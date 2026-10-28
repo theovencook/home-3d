@@ -977,15 +977,25 @@ const OPEN_TREAD = 0.045;
  * Straight stair rising towards -z (the back), with a handrail on the +x side (mirror it for the other side).
  * `open`: treads and stringers only, so the stair floats and what is beneath shows through. `turn`: a quarter turn
  * at the bottom – it is entered from the -x side ("left": walking +x, turning left up the flight) or the +x side
- * ("right"), with winders fanning round the inner corner of the bottom w × w square.
+ * ("right"), with winders fanning round the inner corner of the bottom w × w square. `landing`: instead, the bottom
+ * w × w square is a flat landing that many risers up (reached by separate steps from the side, e.g. a quarter
+ * landing in front of a cupboard); the flight climbs on from there.
  */
-function stairs(b: Builder, w: number, d: number, h: number, open = false, turn: "left" | "right" | null = null): void {
+function stairs(b: Builder, w: number, d: number, h: number, open = false, turn: "left" | "right" | null = null, landing = 0): void {
   const n = Math.max(3, Math.round(h / 0.18));
   const rise = h / n;
-  const winders = turn && d > w + 0.3 ? STAIR_WINDERS : 0;
-  const z0s = d / 2 - (winders ? w : 0); // where the straight flight starts
-  const run = (z0s + d / 2) / (n - winders);
+  const fits = d > w + 0.3;
+  const flat = fits && landing > 0 ? Math.min(landing, n - 1) : 0;
+  const winders = !flat && turn && fits ? STAIR_WINDERS : 0;
+  const skip = flat || winders; // steps taken before the straight flight starts
+  const z0s = d / 2 - (skip ? w : 0); // where the straight flight starts
+  const run = (z0s + d / 2) / (n - skip);
   const bottom = (y1: number) => (open ? Math.max(0, y1 - OPEN_TREAD) : 0);
+  if (flat) {
+    // the landing stands on the floor (it is usually built over a cupboard or the stair below)
+    const yl = rise * flat;
+    b.box(-w / 2, w / 2, 0, yl, z0s, d / 2, C.wood, C.woodTop, EDGE_FURN);
+  }
   if (winders) {
     // the winders fan from the inner corner (entry side, top of the turn) along the outer edges of the square
     const sx = turn === "right" ? -1 : 1;
@@ -1001,21 +1011,21 @@ function stairs(b: Builder, w: number, d: number, h: number, open = false, turn:
       b.prism(pts, bottom(y1), y1, C.wood, C.woodTop, EDGE_FURN);
     }
   }
-  for (let i = winders; i < n; i++) {
-    const z1 = z0s - run * (i - winders);
+  for (let i = skip; i < n; i++) {
+    const z1 = z0s - run * (i - skip);
     const z0 = z1 - run;
     const y1 = rise * (i + 1);
     b.box(-w / 2, w / 2, bottom(y1), y1, z0, z1, C.wood, C.woodTop);
     b.seg(-w / 2, y1, z1, w / 2, y1, z1, EDGE_FURN);
   }
-  if (!winders) b.seg(-w / 2, 0, d / 2, -w / 2, rise, d / 2, EDGE_FURN);
+  if (!skip) b.seg(-w / 2, 0, d / 2, -w / 2, rise, d / 2, EDGE_FURN);
   // stringer lines along both sides of the straight flight
-  const yS = rise * (winders + 1);
+  const yS = rise * (skip + 1);
   for (const x of [-w / 2, w / 2]) b.seg(x, yS, z0s, x, h, -d / 2 + run, EDGE_FAINT);
   if (open) {
     // an open stair hangs on two slim stringers: boards under the tread ends, stepping up with them
-    for (let i = winders; i < n; i++) {
-      const z1 = z0s - run * (i - winders);
+    for (let i = skip; i < n; i++) {
+      const z1 = z0s - run * (i - skip);
       const y1 = rise * (i + 1);
       for (const x of [-w / 2, w / 2 - 0.035]) b.box(x, x + 0.035, Math.max(0, y1 - 0.28), y1 - OPEN_TREAD, z1 - run, z1, C.wood, C.woodTop);
     }
@@ -1024,10 +1034,10 @@ function stairs(b: Builder, w: number, d: number, h: number, open = false, turn:
   const rail = 0.9;
   const xr = w / 2 - 0.03;
   // the rail ends where the stair passes through the ceiling opening
-  const last = Math.max(winders + 1, n - 4);
-  const zAt = (i: number) => z0s - run * (i - winders + 0.5);
-  b.seg(xr, rise * (winders + 1) + rail, zAt(winders), xr, rise * last + rail, zAt(last - 1), EDGE_GLOW);
-  for (let i = winders; i < last; i += 3) {
+  const last = Math.max(skip + 1, n - 4);
+  const zAt = (i: number) => z0s - run * (i - skip + 0.5);
+  b.seg(xr, rise * (skip + 1) + rail, zAt(skip), xr, rise * last + rail, zAt(last - 1), EDGE_GLOW);
+  for (let i = skip; i < last; i += 3) {
     const y = rise * (i + 1);
     b.seg(xr, y, zAt(i), xr, y + rail, zAt(i), EDGE_FAINT);
   }
@@ -1763,7 +1773,7 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
       rug(b, w, d);
       return; // flat, no contact shadow
     case "stairs":
-      stairs(b, w, d, h, !!f.stair_open, f.stair_turn ?? null);
+      stairs(b, w, d, h, !!f.stair_open, f.stair_turn ?? null, f.stair_landing ?? 0);
       break;
     case "stairs_u":
       stairsU(b, w, d, h);

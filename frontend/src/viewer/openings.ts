@@ -198,8 +198,9 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
       const garageOpen = info.opening.type === "garage" && (markClosed ? !!st.sensed && (st.cover ?? 1) >= 0.95 : (st.cover ?? 1) < 0.95);
       const frameC = garageOpen ? shade(OPEN_WARM, 0.8) : new Color(FRAME);
       const frameTop = garageOpen ? shade(OPEN_WARM, 1) : new Color(FRAME_TOP);
-      splitBox(frames, tf, -0.045, 0.02, n0, n1, 0, T + 0.045, frameC, frameTop, cut, bucket);
-      splitBox(frames, tf, W - 0.02, W + 0.045, n0, n1, 0, T + 0.045, frameC, frameTop, cut, bucket);
+      // a door may start above the floor (a cupboard door on a raised landing): everything stands on its sill
+      splitBox(frames, tf, -0.045, 0.02, n0, n1, S, T + 0.045, frameC, frameTop, cut, bucket);
+      splitBox(frames, tf, W - 0.02, W + 0.045, n0, n1, S, T + 0.045, frameC, frameTop, cut, bucket);
       splitBox(frames, tf, 0.02, W - 0.02, n0, n1, T - 0.02, T + 0.045, frameC, frameTop, cut, bucket);
     }
     if (info.opening.type === "door") {
@@ -222,10 +223,10 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
         const glassN = face - (s * (front ? 0.06 : 0.04)) / 2;
         const fw = 0.06;
         for (const [a, b] of lights.panels) {
-          splitBox(frames, tf, a, a + fw, n0, n1, 0.02, T - 0.02, frameC, frameTop, cut, bucket);
-          splitBox(frames, tf, b - fw, b, n0, n1, 0.02, T - 0.02, frameC, frameTop, cut, bucket);
-          splitBox(frames, tf, a + fw, b - fw, n0, n1, 0.02, 0.12, frameC, frameTop, cut, bucket);
-          panel(glass, tf, a + fw, b - fw, glassN, 0.12, T - 0.02, GLASS, cut, bucket);
+          splitBox(frames, tf, a, a + fw, n0, n1, S + 0.02, T - 0.02, frameC, frameTop, cut, bucket);
+          splitBox(frames, tf, b - fw, b, n0, n1, S + 0.02, T - 0.02, frameC, frameTop, cut, bucket);
+          splitBox(frames, tf, a + fw, b - fw, n0, n1, S + 0.02, S + 0.12, frameC, frameTop, cut, bucket);
+          panel(glass, tf, a + fw, b - fw, glassN, S + 0.12, T - 0.02, GLASS, cut, bucket);
         }
         x0 = lights.x0;
         x1 = lights.x1;
@@ -236,7 +237,7 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
       if (info.exterior && (front || style === "glass")) splitBox(frames, tf, W / 2 - 0.08, W / 2 + 0.08, -info.faceOut - 0.1, -info.faceOut, T + 0.1, T + 0.17, shade(OPEN_WARM, 0.55), shade(OPEN_WARM, 0.85), cut, ALWAYS);
       if (front) {
         // threshold across the wall
-        splitBox(frames, tf, 0.02, W - 0.02, -info.faceOut - 0.02, info.faceRoom, 0, 0.02, new Color(SILL), frameTop, cut, bucket);
+        splitBox(frames, tf, 0.02, W - 0.02, -info.faceOut - 0.02, info.faceRoom, S, S + 0.02, new Color(SILL), frameTop, cut, bucket);
       }
       const leaves: [boolean, number][] = passage ? [] : [[info.hingeAtStart, st.open]];
       if (two && !passage) leaves.push([!info.hingeAtStart, st.open2 ?? 0]);
@@ -264,28 +265,28 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
         const leafTop = warm ? shade(OPEN_WARM, 0.9) : new Color(front ? LEAF_FRONT_TOP : LEAF_TOP);
         if (style === "glass") {
           // a glass door: slim stiles and rails around a pane
-          splitBox(frames, leafTf, 0, 0.05, -thick, 0, 0.01, T - 0.01, leafC, leafTop, cut, leafBucket);
-          splitBox(frames, leafTf, lw - 0.05, lw, -thick, 0, 0.01, T - 0.01, leafC, leafTop, cut, leafBucket);
-          splitBox(frames, leafTf, 0.05, lw - 0.05, -thick, 0, 0.01, 0.12, leafC, leafTop, cut, leafBucket);
+          splitBox(frames, leafTf, 0, 0.05, -thick, 0, S + 0.01, T - 0.01, leafC, leafTop, cut, leafBucket);
+          splitBox(frames, leafTf, lw - 0.05, lw, -thick, 0, S + 0.01, T - 0.01, leafC, leafTop, cut, leafBucket);
+          splitBox(frames, leafTf, 0.05, lw - 0.05, -thick, 0, S + 0.01, S + 0.12, leafC, leafTop, cut, leafBucket);
           splitBox(frames, leafTf, 0.05, lw - 0.05, -thick, 0, T - 0.08, T - 0.01, leafC, leafTop, cut, leafBucket);
-          panel(glass, leafTf, 0.05, lw - 0.05, -thick / 2, 0.12, T - 0.08, GLASS, cut, leafBucket);
+          panel(glass, leafTf, 0.05, lw - 0.05, -thick / 2, S + 0.12, T - 0.08, GLASS, cut, leafBucket);
         } else {
-          splitBox(frames, leafTf, 0, lw, -thick, 0, 0.01, T - 0.01, leafC, leafTop, cut, leafBucket);
+          splitBox(frames, leafTf, 0, lw, -thick, 0, S + 0.01, T - 0.01, leafC, leafTop, cut, leafBucket);
         }
         // the pane on both faces of the solid leaf: from outside the leaf hid it (#712)
         for (const n of [0.001, -thick - 0.001]) {
-          if (style === "front_glass") panel(glass, leafTf, 0.12, lw - 0.12, n, T * 0.55, T - 0.18, GLASS, cut, leafBucket);
-          else if (front) panel(glass, leafTf, 0.1, 0.18, n, 0.3, T - 0.3, GLASS, cut, leafBucket);
+          if (style === "front_glass") panel(glass, leafTf, 0.12, lw - 0.12, n, S + (T - S) * 0.55, T - 0.18, GLASS, cut, leafBucket);
+          else if (front) panel(glass, leafTf, 0.1, 0.18, n, S + 0.3, T - 0.3, GLASS, cut, leafBucket);
         }
         // handle on both sides: a knob on a room door, a bar on a front door
-        const hy = Math.min(1.05, T * 0.5);
+        const hy = S + Math.min(1.05, (T - S) * 0.5);
         const hh = front ? 0.3 : 0.012;
         const hx0 = front ? lw - 0.11 : lw - 0.16;
         const hx1 = front ? lw - 0.08 : lw - 0.05;
         splitBox(frames, leafTf, hx0, hx1, 0.004, 0.05, hy - hh, hy + hh, new Color(HANDLE), new Color(HANDLE_TOP), cut, leafBucket);
         splitBox(frames, leafTf, hx0, hx1, -thick - 0.05, -thick - 0.004, hy - hh, hy + hh, new Color(HANDLE), new Color(HANDLE_TOP), cut, leafBucket);
         // an unlocked smart lock: a soft accent strip along the leaf's free edge, on both faces (#682)
-        if (st.unlocked && atStart === info.hingeAtStart) splitBox(frames, leafTf, lw - 0.022, lw + 0.004, -thick - 0.006, 0.006, 0.03, T - 0.03, shade(UNLOCKED, 0.85), shade(UNLOCKED, 1), cut, leafBucket);
+        if (st.unlocked && atStart === info.hingeAtStart) splitBox(frames, leafTf, lw - 0.022, lw + 0.004, -thick - 0.006, 0.006, S + 0.03, T - 0.03, shade(UNLOCKED, 0.85), shade(UNLOCKED, 1), cut, leafBucket);
       }
     } else if (info.opening.type === "garage") {
       // sectional door: the closed part hangs in the opening, the open part lies under the ceiling

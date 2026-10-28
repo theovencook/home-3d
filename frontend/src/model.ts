@@ -189,6 +189,8 @@ export interface Furniture {
   stair_open?: boolean | null;
   /** Straight stairs: a quarter turn with winders at the bottom, entered from the left or right side. */
   stair_turn?: "left" | "right" | null;
+  /** Straight stairs: the bottom square is a flat landing this many risers up (reached by separate steps). */
+  stair_landing?: number | null;
   /** Own name (e.g. "Wechselrichter Nord"); null = the type's name. */
   name?: string | null;
   /** Further names the voice answers to ("Wohnzimmerfernseher", "Glotze"). */

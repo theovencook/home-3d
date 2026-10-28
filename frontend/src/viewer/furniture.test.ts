@@ -333,3 +333,26 @@ test("a stair turning at the bottom: its first steps wind inside the bottom squa
     assert.ok(at(h).length > 0 && at(h).every(([, z]) => z < 0));
   }
 });
+
+test("a stair with a bottom landing: a flat square that many risers up, the flight climbing on from it", () => {
+  const w = 1, d = 3.2, h = 2.75;
+  const n = Math.round(h / 0.18);
+  const rise = h / n;
+  const f: Furniture = { id: "s", type: "stairs", x: 0, z: 0, rotation: 0, w, d, h, variant: null, stair_open: true, stair_landing: 3 };
+  const buf = new GeoBuffer();
+  pushFurniture(buf, new LineBuffer(), new GeoBuffer(), f);
+  const at = (y: number) => {
+    const out: number[][] = [];
+    for (let i = 0; i < buf.p.length; i += 3) if (Math.abs(buf.p[i + 1] - y) < 1e-6) out.push([buf.p[i], buf.p[i + 2]]);
+    return out;
+  };
+  // the landing's top covers the bottom square at 3 risers
+  const top = at(rise * 3);
+  assert.ok(top.some(([x, z]) => Math.abs(x + w / 2) < 1e-6 && Math.abs(z - d / 2) < 1e-6), "landing reaches the front corner");
+  assert.ok(top.some(([, z]) => Math.abs(z - (d / 2 - w)) < 1e-6), "landing ends where the flight starts");
+  // no steps below it inside the square: nothing at 1 or 2 risers
+  assert.equal(at(rise).length + at(rise * 2).length, 0);
+  // the next step is the flight's first, behind the landing
+  assert.ok(at(rise * 4).length > 0 && at(rise * 4).every(([, z]) => z <= d / 2 - w + 1e-6));
+  assert.ok(at(h).length > 0);
+});
