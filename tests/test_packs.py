@@ -108,9 +108,7 @@ async def test_import_list_and_remove(hass: HomeAssistant, hass_ws_client) -> No
     await hass.async_block_till_done()
     client = await hass_ws_client(hass)
 
-    await client.send_json_auto_id(
-        {"type": "home_3d/packs/import", "pack": _pack({**PAYLOAD, "licensee": "Anna"})}
-    )
+    await client.send_json_auto_id({"type": "home_3d/packs/import", "pack": _pack({**PAYLOAD, "licensee": "Anna"})})
     result = await client.receive_json()
     assert result["success"]
     assert result["result"] == {

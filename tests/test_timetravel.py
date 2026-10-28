@@ -348,7 +348,10 @@ async def test_history_asks_for_no_tracker_off_the_parking_spots(hass: HomeAssis
     """A tracker asked for as a car's that is on no parking spot of the plan is never answered."""
     await _setup(hass)
     data = hass.data[DOMAIN]
-    data.building = {**data.building, "floors": [{"furniture": [{"type": "parking", "entity": "device_tracker.other"}]}]}
+    data.building = {
+        **data.building,
+        "floors": [{"furniture": [{"type": "parking", "entity": "device_tracker.other"}]}],
+    }
     hass.config.components.add("recorder")
     asked: list[list[str]] = []
 

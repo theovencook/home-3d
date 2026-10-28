@@ -18,7 +18,6 @@ from homeassistant.helpers.storage import Store
 import voluptuous as vol
 
 from .const import (
-    DOMAIN,
     HISTORY_INTERVAL,
     HISTORY_MAX,
     SIGNAL_BUILDING_UPDATED,
