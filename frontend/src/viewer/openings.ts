@@ -232,10 +232,11 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
       }
       const lw = two ? (x1 - x0) / 2 - 0.004 : x1 - x0;
       const thick = front ? 0.06 : 0.04;
+      // a small light over every door to the outside, glazed garden and French doors too
+      if (info.exterior && (front || style === "glass")) splitBox(frames, tf, W / 2 - 0.08, W / 2 + 0.08, -info.faceOut - 0.1, -info.faceOut, T + 0.1, T + 0.17, shade(OPEN_WARM, 0.55), shade(OPEN_WARM, 0.85), cut, ALWAYS);
       if (front) {
-        // threshold across the wall, and a small light over the door outside
+        // threshold across the wall
         splitBox(frames, tf, 0.02, W - 0.02, -info.faceOut - 0.02, info.faceRoom, 0, 0.02, new Color(SILL), frameTop, cut, bucket);
-        if (info.exterior) splitBox(frames, tf, W / 2 - 0.08, W / 2 + 0.08, -info.faceOut - 0.1, -info.faceOut, T + 0.1, T + 0.17, shade(OPEN_WARM, 0.55), shade(OPEN_WARM, 0.85), cut, ALWAYS);
       }
       const leaves: [boolean, number][] = passage ? [] : [[info.hingeAtStart, st.open]];
       if (two && !passage) leaves.push([!info.hingeAtStart, st.open2 ?? 0]);
