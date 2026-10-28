@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
+from functools import wraps
 from typing import Any
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.loader import async_get_integration
 import voluptuous as vol
 
-from .const import DATA_ASK, DATA_VOICE, DOMAIN, SIGNAL_ASK, SIGNAL_BUILDING_UPDATED
+from .const import DATA_ASK, DATA_EDITORS, DATA_VOICE, DOMAIN, SIGNAL_ASK, SIGNAL_BUILDING_UPDATED
+from .editors import Editors, EditorsError, can_edit
 from .locate.recorder import ws_locate_rec
 from .locate.ws import COMMANDS as LOCATE_COMMANDS
 from .packs import MAX_PACK_SIZE, PackError, parts_of, validate_payload, verify_pack
@@ -47,10 +51,24 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_voice_settings,
         ws_voice_settings_set,
         ws_locate_rec,
+        ws_editors_get,
+        ws_editors_set,
     ):
         websocket_api.async_register_command(hass, command)
     for command in LOCATE_COMMANDS:
         websocket_api.async_register_command(hass, command)
+
+
+def require_editor(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Like `require_admin`, for the editors list (#7): anyone else is refused with "unauthorized"."""
+
+    @wraps(func)
+    def with_editor(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+        if not can_edit(hass, connection.user):
+            raise Unauthorized
+        func(hass, connection, msg)
+
+    return with_editor
 
 
 def _data(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> FloorplanData | None:
@@ -63,7 +81,7 @@ def _data(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/building/get"})
 @websocket_api.async_response
 async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Return the building, its revision and the running integration version.
+    """Return the building, its revision, the running integration version and whether the user may edit.
 
     The frontend compares the version with its own: after an update the new frontend files are served
     at once, but the backend (and its validation) only changes with a restart.
@@ -72,7 +90,14 @@ async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveC
         return
     integration = await async_get_integration(hass, DOMAIN)
     connection.send_result(
-        msg["id"], {"building": data.building, "revision": data.revision, "version": str(integration.version)}
+        msg["id"],
+        {
+            "building": data.building,
+            "revision": data.revision,
+            "version": str(integration.version),
+            # whether this user is on the editors list (#7); the backend checks every change again
+            "can_edit": can_edit(hass, connection.user),
+        },
     )
 
 
@@ -82,7 +107,7 @@ async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveC
         vol.Required("building"): BUILDING_SCHEMA,
     }
 )
-@websocket_api.require_admin
+@require_editor
 @websocket_api.async_response
 async def ws_save_building(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
@@ -127,7 +152,7 @@ def ws_get_image(hass: HomeAssistant, connection: websocket_api.ActiveConnection
         vol.Required("data"): IMAGE_DATA,
     }
 )
-@websocket_api.require_admin
+@require_editor
 @websocket_api.async_response
 async def ws_set_image(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Store a background image."""
@@ -138,7 +163,7 @@ async def ws_set_image(hass: HomeAssistant, connection: websocket_api.ActiveConn
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/image/delete", vol.Required("image_id"): _IMAGE_ID})
-@websocket_api.require_admin
+@require_editor
 @websocket_api.async_response
 async def ws_delete_image(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Remove a background image."""
@@ -149,7 +174,7 @@ async def ws_delete_image(hass: HomeAssistant, connection: websocket_api.ActiveC
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/history/list"})
-@websocket_api.require_admin
+@require_editor
 @callback
 def ws_history_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """List the restore points (newest first)."""
@@ -159,7 +184,7 @@ def ws_history_list(hass: HomeAssistant, connection: websocket_api.ActiveConnect
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/history/snapshot"})
-@websocket_api.require_admin
+@require_editor
 @websocket_api.async_response
 async def ws_history_snapshot(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
@@ -174,7 +199,7 @@ async def ws_history_snapshot(
 @websocket_api.websocket_command(
     {vol.Required("type"): "home_3d/history/restore", vol.Required("snapshot_id"): _IMAGE_ID}
 )
-@websocket_api.require_admin
+@require_editor
 @websocket_api.async_response
 async def ws_history_restore(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
@@ -206,7 +231,7 @@ def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
         vol.Required("pack"): vol.All(str, vol.Length(max=MAX_PACK_SIZE)),
     }
 )
-@websocket_api.require_admin
+@require_editor
 @websocket_api.async_response
 async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Check a pack file's content, then keep it."""
@@ -231,7 +256,7 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
 @websocket_api.websocket_command(
     {vol.Required("type"): "home_3d/packs/remove", vol.Required("pack_id"): vol.All(str, vol.Length(max=64))}
 )
-@websocket_api.require_admin
+@require_editor
 @websocket_api.async_response
 async def ws_packs_remove(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Remove an imported pack."""
@@ -249,7 +274,7 @@ BACKUP_FORMAT = "home3d-backup"
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/backup/export"})
-@websocket_api.require_admin
+@require_editor
 @callback
 def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """The plan and the packs for a backup file (the frontend adds the images one by one)."""
@@ -267,7 +292,7 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         vol.Optional("packs", default=[]): [dict],
     }
 )
-@websocket_api.require_admin
+@require_editor
 @websocket_api.async_response
 async def ws_backup_import(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
@@ -363,3 +388,46 @@ async def ws_voice_settings_set(
         connection.send_error(msg["id"], "write_failed", str(err))
         return
     connection.send_result(msg["id"], {"sentences": settings.sentences, "kept": kept})
+
+
+# ---------------------------------------------------------------------------- editors (#7)
+
+
+def _editors(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> Editors | None:
+    editors: Editors | None = hass.data.get(DATA_EDITORS)
+    if editors is None:
+        connection.send_error(msg["id"], "not_loaded", "Home 3D is not set up")
+    return editors
+
+
+async def _send_editors(editors: Editors, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    connection.send_result(msg["id"], {"users": await editors.async_users(), "custom": editors.custom is not None})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/editors/get"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_editors_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Everyone who signs in and whether they may change the plan; `custom` is false while the admins are."""
+    if (editors := _editors(hass, connection, msg)) is not None:
+        await _send_editors(editors, connection, msg)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_3d/editors/set",
+        vol.Required("editors"): vol.Any(None, [vol.All(str, vol.Length(max=64))]),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_editors_set(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Pick the editors (null: every admin again). A list without an admin is refused."""
+    if (editors := _editors(hass, connection, msg)) is None:
+        return
+    try:
+        await editors.async_set(msg["editors"])
+    except EditorsError as err:
+        connection.send_error(msg["id"], err.code, err.detail)
+        return
+    await _send_editors(editors, connection, msg)

@@ -30,3 +30,6 @@ DATA_ASK = f"{DOMAIN}_ask"
 # the voice settings (which sentences Assist hands to Home 3D), kept in .storage
 DATA_VOICE = f"{DOMAIN}_voice"
 STORAGE_KEY_VOICE = f"{DOMAIN}.voice"
+# the editors list (#7): who may change the plan, kept in .storage (see editors.py)
+DATA_EDITORS = f"{DOMAIN}_editors"
+STORAGE_KEY_EDITORS = f"{DOMAIN}.editors"

@@ -200,6 +200,7 @@ export class Fp3dView3d extends LitElement {
   static properties = {
     hass: { attribute: false },
     building: { attribute: false },
+    canEdit: { attribute: false },
     floorId: { attribute: false },
     roomId: { attribute: false },
     wallMode: { attribute: false },
@@ -300,6 +301,8 @@ export class Fp3dView3d extends LitElement {
 
   declare hass: HomeAssistant;
   declare building: Building | null;
+  /** On the editors list (#7): may change the plan's settings from the view. Unset: admins may (a backend before #7). */
+  declare canEdit: boolean | undefined;
   /** Time travel: the replayed moment (hass is then the past, read-only); null = live. */
   declare replay: ReplayInfo | null;
   /** Time travel: a tapped device's state at the replayed moment, next to the finger. */
@@ -4657,10 +4660,10 @@ export class Fp3dView3d extends LitElement {
         return hit?.kind === "device" && hit.id ? (spoken().find((d) => d.id === hit.id) ?? null) : null;
       },
       dimmed: () => this.dimmed,
-      canEdit: () => !!this.hass?.user?.is_admin && !this.ro,
+      canEdit: () => this.mayEdit,
       updateBuilding: (mutate) => {
         const cur = this.building;
-        if (!cur || !this.hass || this.ro || !this.hass.user?.is_admin) return;
+        if (!cur || !this.hass || !this.mayEdit) return;
         const next = structuredClone(cur);
         mutate(next);
         this.building = next;
@@ -4848,7 +4851,7 @@ export class Fp3dView3d extends LitElement {
             </div>`
           : nothing}
         ${sheet.lines?.length ? html`<div class="fp3d-sheet-lines">${sheet.lines.map((l) => html`<p>${l}</p>`)}</div>` : nothing}
-        ${hass.user?.is_admin && !this.ro && modulesWithSettings().length
+        ${this.mayEdit && modulesWithSettings().length
           ? html`<button class="fp3d-sheet-gear" @click=${() => {
               // the sentences and speakers are set in the ⚙ menu: open it at the modules' sections
               close();
@@ -4859,10 +4862,15 @@ export class Fp3dView3d extends LitElement {
       </div>`;
   }
 
-  /** Changes the plan's settings from the ⚙ menu and saves them (administrators only). */
+  /** Whether this user may change the plan here (editors only, never while replaying). */
+  private get mayEdit(): boolean {
+    return (this.canEdit ?? !!this.hass?.user?.is_admin) && !this.ro;
+  }
+
+  /** Changes the plan's settings from the ⚙ menu and saves them (editors only). */
   private setPlanSettings(patch: Partial<Building["settings"]>): void {
     const cur = this.building;
-    if (!cur || !this.hass?.user?.is_admin || this.ro) return;
+    if (!cur || !this.hass || !this.mayEdit) return;
     const next = structuredClone(cur);
     Object.assign(next.settings, patch);
     this.building = next;
@@ -4879,7 +4887,7 @@ export class Fp3dView3d extends LitElement {
     const b = this.building;
     if (!hass || !b || !this._settingsOpen) return nothing;
     const t = (k: I18nKey) => translate(hass, k);
-    const admin = !!hass.user?.is_admin && !this.ro;
+    const admin = this.mayEdit;
     const st = b.settings;
     const check = (key: I18nKey, on: boolean, patch: (v: boolean) => Partial<Building["settings"]>, hint?: I18nKey) =>
       html`<label class="fp3d-set-check" title=${hint ? t(hint) : ""}

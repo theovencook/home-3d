@@ -9,6 +9,9 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - Renamed to Home 3D (Home Assistant domain `home_3d`). This is a fresh integration: it does not take over
   NeonPlan 3D data or backups.
 - Furniture packs are no longer signed: pack import checks the content only.
+- **Editors list:** ⚙ Settings → 👥 Editors (admins only) picks who may change the plan; by default every admin.
+  A non-admin on the list gets the Editor and Extensions tabs; everyone else views and controls devices only, and
+  Home Assistant refuses their saves. The list always keeps at least one admin.
 
 ## 2.0.7
 
