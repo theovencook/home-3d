@@ -292,3 +292,44 @@ test("a cover fills a small smart display, not just a sliver; a TV keeps its 4 c
   const tv = screenPictureSize(1.21, 0.68, 16 / 9);
   assert.ok(Math.abs(tv.h - 0.64) < 1e-9);
 });
+
+test("an open stair floats: nothing under its upper treads reaches the floor", () => {
+  const f: Furniture = { id: "s", type: "stairs", x: 0, z: 0, rotation: 0, w: 1, d: 3.2, h: 2.75, variant: null, stair_open: true };
+  const buf = new GeoBuffer();
+  pushFurniture(buf, new LineBuffer(), new GeoBuffer(), f);
+  // under the back half (the upper treads) every point sits well above the floor
+  let lowest = Infinity;
+  for (let i = 0; i < buf.p.length; i += 3) if (buf.p[i + 2] < -0.5) lowest = Math.min(lowest, buf.p[i + 1]);
+  assert.ok(lowest > 1, `lowest point under the upper treads at ${lowest}`);
+  // the solid stair stands on the floor there
+  const solid = new GeoBuffer();
+  pushFurniture(solid, new LineBuffer(), new GeoBuffer(), { ...f, stair_open: false });
+  let low2 = Infinity;
+  for (let i = 0; i < solid.p.length; i += 3) if (solid.p[i + 2] < -0.5) low2 = Math.min(low2, solid.p[i + 1]);
+  assert.equal(low2, 0);
+});
+
+test("a stair turning at the bottom: its first steps wind inside the bottom square, from the entry side", async () => {
+  const { STAIR_WINDERS } = await import("./furniture.ts");
+  const w = 1, d = 3.2, h = 2.75;
+  const n = Math.round(h / 0.18);
+  const rise = h / n;
+  for (const turn of ["left", "right"] as const) {
+    const f: Furniture = { id: "s", type: "stairs", x: 0, z: 0, rotation: 0, w, d, h, variant: null, stair_turn: turn };
+    const buf = new GeoBuffer();
+    pushFurniture(buf, new LineBuffer(), new GeoBuffer(), f);
+    const at = (y: number) => {
+      const out: number[][] = [];
+      for (let i = 0; i < buf.p.length; i += 3) if (Math.abs(buf.p[i + 1] - y) < 1e-6) out.push([buf.p[i], buf.p[i + 2]]);
+      return out;
+    };
+    // every winder's top lies in the bottom w × w square
+    for (let k = 1; k <= STAIR_WINDERS; k++) assert.ok(at(rise * k).every(([, z]) => z >= d / 2 - w - 1e-6), `${turn}: winder ${k} outside the square`);
+    // the first winder starts at the entry side: left = -x, right = +x
+    const first = at(rise);
+    const sx = turn === "left" ? -1 : 1;
+    assert.ok(first.some(([x]) => Math.abs(x - (sx * w) / 2) < 1e-6), `${turn}: first winder not on the entry side`);
+    // the top step still reaches the floor above at the back
+    assert.ok(at(h).length > 0 && at(h).every(([, z]) => z < 0));
+  }
+});

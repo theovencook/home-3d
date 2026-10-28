@@ -185,6 +185,10 @@ export interface Furniture {
   d: number;
   h: number;
   variant: string | null;
+  /** Straight stairs: open treads on two stringers (a floating stair, what is beneath shows through). */
+  stair_open?: boolean | null;
+  /** Straight stairs: a quarter turn with winders at the bottom, entered from the left or right side. */
+  stair_turn?: "left" | "right" | null;
   /** Own name (e.g. "Wechselrichter Nord"); null = the type's name. */
   name?: string | null;
   /** Further names the voice answers to ("Wohnzimmerfernseher", "Glotze"). */
