@@ -105,7 +105,8 @@ def _bundle_hash() -> str:
 
 
 async def _async_main_url(hass: HomeAssistant) -> str:
-    # computed once per run, so adding and removing the script use the same URL
+    # computed once per setup, so adding and removing the script use the same URL; unloading forgets it, so a
+    # reload after copying in a new bundle serves it under its new hash
     if url := hass.data.get(_MAIN_URL):
         return url
     integration = await async_get_integration(hass, DOMAIN)
@@ -156,6 +157,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # newer Home Assistant raises when the list was never made (no frontend loaded, as in tests) or the url is gone
     with contextlib.suppress(KeyError, ValueError):
         frontend.remove_extra_js_url(hass, await _async_main_url(hass))
+    hass.data.pop(_MAIN_URL, None)
     async_unload_voice(hass)
     await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if (locate := hass.data.pop(DATA_LOCATE, None)) is not None:

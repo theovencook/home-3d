@@ -343,8 +343,11 @@ export interface ViewerStats {
 const ACCENT_STOCK: [number, number, number] = [0.22, 0.88, 1];
 /** Extra gap between floors in the pulled-apart house view (metres). */
 const EXPLODE_GAP = 2.4;
-/** How far the roof lifts off the top floor while the floors are pulled apart. */
-const ROOF_GAP = 1.4;
+/**
+ * How far the roof lifts off the top floor while the floors are pulled apart: the same gap as between the
+ * floors, so a loft under the roof can be seen into like the floors below it.
+ */
+const ROOF_GAP = EXPLODE_GAP;
 /** Opacity of the floors below the selected one. */
 const BELOW_OPACITY = 0.22;
 /** Time constant of the floor animation (ms); about 700 ms until settled. */

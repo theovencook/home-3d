@@ -498,6 +498,20 @@ async def test_panel_and_card_are_registered_and_removed(hass: HomeAssistant, mo
     mock_frontend["remove_js"].assert_called_once_with(hass, url)
 
 
+async def test_reload_serves_a_rebuilt_bundle_under_a_new_url(hass: HomeAssistant, mock_frontend, monkeypatch) -> None:
+    entry = await _setup(hass)
+    first = mock_frontend["add_js"].call_args.args[1]
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    monkeypatch.setattr("custom_components.home_3d._bundle_hash", lambda: "rebuilt")
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    second = mock_frontend["add_js"].call_args.args[1]
+    assert second != first
+    assert second.endswith("-rebuilt")
+
+
 async def test_frontend_files_are_served_without_caching(hass: HomeAssistant, hass_client) -> None:
     """A reload shows a new bundle: no-cache (and a 304 when unchanged); nothing outside the folder."""
     await _setup(hass)
