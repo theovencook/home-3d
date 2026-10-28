@@ -216,7 +216,7 @@ export function locatedPersons(hass: HomeAssistant, building: Building, skip: Re
 }
 
 // what a zone of a presence sensor may be called, per furniture kind – built-in or from a pack, by the kind's id
-// after the pack prefix ("pack:mastershort.living:corner_right"); an own furniture name always counts too
+// after the pack prefix ("pack:home3d.living:corner_right"); an own furniture name always counts too
 const ZONE_WORDS: [RegExp, string[]][] = [
   [/sofa|couch|corner|chesterfield|recamiere|chaise|^module_/, ["sofa", "couch", "wohnlandschaft", "ecksofa", "eckcouch"]],
   [/armchair|club_chair|wingback|recliner|lounge_chair|cocktail_chair|rocking_chair|bean_bag/, ["sessel", "armchair", "ohrensessel", "relaxsessel", "chair"]],

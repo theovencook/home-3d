@@ -7,24 +7,24 @@ const part = { shape: "box" as const, x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color:
 const item = (id: string, en: string, de = en, extra: Partial<PackItem> = {}): PackItem => ({ id, name: { de, en }, size: [1, 0.5, 0.8], parts: [part], ...extra });
 
 test("pack items are classified by their words, with the pack's room as the fallback", () => {
-  assert.deepEqual(classify("mastershort.living", item("sofa_3", "3-seater sofa")), { kind: "sofa", rooms: ["living"] });
-  assert.deepEqual(classify("mastershort.kitchen", item("base_60", "Base unit 60")), { kind: "kitchen", rooms: ["kitchen"] });
-  assert.deepEqual(classify("mastershort.kitchen", item("coffee_machine", "Bean-to-cup coffee machine")).kind, "appliance");
-  assert.deepEqual(classify("mastershort.pets", item("cat_tree", "Cat tree (large)")).kind, "pets");
-  assert.deepEqual(classify("mastershort.garden", item("tree_oak", "Oak")), { kind: "plant", rooms: ["garden"] });
-  assert.deepEqual(classify("mastershort.vehicles", item("campervan", "Campervan (pop-top)")), { kind: "vehicle", rooms: ["garage"] });
-  assert.deepEqual(classify("mastershort.kids", item("kids_desk", "Kids desk")).kind, "kids");
-  assert.deepEqual(classify("mastershort.bath", item("mirror_round", "Round mirror with light")).kind, "bath");
-  assert.deepEqual(classify("mastershort.smarthome", item("wallbox", "Wallbox")).kind, "energy");
-  assert.deepEqual(classify("mastershort.utility", item("gas_boiler", "Gas condensing boiler")).kind, "heating");
-  assert.deepEqual(classify("mastershort.cinema", item("tower_speaker", "Floor-standing speaker")), { kind: "media", rooms: ["living", "hobby"] });
-  assert.deepEqual(classify("mastershort.stairs", item("railing_glass", "Glass railing")).kind, "stairs");
-  assert.deepEqual(classify("mastershort.office", item("printer_3d", "3D printer")).kind, "tech");
-  assert.deepEqual(classify("mastershort.living", item("arc_lamp", "Arc floor lamp")).kind, "lamp");
+  assert.deepEqual(classify("home3d.living", item("sofa_3", "3-seater sofa")), { kind: "sofa", rooms: ["living"] });
+  assert.deepEqual(classify("home3d.kitchen", item("base_60", "Base unit 60")), { kind: "kitchen", rooms: ["kitchen"] });
+  assert.deepEqual(classify("home3d.kitchen", item("coffee_machine", "Bean-to-cup coffee machine")).kind, "appliance");
+  assert.deepEqual(classify("home3d.pets", item("cat_tree", "Cat tree (large)")).kind, "pets");
+  assert.deepEqual(classify("home3d.garden", item("tree_oak", "Oak")), { kind: "plant", rooms: ["garden"] });
+  assert.deepEqual(classify("home3d.vehicles", item("campervan", "Campervan (pop-top)")), { kind: "vehicle", rooms: ["garage"] });
+  assert.deepEqual(classify("home3d.kids", item("kids_desk", "Kids desk")).kind, "kids");
+  assert.deepEqual(classify("home3d.bath", item("mirror_round", "Round mirror with light")).kind, "bath");
+  assert.deepEqual(classify("home3d.smarthome", item("wallbox", "Wallbox")).kind, "energy");
+  assert.deepEqual(classify("home3d.utility", item("gas_boiler", "Gas condensing boiler")).kind, "heating");
+  assert.deepEqual(classify("home3d.cinema", item("tower_speaker", "Floor-standing speaker")), { kind: "media", rooms: ["living", "hobby"] });
+  assert.deepEqual(classify("home3d.stairs", item("railing_glass", "Glass railing")).kind, "stairs");
+  assert.deepEqual(classify("home3d.office", item("printer_3d", "3D printer")).kind, "tech");
+  assert.deepEqual(classify("home3d.living", item("arc_lamp", "Arc floor lamp")).kind, "lamp");
   // a pack's own fields win
-  assert.deepEqual(classify("mastershort.living", item("thing", "Sofa", "Sofa", { group: "deco", room: ["hall"] })), { kind: "deco", rooms: ["hall"] });
+  assert.deepEqual(classify("home3d.living", item("thing", "Sofa", "Sofa", { group: "deco", room: ["hall"] })), { kind: "deco", rooms: ["hall"] });
   // unknown words fall back to deco in the pack's room
-  assert.deepEqual(classify("mastershort.bedroom", item("xyz", "Zorbulator")), { kind: "deco", rooms: ["bedroom"] });
+  assert.deepEqual(classify("home3d.bedroom", item("xyz", "Zorbulator")), { kind: "deco", rooms: ["bedroom"] });
 });
 
 test("a room's name tells which room kind it is, in several languages", () => {
@@ -63,9 +63,9 @@ test("families: the size suffix of the id, the numbers of the name as the chip, 
 
 test("the index lists built-in kinds and pack items, folds families into cards and filters by room, words and chips", () => {
   const pack: FurniturePack = {
-    id: "mastershort.living",
+    id: "home3d.living",
     name: "Wohnzimmer",
-    publisher: "Mastershort",
+    publisher: "Home 3D",
     licensee: null,
     release: 4,
     items: [
@@ -86,53 +86,53 @@ test("the index lists built-in kinds and pack items, folds families into cards a
     size: () => [1, 1, 1],
   });
   assert.ok(entries.length > 70, "built-in kinds are in");
-  const sofa2 = entries.find((e) => e.type === "pack:mastershort.living:sofa_2")!;
+  const sofa2 = entries.find((e) => e.type === "pack:home3d.living:sofa_2")!;
   assert.equal(sofa2.label, "Sofa 2-Sitzer");
   assert.equal(sofa2.family, "sofa");
   assert.equal(sofa2.variant, "2");
   assert.equal(sofa2.packRelease, 4);
-  assert.equal(entries.find((e) => e.type === "pack:mastershort.living:arc_lamp")!.light, true);
+  assert.equal(entries.find((e) => e.type === "pack:home3d.living:arc_lamp")!.light, true);
 
   const sofas = cardsOf(entries, "sofa");
-  const family = sofas.find((c) => c.key === "mastershort.living:sofa")!;
+  const family = sofas.find((c) => c.key === "home3d.living:sofa")!;
   assert.equal(family.label, "Sofa");
   assert.equal(family.entries.length, 2);
-  assert.ok(sofas.some((c) => c.key === "pack:mastershort.living:chesterfield"), "a lone item is its own card");
+  assert.ok(sofas.some((c) => c.key === "pack:home3d.living:chesterfield"), "a lone item is its own card");
   assert.ok(sofas.some((c) => c.key === "sofa"), "the built-in sofa is a card too");
 
   const none = { query: "", room: null, electric: false, light: false, outdoor: false };
   assert.equal(filterEntries(entries, { ...none, query: "chester" }).length, 1);
   assert.equal(filterEntries(entries, { ...none, query: "sofa sitzer" }).length, 2, "every word must match");
-  assert.ok(filterEntries(entries, { ...none, query: "fernseher" }).some((e) => e.type === "pack:mastershort.living:tv_stand"));
+  assert.ok(filterEntries(entries, { ...none, query: "fernseher" }).some((e) => e.type === "pack:home3d.living:tv_stand"));
   assert.ok(filterEntries(entries, { ...none, query: "lampe" }).some((e) => e.type === "lamp_ceiling"), "everyday words find a kind");
   const kitchen = filterEntries(entries, { ...none, room: "kitchen" });
   assert.ok(kitchen.every((e) => !e.rooms.length || e.rooms.includes("kitchen")));
-  assert.ok(!kitchen.some((e) => e.type === "pack:mastershort.living:sofa_2"));
+  assert.ok(!kitchen.some((e) => e.type === "pack:home3d.living:sofa_2"));
   assert.ok(kitchen.some((e) => e.type === "lamp_ceiling"), "items for any room fit every room");
   assert.ok(filterEntries(entries, { ...none, light: true }).every((e: LibraryEntry) => e.light));
-  assert.ok(filterEntries(entries, { ...none, electric: true }).some((e) => e.type === "pack:mastershort.living:tv_stand"));
+  assert.ok(filterEntries(entries, { ...none, electric: true }).some((e) => e.type === "pack:home3d.living:tv_stand"));
 });
 
 test("an item for one side gets a mirrored twin for the other, explicit pairs become a family", () => {
   const pack: FurniturePack = {
-    id: "mastershort.living",
+    id: "home3d.living",
     name: "Wohnzimmer",
-    publisher: "Mastershort",
+    publisher: "Home 3D",
     licensee: null,
     items: [item("sofa_chaise", "Sofa with chaise (left)", "Sofa mit Récamiere links"), item("corner_left", "Corner sofa (left)", "Ecksofa links"), item("corner_right", "Corner sofa (right)", "Ecksofa rechts")],
   };
   const entries = buildIndex({ packs: [pack], basics: [], language: "de", basicName: (t) => t, basicNameEn: (t) => t, kindName: (k) => k, size: () => [1, 1, 1] });
-  const twin = entries.find((e) => e.key === "pack:mastershort.living:sofa_chaise#m")!;
+  const twin = entries.find((e) => e.key === "pack:home3d.living:sofa_chaise#m")!;
   assert.ok(twin, "a twin exists");
   assert.equal(twin.mirror, true);
-  assert.equal(twin.type, "pack:mastershort.living:sofa_chaise");
+  assert.equal(twin.type, "pack:home3d.living:sofa_chaise");
   assert.equal(twin.label, "Sofa mit Récamiere rechts");
   assert.ok(!entries.some((e) => e.key.endsWith("corner_left#m")), "an explicit pair needs no twin");
   const cards = cardsOf(entries, "sofa");
-  const chaise = cards.find((c) => c.key === "mastershort.living:pack:mastershort.living:sofa_chaise")!;
+  const chaise = cards.find((c) => c.key === "home3d.living:pack:home3d.living:sofa_chaise")!;
   assert.equal(chaise.entries.length, 2);
   assert.deepEqual(chaise.entries.map((e) => e.variant), ["links", "rechts"]);
-  const corner = cards.find((c) => c.key === "mastershort.living:corner")!;
+  const corner = cards.find((c) => c.key === "home3d.living:corner")!;
   assert.equal(corner.entries.length, 2, "corner_left and corner_right fold into one card");
 });
 

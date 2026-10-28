@@ -171,9 +171,9 @@ test("the U-stair: both flights share one going, the landing turns it and the to
 });
 
 test("a motorised curtain opens to both ends and a roll-down screen rolls up with its cover (#511)", () => {
-  assert.equal(packMotion("pack:mastershort.architecture:curtain_motor"), "curtain");
-  assert.equal(packMotion("pack:mastershort.cinema:screen_roll"), "screen");
-  assert.equal(packMotion("pack:mastershort.cinema:screen_wall"), null);
+  assert.equal(packMotion("pack:home3d.architecture:curtain_motor"), "curtain");
+  assert.equal(packMotion("pack:home3d.cinema:screen_roll"), "screen");
+  assert.equal(packMotion("pack:home3d.cinema:screen_wall"), null);
   const box = (x: number, color: string, y = 0, h = 1) => ({ shape: "box" as const, x, z: 0, w: 0.06, d: 0.2, y, h, color });
   const curtain = { id: "curtain_motor", names: {}, size: [2.4, 0.15, 2.4], parts: [box(0, "metal", 0.97, 0.03), box(-0.45, "fabric"), box(-0.05, "fabric"), box(0.05, "fabric"), box(0.45, "fabric")] } as unknown as PackItem;
   // closed: the panels stay where the pack has them; the rail does not move at all

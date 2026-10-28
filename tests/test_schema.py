@@ -305,12 +305,12 @@ def test_module_data_on_furniture_and_areas() -> None:
     """A module keeps its own data on an item of the plan, by its id; anything else is refused."""
     item = {"id": "f1", "type": "radiator", "x": 0, "z": 0, "rotation": 0, "w": 1, "d": 0.1, "h": 0.6, "variant": None}
     assert "mods" not in FURNITURE_SCHEMA(item)
-    data = {"mastershort.example": {"source": "ground", "links": {"supply": "sensor.flow"}}}
+    data = {"test.example": {"source": "ground", "links": {"supply": "sensor.flow"}}}
     assert FURNITURE_SCHEMA({**item, "mods": data})["mods"] == data
     with pytest.raises(vol.Invalid):
-        FURNITURE_SCHEMA({**item, "mods": {"mastershort.example": 3}})
+        FURNITURE_SCHEMA({**item, "mods": {"test.example": 3}})
     lawn = {"id": "a1", "type": "lawn", "points": [[0, 0], [4, 0], [4, 4]]}
-    mods = {"mastershort.example": {"collector": "loop"}}
+    mods = {"test.example": {"collector": "loop"}}
     assert OUTDOOR_SCHEMA({**lawn, "mods": mods})["mods"] == mods
 
 

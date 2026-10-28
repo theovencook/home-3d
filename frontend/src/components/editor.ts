@@ -4,7 +4,7 @@ import { css, html, LitElement, nothing, svg, type PropertyValues, type Template
 import { linesField } from "./lines-field.ts";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { ref } from "lit/directives/ref.js";
-import { fetchImage, importPack, listHistory, restoreSnapshot, storeImage, takeSnapshot, type Snapshot, getVoiceSettings, setVoiceSentences, type SentenceMode } from "../api.ts";
+import { fetchImage, listHistory, restoreSnapshot, storeImage, takeSnapshot, type Snapshot, getVoiceSettings, setVoiceSentences, type SentenceMode } from "../api.ts";
 import { download, exportFile, parseExport } from "../transfer.ts";
 import { carEntities, type CarEntities, areaEntities, autoPlace, hiddenInHa, CLIMATE_CLASSES, defaultHeight, entityName, entityAreaId, furnitureEntities, groupByDevice, hasScreen, isMediaFurniture, isPlaceable, isRoomClimateSensor, kindOf, openingEntities, otherAreaEntities, pictureRuleMatches, roomClimateSensors, unassignedEntities, windowPosition, type ClimateKey } from "../devices.ts";
 import { furnitureSymbol } from "./furniture2d.ts";
@@ -18,9 +18,8 @@ import { devicePorts, FILTER_VALVES, jointPortAt, jointPorts, nodePart, poolPort
 import { holeInRoom } from "../geometry/holes.ts";
 import { weatherEntity, isRainSource } from "../weather.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
-import { hasFeature, labOn, manualUrl, released, shopUrl, UNRELEASED } from "../features.ts";
+import { hasFeature, labOn, released } from "../features.ts";
 import { loadLocate } from "../load-locate.ts";
-import { isBeta, supporterUrl } from "../beta.ts";
 import { BIN_SHAPES, BIN_SIZE, binColors, binShape, householdCountry, isPackPlant, MAILBOX_SHAPES, MAILBOX_SIZE, mailboxShape, WASTE_KINDS, wasteColors } from "../household.ts";
 import { cameraMotionSensors, cameraOwnSensors, detectionKind, setCameraSensors } from "../markers.ts";
 import { backdropImage } from "../backdrop.ts";
@@ -53,8 +52,9 @@ import { type CarLinks, type Background, OUTDOOR_TOP, sidelightLayout, DEFAULT_W
 import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { edgeReach, generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } from "../i18n.ts";
+import { ISSUES_URL } from "./extensions.ts";
 import { iconPath } from "../icons.ts";
-import { moduleAreaFields, moduleFurnitureFields, moduleHelp, moduleRoomFields, modulePipeRules, moduleSettings, moduleWaits, syncModules, type ModuleField, type ModuleHost, type PipeRules } from "../modules.ts";
+import { moduleAreaFields, moduleFurnitureFields, moduleHelp, moduleRoomFields, modulePipeRules, syncModules, type ModuleField, type ModuleHost, type PipeRules } from "../modules.ts";
 import { pipePlanner } from "../pipe-planner.ts";
 import {
   bounds,
@@ -143,7 +143,6 @@ import { controls, tokens } from "../styles.ts";
 import "./entity-picker.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
 import { fetchBackup, restoreBackup, type BackupFile } from "../api.ts";
-import { deleteDiagnostics, getDiagnostics, setDiagnostics, type DiagnosticsStatus } from "../api.ts";
 import { load3d } from "../load3d.ts";
 import "./library.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
@@ -211,7 +210,7 @@ const turnBy = (a: number, d: number): number => {
 };
 
 /** Topics of the ⚙ settings menu (everything that belongs to the whole plan). */
-type SettingsTopic = "house" | "weather" | "director" | "voice" | "locate" | "favorites" | "backdrop" | "terrain" | "backup" | "modules" | "diagnostics";
+type SettingsTopic = "house" | "weather" | "director" | "voice" | "locate" | "favorites" | "backdrop" | "terrain" | "backup";
 
 /** Wall view side bar: what stands or hangs at a wall, by kind. */
 const WALL_CATS: Record<string, string[]> = {
@@ -388,10 +387,6 @@ export class Fp3dEditor extends LitElement {
     _expanded: { state: true },
     _notice: { state: true },
     _history: { state: true },
-    _diag: { state: true },
-    _diagView: { state: true },
-    _diagBusy: { state: true },
-    _diagNote: { state: true },
     _spots: { state: true },
     _outdoorId: { state: true },
     _wallId: { state: true },
@@ -420,7 +415,6 @@ export class Fp3dEditor extends LitElement {
     _ctx: { state: true },
     _fixedHint: { state: true },
     _phoneHint: { state: true },
-    _diagInvite: { state: true },
     _floorMenu: { state: true },
     _openingPreset: { state: true },
     _measureLen: { state: true },
@@ -430,7 +424,6 @@ export class Fp3dEditor extends LitElement {
     _toolMenu: { state: true },
     _settingsMenu: { state: true },
     _sideWidth: { state: true },
-    _moduleMsg: { state: true },
     _settingsDialog: { state: true },
     _toolOpen: { state: true },
     _viewMenu: { state: true },
@@ -519,10 +512,6 @@ export class Fp3dEditor extends LitElement {
   /** Restore points, loaded when the backup section is opened. */
   private declare _history: Snapshot[] | null;
   /** The opt-in reports: their status (null = not loaded, "error" = backend without them). */
-  private declare _diag: DiagnosticsStatus | null | "error";
-  private declare _diagView: boolean;
-  private declare _diagBusy: boolean;
-  private declare _diagNote: string;
   /** Open "place spots" form of the selected room. */
   private declare _outdoorId: string | null;
   /** Selected free-standing wall. */
@@ -623,8 +612,6 @@ export class Fp3dEditor extends LitElement {
   /** The one-time "draw on a PC or tablet" hint on phones (shown by CSS on narrow screens only). */
   private declare _phoneHint: boolean;
   /** A one-time invitation for admins to switch on the usage reports (while they are off and it was not closed). */
-  private declare _diagInvite: boolean;
-  private diagInviteChecked = false;
   private fixedPan = false;
   /** Frame the 3D half again after the next render (the roof tool shows the whole house). */
   private reframe3d = false;
@@ -648,7 +635,6 @@ export class Fp3dEditor extends LitElement {
   /** Width of the side bar (px), dragged at its left edge and remembered per browser (#620). */
   private declare _sideWidth: number;
   /** What the last module import said (the ⚙ Module dialog). */
-  private declare _moduleMsg: { ok: boolean; text: string } | null;
   private sideDrag: { x: number; width: number } | null = null;
   private declare _settingsDialog: SettingsTopic | null;
   private declare _toolOpen: Tool | null;
@@ -709,10 +695,6 @@ export class Fp3dEditor extends LitElement {
     this._expanded = new Set();
     this._notice = null;
     this._history = null;
-    this._diag = null;
-    this._diagView = false;
-    this._diagBusy = false;
-    this._diagNote = "";
     this._spots = null;
     this._outdoorId = null;
     this._wallId = null;
@@ -755,7 +737,6 @@ export class Fp3dEditor extends LitElement {
     this._floorMenu = false;
     this._openingPreset = "door";
     this._phoneHint = true;
-    this._diagInvite = false;
     try {
       this._phoneHint = localStorage.getItem("neonplan3d.phoneHint") !== "0";
     } catch {
@@ -813,7 +794,6 @@ export class Fp3dEditor extends LitElement {
       // no storage: the default width
     }
     this._sideWidth = Math.min(640, Math.max(280, width));
-    this._moduleMsg = null;
     this._settingsDialog = null;
     this._toolOpen = null;
     this._viewMenu = false;
@@ -855,9 +835,6 @@ export class Fp3dEditor extends LitElement {
   protected willUpdate(changed: PropertyValues): void {
     // this bundle keeps its own pack registry – and its own language table, so it fetches the language itself
     if (changed.has("packs")) setPacks(this.packs ?? []);
-    // the modules of the packs (Pool Pro's fields and pipe rules, the voice sentences) are loaded here too: an
-    // import in the editor must not wait for the 3D view
-    if ((changed.has("packs") || changed.has("hass")) && this.hass && this.packs?.some((p) => p.module)) void syncModules(this.hass, this.packs).then(() => this.requestUpdate());
     if (changed.has("_doc")) setTerrain(this._doc);
     if (changed.has("hass") && this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language).then(() => this.requestUpdate());
     // the 3D pane and the wall view's 3D both show the draft (otherwise a piece moved in the wall view jumps back)
@@ -1203,31 +1180,7 @@ export class Fp3dEditor extends LitElement {
     }
   }
 
-  /** Once per page: an admin with the usage reports off (and the invitation never closed) is invited. */
-  private checkDiagInvite(): void {
-    if (this.diagInviteChecked || !this.hass || !this.isAdmin || !released("diagnostics")) return;
-    this.diagInviteChecked = true;
-    try {
-      if (localStorage.getItem("neonplan3d.diagInvite") === "0") return;
-    } catch {
-      return;
-    }
-    void getDiagnostics(this.hass)
-      .then((d) => (this._diagInvite = !d.enabled))
-      .catch(() => undefined);
-  }
-
-  private closeDiagInvite(): void {
-    this._diagInvite = false;
-    try {
-      localStorage.setItem("neonplan3d.diagInvite", "0");
-    } catch {
-      // no storage: gone for this visit
-    }
-  }
-
   protected updated(): void {
-    this.checkDiagInvite();
     // the settings dialog shows its section unfolded (its summary is hidden there)
     if (this._settingsDialog) for (const d of this.renderRoot.querySelectorAll<HTMLDetailsElement>(".fp3d-dialog details")) d.open = true;
     // the item preview is placed in window coordinates; with the 3D view beside the plan an ancestor becomes its
@@ -4017,7 +3970,7 @@ export class Fp3dEditor extends LitElement {
       return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("furniture", null)}>‹ ${this.t("tool_energy")}</button>
         ${this.renderFurnitureForm(device)}`;
     const pro = hasFeature("energy_pro");
-    return html`${this.renderEnergyChecklist()}${this.renderSolarList()}${this.renderEnergyDevices()}${this.renderEnergyBalance()}${pro ? this.renderCableSettings() : nothing}${pro ? this.renderHologramSettings() : nothing}${this.renderProCard()}`;
+    return html`${this.renderEnergyChecklist()}${this.renderSolarList()}${this.renderEnergyDevices()}${this.renderEnergyBalance()}${pro ? this.renderCableSettings() : nothing}${pro ? this.renderHologramSettings() : nothing}`;
   }
 
   /**
@@ -4124,7 +4077,6 @@ export class Fp3dEditor extends LitElement {
     const meterOk = !!doc.energy.grid || meters.some((x) => this.devicePower(x.m, links));
     const inverterOk = !!doc.energy.solar || (inverters.length > 0 && inverters.every((x) => this.devicePower(x.m, links)));
     const batteryOk = batteries.every((x) => this.devicePower(x.m, links) && x.m.soc && x.m.soc !== "none") || !!doc.energy.battery;
-    const pro = hasFeature("energy_pro");
     type Row = { state: "ok" | "todo" | "opt"; label: string; action?: () => void; href?: string };
     const rows: Row[] = [
       { state: fields.length ? "ok" : "todo", label: this.t(fields.length ? "chk_solar" : "chk_solar_add"), action: fields.length ? () => (this._solarId = fields[0].id) : () => this.addSolarField() },
@@ -4138,7 +4090,6 @@ export class Fp3dEditor extends LitElement {
         ? { state: batteryOk ? "ok" : "todo", label: this.t(batteryOk ? "chk_battery" : "chk_battery_sensor"), action: () => goTo(batteries[0]) }
         : { state: "opt", label: this.t("chk_battery_opt"), action: () => this.addEnergyDevice("home_battery") },
       grid.length ? { state: "ok", label: this.t("chk_grid"), action: () => goTo(grid[0]) } : { state: "opt", label: this.t("chk_grid_opt"), action: () => this.addEnergyDevice("grid_point") },
-      pro ? { state: "ok", label: this.t("chk_pro_active") } : { state: "opt", label: this.t("chk_pro_get"), href: shopUrl(this.hass?.language) },
     ];
     const done = rows.filter((r) => r.state === "ok").length;
     return html`<section class="fp3d-checklist">
@@ -4158,35 +4109,8 @@ export class Fp3dEditor extends LitElement {
       <h3>${this.t("help_title")}</h3>
       <p class="fp3d-sub">${this.t("help_hint")}</p>
       <div class="fp3d-actions">
-        <a class="fp3d-btn" href="https://github.com/Mastershort/neonplan3d/issues/new/choose" target="_blank" rel="noopener">🐞 ${this.t("help_issue")}</a>
-        <a class="fp3d-btn" href="https://github.com/Mastershort/neonplan3d/discussions/categories/ideas" target="_blank" rel="noopener">💡 ${this.t("help_idea")}</a>
-        <a class="fp3d-btn" href="https://discord.gg/SSdVVFsev7" target="_blank" rel="noopener">💬 ${this.t("help_discord")}</a>
+        <a class="fp3d-btn" href=${ISSUES_URL} target="_blank" rel="noopener">🐞 ${this.t("help_issue")}</a>
       </div>
-    </section>`;
-  }
-
-  /** The Pro add-on: active (with the manual), or what it brings and where to get it. */
-  private renderProCard() {
-    const lang = this.hass?.language;
-    if (hasFeature("energy_pro")) {
-      return html`<section class="fp3d-teaser fp3d-teaser-on">
-        <div class="fp3d-teaser-head"><b>✓ ${this.t("energy_pro_active")}</b></div>
-        <p class="fp3d-sub">${this.t("energy_pro_active_hint")}</p>
-        <div class="fp3d-actions"><a class="fp3d-btn" href=${manualUrl(lang, "energy_pro")} target="_blank" rel="noopener">📖 ${this.t("manual")}</a></div>
-      </section>`;
-    }
-    const picture = new URL("./images/solar-pro.jpg", import.meta.url).href;
-    return html`<section class="fp3d-teaser">
-      <div class="fp3d-teaser-head"><b>⚡ ${this.t("pro_name_energy_pro")}</b><a class="fp3d-btn fp3d-primary" href=${shopUrl(lang)} target="_blank" rel="noopener">${this.t("pro_unlock")}</a></div>
-      <img src=${picture} alt=${this.t("solar_pro_title")} loading="lazy" />
-      <ul>
-        <li>${this.t("solar_pro_1")}</li>
-        <li>${this.t("solar_pro_2")}</li>
-        <li>${this.t("solar_pro_3")}</li>
-        <li>${this.t("solar_pro_4")}</li>
-      </ul>
-      <p class="fp3d-sub">${this.t("solar_pro_free")}</p>
-      <div class="fp3d-actions"><a class="fp3d-btn" href=${manualUrl(lang, "energy_pro")} target="_blank" rel="noopener">📖 ${this.t("manual")}</a></div>
     </section>`;
   }
 
@@ -5325,48 +5249,6 @@ export class Fp3dEditor extends LitElement {
   // ------------------------------------------------------------------ rendering
 
   /** "Later" on the news: gone for this visit of the editor, back the next time. */
-  private newsLater = false;
-
-  /**
-   * News from the shop after an update, once per announcement: a new fun pack to pick up (the pets, a present for the
-   * customers). Shown to admins who bought something and do not have it yet, until "don't show again".
-   */
-  private renderNews() {
-    // the pets' notice went with the gift notice of the panel (both fun packs free with a customer account)
-    const news: { id: string; feature: "fun_pets" }[] = [];
-    if (this.newsLater || !this.isAdmin) return nothing;
-    const customer = (this.packs ?? []).some((p) => p.licensee);
-    const item = news.find((n) => {
-      if (UNRELEASED.includes(n.feature) || hasFeature(n.feature) || !customer) return false;
-      try {
-        return localStorage.getItem(`neonplan3d.news.${n.id}`) !== "never";
-      } catch {
-        return true;
-      }
-    });
-    if (!item) return nothing;
-    const never = () => {
-      try {
-        localStorage.setItem(`neonplan3d.news.${item.id}`, "never");
-      } catch {
-        // a private window: it only stays away for this visit
-      }
-      this.newsLater = true;
-      this.requestUpdate();
-    };
-    return html`<div class="fp3d-news-veil" @click=${(e: Event) => e.target === e.currentTarget && ((this.newsLater = true), this.requestUpdate())}>
-      <div class="fp3d-news" role="dialog" aria-label=${this.t("news_pets_title")}>
-        <div class="fp3d-news-pic">🐱 🐶 🐰 🐟</div>
-        <h3>${this.t("news_pets_title")}</h3>
-        <p>${this.t("news_pets_text")}</p>
-        <div class="fp3d-news-actions">
-          <a class="fp3d-btn fp3d-primary" href=${shopUrl(this.hass?.language)} target="_blank" rel="noopener" @click=${() => ((this.newsLater = true), this.requestUpdate())}>🎁 ${this.t("news_to_shop")}</a>
-          <button class="fp3d-btn" @click=${() => ((this.newsLater = true), this.requestUpdate())}>${this.t("news_later")}</button>
-          <button class="fp3d-btn" @click=${never}>${this.t("news_never")}</button>
-        </div>
-      </div>
-    </div>`;
-  }
 
   /** Work on another floor (from the floor menu of the toolbar). */
   private selectFloor(id: string): void {
@@ -5607,8 +5489,6 @@ export class Fp3dEditor extends LitElement {
       { key: "backdrop", icon: "🖼", label: this.t("backdrop"), admin: true },
       { key: "terrain", icon: "⛰", label: this.t("terrain"), admin: true },
       { key: "backup", icon: "💾", label: this.t("backup"), admin: true },
-      { key: "modules", icon: "🧩", label: this.t("settings_modules"), admin: true },
-      ...(released("diagnostics") ? [{ key: "diagnostics" as const, icon: "🛟", label: this.t("diag_menu"), admin: true }] : []),
     ];
     const topics = all.filter((t) => admin || !t.admin);
     const toggle = () => {
@@ -5635,7 +5515,6 @@ export class Fp3dEditor extends LitElement {
                         return;
                       }
                       this._settingsDialog = t.key;
-                      if (t.key === "diagnostics") void this.loadDiagnostics();
                       // the modules' sentences for the voice list: loaded here as well (the editor is its own bundle), once per opening
                       if (t.key === "voice" && this.hass) void syncModules(this.hass, this.packs ?? []).then(() => this.requestUpdate());
                     }}
@@ -5664,8 +5543,6 @@ export class Fp3dEditor extends LitElement {
       backdrop: this.t("backdrop"),
       terrain: this.t("terrain"),
       backup: this.t("backup"),
-      modules: this.t("settings_modules"),
-      diagnostics: this.t("diag_title"),
     };
     const body =
       topic === "house"
@@ -5682,11 +5559,7 @@ export class Fp3dEditor extends LitElement {
                   ? this.renderBackdrop()
                   : topic === "terrain"
                     ? this.renderTerrain()
-                    : topic === "backup"
-                      ? this.renderBackup()
-                      : topic === "diagnostics"
-                        ? this.renderDiagnostics(true)
-                        : this.renderModuleSettings();
+                    : this.renderBackup();
     return html`<div class="fp3d-dialog-veil" @click=${(e: Event) => e.target === e.currentTarget && close()}>
       <div class="fp3d-dialog" role="dialog" aria-label=${titles[topic]} tabindex="-1" @keydown=${(e: KeyboardEvent) => e.key === "Escape" && close()}>
         <div class="fp3d-dialog-head">
@@ -5698,65 +5571,11 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
-  /** Modules installed from the shop; a module's own settings will show here once modules bring some. */
-  /** The modules installed (code from the shop) and the button that imports one – a module file need not go through the extensions page. */
-  private renderModuleSettings() {
-    const modules = (this.packs ?? []).filter((p) => p.module || p.features?.length);
-    return html`<div class="fp3d-form">
-      ${modules.length
-        ? modules.map(
-            (p) => html`<div class="fp3d-wide">
-              <b>${packName(p, this.hass?.language ?? "de")}</b>
-              <p class="fp3d-sub">${p.module ? this.t("pack_module", { publisher: p.publisher }) : this.t((p.features ?? []).every((f) => f.startsWith("fun_")) ? "pack_fun_module" : "pack_pro_module", { publisher: p.publisher })}${p.release && p.release > 1 ? ` · v${p.release}` : ""}</p>
-              ${p.module && moduleWaits(p)
-                ? html`<p class="fp3d-sub">${this.t(p.module.approved === true ? "module_update_waits" : "module_waits", { from: p.release ?? 1, to: p.pending?.release ?? 1 })} ${this.t("module_waits_where")}</p>`
-                : p.module
-                  ? (() => {
-                      const own = this.hass ? moduleSettings(p.id, this.editorHost()) : [];
-                      return own.length ? html`<div class="fp3d-form">${this.renderFields(own, false)}</div>` : html`<p class="fp3d-sub">${this.t("module_no_settings")}</p>`;
-                    })()
-                  : nothing}
-            </div>`,
-          )
-        : html`<p class="fp3d-sub fp3d-wide">${this.t("modules_none")}</p>`}
-      <label class="fp3d-btn fp3d-primary fp3d-wide">
-        ${this.t("module_import")}
-        <input type="file" accept=".fp3dpack,.json,application/json" multiple hidden @change=${(e: Event) => void this.importModuleFile(e)} />
-      </label>
-      ${this._moduleMsg ? html`<p class="fp3d-sub fp3d-wide ${this._moduleMsg.ok ? "" : "fp3d-pack-error"}">${this._moduleMsg.text}</p>` : nothing}
-      <p class="fp3d-sub fp3d-wide">${this.t("module_import_hint")}</p>
-    </div>`;
-  }
-
-  /** Imports module files like the extensions page imports packs (the same signed format, the same check). */
-  private async importModuleFile(e: Event): Promise<void> {
-    const input = e.target as HTMLInputElement;
-    const files = [...(input.files ?? [])];
-    input.value = "";
-    if (!files.length || !this.hass) return;
-    const done: string[] = [];
-    const failed: string[] = [];
-    for (const file of files) {
-      try {
-        const res = await importPack(this.hass, await file.text());
-        const text = this.t("module_imported", { name: res.name, publisher: res.publisher });
-        done.push(res.approval ? `${text} ${this.t("module_imported_waits")}` : text);
-      } catch (err) {
-        const { code, message } = (err ?? {}) as { code?: string; message?: string };
-        const key = `pack_error_${code}` as I18nKey;
-        const text = this.t(key, { detail: message ?? String(err) });
-        failed.push(`${file.name}: ${text === key ? this.t("pack_error_other", { detail: message ?? String(err) }) : text}`);
-      }
-    }
-    if (done.length) this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
-    this._moduleMsg = { ok: failed.length === 0, text: [...done, ...failed].join(" · ") };
-  }
-
   protected render(): TemplateResult {
     const floor = this.floor;
     const walls = floor ? generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }, floor.walls ?? []) : null;
     return html`
-      ${this.renderPreview()} ${this.renderWallView()} ${this.renderPartCard()} ${this.renderDiagnosticsView()} ${this.renderNews()} ${this.renderSettingsDialog()}
+      ${this.renderPreview()} ${this.renderWallView()} ${this.renderPartCard()} ${this.renderSettingsDialog()}
       <div class="fp3d-editor ${this.narrow ? "fp3d-narrow" : ""}" style=${`--fp3d-side-w:${this._sideWidth}px`}>
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
@@ -5783,24 +5602,6 @@ export class Fp3dEditor extends LitElement {
                   >
                     ✕
                   </button>
-                </div>`
-              : nothing}
-            ${this._diagInvite
-              ? html`<div class="fp3d-diag-invite" role="note">
-                  <span><b>🛟 ${this.t("diag_title")}</b> ${this.t("diag_invite")}</span>
-                  <span class="fp3d-diag-invite-buttons">
-                    <button
-                      class="fp3d-btn primary"
-                      @click=${() => {
-                        this.closeDiagInvite();
-                        this._settingsDialog = "diagnostics";
-                        void this.loadDiagnostics();
-                      }}
-                    >
-                      ${this.t("diag_invite_look")}
-                    </button>
-                    <button class="fp3d-btn" @click=${() => this.closeDiagInvite()}>${this.t("diag_invite_later")}</button>
-                  </span>
                 </div>`
               : nothing}
             ${this.houseTool ? html`<div class="fp3d-tool-note">${this.t(this._tool === "energy" ? "energy_only_note" : "roof_only_note")}</div>` : nothing}
@@ -11186,7 +10987,7 @@ export class Fp3dEditor extends LitElement {
         : nothing}
       ${isElectric(f.type) ? this.renderFurnitureLinks(f) : !NO_STATE_TYPES.has(f.type) ? html`<div class="fp3d-form fp3d-links">${this.renderStateLinks(f)}</div>` : nothing} ${GANG_TYPES.has(f.type) ? this.renderGangsForm(f) : nothing} ${TECH_TYPES.has(f.type) ? this.renderTechForm(f) : nothing} ${f.type === "parking" ? this.renderParkingForm(f) : nothing} ${f.type === "waste_bin" || f.type === "mailbox" ? this.renderHouseholdForm(f) : this.renderHouseholdExtras(f)}
       ${this.renderModuleFurnitureFields(f)}
-      ${f.type.startsWith("pack:mastershort.vehicles:") && this.isAdmin
+      ${/^pack:[^:]+\.vehicles:/.test(f.type) && this.isAdmin
         ? html`<section>
             <p class="fp3d-sub">${this.t("vehicle_to_spot_hint")}</p>
             <div class="fp3d-actions"><button class="fp3d-btn fp3d-primary" @click=${() => this.vehicleToSpot(f)}>🅿 ${this.t("vehicle_to_spot")}</button></div>
@@ -11764,17 +11565,8 @@ export class Fp3dEditor extends LitElement {
    */
   private renderHouseholdForm(f: Furniture) {
     const admin = this.isAdmin;
-    const lang = this.hass?.language;
     const pro = hasFeature("household");
-    const teaser = !pro && released("household")
-      ? html`<section class="fp3d-teaser fp3d-wide">
-          <div class="fp3d-teaser-head">
-            <b>🏠 ${this.t("pro_name_household")}</b>
-            <a class="fp3d-btn fp3d-primary" href=${isBeta("household") ? supporterUrl(lang) : shopUrl(lang)} target="_blank" rel="noopener">${this.t(isBeta("household") ? "beta_become" : "pro_unlock")}</a>
-          </div>
-          <p class="fp3d-sub">${this.t(f.type === "waste_bin" ? "household_teaser_bin" : "household_teaser_mail")}</p>
-        </section>`
-      : nothing;
+    const teaser = nothing;
     const select = <T extends string>(label: string, value: T, options: readonly T[], key: (o: T) => I18nKey, onChange: (v: T) => void) =>
       html`<label class="fp3d-field fp3d-wide"
         >${label}
@@ -11858,17 +11650,7 @@ export class Fp3dEditor extends LitElement {
     const fridge = f.type === "fridge" || f.type === "fridge_smart";
     const electric = isElectric(f.type);
     if (!plant && !electric) return nothing;
-    if (!hasFeature("household")) {
-      if (!released("household") || !(plant || appliance || fridge)) return nothing;
-      const lang = this.hass?.language;
-      return html`<section class="fp3d-teaser">
-        <div class="fp3d-teaser-head">
-          <b>🏠 ${this.t("pro_name_household")}</b>
-          <a class="fp3d-btn fp3d-primary" href=${isBeta("household") ? supporterUrl(lang) : shopUrl(lang)} target="_blank" rel="noopener">${this.t(isBeta("household") ? "beta_become" : "pro_unlock")}</a>
-        </div>
-        <p class="fp3d-sub">${this.t(plant ? "hh_teaser_plant" : fridge ? "hh_teaser_fridge" : "hh_teaser_appliance")}</p>
-      </section>`;
-    }
+    if (!hasFeature("household")) return nothing;
     const sensors = this.entityOptions((id) => id.startsWith("sensor."));
     const doors = this.entityOptions((id) => id.startsWith("binary_sensor."));
     const services = this.entityOptions((id) => ["sensor.", "binary_sensor.", "input_boolean.", "input_datetime.", "input_number."].some((d) => id.startsWith(d)));
@@ -12304,12 +12086,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Auto Pro: the car's entities – one entity of the car's device is enough, the roles are found beside it. */
   private renderCarForm(f: Furniture) {
-    const lang = this.hass?.language;
-    if (!hasFeature("auto_pro"))
-      return html`<section class="fp3d-teaser">
-        <div class="fp3d-teaser-head"><b>🚗 ${this.t("pro_name_auto_pro")}</b><a class="fp3d-btn fp3d-primary" href=${shopUrl(lang)} target="_blank" rel="noopener">${this.t("pro_unlock")}</a></div>
-        <p class="fp3d-sub">${this.t("auto_pro_teaser")}</p>
-      </section>`;
+    if (!hasFeature("auto_pro")) return nothing;
     if (!this.hass) return nothing;
     const hass = this.hass;
     const car = f.car ?? {};
@@ -12355,7 +12132,7 @@ export class Fp3dEditor extends LitElement {
     if (!hasFeature("screens")) {
       return html`<div class="fp3d-wide">
         <div class="fp3d-sub">${this.t("screen_pictures")}</div>
-        <p class="fp3d-sub">🔒 ${this.t("pro_feature_screens")} – ${this.t("pro_locked")} <a href=${shopUrl(this.hass?.language)} target="_blank" rel="noopener">${this.t("pro_shop")}</a> · <a href=${manualUrl(this.hass?.language, "screens")} target="_blank" rel="noopener">${this.t("manual_more")}</a></p>
+        <p class="fp3d-sub">🔒 ${this.t("pro_feature_screens")}</p>
       </div>`;
     }
     const set = (next: ScreenPicture[]) => this.updateFurniture({ pictures: next });
@@ -12981,81 +12758,6 @@ export class Fp3dEditor extends LitElement {
     </details>`;
   }
 
-  private async loadDiagnostics(): Promise<void> {
-    if (!this.hass) return;
-    try {
-      this._diag = await getDiagnostics(this.hass);
-    } catch {
-      this._diag = "error";
-    }
-  }
-
-  /** Switch the reports, delete them; the main bundle's collector hears about it through a window event. */
-  private async changeDiagnostics(action: "on" | "off" | "delete"): Promise<void> {
-    if (!this.hass || this._diagBusy) return;
-    if (action === "delete" && !confirm(this.t("diag_delete_confirm"))) return;
-    this._diagBusy = true;
-    this._diagNote = "";
-    try {
-      this._diag = action === "delete" ? await deleteDiagnostics(this.hass) : await setDiagnostics(this.hass, action === "on");
-      if (action === "delete") this._diagNote = this.t("diag_deleted");
-      window.dispatchEvent(new CustomEvent("neonplan3d-diagnostics", { detail: { enabled: this._diag.enabled } }));
-    } catch {
-      this._diagNote = this.t(action === "delete" ? "diag_delete_failed" : "save_error");
-    }
-    this._diagBusy = false;
-  }
-
-  /** `open`: shown in its own settings dialog (open from the start). */
-  private renderDiagnostics(open = false) {
-    const d = this._diag;
-    const on = d !== null && d !== "error" && d.enabled;
-    return html`<details
-      class="fp3d-section"
-      ?open=${open}
-      @toggle=${(e: Event) => {
-        if ((e.target as HTMLDetailsElement).open) void this.loadDiagnostics();
-      }}
-    >
-      <summary>${this.t("diag_title")}</summary>
-      <p class="fp3d-sub">${this.t("diag_intro")}</p>
-      <p class="fp3d-sub"><b>${this.t("diag_sent_head")}</b> ${this.t("diag_sent")}</p>
-      <p class="fp3d-sub"><b>${this.t("diag_never_head")}</b> ${this.t("diag_never")}</p>
-      <p class="fp3d-sub">
-        ${this.t("diag_voluntary")}
-        <a href="https://mastershort.de/datenschutz/" target="_blank" rel="noopener noreferrer">${this.t("diag_privacy")}</a>
-      </p>
-      ${d === null
-        ? html`<p class="fp3d-sub">${this.t("loading")}</p>`
-        : d === "error"
-          ? html`<p class="fp3d-sub">${this.t("diag_unavailable")}</p>`
-          : html`<label class="fp3d-check fp3d-wide"
-                ><input type="checkbox" .checked=${on} ?disabled=${this._diagBusy} @change=${(e: Event) => void this.changeDiagnostics((e.target as HTMLInputElement).checked ? "on" : "off")} />
-                ${this.t("diag_switch")}</label
-              >
-              <div class="fp3d-actions">
-                <button class="fp3d-btn" @click=${() => (this._diagView = true)}>${this.t("diag_view")}</button>
-                <button class="fp3d-btn" ?disabled=${this._diagBusy || (!on && !d.can_delete)} @click=${() => void this.changeDiagnostics("delete")}>${this.t("diag_delete")}</button>
-              </div>`}
-      ${this._diagNote ? html`<p class="fp3d-sub">${this._diagNote}</p>` : nothing}
-    </details>`;
-  }
-
-  /** The exact next report as JSON, over the whole editor. */
-  private renderDiagnosticsView() {
-    const d = this._diag;
-    if (!this._diagView || !d || d === "error") return nothing;
-    const on = d.enabled;
-    return html`<div class="fp3d-wv-veil" @click=${(e: Event) => e.target === e.currentTarget && (this._diagView = false)}>
-      <div class="fp3d-wv fp3d-diag" role="dialog" aria-label=${this.t("diag_view")}>
-        <h4 class="fp3d-lib-head">${this.t("diag_view_head")}</h4>
-        <pre class="fp3d-diag-json">${JSON.stringify(d.preview, null, 2)}</pre>
-        <p class="fp3d-sub">${this.t(on ? "diag_view_hint_on" : "diag_view_hint_off")}</p>
-        <div class="fp3d-actions"><button class="fp3d-btn fp3d-primary" @click=${() => (this._diagView = false)}>${this.t("close")}</button></div>
-      </div>
-    </div>`;
-  }
-
   private async loadHistory(): Promise<void> {
     if (!this.hass) return;
     try {
@@ -13203,10 +12905,6 @@ export class Fp3dEditor extends LitElement {
         /></label>
       </div>
       <p class="fp3d-sub">${this.t("backup_hint")}</p>
-      <p class="fp3d-sub">
-        ${this.t("backup_other_hint")}
-        <a href=${`https://neonplan3d.mastershort.de/import/?lang=${(this.hass?.language ?? "en").startsWith("de") ? "de" : "en"}`} target="_blank" rel="noopener">${this.t("backup_other")}</a>
-      </p>
       <h4 class="fp3d-lib-head">${this.t("backup_full")}</h4>
       <div class="fp3d-actions">
         <button class="fp3d-btn" ?disabled=${this._backupBusy} @click=${() => this.exportBackup()}>${this._backupBusy ? "…" : this.t("backup_full_export")}</button>
@@ -14098,20 +13796,6 @@ export class Fp3dEditor extends LitElement {
         pointer-events: none;
       }
       /* the opt-in reports: the exact JSON they send */
-      .fp3d-wv.fp3d-diag {
-        width: min(640px, 100%);
-        grid-template-rows: auto minmax(0, 1fr) auto auto;
-      }
-      .fp3d-diag-json {
-        margin: 0;
-        overflow: auto;
-        padding: 10px;
-        border-radius: 10px;
-        background: rgba(0, 0, 0, 0.3);
-        font-size: 12px;
-        line-height: 1.4;
-        white-space: pre;
-      }
       /* the wall view: a room's wall from the front, furniture on it to slide along and up */
       .fp3d-wv-veil {
         position: fixed;
@@ -15142,41 +14826,6 @@ export class Fp3dEditor extends LitElement {
         background: var(--fp3d-accent);
         color: var(--fp3d-accent-text);
       }
-      .fp3d-news-veil {
-        position: fixed;
-        inset: 0;
-        z-index: 40;
-        display: grid;
-        place-items: center;
-        padding: 16px;
-        background: rgba(2, 6, 14, 0.55);
-      }
-      .fp3d-news {
-        max-width: 420px;
-        padding: 22px 22px 18px;
-        border-radius: 18px;
-        border: 1px solid var(--fp3d-accent, #22d3ee);
-        background: var(--fp3d-panel, #0d1628);
-        box-shadow: 0 0 40px rgba(34, 211, 238, 0.25);
-        text-align: center;
-      }
-      .fp3d-news-pic {
-        font-size: 34px;
-        letter-spacing: 6px;
-      }
-      .fp3d-news h3 {
-        margin: 10px 0 6px;
-      }
-      .fp3d-news p {
-        margin: 0 0 14px;
-        color: var(--fp3d-muted, #a9b8d4);
-      }
-      .fp3d-news-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        justify-content: center;
-      }
       .fp3d-wv-zoom {
         position: absolute;
         right: 64px;
@@ -15498,32 +15147,6 @@ export class Fp3dEditor extends LitElement {
           border: 1px solid var(--fp3d-accent);
           font-size: 13px;
         }
-      }
-      .fp3d-diag-invite {
-        position: absolute;
-        bottom: 12px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 3;
-        width: min(560px, calc(100% - 24px));
-        box-sizing: border-box;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px 12px;
-        padding: 10px 12px;
-        border-radius: 14px;
-        background: var(--fp3d-chrome-solid);
-        border: 1px solid var(--fp3d-accent);
-        font-size: 13px;
-        line-height: 1.4;
-      }
-      .fp3d-diag-invite > span:first-child {
-        flex: 1 1 260px;
-      }
-      .fp3d-diag-invite-buttons {
-        display: flex;
-        gap: 6px;
       }
       .fp3d-tool-note {
         position: absolute;

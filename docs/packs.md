@@ -3,28 +3,18 @@
 Möbel-Packs bringen zusätzliche Möbel in NeonPlan 3D. Sie werden wie die eingebauten Möbel aus
 Quadern und Zylindern gebaut und laufen deshalb genauso flüssig auf schwachen Tablets.
 
-Nur Packs, die mit dem Herausgeber-Schlüssel unterschrieben sind, lassen sich importieren. Der
-öffentliche Schlüssel steht in `custom_components/neonplan3d/packs.py` (`PACK_PUBLIC_KEYS`); der
-geheime Schlüssel liegt nur beim Herausgeber und gehört nie ins Repo.
+Packs werden nicht signiert: Beim Import prüft Home Assistant nur den Inhalt gegen das Schema in
+`custom_components/neonplan3d/packs.py`. Eine Pack-Datei ist `{"payload": {…}}` oder direkt das
+Payload-Objekt; ein `signature`-Block älterer Dateien wird ignoriert.
 
 ## Ablauf
 
 1. Pack-Quelle schreiben (JSON, Format unten), z. B. `private/packs/kueche.json`
    (`private/` wird von Git ignoriert).
-2. Unterschreiben:
-
-   ```
-   python tools/fp3dpack.py sign private/packs/kueche.json --key %USERPROFILE%\.floorplan3d\pack-signing-key.pem
-   ```
-
-   Mit `--licensee "Name oder E-Mail"` wird der Käufer mit unterschrieben und beim Import angezeigt.
-3. Prüfen: `python tools/fp3dpack.py verify private/packs/kueche.fp3dpack`
-4. Die `.fp3dpack`-Datei verteilen. Import in Home Assistant: Editor → **Möbel** →
-   **Möbel-Pack importieren …**
-
-Den geheimen Schlüssel sicher aufbewahren (Backup, z. B. Passwort-Manager): Geht er verloren, können
-keine neuen Packs mehr unterschrieben werden. Mit `keygen` einen neuen zu erzeugen hilft nur, wenn
-dessen öffentlicher Schlüssel zusätzlich in `PACK_PUBLIC_KEYS` eingetragen und ausgeliefert wird.
+2. Prüfen: `python tools/fp3dpack.py validate private/packs/kueche.json`
+3. Optional verpacken: `python tools/fp3dpack.py build private/packs/kueche.json` schreibt
+   `kueche.fp3dpack` (`{"payload": …}`).
+4. Import in Home Assistant: **Erweiterungen** → **Möbel-Pack importieren …**
 
 ## Format
 
@@ -32,9 +22,9 @@ dessen öffentlicher Schlüssel zusätzlich in `PACK_PUBLIC_KEYS` eingetragen un
 {
   "format": "fp3dpack",
   "version": 1,
-  "id": "mastershort.kueche",
+  "id": "home3d.kueche",
   "name": "Küchen-Pack",
-  "publisher": "Mastershort",
+  "publisher": "Home 3D",
   "description": "optional",
   "items": [
     {
@@ -98,85 +88,7 @@ dessen öffentlicher Schlüssel zusätzlich in `PACK_PUBLIC_KEYS` eingetragen un
   Ohne diese Felder ordnet NeonPlan das Möbel nach seinen Wörtern und dem Pack ein; Varianten
   erkennt es an der Größe am Ende der ID (`table_160`) und an den Zahlen im Namen.
 
-## Feature-Packs (NeonPlan Pro)
+## Feature-Namen
 
-Ein Pack darf statt Möbeln (oder zusätzlich) `features` tragen, zum Beispiel
-`"features": ["weather"]` mit `"items": []`. Ist so ein Pack installiert, ist die Pro-Funktion frei:
-`camera_cockpit` (durch die Kamera schauen, Bewegungsspur), `weather` (Wetter draußen) oder
-`screens` (Bildschirme live: App-Farbe und Cover des Media Players, Bildregeln, Kamera-Livebild auf
-Bildschirmen – ohne das Feature ist ein Bildschirm nur an oder aus). Ohne Pack zeigen die Schalter
-ein Schloss und ein Hinweis führt zum Shop. Die Pro-Packs werden wie jedes Pack signiert, gebunden
-und über die Shop-Verbindung installiert (`private/packs/defs/pro_*.py`, Produkt-Schlüssel
-`pro_camera`, `pro_weather`, `pro_screens`); jede Erweiterung wird einzeln verkauft.
-
-## Shop-Bilder
-
-`cd frontend && node pack-images.mjs <pack.json>... --out <ordner>` rendert mit der echten 3D-Grafik
-(vorher `npm run build`) je Pack ein Übersichtsbild (`overview.png`, 3200 × 2400) und ein freigestelltes
-PNG pro Möbel (`items/<id>.png`).
-
-## Personalisierte Downloads im Shop
-
-Zwei Schlüssel sind eingetragen: der **Master-Schlüssel** (offline, signiert die Packs) und der
-**Shop-Schlüssel** (auf dem Server, signiert jeden Kauf mit dem Käufernamen). Wird der Server je
-kompromittiert, fliegt nur der Shop-Schlüssel aus `PACK_PUBLIC_KEYS`; alte Signaturen bleiben gültig.
-
-Damit der Server nicht die ganze Kanonisierung nachbauen muss, liegt neben jeder Pack-Datei eine
-**Vorlage** `<pack>.canonical.json` (die kanonischen Bytes ohne Lizenznehmer, aus
-`python tools/fp3dpack.py canonical <pack>.json`; `private/packs/build.py` erzeugt sie mit). Der Shop
-ersetzt darin das letzte `"licensee":null` durch den Namen und signiert genau diese Bytes –
-`tools/shop/ms-np-sign.php` macht das für WooCommerce (Hook `woocommerce_download_product`).
-
-Einrichtung auf dem Server:
-
-1. Seed des Shop-Schlüssels ausgeben: `python tools/fp3dpack.py seed shop-signing-key.pem` und in
-   `wp-config.php` eintragen: `define('MS_NP_SIGNING_SEED', '<base64>');`
-2. `<pack>.canonical.json` zu jeder `<pack>.fp3dpack` in den WooCommerce-Upload-Ordner legen.
-3. `tools/shop/ms-np-sign.php` in den Code-Ordner des Shops kopieren.
-
-Fehlt Seed oder Vorlage, liefert WooCommerce die unpersonalisierte Datei wie bisher aus.
-
-Möbel eines entfernten Packs bleiben im Plan als einfache Kästen stehen und erscheinen wieder, wenn das
-Pack erneut importiert wird.
-
-## Lizenzschlüssel, Gerätebindung und Updates
-
-Jeder Kunde bekommt mit dem ersten Pack-Kauf **einen Schlüssel** (`NP-XXXX-XXXX-XXXX-XXXX`), der in
-der Bestell-Mail, auf der Danke-Seite und im Kundenkonto steht. In NeonPlan 3D wird er einmal unter
-*Erweiterungen › Shop-Verbindung* eingetragen. Danach:
-
-- listet die Integration die gekauften Packs (Knopf „Installieren“ beziehungsweise „Aktualisieren“),
-- holt sie **signiert für diese Installation**: das Payload-Feld `instance` trägt den Fingerabdruck
-  (`sha256("neonplan3d:" + Instanz-ID)[:16]`, in der Oberfläche als „Installations-Kennung“ zu
-  sehen); ein so signiertes Pack lehnt jede andere Installation mit `wrong_instance` ab,
-- prüft **einmal täglich** beim Shop nach neuen Käufen und neueren Releases (Payload-Feld `release`,
-  Standard 1; ein höheres Release derselben Pack-ID ersetzt das installierte Pack).
-
-Installierte Packs brauchen den Shop nie wieder: die Signatur wird lokal geprüft. Fällt der Shop aus
-oder wird die Verbindung getrennt, bleibt alles, nur Updates kommen nicht mehr von selbst.
-
-Ein Schlüssel ist mit höchstens drei Installationen gleichzeitig verbunden. Kommt eine neue dazu
-(Umzug auf neue Hardware), fällt die älteste heraus. Bis zu fünf neue Verbindungen sind in 365 Tagen
-möglich; darüber antwortet der Shop mit `activation_limit`. Downloads von der Website sind an die zuletzt
-aktivierte Installation gebunden; wer noch nie aktiviert hat, bekommt die Datei nur mit Namen signiert.
-
-Serverseite (`tools/shop/ms-np-license.php`, neben `ms-np-sign.php`):
-
-1. WooCommerce-Hooks legen den Schlüssel beim ersten Pack-Kauf an (Nutzer-Meta `_ms_np_license`,
-   bei Gastbestellungen Bestell-Meta) und zeigen ihn in Mail, Bestellung und Konto.
-2. `POST /wp-json/neonplan/v1/catalog` `{key, instance}` bindet die Installation und liefert
-   `{licensee, packs: [{id, name, release, url}]}`; `POST /wp-json/neonplan/v1/pack`
-   `{key, instance, pack}` liefert die signierte Datei. Fehler sind `{code, message}` mit HTTP 4xx.
-3. `release` und `instance` stehen in den Vorlagen `<pack>.canonical.json` (neu erzeugen mit
-   `python tools/fp3dpack.py canonical`); der Shop ersetzt das letzte `"instance":null`.
-
-Nutzt der Shop ein Mail-Template-Plugin, das `woocommerce_email_after_order_table` nicht ausführt
-(zum Beispiel „Email Template Customizer for WooCommerce“), hängt eine kleine Zusatzdatei
-`ms-np-license-mail.php` auf dem Server den Schlüssel über den Filter `woocommerce_mail_callback_params`
-an die fertige Mail an. Sie liegt nur auf dem Server, weil sie zum jeweiligen Shop gehört.
-
-Beim Speichern eines Produkts leert `ms-np-license.php` die zwischengespeicherten Produkt-Links und
-Pack-Angaben, damit der Katalog nach dem Veröffentlichen sofort die richtigen URLs liefert.
-
-Signieren von Hand: `python tools/fp3dpack.py sign PACK.json --key … --licensee "Name" --instance <Kennung>`.
-
+Ein Pack darf `features` tragen (z. B. `"features": ["weather"]`), wie ältere Pack-Dateien es tun. Das
+schaltet nichts frei: Alle Funktionen, deren Code in diesem Repository liegt, sind ohnehin an.

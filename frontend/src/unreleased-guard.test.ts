@@ -1,6 +1,6 @@
-// Guard: an add-on on the UNRELEASED list must not show anywhere public – not in the manuals, the README, the
-// changelog or the roadmap. CI fails as soon as one of these texts names it (it happened once: Pool Pro showed
-// for two releases). Releasing an add-on means taking it off UNRELEASED first.
+// Guard: a feature on the UNRELEASED list must not show anywhere public – not in the README or the docs. CI fails as
+// soon as one of these texts names it. Releasing a feature means taking it off UNRELEASED first. (CHANGELOG.md is left
+// out: its older entries are the upstream project's history.)
 
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { UNRELEASED } from "./features.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..");
-const PUBLIC = ["README.md", "CHANGELOG.md", "ROADMAP.md", "docs/manual.md", "docs/anleitung.md"];
+const PUBLIC = ["README.md", "docs/plan-format.md", "docs/ai-import.md", "docs/packs.md"];
 
 /** The names users would read for each gated add-on (case-insensitive). */
 const NAMES: Record<string, RegExp> = {
@@ -31,8 +31,8 @@ test("unreleased add-ons are named in no public text", () => {
   }
 });
 
-test("Pool Pro stays unreleased until it is released on purpose", () => {
-  assert.ok(UNRELEASED.includes("pool" as never), "Pool Pro left the UNRELEASED list – only do that when Torsten releases it");
+test("the pool stays unreleased (its logic is not in this repository)", () => {
+  assert.ok(UNRELEASED.includes("pool" as never), "the pool left the UNRELEASED list – its logic is not part of this repository");
 });
 
 test("no local test harness and nothing private is tracked by git", () => {

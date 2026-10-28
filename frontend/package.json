@@ -7,7 +7,6 @@
     "watch": "node build.mjs --watch",
     "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "screenshot": "node screenshot.mjs",
     "deploy": "node build.mjs && node ../scripts/deploy.mjs"
   },
   "dependencies": {

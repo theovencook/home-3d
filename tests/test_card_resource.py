@@ -10,7 +10,6 @@ from custom_components.neonplan3d.card_resource import (
     async_ensure_card_resource,
     async_remove_card_resource,
     loader_source,
-    remove_loader,
 )
 
 
@@ -79,15 +78,8 @@ async def test_loader_resource_replaces_the_bundle_and_goes_on_removal() -> None
     assert res.items == []
 
 
-def test_loader_file(tmp_path) -> None:
-    """The loader imports the bundle, tries again while the card is missing, and is written and removed cleanly."""
+def test_loader_file() -> None:
+    """The loader imports the bundle and tries again while the card is missing."""
     text = loader_source(URL)
     assert f'const url = "{URL}";' in text
     assert "customElements.get(tag)" in text
-    # a loader that an older version left in www is removed, with its folder
-    old = tmp_path / "neonplan3d" / "neonplan3d-loader.js"
-    old.parent.mkdir()
-    old.write_text(text, encoding="utf-8")
-    remove_loader(tmp_path)
-    assert not (tmp_path / "neonplan3d").exists()
-    remove_loader(tmp_path)  # nothing there: no error

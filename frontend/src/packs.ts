@@ -89,20 +89,14 @@ export interface FurniturePack {
   id: string;
   name: string;
   publisher: string;
+  /** Older pack files may name a licensee (shown on the extensions page). */
   licensee: string | null;
   description?: string;
   /** Release number; a newer release of the same id replaces the installed one. */
   release?: number;
-  /** Fingerprint of the installation the pack is bound to (null = any). */
-  instance?: string | null;
-  /** Pro features the pack unlocks (see features.ts). */
+  /** Feature names the pack lists (compatibility only; see features.ts). */
   features?: string[];
   items: PackItem[];
-  /** A module (code the shop delivers; see modules.ts) – the code itself is fetched apart. It runs only once an
-   * admin approved exactly this code (`approved`); `sha` is the code's fingerprint, `size` its length. */
-  module?: { api: number; kind: string; approved?: boolean; size?: number; sha?: string };
-  /** A new release of the module code that waits for an admin's approval (the approved one keeps running). */
-  pending?: { release: number; size: number; sha: string };
   imported_at?: number;
 }
 
@@ -189,13 +183,6 @@ export function isPackHeater(type: string): boolean {
 }
 
 /** The pack item of a furniture type (undefined for built-in types and removed packs). */
-/** Packs that were merged into another one: furniture placed from them keeps working. */
-const PACK_ALIASES: Record<string, string> = {
-  "mastershort.living_basics": "mastershort.living",
-  "mastershort.kitchen_basics": "mastershort.kitchen",
-  "mastershort.bedroom_basics": "mastershort.bedroom",
-  "mastershort.bath_basics": "mastershort.bath",
-};
 
 /** The screen part of a pack item (a TV or monitor), if it has one. */
 export function packScreen(type: string): PackPart | undefined {
@@ -219,11 +206,7 @@ export function packDisplay(type: string): boolean {
 
 export function packItem(type: string): PackItem | undefined {
   if (!isPackType(type)) return undefined;
-  const hit = items.get(type);
-  if (hit) return hit;
-  const [, pack, ...rest] = type.split(":");
-  const alias = PACK_ALIASES[pack];
-  return alias ? items.get(`pack:${alias}:${rest.join(":")}`) : undefined;
+  return items.get(type);
 }
 
 /** Default size of any furniture type. */
@@ -244,43 +227,9 @@ export function packItemName(item: PackItem, language: string): string {
 }
 
 
-// English names of our own packs: a pack file carries one (German) name, the furniture inside both (#224)
-const PACK_NAMES_EN: Record<string, string> = {
-  architecture: "Architecture & Fit-out",
-  bath: "Bathroom",
-  bedroom: "Bedroom",
-  cinema: "Home Cinema & Hi-Fi",
-  exclusive: "Exclusive: Smart Fridge",
-  fitness: "Fitness",
-  garage: "Garage & Workshop",
-  garden: "Garden & Terrace",
-  kids: "Kids' Room",
-  kitchen: "Kitchen",
-  living: "Living Room",
-  office: "Office & Gaming",
-  pets: "Pets",
-  smarthome: "Smart Home & Tech",
-  stairs: "Stairs & Railings",
-  utility: "Utility & Building Services",
-  vehicles: "Vehicles",
-  starter: "Starter Pack",
-  pro_auto: "Pro: Car Pro",
-  pro_timetravel: "Pro: Time travel",
-  pro_pool: "Pro: Pool Pro",
-  pro_camera: "Pro: Camera Cockpit",
-  pro_energy: "Pro: Energy Pro",
-  pro_screens: "Pro: Live Screens",
-  pro_sound: "Pro: Sound & Cinema",
-  pro_weather: "Pro: Weather Outside",
-};
-
-/** A pack's name in the user's language: our own packs in English outside German, others as they come. */
-export function packName(pack: { id: string; name: string }, language: string): string {
-  if (language.split("-")[0] === "de") return pack.name;
-  const key = pack.id.replace(/^mastershort\./, "");
-  const sample = key.endsWith("_sample");
-  const en = PACK_NAMES_EN[sample ? key.slice(0, -"_sample".length) : key];
-  return en ? (sample ? `${en} – Sampler` : en) : pack.name;
+/** A pack's name as the pack file gives it. */
+export function packName(pack: { id: string; name: string }, _language: string): string {
+  return pack.name;
 }
 
 /** Height of the bottom of a pack item, a wall light or an LED strip above the floor (0 for other built-in furniture). */

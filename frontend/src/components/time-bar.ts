@@ -5,7 +5,6 @@
 // The clock and the playhead follow the replay by writing to the DOM directly – no re-render per tick.
 
 import { css, html, LitElement, nothing, svg } from "lit";
-import { DISCORD_URL, isBeta } from "../beta.ts";
 import type { Session } from "../timetravel/entry.ts";
 import { CATEGORY, clusterEvents, groupByHour, type Category, type Cluster, type EventKind, type TTEvent } from "../timetravel/events.ts";
 import { parseMoment } from "../timetravel/playback.ts";
@@ -598,7 +597,7 @@ export class Fp3dTimeBar extends LitElement {
     const minutes = Math.round((s.end - s.start) / 60000);
     return html`<div class="frame"></div>
       <div class="clock" role="status" aria-live="off">
-        <span class="badge">⏪ ${t("tt_badge")}${isBeta("time_travel") ? html` <a class="beta" href=${DISCORD_URL} target="_blank" rel="noopener" title=${t("beta_bar")}>🧪 BETA</a>` : nothing}</span>
+        <span class="badge">⏪ ${t("tt_badge")}</span>
         ${ready
           ? // filled by onTick (written directly, many times a second while playing – no binding inside)
             html`<b class="clock-time"></b><span class="clock-ago"></span>`
@@ -680,13 +679,6 @@ export class Fp3dTimeBar extends LitElement {
       font-weight: 800;
       letter-spacing: 0.12em;
       color: var(--tt);
-    }
-    .beta {
-      margin-left: 4px;
-      color: inherit;
-      opacity: 0.8;
-      text-decoration: none;
-      pointer-events: auto;
     }
     .clock-time {
       font-family: var(--fp3d-title-font, inherit);

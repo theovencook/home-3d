@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clearModules, loadedModules, MODULE_API, moduleFurnitureFields, moduleMenuSheets, moduleRoomFields, moduleRoomSheets, moduleSettings, modulesWithSettings, moduleVoice, moduleWaits, registerModule, syncModules, type ModuleHost } from "./modules.ts";
+import { clearModules, loadedModules, MODULE_API, moduleFurnitureFields, moduleMenuSheets, moduleRoomFields, moduleRoomSheets, moduleSettings, modulesWithSettings, moduleVoice, registerModule, syncModules, type ModuleHost } from "./modules.ts";
 
 const host = {
   api: MODULE_API,
@@ -26,21 +26,6 @@ test("voice modules are asked in turn; the first answer wins, a failing one is s
   assert.equal(await moduleVoice("wie spät ist es", host), null);
   clearModules();
   assert.equal(loadedModules().length, 0);
-});
-
-test("only module code an admin approved is fetched and run", async () => {
-  clearModules();
-  const asked: string[] = [];
-  const hass = { callWS: async (msg: { pack_id: string }) => (asked.push(msg.pack_id), Promise.reject(new Error("not_approved"))) } as never;
-  await syncModules(hass, [
-    { id: "a", module: { api: MODULE_API, kind: "voice" } },
-    { id: "b", module: { api: MODULE_API, kind: "voice", approved: false } },
-  ]);
-  assert.deepEqual(asked, []);
-  assert.equal(moduleWaits({ module: { approved: false } }), true);
-  assert.equal(moduleWaits({ module: { approved: true }, pending: { release: 2 } }), true);
-  assert.equal(moduleWaits({ module: { approved: true } }), false);
-  assert.equal(moduleWaits({}), false);
 });
 
 test("a module's fields on a piece of furniture and its own settings; a failing module adds none", () => {
@@ -73,4 +58,13 @@ test("modules offer sheets in a room and in the ⭐ menu, fields in a room's for
   assert.deepEqual(moduleRoomFields(host, { id: "r", name: "Bad", points: [] } as never, {} as never), [{ kind: "text", text: "Bad" }]);
   assert.deepEqual(modulesWithSettings(), ["test.sheets"]);
   clearModules();
+});
+
+test("module code is never fetched from packs: syncing asks the backend for nothing", async () => {
+  clearModules();
+  const asked: unknown[] = [];
+  const hass = { callWS: async (msg: unknown) => (asked.push(msg), null) } as never;
+  await syncModules(hass, [{ id: "a" }, { id: "b" }]);
+  assert.deepEqual(asked, []);
+  assert.equal(loadedModules().length, 0);
 });

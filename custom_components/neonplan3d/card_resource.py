@@ -8,15 +8,12 @@ kept in the resource list as well, in storage mode only (YAML resources belong t
 While Home Assistant starts, a dashboard (a wall tablet reloading itself) may ask for the bundle before it is
 there and keep "Configuration error" until the next reload (#461). The resource is therefore a small loader that
 loads the bundle and tries again every few seconds while it is not there yet. It is served from the integration's
-own path (registered in async_setup, as early as possible); nothing is written into the user's `www` folder; a
-loader that older versions left in `www/neonplan3d/` is removed.
+own path (registered in async_setup, as early as possible); nothing is written into the user's `www` folder.
 """
 
 from __future__ import annotations
 
-import contextlib
 import logging
-from pathlib import Path
 from typing import Any
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
@@ -26,11 +23,8 @@ from .const import MAIN_BUNDLE, URL_BASE
 
 _LOGGER = logging.getLogger(__name__)
 
-LOADER_DIR = "neonplan3d"
 LOADER_FILE = "neonplan3d-loader.js"
 LOADER_URL = f"{URL_BASE}/{LOADER_FILE}"
-# where versions before 1.23 put the loader (in the user's www folder): cleaned up
-OLD_LOADER_URL = f"/local/{LOADER_DIR}/{LOADER_FILE}"
 
 # tries every 5 s for 15 minutes; the first try is awaited, so a dashboard normally waits for the card as before
 _LOADER = """// NeonPlan 3D: loads the dashboard card. Served from the integration's own path, never written to disk.
@@ -57,14 +51,6 @@ await load(0);
 def loader_source(bundle_url: str) -> str:
     """The loader for the bundle at this URL."""
     return _LOADER.format(url=bundle_url.replace("\\", "").replace('"', ""))
-
-
-def remove_loader(www: Path) -> None:
-    """Takes a loader older versions wrote into www (and its folder, when empty) away again."""
-    folder = www / LOADER_DIR
-    (folder / LOADER_FILE).unlink(missing_ok=True)
-    with contextlib.suppress(OSError):
-        folder.rmdir()
 
 
 def _resources(hass: HomeAssistant) -> Any | None:
@@ -127,7 +113,7 @@ async def async_remove_card_resource(hass: HomeAssistant) -> None:
         await resources.async_get_info()
         for item in list(resources.async_items()):
             url = str(item.get("url", ""))
-            if url.startswith(f"{URL_BASE}/") or url.split("?")[0] == OLD_LOADER_URL:
+            if url.startswith(f"{URL_BASE}/"):
                 await resources.async_delete_item(item["id"])
     except Exception:
         _LOGGER.debug("Could not remove the dashboard resource", exc_info=True)

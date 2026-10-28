@@ -164,8 +164,8 @@ test("a person stands at the furniture an occupied presence zone names (an FP2's
 test("pack furniture counts for presence zones by its kind (an Ecksofa from the Living pack is the \"Sofa\")", () => {
   const { hass, building } = setup();
   building.floors[0].furniture = [
-    { id: "s", type: "pack:mastershort.living:corner_right", x: 2, z: 1, rotation: 0, w: 2.4, d: 1.6, h: 0.8, variant: null },
-    { id: "a", type: "pack:mastershort.living:armchair", x: 3.5, z: 2.5, rotation: 0, w: 0.8, d: 0.8, h: 0.9, variant: null },
+    { id: "s", type: "pack:home3d.living:corner_right", x: 2, z: 1, rotation: 0, w: 2.4, d: 1.6, h: 0.8, variant: null },
+    { id: "a", type: "pack:home3d.living:armchair", x: 3.5, z: 2.5, rotation: 0, w: 0.8, d: 0.8, h: 0.9, variant: null },
   ];
   hass.entities = { ...hass.entities, "binary_sensor.fp2_sessel": { entity_id: "binary_sensor.fp2_sessel", area_id: "living_room" } };
   hass.states["binary_sensor.fp2_sessel"] = st("binary_sensor.fp2_sessel", "on", { device_class: "occupancy", friendly_name: "Wohnzimmer Präsenz Sessel" });

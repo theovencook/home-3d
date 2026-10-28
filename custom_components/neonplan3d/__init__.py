@@ -6,7 +6,6 @@ import contextlib
 import hashlib
 import logging
 from pathlib import Path
-import random
 
 from aiohttp import web
 from homeassistant.components import frontend, panel_custom
@@ -14,7 +13,6 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.http import KEY_HASS
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
@@ -25,10 +23,8 @@ from .card_resource import (
     async_remove_card_resource,
     async_schedule_card_resource,
     loader_source,
-    remove_loader,
 )
 from .const import (
-    DATA_DIAGNOSTICS,
     DOMAIN,
     MAIN_BUNDLE,
     PANEL_COMPONENT,
@@ -37,8 +33,6 @@ from .const import (
     PANEL_URL_PATH,
     URL_BASE,
 )
-from .diagnostics_report import DiagnosticsReporter
-from .license import FIRST_CHECK_DELAY, REFRESH_INTERVAL, async_refresh_quietly
 from .locate.service import DATA_LOCATE, LocateService
 from .storage import FloorplanData
 from .voice import async_remove_sentences, async_setup_voice, async_unload_voice
@@ -127,19 +121,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await data.async_load()
     hass.data[DOMAIN] = data
 
-    # with a shop key, bought packs are checked for updates once a day (never needed for what is installed)
-    async def _check(_now) -> None:
-        await async_refresh_quietly(hass, data)
-
-    entry.async_on_unload(async_track_time_interval(hass, _check, REFRESH_INTERVAL))
-    entry.async_on_unload(async_call_later(hass, random.uniform(*FIRST_CHECK_DELAY), _check))
-
-    # opt-in usage and error reports: inert (nothing is sent) unless the user switched them on
-    reporter = DiagnosticsReporter(hass, data)
-    await reporter.async_load()
-    hass.data[DATA_DIAGNOSTICS] = reporter
-    entry.async_on_unload(reporter.start())
-
     # locating (who and what is where, from the Bluetooth scanners): idle unless an admin switched it on
     locate = LocateService(hass)
     await locate.async_load()
@@ -156,9 +137,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # and as a dashboard resource, so a dashboard never draws the card before its script is there (#252), through
     # the loader on our own path, which tries again while the bundle is not there yet (#461)
     async_schedule_card_resource(hass, f"{LOADER_URL}?{url.split('?', 1)[1]}")
-    # versions before 1.23 wrote the loader into the user's www folder: that copy goes (the resource is moved above)
-    with contextlib.suppress(OSError):
-        await hass.async_add_executor_job(remove_loader, Path(hass.config.path("www")))
     await panel_custom.async_register_panel(
         hass,
         frontend_url_path=PANEL_URL_PATH,
@@ -183,7 +161,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if (locate := hass.data.pop(DATA_LOCATE, None)) is not None:
         locate.stop()
     hass.data.pop(DOMAIN, None)
-    hass.data.pop(DATA_DIAGNOSTICS, None)
     return True
 
 
@@ -191,8 +168,6 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """The plan, its pictures and packs stay in .storage when the integration is removed: they are the
     user's work, and removing and re-adding the integration must never cost it."""
     await async_remove_card_resource(hass)
-    with contextlib.suppress(OSError):
-        await hass.async_add_executor_job(remove_loader, Path(hass.config.path("www")))
     # the Assist sentence files NeonPlan wrote (a file the user changed stays)
     with contextlib.suppress(OSError):
         await async_remove_sentences(hass)

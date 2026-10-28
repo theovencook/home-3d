@@ -239,7 +239,8 @@ function wordsOf(item: PackItem): string {
 export function classify(packId: string, item: PackItem): { kind: Kind; rooms: Room[] } {
   const own = (item.group && (KINDS as readonly string[]).includes(item.group) ? item.group : null) as Kind | null;
   const ownRooms = item.room?.filter((r) => (ROOMS as readonly string[]).includes(r)) as Room[] | undefined;
-  const key = packId.replace(/^mastershort\./, "");
+  // the pack's own name after its publisher's prefix ("home3d.living" -> "living")
+  const key = packId.replace(/^[a-z0-9_-]+\./, "");
   const packRooms = PACK_ROOMS[key] ?? [];
   if (own) return { kind: own, rooms: ownRooms ?? packRooms };
   const text = wordsOf(item);

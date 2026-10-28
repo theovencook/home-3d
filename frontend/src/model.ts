@@ -321,7 +321,7 @@ export interface Furniture {
 
 export type LampMount = "ceiling" | "floor" | "table" | "wall";
 
-/** A module's own data on an item of the plan, by the module's id ("mastershort.window_watch": {…}); plain JSON. */
+/** A module's own data on an item of the plan, by the module's id ("home3d.example": {…}); plain JSON. */
 export type ModuleData = Record<string, Record<string, unknown>>;
 
 /** How a device's marker shows in 3D (null = automatic by the marker mode). */

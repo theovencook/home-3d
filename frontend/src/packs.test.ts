@@ -56,11 +56,8 @@ test("pack items stand on the floor, on furniture, on a wall or hang from the ce
   setPacks([]);
 });
 
-test("our packs show an English name outside German, others keep theirs (#224)", () => {
-  assert.equal(packName({ id: "mastershort.office", name: "Büro & Gaming" }, "en"), "Office & Gaming");
-  assert.equal(packName({ id: "mastershort.office", name: "Büro & Gaming" }, "de-DE"), "Büro & Gaming");
-  assert.equal(packName({ id: "mastershort.living_sample", name: "Wohnzimmer – Schnupper-Pack" }, "fr"), "Living Room – Sampler");
-  assert.equal(packName({ id: "pro_weather", name: "Wetter draußen" }, "en"), "Pro: Weather Outside");
+test("a pack shows the name its file gives", () => {
+  assert.equal(packName({ id: "home3d.office", name: "Office & Gaming" }, "en"), "Office & Gaming");
   assert.equal(packName({ id: "someone.else", name: "Möbel" }, "en"), "Möbel");
 });
 
@@ -120,9 +117,9 @@ test("items outside the rooms stand on the ground beneath them, also when it lie
 });
 
 test("a pack's sensor models follow any sensor, other pack items and built-ins do not (#810)", () => {
-  assert.equal(isPackSensor("pack:mastershort.smarthome:motion_sensor"), true);
-  assert.equal(isPackSensor("pack:mastershort.smarthome:door_contact"), true);
-  assert.equal(isPackSensor("pack:mastershort.smarthome:presence_mmwave"), true);
-  assert.equal(isPackSensor("pack:mastershort.smarthome:smart_plug"), false);
+  assert.equal(isPackSensor("pack:home3d.smarthome:motion_sensor"), true);
+  assert.equal(isPackSensor("pack:home3d.smarthome:door_contact"), true);
+  assert.equal(isPackSensor("pack:home3d.smarthome:presence_mmwave"), true);
+  assert.equal(isPackSensor("pack:home3d.smarthome:smart_plug"), false);
   assert.equal(isPackSensor("motion_sensor"), false);
 });

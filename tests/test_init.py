@@ -51,24 +51,6 @@ async def _setup(hass: HomeAssistant) -> MockConfigEntry:
     return entry
 
 
-async def test_data_of_the_earlier_name_is_taken_over(hass: HomeAssistant, hass_ws_client, hass_storage) -> None:
-    """A plan saved under the old integration name (floorplan_3d) shows up after the rename."""
-    data = {"building": copy.deepcopy(BUILDING), "revision": 7}
-    hass_storage["floorplan_3d.building"] = {
-        "version": 1,
-        "minor_version": 2,
-        "key": "floorplan_3d.building",
-        "data": data,
-    }
-    await _setup(hass)
-    client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": f"{DOMAIN}/building/get"})
-    result = (await client.receive_json())["result"]
-    assert result["revision"] == 7
-    assert [f["name"] for f in result["building"]["floors"]] == [f["name"] for f in BUILDING["floors"]]
-    assert hass_storage[STORAGE_KEY_BUILDING]["data"]["revision"] == 7
-
-
 async def test_config_flow_creates_single_entry(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
     assert result["type"] is FlowResultType.FORM

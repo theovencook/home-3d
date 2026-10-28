@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 DOMAIN = "neonplan3d"
-# the integration's earlier name; its stores are taken over once (see storage.py)
-LEGACY_DOMAIN = "floorplan_3d"
 
 STORAGE_VERSION = 1
 # minor versions of the building store; each step has a migration in storage.py
@@ -13,11 +11,6 @@ STORAGE_KEY_BUILDING = f"{DOMAIN}.building"
 STORAGE_KEY_IMAGES = f"{DOMAIN}.images"
 STORAGE_KEY_HISTORY = f"{DOMAIN}.history"
 STORAGE_KEY_PACKS = f"{DOMAIN}.packs"
-STORAGE_KEY_LICENSE = f"{DOMAIN}.license"
-# opt-in usage and error reports (see diagnostics_report.py)
-STORAGE_KEY_DIAGNOSTICS = f"{DOMAIN}.diagnostics"
-# hass.data key of the reporter
-DATA_DIAGNOSTICS = f"{DOMAIN}_diagnostics"
 
 # restore points: at most this many, and a new one only after this pause since the last one
 HISTORY_MAX = 20

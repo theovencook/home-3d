@@ -1,14 +1,11 @@
-"""Furniture packs: signature check, content check and import through the websocket."""
+"""Furniture packs: content check and import through the websocket (packs are not signed)."""
 
 from __future__ import annotations
 
-import base64
 import copy
 import json
 from types import SimpleNamespace
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 import pytest
@@ -38,105 +35,72 @@ PAYLOAD = {
 }
 
 
-def _key() -> tuple[Ed25519PrivateKey, dict[str, str]]:
-    private = Ed25519PrivateKey.generate()
-    raw = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-    return private, {packs.key_id(raw): base64.b64encode(raw).decode()}
+def _pack(payload: dict) -> str:
+    return json.dumps({"payload": payload})
 
 
-def _sign(private: Ed25519PrivateKey, keys: dict[str, str], payload: dict) -> str:
-    sig = base64.b64encode(private.sign(packs.canonical(payload))).decode()
-    return json.dumps({"payload": payload, "signature": {"key": next(iter(keys)), "sig": sig}})
-
-
-def test_signed_pack_is_accepted() -> None:
-    private, keys = _key()
-    payload = packs.verify_pack(_sign(private, keys, PAYLOAD), keys)
+def test_unsigned_pack_is_accepted() -> None:
+    payload = packs.verify_pack(_pack(PAYLOAD))
     assert payload["items"][0]["parts"][0]["edges"] is False
     assert payload["licensee"] is None
 
 
-def test_changed_or_foreign_packs_are_rejected() -> None:
-    private, keys = _key()
-    text = _sign(private, keys, PAYLOAD)
-    # a changed file breaks the signature
-    changed = json.loads(text)
-    changed["payload"]["name"] = "Mine now"
+def test_bare_payload_and_old_signed_files_are_accepted() -> None:
+    """A pack file may be the payload itself; a signature block of an older file is ignored."""
+    assert packs.verify_pack(json.dumps(PAYLOAD))["id"] == "test.starter"
+    old = json.dumps({"payload": PAYLOAD, "signature": {"key": "0" * 12, "sig": "not checked"}})
+    assert packs.verify_pack(old)["id"] == "test.starter"
+    # an installation binding of an older file is ignored as well
+    assert packs.verify_pack(_pack({**PAYLOAD, "instance": "0123456789abcdef"}))["id"] == "test.starter"
+    assert packs.parts_of(old) == PAYLOAD
+
+
+def test_non_packs_are_rejected() -> None:
+    for text in ("{}", "[]", json.dumps({"payload": {**PAYLOAD, "format": "other"}})):
+        with pytest.raises(packs.PackError) as err:
+            packs.verify_pack(text)
+        assert err.value.code == "not_a_pack"
     with pytest.raises(packs.PackError) as err:
-        packs.verify_pack(json.dumps(changed), keys)
-    assert err.value.code == "bad_signature"
-    # signed with another key: the publisher is unknown
-    other, other_keys = _key()
-    with pytest.raises(packs.PackError) as err:
-        packs.verify_pack(_sign(other, other_keys, PAYLOAD), keys)
-    assert err.value.code == "unknown_publisher"
-    # another key claiming the known key id
-    forged = json.loads(_sign(other, other_keys, PAYLOAD))
-    forged["signature"]["key"] = next(iter(keys))
-    with pytest.raises(packs.PackError) as err:
-        packs.verify_pack(json.dumps(forged), keys)
-    assert err.value.code == "bad_signature"
-    # without a signature, or not a pack at all
-    with pytest.raises(packs.PackError) as err:
-        packs.verify_pack(json.dumps({"payload": PAYLOAD}), keys)
-    assert err.value.code == "unsigned"
-    with pytest.raises(packs.PackError) as err:
-        packs.verify_pack("{}", keys)
+        packs.verify_pack("not json")
     assert err.value.code == "not_a_pack"
 
 
+def test_module_packs_are_refused() -> None:
+    """Module code (JavaScript in a pack) is not supported: such a pack does not validate."""
+    module = {**PAYLOAD, "items": [], "module": {"api": 1, "kind": "voice", "code": "export default {};"}}
+    with pytest.raises(packs.PackError):
+        packs.verify_pack(_pack(module))
+
+
 def test_sloped_and_lying_parts_are_accepted() -> None:
-    private, keys = _key()
     shaped = copy.deepcopy(PAYLOAD)
     box = {"x": 0, "z": 0.2, "w": 1, "d": 0.6, "y": 0, "h": 0.5, "color": "body"}
     shaped["items"][0]["parts"] = [
         {"shape": "loft", **box, "tx": 0, "tz": 0.1, "tw": 0.9, "td": 0.2, "edges": "glow"},
         {"shape": "cyl", "axis": "x", **box, "edges": "faint"},
     ]
-    payload = packs.verify_pack(_sign(private, keys, shaped), keys)
+    payload = packs.verify_pack(_pack(shaped))
     assert payload["items"][0]["parts"][0]["edges"] == "glow"
     assert payload["items"][0]["parts"][1]["axis"] == "x"
     bad = copy.deepcopy(shaped)
     bad["items"][0]["parts"][1]["axis"] = "w"
     with pytest.raises(packs.PackError):
-        packs.verify_pack(_sign(private, keys, bad), keys)
-
-
-def test_shop_signing_from_the_canonical_template() -> None:
-    """The shop replaces the last "licensee":null of the canonical template with the buyer's name and
-    signs those bytes (tools/shop/ms-np-sign.php); the result must verify and carry the name."""
-    private, keys = _key()
-    template = packs.canonical({**copy.deepcopy(PAYLOAD), "licensee": None})
-    name = 'Jürgen Müller-Lüdenscheidt "Jü"'
-    marker = b'"licensee":null'
-    at = template.rfind(marker)
-    assert at > 0
-    encoded = json.dumps(name, ensure_ascii=False).encode()
-    signed = template[:at] + b'"licensee":' + encoded + template[at + len(marker) :]
-    sig = base64.b64encode(private.sign(signed)).decode()
-    text = '{"payload":' + signed.decode() + ',"signature":{"key":"' + next(iter(keys)) + '","sig":"' + sig + '"}}'
-    payload = packs.verify_pack(text, keys)
-    assert payload["licensee"] == name
-    # the same bytes, canonicalised again by the integration, are what was signed
-    assert packs.canonical(json.loads(text)["payload"]) == signed
+        packs.verify_pack(_pack(bad))
 
 
 def test_pack_content_is_checked() -> None:
-    private, keys = _key()
     heavy = copy.deepcopy(PAYLOAD)
     heavy["items"][0]["parts"] *= 31  # more than 60 parts
     with pytest.raises(packs.PackError) as err:
-        packs.verify_pack(_sign(private, keys, heavy), keys)
+        packs.verify_pack(_pack(heavy))
     assert err.value.code == "invalid_content"
     twice = copy.deepcopy(PAYLOAD)
     twice["items"].append(copy.deepcopy(twice["items"][0]))
     with pytest.raises(packs.PackError):
-        packs.verify_pack(_sign(private, keys, twice), keys)
+        packs.verify_pack(_pack(twice))
 
 
-async def test_import_list_and_remove(hass: HomeAssistant, hass_ws_client, monkeypatch: pytest.MonkeyPatch) -> None:
-    private, keys = _key()
-    monkeypatch.setattr(packs, "PACK_PUBLIC_KEYS", keys)
+async def test_import_list_and_remove(hass: HomeAssistant, hass_ws_client) -> None:
     await async_setup_component(hass, "http", {})
     entry = MockConfigEntry(domain=DOMAIN, data={})
     entry.add_to_hass(hass)
@@ -145,7 +109,7 @@ async def test_import_list_and_remove(hass: HomeAssistant, hass_ws_client, monke
     client = await hass_ws_client(hass)
 
     await client.send_json_auto_id(
-        {"type": "neonplan3d/packs/import", "pack": _sign(private, keys, {**PAYLOAD, "licensee": "Anna"})}
+        {"type": "neonplan3d/packs/import", "pack": _pack({**PAYLOAD, "licensee": "Anna"})}
     )
     result = await client.receive_json()
     assert result["success"]
@@ -170,74 +134,6 @@ async def test_import_list_and_remove(hass: HomeAssistant, hass_ws_client, monke
     assert (await client.receive_json())["success"]
     await client.send_json_auto_id({"type": "neonplan3d/packs/list"})
     assert (await client.receive_json())["result"]["packs"] == []
-
-
-async def test_module_code_runs_only_after_an_admin_approved_it(
-    hass: HomeAssistant, hass_ws_client, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """HACS review: module code is shown and approved by an admin before it runs, and an update never replaces
-    the running code by itself."""
-    private, keys = _key()
-    monkeypatch.setattr(packs, "PACK_PUBLIC_KEYS", keys)
-    await async_setup_component(hass, "http", {})
-    entry = MockConfigEntry(domain=DOMAIN, data={})
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-    client = await hass_ws_client(hass)
-
-    async def call(**msg):
-        await client.send_json_auto_id(msg)
-        return await client.receive_json()
-
-    module = {**PAYLOAD, "id": "mastershort.window_watch", "items": [], "release": 1}
-    v1 = {**module, "module": {"api": 1, "kind": "stage", "code": "export default { api: 1, id: 'v1' };"}}
-    res = await call(type="neonplan3d/packs/import", pack=_sign(private, keys, v1))
-    assert res["success"] and res["result"]["approval"] is True
-    listed = (await call(type="neonplan3d/packs/list"))["result"]["packs"][0]
-    assert listed["module"]["approved"] is False and "code" not in listed["module"]
-    # not approved: its code is not served
-    res = await call(type="neonplan3d/modules/code", pack_id="mastershort.window_watch")
-    assert res["error"]["code"] == "not_approved"
-    # the admin reads it, then approves exactly that code
-    review = (await call(type="neonplan3d/modules/review", pack_id="mastershort.window_watch"))["result"]
-    assert "id: 'v1'" in review["code"]
-    assert not (await call(type="neonplan3d/modules/approve", pack_id="mastershort.window_watch", sha="0" * 64))[
-        "success"
-    ]
-    assert (await call(type="neonplan3d/modules/approve", pack_id="mastershort.window_watch", sha=review["sha"]))[
-        "success"
-    ]
-    assert (
-        "id: 'v1'" in (await call(type="neonplan3d/modules/code", pack_id="mastershort.window_watch"))["result"]["code"]
-    )
-
-    # a new release waits beside the running code
-    v2 = {**module, "release": 2, "module": {"api": 1, "kind": "stage", "code": "export default { api: 1, id: 'v2' };"}}
-    assert (await call(type="neonplan3d/packs/import", pack=_sign(private, keys, v2)))["result"]["approval"] is True
-    listed = (await call(type="neonplan3d/packs/list"))["result"]["packs"][0]
-    assert listed["module"]["approved"] is True and listed["release"] == 1
-    assert listed["pending"]["release"] == 2
-    assert (
-        "id: 'v1'" in (await call(type="neonplan3d/modules/code", pack_id="mastershort.window_watch"))["result"]["code"]
-    )
-    pending = (await call(type="neonplan3d/modules/review", pack_id="mastershort.window_watch", pending=True))["result"]
-    assert "id: 'v2'" in pending["code"]
-    assert (await call(type="neonplan3d/modules/approve", pack_id="mastershort.window_watch", sha=pending["sha"]))[
-        "success"
-    ]
-    listed = (await call(type="neonplan3d/packs/list"))["result"]["packs"][0]
-    assert listed["release"] == 2 and listed["module"]["approved"] is True and "pending" not in listed
-    assert (
-        "id: 'v2'" in (await call(type="neonplan3d/modules/code", pack_id="mastershort.window_watch"))["result"]["code"]
-    )
-
-
-def test_publisher_key_is_configured() -> None:
-    # the published integration accepts packs of the publisher's key only
-    assert len(packs.PACK_PUBLIC_KEYS) >= 1
-    for kid, public in packs.PACK_PUBLIC_KEYS.items():
-        assert packs.key_id(base64.b64decode(public)) == kid
 
 
 def test_turned_parts_and_stairs_holes_are_accepted() -> None:
@@ -268,29 +164,16 @@ def test_library_fields_are_accepted_and_checked() -> None:
 
 
 def test_feature_packs_need_no_items_but_a_pack_needs_something() -> None:
-    """A feature pack unlocks Pro features without furniture; an empty pack is refused."""
+    """A pack may list features without furniture (compatibility); an empty pack is refused."""
     pro = {**PAYLOAD, "id": "test.pro", "items": [], "features": ["camera_cockpit", "weather"]}
     assert packs.validate_payload(pro)["features"] == ["camera_cockpit", "weather"]
     with pytest.raises(packs.PackError):
         packs.validate_payload({**PAYLOAD, "items": []})
-    # a Pro add-on newer than this installation asks for an update (#218)
+    # a feature this version does not know asks for an update (#218)
     with pytest.raises(packs.PackError) as err:
         packs.validate_payload({**pro, "features": ["some_future_addon"]})
     assert err.value.code == "needs_update"
     assert err.value.detail == "some_future_addon"
-
-
-def test_studio_key_signs_studio_furniture_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The Möbel-Studio key may sign "studio.*" furniture packs, never Pro features or other packs."""
-    private, keys = _key()
-    kid = next(iter(keys))
-    monkeypatch.setattr(packs, "STUDIO_KEYS", {kid})
-    studio = {**PAYLOAD, "id": "studio.abc123"}
-    assert packs.verify_pack(_sign(private, keys, studio), keys)["id"] == "studio.abc123"
-    for bad in ({**PAYLOAD, "id": "test.other"}, {**studio, "features": ["camera_cockpit"]}):
-        with pytest.raises(packs.PackError) as err:
-            packs.verify_pack(_sign(private, keys, bad), keys)
-        assert err.value.code == "bad_signature"
 
 
 def test_a_newer_part_shape_asks_for_an_update() -> None:
@@ -312,27 +195,3 @@ def test_probatio_marks_an_unknown_value_by_its_code() -> None:
     probatio = SimpleNamespace(errors=[SimpleNamespace(code="not_in_list")])
     assert packs._unknown_value(probatio)  # type: ignore[arg-type]
     assert not packs._unknown_value(vol.MultipleInvalid([vol.Invalid("expected float")]))
-
-
-def test_a_module_pack_needs_no_furniture_and_its_code_is_served_apart() -> None:
-    """A module pack (code the shop delivers) passes without items; the studio key may not sign one."""
-    module = {
-        **PAYLOAD,
-        "id": "mastershort.voice_answers",
-        "items": [],
-        "module": {"api": 1, "kind": "voice", "code": "export default { api: 1 };"},
-    }
-    clean = packs.validate_payload(module)
-    assert clean["module"]["kind"] == "voice"
-    with pytest.raises(packs.PackError) as err:
-        packs.validate_payload({**module, "module": {"api": 2, "kind": "voice", "code": "x"}})
-    assert err.value.code == "needs_update"
-    with pytest.raises(packs.PackError) as err:
-        packs.validate_payload({**module, "module": {"api": 1, "kind": "editor", "code": "x"}})
-    assert err.value.code == "needs_update"
-    # the pack list leaves the code out, the code command returns it
-    from custom_components.neonplan3d.websocket import _without_code
-
-    slim = _without_code({**clean, "source": clean})
-    assert "code" not in slim["module"] and "code" not in slim["source"]["module"]
-    assert slim["module"]["api"] == 1

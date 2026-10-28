@@ -74,7 +74,6 @@ const DE = {
   person: "Person",
   none: "keine",
   irk_help: "iPhone oder Apple Watch fehlt? Sie brauchen ihren Schlüssel (IRK) als „Private BLE Device“ in Home Assistant – die Anleitung zeigt die einfachsten Wege.",
-  manual: "Anleitung",
   voice_hint: "Frag auch per Sprache: „Wo ist mein iPhone?“, „Wo ist Torsten?“, „Wer ist zu Hause?“, „Lass mein iPhone klingeln“.",
   look_hint: "In 3D erscheinen Personen als Figur; im ⚙-Menü der Ansicht: Personen → Figur, Pin oder aus.",
   ring: "Klingeln",
@@ -114,7 +113,6 @@ const DE = {
   near_summary: "Android-Handy oder Schlüsselanhänger hinzufügen",
   android_label: "Android-Handy (HA-App)",
   paste_summary: "Eigenen Schlüssel einfügen",
-  helper_install: "Auf ESP32 installieren",
   helper_pitch: "Für iPhone und Apple Watch: Ein ESP32 für ca. 5 € wird in drei Minuten zum Schlüssel-Helfer – direkt im Browser installiert, ganz ohne Mac. Danach hier koppeln.",
   near_intro: "Halte das Gerät direkt an einen Empfänger. Android: in der Home-Assistant-App „BLE-Sender“ einschalten. Schlüsselanhänger: kurz drücken.",
   near_empty: "Noch nichts Starkes in der Nähe …",
@@ -163,7 +161,6 @@ const EN: typeof DE = {
   person: "Person",
   none: "none",
   irk_help: "iPhone or Apple Watch missing? They need their key (IRK) as a \"Private BLE Device\" in Home Assistant – the manual shows the easiest ways.",
-  manual: "Manual",
   voice_hint: "Ask by voice too: \"Where is my iPhone?\", \"Where is Torsten?\", \"Who is home?\", \"Ring my iPhone\".",
   look_hint: "In 3D people stand as a figure; in the view's ⚙ menu: People → figure, pin or off.",
   ring: "Ring",
@@ -203,7 +200,6 @@ const EN: typeof DE = {
   near_summary: "Add an Android phone or a key tag",
   android_label: "Android phone (HA app)",
   paste_summary: "Paste a key you already have",
-  helper_install: "Install on an ESP32",
   helper_pitch: "For iPhone and Apple Watch: an ESP32 for about 5 € becomes the key helper in three minutes – installed right from the browser, no Mac needed. Then pair it here.",
   near_intro: "Hold the device right next to a scanner. Android: switch on \"BLE Transmitter\" in the Home Assistant app. Key tags: press once.",
   near_empty: "Nothing strong nearby yet …",
@@ -253,7 +249,6 @@ const CS: typeof DE = {
   person: "Osoba",
   none: "žádná",
   irk_help: "Chybí iPhone nebo Apple Watch? Potřebují svůj klíč (IRK) jako „Private BLE Device“ v Home Assistant – návod ukazuje nejjednodušší cesty.",
-  manual: "Návod",
   voice_hint: "Ptej se i hlasem: „Kde je můj iPhone?“, „Kde je Torsten?“, „Kdo je doma?“, „Prozvoň můj iPhone“.",
   look_hint: "Ve 3D se osoby zobrazují jako postava; v menu ⚙ zobrazení: Osoby → postava, špendlík nebo vypnuto.",
   ring: "Prozvonit",
@@ -293,7 +288,6 @@ const CS: typeof DE = {
   near_summary: "Přidat telefon s Androidem nebo přívěsek",
   android_label: "Telefon s Androidem (aplikace HA)",
   paste_summary: "Vložit klíč, který už máte",
-  helper_install: "Nainstalovat na ESP32",
   helper_pitch: "Pro iPhone a Apple Watch: ESP32 za cca 5 € se za tři minuty stane pomocníkem pro klíče – instalace přímo z prohlížeče, bez Macu. Pak spárujte zde.",
   near_intro: "Podrž zařízení přímo u přijímače. Android: v aplikaci Home Assistant zapni „BLE Transmitter“. Přívěsky na klíče: krátce stiskni.",
   near_empty: "Zatím nic silného poblíž …",
@@ -342,7 +336,6 @@ const DA: typeof DE = {
   person: "Person",
   none: "ingen",
   irk_help: "Mangler iPhone eller Apple Watch? De skal have deres nøgle (IRK) som »Private BLE Device« i Home Assistant – vejledningen viser de nemmeste veje.",
-  manual: "Vejledning",
   voice_hint: "Spørg også med stemmen: »Hvor er min iPhone?«, »Hvor er Torsten?«, »Hvem er hjemme?«, »Ring til min iPhone«.",
   look_hint: "I 3D vises personer som figur; i visningens ⚙-menu: Personer → figur, nål eller fra.",
   ring: "Ring",
@@ -382,7 +375,6 @@ const DA: typeof DE = {
   near_summary: "Tilføj Android-telefon eller nøglevedhæng",
   android_label: "Android-telefon (HA-app)",
   paste_summary: "Indsæt en nøgle, du allerede har",
-  helper_install: "Installer på en ESP32",
   helper_pitch: "Til iPhone og Apple Watch: En ESP32 til ca. 5 € bliver nøglehjælper på tre minutter – installeret direkte fra browseren, uden Mac. Par den derefter her.",
   near_intro: "Hold enheden helt tæt på en modtager. Android: slå »BLE Transmitter« til i Home Assistant-appen. Nøglevedhæng: tryk kort.",
   near_empty: "Endnu intet stærkt i nærheden …",
@@ -431,7 +423,6 @@ const ES: typeof DE = {
   person: "Persona",
   none: "ninguna",
   irk_help: "¿Falta el iPhone o el Apple Watch? Necesitan su clave (IRK) como “Private BLE Device” en Home Assistant – el manual muestra las formas más sencillas.",
-  manual: "Manual",
   voice_hint: "Pregunta también por voz: “¿Dónde está mi iPhone?”, “¿Dónde está Torsten?”, “¿Quién está en casa?”, “Haz sonar mi iPhone”.",
   look_hint: "En 3D las personas aparecen como figura; en el menú ⚙ de la vista: Personas → figura, chincheta o desactivado.",
   ring: "Hacer sonar",
@@ -471,7 +462,6 @@ const ES: typeof DE = {
   near_summary: "Añadir un móvil Android o un llavero",
   android_label: "Móvil Android (app de HA)",
   paste_summary: "Pegar una clave que ya tienes",
-  helper_install: "Instalar en un ESP32",
   helper_pitch: "Para iPhone y Apple Watch: un ESP32 de unos 5 € se convierte en el asistente de claves en tres minutos, instalado desde el navegador, sin Mac. Luego empareja aquí.",
   near_intro: "Acerca el dispositivo a un receptor. Android: activa “BLE Transmitter” en la app de Home Assistant. Llaveros: pulsa una vez.",
   near_empty: "Aún nada fuerte cerca …",
@@ -520,7 +510,6 @@ const FI: typeof DE = {
   person: "Henkilö",
   none: "ei mitään",
   irk_help: "Puuttuuko iPhone tai Apple Watch? Ne tarvitsevat avaimensa (IRK) ”Private BLE Device” -laitteena Home Assistantissa – ohje näyttää helpoimmat tavat.",
-  manual: "Ohje",
   voice_hint: "Kysy myös äänellä: ”Missä iPhoneni on?”, ”Missä Torsten on?”, ”Kuka on kotona?”, ”Soita iPhoneani”.",
   look_hint: "3D:ssä henkilöt näkyvät hahmona; näkymän ⚙-valikossa: Henkilöt → hahmo, nasta tai pois.",
   ring: "Soita",
@@ -560,7 +549,6 @@ const FI: typeof DE = {
   near_summary: "Lisää Android-puhelin tai avaimenperä",
   android_label: "Android-puhelin (HA-sovellus)",
   paste_summary: "Liitä avain, joka sinulla jo on",
-  helper_install: "Asenna ESP32:lle",
   helper_pitch: "iPhonelle ja Apple Watchille: noin 5 €:n ESP32:sta tulee avainapuri kolmessa minuutissa – asennus suoraan selaimesta, ilman Macia. Paritus sitten täällä.",
   near_intro: "Pidä laitetta aivan vastaanottimen vieressä. Android: kytke Home Assistant -sovelluksessa ”BLE Transmitter” päälle. Avaimenperät: paina kerran.",
   near_empty: "Ei vielä mitään vahvaa lähellä …",
@@ -609,7 +597,6 @@ const FR: typeof DE = {
   person: "Personne",
   none: "aucune",
   irk_help: "iPhone ou Apple Watch absent ? Ils ont besoin de leur clé (IRK) comme « Private BLE Device » dans Home Assistant – le guide montre les méthodes les plus simples.",
-  manual: "Guide",
   voice_hint: "Demandez aussi à la voix : « Où est mon iPhone ? », « Où est Torsten ? », « Qui est à la maison ? », « Fais sonner mon iPhone ».",
   look_hint: "En 3D, les personnes apparaissent sous forme de figurine ; dans le menu ⚙ de la vue : Personnes → figurine, épingle ou masqué.",
   ring: "Faire sonner",
@@ -649,7 +636,6 @@ const FR: typeof DE = {
   near_summary: "Ajouter un téléphone Android ou un porte-clés",
   android_label: "Téléphone Android (app HA)",
   paste_summary: "Coller une clé que vous avez déjà",
-  helper_install: "Installer sur un ESP32",
   helper_pitch: "Pour iPhone et Apple Watch : un ESP32 à environ 5 € devient l’assistant de clé en trois minutes – installé depuis le navigateur, sans Mac. Jumelez-le ensuite ici.",
   near_intro: "Tenez l’appareil tout près d’un récepteur. Android : activez « BLE Transmitter » dans l’app Home Assistant. Porte-clés : appuyez une fois.",
   near_empty: "Rien de fort à proximité pour l’instant …",
@@ -698,7 +684,6 @@ const HU: typeof DE = {
   person: "Személy",
   none: "nincs",
   irk_help: "Hiányzik az iPhone vagy az Apple Watch? Szükségük van a kulcsukra (IRK) „Private BLE Device”-ként a Home Assistantban – az útmutató megmutatja a legegyszerűbb módokat.",
-  manual: "Útmutató",
   voice_hint: "Kérdezz hanggal is: „Hol van az iPhone-om?”, „Hol van Torsten?”, „Ki van otthon?”, „Csörgesd meg az iPhone-omat”.",
   look_hint: "3D-ben a személyek figuraként jelennek meg; a nézet ⚙ menüjében: Személyek → figura, tű vagy ki.",
   ring: "Csörgetés",
@@ -738,7 +723,6 @@ const HU: typeof DE = {
   near_summary: "Androidos telefon vagy kulcstartó hozzáadása",
   android_label: "Androidos telefon (HA-alkalmazás)",
   paste_summary: "Meglévő kulcs beillesztése",
-  helper_install: "Telepítés ESP32-re",
   helper_pitch: "iPhone-hoz és Apple Watch-hoz: egy kb. 5 eurós ESP32 három perc alatt kulcssegéddé válik – közvetlenül a böngészőből telepítve, Mac nélkül. Utána itt párosítsa.",
   near_intro: "Tartsd az eszközt közvetlenül egy vevő mellé. Android: kapcsold be a „BLE Transmitter” opciót a Home Assistant alkalmazásban. Kulcstartók: nyomd meg egyszer.",
   near_empty: "Még semmi erős a közelben …",
@@ -787,7 +771,6 @@ const IT: typeof DE = {
   person: "Persona",
   none: "nessuna",
   irk_help: "Manca l’iPhone o l’Apple Watch? Serve la loro chiave (IRK) come “Private BLE Device” in Home Assistant – la guida mostra i modi più semplici.",
-  manual: "Guida",
   voice_hint: "Chiedi anche a voce: “Dov’è il mio iPhone?”, “Dov’è Torsten?”, “Chi è a casa?”, “Fai squillare il mio iPhone”.",
   look_hint: "In 3D le persone appaiono come figura; nel menu ⚙ della vista: Persone → figura, puntina o spento.",
   ring: "Fai squillare",
@@ -827,7 +810,6 @@ const IT: typeof DE = {
   near_summary: "Aggiungi un telefono Android o un portachiavi",
   android_label: "Telefono Android (app HA)",
   paste_summary: "Incolla una chiave che hai già",
-  helper_install: "Installa su un ESP32",
   helper_pitch: "Per iPhone e Apple Watch: un ESP32 da circa 5 € diventa l’aiutante delle chiavi in tre minuti, installato dal browser, senza Mac. Poi associalo qui.",
   near_intro: "Tieni il dispositivo vicinissimo a un ricevitore. Android: attiva “BLE Transmitter” nell’app Home Assistant. Portachiavi: premi una volta.",
   near_empty: "Ancora niente di forte nelle vicinanze …",
@@ -876,7 +858,6 @@ const NB: typeof DE = {
   person: "Person",
   none: "ingen",
   irk_help: "Mangler iPhone eller Apple Watch? De trenger nøkkelen sin (IRK) som «Private BLE Device» i Home Assistant – veiledningen viser de enkleste måtene.",
-  manual: "Veiledning",
   voice_hint: "Spør også med stemmen: «Hvor er iPhonen min?», «Hvor er Torsten?», «Hvem er hjemme?», «Ring iPhonen min».",
   look_hint: "I 3D vises personer som figur; i visningens ⚙-meny: Personer → figur, nål eller av.",
   ring: "Ring",
@@ -916,7 +897,6 @@ const NB: typeof DE = {
   near_summary: "Legg til Android-telefon eller nøkkelbrikke",
   android_label: "Android-telefon (HA-appen)",
   paste_summary: "Lim inn en nøkkel du allerede har",
-  helper_install: "Installer på en ESP32",
   helper_pitch: "For iPhone og Apple Watch: En ESP32 til ca. 5 € blir nøkkelhjelper på tre minutter – installert rett fra nettleseren, uten Mac. Par den deretter her.",
   near_intro: "Hold enheten helt inntil en mottaker. Android: slå på «BLE Transmitter» i Home Assistant-appen. Nøkkelbrikker: trykk én gang.",
   near_empty: "Ingenting sterkt i nærheten ennå …",
@@ -965,7 +945,6 @@ const NL: typeof DE = {
   person: "Persoon",
   none: "geen",
   irk_help: "Mist er een iPhone of Apple Watch? Die hebben hun sleutel (IRK) nodig als “Private BLE Device” in Home Assistant – de handleiding toont de eenvoudigste manieren.",
-  manual: "Handleiding",
   voice_hint: "Vraag het ook met je stem: “Waar is mijn iPhone?”, “Waar is Torsten?”, “Wie is er thuis?”, “Laat mijn iPhone overgaan”.",
   look_hint: "In 3D verschijnen personen als figuur; in het ⚙-menu van de weergave: Personen → figuur, speld of uit.",
   ring: "Laten overgaan",
@@ -1005,7 +984,6 @@ const NL: typeof DE = {
   near_summary: "Android-telefoon of sleutelhanger toevoegen",
   android_label: "Android-telefoon (HA-app)",
   paste_summary: "Een sleutel plakken die je al hebt",
-  helper_install: "Op een ESP32 installeren",
   helper_pitch: "Voor iPhone en Apple Watch: een ESP32 van ca. 5 € wordt in drie minuten de sleutelhelper – direct vanuit de browser geïnstalleerd, zonder Mac. Daarna hier koppelen.",
   near_intro: "Houd het apparaat vlak bij een ontvanger. Android: zet “BLE Transmitter” aan in de Home Assistant-app. Sleutelhangers: kort indrukken.",
   near_empty: "Nog niets sterks in de buurt …",
@@ -1054,7 +1032,6 @@ const NN: typeof DE = {
   person: "Person",
   none: "ingen",
   irk_help: "Manglar iPhone eller Apple Watch? Dei treng nøkkelen sin (IRK) som «Private BLE Device» i Home Assistant – rettleiinga viser dei enklaste måtane.",
-  manual: "Rettleiing",
   voice_hint: "Spør òg med stemma: «Kvar er iPhonen min?», «Kvar er Torsten?», «Kven er heime?», «Ring iPhonen min».",
   look_hint: "I 3D blir personar viste som figur; i ⚙-menyen til visinga: Personar → figur, nål eller av.",
   ring: "Ring",
@@ -1094,7 +1071,6 @@ const NN: typeof DE = {
   near_summary: "Legg til Android-telefon eller nøkkelbrikke",
   android_label: "Android-telefon (HA-appen)",
   paste_summary: "Lim inn ein nøkkel du alt har",
-  helper_install: "Installer på ein ESP32",
   helper_pitch: "For iPhone og Apple Watch: Ein ESP32 til ca. 5 € blir nøkkelhjelpar på tre minutt – installert rett frå nettlesaren, utan Mac. Par han så her.",
   near_intro: "Hald eininga heilt inntil ein mottakar. Android: slå på «BLE Transmitter» i Home Assistant-appen. Nøkkelbrikker: trykk éin gong.",
   near_empty: "Ikkje noko sterkt i nærleiken enno …",
@@ -1143,7 +1119,6 @@ const PL: typeof DE = {
   person: "Osoba",
   none: "brak",
   irk_help: "Brakuje iPhone’a lub Apple Watch? Potrzebują swojego klucza (IRK) jako „Private BLE Device” w Home Assistant – instrukcja pokazuje najprostsze sposoby.",
-  manual: "Instrukcja",
   voice_hint: "Pytaj też głosem: „Gdzie jest mój iPhone?”, „Gdzie jest Torsten?”, „Kto jest w domu?”, „Zadzwoń na mój iPhone”.",
   look_hint: "W 3D osoby widać jako postać; w menu ⚙ widoku: Osoby → postać, pinezka lub wyłączone.",
   ring: "Zadzwoń",
@@ -1183,7 +1158,6 @@ const PL: typeof DE = {
   near_summary: "Dodaj telefon z Androidem lub brelok",
   android_label: "Telefon z Androidem (aplikacja HA)",
   paste_summary: "Wklej klucz, który już masz",
-  helper_install: "Zainstaluj na ESP32",
   helper_pitch: "Dla iPhone’a i Apple Watch: ESP32 za ok. 5 € w trzy minuty staje się pomocnikiem kluczy – instalacja prosto z przeglądarki, bez Maca. Potem sparuj tutaj.",
   near_intro: "Przyłóż urządzenie tuż do odbiornika. Android: włącz „BLE Transmitter” w aplikacji Home Assistant. Breloki: naciśnij raz.",
   near_empty: "Jeszcze nic silnego w pobliżu …",
@@ -1232,7 +1206,6 @@ const PT: typeof DE = {
   person: "Pessoa",
   none: "nenhuma",
   irk_help: "Falta o iPhone ou o Apple Watch? Precisam da sua chave (IRK) como “Private BLE Device” no Home Assistant – o manual mostra as formas mais simples.",
-  manual: "Manual",
   voice_hint: "Pergunte também por voz: “Onde está o meu iPhone?”, “Onde está o Torsten?”, “Quem está em casa?”, “Faz tocar o meu iPhone”.",
   look_hint: "Em 3D as pessoas aparecem como figura; no menu ⚙ da vista: Pessoas → figura, pino ou desligado.",
   ring: "Fazer tocar",
@@ -1272,7 +1245,6 @@ const PT: typeof DE = {
   near_summary: "Adicionar um telemóvel Android ou um porta-chaves",
   android_label: "Telemóvel Android (app HA)",
   paste_summary: "Colar uma chave que já tem",
-  helper_install: "Instalar num ESP32",
   helper_pitch: "Para iPhone e Apple Watch: um ESP32 de cerca de 5 € torna-se o assistente de chaves em três minutos – instalado a partir do navegador, sem Mac. Depois emparelhe aqui.",
   near_intro: "Segure o dispositivo mesmo junto a um recetor. Android: ative “BLE Transmitter” na app Home Assistant. Porta-chaves: prima uma vez.",
   near_empty: "Ainda nada forte por perto …",
@@ -1321,7 +1293,6 @@ const RO: typeof DE = {
   person: "Persoană",
   none: "niciuna",
   irk_help: "Lipsește iPhone-ul sau Apple Watch-ul? Au nevoie de cheia lor (IRK) ca „Private BLE Device” în Home Assistant – ghidul arată cele mai simple căi.",
-  manual: "Ghid",
   voice_hint: "Întreabă și vocal: „Unde e iPhone-ul meu?”, „Unde e Torsten?”, „Cine e acasă?”, „Sună-mi iPhone-ul”.",
   look_hint: "În 3D persoanele apar ca figurină; în meniul ⚙ al vizualizării: Persoane → figurină, pin sau oprit.",
   ring: "Sună",
@@ -1361,7 +1332,6 @@ const RO: typeof DE = {
   near_summary: "Adaugă un telefon Android sau un breloc",
   android_label: "Telefon Android (aplicația HA)",
   paste_summary: "Lipește o cheie pe care o ai deja",
-  helper_install: "Instalează pe un ESP32",
   helper_pitch: "Pentru iPhone și Apple Watch: un ESP32 de circa 5 € devine în trei minute ajutorul pentru chei – instalat direct din browser, fără Mac. Apoi asociază-l aici.",
   near_intro: "Ține dispozitivul chiar lângă un receptor. Android: activează „BLE Transmitter” în aplicația Home Assistant. Brelocuri: apasă o dată.",
   near_empty: "Încă nimic puternic în apropiere …",
@@ -1410,7 +1380,6 @@ const SL: typeof DE = {
   person: "Oseba",
   none: "nobena",
   irk_help: "Manjka iPhone ali Apple Watch? Potrebujeta svoj ključ (IRK) kot „Private BLE Device“ v Home Assistant – navodila pokažejo najpreprostejše poti.",
-  manual: "Navodila",
   voice_hint: "Vprašaj tudi z glasom: „Kje je moj iPhone?“, „Kje je Torsten?“, „Kdo je doma?“, „Pozvoni moj iPhone“.",
   look_hint: "V 3D so osebe prikazane kot figura; v meniju ⚙ pogleda: Osebe → figura, žebljiček ali izklopljeno.",
   ring: "Pozvoni",
@@ -1450,7 +1419,6 @@ const SL: typeof DE = {
   near_summary: "Dodaj telefon Android ali obesek za ključe",
   android_label: "Telefon Android (aplikacija HA)",
   paste_summary: "Prilepi ključ, ki ga že imaš",
-  helper_install: "Namesti na ESP32",
   helper_pitch: "Za iPhone in Apple Watch: ESP32 za približno 5 € v treh minutah postane pomočnik za ključe – nameščen kar iz brskalnika, brez Maca. Nato ga seznanite tukaj.",
   near_intro: "Drži napravo tik ob sprejemniku. Android: v aplikaciji Home Assistant vklopi „BLE Transmitter“. Obeski za ključe: pritisni enkrat.",
   near_empty: "V bližini še nič močnega …",
@@ -1499,7 +1467,6 @@ const SV: typeof DE = {
   person: "Person",
   none: "ingen",
   irk_help: "Saknas iPhone eller Apple Watch? De behöver sin nyckel (IRK) som ”Private BLE Device” i Home Assistant – guiden visar de enklaste sätten.",
-  manual: "Guide",
   voice_hint: "Fråga också med rösten: ”Var är min iPhone?”, ”Var är Torsten?”, ”Vem är hemma?”, ”Ring min iPhone”.",
   look_hint: "I 3D visas personer som figur; i vyns ⚙-meny: Personer → figur, nål eller av.",
   ring: "Ring",
@@ -1539,7 +1506,6 @@ const SV: typeof DE = {
   near_summary: "Lägg till Android-telefon eller nyckelbricka",
   android_label: "Android-telefon (HA-appen)",
   paste_summary: "Klistra in en nyckel du redan har",
-  helper_install: "Installera på en ESP32",
   helper_pitch: "För iPhone och Apple Watch: En ESP32 för cirka 5 € blir nyckelhjälpare på tre minuter – installerad direkt från webbläsaren, utan Mac. Parkoppla den sedan här.",
   near_intro: "Håll enheten alldeles intill en mottagare. Android: slå på ”BLE Transmitter” i Home Assistant-appen. Nyckelbrickor: tryck en gång.",
   near_empty: "Inget starkt i närheten än …",
@@ -1588,7 +1554,6 @@ const ZH: typeof DE = {
   person: "人员",
   none: "无",
   irk_help: "缺少 iPhone 或 Apple Watch？它们需要在 Home Assistant 中以“Private BLE Device”形式提供密钥（IRK）– 说明中介绍了最简单的方法。",
-  manual: "说明",
   voice_hint: "也可以语音提问：“我的 iPhone 在哪？”、“Torsten 在哪？”、“谁在家？”、“让我的 iPhone 响铃”。",
   look_hint: "在 3D 中人员显示为人物模型；在视图的 ⚙ 菜单中：人员 → 人物、图钉或关闭。",
   ring: "响铃",
@@ -1628,7 +1593,6 @@ const ZH: typeof DE = {
   near_summary: "添加安卓手机或钥匙扣",
   android_label: "安卓手机（HA 应用）",
   paste_summary: "粘贴已有的密钥",
-  helper_install: "安装到 ESP32",
   helper_pitch: "适用于 iPhone 和 Apple Watch：一块约 5 欧元的 ESP32 三分钟即可变成密钥助手——直接在浏览器中安装，无需 Mac。然后在这里配对。",
   near_intro: "把设备紧贴接收器。Android：在 Home Assistant 应用中打开“BLE Transmitter”。钥匙扣：按一下。",
   near_empty: "附近暂无强信号 …",
@@ -1924,11 +1888,6 @@ export class LocateSetup extends LitElement {
     </div>`;
   }
 
-  private manualLink(): string {
-    const de = this.hass?.language?.startsWith("de");
-    return de ? "https://mastershort.de/neonplan3d/anleitung/3d-ansicht/#511-ortung-neu" : "https://mastershort.de/en/neonplan3d/manual/3d-view/#511-locating-new";
-  }
-
   private renderStep(cfg: Config) {
     switch (this._step) {
       case "scanners":
@@ -2024,7 +1983,6 @@ export class LocateSetup extends LitElement {
     const helper = helpers.find((h) => h.select === this.helperId) ?? helpers[0];
     const head = html`<div class="helper-head">
         <h4>${t.helper_title}</h4>
-        <a class="install" href="https://neonplan3d.mastershort.de/keys/" target="_blank" rel="noopener">⚡ ${t.helper_install} ↗</a>
       </div>
       <p class="hint">${t.helper_pitch}</p>
       <p class="hint">${t.helper_android}</p>`;
@@ -2223,7 +2181,7 @@ export class LocateSetup extends LitElement {
         </button>
       </div>
       </details>
-      <p class="hint">${t.irk_help} <a href=${this.manualLink()} target="_blank" rel="noopener">${t.manual} ↗</a></p>
+      <p class="hint">${t.irk_help}</p>
       <p class="end"><button class="primary" ?disabled=${!cfg.devices.length} @click=${() => (this._step = "walk")}>${t.next} →</button></p>`;
   }
 

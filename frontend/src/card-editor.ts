@@ -279,8 +279,7 @@ export class Floorplan3dCardEditor extends LitElement {
               </select>
             </label>
           </div>`
-        : nothing}
-      <p class="hint">${this.t("card_pro_hint")}</p>`;
+        : nothing}`;
   }
 
   protected render() {

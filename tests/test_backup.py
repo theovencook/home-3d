@@ -1,17 +1,13 @@
-"""Full backup: export of plan and packs, restore with a fresh signature check."""
+"""Full backup: export of plan and packs, restore with a fresh content check."""
 
 from __future__ import annotations
 
-import base64
 import json
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.neonplan3d import packs
 from custom_components.neonplan3d.const import DOMAIN
 from tests.test_init import BUILDING
 
@@ -32,20 +28,7 @@ PAYLOAD = {
 }
 
 
-def _key() -> tuple[Ed25519PrivateKey, dict[str, str]]:
-    private = Ed25519PrivateKey.generate()
-    raw = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-    return private, {packs.key_id(raw): base64.b64encode(raw).decode()}
-
-
-def _sign(private: Ed25519PrivateKey, keys: dict[str, str], payload: dict) -> str:
-    sig = base64.b64encode(private.sign(packs.canonical(payload))).decode()
-    return json.dumps({"payload": payload, "signature": {"key": next(iter(keys)), "sig": sig}})
-
-
-async def test_backup_round_trip(hass: HomeAssistant, hass_ws_client, monkeypatch) -> None:
-    private, keys = _key()
-    monkeypatch.setattr(packs, "PACK_PUBLIC_KEYS", keys)
+async def test_backup_round_trip(hass: HomeAssistant, hass_ws_client) -> None:
     await async_setup_component(hass, "http", {})
     entry = MockConfigEntry(domain=DOMAIN, data={})
     entry.add_to_hass(hass)
@@ -53,8 +36,8 @@ async def test_backup_round_trip(hass: HomeAssistant, hass_ws_client, monkeypatc
     await hass.async_block_till_done()
     client = await hass_ws_client(hass)
 
-    # an imported pack keeps its signature
-    await client.send_json_auto_id({"type": "neonplan3d/packs/import", "pack": _sign(private, keys, PAYLOAD)})
+    # an imported pack keeps its source
+    await client.send_json_auto_id({"type": "neonplan3d/packs/import", "pack": json.dumps({"payload": PAYLOAD})})
     assert (await client.receive_json())["success"]
     building = json.loads(json.dumps(BUILDING))
     building["floors"][0]["name"] = "Backup floor"
@@ -65,21 +48,21 @@ async def test_backup_round_trip(hass: HomeAssistant, hass_ws_client, monkeypatc
     backup = (await client.receive_json())["result"]
     assert backup["format"] == "neonplan3d-backup"
     assert backup["building"]["floors"][0]["name"] == "Backup floor"
-    assert backup["packs"][0]["signature"]["key"] == next(iter(keys))
+    assert backup["packs"][0]["source"]["id"] == "test.backup"
 
-    # a tampered pack and an unsigned one are skipped on restore, the good one comes back
-    tampered = json.loads(json.dumps(backup["packs"][0]))
-    tampered["id"] = tampered["source"]["id"] = "test.tampered"
-    tampered["source"]["name"] = "Changed"
-    unsigned = {k: v for k, v in backup["packs"][0].items() if k != "signature"}
-    unsigned["id"] = "test.unsigned"
+    # a broken pack and one without its source are skipped on restore, the good one comes back
+    broken = json.loads(json.dumps(backup["packs"][0]))
+    broken["id"] = broken["source"]["id"] = "test.broken"
+    broken["source"]["items"] = "not a list"
+    sourceless = {k: v for k, v in backup["packs"][0].items() if k != "source"}
+    sourceless["id"] = "test.sourceless"
     backup["building"]["floors"][0]["name"] = "Restored floor"
     restore = {"type": "neonplan3d/backup/import", "building": backup["building"]}
-    await client.send_json_auto_id({**restore, "packs": [*backup["packs"], tampered, unsigned]})
+    await client.send_json_auto_id({**restore, "packs": [*backup["packs"], broken, sourceless]})
     result = await client.receive_json()
     assert result["success"], result
     assert result["result"]["packs"] == 1
-    assert sorted(s["id"] for s in result["result"]["skipped"]) == ["test.tampered", "test.unsigned"]
+    assert sorted(s["id"] for s in result["result"]["skipped"]) == ["test.broken", "test.sourceless"]
     assert result["result"]["building"]["floors"][0]["name"] == "Restored floor"
 
     await client.send_json_auto_id({"type": "neonplan3d/packs/list"})

@@ -67,9 +67,9 @@ test("a pack's flat ceiling light (the workshop light) gets a mount height, a pa
 
 test("a heat pump's indoor unit and other pack heaters take a water_heater entity (#645)", () => {
   setPacks([]);
-  assert.equal(isPackHeater("pack:mastershort.utility:heat_pump_indoor"), true);
-  assert.equal(isPackHeater("pack:mastershort.utility:buffer_tank"), true);
-  assert.equal(isPackHeater("pack:mastershort.utility:heat_pump_out_s"), false);
+  assert.equal(isPackHeater("pack:home3d.utility:heat_pump_indoor"), true);
+  assert.equal(isPackHeater("pack:home3d.utility:buffer_tank"), true);
+  assert.equal(isPackHeater("pack:home3d.utility:heat_pump_out_s"), false);
   assert.equal(isPackHeater("water_heater"), false);
 });
 

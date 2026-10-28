@@ -110,7 +110,7 @@ import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from 
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
-import { hasFeature, manualUrl, projectionOn, released, shopUrl, type Feature } from "../features.ts";
+import { hasFeature, projectionOn, released, type Feature } from "../features.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import type { Shown } from "../voice/targets.ts";
 import { anyModule, moduleAlerts, moduleCards, moduleMenuSheets, modulePools, moduleRoomSheets, moduleScene, moduleSettings, modulesWithSettings, moduleVoice, moduleWatched, syncModules, type ModuleCard, type ModuleField, type ModuleHost, type ModuleSheet, type ScenePiece, type SpokenAlert, type SpokenCar, type SpokenDevice, type SpokenOpening, type VoiceAnswer } from "../modules.ts";
@@ -133,7 +133,6 @@ import { lowSyncDelay } from "../viewer/pace.ts";
 import { floorCounts, floorInfoText, locatedPersons, personLook, personsInRooms, personsShown } from "../presence.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
-import { countView, diagnosticsActive, recordFrame, watchDiagnostics } from "../diagnostics.ts";
 import type { DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SoundSource, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 import { wallLayout } from "../camera-wall.ts";
 import { watchedEntities } from "../watched.ts";
@@ -314,7 +313,6 @@ export class Fp3dView3d extends LitElement {
   /** The replay's focus counter as last seen (an event was tapped: the view shows where). */
   private seenFocus = 0;
   private unlistenReplay: (() => void) | null = null;
-  private unwatchDiag: (() => void) | null = null;
   /** The last sync showed something that follows the clock (a camera's detection pin). */
   private detecting = false;
   /** How long the last full sync took (ms, smoothed), shown with the stats. */
@@ -364,7 +362,7 @@ export class Fp3dView3d extends LitElement {
   declare weatherEntityId: string | null;
   /** A lightning flash lights the stage for a moment. */
   private declare _flash: boolean;
-  /** A Pro feature was asked for without the Pro pack: a hint with the shop link. */
+  /** A feature that is not available here was asked for: a short hint. */
   private declare _proHint: Feature | null;
   private flashTimer: ReturnType<typeof setTimeout> | undefined;
   private cloud = 0;
@@ -727,7 +725,6 @@ export class Fp3dView3d extends LitElement {
     super.connectedCallback();
     this.listenReplay();
     // the opt-in reports sample the frame rate the viewer measures for its stats anyway
-    this.unwatchDiag = watchDiagnostics((on) => this.viewer?.setStats(this.showStats || on));
     if (this.hasUpdated) {
       this.observeStage();
       if (!this.viewer) void this.start();
@@ -779,8 +776,6 @@ export class Fp3dView3d extends LitElement {
     this.ghost = null;
     this.unlistenReplay?.();
     this.unlistenReplay = null;
-    this.unwatchDiag?.();
-    this.unwatchDiag = null;
     this.unwatchAsk();
     clearInterval(this.clockTimer);
     this.clockTimer = undefined;
@@ -882,7 +877,6 @@ export class Fp3dView3d extends LitElement {
         // stats can be switched on at any time; they only cause updates while shown
         onStats: (s) => {
           if (this.showStats) this._stats = s;
-          recordFrame(s);
         },
       });
       this.viewer.setWallMode(this.wallMode);
@@ -895,8 +889,7 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setFurnishTypes(this.furnishTypes ?? null);
       this.viewer.setAnchorCallback((i, x, y, on, scale, facing) => this.placeHolo(i, x, y, on, scale, facing));
       this.viewer.setFloorStack(this.floorStack);
-      this.viewer.setStats(this.showStats || diagnosticsActive());
-      countView("3d");
+      this.viewer.setStats(this.showStats);
       this.viewer.setAutoOrbit(this.autoOrbit ? 0.06 : 0);
       this.viewer.setKeepRoof(this.keepRoof);
       this.viewer.setHideRoof(this.hideRoof);
@@ -1012,7 +1005,7 @@ export class Fp3dView3d extends LitElement {
       // a replay ticks as often as the new quality allows
       this.replay?.setQuality(this.quality, v.low);
     }
-    if (changed.has("showStats")) v.setStats(this.showStats || diagnosticsActive());
+    if (changed.has("showStats")) v.setStats(this.showStats);
     if (changed.has("building")) this.findIndex = null;
   }
 
@@ -1630,7 +1623,7 @@ export class Fp3dView3d extends LitElement {
     return { entities, openings: [...openings], furniture: [...furniture], low: this._low, cars, energy: hasFeature("energy_pro"), auto: hasFeature("auto_pro") };
   }
 
-  /** Shows the hint of a Pro add-on that is not installed (with the shop link). */
+  /** Shows the hint of a feature that is not available here. */
   proHint(feature: Feature): void {
     this._proHint = feature;
   }
@@ -3930,7 +3923,6 @@ export class Fp3dView3d extends LitElement {
    * stick move; walls stop you. The house lives on around you: lights, screens, sunlight.
    */
   private async startWalk(): Promise<void> {
-    countView("walk");
     const b = this.building;
     const v = this.viewer;
     if (!b || !v || this._walk) return;
@@ -4383,7 +4375,7 @@ export class Fp3dView3d extends LitElement {
         if (speak) void v.speak(hass, located.text, voicePipeline());
         return located.text;
       }
-      // a module of the house answers (installed from the shop): what to say and what to show
+      // a module of the house answers (registered in code): what to say and what to show
       const host = this.moduleHost(hass, b, v.SYNONYMS, (s) => v.showTarget(s, b, devices, (r) => (r.area_id ? hass.areas?.[r.area_id]?.name : null)));
       const own = await moduleVoice(text, host);
       if (own) {
@@ -5040,7 +5032,7 @@ export class Fp3dView3d extends LitElement {
     }
   }
 
-  /** The hint shown when a Pro feature is used without the Pro pack. */
+  /** The hint shown when a feature that is not available here is used. */
   private renderProHint() {
     if (!this._proHint || !this.hass) return nothing;
     return html`<div class="fp3d-pro" role="dialog">
@@ -5048,8 +5040,6 @@ export class Fp3dView3d extends LitElement {
       <span>${translate(this.hass, `pro_feature_${this._proHint}` as I18nKey)}</span>
       <span class="fp3d-sub">${translate(this.hass, "pro_locked")}</span>
       <div>
-        <a class="fp3d-chip fp3d-chip-on" href=${shopUrl(this.hass.language)} target="_blank" rel="noopener">${translate(this.hass, "pro_shop")}</a>
-        <a class="fp3d-chip" href=${manualUrl(this.hass.language, this._proHint)} target="_blank" rel="noopener">${translate(this.hass, "manual_more")}</a>
         <button class="fp3d-chip" @click=${() => ((this._proHint = null), this.fire("open-extensions", null))}>${translate(this.hass, "ext_tab")}</button>
         <button class="fp3d-chip" @click=${() => (this._proHint = null)}>${translate(this.hass, "close")}</button>
       </div>

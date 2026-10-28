@@ -269,7 +269,7 @@ interface Spot {
   visit?: boolean;
 }
 
-/** The item's own name: a pack item's id after the pack ("pack:mastershort.pets:cat_bed" → "cat_bed"). */
+/** The item's own name: a pack item's id after the pack ("pack:home3d.pets:cat_bed" → "cat_bed"). */
 const itemOf = (type: string) => type.slice(type.lastIndexOf(":") + 1).toLowerCase();
 const SOFA = /^(sofa|armchair|chesterfield|corner_(left|right|sofa))|sofa/;
 const BED = /^bed(_|$)/;

@@ -2,7 +2,9 @@
 
 *Deutsch weiter unten.*
 
-Many people already ask ChatGPT, Claude or Gemini to turn their floor plan into NeonPlan 3D. This works best with the template below: the AI writes the simple [import format](plan-format.md), and the **import page** (<https://neonplan3d.mastershort.de/import/>) checks it, places doors and windows on their walls, fixes small mistakes and gives you the NeonPlan file for **Editor → Backup → Import …**.
+> **Home 3D note:** the hosted import page of the original project is not part of Home 3D. The converters for these formats are in `frontend/src/import/` but are not wired into the editor yet; this page is kept as the format reference.
+
+Many people already ask ChatGPT, Claude or Gemini to turn their floor plan into NeonPlan 3D. This works best with the template below: the AI writes the simple [import format](plan-format.md), and the **import page** checks it, places doors and windows on their walls, fixes small mistakes and gives you the NeonPlan file for **Editor → Backup → Import …**.
 
 Tip: for a Sweet Home 3D file, a CAD drawing, an iPhone scan or a 3D model you do not need an AI – drop the file on the import page directly.
 
@@ -47,7 +49,9 @@ Then save the AI's answer as a `.json` file and drop it on the import page. Chec
 
 # Den Plan von einer KI schreiben lassen
 
-Viele lassen sich ihren Grundriss schon von ChatGPT, Claude oder Gemini für NeonPlan 3D umbauen. Am besten klappt das mit der Vorlage unten: Die KI schreibt das einfache [Importformat](plan-format.md), und die **Import-Seite** (<https://neonplan3d.mastershort.de/import/>) prüft es, setzt Türen und Fenster auf ihre Wände, repariert kleine Fehler und gibt dir die NeonPlan-Datei für **Editor → Sicherung → Importieren …**.
+> **Hinweis zu Home 3D:** Die gehostete Import-Seite des Originalprojekts gehört nicht zu Home 3D. Die Konverter liegen in `frontend/src/import/`, sind aber noch nicht im Editor eingebunden; diese Seite bleibt als Formatbeschreibung.
+
+Viele lassen sich ihren Grundriss schon von ChatGPT, Claude oder Gemini für NeonPlan 3D umbauen. Am besten klappt das mit der Vorlage unten: Die KI schreibt das einfache [Importformat](plan-format.md), und die **Import-Seite** prüft es, setzt Türen und Fenster auf ihre Wände, repariert kleine Fehler und gibt dir die NeonPlan-Datei für **Editor → Sicherung → Importieren …**.
 
 Tipp: Für eine Sweet-Home-3D-Datei, eine CAD-Zeichnung, einen iPhone-Scan oder ein 3D-Modell brauchst du keine KI – die Datei einfach direkt auf die Import-Seite ziehen.
 

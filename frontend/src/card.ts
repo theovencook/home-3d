@@ -2,7 +2,6 @@
 
 import { zonesOf } from "./model.ts";
 import { confirmEntities } from "./devices.ts";
-import { countView } from "./diagnostics.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { BuildingController } from "./building-controller.ts";
 import "./components/room-panel.ts";
@@ -186,7 +185,6 @@ export class Floorplan3dCard extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    countView("card");
     document.addEventListener("fullscreenchange", this.onFullscreen);
     window.addEventListener("resize", this.onViewport);
     window.visualViewport?.addEventListener("resize", this.onViewport);
