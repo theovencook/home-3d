@@ -84,3 +84,36 @@ test("a floating roof window over a room of a lower floor belongs to that floor 
   const [plain] = buildRoof(b);
   assert.ok(!plain.winBelow && plain.winRoof?.solid.count);
 });
+
+test("a cross gable a top floor reaches into leaves its walls to that floor, like the main roof's attic", () => {
+  // a 10 × 8 m house with a 4 m wing at the front, two storeys, a cross gable over the wing on the first floor's
+  // walls; the top floor (inside the main roof) runs on into the cross gable or stops at the main body
+  const gableEnd = (intoWing: boolean) => {
+    const b = emptyBuilding();
+    const wing = (id: string): Room => ({ id, name: id, area_id: null, points: [[3, 8], [7, 8], [7, 11], [3, 11]], floor_material: "wood" });
+    b.floors = [
+      { ...newFloor("eg", "EG", 0), rooms: [rect("a", 10, 8), wing("w0")] },
+      { ...newFloor("og", "OG", 2.75), height: 2.5, rooms: [rect("b", 10, 8), wing("w1")] },
+      { ...newFloor("dg", "DG", 5.5), height: 2.4, rooms: intoWing ? [rect("c", 10, 8), wing("w2")] : [rect("c", 10, 8)] },
+    ];
+    b.settings.roof = {
+      type: "custom",
+      pitch: 35,
+      overhang: 0.3,
+      sections: [
+        { id: "main", x0: -0.24, z0: -0.24, x1: 10.24, z1: 8.24, shape: "gable", axis: "x", eave_a: 5.58, eave_b: 5.58, pitch_a: 35, pitch_b: 35, base: 5.58 },
+        { id: "front", x0: 2.76, z0: 6, x1: 7.24, z1: 11.24, shape: "gable", axis: "z", eave_a: 5.25, eave_b: 5.25, pitch_a: 40, pitch_b: 40, base: 5.25, dormer: true },
+      ],
+    };
+    // the roof's own gable end: points in the wall's plane at the front, short of the verge's overhang
+    let n = 0;
+    for (const part of buildRoof(b)) {
+      const p = part.solid.p;
+      for (let i = 0; i < p.length; i += 3) if (p[i + 2] > 11 && p[i + 2] < 11.3 && p[i] > 3.2 && p[i] < 6.8) n++;
+    }
+    return n;
+  };
+  // without the top floor in it, the cross gable draws its gable end; with it, that floor's walls stand there
+  assert.ok(gableEnd(false) > 0);
+  assert.equal(gableEnd(true), 0);
+});

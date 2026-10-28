@@ -5,7 +5,7 @@
 
 import { Color } from "three";
 import type { Building, Floor, RoofSection, SolarField, Vec2 } from "../model.ts";
-import { polygonArea } from "../model.ts";
+import { pointInPolygon, polygonArea } from "../model.ts";
 import { coversIn, cutHole, cutUnder, lineOutside, meetLine, sectionCovers, sectionFloor, sectionsCut, dormerHoles, dormerParent, effectiveDormer, offsetPolygon, sectionGeometry, sectionHeightAt, sectionPolygon, sectionFrame, sectionOverhang, sectionProfile, sectionUV, wingJunction, wingSection, type LocalCover, type Q, type SectionOverhang } from "../roof-sections.ts";
 import { DEG, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
 import { fieldModules, roofFaces, roofWindowRoom, windowCorners, type RoofFace } from "../solar.ts";
@@ -295,7 +295,11 @@ function buildSections(b: Building, sections: readonly RoofSection[], overhang: 
     // themselves (knee walls, gables) and the roof draws none of its own; a dormer keeps its cheeks
     // a dormer or a cross gable (a smaller section on a bigger one) keeps its cheeks and front gable
     const parent = plan.parent;
-    const attic = floor.elevation + floor.height > sec.base + 0.05 && !sec.dormer && !parent;
+    // … unless a floor above starts inside it with a room under it (a top floor reaching into a cross gable over
+    // a lower wing): that floor's walls end under the slopes like an attic's, the gable included
+    const centre: Vec2 = [(sec.x0 + sec.x1) / 2, (sec.z0 + sec.z1) / 2];
+    const filled = floors.some((f) => f.elevation > floor.elevation && f.elevation <= sec.base + 0.5 && f.elevation + f.height > sec.base && f.rooms.some((r) => pointInPolygon(centre, r.points)));
+    const attic = (floor.elevation + floor.height > sec.base + 0.05 && !sec.dormer && !parent) || filled;
     // the slope opens under every dormer and cross gable sitting on this section, and under its roof windows
     const holes = sections.filter((d) => d !== sec && dormerParent(sections, d) === sec).flatMap((d) => dormerHoles(sec, d));
     for (const w of b.settings.roof.windows ?? []) {
