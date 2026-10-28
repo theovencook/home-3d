@@ -12,8 +12,8 @@ sidebar panel with a plan editor and a live 3D view, plus a dashboard card (`cus
 
 ## Credit
 
-Home 3D is a fork of [NeonPlan 3D](https://github.com/Mastershort/neonplan3d) by Mastershort (MIT licence,
-forked at commit 0a947aa). Thanks to Mastershort for the original work. Home 3D is not affiliated with or endorsed by
+Home 3D is derived from [NeonPlan 3D](https://github.com/Mastershort/neonplan3d) by Mastershort (MIT licence,
+copied at commit 0a947aa). Thanks to Mastershort for the original work. Home 3D is not affiliated with or endorsed by
 Mastershort; see [NOTICE](NOTICE).
 
 ## Installation
