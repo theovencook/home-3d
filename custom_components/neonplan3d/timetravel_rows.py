@@ -237,13 +237,31 @@ def car_state(state: str) -> str:
     return state if state in ("home", "unavailable", "unknown") else "not_home"
 
 
+# features whose code is in this integration: always on, no pack needed ("pool" is not here: its logic is missing)
+LOCAL_FEATURES = frozenset(
+    {
+        "camera_cockpit",
+        "weather",
+        "screens",
+        "energy_pro",
+        "sound",
+        "auto_pro",
+        "time_travel",
+        "household",
+        "fridge_smart",
+        "fun_pets",
+        "fun_halloween",
+    }
+)
+
+
 def has_feature(packs: Iterable[Mapping[str, Any]], feature: str) -> bool:
-    """Whether an installed pack unlocks a Pro feature."""
-    return any(feature in (pack.get("features") or []) for pack in packs)
+    """Whether a feature is on: built in (LOCAL_FEATURES) or listed by an installed pack."""
+    return feature in LOCAL_FEATURES or any(feature in (pack.get("features") or []) for pack in packs)
 
 
 def has_time_travel(packs: Iterable[Mapping[str, Any]]) -> bool:
-    """Whether an installed pack unlocks the time travel."""
+    """Whether the time travel is on (always, it is built in)."""
     return has_feature(packs, "time_travel")
 
 

@@ -1,26 +1,22 @@
 /**
- * Pro features: unlocked by an installed, signed feature pack (a pack whose payload lists `features`).
- * The code of every feature is in the integration; the pack is the licence and carries its content.
+ * Features: every feature whose code is in this repository is on (BUILT_IN); there is no tier and no licence.
+ * A pack may still list feature names (older pack files do), which is harmless.
  */
 import { getPacks } from "./packs.ts";
 
 export type Feature = "camera_cockpit" | "weather" | "screens" | "energy_pro" | "sound" | "auto_pro" | "time_travel" | "pool" | "household" | "fridge_smart" | "fun_pets" | "fun_halloween";
 
-/** The add-ons shown on the extensions page (sold in the shop). */
+/** The features listed on the extensions page. */
 export const FEATURES: readonly Feature[] = ["camera_cockpit", "weather", "screens", "energy_pro", "sound", "auto_pro", "time_travel", "pool", "household"];
-/**
- * Fun packs: free extras (0 €, anyone may give what they like) picked up in the shop by customers – not Pro add-ons,
- * shown in their own section of the extensions page and switched on and off there.
- */
+/** Fun extras (pets, Halloween): shown in their own section of the extensions page and switched on and off there. */
 export const FUN: readonly Feature[] = ["fun_pets", "fun_halloween"];
-/** Free features built but not released yet (no pack unlocks them; only the lab switch shows them). */
+/** Free features that are always on (they can still be listed in UNRELEASED to hide them). */
 export type FreeFeature = "diagnostics" | "locate";
 export type Gated = Feature | FreeFeature;
 
 /**
- * Pro add-ons (and free features) built but not released yet: they show nowhere (extensions page, teasers) unless they are
- * unlocked (the tester has the pack) or the lab switch is on (localStorage "neonplan3d.lab" = "1").
- * A release takes a feature off this list.
+ * Features whose logic is not in this repository: they show nowhere unless a pack lists them or the lab switch is on
+ * (localStorage "neonplan3d.lab" = "1").
  */
 export const UNRELEASED: readonly Gated[] = ["pool"];
 
@@ -61,50 +57,11 @@ export function knownFeature(key: string): boolean {
   return (FEATURES as readonly string[]).includes(key) || (HIDDEN as readonly string[]).includes(key) || (FUN as readonly string[]).includes(key);
 }
 
-/** The shop page where the Pro pack is sold (German; see shopUrl for the user's language). */
-export const PRO_URL = "https://mastershort.de/neonplan3d/";
-
-const isGerman = (lang: string | undefined) => (lang ?? navigator.language).toLowerCase().startsWith("de");
-
-/** The NeonPlan 3D page of the shop in the user's language (?lang= makes the site keep that language). */
-/**
- * The shop's sign-up page: a free customer account with its licence key (and the free fun packs). Marked as coming
- * from the app. (The exact address comes from the shop – see "Rueckmeldung Claude Desktop - Fun-Pack Halloween.md".)
- */
-export function registerUrl(lang: string | undefined): string {
-  return `https://mastershort.de/my-account/?lang=${isGerman(lang) ? "de" : "en"}&src=neonplan-app`;
-}
-
-export function shopUrl(lang: string | undefined): string {
-  return isGerman(lang) ? "https://mastershort.de/neonplan3d/?lang=de" : "https://mastershort.de/en/neonplan3d/?lang=en";
-}
-
-/** Where each Pro add-on is described in chapter 6 of the manual: German and English slug and anchor. */
-const MANUAL_FEATURE: Record<string, { de: string; en: string }> = {
-  camera_cockpit: { de: "pro-erweiterungen/#61-kamera-cockpit", en: "pro-add-ons/#61-camera-cockpit" },
-  weather: { de: "pro-erweiterungen/#62-wetter-drau%C3%9Fen", en: "pro-add-ons/#62-weather-outside" },
-  screens: { de: "pro-erweiterungen/#63-bildschirme-live", en: "pro-add-ons/#63-live-screens" },
-  energy_pro: { de: "pro-erweiterungen/#64-energie-pro", en: "pro-add-ons/#64-energy-pro" },
-  sound: { de: "pro-erweiterungen/#65-klang-kino", en: "pro-add-ons/#65-sound-cinema" },
-  auto_pro: { de: "pro-erweiterungen/#66-auto-pro", en: "pro-add-ons/#66-auto-pro" },
-  time_travel: { de: "pro-erweiterungen/#67-zeitreise", en: "pro-add-ons/#67-time-travel" },
-  pool: { de: "pro-erweiterungen/#68-pool-pro", en: "pro-add-ons/#68-pool-pro" },
-  household: { de: "pro-erweiterungen/#68-haushalt-pro", en: "pro-add-ons/#68-household-pro" },
-  extensions: { de: "erweiterungen-shop-moebel-packs/", en: "extensions-shop-furniture-packs/" },
-};
-
-/** The online manual in the user's language, optionally at a Pro add-on's section or the extensions chapter. */
-export function manualUrl(lang: string | undefined, topic?: Feature | "extensions"): string {
-  const de = isGerman(lang);
-  const base = de ? "https://mastershort.de/neonplan3d/anleitung/" : "https://mastershort.de/en/neonplan3d/manual/";
-  const target = topic ? MANUAL_FEATURE[topic] : undefined;
-  const path = target ? (de ? target.de : target.en) : "";
-  const [page, anchor] = path.split("#");
-  return `${base}${page}?lang=${de ? "de" : "en"}${anchor ? `#${anchor}` : ""}`;
-}
+/** Every feature whose code is in this repository: on without any pack. */
+export const BUILT_IN: readonly Feature[] = ["camera_cockpit", "weather", "screens", "energy_pro", "sound", "auto_pro", "time_travel", "household", "fridge_smart", "fun_pets", "fun_halloween"];
 
 export function unlockedFeatures(packs: readonly { features?: string[] }[] = getPacks()): Set<Feature> {
-  const out = new Set<Feature>();
+  const out = new Set<Feature>(BUILT_IN);
   for (const p of packs) for (const f of p.features ?? []) if (knownFeature(f)) out.add(f as Feature);
   return out;
 }

@@ -156,10 +156,13 @@ def test_a_car_tracker_says_home_or_away_only() -> None:
     assert reduce_attributes("vacuum", {"current_room": "Kitchen", "battery_level": 80}) == {"current_room": "Kitchen"}
 
 
-def test_the_pack_feature_unlocks_time_travel() -> None:
-    assert has_time_travel([{"features": ["energy_pro"]}, {"features": ["time_travel"]}])
-    assert not has_time_travel([{"features": ["energy_pro"]}, {"features": None}, {}])
+def test_time_travel_is_built_in() -> None:
+    assert has_time_travel([])
+    assert has_time_travel([{"features": ["energy_pro"]}, {"features": None}, {}])
     assert "time_travel" in packs.KNOWN_FEATURES
+    # the pool's logic is not part of this integration: it stays off unless a pack lists it
+    assert not has_feature([], "pool")
+    assert has_feature([{"features": ["pool"]}], "pool")
 
 
 def test_places_stay_private() -> None:
@@ -193,8 +196,7 @@ def test_car_trackers_come_from_the_parking_spots() -> None:
     assert trackers == {"device_tracker.spot", "device_tracker.named"}
     assert seeds == {"binary_sensor.spot2", "sensor.ev_soc", "sensor.spot4"}
     assert car_refs({}) == (set(), set())
-    assert has_feature([{"features": ["auto_pro"]}], "auto_pro")
-    assert not has_feature([{"features": ["time_travel"]}], "auto_pro")
+    assert has_feature([], "auto_pro")
 
 
 async def _setup(hass: HomeAssistant) -> None:
@@ -216,13 +218,13 @@ def _msg(**over: Any) -> dict[str, Any]:
     }
 
 
-async def test_history_needs_the_pro_add_on(hass: HomeAssistant, hass_ws_client) -> None:
+async def test_history_needs_no_pack(hass: HomeAssistant, hass_ws_client) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(_msg())
     result = await client.receive_json()
-    assert not result["success"]
-    assert result["error"]["code"] == "not_unlocked"
+    # time travel is built in: without a pack it gets past the gate (and stops at the missing recorder here)
+    assert result["error"]["code"] == "no_recorder"
 
 
 async def test_history_checks_the_window_and_the_recorder(hass: HomeAssistant, hass_ws_client) -> None:
@@ -342,12 +344,11 @@ class _Instance:
         return func(*args)
 
 
-async def test_history_without_auto_pro_has_no_cars(hass: HomeAssistant, hass_ws_client) -> None:
-    """Without Auto Pro no tracker is answered, even one on a parking spot."""
+async def test_history_asks_for_no_tracker_off_the_parking_spots(hass: HomeAssistant, hass_ws_client) -> None:
+    """A tracker asked for as a car's that is on no parking spot of the plan is never answered."""
     await _setup(hass)
     data = hass.data[DOMAIN]
-    data.packs = [{"id": "test.pro", "features": ["time_travel"], "items": []}]
-    data.building = {**data.building, "floors": [{"furniture": [{"type": "parking", "entity": "device_tracker.car"}]}]}
+    data.building = {**data.building, "floors": [{"furniture": [{"type": "parking", "entity": "device_tracker.other"}]}]}
     hass.config.components.add("recorder")
     asked: list[list[str]] = []
 

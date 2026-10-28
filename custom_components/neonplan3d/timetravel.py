@@ -197,7 +197,7 @@ async def ws_timetravel_history(
         connection.send_error(msg["id"], "not_loaded", "NeonPlan 3D is not set up")
         return
     if not has_time_travel(data.packs):
-        connection.send_error(msg["id"], "not_unlocked", "Time travel is a Pro add-on")
+        connection.send_error(msg["id"], "not_unlocked", "Time travel is not available")
         return
     start, end = msg["start_time"], msg["end_time"]
     if not 0 < end - start <= MAX_SPAN:
