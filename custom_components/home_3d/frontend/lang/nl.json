@@ -1261,6 +1261,7 @@
  "furn_stairs": "Trap",
  "furn_stairs_u": "U-trap met bordes",
  "furn_stairwell": "Vloeropening",
+ "furn_loft_ladder": "Vlizotrap",
  "stairwell_hint": "Een gat in deze vloer, bijvoorbeeld boven de trap of voor een vide; van boven kijk je erdoorheen. De opening moet binnen één kamer liggen; meerdere openingen mogen overlappen (bijvoorbeeld voor een L-vorm). Trappen op de verdieping eronder die tot hier reiken, openen de vloer ook vanzelf.",
  "tool_hole": "Vloeropening",
  "tool_roof": "Dak",

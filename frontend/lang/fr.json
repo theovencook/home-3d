@@ -1261,6 +1261,7 @@
  "furn_stairs": "Escalier",
  "furn_stairs_u": "Escalier en U avec palier",
  "furn_stairwell": "Trémie",
+ "furn_loft_ladder": "Escalier escamotable",
  "stairwell_hint": "Une ouverture dans ce plancher, p. ex. au-dessus de l'escalier ou pour une mezzanine ; d'en haut on voit à travers. L'ouverture doit être dans une seule pièce ; plusieurs ouvertures peuvent se chevaucher (pour une forme en L, par exemple). Les escaliers de l'étage du dessous qui montent jusqu'ici ouvrent aussi le plancher d'eux-mêmes.",
  "tool_hole": "Trémie",
  "tool_roof": "Toit",

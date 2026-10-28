@@ -1317,6 +1317,7 @@ export const FURNITURE_TYPES = [
   "parking",
   "fridge_smart",
   "stairwell",
+  "loft_ladder",
   "awning",
   "waste_bin",
   "mailbox",
@@ -1335,7 +1336,7 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
   kitchen: ["kitchen", "kitchen_wall", "kitchen_tall", "island", "worktop", "sink", "stove", "dishwasher", "fridge"],
   sleeping: ["bed", "bunk_bed", "nightstand", "wardrobe", "dresser"],
   bath: ["bathtub", "shower", "wc", "washbasin", "washer", "dryer"],
-  work: ["desk", "worktop", "office_chair", "tall_cabinet", "coat_rack", "radiator", "ac_unit", "stairs", "stairs_u", "robot_vacuum"],
+  work: ["desk", "worktop", "office_chair", "tall_cabinet", "coat_rack", "radiator", "ac_unit", "stairs", "stairs_u", "loft_ladder", "robot_vacuum"],
   vehicles: ["parking"],
   outdoor: ["awning"],
   household: ["waste_bin", "mailbox"],
@@ -1377,7 +1378,7 @@ export const WALL_LAMP_Y = 1.75;
  * light (a downstand beam, ceiling beams) start under the ceiling and can be lowered (#287).
  */
 export function canLift(f: Pick<Furniture, "type">): boolean {
-  if (["lamp_pendant", "lamp_fan", "stairwell", "parking"].includes(f.type) || STAIR_TYPES.has(f.type)) return false;
+  if (["lamp_pendant", "lamp_fan", "stairwell", "loft_ladder", "parking"].includes(f.type) || STAIR_TYPES.has(f.type)) return false;
   const item = packItem(f.type);
   // a pack's flat ceiling light (a workshop batten, a hexagon panel) can be lowered like the built-in LED panel (#645)
   return !(item?.mount === "ceiling" && item.light && item.light !== "panel");
@@ -1397,6 +1398,17 @@ export function spotDepth(type: string, h: number): number {
 
 /** Built-in stairs: they reach up to the next floor and cut its opening (the straight one and the U-stair). */
 export const STAIR_TYPES = new Set<string>(["stairs", "stairs_u"]);
+
+/** Length of a loft ladder's hatch along the ladder (at most; a short item keeps 0.2 m for the ladder's foot). */
+export const LOFT_HATCH = 1.1;
+
+/** The hatch a loft ladder comes down from, in plan: the back of its footprint, which the floor above leaves open. */
+export function loftHatchFootprint(f: Furniture): Vec2[] {
+  const len = Math.max(0.3, Math.min(LOFT_HATCH, f.d - 0.2));
+  const a = (f.rotation * Math.PI) / 180;
+  const shift = -(f.d - len) / 2; // towards the back (-z)
+  return furnitureFootprint({ ...f, d: len, x: f.x - shift * Math.sin(a), z: f.z + shift * Math.cos(a) });
+}
 
 /**
  * Layout of the built-in U-stair (w × d, height h): n risers of equal height, the landing at the back is
@@ -1639,6 +1651,8 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   fridge: [0.6, 0.65, 1.8],
   fridge_smart: [0.91, 0.73, 1.78],
   stairwell: [1.0, 2.6, 0.02],
+  // a hatch of 0.6 × 1.1 m in the ceiling, its ladder folded down to the floor
+  loft_ladder: [0.6, 1.6, 2.5],
   stove: [0.6, 0.62, 0.92],
   sink: [0.9, 0.62, 0.92],
   bathtub: [1.7, 0.75, 0.58],

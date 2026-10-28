@@ -1261,6 +1261,7 @@
  "furn_stairs": "Escalera",
  "furn_stairs_u": "Escalera en U con descansillo",
  "furn_stairwell": "Hueco de forjado",
+ "furn_loft_ladder": "Escalera de buhardilla",
  "stairwell_hint": "Un hueco en este forjado, por ejemplo sobre la escalera o para una galería; desde arriba se ve a través. El hueco debe estar dentro de una sola habitación; varios huecos pueden solaparse (para una forma en L, por ejemplo). Las escaleras de la planta inferior que llegan hasta aquí abren el forjado por sí solas.",
  "tool_hole": "Hueco de forjado",
  "tool_roof": "Tejado",

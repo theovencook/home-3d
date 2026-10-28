@@ -1261,6 +1261,7 @@
  "furn_stairs": "Scala",
  "furn_stairs_u": "Scala a U con pianerottolo",
  "furn_stairwell": "Apertura nel solaio",
+ "furn_loft_ladder": "Scala retrattile",
  "stairwell_hint": "Un foro in questo solaio, per esempio sopra la scala o per un soppalco; dall'alto si vede attraverso. L'apertura deve stare in una sola stanza; più aperture possono sovrapporsi (per una forma a L, per esempio). Le scale del piano sottostante che arrivano fin qui aprono il solaio anche da sole.",
  "tool_hole": "Apertura nel solaio",
  "tool_roof": "Tetto",

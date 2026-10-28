@@ -1261,6 +1261,7 @@
  "furn_stairs": "Trappa",
  "furn_stairs_u": "U-trappa med vilplan",
  "furn_stairwell": "Bjälklagsöppning",
+ "furn_loft_ladder": "Vindstrappa",
  "stairwell_hint": "Ett hål i det här bjälklaget, till exempel ovanför trappan eller för ett galleri; ovanifrån tittar du igenom det. Öppningen måste ligga inom ett rum; flera öppningar får överlappa (till exempel för en L-form). Trappor på våningen under som når upp hit öppnar också golvet av sig själva.",
  "tool_hole": "Bjälklagsöppning",
  "tool_roof": "Tak",

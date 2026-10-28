@@ -1261,6 +1261,7 @@
  "furn_stairs": "Portaat",
  "furn_stairs_u": "U-portaat välitasanteella",
  "furn_stairwell": "Lattia-aukko",
+ "furn_loft_ladder": "Ullakkotikkaat",
  "stairwell_hint": "Reikä tässä lattiassa, esimerkiksi portaikon yläpuolella tai parvea varten; ylhäältä katsot sen läpi. Aukon on oltava yhden huoneen sisällä; useat aukot voivat mennä päällekkäin (esimerkiksi L-muotoa varten). Alemman kerroksen portaat, jotka ulottuvat tänne, avaavat lattian myös itsestään.",
  "tool_hole": "Lattia-aukko",
  "tool_roof": "Katto",

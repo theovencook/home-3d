@@ -1261,6 +1261,7 @@
  "furn_stairs": "Stopnice",
  "furn_stairs_u": "Stopnice v obliki U s podestom",
  "furn_stairwell": "Odprtina v tleh",
+ "furn_loft_ladder": "Podstrešne stopnice",
  "stairwell_hint": "Luknja v tem nadstropju, na primer nad stopniščem ali za galerijo; od zgoraj gledaš skozi njo. Odprtina mora ležati znotraj enega prostora; več odprtin se lahko prekriva (npr. za obliko L). Stopnice v nadstropju spodaj, ki segajo do sem, prav tako same odprejo tla.",
  "tool_hole": "Odprtina v tleh",
  "tool_roof": "Streha",

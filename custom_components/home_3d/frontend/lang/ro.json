@@ -1261,6 +1261,7 @@
  "furn_stairs": "Scară",
  "furn_stairs_u": "Scară în U cu podest",
  "furn_stairwell": "Gol în planșeu",
+ "furn_loft_ladder": "Scară de pod",
  "stairwell_hint": "O gaură în acest planșeu, de exemplu deasupra casei scării sau pentru o galerie; de sus privești prin ea. Golul trebuie să se afle într-o singură cameră; mai multe goluri se pot suprapune (de exemplu pentru o formă în L). Scările de la etajul de dedesubt care ajung până aici deschid și ele singure planșeul.",
  "tool_hole": "Gol în planșeu",
  "tool_roof": "Acoperiș",

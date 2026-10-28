@@ -12,7 +12,7 @@
 
 import { Color, type BufferGeometry } from "three";
 import type { Floor, Opening, Room, SolarField, Vec2 } from "../model.ts";
-import { furnitureFootprint, GANG_TYPES, isLamp, pointInPolygon, polygonArea, STAIR_TYPES } from "../model.ts";
+import { furnitureFootprint, GANG_TYPES, isLamp, loftHatchFootprint, pointInPolygon, polygonArea, STAIR_TYPES } from "../model.ts";
 import { freeWallRoomLeft, generateWalls, locateOpening, openingHost, placeWallPlate, slopeTop, wallContinuation, type Wall } from "../geometry/walls.ts";
 import { clipConvex, isConvex } from "../geometry/area.ts";
 import { holeInRoom, insetHole, mergeHoles } from "../geometry/holes.ts";
@@ -718,8 +718,9 @@ export function stairHoleParts(floors: readonly Floor[], floor: Floor): Vec2[][]
   if (!below) return own;
   const stairs = below.furniture
     // a flight starting from a raised landing (its mount height) reaches up that much higher
-    .filter((f) => (STAIR_TYPES.has(f.type) || packItem(f.type)?.hole) && below.elevation + (f.mount_y ?? 0) + f.h >= floor.elevation - 0.3)
-    .map(furnitureFootprint);
+    .filter((f) => (STAIR_TYPES.has(f.type) || f.type === "loft_ladder" || packItem(f.type)?.hole) && below.elevation + (f.mount_y ?? 0) + f.h >= floor.elevation - 0.3)
+    // a loft ladder opens only its hatch, not the floor over its foot
+    .map((f) => (f.type === "loft_ladder" ? loftHatchFootprint(f) : furnitureFootprint(f)));
   // overlapping openings become one outline (an L-shaped stairwell made of two) – after cutting, room by room
   return [...own, ...stairs];
 }

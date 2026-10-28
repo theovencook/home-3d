@@ -1261,6 +1261,7 @@
  "furn_stairs": "Trappe",
  "furn_stairs_u": "U-trappe med repos",
  "furn_stairwell": "Etageåbning",
+ "furn_loft_ladder": "Loftstige",
  "stairwell_hint": "Et hul i denne etage, f.eks. over trappen eller til et galleri; oppefra kan du se igennem det. Åbningen skal ligge inden for ét rum; flere åbninger må overlappe (f.eks. til en L-form). En trappe på etagen nedenunder, der når herop, åbner også selv etagen.",
  "tool_hole": "Etageåbning",
  "tool_roof": "Tag",

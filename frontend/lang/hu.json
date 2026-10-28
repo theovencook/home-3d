@@ -1261,6 +1261,7 @@
  "furn_stairs": "Lépcső",
  "furn_stairs_u": "U alakú lépcső pihenővel",
  "furn_stairwell": "Födémáttörés",
+ "furn_loft_ladder": "Padlásfeljáró",
  "stairwell_hint": "Nyílás ebben a födémben, például a lépcső felett vagy galériához; felülről átlátsz rajta. A nyílásnak egy helyiségen belül kell lennie; több nyílás átfedheti egymást (például L alakhoz). Az alsó szint lépcsői, amelyek ide felérnek, maguktól is megnyitják a födémet.",
  "tool_hole": "Födémáttörés",
  "tool_roof": "Tető",

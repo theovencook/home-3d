@@ -140,6 +140,7 @@ const BASIC: Record<string, [Kind, Room[]]> = {
   stairs: ["stairs", ["hall", "living"]],
   stairs_u: ["stairs", ["hall", "living"]],
   stairwell: ["stairs", ["hall", "living"]],
+  loft_ladder: ["stairs", ["garage", "hall"]],
   robot_vacuum: ["appliance", []],
   inverter: ["energy", ["utility", "garage"]],
   home_battery: ["energy", ["utility", "garage"]],

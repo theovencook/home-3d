@@ -1261,6 +1261,7 @@
  "furn_stairs": "Escada",
  "furn_stairs_u": "Escada em U com patamar",
  "furn_stairwell": "Abertura no piso",
+ "furn_loft_ladder": "Escada de sótão",
  "stairwell_hint": "Um buraco neste piso, por exemplo por cima da escada ou para uma galeria; de cima vê-se através dele. Se atravessar várias divisões, é recortado em cada uma; várias aberturas podem sobrepor-se (por exemplo para uma forma em L). As escadas do piso de baixo que chegam até aqui também abrem o piso por si.",
  "tool_hole": "Abertura no piso",
  "tool_roof": "Telhado",

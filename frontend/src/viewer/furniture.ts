@@ -5,7 +5,7 @@
 
 import { Color } from "three";
 import type { Furniture, Vec2 } from "../model.ts";
-import { builtinBase, gangsOf, stairsULayout, POOL_VALVE_Y } from "../model.ts";
+import { builtinBase, gangsOf, LOFT_HATCH, stairsULayout, POOL_VALVE_Y } from "../model.ts";
 import { isRobotVacuum, mountBase, packItem, packMotion, packMovingPart, packRobotCentre, packRobotPart, packScreen, type PackItem, type PackMotion, type PackPart } from "../packs.ts";
 import { fitParts } from "../pack-scale.ts";
 import { binColors, binShape, householdCountry, mailboxShape, type BinShape, type MailboxShape } from "../household.ts";
@@ -1051,6 +1051,40 @@ function stairs(b: Builder, w: number, d: number, h: number, open = false, turn:
  * the whole width turns it, the second flight comes back up on the right half to the front. Mirroring
  * turns it the other way. A handrail runs along the eye between the flights.
  */
+/**
+ * A loft ladder pulled down: the hatch in the ceiling at the back (the floor above leaves it open, see
+ * loftHatchFootprint), its door hanging from the back edge, and an aluminium ladder from just in front of the door
+ * down to the floor at the front. `h` is the ceiling height.
+ */
+function loftLadder(b: Builder, w: number, d: number, h: number): void {
+  const hatch = Math.max(0.3, Math.min(LOFT_HATCH, d - 0.2));
+  const zb = -d / 2;
+  const zh = zb + hatch;
+  const t = 0.05; // the hatch lining
+  // the lining round the opening, on the ceiling
+  b.box(-w / 2, w / 2, h - 0.03, h, zb, zb + t, C.white, C.whiteTop, EDGE_FURN);
+  b.box(-w / 2, w / 2, h - 0.03, h, zh - t, zh, C.white, C.whiteTop, EDGE_FURN);
+  b.box(-w / 2, -w / 2 + t, h - 0.03, h, zb + t, zh - t, C.white, C.whiteTop, EDGE_FURN);
+  b.box(w / 2 - t, w / 2, h - 0.03, h, zb + t, zh - t, C.white, C.whiteTop, EDGE_FURN);
+  // the door, hinged at the back edge, hanging down
+  const door = Math.min(hatch - 2 * t, h - 0.3);
+  b.box(-w / 2 + t, w / 2 - t, h - door, h - 0.03, zb, zb + 0.035, C.white, C.whiteTop, EDGE_FURN);
+  // the ladder: two rails from the top (in front of the door) to the foot, rungs every ~25 cm
+  const half = Math.max(0.12, w / 2 - 0.1);
+  const zTop = zb + 0.06;
+  const zFoot = d / 2;
+  const rail = 0.03;
+  for (const x of [-half, half - 0.04]) {
+    b.loft([x, x + 0.04, zFoot - rail, zFoot], [x, x + 0.04, zTop, zTop + rail], 0, h - 0.03, C.metal, C.metal, EDGE_FURN);
+  }
+  const n = Math.max(2, Math.round(h / 0.25));
+  for (let i = 1; i < n; i++) {
+    const y = (h * i) / n;
+    const z = zFoot + ((zTop - zFoot) * i) / n;
+    b.box(-half, half, y - 0.015, y + 0.015, z - 0.06, z + 0.02, C.metal, C.metal);
+  }
+}
+
 function stairsU(b: Builder, w: number, d: number, h: number): void {
   const { k, steps1, steps2, fw, landing, run, rise } = stairsULayout(w, d, h);
   const xa0 = -w / 2;
@@ -1783,6 +1817,9 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
       break;
     case "stairwell":
       return; // only a hole in the floor (see stairHoles in build.ts), nothing to draw
+    case "loft_ladder":
+      loftLadder(b, w, d, h);
+      break;
     case "sideboard":
       sideboard(b, w, d, h);
       break;

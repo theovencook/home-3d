@@ -1261,6 +1261,7 @@
  "furn_stairs": "Schody",
  "furn_stairs_u": "Schody w kształcie U ze spocznikiem",
  "furn_stairwell": "Otwór w stropie",
+ "furn_loft_ladder": "Schody strychowe",
  "stairwell_hint": "Otwór w tym piętrze, np. nad klatką schodową lub na antresolę; z góry widać przez niego. Otwór musi leżeć w obrębie jednego pokoju; kilka otworów może na siebie nachodzić (np. dla kształtu L). Schody z piętra poniżej, które sięgają tutaj, same też otwierają strop.",
  "tool_hole": "Otwór w stropie",
  "tool_roof": "Dach",

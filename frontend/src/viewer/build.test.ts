@@ -254,3 +254,17 @@ test("a flight starting from a raised landing still cuts the opening above (its 
   stair.mount_y = null;
   assert.equal(stairHoles([lower, upper], upper).length, 0);
 });
+
+test("a loft ladder opens only its hatch in the floor above, at the back of the item", () => {
+  // 0.6 × 1.6 m, turned 90°: its back (the hatch end) faces +x, so the hatch spans x 1.7 … 2.8 and its foot stays covered
+  const ladder: Furniture = { id: "l", type: "loft_ladder", x: 2, z: 1.5, rotation: 90, w: 0.6, d: 1.6, h: 2.5, variant: null };
+  const lower = floorWith([rect("a", 0, 0, 4, 3)], [], [ladder]);
+  const upper = { ...floorWith([rect("b", 0, 0, 4, 3)]), id: "u", elevation: 2.75 };
+  const [hole] = stairHoleParts([lower, upper], upper);
+  const xs = hole.map((p) => p[0]);
+  const zs = hole.map((p) => p[1]);
+  near(Math.min(...xs), 2.8 - 1.1, 1e-9);
+  near(Math.max(...xs), 2.8, 1e-9);
+  near(Math.min(...zs), 1.2, 1e-9);
+  near(Math.max(...zs), 1.8, 1e-9);
+});

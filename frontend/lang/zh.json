@@ -1261,6 +1261,7 @@
  "furn_stairs": "楼梯",
  "furn_stairs_u": "带平台的 U 形楼梯",
  "furn_stairwell": "楼板开口",
+ "furn_loft_ladder": "阁楼梯",
  "stairwell_hint": "此楼层中的一个洞，例如楼梯上方或用于挑空；从上方可以透过它看下去。跨越多个房间时会在每个房间中切开；多个开口可以重叠（例如组成 L 形）。下层楼梯若延伸到此处，也会自动打开楼板。",
  "tool_hole": "楼板开口",
  "tool_roof": "屋顶",

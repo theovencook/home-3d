@@ -1261,6 +1261,7 @@
  "furn_stairs": "Schodiště",
  "furn_stairs_u": "Schodiště do U s podestou",
  "furn_stairwell": "Otvor v podlaze",
+ "furn_loft_ladder": "Půdní schody",
  "stairwell_hint": "Díra v tomto podlaží, například nad schodištěm nebo pro galerii; shora se jí díváš skrz. Otvor musí ležet uvnitř jedné místnosti; více otvorů se může překrývat (například pro tvar L). Schodiště z podlaží pod tímto, které sem sahá, otevře podlahu také samo.",
  "tool_hole": "Otvor v podlaze",
  "tool_roof": "Střecha",
