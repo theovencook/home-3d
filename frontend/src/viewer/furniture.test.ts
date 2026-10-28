@@ -368,3 +368,15 @@ test("a few steps up to a flat top: the last step runs on to the back", () => {
   assert.ok(Math.abs(Math.min(...topZ) + d / 2) < 1e-6);
   assert.ok(Math.max(...topZ) - Math.min(...topZ) >= 0.5 - 1e-6);
 });
+
+test("a loft ladder stands steeply under its hatch: its foot lands well inside the hatch's length", () => {
+  const f: Furniture = { id: "l", type: "loft_ladder", x: 0, z: 0, rotation: 0, w: 0.6, d: 1.1, h: 2.5, variant: null };
+  const buf = new GeoBuffer();
+  pushFurniture(buf, new LineBuffer(), new GeoBuffer(), f);
+  // the lowest points are the rails' feet: from the hinge end (z = -0.55) about 0.8 m on, about 72° from the floor
+  let foot = -Infinity;
+  for (let i = 0; i < buf.p.length; i += 3) if (buf.p[i + 1] < 0.01) foot = Math.max(foot, buf.p[i + 2]);
+  const run = foot - (-0.55 + 0.06);
+  assert.ok(run > 0.7 && run < 0.9, `foot ${run.toFixed(2)} m out`);
+  assert.ok(foot <= 0.55);
+});

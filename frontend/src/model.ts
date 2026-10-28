@@ -1399,17 +1399,6 @@ export function spotDepth(type: string, h: number): number {
 /** Built-in stairs: they reach up to the next floor and cut its opening (the straight one and the U-stair). */
 export const STAIR_TYPES = new Set<string>(["stairs", "stairs_u"]);
 
-/** Length of a loft ladder's hatch along the ladder (at most; a short item keeps 0.2 m for the ladder's foot). */
-export const LOFT_HATCH = 1.1;
-
-/** The hatch a loft ladder comes down from, in plan: the back of its footprint, which the floor above leaves open. */
-export function loftHatchFootprint(f: Furniture): Vec2[] {
-  const len = Math.max(0.3, Math.min(LOFT_HATCH, f.d - 0.2));
-  const a = (f.rotation * Math.PI) / 180;
-  const shift = -(f.d - len) / 2; // towards the back (-z)
-  return furnitureFootprint({ ...f, d: len, x: f.x - shift * Math.sin(a), z: f.z + shift * Math.cos(a) });
-}
-
 /**
  * Layout of the built-in U-stair (w × d, height h): n risers of equal height, the landing at the back is
  * the top of riser k. The first flight never has fewer treads than the second; both share one going.
@@ -1651,8 +1640,8 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   fridge: [0.6, 0.65, 1.8],
   fridge_smart: [0.91, 0.73, 1.78],
   stairwell: [1.0, 2.6, 0.02],
-  // a hatch of 0.6 × 1.1 m in the ceiling, its ladder folded down to the floor
-  loft_ladder: [0.6, 1.6, 2.5],
+  // a hatch of 0.6 × 1.1 m in the ceiling (the item), its ladder folded down to the floor under it
+  loft_ladder: [0.6, 1.1, 2.5],
   stove: [0.6, 0.62, 0.92],
   sink: [0.9, 0.62, 0.92],
   bathtub: [1.7, 0.75, 0.58],

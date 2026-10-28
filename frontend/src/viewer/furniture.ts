@@ -5,7 +5,7 @@
 
 import { Color } from "three";
 import type { Furniture, Vec2 } from "../model.ts";
-import { builtinBase, gangsOf, LOFT_HATCH, stairsULayout, POOL_VALVE_Y } from "../model.ts";
+import { builtinBase, gangsOf, stairsULayout, POOL_VALVE_Y } from "../model.ts";
 import { isRobotVacuum, mountBase, packItem, packMotion, packMovingPart, packRobotCentre, packRobotPart, packScreen, type PackItem, type PackMotion, type PackPart } from "../packs.ts";
 import { fitParts } from "../pack-scale.ts";
 import { binColors, binShape, householdCountry, mailboxShape, type BinShape, type MailboxShape } from "../household.ts";
@@ -1051,15 +1051,17 @@ function stairs(b: Builder, w: number, d: number, h: number, open = false, turn:
  * the whole width turns it, the second flight comes back up on the right half to the front. Mirroring
  * turns it the other way. A handrail runs along the eye between the flights.
  */
+/** How steeply a pulled-down loft ladder stands, in degrees from the floor. */
+const LOFT_LADDER_ANGLE = 72;
+
 /**
- * A loft ladder pulled down: the hatch in the ceiling at the back (the floor above leaves it open, see
- * loftHatchFootprint), its door hanging from the back edge, and an aluminium ladder from just in front of the door
- * down to the floor at the front. `h` is the ceiling height.
+ * A loft ladder pulled down: the item is the hatch in the ceiling (the floor above leaves it open), its door hanging
+ * from the back edge, and an aluminium ladder from just in front of the door steeply down to the floor under the
+ * hatch. `h` is the ceiling height.
  */
 function loftLadder(b: Builder, w: number, d: number, h: number): void {
-  const hatch = Math.max(0.3, Math.min(LOFT_HATCH, d - 0.2));
   const zb = -d / 2;
-  const zh = zb + hatch;
+  const zh = d / 2;
   const t = 0.05; // the hatch lining
   // the lining round the opening, on the ceiling
   b.box(-w / 2, w / 2, h - 0.03, h, zb, zb + t, C.white, C.whiteTop, EDGE_FURN);
@@ -1067,12 +1069,13 @@ function loftLadder(b: Builder, w: number, d: number, h: number): void {
   b.box(-w / 2, -w / 2 + t, h - 0.03, h, zb + t, zh - t, C.white, C.whiteTop, EDGE_FURN);
   b.box(w / 2 - t, w / 2, h - 0.03, h, zb + t, zh - t, C.white, C.whiteTop, EDGE_FURN);
   // the door, hinged at the back edge, hanging down
-  const door = Math.min(hatch - 2 * t, h - 0.3);
+  const door = Math.min(d - 2 * t, h - 0.3);
   b.box(-w / 2 + t, w / 2 - t, h - door, h - 0.03, zb, zb + 0.035, C.white, C.whiteTop, EDGE_FURN);
   // the ladder: two rails from the top (in front of the door) to the foot, rungs every ~25 cm
   const half = Math.max(0.12, w / 2 - 0.1);
   const zTop = zb + 0.06;
-  const zFoot = d / 2;
+  // the foot stands where the ladder's angle puts it, inside the hatch's length (a long, low hatch: at its front)
+  const zFoot = Math.min(zh, zTop + h / Math.tan(LOFT_LADDER_ANGLE * DEG));
   const rail = 0.03;
   for (const x of [-half, half - 0.04]) {
     b.loft([x, x + 0.04, zFoot - rail, zFoot], [x, x + 0.04, zTop, zTop + rail], 0, h - 0.03, C.metal, C.metal, EDGE_FURN);
