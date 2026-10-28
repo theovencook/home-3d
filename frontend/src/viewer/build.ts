@@ -717,7 +717,8 @@ export function stairHoleParts(floors: readonly Floor[], floor: Floor): Vec2[][]
   const below = floors.filter((f) => f.elevation < floor.elevation).sort((p, q) => q.elevation - p.elevation)[0];
   if (!below) return own;
   const stairs = below.furniture
-    .filter((f) => (STAIR_TYPES.has(f.type) || packItem(f.type)?.hole) && below.elevation + f.h >= floor.elevation - 0.3)
+    // a flight starting from a raised landing (its mount height) reaches up that much higher
+    .filter((f) => (STAIR_TYPES.has(f.type) || packItem(f.type)?.hole) && below.elevation + (f.mount_y ?? 0) + f.h >= floor.elevation - 0.3)
     .map(furnitureFootprint);
   // overlapping openings become one outline (an L-shaped stairwell made of two) – after cutting, room by room
   return [...own, ...stairs];

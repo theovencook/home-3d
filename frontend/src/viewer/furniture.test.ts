@@ -356,3 +356,15 @@ test("a stair with a bottom landing: a flat square that many risers up, the flig
   assert.ok(at(rise * 4).length > 0 && at(rise * 4).every(([, z]) => z <= d / 2 - w + 1e-6));
   assert.ok(at(h).length > 0);
 });
+
+test("a few steps up to a flat top: the last step runs on to the back", () => {
+  const w = 1, d = 1.3, h = 0.55;
+  const f: Furniture = { id: "s", type: "stairs", x: 0, z: 0, rotation: 0, w, d, h, variant: null, stair_top: 0.5 };
+  const buf = new GeoBuffer();
+  pushFurniture(buf, new LineBuffer(), new GeoBuffer(), f);
+  const topZ: number[] = [];
+  for (let i = 0; i < buf.p.length; i += 3) if (Math.abs(buf.p[i + 1] - h) < 1e-6) topZ.push(buf.p[i + 2]);
+  // the top reaches the back edge and is at least 0.5 m deep
+  assert.ok(Math.abs(Math.min(...topZ) + d / 2) < 1e-6);
+  assert.ok(Math.max(...topZ) - Math.min(...topZ) >= 0.5 - 1e-6);
+});

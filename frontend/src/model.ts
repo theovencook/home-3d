@@ -191,6 +191,8 @@ export interface Furniture {
   stair_turn?: "left" | "right" | null;
   /** Straight stairs: the bottom square is a flat landing this many risers up (reached by separate steps). */
   stair_landing?: number | null;
+  /** Straight stairs: the top step runs on flat for this many metres (steps up to a landing). */
+  stair_top?: number | null;
   /** Own name (e.g. "Wechselrichter Nord"); null = the type's name. */
   name?: string | null;
   /** Further names the voice answers to ("Wohnzimmerfernseher", "Glotze"). */

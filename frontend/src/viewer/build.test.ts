@@ -245,3 +245,12 @@ test("a window across a transition without a wall cuts both outer walls, framed 
   near(Math.max(...jambs.map((s) => s[0])), 4.4, 1e-5);
   near(Math.min(...jambs.map((s) => s[0])), 3.2, 1e-5);
 });
+
+test("a flight starting from a raised landing still cuts the opening above (its mount height counts)", () => {
+  const stair: Furniture = { id: "s", type: "stairs", x: 2, z: 1.5, rotation: 0, w: 1, d: 2, h: 2.2, variant: null, mount_y: 0.55 };
+  const lower = floorWith([rect("a", 0, 0, 4, 3)], [], [stair]);
+  const upper = { ...floorWith([rect("b", 0, 0, 4, 3)]), id: "u", elevation: 2.75 };
+  assert.equal(stairHoles([lower, upper], upper).length, 1);
+  stair.mount_y = null;
+  assert.equal(stairHoles([lower, upper], upper).length, 0);
+});

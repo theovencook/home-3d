@@ -979,9 +979,10 @@ const OPEN_TREAD = 0.045;
  * at the bottom – it is entered from the -x side ("left": walking +x, turning left up the flight) or the +x side
  * ("right"), with winders fanning round the inner corner of the bottom w × w square. `landing`: instead, the bottom
  * w × w square is a flat landing that many risers up (reached by separate steps from the side, e.g. a quarter
- * landing in front of a cupboard); the flight climbs on from there.
+ * landing in front of a cupboard); the flight climbs on from there. `top`: the top step runs on flat for that many
+ * metres (a few steps up to a landing, the flight going on from its side).
  */
-function stairs(b: Builder, w: number, d: number, h: number, open = false, turn: "left" | "right" | null = null, landing = 0): void {
+function stairs(b: Builder, w: number, d: number, h: number, open = false, turn: "left" | "right" | null = null, landing = 0, top = 0): void {
   const n = Math.max(3, Math.round(h / 0.18));
   const rise = h / n;
   const fits = d > w + 0.3;
@@ -989,7 +990,8 @@ function stairs(b: Builder, w: number, d: number, h: number, open = false, turn:
   const winders = !flat && turn && fits ? STAIR_WINDERS : 0;
   const skip = flat || winders; // steps taken before the straight flight starts
   const z0s = d / 2 - (skip ? w : 0); // where the straight flight starts
-  const run = (z0s + d / 2) / (n - skip);
+  const flatTop = Math.max(0, Math.min(top, d - 0.2 * (n - skip)));
+  const run = (z0s + d / 2 - flatTop) / (n - skip);
   const bottom = (y1: number) => (open ? Math.max(0, y1 - OPEN_TREAD) : 0);
   if (flat) {
     // the landing stands on the floor (it is usually built over a cupboard or the stair below)
@@ -1013,7 +1015,8 @@ function stairs(b: Builder, w: number, d: number, h: number, open = false, turn:
   }
   for (let i = skip; i < n; i++) {
     const z1 = z0s - run * (i - skip);
-    const z0 = z1 - run;
+    // the top step runs on to the back when it is a flat landing
+    const z0 = i === n - 1 && flatTop > 0 ? -d / 2 : z1 - run;
     const y1 = rise * (i + 1);
     b.box(-w / 2, w / 2, bottom(y1), y1, z0, z1, C.wood, C.woodTop);
     b.seg(-w / 2, y1, z1, w / 2, y1, z1, EDGE_FURN);
@@ -1773,7 +1776,7 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
       rug(b, w, d);
       return; // flat, no contact shadow
     case "stairs":
-      stairs(b, w, d, h, !!f.stair_open, f.stair_turn ?? null, f.stair_landing ?? 0);
+      stairs(b, w, d, h, !!f.stair_open, f.stair_turn ?? null, f.stair_landing ?? 0, f.stair_top ?? 0);
       break;
     case "stairs_u":
       stairsU(b, w, d, h);
