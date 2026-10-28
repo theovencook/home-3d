@@ -1,8 +1,14 @@
 # Changelog
 
-All notable changes to NeonPlan 3D. The full notes in German and English are on the
-[releases page](https://github.com/Mastershort/neonplan3d/releases). Ideas and votes:
-[Discussions → Ideas](https://github.com/Mastershort/neonplan3d/discussions/categories/ideas).
+All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
+by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
+
+## Home 3D 0.1.0
+
+- Forked from NeonPlan 3D 0a947aa; shop, licence, telemetry and modules removed; Pro features unlocked.
+- Renamed to Home 3D (Home Assistant domain `home_3d`). This is a fresh integration: it does not take over
+  NeonPlan 3D data or backups.
+- Furniture packs are no longer signed: pack import checks the content only.
 
 ## 2.0.7
 

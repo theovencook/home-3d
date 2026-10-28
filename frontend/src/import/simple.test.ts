@@ -7,7 +7,7 @@ import { emptyBuilding, newFloor, type Building } from "../model.ts";
 import { parseExport } from "../transfer.ts";
 
 const simple = {
-  format: "neonplan-import",
+  format: "home3d-import",
   units: "cm",
   floors: [
     {
@@ -48,7 +48,7 @@ test("the simple format: units, doors and windows on their edges, furniture by k
   assert.ok(warnings.some((w) => w.code === "rooms_skipped"));
 });
 
-test("a NeonPlan plan written by an AI with mistakes is repaired", () => {
+test("a Home 3D plan written by an AI with mistakes is repaired", () => {
   const b = emptyBuilding();
   const f = newFloor("eg", "EG", 0);
   f.rooms = [
@@ -75,13 +75,13 @@ test("a NeonPlan plan written by an AI with mistakes is repaired", () => {
   assert.equal(fl.furniture[0].rotation, 90);
   assert.ok(warnings.some((w) => w.code === "openings_dropped"));
   // what comes out is a plan the editor reads
-  assert.ok(parseExport(JSON.stringify({ format: "neonplan3d", version: 1, building: out })));
+  assert.ok(parseExport(JSON.stringify({ format: "home3d", version: 1, building: out })));
 });
 
 test("files are told apart by name and content", async () => {
   const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
   assert.equal((await readFile("plan.json", enc(simple))).kind, "simple");
-  assert.equal((await readFile("x.json", enc({ format: "neonplan3d", version: 1, building: { ...emptyBuilding(), floors: [newFloor("a", "A", 0)] } }))).kind, "neonplan");
+  assert.equal((await readFile("x.json", enc({ format: "home3d", version: 1, building: { ...emptyBuilding(), floors: [newFloor("a", "A", 0)] } }))).kind, "home3d");
   await assert.rejects(readFile("x.json", enc({ hello: 1 })), /unknown_format/);
   await assert.rejects(readFile("x.json", new TextEncoder().encode("{ broken")), /not_json/);
 });
@@ -89,7 +89,7 @@ test("files are told apart by name and content", async () => {
 test("a plan lying at an angle is squared to the axes, furniture turned with it", () => {
   const a = (20 * Math.PI) / 180;
   const rot = ([x, z]: number[]) => [x * Math.cos(a) - z * Math.sin(a), x * Math.sin(a) + z * Math.cos(a)];
-  const plan = readSimple({ format: "neonplan-import", floors: [{ name: "EG", rooms: [{ name: "A", points: [[0, 0], [5, 0], [5, 3], [0, 3]].map(rot) }], furniture: [{ type: "bed", at: rot([2, 1.5]), rotation: 20 }] }] });
+  const plan = readSimple({ format: "home3d-import", floors: [{ name: "EG", rooms: [{ name: "A", points: [[0, 0], [5, 0], [5, 3], [0, 3]].map(rot) }], furniture: [{ type: "bed", at: rot([2, 1.5]), rotation: 20 }] }] });
   const { building: b } = buildPlan(plan, { align: true });
   const pts = b.floors[0].rooms[0].points;
   for (let i = 0; i < pts.length; i++) {
@@ -100,4 +100,10 @@ test("a plan lying at an angle is squared to the axes, furniture turned with it"
   // the bed was turned 20° with the room: square again
   const r = b.floors[0].furniture[0].rotation % 90;
   assert.ok(r < 0.5 || r > 89.5, String(b.floors[0].furniture[0].rotation));
+});
+
+test("the upstream format id is still read", () => {
+  const legacy = { format: "neonplan-import", floors: [{ name: "EG", rooms: [{ name: "A", points: [[0, 0], [4, 0], [4, 3], [0, 3]] }] }] };
+  assert.ok(isSimple(legacy));
+  assert.equal(readSimple(legacy).floors[0].rooms.length, 1);
 });

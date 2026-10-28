@@ -88,11 +88,11 @@ const DE = {
   helper_found: "Schlüssel-Helfer gefunden: {name}",
   helper_watch: "Für Apple Watch",
   helper_phone: "Für iPhone",
-  helper_watch_steps: "Auf der Uhr: Einstellungen → Bluetooth → unter „Gesundheitsgeräte“ auf „NeonPlan Key“ tippen und koppeln.",
-  helper_phone_steps: "Am Handy: Einstellungen → Bluetooth → „NeonPlan Key“ (erscheint als Tastatur) koppeln.",
+  helper_watch_steps: "Auf der Uhr: Einstellungen → Bluetooth → unter „Gesundheitsgeräte“ auf „Home 3D Key“ tippen und koppeln.",
+  helper_phone_steps: "Am Handy: Einstellungen → Bluetooth → „Home 3D Key“ (erscheint als Tastatur) koppeln.",
   helper_key: "Gelesener Schlüssel:",
   helper_wait: "Warte auf das Koppeln …",
-  helper_after: "Danach das Gerät „NeonPlan Key“ in den Bluetooth-Einstellungen wieder entfernen.",
+  helper_after: "Danach das Gerät „Home 3D Key“ in den Bluetooth-Einstellungen wieder entfernen.",
   helper_next: "🔄 Nächstes Gerät",
   helper_next_hint: "Vor jedem weiteren Gerät antippen: Der Helfer bekommt eine neue Bluetooth-Kennung, ein schon gekoppeltes Gerät verbindet sich dann nicht mehr dazwischen.",
   helper_name: "Name für dieses Gerät",
@@ -123,7 +123,7 @@ const DE = {
   quality: "Trefferquote prüfen",
   quality_result: "Trefferquote: {p}",
   relearn_all: "Alles neu einlernen",
-  live_intro: "So sieht NeonPlan dich gerade. Lauf herum und schau, ob es stimmt.",
+  live_intro: "So sieht Home 3D dich gerade. Lauf herum und schau, ob es stimmt.",
   enabled: "Ortung eingeschaltet",
   admins_only: "Personen nur für Admins zeigen",
   not_heard: "nicht gehört",
@@ -138,7 +138,7 @@ const DE = {
   unheard: "⚠ nicht gehört",
   unheard_hint: "Gerade hört kein Empfänger dieses Gerät. Ist es an und sendet es? Android: BLE-Sender der Home-Assistant-App.",
   fly: "Bei „Wo ist …?“ und „Wer ist zu Hause?“ in die Räume fliegen",
-  fly_hint: "Die offenen NeonPlan-Ansichten fliegen in den Raum der Antwort, bei „Wer ist zu Hause?“ nacheinander in alle Räume. Antippen stoppt. Personen nicht, wenn sie nur Admins gezeigt werden.",
+  fly_hint: "Die offenen Home 3D-Ansichten fliegen in den Raum der Antwort, bei „Wer ist zu Hause?“ nacheinander in alle Räume. Antippen stoppt. Personen nicht, wenn sie nur Admins gezeigt werden.",
 };
 const EN: typeof DE = {
   title: "Set up locating",
@@ -149,7 +149,7 @@ const EN: typeof DE = {
   s_walk: "3 · Learn",
   s_live: "4 · Live",
   no_bt: "Home Assistant has no Bluetooth set up. Shelly (Gen2/3: Bluetooth scanning passive), ESPHome Bluetooth proxies or a USB adapter will do.",
-  scanners_intro: "These are all Bluetooth scanners Home Assistant knows. Tell NeonPlan which room each one is in.",
+  scanners_intro: "These are all Bluetooth scanners Home Assistant knows. Tell Home 3D which room each one is in.",
   not_placed: "– pick a room –",
   hint_room: "Signals say: {room} – use it",
   coverage: "Rooms without a scanner of their own – learning makes them recognisable anyway:",
@@ -175,11 +175,11 @@ const EN: typeof DE = {
   helper_found: "Key helper found: {name}",
   helper_watch: "For an Apple Watch",
   helper_phone: "For an iPhone",
-  helper_watch_steps: "On the watch: Settings → Bluetooth → under \"Health devices\" tap \"NeonPlan Key\" and pair.",
-  helper_phone_steps: "On the phone: Settings → Bluetooth → pair \"NeonPlan Key\" (it shows as a keyboard).",
+  helper_watch_steps: "On the watch: Settings → Bluetooth → under \"Health devices\" tap \"Home 3D Key\" and pair.",
+  helper_phone_steps: "On the phone: Settings → Bluetooth → pair \"Home 3D Key\" (it shows as a keyboard).",
   helper_key: "Key read:",
   helper_wait: "Waiting for the pairing …",
-  helper_after: "Afterwards remove the device \"NeonPlan Key\" from the Bluetooth settings again.",
+  helper_after: "Afterwards remove the device \"Home 3D Key\" from the Bluetooth settings again.",
   helper_next: "🔄 Next device",
   helper_next_hint: "Tap before every further device: the helper gets a new Bluetooth identity, so a device paired before no longer connects in between.",
   helper_name: "Name for this device",
@@ -210,7 +210,7 @@ const EN: typeof DE = {
   quality: "Check accuracy",
   quality_result: "Accuracy: {p}",
   relearn_all: "Learn everything anew",
-  live_intro: "This is where NeonPlan sees you now. Walk around and check.",
+  live_intro: "This is where Home 3D sees you now. Walk around and check.",
   enabled: "Locating on",
   admins_only: "Show people to admins only",
   not_heard: "not heard",
@@ -225,7 +225,7 @@ const EN: typeof DE = {
   unheard: "⚠ not heard",
   unheard_hint: "No receiver hears this device right now. Is it on and sending? Android: the Home Assistant app's BLE Transmitter.",
   fly: "Fly into the rooms on “Where is …?” and “Who is home?”",
-  fly_hint: "The open NeonPlan views fly into the room of the answer, on “Who is home?” into every room in turn. A tap stops it. Not for people while they are shown to admins only.",
+  fly_hint: "The open Home 3D views fly into the room of the answer, on “Who is home?” into every room in turn. A tap stops it. Not for people while they are shown to admins only.",
 };
 
 const CS: typeof DE = {
@@ -263,11 +263,11 @@ const CS: typeof DE = {
   helper_found: "Pomocník pro klíč nalezen: {name}",
   helper_watch: "Pro Apple Watch",
   helper_phone: "Pro iPhone",
-  helper_watch_steps: "Na hodinkách: Nastavení → Bluetooth → v části „Zdravotní zařízení“ klepněte na „NeonPlan Key“ a spárujte.",
-  helper_phone_steps: "V telefonu: Nastavení → Bluetooth → spárujte „NeonPlan Key“ (zobrazí se jako klávesnice).",
+  helper_watch_steps: "Na hodinkách: Nastavení → Bluetooth → v části „Zdravotní zařízení“ klepněte na „Home 3D Key“ a spárujte.",
+  helper_phone_steps: "V telefonu: Nastavení → Bluetooth → spárujte „Home 3D Key“ (zobrazí se jako klávesnice).",
   helper_key: "Přečtený klíč:",
   helper_wait: "Čekám na spárování …",
-  helper_after: "Poté zařízení „NeonPlan Key“ v nastavení Bluetooth opět odeberte.",
+  helper_after: "Poté zařízení „Home 3D Key“ v nastavení Bluetooth opět odeberte.",
   helper_next: "🔄 Další zařízení",
   helper_next_hint: "Klepněte před každým dalším zařízením: pomocník dostane novou Bluetooth identitu, takže se dříve spárované zařízení už nepřipojí.",
   helper_name: "Název tohoto zařízení",
@@ -298,7 +298,7 @@ const CS: typeof DE = {
   quality: "Ověřit přesnost",
   quality_result: "Přesnost: {p}",
   relearn_all: "Vše naučit znovu",
-  live_intro: "Takhle tě NeonPlan právě vidí. Projdi se a zkontroluj, jestli to sedí.",
+  live_intro: "Takhle tě Home 3D právě vidí. Projdi se a zkontroluj, jestli to sedí.",
   enabled: "Lokalizace zapnuta",
   admins_only: "Osoby zobrazit jen správcům",
   not_heard: "neslyšeno",
@@ -313,7 +313,7 @@ const CS: typeof DE = {
   unheard: "⚠ neslyšeno",
   unheard_hint: "Žádný přijímač toto zařízení právě neslyší. Je zapnuté a vysílá? Android: BLE Transmitter aplikace Home Assistant.",
   fly: "Při „Kde je …?“ a „Kdo je doma?“ přeletět do místností",
-  fly_hint: "Otevřená zobrazení NeonPlan přeletí do místnosti z odpovědi, u „Kdo je doma?“ postupně do všech. Klepnutí to zastaví. U osob ne, pokud se zobrazují jen správcům.",
+  fly_hint: "Otevřená zobrazení Home 3D přeletí do místnosti z odpovědi, u „Kdo je doma?“ postupně do všech. Klepnutí to zastaví. U osob ne, pokud se zobrazují jen správcům.",
 };
 const DA: typeof DE = {
   title: "Opsæt lokalisering",
@@ -350,11 +350,11 @@ const DA: typeof DE = {
   helper_found: "Nøglehjælper fundet: {name}",
   helper_watch: "Til Apple Watch",
   helper_phone: "Til iPhone",
-  helper_watch_steps: "På uret: Indstillinger → Bluetooth → under »Sundhedsenheder« tryk på »NeonPlan Key«, og par.",
-  helper_phone_steps: "På telefonen: Indstillinger → Bluetooth → par »NeonPlan Key« (vises som tastatur).",
+  helper_watch_steps: "På uret: Indstillinger → Bluetooth → under »Sundhedsenheder« tryk på »Home 3D Key«, og par.",
+  helper_phone_steps: "På telefonen: Indstillinger → Bluetooth → par »Home 3D Key« (vises som tastatur).",
   helper_key: "Aflæst nøgle:",
   helper_wait: "Venter på parring …",
-  helper_after: "Fjern derefter enheden »NeonPlan Key« fra Bluetooth-indstillingerne igen.",
+  helper_after: "Fjern derefter enheden »Home 3D Key« fra Bluetooth-indstillingerne igen.",
   helper_next: "🔄 Næste enhed",
   helper_next_hint: "Tryk før hver ny enhed: hjælperen får en ny Bluetooth-identitet, så en tidligere parret enhed ikke længere forbinder imellem.",
   helper_name: "Navn på denne enhed",
@@ -385,7 +385,7 @@ const DA: typeof DE = {
   quality: "Tjek træfsikkerhed",
   quality_result: "Træfsikkerhed: {p}",
   relearn_all: "Indlær alt igen",
-  live_intro: "Sådan ser NeonPlan dig lige nu. Gå rundt og se, om det passer.",
+  live_intro: "Sådan ser Home 3D dig lige nu. Gå rundt og se, om det passer.",
   enabled: "Lokalisering slået til",
   admins_only: "Vis kun personer for administratorer",
   not_heard: "ikke hørt",
@@ -400,7 +400,7 @@ const DA: typeof DE = {
   unheard: "⚠ ikke hørt",
   unheard_hint: "Ingen modtager hører enheden lige nu. Er den tændt og sender? Android: Home Assistant-appens BLE Transmitter.",
   fly: "Flyv ind i rummene ved „Hvor er …?“ og „Hvem er hjemme?“",
-  fly_hint: "De åbne NeonPlan-visninger flyver ind i svarets rum, ved „Hvem er hjemme?“ ind i alle rum efter tur. Et tryk stopper det. Ikke for personer, når de kun vises for administratorer.",
+  fly_hint: "De åbne Home 3D-visninger flyver ind i svarets rum, ved „Hvem er hjemme?“ ind i alle rum efter tur. Et tryk stopper det. Ikke for personer, når de kun vises for administratorer.",
 };
 const ES: typeof DE = {
   title: "Configurar localización",
@@ -437,11 +437,11 @@ const ES: typeof DE = {
   helper_found: "Asistente de clave encontrado: {name}",
   helper_watch: "Para un Apple Watch",
   helper_phone: "Para un iPhone",
-  helper_watch_steps: "En el reloj: Ajustes → Bluetooth → en «Dispositivos de salud» toca «NeonPlan Key» y enlázalo.",
-  helper_phone_steps: "En el móvil: Ajustes → Bluetooth → enlaza «NeonPlan Key» (aparece como teclado).",
+  helper_watch_steps: "En el reloj: Ajustes → Bluetooth → en «Dispositivos de salud» toca «Home 3D Key» y enlázalo.",
+  helper_phone_steps: "En el móvil: Ajustes → Bluetooth → enlaza «Home 3D Key» (aparece como teclado).",
   helper_key: "Clave leída:",
   helper_wait: "Esperando el enlace …",
-  helper_after: "Después, elimina el dispositivo «NeonPlan Key» de los ajustes de Bluetooth.",
+  helper_after: "Después, elimina el dispositivo «Home 3D Key» de los ajustes de Bluetooth.",
   helper_next: "🔄 Siguiente dispositivo",
   helper_next_hint: "Toca antes de cada dispositivo nuevo: el asistente recibe una nueva identidad Bluetooth y un dispositivo ya emparejado deja de conectarse.",
   helper_name: "Nombre de este dispositivo",
@@ -472,7 +472,7 @@ const ES: typeof DE = {
   quality: "Comprobar precisión",
   quality_result: "Precisión: {p}",
   relearn_all: "Volver a aprender todo",
-  live_intro: "Así te ve NeonPlan ahora mismo. Camina un poco y comprueba si acierta.",
+  live_intro: "Así te ve Home 3D ahora mismo. Camina un poco y comprueba si acierta.",
   enabled: "Localización activada",
   admins_only: "Mostrar personas solo a administradores",
   not_heard: "sin señal",
@@ -487,7 +487,7 @@ const ES: typeof DE = {
   unheard: "⚠ sin señal",
   unheard_hint: "Ahora mismo ningún receptor oye este dispositivo. ¿Está encendido y emitiendo? Android: el BLE Transmitter de la app de Home Assistant.",
   fly: "Volar a las habitaciones con «¿Dónde está …?» y «¿Quién está en casa?»",
-  fly_hint: "Las vistas abiertas de NeonPlan vuelan a la habitación de la respuesta y, con «¿Quién está en casa?», a todas por turno. Un toque lo detiene. No para personas mientras solo se muestren a administradores.",
+  fly_hint: "Las vistas abiertas de Home 3D vuelan a la habitación de la respuesta y, con «¿Quién está en casa?», a todas por turno. Un toque lo detiene. No para personas mientras solo se muestren a administradores.",
 };
 const FI: typeof DE = {
   title: "Paikannuksen määritys",
@@ -524,11 +524,11 @@ const FI: typeof DE = {
   helper_found: "Avainapuri löytyi: {name}",
   helper_watch: "Apple Watch -kellolle",
   helper_phone: "iPhonelle",
-  helper_watch_steps: "Kellossa: Asetukset → Bluetooth → valitse kohdassa ”Terveyslaitteet” ”NeonPlan Key” ja muodosta pari.",
-  helper_phone_steps: "Puhelimessa: Asetukset → Bluetooth → muodosta pari laitteen ”NeonPlan Key” kanssa (näkyy näppäimistönä).",
+  helper_watch_steps: "Kellossa: Asetukset → Bluetooth → valitse kohdassa ”Terveyslaitteet” ”Home 3D Key” ja muodosta pari.",
+  helper_phone_steps: "Puhelimessa: Asetukset → Bluetooth → muodosta pari laitteen ”Home 3D Key” kanssa (näkyy näppäimistönä).",
   helper_key: "Luettu avain:",
   helper_wait: "Odotetaan pariliitosta …",
-  helper_after: "Poista sen jälkeen laite ”NeonPlan Key” Bluetooth-asetuksista.",
+  helper_after: "Poista sen jälkeen laite ”Home 3D Key” Bluetooth-asetuksista.",
   helper_next: "🔄 Seuraava laite",
   helper_next_hint: "Napauta ennen jokaista uutta laitetta: apuri saa uuden Bluetooth-tunnisteen, eikä aiemmin yhdistetty laite enää yhdisty väliin.",
   helper_name: "Tämän laitteen nimi",
@@ -559,7 +559,7 @@ const FI: typeof DE = {
   quality: "Tarkista osumatarkkuus",
   quality_result: "Osumatarkkuus: {p}",
   relearn_all: "Opeta kaikki uudelleen",
-  live_intro: "Näin NeonPlan näkee sinut juuri nyt. Kävele ympäriinsä ja katso, pitääkö se paikkansa.",
+  live_intro: "Näin Home 3D näkee sinut juuri nyt. Kävele ympäriinsä ja katso, pitääkö se paikkansa.",
   enabled: "Paikannus päällä",
   admins_only: "Näytä henkilöt vain ylläpitäjille",
   not_heard: "ei kuultu",
@@ -574,7 +574,7 @@ const FI: typeof DE = {
   unheard: "⚠ ei kuultu",
   unheard_hint: "Mikään vastaanotin ei kuule laitetta juuri nyt. Onko se päällä ja lähettääkö se? Android: Home Assistant -sovelluksen BLE Transmitter.",
   fly: "Lennä huoneisiin kysymyksillä ”Missä on …?” ja ”Kuka on kotona?”",
-  fly_hint: "Avoimet NeonPlan-näkymät lentävät vastauksen huoneeseen, kysymyksellä ”Kuka on kotona?” vuorotellen kaikkiin. Napautus pysäyttää. Ei henkilöille, jos ne näytetään vain ylläpitäjille.",
+  fly_hint: "Avoimet Home 3D-näkymät lentävät vastauksen huoneeseen, kysymyksellä ”Kuka on kotona?” vuorotellen kaikkiin. Napautus pysäyttää. Ei henkilöille, jos ne näytetään vain ylläpitäjille.",
 };
 const FR: typeof DE = {
   title: "Configurer la localisation",
@@ -611,11 +611,11 @@ const FR: typeof DE = {
   helper_found: "Assistant de clé trouvé : {name}",
   helper_watch: "Pour une Apple Watch",
   helper_phone: "Pour un iPhone",
-  helper_watch_steps: "Sur la montre : Réglages → Bluetooth → sous « Appareils de santé », touchez « NeonPlan Key » et jumelez.",
-  helper_phone_steps: "Sur le téléphone : Réglages → Bluetooth → jumelez « NeonPlan Key » (il apparaît comme clavier).",
+  helper_watch_steps: "Sur la montre : Réglages → Bluetooth → sous « Appareils de santé », touchez « Home 3D Key » et jumelez.",
+  helper_phone_steps: "Sur le téléphone : Réglages → Bluetooth → jumelez « Home 3D Key » (il apparaît comme clavier).",
   helper_key: "Clé lue :",
   helper_wait: "En attente du jumelage …",
-  helper_after: "Ensuite, supprimez l’appareil « NeonPlan Key » des réglages Bluetooth.",
+  helper_after: "Ensuite, supprimez l’appareil « Home 3D Key » des réglages Bluetooth.",
   helper_next: "🔄 Appareil suivant",
   helper_next_hint: "Touchez avant chaque nouvel appareil : l'assistant reçoit une nouvelle identité Bluetooth, un appareil déjà jumelé ne se reconnecte plus.",
   helper_name: "Nom de cet appareil",
@@ -646,7 +646,7 @@ const FR: typeof DE = {
   quality: "Vérifier la précision",
   quality_result: "Précision : {p}",
   relearn_all: "Tout réapprendre",
-  live_intro: "Voici comment NeonPlan vous voit en ce moment. Déplacez-vous et vérifiez.",
+  live_intro: "Voici comment Home 3D vous voit en ce moment. Déplacez-vous et vérifiez.",
   enabled: "Localisation activée",
   admins_only: "Afficher les personnes aux admins uniquement",
   not_heard: "non capté",
@@ -661,7 +661,7 @@ const FR: typeof DE = {
   unheard: "⚠ non capté",
   unheard_hint: "Aucun récepteur n'entend cet appareil en ce moment. Est-il allumé et émet-il ? Android : le BLE Transmitter de l'app Home Assistant.",
   fly: "Voler dans les pièces avec « Où est … ? » et « Qui est à la maison ? »",
-  fly_hint: "Les vues NeonPlan ouvertes volent dans la pièce de la réponse et, avec « Qui est à la maison ? », dans chaque pièce tour à tour. Un toucher arrête. Pas pour les personnes tant qu'elles ne sont montrées qu'aux admins.",
+  fly_hint: "Les vues Home 3D ouvertes volent dans la pièce de la réponse et, avec « Qui est à la maison ? », dans chaque pièce tour à tour. Un toucher arrête. Pas pour les personnes tant qu'elles ne sont montrées qu'aux admins.",
 };
 const HU: typeof DE = {
   title: "Helymeghatározás beállítása",
@@ -698,11 +698,11 @@ const HU: typeof DE = {
   helper_found: "Kulcssegéd megtalálva: {name}",
   helper_watch: "Apple Watch esetén",
   helper_phone: "iPhone esetén",
-  helper_watch_steps: "Az órán: Beállítások → Bluetooth → az „Egészségügyi eszközök” alatt koppintson a „NeonPlan Key” elemre, és párosítsa.",
-  helper_phone_steps: "A telefonon: Beállítások → Bluetooth → párosítsa a „NeonPlan Key” eszközt (billentyűzetként jelenik meg).",
+  helper_watch_steps: "Az órán: Beállítások → Bluetooth → az „Egészségügyi eszközök” alatt koppintson a „Home 3D Key” elemre, és párosítsa.",
+  helper_phone_steps: "A telefonon: Beállítások → Bluetooth → párosítsa a „Home 3D Key” eszközt (billentyűzetként jelenik meg).",
   helper_key: "Kiolvasott kulcs:",
   helper_wait: "Várakozás a párosításra …",
-  helper_after: "Ezután távolítsa el a „NeonPlan Key” eszközt a Bluetooth-beállításokból.",
+  helper_after: "Ezután távolítsa el a „Home 3D Key” eszközt a Bluetooth-beállításokból.",
   helper_next: "🔄 Következő eszköz",
   helper_next_hint: "Minden további eszköz előtt koppintson: a segéd új Bluetooth-azonosítót kap, így a korábban párosított eszköz nem kapcsolódik közbe.",
   helper_name: "Az eszköz neve",
@@ -733,7 +733,7 @@ const HU: typeof DE = {
   quality: "Pontosság ellenőrzése",
   quality_result: "Pontosság: {p}",
   relearn_all: "Minden újratanítása",
-  live_intro: "Így lát most téged a NeonPlan. Sétálj egy kicsit, és nézd meg, stimmel-e.",
+  live_intro: "Így lát most téged a Home 3D. Sétálj egy kicsit, és nézd meg, stimmel-e.",
   enabled: "Helymeghatározás bekapcsolva",
   admins_only: "Személyek csak adminoknak",
   not_heard: "nem hallható",
@@ -748,7 +748,7 @@ const HU: typeof DE = {
   unheard: "⚠ nem hallható",
   unheard_hint: "Most egyik vevő sem hallja ezt az eszközt. Be van kapcsolva és sugároz? Android: a Home Assistant alkalmazás BLE Transmittere.",
   fly: "Repülés a szobákba a „Hol van …?” és „Ki van otthon?” kérdésekre",
-  fly_hint: "A nyitott NeonPlan-nézetek a válasz szobájába repülnek, „Ki van otthon?” esetén sorban minden szobába. Koppintás leállítja. Személyeknél nem, ha csak adminoknak látszanak.",
+  fly_hint: "A nyitott Home 3D-nézetek a válasz szobájába repülnek, „Ki van otthon?” esetén sorban minden szobába. Koppintás leállítja. Személyeknél nem, ha csak adminoknak látszanak.",
 };
 const IT: typeof DE = {
   title: "Configura localizzazione",
@@ -785,11 +785,11 @@ const IT: typeof DE = {
   helper_found: "Assistente chiave trovato: {name}",
   helper_watch: "Per Apple Watch",
   helper_phone: "Per iPhone",
-  helper_watch_steps: "Sull’orologio: Impostazioni → Bluetooth → in «Dispositivi per la salute» tocca «NeonPlan Key» e abbina.",
-  helper_phone_steps: "Sul telefono: Impostazioni → Bluetooth → abbina «NeonPlan Key» (appare come tastiera).",
+  helper_watch_steps: "Sull’orologio: Impostazioni → Bluetooth → in «Dispositivi per la salute» tocca «Home 3D Key» e abbina.",
+  helper_phone_steps: "Sul telefono: Impostazioni → Bluetooth → abbina «Home 3D Key» (appare come tastiera).",
   helper_key: "Chiave letta:",
   helper_wait: "In attesa dell’abbinamento …",
-  helper_after: "Poi rimuovi il dispositivo «NeonPlan Key» dalle impostazioni Bluetooth.",
+  helper_after: "Poi rimuovi il dispositivo «Home 3D Key» dalle impostazioni Bluetooth.",
   helper_next: "🔄 Dispositivo successivo",
   helper_next_hint: "Tocca prima di ogni nuovo dispositivo: l'aiutante riceve una nuova identità Bluetooth, così un dispositivo già associato non si ricollega.",
   helper_name: "Nome di questo dispositivo",
@@ -820,7 +820,7 @@ const IT: typeof DE = {
   quality: "Verifica precisione",
   quality_result: "Precisione: {p}",
   relearn_all: "Riapprendi tutto",
-  live_intro: "Ecco come ti vede NeonPlan adesso. Cammina un po’ e controlla se è giusto.",
+  live_intro: "Ecco come ti vede Home 3D adesso. Cammina un po’ e controlla se è giusto.",
   enabled: "Localizzazione attiva",
   admins_only: "Mostra persone solo agli admin",
   not_heard: "non rilevato",
@@ -835,7 +835,7 @@ const IT: typeof DE = {
   unheard: "⚠ non rilevato",
   unheard_hint: "Nessun ricevitore sente questo dispositivo in questo momento. È acceso e trasmette? Android: il BLE Transmitter dell'app Home Assistant.",
   fly: "Volare nelle stanze con «Dov'è …?» e «Chi è a casa?»",
-  fly_hint: "Le viste NeonPlan aperte volano nella stanza della risposta e, con «Chi è a casa?», in tutte a turno. Un tocco ferma. Non per le persone finché sono mostrate solo agli admin.",
+  fly_hint: "Le viste Home 3D aperte volano nella stanza della risposta e, con «Chi è a casa?», in tutte a turno. Un tocco ferma. Non per le persone finché sono mostrate solo agli admin.",
 };
 const NB: typeof DE = {
   title: "Sett opp lokalisering",
@@ -872,11 +872,11 @@ const NB: typeof DE = {
   helper_found: "Nøkkelhjelper funnet: {name}",
   helper_watch: "For Apple Watch",
   helper_phone: "For iPhone",
-  helper_watch_steps: "På klokken: Innstillinger → Bluetooth → under «Helseenheter» trykker du på «NeonPlan Key» og parer.",
-  helper_phone_steps: "På telefonen: Innstillinger → Bluetooth → par «NeonPlan Key» (vises som tastatur).",
+  helper_watch_steps: "På klokken: Innstillinger → Bluetooth → under «Helseenheter» trykker du på «Home 3D Key» og parer.",
+  helper_phone_steps: "På telefonen: Innstillinger → Bluetooth → par «Home 3D Key» (vises som tastatur).",
   helper_key: "Lest nøkkel:",
   helper_wait: "Venter på paring …",
-  helper_after: "Fjern deretter enheten «NeonPlan Key» fra Bluetooth-innstillingene igjen.",
+  helper_after: "Fjern deretter enheten «Home 3D Key» fra Bluetooth-innstillingene igjen.",
   helper_next: "🔄 Neste enhet",
   helper_next_hint: "Trykk før hver ny enhet: hjelperen får en ny Bluetooth-identitet, så en enhet som var paret før, ikke kobler seg til imellom.",
   helper_name: "Navn på denne enheten",
@@ -907,7 +907,7 @@ const NB: typeof DE = {
   quality: "Sjekk treffsikkerhet",
   quality_result: "Treffsikkerhet: {p}",
   relearn_all: "Lær inn alt på nytt",
-  live_intro: "Slik ser NeonPlan deg akkurat nå. Gå rundt og se om det stemmer.",
+  live_intro: "Slik ser Home 3D deg akkurat nå. Gå rundt og se om det stemmer.",
   enabled: "Lokalisering på",
   admins_only: "Vis personer bare for administratorer",
   not_heard: "ikke hørt",
@@ -922,7 +922,7 @@ const NB: typeof DE = {
   unheard: "⚠ ikke hørt",
   unheard_hint: "Ingen mottaker hører enheten akkurat nå. Er den på og sender? Android: Home Assistant-appens BLE Transmitter.",
   fly: "Fly inn i rommene ved «Hvor er …?» og «Hvem er hjemme?»",
-  fly_hint: "De åpne NeonPlan-visningene flyr inn i rommet i svaret, ved «Hvem er hjemme?» inn i alle rom etter tur. Et trykk stopper. Ikke for personer når de bare vises for administratorer.",
+  fly_hint: "De åpne Home 3D-visningene flyr inn i rommet i svaret, ved «Hvem er hjemme?» inn i alle rom etter tur. Et trykk stopper. Ikke for personer når de bare vises for administratorer.",
 };
 const NL: typeof DE = {
   title: "Locatiebepaling instellen",
@@ -959,11 +959,11 @@ const NL: typeof DE = {
   helper_found: "Sleutelhulp gevonden: {name}",
   helper_watch: "Voor een Apple Watch",
   helper_phone: "Voor een iPhone",
-  helper_watch_steps: "Op de watch: Instellingen → Bluetooth → onder ‘Gezondheidsapparaten’ op ‘NeonPlan Key’ tikken en koppelen.",
-  helper_phone_steps: "Op de telefoon: Instellingen → Bluetooth → ‘NeonPlan Key’ koppelen (verschijnt als toetsenbord).",
+  helper_watch_steps: "Op de watch: Instellingen → Bluetooth → onder ‘Gezondheidsapparaten’ op ‘Home 3D Key’ tikken en koppelen.",
+  helper_phone_steps: "Op de telefoon: Instellingen → Bluetooth → ‘Home 3D Key’ koppelen (verschijnt als toetsenbord).",
   helper_key: "Uitgelezen sleutel:",
   helper_wait: "Wachten op koppelen …",
-  helper_after: "Verwijder daarna het apparaat ‘NeonPlan Key’ weer uit de Bluetooth-instellingen.",
+  helper_after: "Verwijder daarna het apparaat ‘Home 3D Key’ weer uit de Bluetooth-instellingen.",
   helper_next: "🔄 Volgend apparaat",
   helper_next_hint: "Tik vóór elk volgend apparaat: de helper krijgt een nieuwe Bluetooth-identiteit, zodat een eerder gekoppeld apparaat niet meer tussendoor verbindt.",
   helper_name: "Naam voor dit apparaat",
@@ -994,7 +994,7 @@ const NL: typeof DE = {
   quality: "Trefzekerheid controleren",
   quality_result: "Trefzekerheid: {p}",
   relearn_all: "Alles opnieuw inleren",
-  live_intro: "Zo ziet NeonPlan je nu. Loop rond en kijk of het klopt.",
+  live_intro: "Zo ziet Home 3D je nu. Loop rond en kijk of het klopt.",
   enabled: "Locatiebepaling aan",
   admins_only: "Personen alleen aan admins tonen",
   not_heard: "niet gehoord",
@@ -1009,7 +1009,7 @@ const NL: typeof DE = {
   unheard: "⚠ niet gehoord",
   unheard_hint: "Geen ontvanger hoort dit apparaat nu. Staat het aan en zendt het? Android: de BLE Transmitter van de Home Assistant-app.",
   fly: "Bij „Waar is …?” en „Wie is er thuis?” de kamers in vliegen",
-  fly_hint: "De open NeonPlan-weergaven vliegen naar de kamer uit het antwoord, bij „Wie is er thuis?” om de beurt naar alle kamers. Tikken stopt het. Niet voor personen zolang ze alleen aan admins worden getoond.",
+  fly_hint: "De open Home 3D-weergaven vliegen naar de kamer uit het antwoord, bij „Wie is er thuis?” om de beurt naar alle kamers. Tikken stopt het. Niet voor personen zolang ze alleen aan admins worden getoond.",
 };
 const NN: typeof DE = {
   title: "Set opp lokalisering",
@@ -1046,11 +1046,11 @@ const NN: typeof DE = {
   helper_found: "Nøkkelhjelpar funnen: {name}",
   helper_watch: "For Apple Watch",
   helper_phone: "For iPhone",
-  helper_watch_steps: "På klokka: Innstillingar → Bluetooth → under «Helseeiningar» trykkjer du på «NeonPlan Key» og parar.",
-  helper_phone_steps: "På telefonen: Innstillingar → Bluetooth → par «NeonPlan Key» (blir vist som tastatur).",
+  helper_watch_steps: "På klokka: Innstillingar → Bluetooth → under «Helseeiningar» trykkjer du på «Home 3D Key» og parar.",
+  helper_phone_steps: "På telefonen: Innstillingar → Bluetooth → par «Home 3D Key» (blir vist som tastatur).",
   helper_key: "Lesen nøkkel:",
   helper_wait: "Ventar på paring …",
-  helper_after: "Fjern deretter eininga «NeonPlan Key» frå Bluetooth-innstillingane igjen.",
+  helper_after: "Fjern deretter eininga «Home 3D Key» frå Bluetooth-innstillingane igjen.",
   helper_next: "🔄 Neste eining",
   helper_next_hint: "Trykk før kvar ny eining: hjelparen får ein ny Bluetooth-identitet, så ei eining som var para før, ikkje koplar seg til i mellomtida.",
   helper_name: "Namn på denne eininga",
@@ -1081,7 +1081,7 @@ const NN: typeof DE = {
   quality: "Sjekk treffsikkerheit",
   quality_result: "Treffsikkerheit: {p}",
   relearn_all: "Lær inn alt på nytt",
-  live_intro: "Slik ser NeonPlan deg akkurat no. Gå rundt og sjå om det stemmer.",
+  live_intro: "Slik ser Home 3D deg akkurat no. Gå rundt og sjå om det stemmer.",
   enabled: "Lokalisering på",
   admins_only: "Vis personar berre for administratorar",
   not_heard: "ikkje høyrt",
@@ -1096,7 +1096,7 @@ const NN: typeof DE = {
   unheard: "⚠ ikkje høyrt",
   unheard_hint: "Ingen mottakar høyrer eininga akkurat no. Er ho på og sender? Android: BLE Transmitter i Home Assistant-appen.",
   fly: "Fly inn i romma ved «Kvar er …?» og «Kven er heime?»",
-  fly_hint: "Dei opne NeonPlan-visingane flyg inn i rommet i svaret, ved «Kven er heime?» inn i alle rom etter tur. Eit trykk stoppar. Ikkje for personar når dei berre blir viste for administratorar.",
+  fly_hint: "Dei opne Home 3D-visingane flyg inn i rommet i svaret, ved «Kven er heime?» inn i alle rom etter tur. Eit trykk stoppar. Ikkje for personar når dei berre blir viste for administratorar.",
 };
 const PL: typeof DE = {
   title: "Konfiguracja lokalizacji",
@@ -1133,11 +1133,11 @@ const PL: typeof DE = {
   helper_found: "Znaleziono pomocnika klucza: {name}",
   helper_watch: "Dla Apple Watch",
   helper_phone: "Dla telefonu iPhone",
-  helper_watch_steps: "Na zegarku: Ustawienia → Bluetooth → w sekcji „Urządzenia zdrowotne” stuknij „NeonPlan Key” i sparuj.",
-  helper_phone_steps: "Na telefonie: Ustawienia → Bluetooth → sparuj „NeonPlan Key” (pojawia się jako klawiatura).",
+  helper_watch_steps: "Na zegarku: Ustawienia → Bluetooth → w sekcji „Urządzenia zdrowotne” stuknij „Home 3D Key” i sparuj.",
+  helper_phone_steps: "Na telefonie: Ustawienia → Bluetooth → sparuj „Home 3D Key” (pojawia się jako klawiatura).",
   helper_key: "Odczytany klucz:",
   helper_wait: "Czekam na parowanie …",
-  helper_after: "Następnie usuń urządzenie „NeonPlan Key” z ustawień Bluetooth.",
+  helper_after: "Następnie usuń urządzenie „Home 3D Key” z ustawień Bluetooth.",
   helper_next: "🔄 Następne urządzenie",
   helper_next_hint: "Dotknij przed każdym kolejnym urządzeniem: pomocnik dostaje nową tożsamość Bluetooth, więc wcześniej sparowane urządzenie już się nie wtrąca.",
   helper_name: "Nazwa tego urządzenia",
@@ -1168,7 +1168,7 @@ const PL: typeof DE = {
   quality: "Sprawdź trafność",
   quality_result: "Trafność: {p}",
   relearn_all: "Naucz wszystko od nowa",
-  live_intro: "Tak NeonPlan widzi cię teraz. Przejdź się i sprawdź, czy się zgadza.",
+  live_intro: "Tak Home 3D widzi cię teraz. Przejdź się i sprawdź, czy się zgadza.",
   enabled: "Lokalizacja włączona",
   admins_only: "Pokazuj osoby tylko adminom",
   not_heard: "brak sygnału",
@@ -1183,7 +1183,7 @@ const PL: typeof DE = {
   unheard: "⚠ brak sygnału",
   unheard_hint: "Żaden odbiornik nie słyszy teraz tego urządzenia. Czy jest włączone i nadaje? Android: BLE Transmitter aplikacji Home Assistant.",
   fly: "Wlatuj do pomieszczeń przy „Gdzie jest …?” i „Kto jest w domu?”",
-  fly_hint: "Otwarte widoki NeonPlan wlatują do pomieszczenia z odpowiedzi, a przy „Kto jest w domu?” po kolei do wszystkich. Dotknięcie zatrzymuje. Nie dla osób, gdy są pokazywane tylko adminom.",
+  fly_hint: "Otwarte widoki Home 3D wlatują do pomieszczenia z odpowiedzi, a przy „Kto jest w domu?” po kolei do wszystkich. Dotknięcie zatrzymuje. Nie dla osób, gdy są pokazywane tylko adminom.",
 };
 const PT: typeof DE = {
   title: "Configurar localização",
@@ -1220,11 +1220,11 @@ const PT: typeof DE = {
   helper_found: "Assistente de chave encontrado: {name}",
   helper_watch: "Para um Apple Watch",
   helper_phone: "Para um iPhone",
-  helper_watch_steps: "No relógio: Definições → Bluetooth → em «Dispositivos de saúde», toque em «NeonPlan Key» e emparelhe.",
-  helper_phone_steps: "No telemóvel: Definições → Bluetooth → emparelhe «NeonPlan Key» (aparece como teclado).",
+  helper_watch_steps: "No relógio: Definições → Bluetooth → em «Dispositivos de saúde», toque em «Home 3D Key» e emparelhe.",
+  helper_phone_steps: "No telemóvel: Definições → Bluetooth → emparelhe «Home 3D Key» (aparece como teclado).",
   helper_key: "Chave lida:",
   helper_wait: "A aguardar o emparelhamento …",
-  helper_after: "Depois, remova o dispositivo «NeonPlan Key» das definições de Bluetooth.",
+  helper_after: "Depois, remova o dispositivo «Home 3D Key» das definições de Bluetooth.",
   helper_next: "🔄 Dispositivo seguinte",
   helper_next_hint: "Toque antes de cada novo dispositivo: o assistente recebe uma nova identidade Bluetooth e um dispositivo já emparelhado deixa de se ligar.",
   helper_name: "Nome deste dispositivo",
@@ -1255,7 +1255,7 @@ const PT: typeof DE = {
   quality: "Verificar precisão",
   quality_result: "Precisão: {p}",
   relearn_all: "Aprender tudo de novo",
-  live_intro: "É assim que o NeonPlan o vê agora. Ande um pouco e confirme se está certo.",
+  live_intro: "É assim que o Home 3D o vê agora. Ande um pouco e confirme se está certo.",
   enabled: "Localização ligada",
   admins_only: "Mostrar pessoas só a administradores",
   not_heard: "não detetado",
@@ -1270,7 +1270,7 @@ const PT: typeof DE = {
   unheard: "⚠ não detetado",
   unheard_hint: "Nenhum recetor ouve este dispositivo agora. Está ligado e a emitir? Android: o BLE Transmitter da app Home Assistant.",
   fly: "Voar para as divisões com «Onde está …?» e «Quem está em casa?»",
-  fly_hint: "As vistas NeonPlan abertas voam para a divisão da resposta e, com «Quem está em casa?», para todas à vez. Um toque para. Não para pessoas enquanto só são mostradas a administradores.",
+  fly_hint: "As vistas Home 3D abertas voam para a divisão da resposta e, com «Quem está em casa?», para todas à vez. Um toque para. Não para pessoas enquanto só são mostradas a administradores.",
 };
 const RO: typeof DE = {
   title: "Configurează localizarea",
@@ -1307,11 +1307,11 @@ const RO: typeof DE = {
   helper_found: "Asistent pentru cheie găsit: {name}",
   helper_watch: "Pentru Apple Watch",
   helper_phone: "Pentru iPhone",
-  helper_watch_steps: "Pe ceas: Configurări → Bluetooth → la „Dispozitive de sănătate” atinge „NeonPlan Key” și asociază.",
-  helper_phone_steps: "Pe telefon: Configurări → Bluetooth → asociază „NeonPlan Key” (apare ca tastatură).",
+  helper_watch_steps: "Pe ceas: Configurări → Bluetooth → la „Dispozitive de sănătate” atinge „Home 3D Key” și asociază.",
+  helper_phone_steps: "Pe telefon: Configurări → Bluetooth → asociază „Home 3D Key” (apare ca tastatură).",
   helper_key: "Cheie citită:",
   helper_wait: "Se așteaptă asocierea …",
-  helper_after: "Apoi elimină dispozitivul „NeonPlan Key” din configurările Bluetooth.",
+  helper_after: "Apoi elimină dispozitivul „Home 3D Key” din configurările Bluetooth.",
   helper_next: "🔄 Dispozitivul următor",
   helper_next_hint: "Atinge înainte de fiecare dispozitiv nou: ajutorul primește o nouă identitate Bluetooth, iar un dispozitiv asociat înainte nu se mai conectează.",
   helper_name: "Numele acestui dispozitiv",
@@ -1342,7 +1342,7 @@ const RO: typeof DE = {
   quality: "Verifică precizia",
   quality_result: "Precizie: {p}",
   relearn_all: "Reînvață tot",
-  live_intro: "Așa te vede NeonPlan acum. Plimbă-te și verifică dacă e corect.",
+  live_intro: "Așa te vede Home 3D acum. Plimbă-te și verifică dacă e corect.",
   enabled: "Localizare pornită",
   admins_only: "Arată persoanele doar adminilor",
   not_heard: "neauzit",
@@ -1357,7 +1357,7 @@ const RO: typeof DE = {
   unheard: "⚠ neauzit",
   unheard_hint: "Niciun receptor nu aude acum acest dispozitiv. Este pornit și emite? Android: BLE Transmitter din aplicația Home Assistant.",
   fly: "Zbor în camere la „Unde este …?” și „Cine e acasă?”",
-  fly_hint: "Vederile NeonPlan deschise zboară în camera din răspuns, iar la „Cine e acasă?” pe rând în toate. O atingere oprește. Nu pentru persoane cât timp sunt arătate doar administratorilor.",
+  fly_hint: "Vederile Home 3D deschise zboară în camera din răspuns, iar la „Cine e acasă?” pe rând în toate. O atingere oprește. Nu pentru persoane cât timp sunt arătate doar administratorilor.",
 };
 const SL: typeof DE = {
   title: "Nastavi lociranje",
@@ -1394,11 +1394,11 @@ const SL: typeof DE = {
   helper_found: "Najden pomočnik za ključ: {name}",
   helper_watch: "Za Apple Watch",
   helper_phone: "Za iPhone",
-  helper_watch_steps: "Na uri: Nastavitve → Bluetooth → pod »Zdravstvene naprave« tapnite »NeonPlan Key« in seznanite.",
-  helper_phone_steps: "Na telefonu: Nastavitve → Bluetooth → seznanite »NeonPlan Key« (prikaže se kot tipkovnica).",
+  helper_watch_steps: "Na uri: Nastavitve → Bluetooth → pod »Zdravstvene naprave« tapnite »Home 3D Key« in seznanite.",
+  helper_phone_steps: "Na telefonu: Nastavitve → Bluetooth → seznanite »Home 3D Key« (prikaže se kot tipkovnica).",
   helper_key: "Prebrani ključ:",
   helper_wait: "Čakam na seznanitev …",
-  helper_after: "Nato napravo »NeonPlan Key« znova odstranite iz nastavitev Bluetooth.",
+  helper_after: "Nato napravo »Home 3D Key« znova odstranite iz nastavitev Bluetooth.",
   helper_next: "🔄 Naslednja naprava",
   helper_next_hint: "Tapnite pred vsako novo napravo: pomočnik dobi novo Bluetooth identiteto, zato se prej seznanjena naprava ne poveže več vmes.",
   helper_name: "Ime te naprave",
@@ -1429,7 +1429,7 @@ const SL: typeof DE = {
   quality: "Preveri natančnost",
   quality_result: "Natančnost: {p}",
   relearn_all: "Znova nauči vse",
-  live_intro: "Tako te NeonPlan vidi zdaj. Sprehodi se in preveri, ali drži.",
+  live_intro: "Tako te Home 3D vidi zdaj. Sprehodi se in preveri, ali drži.",
   enabled: "Lociranje vklopljeno",
   admins_only: "Osebe prikaži samo skrbnikom",
   not_heard: "ni slišano",
@@ -1444,7 +1444,7 @@ const SL: typeof DE = {
   unheard: "⚠ ni slišano",
   unheard_hint: "Trenutno te naprave ne sliši noben sprejemnik. Je vklopljena in oddaja? Android: BLE Transmitter aplikacije Home Assistant.",
   fly: "Pri »Kje je …?« in »Kdo je doma?« poleti v prostore",
-  fly_hint: "Odprti pogledi NeonPlan poletijo v prostor iz odgovora, pri »Kdo je doma?« po vrsti v vse. Dotik ustavi. Ne za osebe, dokler so prikazane samo skrbnikom.",
+  fly_hint: "Odprti pogledi Home 3D poletijo v prostor iz odgovora, pri »Kdo je doma?« po vrsti v vse. Dotik ustavi. Ne za osebe, dokler so prikazane samo skrbnikom.",
 };
 const SV: typeof DE = {
   title: "Ställ in positionering",
@@ -1481,11 +1481,11 @@ const SV: typeof DE = {
   helper_found: "Nyckelhjälpare hittad: {name}",
   helper_watch: "För Apple Watch",
   helper_phone: "För iPhone",
-  helper_watch_steps: "På klockan: Inställningar → Bluetooth → under ”Hälsoenheter” trycker du på ”NeonPlan Key” och parkopplar.",
-  helper_phone_steps: "På telefonen: Inställningar → Bluetooth → parkoppla ”NeonPlan Key” (visas som tangentbord).",
+  helper_watch_steps: "På klockan: Inställningar → Bluetooth → under ”Hälsoenheter” trycker du på ”Home 3D Key” och parkopplar.",
+  helper_phone_steps: "På telefonen: Inställningar → Bluetooth → parkoppla ”Home 3D Key” (visas som tangentbord).",
   helper_key: "Avläst nyckel:",
   helper_wait: "Väntar på parkoppling …",
-  helper_after: "Ta sedan bort enheten ”NeonPlan Key” från Bluetooth-inställningarna igen.",
+  helper_after: "Ta sedan bort enheten ”Home 3D Key” från Bluetooth-inställningarna igen.",
   helper_next: "🔄 Nästa enhet",
   helper_next_hint: "Tryck före varje ny enhet: hjälparen får en ny Bluetooth-identitet, så att en tidigare parkopplad enhet inte ansluter emellan.",
   helper_name: "Namn på den här enheten",
@@ -1516,7 +1516,7 @@ const SV: typeof DE = {
   quality: "Kontrollera träffsäkerhet",
   quality_result: "Träffsäkerhet: {p}",
   relearn_all: "Lär in allt på nytt",
-  live_intro: "Så här ser NeonPlan dig just nu. Gå runt och kolla om det stämmer.",
+  live_intro: "Så här ser Home 3D dig just nu. Gå runt och kolla om det stämmer.",
   enabled: "Positionering på",
   admins_only: "Visa personer bara för administratörer",
   not_heard: "inte hörd",
@@ -1531,7 +1531,7 @@ const SV: typeof DE = {
   unheard: "⚠ inte hörd",
   unheard_hint: "Ingen mottagare hör enheten just nu. Är den på och sänder? Android: Home Assistant-appens BLE Transmitter.",
   fly: "Flyg in i rummen vid ”Var är …?” och ”Vem är hemma?”",
-  fly_hint: "De öppna NeonPlan-vyerna flyger in i rummet i svaret, vid ”Vem är hemma?” in i alla rum i tur och ordning. Ett tryck stoppar. Inte för personer medan de bara visas för administratörer.",
+  fly_hint: "De öppna Home 3D-vyerna flyger in i rummet i svaret, vid ”Vem är hemma?” in i alla rum i tur och ordning. Ett tryck stoppar. Inte för personer medan de bara visas för administratörer.",
 };
 const ZH: typeof DE = {
   title: "设置定位",
@@ -1568,11 +1568,11 @@ const ZH: typeof DE = {
   helper_found: "已找到密钥助手：{name}",
   helper_watch: "用于 Apple Watch",
   helper_phone: "用于 iPhone",
-  helper_watch_steps: "在手表上：设置 → Bluetooth → 在“健康设备”下轻点“NeonPlan Key”并配对。",
-  helper_phone_steps: "在手机上：设置 → Bluetooth → 配对“NeonPlan Key”（显示为键盘）。",
+  helper_watch_steps: "在手表上：设置 → Bluetooth → 在“健康设备”下轻点“Home 3D Key”并配对。",
+  helper_phone_steps: "在手机上：设置 → Bluetooth → 配对“Home 3D Key”（显示为键盘）。",
   helper_key: "读取到的密钥：",
   helper_wait: "正在等待配对 …",
-  helper_after: "之后请在 Bluetooth 设置中移除设备“NeonPlan Key”。",
+  helper_after: "之后请在 Bluetooth 设置中移除设备“Home 3D Key”。",
   helper_next: "🔄 下一个设备",
   helper_next_hint: "每添加一台新设备前点一下：助手会换一个新的蓝牙身份，之前配对过的设备就不会再抢先连接。",
   helper_name: "此设备的名称",
@@ -1603,7 +1603,7 @@ const ZH: typeof DE = {
   quality: "检查准确率",
   quality_result: "准确率：{p}",
   relearn_all: "全部重新学习",
-  live_intro: "这是 NeonPlan 此刻看到的你。走动一下，看看是否准确。",
+  live_intro: "这是 Home 3D 此刻看到的你。走动一下，看看是否准确。",
   enabled: "定位已开启",
   admins_only: "仅向管理员显示人员",
   not_heard: "未检测到",
@@ -1618,7 +1618,7 @@ const ZH: typeof DE = {
   unheard: "⚠ 未检测到",
   unheard_hint: "目前没有接收器能听到这个设备。它是否开着并在发送？安卓：Home Assistant 应用的 BLE Transmitter。",
   fly: "问“…在哪里？”和“谁在家？”时飞进房间",
-  fly_hint: "打开的 NeonPlan 视图会飞进答案所在的房间；问“谁在家？”时依次飞过所有房间。轻点即可停止。若人员仅对管理员显示，则不会飞向人员。",
+  fly_hint: "打开的 Home 3D 视图会飞进答案所在的房间；问“谁在家？”时依次飞过所有房间。轻点即可停止。若人员仅对管理员显示，则不会飞向人员。",
 };
 
 /** An IRK as 32 hex characters: pasted as hex (with or without separators) or as Base64 (as the Mac keychain shows it). */
@@ -1750,7 +1750,7 @@ export class LocateSetup extends LitElement {
     this.load().catch((e: unknown) => (this._error = `load: ${(e as Error)?.stack ?? String(e)}`));
     this.timer = window.setInterval(() => void this.tick(), 1000);
     void this.hass.connection
-      .subscribeMessage<Live>((live) => (this._live = live), { type: "neonplan3d/locate/subscribe" })
+      .subscribeMessage<Live>((live) => (this._live = live), { type: "home_3d/locate/subscribe" })
       .then((u) => (this.unsub = u))
       .catch(() => undefined);
   }
@@ -1772,7 +1772,7 @@ export class LocateSetup extends LitElement {
   }
 
   private async load(): Promise<void> {
-    const cfg = await this.call<Config>({ type: "neonplan3d/locate/config" });
+    const cfg = await this.call<Config>({ type: "home_3d/locate/config" });
     if (!cfg) return;
     // scanners not placed yet: the room of their device in the plan (a placed switch of a Shelly), else its area
     const rooms = { ...cfg.scanner_rooms };
@@ -1840,10 +1840,10 @@ export class LocateSetup extends LitElement {
     try {
       doors = doorPairs(this.building);
     } catch (e) {
-      console.warn("NeonPlan locate: no door graph", e);
+      console.warn("Home 3D locate: no door graph", e);
     }
     const cfg = await this.call<Config>({
-      type: "neonplan3d/locate/configure",
+      type: "home_3d/locate/configure",
       rooms: this.rooms,
       doors,
       ...changes,
@@ -1855,12 +1855,12 @@ export class LocateSetup extends LitElement {
     const live = this.hassSource?.();
     if (live && live !== this.hass) this.hass = live;
     if (this._step === "devices" && this.nearOpen) {
-      const res = await this.call<{ devices: Nearby[] }>({ type: "neonplan3d/locate/nearby" });
+      const res = await this.call<{ devices: Nearby[] }>({ type: "home_3d/locate/nearby" });
       if (res) this._near = res.devices;
     }
     if (this._step === "walk") {
       // the countdown and the sample counts come from here (the live state only changes when a room changes)
-      const res = await this.call<{ calibration: Live["calibration"]; samples: Config["samples"] }>({ type: "neonplan3d/locate/calibrate", action: "status" });
+      const res = await this.call<{ calibration: Live["calibration"]; samples: Config["samples"] }>({ type: "home_3d/locate/calibrate", action: "status" });
       if (res && this._cfg) {
         this._cfg = { ...this._cfg, samples: res.samples };
         this._live = { ...(this._live ?? { running: true, devices: [] }), calibration: res.calibration };
@@ -1945,7 +1945,7 @@ export class LocateSetup extends LitElement {
   }
 
   /**
-   * The NeonPlan key helper (an ESP32 with irk-capture, see site/keys): found by its profile select ("Heart Sensor" /
+   * The Home 3D key helper (an ESP32 with irk-capture, see site/keys): found by its profile select ("Heart Sensor" /
    * "Keyboard"); its IRK sensor shows the key of the device that paired last.
    */
   private keyHelpers(): { name: string; select: string; option: string; irk: string | null; ours: boolean; refresh: string | null }[] {
@@ -1959,9 +1959,9 @@ export class LocateSetup extends LitElement {
       const entry = device ? (this.hass.devices?.[device] as { name?: string | null; name_by_user?: string | null; model?: string | null } | undefined) : undefined;
       const name = entry?.name_by_user || entry?.name || String(st.attributes.friendly_name ?? id);
       const refresh = Object.values(this.hass.entities ?? {}).find((e) => e.device_id === device && /_refresh_ble_identity$/.test(e.entity_id))?.entity_id ?? null;
-      out.push({ name, select: id, option: st.state, irk: raw ? irkHex(raw) : null, ours: entry?.model === "neonplan_key" || /neonplan[ _]key/i.test(id), refresh });
+      out.push({ name, select: id, option: st.state, irk: raw ? irkHex(raw) : null, ours: entry?.model === "home3d_key" || /home3d[ _]key/i.test(id), refresh });
     }
-    // NeonPlan's own helper first
+    // Home 3D's own helper first
     return out.sort((x, y) => Number(y.ours) - Number(x.ours));
   }
 
@@ -2217,7 +2217,7 @@ export class LocateSetup extends LitElement {
         ? html`<div class="learning">
             ${this.tr(t.learning, { room: this.rooms.find((r) => r.id === cal.room)?.name ?? "", left: cal.left })}
             <div class="bar"><i style="width:${Math.round(((90 - cal.left) / 90) * 100)}%"></i></div>
-            <button @click=${() => void this.call({ type: "neonplan3d/locate/calibrate", action: "stop" })}>${t.stop}</button>
+            <button @click=${() => void this.call({ type: "home_3d/locate/calibrate", action: "stop" })}>${t.stop}</button>
           </div>`
         : nothing}
       ${floors.map(
@@ -2234,7 +2234,7 @@ export class LocateSetup extends LitElement {
                   ?disabled=${!!cal}
                   @click=${async () => {
                     const devices = cfg.devices.filter((d) => !this.notCarried.has(d.id)).map((d) => d.id);
-                    const res = await this.call<{ calibration: Live["calibration"] }>({ type: "neonplan3d/locate/calibrate", action: "start", room: r.id, seconds: 90, devices });
+                    const res = await this.call<{ calibration: Live["calibration"] }>({ type: "home_3d/locate/calibrate", action: "start", room: r.id, seconds: 90, devices });
                     if (res) this._live = { ...(this._live ?? { running: true, devices: [] }), calibration: res.calibration };
                     // learning the first room switches locating on (one switch less to find)
                     if (res && !cfg.enabled) await this.save({ enabled: true });
@@ -2246,7 +2246,7 @@ export class LocateSetup extends LitElement {
           </div>`,
       )}
       <p class="end">
-        <button @click=${async () => (this._quality = await this.call({ type: "neonplan3d/locate/quality" }))}>${t.quality}</button>
+        <button @click=${async () => (this._quality = await this.call({ type: "home_3d/locate/quality" }))}>${t.quality}</button>
         ${q
           ? html`<b>${this.tr(t.quality_result, {
               p: cfg.devices.map((d) => `${d.name} ${q[d.id]?.overall != null ? Math.round(q[d.id].overall! * 100) : "–"} %`).join(" · "),
@@ -2254,7 +2254,7 @@ export class LocateSetup extends LitElement {
           : nothing}
         <button class="primary" @click=${() => (this._step = "live")}>${t.next} →</button>
       </p>
-      <p class="end"><button class="ghost" @click=${() => void this.call({ type: "neonplan3d/locate/calibrate", action: "clear" }).then(() => this.load())}>${t.relearn_all}</button></p>`;
+      <p class="end"><button class="ghost" @click=${() => void this.call({ type: "home_3d/locate/calibrate", action: "clear" }).then(() => this.load())}>${t.relearn_all}</button></p>`;
   }
 
   private renderLive(cfg: Config) {

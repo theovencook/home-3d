@@ -721,7 +721,7 @@ export class Fp3dEditor extends LitElement {
     this._cardJoin = null;
     this._wallView3d = (() => {
       try {
-        return localStorage.getItem("neonplan3d.wall3d") !== "0";
+        return localStorage.getItem("home3d.wall3d") !== "0";
       } catch {
         return true;
       }
@@ -738,20 +738,20 @@ export class Fp3dEditor extends LitElement {
     this._openingPreset = "door";
     this._phoneHint = true;
     try {
-      this._phoneHint = localStorage.getItem("neonplan3d.phoneHint") !== "0";
+      this._phoneHint = localStorage.getItem("home3d.phoneHint") !== "0";
     } catch {
       // no storage: shown until closed
     }
     let split = false;
     try {
-      split = localStorage.getItem("neonplan3d.editor3d") === "1";
+      split = localStorage.getItem("home3d.editor3d") === "1";
     } catch {
       // no storage
     }
     this._split = split;
     this._splitRatio = 0.55;
     try {
-      const saved = Number(localStorage.getItem("neonplan3d.editorSplit"));
+      const saved = Number(localStorage.getItem("home3d.editorSplit"));
       if (saved >= 20 && saved <= 80) this._splitRatio = saved / 100;
     } catch {
       /* no storage */
@@ -760,7 +760,7 @@ export class Fp3dEditor extends LitElement {
     // the 3D pane's wall view stays as it was last set on this device (#309)
     this._wall3d = "cut";
     try {
-      if (localStorage.getItem("neonplan3d.walls3d") === "auto") this._wall3d = "auto";
+      if (localStorage.getItem("home3d.walls3d") === "auto") this._wall3d = "auto";
     } catch {
       // no storage: the default
     }
@@ -768,14 +768,14 @@ export class Fp3dEditor extends LitElement {
     this._sideOpen = false;
     let pinned = true;
     try {
-      pinned = localStorage.getItem("neonplan3d.sidePinned") !== "0";
+      pinned = localStorage.getItem("home3d.sidePinned") !== "0";
     } catch {
       // no storage
     }
     this._sidePinned = pinned;
     let min = false;
     try {
-      min = localStorage.getItem("neonplan3d.sideMin") === "1";
+      min = localStorage.getItem("home3d.sideMin") === "1";
     } catch {
       // no storage
     }
@@ -789,7 +789,7 @@ export class Fp3dEditor extends LitElement {
     this._settingsMenu = false;
     let width = 320;
     try {
-      width = Number(localStorage.getItem("neonplan3d.sideWidth")) || 320;
+      width = Number(localStorage.getItem("home3d.sideWidth")) || 320;
     } catch {
       // no storage: the default width
     }
@@ -888,7 +888,7 @@ export class Fp3dEditor extends LitElement {
       handle.removeEventListener("pointerup", up);
       handle.removeEventListener("pointercancel", up);
       try {
-        localStorage.setItem("neonplan3d.editorSplit", String(Math.round(this._splitRatio * 100)));
+        localStorage.setItem("home3d.editorSplit", String(Math.round(this._splitRatio * 100)));
       } catch {
         /* no storage */
       }
@@ -902,7 +902,7 @@ export class Fp3dEditor extends LitElement {
   private toggleSplit(): void {
     this._split = !this._split;
     try {
-      localStorage.setItem("neonplan3d.editor3d", this._split ? "1" : "0");
+      localStorage.setItem("home3d.editor3d", this._split ? "1" : "0");
     } catch {
       // no storage: the choice lasts for this page
     }
@@ -1174,7 +1174,7 @@ export class Fp3dEditor extends LitElement {
   private setWall3d(mode: WallMode): void {
     this._wall3d = mode;
     try {
-      localStorage.setItem("neonplan3d.walls3d", mode);
+      localStorage.setItem("home3d.walls3d", mode);
     } catch {
       // no storage: not remembered
     }
@@ -5594,7 +5594,7 @@ export class Fp3dEditor extends LitElement {
                     @click=${() => {
                       this._phoneHint = false;
                       try {
-                        localStorage.setItem("neonplan3d.phoneHint", "0");
+                        localStorage.setItem("home3d.phoneHint", "0");
                       } catch {
                         // no storage: gone for this visit
                       }
@@ -6372,7 +6372,7 @@ export class Fp3dEditor extends LitElement {
     this._wallView3d = on;
     this.wall3dKey = "";
     try {
-      localStorage.setItem("neonplan3d.wall3d", on ? "1" : "0");
+      localStorage.setItem("home3d.wall3d", on ? "1" : "0");
     } catch {
       // not remembered
     }
@@ -7443,8 +7443,8 @@ export class Fp3dEditor extends LitElement {
 
   private rememberWallType(type: string): void {
     try {
-      const list = JSON.parse(localStorage.getItem("neonplan3d.wallRecent") ?? "[]") as string[];
-      localStorage.setItem("neonplan3d.wallRecent", JSON.stringify([type, ...list.filter((t) => t !== type)].slice(0, 6)));
+      const list = JSON.parse(localStorage.getItem("home3d.wallRecent") ?? "[]") as string[];
+      localStorage.setItem("home3d.wallRecent", JSON.stringify([type, ...list.filter((t) => t !== type)].slice(0, 6)));
     } catch {
       // no storage
     }
@@ -7452,7 +7452,7 @@ export class Fp3dEditor extends LitElement {
 
   private wallRecent(): string[] {
     try {
-      const list = JSON.parse(localStorage.getItem("neonplan3d.wallRecent") ?? "[]");
+      const list = JSON.parse(localStorage.getItem("home3d.wallRecent") ?? "[]");
       return Array.isArray(list) ? list.filter((t): t is string => typeof t === "string" && (FURNITURE_TYPES.includes(t as never) || !!packItem(t))) : [];
     } catch {
       return [];
@@ -10110,7 +10110,7 @@ export class Fp3dEditor extends LitElement {
     this._sidePinned = pinned;
     this._sideOpen = false;
     try {
-      localStorage.setItem("neonplan3d.sidePinned", pinned ? "1" : "0");
+      localStorage.setItem("home3d.sidePinned", pinned ? "1" : "0");
     } catch {
       // no storage
     }
@@ -10124,7 +10124,7 @@ export class Fp3dEditor extends LitElement {
     }
     this._sideMin = folded;
     try {
-      localStorage.setItem("neonplan3d.sideMin", folded ? "1" : "0");
+      localStorage.setItem("home3d.sideMin", folded ? "1" : "0");
     } catch {
       // no storage
     }
@@ -10146,7 +10146,7 @@ export class Fp3dEditor extends LitElement {
       this.sideDrag = null;
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
       try {
-        localStorage.setItem("neonplan3d.sideWidth", String(this._sideWidth));
+        localStorage.setItem("home3d.sideWidth", String(this._sideWidth));
       } catch {
         // no storage: the width lasts for this visit
       }
@@ -12789,7 +12789,7 @@ export class Fp3dEditor extends LitElement {
         }
       }
       const day = new Date().toISOString().slice(0, 10);
-      download(`neonplan3d-${this.t("export_name_full")}-${day}.json`, JSON.stringify({ ...base, exported_at: new Date().toISOString(), images }));
+      download(`home-3d-${this.t("export_name_full")}-${day}.json`, JSON.stringify({ ...base, exported_at: new Date().toISOString(), images }));
     } catch (err) {
       alert(this.t("backup_import_error", { error: String((err as { message?: string })?.message ?? err) }));
     } finally {
@@ -12809,7 +12809,7 @@ export class Fp3dEditor extends LitElement {
       alert(this.t("import_error_not_json"));
       return;
     }
-    if (data?.format !== "neonplan3d-backup" || !data.building) {
+    if (data?.format !== "home3d-backup" || !data.building) {
       alert(this.t("backup_full_not_backup"));
       return;
     }
@@ -12845,7 +12845,7 @@ export class Fp3dEditor extends LitElement {
 
   private exportPlan(shareable: boolean): void {
     const day = new Date().toISOString().slice(0, 10);
-    download(`neonplan3d-${this.t(shareable ? "export_name_template" : "export_name_backup")}-${day}.json`, JSON.stringify(exportFile(this._doc, shareable), null, 2));
+    download(`home-3d-${this.t(shareable ? "export_name_template" : "export_name_backup")}-${day}.json`, JSON.stringify(exportFile(this._doc, shareable), null, 2));
   }
 
   private async importPlan(e: Event): Promise<void> {

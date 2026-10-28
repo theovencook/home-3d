@@ -1,6 +1,6 @@
 // The simple import format (docs/plan-format.md): what a person, a script or an AI writes easily – floors with rooms
 // as outlines, walls, doors and windows by their middle, furniture by kind and size. The importer turns it into a
-// proper plan. And the check for complete NeonPlan plans that were written by hand or by an AI: broken parts are
+// proper plan. And the check for complete Home 3D plans that were written by hand or by an AI: broken parts are
 // repaired or left out, with a warning for each.
 
 import type { Building, FurnitureType, SillBoard, Vec2 } from "../model.ts";
@@ -9,7 +9,9 @@ import type { RawFloor, RawPlan, Warning } from "./builder.ts";
 import { cleanPolygon } from "./geom.ts";
 import { furnitureType } from "./furniture-map.ts";
 
-export const SIMPLE_FORMAT = "neonplan-import";
+export const SIMPLE_FORMAT = "home3d-import";
+/** The format id of the upstream project (NeonPlan 3D): still accepted on input, so its example files keep working. */
+export const LEGACY_SIMPLE_FORMAT = "neonplan-import";
 
 const KNOWN = new Set<string>(FURNITURE_TYPES);
 const n = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && Number.isFinite(parseFloat(v)) ? parseFloat(v) : d);
@@ -17,7 +19,7 @@ const pt = (v: unknown): Vec2 | null => (Array.isArray(v) && v.length >= 2 && Nu
 
 export function isSimple(data: unknown): boolean {
   const d = data as { format?: string; floors?: { rooms?: unknown }[] };
-  return d?.format === SIMPLE_FORMAT || (Array.isArray(d?.floors) && d.floors.some((f) => Array.isArray(f?.rooms) && (f.rooms as { points?: unknown }[]).some((r) => Array.isArray(r?.points))) && !(d as { version?: unknown }).version);
+  return d?.format === SIMPLE_FORMAT || d?.format === LEGACY_SIMPLE_FORMAT || (Array.isArray(d?.floors) && d.floors.some((f) => Array.isArray(f?.rooms) && (f.rooms as { points?: unknown }[]).some((r) => Array.isArray(r?.points))) && !(d as { version?: unknown }).version);
 }
 
 interface SimpleFloor {
@@ -79,11 +81,11 @@ export function readSimple(data: unknown): RawPlan {
     return floor;
   });
   if (!floors.length) throw new Error("nothing_found");
-  return { source: "NeonPlan", floors, roomsAtInnerFaces: d.rooms_at === "inner", warnings };
+  return { source: "Home 3D", floors, roomsAtInnerFaces: d.rooms_at === "inner", warnings };
 }
 
 /**
- * A complete NeonPlan plan as a person or an AI wrote it, checked and repaired: rooms with fewer than three usable
+ * A complete Home 3D plan as a person or an AI wrote it, checked and repaired: rooms with fewer than three usable
  * points go, outlines are tidied, doors and windows on edges that do not exist go, positions are kept on their
  * edge, unknown furniture becomes the nearest known kind, ids are made unique.
  */

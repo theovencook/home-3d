@@ -1,0 +1,16 @@
+Home 3D
+Copyright (c) 2026 theovencook
+
+Home 3D is derived from NeonPlan 3D by Mastershort
+(https://github.com/Mastershort/neonplan3d, commit 0a947aa), which is published under the
+MIT License. The original copyright notice is kept in LICENSE.
+
+"NeonPlan 3D" is Mastershort's name. Home 3D is not affiliated with or endorsed by Mastershort.
+
+The furniture packs in this repository are original work. They are not copies of the packs sold in
+Mastershort's shop.
+
+Bundled fonts (custom_components/home_3d/frontend/fonts/) are licensed under the SIL Open Font
+License 1.1; their licence files are kept next to them:
+- Figtree (figtree-LICENSE.txt)
+- Bricolage Grotesque (bricolage-grotesque-LICENSE.txt)

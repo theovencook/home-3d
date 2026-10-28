@@ -21,7 +21,7 @@ type HeatMode = NonNullable<CardConfig["heatmap"]>;
 
 function savedWalls(): WallMode | null {
   try {
-    const v = localStorage.getItem("neonplan3d.card_walls");
+    const v = localStorage.getItem("home3d.card_walls");
     return v === "auto" || v === "cut" ? v : null;
   } catch {
     return null;
@@ -235,18 +235,18 @@ clearTimeout(this.cleanTimer);
   /** Visual editor in the dashboard (no YAML needed). */
   static async getConfigElement(): Promise<HTMLElement> {
     await loadCardEditor();
-    return document.createElement("neonplan3d-card-editor");
+    return document.createElement("home-3d-card-editor");
   }
 
   static getStubConfig(): CardConfig {
-    return { type: "custom:neonplan3d-card" };
+    return { type: "custom:home-3d-card" };
   }
 
   /** A wall view picked on the card stays for the next visit on this device (#309). */
   private setWalls(mode: WallMode): void {
     this._walls = mode;
     try {
-      localStorage.setItem("neonplan3d.card_walls", mode);
+      localStorage.setItem("home3d.card_walls", mode);
     } catch {
       // no storage: not remembered
     }
@@ -629,12 +629,12 @@ clearTimeout(this.cleanTimer);
   ];
 }
 
-if (!customElements.get("neonplan3d-card")) {
-  customElements.define("neonplan3d-card", Floorplan3dCard);
+if (!customElements.get("home-3d-card")) {
+  customElements.define("home-3d-card", Floorplan3dCard);
   const w = window as Window & { customCards?: unknown[] };
   w.customCards = w.customCards ?? [];
   w.customCards.push({
-    type: "neonplan3d-card",
+    type: "home-3d-card",
     name: translate(undefined, "card_name"),
     description: translate(undefined, "card_description"),
     preview: false,

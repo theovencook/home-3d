@@ -1,0 +1,25 @@
+{
+  "domain": "home_3d",
+  "name": "Home 3D",
+  "after_dependencies": [
+    "bluetooth",
+    "recorder"
+  ],
+  "codeowners": [
+    "@theovencook"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "websocket_api"
+  ],
+  "documentation": "https://github.com/theovencook/home-3d",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/theovencook/home-3d/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

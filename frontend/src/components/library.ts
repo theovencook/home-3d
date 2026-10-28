@@ -13,9 +13,9 @@ import { thumbFor } from "../thumbs.ts";
 const RECENT_MAX = 10;
 const PAGE = 24;
 const THUMB_PX = 96;
-const STORE_OPEN = "neonplan3d.lib.open";
-const STORE_FAV = "neonplan3d.lib.fav";
-const STORE_RECENT = "neonplan3d.lib.recent";
+const STORE_OPEN = "home3d.lib.open";
+const STORE_FAV = "home3d.lib.fav";
+const STORE_RECENT = "home3d.lib.recent";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
 

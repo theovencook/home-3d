@@ -37,14 +37,14 @@ type Mode = "view" | "editor" | "extensions";
 const prefs = {
   get(key: string): string | null {
     try {
-      return localStorage.getItem(`neonplan3d.${key}`);
+      return localStorage.getItem(`home3d.${key}`);
     } catch {
       return null;
     }
   },
   set(key: string, value: string): void {
     try {
-      localStorage.setItem(`neonplan3d.${key}`, value);
+      localStorage.setItem(`home3d.${key}`, value);
     } catch {
       // storage unavailable (private mode): the choice just is not remembered
     }
@@ -531,7 +531,7 @@ export class Floorplan3dPanel extends LitElement {
         ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.hass} .building=${b} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
         ${this._clean && this._mode === "view" ? nothing : html`<header class="fp3d-header">
           <ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>
-          <h1>NeonPlan 3D</h1>
+          <h1>Home 3D</h1>
           ${this.isAdmin
             ? html`<div class="fp3d-seg" role="tablist">
                 <button role="tab" aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
@@ -1532,4 +1532,4 @@ export class Floorplan3dPanel extends LitElement {
   ];
 }
 
-if (!customElements.get("neonplan3d-panel")) customElements.define("neonplan3d-panel", Floorplan3dPanel);
+if (!customElements.get("home-3d-panel")) customElements.define("home-3d-panel", Floorplan3dPanel);

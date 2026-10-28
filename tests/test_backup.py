@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.neonplan3d.const import DOMAIN
+from custom_components.home_3d.const import DOMAIN
 from tests.test_init import BUILDING
 
 PAYLOAD = {
@@ -37,16 +37,16 @@ async def test_backup_round_trip(hass: HomeAssistant, hass_ws_client) -> None:
     client = await hass_ws_client(hass)
 
     # an imported pack keeps its source
-    await client.send_json_auto_id({"type": "neonplan3d/packs/import", "pack": json.dumps({"payload": PAYLOAD})})
+    await client.send_json_auto_id({"type": "home_3d/packs/import", "pack": json.dumps({"payload": PAYLOAD})})
     assert (await client.receive_json())["success"]
     building = json.loads(json.dumps(BUILDING))
     building["floors"][0]["name"] = "Backup floor"
-    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": building})
+    await client.send_json_auto_id({"type": "home_3d/building/save", "building": building})
     assert (await client.receive_json())["success"]
 
-    await client.send_json_auto_id({"type": "neonplan3d/backup/export"})
+    await client.send_json_auto_id({"type": "home_3d/backup/export"})
     backup = (await client.receive_json())["result"]
-    assert backup["format"] == "neonplan3d-backup"
+    assert backup["format"] == "home3d-backup"
     assert backup["building"]["floors"][0]["name"] == "Backup floor"
     assert backup["packs"][0]["source"]["id"] == "test.backup"
 
@@ -57,7 +57,7 @@ async def test_backup_round_trip(hass: HomeAssistant, hass_ws_client) -> None:
     sourceless = {k: v for k, v in backup["packs"][0].items() if k != "source"}
     sourceless["id"] = "test.sourceless"
     backup["building"]["floors"][0]["name"] = "Restored floor"
-    restore = {"type": "neonplan3d/backup/import", "building": backup["building"]}
+    restore = {"type": "home_3d/backup/import", "building": backup["building"]}
     await client.send_json_auto_id({**restore, "packs": [*backup["packs"], broken, sourceless]})
     result = await client.receive_json()
     assert result["success"], result
@@ -65,11 +65,11 @@ async def test_backup_round_trip(hass: HomeAssistant, hass_ws_client) -> None:
     assert sorted(s["id"] for s in result["result"]["skipped"]) == ["test.broken", "test.sourceless"]
     assert result["result"]["building"]["floors"][0]["name"] == "Restored floor"
 
-    await client.send_json_auto_id({"type": "neonplan3d/packs/list"})
+    await client.send_json_auto_id({"type": "home_3d/packs/list"})
     listed = (await client.receive_json())["result"]["packs"]
     assert [p["id"] for p in listed] == ["test.backup"]
 
     # a broken building is refused before anything changes
-    await client.send_json_auto_id({"type": "neonplan3d/backup/import", "building": {"version": 99}, "packs": []})
+    await client.send_json_auto_id({"type": "home_3d/backup/import", "building": {"version": 99}, "packs": []})
     result = await client.receive_json()
     assert not result["success"] and result["error"]["code"] == "invalid_format"

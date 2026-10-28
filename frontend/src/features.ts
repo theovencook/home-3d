@@ -16,7 +16,7 @@ export type Gated = Feature | FreeFeature;
 
 /**
  * Features whose logic is not in this repository: they show nowhere unless a pack lists them or the lab switch is on
- * (localStorage "neonplan3d.lab" = "1").
+ * (localStorage "home3d.lab" = "1").
  */
 export const UNRELEASED: readonly Gated[] = ["pool"];
 
@@ -24,9 +24,9 @@ export function labOn(): boolean {
   try {
     // "?fp3d_lab=1" in the address bar switches it on (and "=0" off) – easier than the browser console on a tablet
     const flag = new URLSearchParams(location.search).get("fp3d_lab");
-    if (flag === "1") localStorage.setItem("neonplan3d.lab", "1");
-    else if (flag === "0") localStorage.removeItem("neonplan3d.lab");
-    return localStorage.getItem("neonplan3d.lab") === "1";
+    if (flag === "1") localStorage.setItem("home3d.lab", "1");
+    else if (flag === "0") localStorage.removeItem("home3d.lab");
+    return localStorage.getItem("home3d.lab") === "1";
   } catch {
     return false;
   }
@@ -36,9 +36,9 @@ export function labOn(): boolean {
 export function projectionOn(): boolean {
   try {
     const flag = new URLSearchParams(location.search).get("fp3d_projection");
-    if (flag === "1") localStorage.setItem("neonplan3d.projection", "1");
-    else if (flag === "0") localStorage.removeItem("neonplan3d.projection");
-    return localStorage.getItem("neonplan3d.projection") === "1";
+    if (flag === "1") localStorage.setItem("home3d.projection", "1");
+    else if (flag === "0") localStorage.removeItem("home3d.projection");
+    return localStorage.getItem("home3d.projection") === "1";
   } catch {
     return false;
   }

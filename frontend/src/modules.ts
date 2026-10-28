@@ -8,7 +8,7 @@ import type { HomeAssistant } from "./types.ts";
 
 export type { PipePlanner, WallSpec } from "./pipe-planner.ts";
 
-/** The loader interface this NeonPlan speaks; a module written for a newer one is left alone. */
+/** The loader interface this Home 3D speaks; a module written for a newer one is left alone. */
 export const MODULE_API = 1;
 
 /** A spoken question's answer: what to say, and what to show in the house. */

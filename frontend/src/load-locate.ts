@@ -8,7 +8,7 @@ declare const __FP3D_LOCATE_HASH__: string;
 let loading: Promise<typeof LocateBundle> | undefined;
 
 export function loadLocate(): Promise<typeof LocateBundle> {
-  const url = new URL(`./neonplan3d-locate.js?v=${__FP3D_LOCATE_HASH__}`, new URL(import.meta.url)).href;
+  const url = new URL(`./home-3d-locate.js?v=${__FP3D_LOCATE_HASH__}`, new URL(import.meta.url)).href;
   loading ??= (import(/* @vite-ignore */ url) as Promise<typeof LocateBundle>).catch((err) => {
     loading = undefined;
     throw err;

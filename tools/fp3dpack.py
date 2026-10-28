@@ -20,7 +20,7 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
-_spec = importlib.util.spec_from_file_location("fp3d_packs", ROOT / "custom_components" / "neonplan3d" / "packs.py")
+_spec = importlib.util.spec_from_file_location("fp3d_packs", ROOT / "custom_components" / "home_3d" / "packs.py")
 assert _spec and _spec.loader
 packs = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(packs)

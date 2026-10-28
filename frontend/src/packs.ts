@@ -1,4 +1,4 @@
-// Furniture from imported packs (see custom_components/neonplan3d/packs.py for the format). Pack
+// Furniture from imported packs (see custom_components/home_3d/packs.py for the format). Pack
 // furniture has the type "pack:<pack id>:<item id>". Every bundle (main, editor, 3D) keeps its own
 // registry, filled with setPacks() from the packs the backend returns.
 
@@ -129,7 +129,7 @@ export function isPackType(type: string): boolean {
 
 /**
  * Pack items with parts that move with a cover (#511): a motorised curtain opens to both sides, a roll-down projection
- * screen comes down from its roller. The packs stay as they are; NeonPlan knows these items by their id.
+ * screen comes down from its roller. The packs stay as they are; Home 3D knows these items by their id.
  */
 export type PackMotion = "curtain" | "screen";
 

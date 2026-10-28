@@ -12,8 +12,8 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 import voluptuous as vol
 
-from custom_components.neonplan3d import packs
-from custom_components.neonplan3d.const import DOMAIN
+from custom_components.home_3d import packs
+from custom_components.home_3d.const import DOMAIN
 
 PAYLOAD = {
     "format": "fp3dpack",
@@ -109,7 +109,7 @@ async def test_import_list_and_remove(hass: HomeAssistant, hass_ws_client) -> No
     client = await hass_ws_client(hass)
 
     await client.send_json_auto_id(
-        {"type": "neonplan3d/packs/import", "pack": _pack({**PAYLOAD, "licensee": "Anna"})}
+        {"type": "home_3d/packs/import", "pack": _pack({**PAYLOAD, "licensee": "Anna"})}
     )
     result = await client.receive_json()
     assert result["success"]
@@ -121,18 +121,18 @@ async def test_import_list_and_remove(hass: HomeAssistant, hass_ws_client) -> No
         "items": 1,
     }
 
-    await client.send_json_auto_id({"type": "neonplan3d/packs/import", "pack": "{}"})
+    await client.send_json_auto_id({"type": "home_3d/packs/import", "pack": "{}"})
     result = await client.receive_json()
     assert not result["success"] and result["error"]["code"] == "not_a_pack"
 
-    await client.send_json_auto_id({"type": "neonplan3d/packs/list"})
+    await client.send_json_auto_id({"type": "home_3d/packs/list"})
     listed = (await client.receive_json())["result"]["packs"]
     assert [p["id"] for p in listed] == ["test.starter"]
     assert listed[0]["items"][0]["name"]["de"] == "Würfelsessel"
 
-    await client.send_json_auto_id({"type": "neonplan3d/packs/remove", "pack_id": "test.starter"})
+    await client.send_json_auto_id({"type": "home_3d/packs/remove", "pack_id": "test.starter"})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "neonplan3d/packs/list"})
+    await client.send_json_auto_id({"type": "home_3d/packs/list"})
     assert (await client.receive_json())["result"]["packs"] == []
 
 

@@ -1,10 +1,10 @@
 # Möbel-Packs
 
-Möbel-Packs bringen zusätzliche Möbel in NeonPlan 3D. Sie werden wie die eingebauten Möbel aus
+Möbel-Packs bringen zusätzliche Möbel in Home 3D. Sie werden wie die eingebauten Möbel aus
 Quadern und Zylindern gebaut und laufen deshalb genauso flüssig auf schwachen Tablets.
 
 Packs werden nicht signiert: Beim Import prüft Home Assistant nur den Inhalt gegen das Schema in
-`custom_components/neonplan3d/packs.py`. Eine Pack-Datei ist `{"payload": {…}}` oder direkt das
+`custom_components/home_3d/packs.py`. Eine Pack-Datei ist `{"payload": {…}}` oder direkt das
 Payload-Objekt; ein `signature`-Block älterer Dateien wird ignoriert.
 
 ## Ablauf
@@ -41,7 +41,7 @@ Payload-Objekt; ein `signature`-Block älterer Dateien wird ignoriert.
 
 - `size`: Standardgröße in Metern (Breite, Tiefe, Höhe). Im Plan lässt sich jedes Möbel danach frei
   skalieren; alle Teile wachsen mit – außer denen mit `fix`.
-- `fix` an einem Teil (ab NeonPlan 1.23, Mindestversion setzen): welche Maße das Teil beim Skalieren
+- `fix` an einem Teil (ab Home 3D 1.23, Mindestversion setzen): welche Maße das Teil beim Skalieren
   **behält** – `"w"`, `"d"`, `"h"` oder mehrere (`"wdh"`). Beine, Armlehnen, Platten und Griffe
   behalten so ihre Größe und ihren Abstand zur Kante des Möbels, die Teile dazwischen (Sitzfläche,
   Korpus) strecken sich. Je Achse gibt es damit eine feste Zone an jedem Ende und eine Mitte, die
@@ -77,7 +77,7 @@ Payload-Objekt; ein `signature`-Block älterer Dateien wird ignoriert.
 - `screen`: ein Teil mit `"screen": true` ist ein Bildschirm (Fernseher, Monitor). Das Möbel lässt sich
   dann mit einem Media Player verknüpfen; die Vorderseite (+z) zeigt die Farbe der laufenden App und
   ihr Bild, wie die eingebauten Fernseher.
-- **Bibliothek** (optional, ab NeonPlan 1.23 – ältere Versionen lehnen Packs mit diesen Feldern ab,
+- **Bibliothek** (optional, ab Home 3D 1.23 – ältere Versionen lehnen Packs mit diesen Feldern ab,
   also die Mindestversion setzen): `group` sagt, was das Möbel ist (`sofa`, `seating`, `table`,
   `storage`, `bed`, `kitchen`, `appliance`, `bath`, `lamp`, `media`, `office`, `tech`, `heating`,
   `energy`, `household`, `deco`, `plant`, `outdoor`, `kids`, `sport`, `pets`, `vehicle`, `stairs`,
@@ -85,7 +85,7 @@ Payload-Objekt; ein `signature`-Block älterer Dateien wird ignoriert.
   `bedroom`, `kids`, `bath`, `office`, `hall`, `utility`, `garage`, `garden`, `hobby`; leer = überall),
   `tags` weitere Suchwörter. `family` fasst Varianten eines Möbels (ein Tisch in drei Längen) zu
   einer Karte zusammen, `variant` (Text je Sprache wie `name`) beschriftet den Chip der Variante.
-  Ohne diese Felder ordnet NeonPlan das Möbel nach seinen Wörtern und dem Pack ein; Varianten
+  Ohne diese Felder ordnet Home 3D das Möbel nach seinen Wörtern und dem Pack ein; Varianten
   erkennt es an der Größe am Ende der ID (`table_160`) und an den Zahlen im Namen.
 
 ## Feature-Namen

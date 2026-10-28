@@ -35,7 +35,7 @@ export class Extensions extends LitElement {
     this._packMsg = null;
     let open: string[] = [];
     try {
-      open = JSON.parse(localStorage.getItem("neonplan3d.ext.open") ?? "[]") as string[];
+      open = JSON.parse(localStorage.getItem("home3d.ext.open") ?? "[]") as string[];
     } catch {
       // nothing remembered
     }
@@ -48,7 +48,7 @@ export class Extensions extends LitElement {
     else next.add(key);
     this._open = next;
     try {
-      localStorage.setItem("neonplan3d.ext.open", JSON.stringify([...next]));
+      localStorage.setItem("home3d.ext.open", JSON.stringify([...next]));
     } catch {
       // a private window: it stays open for this visit only
     }
