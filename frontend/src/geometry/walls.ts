@@ -287,6 +287,7 @@ export function generateWalls(rooms: readonly Room[], options: WallOptions, free
   // an interior wall that continues an outer wall in line sits flush with the outer wall's inner face on
   // the room they share, instead of standing half its thickness into that room (#179)
   const dir = (d: Draft): Vec2 => unit(sub(verts[d.b], verts[d.a]));
+  const flushed = new Set<Draft>();
   for (const d of drafts) {
     if (d.exterior || d.free) continue;
     const sides = new Set<"left" | "right">();
@@ -306,6 +307,28 @@ export function generateWalls(rooms: readonly Room[], options: WallOptions, free
     } else {
       d.left = t;
       d.right = 0;
+    }
+    flushed.add(d);
+  }
+  // the interior walls carrying on in line from a flush one follow it, so the run stays one straight wall instead of
+  // stepping by half its thickness where the outer wall's side ends (a WC under a dining room and a hall)
+  for (const start of [...flushed]) {
+    const run = [start];
+    while (run.length) {
+      const d = run.pop()!;
+      for (const node of [d.a, d.b]) {
+        for (const e of drafts) {
+          if (e === d || e.exterior || e.free || flushed.has(e) || (e.a !== node && e.b !== node)) continue;
+          if (Math.abs(cross(dir(d), dir(e))) > 1e-6) continue;
+          const t = e.left + e.right;
+          // d's thickness lies on its left; e's on the same side when they run the same way
+          const toLeft = (d.right === 0) === dot(dir(d), dir(e)) > 0;
+          e.left = toLeft ? t : 0;
+          e.right = toLeft ? 0 : t;
+          flushed.add(e);
+          run.push(e);
+        }
+      }
     }
   }
 

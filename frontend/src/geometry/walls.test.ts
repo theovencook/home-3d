@@ -246,6 +246,19 @@ test("an interior wall continuing an outer wall in line sits flush with it (#179
   near(inner.left + inner.right, INT);
 });
 
+test("interior walls in line with a wall sitting flush stay one straight wall", () => {
+  // a WC (1..3 × 3..6) below a dining room (2..6 × 0..3) and an L-shaped hall: the dining room's south side is an
+  // outer wall past the WC, so the dining/WC wall sits flush with it; the hall/WC wall carries on in line with it
+  const hall = { id: "h", name: "h", area_id: null, points: [[0, 0], [2, 0], [2, 3], [1, 3], [1, 6], [0, 6]] } as unknown as Room;
+  const { walls } = generateWalls([rect("d", 2, 0, 6, 3), hall, rect("w", 1, 3, 3, 6)], opts);
+  const top = (other: string) => walls.find((w) => !w.exterior && [w.roomLeft, w.roomRight].includes(other) && [w.roomLeft, w.roomRight].includes("w"))!;
+  for (const w of [top("d"), top("h")]) {
+    const wcSide = w.roomLeft === "w" ? w.left : w.right;
+    near(wcSide, INT);
+    near(w.left + w.right, INT);
+  }
+});
+
 test("rooms with a ceiling of their own: walls end at the taller room, a room without one keeps the floor height (#30)", () => {
   const room = (id: string, x0: number, x1: number, ceiling_height?: number) => ({ id, name: id, area_id: null, points: [[x0, 0], [x1, 0], [x1, 3], [x0, 3]] as [number, number][], floor_material: "wood", ceiling_height });
   const { walls } = generateWalls([room("wohnen", 0, 4, 2.5), room("flur", 4, 6, 2.6), room("garage", 6, 10)], { exterior: 0.24, interior: 0.12 }, []);
