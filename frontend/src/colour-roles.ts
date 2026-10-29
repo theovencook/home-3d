@@ -42,6 +42,13 @@ export const COLOUR_PRESETS: readonly ColourPreset[] = [
   { id: "brass", hex: "#b5a14a" },
   { id: "chrome", hex: "#c8ccd2" },
   { id: "terracotta", hex: "#c0643f" },
+  // IKEA finishes, for the IKEA UK pack's colourways (#30)
+  { id: "black_brown", hex: "#3a2f2a" },
+  { id: "white_stained_oak", hex: "#dccfb8" },
+  { id: "birch", hex: "#dcc39a" },
+  { id: "pine", hex: "#d8b27a" },
+  { id: "acacia", hex: "#8a5a36" },
+  { id: "anthracite", hex: "#45484c" },
 ];
 
 /** The roles a built-in model is drawn in (the furniture tests check this against the models). Lamps have none. */

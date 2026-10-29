@@ -411,7 +411,7 @@ copy (see below).
 ## Packs that ship with Home 3D
 
 Our own library comes with the integration in `custom_components/home_3d/bundled_packs/`, one folder per pack
-(`theovencook.core` for now). Home Assistant reads these folders from its own disk when the integration starts, so
+(`theovencook.core` and `theovencook.ikea-uk`). Home Assistant reads these folders from its own disk when the integration starts, so
 they are there on a fresh install without network access and nothing has to be imported. They are checked like an
 imported pack; a bundled pack that does not check is logged and left out.
 
@@ -445,6 +445,22 @@ custom_components/home_3d/bundled_packs/theovencook.core/
 in the folder of its `group`; `frontend/src/core-pack.test.ts` checks that each item shows in the library under that
 section. Adding an item does not touch `pack.json`; its `release` goes up once per Home 3D release that changes the
 pack, so installs holding an older imported copy pick up the bundled one.
+
+### The IKEA UK pack
+
+`theovencook.ikea-uk` holds models of IKEA UK bestsellers, laid out like the core pack
+(`theovencook.ikea-uk/<group>/<item id>.json`). Each item has a readable English `name` ("Cube shelving unit 2x4")
+and the IKEA product name in `ikea` ("KALLAX"); searching either finds it. The models are our own, built from the
+shapes above with sizes read from IKEA UK product pages; no IKEA pictures or 3D files are used. The trademark note is
+in the repository's `NOTICE`.
+
+- Every size, layout and left/right version is its own item, grouped into one library card by `family`.
+- Colourways are not separate items: the parts are drawn in colour roles (the white carcass of a KALLAX in `white`,
+  a walnut veneer in `wood`), and a placed item takes its colourway from the colour presets in the item panel
+  (white gloss, black-brown, white stained oak, oak, walnut, birch, pine, acacia, anthracite, …). The colourways IKEA
+  sells are listed in the item's `tags`, so "kallax black-brown" finds it. This keeps the pack under the 500-item
+  limit for its 200 models.
+- The models and their batches are tracked in `docs/ikea-uk-models.md`.
 
 ## Your own items
 

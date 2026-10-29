@@ -42,6 +42,11 @@ test("the named presets: oak, walnut, white gloss, grey fabric, rattan and brass
   for (const p of COLOUR_PRESETS) assert.match(p.hex, /^#[0-9a-f]{6}$/, p.id);
 });
 
+test("IKEA finishes are presets too, so an IKEA UK item can take its colourway (#30)", () => {
+  const ids = COLOUR_PRESETS.map((p) => p.id);
+  for (const id of ["black_brown", "white_stained_oak", "birch", "pine", "acacia", "anthracite"]) assert.ok(ids.includes(id), id);
+});
+
 test("setting a role's colour keeps the others; clearing the last one leaves no override at all", () => {
   const one = setRoleColour(null, "wood", "#8B5A2B");
   assert.deepEqual(one, { wood: "#8b5a2b" });

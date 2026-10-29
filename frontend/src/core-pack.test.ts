@@ -6,7 +6,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { buildIndex, cardsOf, KINDS } from "./library-index.ts";
+import { buildIndex, cardsOf, filterEntries, KINDS } from "./library-index.ts";
 import type { FurniturePack, PackItem } from "./packs.ts";
 
 const BUNDLED = fileURLToPath(new URL("../../custom_components/home_3d/bundled_packs", import.meta.url));
@@ -74,4 +74,23 @@ test("every bundled lamp is linked as a light and has parts that glow with it", 
       assert.ok(item.parts.some((p) => p.glow), `${pack.id}/${item.id} has glowing parts`);
     }
   }
+});
+
+test("theovencook.ikea-uk ships with Home 3D: every item has its IKEA name, and both names find it (#30)", () => {
+  const ikea = packs.find((p) => p.pack.id === "theovencook.ikea-uk");
+  assert.ok(ikea, "bundled_packs/theovencook.ikea-uk");
+  assert.equal(ikea.pack.licence, "MIT");
+  const entries = buildIndex({ packs: [ikea.pack], basics: [], language: "en", basicName: (t) => t, basicNameEn: (t) => t, kindName: (k) => k, size: () => [1, 1, 1] });
+  const find = (query: string) => filterEntries(entries, { query, room: null, electric: false, light: false, outdoor: false }).map((e) => e.type);
+  for (const item of ikea.pack.items) {
+    assert.ok(item.ikea, `${item.id} carries its IKEA product name`);
+    assert.notEqual(item.name.en.toUpperCase(), item.ikea, `${item.id}: the readable name is not the product name`);
+    const typeId: string = `pack:${ikea.pack.id}:${item.id}`;
+    assert.ok(find(item.ikea).includes(typeId), `"${item.ikea}" finds ${item.id}`);
+    assert.ok(find(item.name.en).includes(typeId), `"${item.name.en}" finds ${item.id}`);
+  }
+  // a known pair: the cube shelving unit is found as KALLAX and as a shelving unit
+  assert.ok(find("kallax").some((t) => t.startsWith("pack:theovencook.ikea-uk:")));
+  // colourways are search words: an IKEA name with its colour finds the item
+  assert.ok(find("kallax black-brown").some((t) => t.startsWith("pack:theovencook.ikea-uk:kallax_")));
 });
