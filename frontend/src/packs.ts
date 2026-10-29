@@ -241,20 +241,27 @@ export function isPackType(type: string): boolean {
 
 /**
  * Pack items with parts that move with a cover (#511): a motorised curtain opens to both sides, a roll-down projection
- * screen comes down from its roller. The packs stay as they are; Home 3D knows these items by their id.
+ * screen comes down from its roller, a roof window's blind runs down the slope from its top edge (#24:
+ * `roof_window_…_blind`). The packs stay as they are; Home 3D knows these items by their id.
  */
-export type PackMotion = "curtain" | "screen";
+export type PackMotion = "curtain" | "screen" | "blind";
 
 export function packMotion(type: string): PackMotion | null {
   if (!isPackType(type)) return null;
   if (type.endsWith(":curtain_motor")) return "curtain";
   if (type.endsWith(":screen_roll")) return "screen";
+  if (/:roof_window[\w.-]*_blind$/.test(type)) return "blind";
   return null;
 }
 
-/** The parts that move: the curtain's fabric; the screen's cloth and bottom bar (everything but its roller). */
+/**
+ * The parts that move: the curtain's fabric; the screen's cloth and bottom bar (everything but its roller); the roof
+ * window blind's fabric (not its roller box).
+ */
 export function packMovingPart(kind: PackMotion, p: PackPart): boolean {
-  return kind === "curtain" ? p.color === "fabric" : p.shape !== "cyl";
+  if (kind === "curtain") return p.color === "fabric";
+  if (kind === "blind") return p.color === "fabric" && p.shape !== "cyl";
+  return p.shape !== "cyl";
 }
 
 /**

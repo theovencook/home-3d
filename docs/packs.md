@@ -333,6 +333,28 @@ status sensor; Home 3D finds the rest on the same device, whatever integration m
 
 `theovencook.core/3d_printer` is one; see its file for a model to start from.
 
+### Roof window blinds
+
+An item whose id starts with `roof_window` and ends with `_blind` (`roof_window_mk04_blind`) and is `electric` has a
+blind that follows a cover, like a motorised curtain: link it to the blind's cover (or a switch that drives it). Its
+`fabric` parts, other than cylinders, are the blind: lofts that lie on the slope from the window's low edge up to its
+high edge. Open, the blind runs up the slope to its top edge; closed, it covers the pane. The run time, a live
+position sensor and the other direction are set like a curtain's.
+
+### Architecture items and openings
+
+Doors, windows, garage doors and roof windows that cut a wall or a roof are **openings** and **roof windows** of the
+plan, not library items; they follow contacts and covers. The architecture items in `theovencook.core` are for what
+those cannot show, or for places without a wall or a roof to cut:
+
+| Item | In a wall or roof of the plan | The library item |
+| --- | --- | --- |
+| Roof window with blind | A roof window on a roof face: blind, window motor, contact | A window on a sloped ceiling the plan has no roof for (a loft room); its blind follows a cover |
+| French doors | The opening's **French doors** preset | Doors for a garden room, a summerhouse or a shed drawn from items |
+| Up-and-over garage door | A garage door opening with the style **Up-and-over door**: it tilts up into a canopy with its cover | The door's look for a garage drawn from items |
+| Bay window | Draw the room's outline with the bay and put a window on each side | A bay that stands in front of a window opening |
+| Chimney breast, half-wall with cap | A free wall can be low, but has no cap | The breast (plain, with an open fireplace or a mantelpiece) and the capped half-wall |
+
 ## What the loader checks
 
 A pack is refused, with a message that names the file and the fault, when:

@@ -335,6 +335,15 @@ def test_door_keeps_its_opening_angle() -> None:
         OPENING_SCHEMA({**door, "open_angle": 200})
 
 
+def test_garage_door_keeps_its_style() -> None:
+    """A garage door is sectional (the default) or up-and-over (#24)."""
+    garage = {"id": "o1", "room_id": "r1", "edge": 0, "offset": 1, "type": "garage", "width": 2.3, "sill": 0, "height": 2.1}
+    assert OPENING_SCHEMA({**garage, "style": "up_and_over"})["style"] == "up_and_over"
+    assert OPENING_SCHEMA({**garage, "style": "sectional"})["style"] == "sectional"
+    with pytest.raises(vol.Invalid):
+        OPENING_SCHEMA({**garage, "style": "roller"})
+
+
 def test_item_keeps_when_it_shows() -> None:
     """An item keeps its entity and intervals (#15); malformed days or times are refused."""
     tree = {"id": "t1", "type": "plant", "x": 2, "z": 2, "rotation": 0, "w": 1, "d": 1, "h": 2, "variant": None}

@@ -1760,10 +1760,18 @@ export const OPENING_DEFAULTS = {
 export const DOOR_STYLES = ["interior", "front", "front_glass", "sidelight", "sidelights", "glass", "sliding", "passage"] as const;
 /** "glass_wall": fixed floor-to-ceiling glazing without sashes, slim mullions (an indoor glass wall, #163). */
 export const WINDOW_STYLES = ["standard", "bars", "glass_wall"] as const;
-export type OpeningStyle = (typeof DOOR_STYLES)[number] | (typeof WINDOW_STYLES)[number];
+/** Garage doors: a sectional door rolls up under the ceiling; an up-and-over door tilts up in one piece (#24). */
+export const GARAGE_STYLES = ["sectional", "up_and_over"] as const;
+export type OpeningStyle = (typeof DOOR_STYLES)[number] | (typeof WINDOW_STYLES)[number] | (typeof GARAGE_STYLES)[number];
+
+/** The styles an opening of this type can have. */
+export function openingStyles(type: OpeningType): readonly OpeningStyle[] {
+  return type === "door" ? DOOR_STYLES : type === "garage" ? GARAGE_STYLES : WINDOW_STYLES;
+}
 
 /** The style an opening is drawn with: its own, or the automatic one for its wall. */
 export function openingStyle(o: Pick<Opening, "type" | "style">, exterior: boolean): OpeningStyle {
+  if (o.type === "garage") return o.style && (GARAGE_STYLES as readonly string[]).includes(o.style) ? o.style : "sectional";
   if (o.type === "door") return o.style && (DOOR_STYLES as readonly string[]).includes(o.style) ? o.style : exterior ? "front" : "interior";
   return o.style && (WINDOW_STYLES as readonly string[]).includes(o.style) ? o.style : "standard";
 }

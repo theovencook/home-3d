@@ -123,6 +123,8 @@ ROOM_SCHEMA = vol.Schema(
 COLOUR_ROLES = ["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent"]
 _OPENING_STYLES = ["interior", "front", "front_glass", "sidelight", "sidelights", "glass", "sliding", "passage"]
 _OPENING_STYLES += ["standard", "bars", "glass_wall"]
+# garage doors: sectional (the default) or up-and-over (#24)
+_OPENING_STYLES += ["sectional", "up_and_over"]
 
 OPENING_SCHEMA = vol.Schema(
     {
