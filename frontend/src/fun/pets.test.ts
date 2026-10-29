@@ -207,3 +207,110 @@ test("a pet set to other eyes or another coat in settings is redrawn with them",
   assert.ok([...cs].some((c) => hue(c) > 195 && hue(c) < 240 && hsl(c).s < 0.3 && hsl(c).l > 0.4 && hsl(c).l < 0.7), "blue-grey coat");
   assert.ok([...cs].some((c) => hsl(c).s > 0.35 && hue(c) >= 80 && hue(c) <= 160), "green eyes");
 });
+
+// Pet homes from the core library (#23): roaming pets rest in the cat beds and trees and visit the bowls
+
+const core = (item: string, x: number, z: number, w: number, d: number, h: number, rotation = 0): Furniture => ({ id: item, type: `pack:theovencook.core:${item}`, x, z, w, d, h, rotation }) as Furniture;
+
+/** One room (6 × 5 m) holding just these items, by day or by night; `lift` raises an item (a shelf on the wall). */
+function homeWith(items: Furniture[], night: boolean, lift: Record<string, number> = {}): { group: THREE.Group; run: PetsController } {
+  const floor = { ...newFloor("f", "Ground", 0), rooms: [rect("r", 0, 0, 6, 5)], furniture: items };
+  const b = { ...emptyBuilding(), floors: [floor] };
+  const group = new THREE.Group();
+  const viewer = { floorMap: new Map([["f", { group, floor }]]), invalidate() {}, animate() {}, low: false, resting: false };
+  const run = startPets({ lib, FloorMap, viewer, building: b, pets: [cat], night: () => night, base: (_, f) => lift[f.id] ?? 0 });
+  return { group, run };
+}
+
+/**
+ * Runs some seconds of the pets' life on a clock of its own, 0.1 s a frame: a fixed random sequence, and the timers
+ * they wait on while all of them rest run on that clock too. Calls `each` after every frame.
+ */
+function playSeeded(seconds: number, each?: (t: number) => void): void {
+  const random = Math.random;
+  const setT = globalThis.setTimeout;
+  const now = Object.getOwnPropertyDescriptor(performance, "now");
+  let seed = 11;
+  let clock = 1000;
+  const timers: { due: number; cb: () => void }[] = [];
+  Math.random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  g.setTimeout = (cb: () => void, ms = 0) => timers.push({ due: clock + ms, cb });
+  Object.defineProperty(performance, "now", { value: () => clock, configurable: true, writable: true });
+  try {
+    for (let t = 0; t <= seconds * 1000; t += 100) {
+      clock = 1000 + t;
+      for (const x of timers.filter((x) => x.due <= clock)) {
+        timers.splice(timers.indexOf(x), 1);
+        x.cb();
+      }
+      const due = frames;
+      frames = [];
+      for (const f of due) f(clock);
+      each?.(t / 1000);
+    }
+  } finally {
+    Math.random = random;
+    g.setTimeout = setT;
+    if (now) Object.defineProperty(performance, "now", now);
+    else delete (performance as unknown as Record<string, unknown>).now;
+  }
+}
+
+const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= tol;
+
+for (const [item, w, d, h] of [
+  ["cat_bed_donut", 0.5, 0.5, 0.18],
+  ["cat_bed_donut_large", 0.7, 0.7, 0.2],
+] as const) {
+  test(`at night a roaming cat sleeps in the ${item.replace(/_/g, " ")}`, () => {
+    const { group, run } = homeWith([core(item, 4, 3, w, d, h)], true);
+    running = run;
+    playSeeded(60);
+    const p = group.children[0].position;
+    assert.ok(near(p.x, 4, 0.02) && near(p.z, 3, 0.02), `in the bed: ${p.x}, ${p.z}`);
+    assert.ok(p.y > 0 && p.y < h, `down in it: ${p.y}`);
+  });
+}
+
+for (const [item, h] of [
+  ["cat_tree_small", 0.9],
+  ["cat_tree", 1.4],
+  ["cat_tree_tall", 1.8],
+] as const) {
+  test(`at night a roaming cat jumps up and sleeps on top of the ${item.replace(/_/g, " ")}`, () => {
+    const { group, run } = homeWith([core(item, 3, 1, 0.6, 0.5, h)], true);
+    running = run;
+    playSeeded(60);
+    const p = group.children[0].position;
+    assert.ok(near(p.x, 3, 0.02) && near(p.z, 1, 0.02), `on the tree: ${p.x}, ${p.z}`);
+    assert.ok(near(p.y, h - 0.05, 0.03), `on its top: ${p.y}`);
+  });
+}
+
+test("at night a roaming cat sleeps in the cat bed on a shelf on the wall", () => {
+  const { group, run } = homeWith([core("cat_shelf_bed", 3, 0.2, 0.45, 0.4, 0.18)], true, { cat_shelf_bed: 1.2 });
+  running = run;
+  playSeeded(60);
+  const p = group.children[0].position;
+  assert.ok(near(p.x, 3, 0.02) && near(p.z, 0.2, 0.02), `on the shelf: ${p.x}, ${p.z}`);
+  assert.ok(p.y > 1.2 && p.y < 1.2 + 0.18, `in its bed: ${p.y}`);
+});
+
+test("by day a roaming cat visits the food and water bowls: it stands at them a while, facing them", () => {
+  const { group, run } = homeWith([core("pet_bowls", 3, 0.3, 0.4, 0.2, 0.06)], false);
+  running = run;
+  const front = [3, 0.3 + 0.1 + 0.25];
+  let still = 0;
+  let longest = 0;
+  let last = "";
+  playSeeded(600, () => {
+    const p = group.children[0].position;
+    const here = `${p.x.toFixed(3)},${p.z.toFixed(3)}`;
+    // facing the bowls (towards -z)
+    const at = Math.hypot(p.x - front[0], p.z - front[1]) < 0.05 && Math.cos(group.children[0].rotation.y) < -0.95;
+    still = at && here === last ? still + 0.1 : 0;
+    longest = Math.max(longest, still);
+    last = here;
+  });
+  assert.ok(longest >= 3, `stood at the bowls for ${longest.toFixed(1)} s`);
+});
