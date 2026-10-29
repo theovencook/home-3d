@@ -881,7 +881,6 @@
  "car_no_controls": "Aucune entité commutable trouvée sur la voiture (serrure, clim, interrupteur de charge).",
  "holo_media_playing": "en lecture",
  "holo_media_paused": "pause",
- "pack_licensed": "Licence pour {name}",
  "pack_remove": "Retirer",
  "pack_remove_confirm": "Retirer le pack « {name} » ? Ses meubles restent dans le plan comme simples boîtes.",
  "pack_missing_item": "Meuble d'un pack retiré",

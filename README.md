@@ -51,8 +51,10 @@ background picture by URL).
 
 ## Furniture packs
 
-Packs are plain JSON files (format `fp3dpack`, see [docs/packs.md](docs/packs.md)). They are not signed; Home Assistant
-checks their content on import. `python tools/fp3dpack.py validate <file>` checks a pack before you import it.
+A pack is a folder of plain JSON: a `pack.json` that names the pack and its licence, and one file per item (see
+[docs/packs.md](docs/packs.md)). Packs are data only, with no code, pictures or links, and Home Assistant checks every
+file on import. Import one under **Extensions** → **Import a pack folder …**. Old single-file packs still import.
+`python tools/fp3dpack.py validate <folder>` checks a pack before you import or publish it.
 
 ## Development
 

@@ -881,7 +881,6 @@
  "car_no_controls": "在汽车上未找到可切换的实体（门锁、空调、充电开关）。",
  "holo_media_playing": "播放中",
  "holo_media_paused": "已暂停",
- "pack_licensed": "授权给 {name}",
  "pack_remove": "移除",
  "pack_remove_confirm": "移除包“{name}”？其家具会以普通方块形式保留在平面图中。",
  "pack_missing_item": "已移除包中的家具",

@@ -338,17 +338,43 @@ def test_door_keeps_its_opening_angle() -> None:
 def test_item_keeps_when_it_shows() -> None:
     """An item keeps its entity and intervals (#15); malformed days or times are refused."""
     tree = {"id": "t1", "type": "plant", "x": 2, "z": 2, "rotation": 0, "w": 1, "d": 1, "h": 2, "variant": None}
-    rule = {"entity": "switch.tree", "intervals": [{"from": "12-01", "to": "01-06"}, {"start": "18:00", "end": "23:30"}]}
+    rule = {
+        "entity": "switch.tree",
+        "intervals": [{"from": "12-01", "to": "01-06"}, {"start": "18:00", "end": "23:30"}],
+    }
     out = FURNITURE_SCHEMA({**tree, "show_when": rule})["show_when"]
     assert out["entity"] == "switch.tree"
     assert out["intervals"][0]["from"] == "12-01"
     assert out["intervals"][1]["end"] == "23:30"
     assert FURNITURE_SCHEMA({**tree, "show_when": None})["show_when"] is None
-    for bad in ({"from": "13-01", "to": "12-31"}, {"from": "12-32", "to": "12-31"}, {"start": "24:00", "end": "06:00"}, {"start": "7:00"}):
+    for bad in (
+        {"from": "13-01", "to": "12-31"},
+        {"from": "12-32", "to": "12-31"},
+        {"start": "24:00", "end": "06:00"},
+        {"start": "7:00"},
+    ):
         with pytest.raises(vol.Invalid):
             FURNITURE_SCHEMA({**tree, "show_when": {"intervals": [bad]}})
     with pytest.raises(vol.Invalid):
         FURNITURE_SCHEMA({**tree, "show_when": {"intervals": [{"from": "01-01", "to": "01-02"}] * 25}})
+
+
+def test_pets_roam_unless_set_static() -> None:
+    """Static pets (#17): a pet roams unless switched to static; a static one keeps its spot, turn and pose."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    roaming = SETTINGS_SCHEMA({**base, "pets": {"list": [{"id": "p1", "kind": "cat"}]}})["pets"]["list"][0]
+    assert roaming["static"] is False
+    assert roaming["pose"] is None
+    assert roaming["x"] is None and roaming["z"] is None and roaming["rotation"] is None
+    pet = {"id": "p2", "kind": "dog", "static": True, "pose": "curl", "x": 2.5, "z": -1, "rotation": 90}
+    still = SETTINGS_SCHEMA({**base, "pets": {"list": [pet]}})["pets"]["list"][0]
+    assert still["static"] is True
+    assert still["pose"] == "curl"
+    assert (still["x"], still["z"], still["rotation"]) == (2.5, -1.0, 90.0)
+    for pose in ("sit", "lie", "curl"):
+        SETTINGS_SCHEMA({**base, "pets": {"list": [{**pet, "pose": pose}]}})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "pets": {"list": [{**pet, "pose": "fly"}]}})
 
 
 def test_item_actions() -> None:
@@ -358,13 +384,24 @@ def test_item_actions() -> None:
     dev = {"entity_id": "switch.gate", "x": 0, "z": 0, "y": None}
     assert "actions" not in PLACEMENT_SCHEMA(dev)
     actions = {
-        "tap": {"action": "perform_action", "target": "rest_command.gate", "data": {"seconds": 5}, "confirm": True, "confirm_text": "Open the gate?"},
+        "tap": {
+            "action": "perform_action",
+            "target": "rest_command.gate",
+            "data": {"seconds": 5},
+            "confirm": True,
+            "confirm_text": "Open the gate?",
+        },
         "hold": {"action": "more_info"},
         "double_tap": None,
     }
     assert PLACEMENT_SCHEMA({**dev, "actions": actions})["actions"]["tap"]["data"] == {"seconds": 5}
     sofa = {"id": "f1", "type": "sofa", "x": 0, "z": 0, "rotation": 0, "w": 2, "d": 1, "h": 0.8, "variant": None}
-    assert FURNITURE_SCHEMA({**sofa, "actions": {"tap": {"action": "navigate", "target": "/lovelace/0"}}})["actions"]["tap"]["target"] == "/lovelace/0"
+    assert (
+        FURNITURE_SCHEMA({**sofa, "actions": {"tap": {"action": "navigate", "target": "/lovelace/0"}}})["actions"][
+            "tap"
+        ]["target"]
+        == "/lovelace/0"
+    )
     with pytest.raises(vol.Invalid):
         PLACEMENT_SCHEMA({**dev, "actions": {"tap": {"action": "javascript"}}})
     with pytest.raises(vol.Invalid):

@@ -1,8 +1,11 @@
-"""Furniture packs: JSON files with furniture models built from boxes and cylinders.
+"""Furniture packs: data-only JSON, furniture models built from boxes, cylinders and lofts.
 
-A pack file is JSON: {"payload": {format, version, id, name, publisher, items, ...}} (an optional "signature"
-next to the payload, as older pack files carry, is ignored), or the payload itself. Packs are not signed:
-an admin imports them, and the content is checked against the schema below.
+A pack (format v2, see docs/packs.md) is a folder: a pack.json naming the pack, its publisher and its licence, and
+one JSON file per item, in subfolders if wanted. The pack id is "publisher.pack", an item's full id
+"publisher.pack/item_id". verify_folder() checks every file against the schemas below, within limits (item count,
+parts per item, file size), and refuses anything else: packs carry no code, pictures or links.
+
+Old single-file packs (format "fp3dpack", version 1) still import through verify_pack().
 
 This module only depends on voluptuous, so tools/fp3dpack.py (which checks packs) uses the same schema.
 """
@@ -10,14 +13,10 @@ This module only depends on voluptuous, so tools/fp3dpack.py (which checks packs
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import voluptuous as vol
-
-PACK_FORMAT = "fp3dpack"
-PACK_VERSION = 1
-# largest pack file accepted (characters of JSON)
-MAX_PACK_SIZE = 1_000_000
 
 _ID = vol.All(str, vol.Match(r"^[a-z0-9][a-z0-9_.-]{0,39}$"))
 _TEXT = vol.All(str, vol.Length(min=1, max=80))
@@ -127,7 +126,169 @@ ITEM_SCHEMA = vol.Schema(
     }
 )
 
-# feature names a pack may list (kept for pack compatibility; every feature whose code is here is on anyway)
+
+class PackError(Exception):
+    """A pack that cannot be imported; `code` says why, `detail` names the file and the fault."""
+
+    def __init__(self, code: str, detail: str = "") -> None:
+        """Keep the reason."""
+        super().__init__(f"{code}: {detail}" if detail else code)
+        self.code = code
+        self.detail = detail
+
+
+def _unknown_value(err: vol.Invalid) -> bool:
+    """Whether a value outside a known list failed: voluptuous says so in its message; Probatio, which checks
+    schemas since Home Assistant 2026.9, gives it the code "not_in_list" (pointed out by hohoanganh)."""
+    found = getattr(err, "errors", None) or [err]
+    return any(getattr(e, "code", None) == "not_in_list" or "value must be one of" in str(e) for e in found)
+
+
+def _check(schema: vol.Schema, path: str, data: Any) -> dict[str, Any]:
+    """Data against a schema; raises PackError naming the file (a value this version does not know yet, as a
+    newer pack may use, asks for an update)."""
+    try:
+        return schema(data)
+    except vol.Invalid as err:
+        code = "needs_update" if _unknown_value(err) else "invalid_content"
+        raise PackError(code, f"{path}: {err}" if path else str(err)) from err
+
+
+# ---------------------------------------------------------------------------- pack format v2: a folder
+
+PACK_FORMAT_V2 = "home3d-pack"
+PACK_VERSION_V2 = 2
+PACK_FILE = "pack.json"
+# limits of a pack folder: items, characters per file and in all (one websocket message carries the folder)
+MAX_ITEMS = 500
+MAX_FILE_SIZE = 50_000
+MAX_FOLDER_SIZE = 3_000_000
+# an item file: lower-case names, at most three folders deep ("seating/chairs/stool.json")
+_ITEM_PATH = re.compile(r"^(?:[a-z0-9][a-z0-9_-]{0,39}/){0,3}[a-z0-9][a-z0-9_.-]{0,39}\.json$")
+# a readme and the licence text may come along; they are not read
+_DOC_PATH = re.compile(r"^(?:README|LICEN[CS]E|COPYING|CHANGELOG)(?:\.(?:md|txt))?$", re.IGNORECASE)
+# packs are data only: no links in any text
+_LINK = re.compile(r"\b(?:https?|ftp|file|data|javascript|mailto):|\bwww\.", re.IGNORECASE)
+
+# a pack id is "publisher.pack"; an item's full id is "publisher.pack/item_id"
+_PACK_ID = vol.All(str, vol.Match(r"^[a-z0-9][a-z0-9_-]{0,29}\.[a-z0-9][a-z0-9_-]{0,29}$"))
+
+PACK_SCHEMA_V2 = vol.Schema(
+    {
+        vol.Required("format"): PACK_FORMAT_V2,
+        vol.Required("version"): PACK_VERSION_V2,
+        vol.Required("id"): _PACK_ID,
+        vol.Required("name"): _TEXT,
+        vol.Required("publisher"): _TEXT,
+        # an SPDX licence id ("MIT", "CC-BY-4.0", …); "license" is read as "licence"
+        vol.Required("licence"): vol.All(str, vol.Match(r"^[A-Za-z0-9][A-Za-z0-9.+-]{1,39}$")),
+        # release number of the pack (a newer release of the same id replaces an installed one)
+        vol.Optional("release", default=1): vol.All(int, vol.Range(min=1, max=100000)),
+        vol.Optional("description", default=""): vol.All(str, vol.Length(max=400)),
+    }
+)
+
+
+def item_ref(pack: dict[str, Any], item: dict[str, Any]) -> str:
+    """The full id of a pack item: "publisher.pack/item_id"."""
+    return f"{pack['id']}/{item['id']}"
+
+
+def _parse(path: str, text: str) -> Any:
+    """One file of a pack folder as JSON; raises PackError naming the file."""
+    try:
+        return json.loads(text)
+    except ValueError as err:
+        raise PackError("invalid_content", f"{path}: not JSON") from err
+
+
+def _link_in(data: Any) -> str | None:
+    """The first text with a link in parsed JSON, or None."""
+    if isinstance(data, str):
+        return data if _LINK.search(data) else None
+    values = data.values() if isinstance(data, dict) else data if isinstance(data, list) else []
+    for value in values:
+        if (found := _link_in(value)) is not None:
+            return found
+    return None
+
+
+def _no_links(path: str, data: Any) -> Any:
+    if (found := _link_in(data)) is not None:
+        raise PackError("not_data", f"{path}: links are not allowed ({found[:60]})")
+    return data
+
+
+def _pack_file(text: str) -> dict[str, Any]:
+    """The checked pack.json of a folder."""
+    pack = _no_links(PACK_FILE, _parse(PACK_FILE, text))
+    if not isinstance(pack, dict) or pack.get("format") != PACK_FORMAT_V2:
+        raise PackError("not_a_pack", f'{PACK_FILE}: "format" must be "{PACK_FORMAT_V2}"')
+    if "licence" not in pack and "license" in pack:
+        pack = {**pack, "licence": pack["license"]}
+        del pack["license"]
+    if not pack.get("licence"):
+        raise PackError("no_licence", f'{PACK_FILE} must name the licence of the pack, e.g. "licence": "MIT"')
+    return _check(PACK_SCHEMA_V2, PACK_FILE, pack)
+
+
+def _item_file(path: str, text: str) -> dict[str, Any]:
+    """One checked item file; its name is the item's id ("seating/stool.json" holds "stool")."""
+    item = _check(ITEM_SCHEMA, path, _no_links(path, _parse(path, text)))
+    stem = path.rsplit("/", 1)[-1].removesuffix(".json")
+    if item["id"] != stem:
+        raise PackError("invalid_content", f'{path}: the item id "{item["id"]}" must match the file name')
+    return item
+
+
+def _data_files(files: dict[str, str]) -> dict[str, str]:
+    """The pack.json and item files of a folder, after the checks on names, count and size; raises PackError."""
+    if PACK_FILE not in files:
+        raise PackError("not_a_pack", f"no {PACK_FILE}")
+    kept: dict[str, str] = {}
+    for path, text in files.items():
+        if _DOC_PATH.match(path):
+            continue
+        if path != PACK_FILE and not _ITEM_PATH.match(path):
+            raise PackError("not_data", f"{path}: a pack holds only {PACK_FILE} and item .json files")
+        kept[path] = text
+    if len(kept) - 1 > MAX_ITEMS:
+        raise PackError("too_many_items", f"{len(kept) - 1} items, at most {MAX_ITEMS}")
+    for path, text in kept.items():
+        if len(text) > MAX_FILE_SIZE:
+            raise PackError("too_large", f"{path}: {len(text)} characters, at most {MAX_FILE_SIZE}")
+    total = sum(len(text) for text in kept.values())
+    if total > MAX_FOLDER_SIZE:
+        raise PackError("too_large", f"the pack: {total} characters, at most {MAX_FOLDER_SIZE}")
+    return kept
+
+
+def verify_folder(files: dict[str, str]) -> dict[str, Any]:
+    """Check a pack folder (relative path -> file text) and return the pack with its items; raises PackError.
+
+    The result has the same shape as an old single-file pack (see verify_pack), so everything after the import
+    treats both alike."""
+    files = _data_files(files)
+    pack = _pack_file(files[PACK_FILE])
+    items = [_item_file(path, text) for path, text in sorted(files.items()) if path != PACK_FILE]
+    if not items:
+        raise PackError("invalid_content", "a pack needs at least one item file")
+    seen: set[str] = set()
+    for item in items:
+        if item["id"] in seen:
+            raise PackError("invalid_content", f'the item id "{item["id"]}" is used twice')
+        seen.add(item["id"])
+    return {**pack, "features": [], "items": items}
+
+
+# ---------------------------------------------------------------------------- old single-file packs (v1)
+
+PACK_FORMAT = "fp3dpack"
+PACK_VERSION = 1
+# largest single pack file accepted (characters of JSON)
+MAX_PACK_SIZE = 1_000_000
+
+# feature names an old pack may list (kept for pack compatibility; every feature whose code is here is on anyway)
 KNOWN_FEATURES = [
     "camera_cockpit",
     "weather",
@@ -144,6 +305,8 @@ KNOWN_FEATURES = [
     "fun_halloween",
 ]
 
+# An old pack's payload. Top-level keys this version does not read (the fields of the old signed shop packs) are
+# dropped; the items are checked as strictly as in a v2 pack.
 PAYLOAD_SCHEMA = vol.Schema(
     {
         vol.Required("format"): PACK_FORMAT,
@@ -151,94 +314,80 @@ PAYLOAD_SCHEMA = vol.Schema(
         vol.Required("id"): _ID,
         vol.Required("name"): _TEXT,
         vol.Required("publisher"): _TEXT,
-        # older pack files may name a licensee: accepted for compatibility, shown on import
-        vol.Optional("licensee", default=None): vol.Any(None, _TEXT),
-        # release number of the pack (a newer release of the same id replaces an installed one)
         vol.Optional("release", default=1): vol.All(int, vol.Range(min=1, max=100000)),
-        # older pack files may carry an installation binding: accepted for compatibility and ignored
-        vol.Optional("instance", default=None): vol.Any(None, vol.Match(r"^[0-9a-f]{16}$")),
         vol.Optional("description", default=""): vol.All(str, vol.Length(max=400)),
         # feature names (compatibility only: they unlock nothing that is not already on)
-        vol.Optional("features", default=[]): vol.All(
-            [vol.In(KNOWN_FEATURES)],
-            vol.Length(max=10),
-        ),
+        vol.Optional("features", default=[]): vol.All([vol.In(KNOWN_FEATURES)], vol.Length(max=10)),
         vol.Required("items"): vol.All([ITEM_SCHEMA], vol.Length(min=0, max=200)),
-    }
+    },
+    extra=vol.REMOVE_EXTRA,
 )
 
 
-class PackError(Exception):
-    """A pack that cannot be imported; `code` says why."""
-
-    def __init__(self, code: str, detail: str = "") -> None:
-        """Keep the reason."""
-        super().__init__(f"{code}: {detail}" if detail else code)
-        self.code = code
-        self.detail = detail
-
-
-def canonical(payload: dict[str, Any]) -> bytes:
-    """A pack payload in a stable form (sorted keys, no whitespace, UTF-8)."""
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-
-
 def _payload_of(data: Any) -> dict[str, Any] | None:
-    """The payload of a parsed pack file: {"payload": {...}} (optionally with an ignored "signature") or the
-    payload itself; None when it is not a pack."""
+    """The payload of a parsed old pack file: {"payload": {...}} (anything next to it is ignored) or the payload
+    itself; None when it is not an old pack."""
     if not isinstance(data, dict):
         return None
-    payload = data.get("payload") if isinstance(data.get("payload"), dict) else data
+    payload = data["payload"] if isinstance(data.get("payload"), dict) else data
     return payload if payload.get("format") == PACK_FORMAT else None
 
 
-def parts_of(text: str) -> dict[str, Any]:
-    """The payload of a pack file that verify_pack accepted, exactly as in the file; it is kept with the pack so a
-    backup can carry it and a restore can check it again."""
-    payload = _payload_of(json.loads(text))
-    assert payload is not None
-    return payload
-
-
-def _unknown_value(err: vol.Invalid) -> bool:
-    """Whether a value outside a known list failed: voluptuous says so in its message; Probatio, which checks
-    schemas since Home Assistant 2026.9, gives it the code "not_in_list" (pointed out by hohoanganh)."""
-    found = getattr(err, "errors", None) or [err]
-    return any(getattr(e, "code", None) == "not_in_list" or "value must be one of" in str(e) for e in found)
-
-
 def validate_payload(payload: Any) -> dict[str, Any]:
-    """Check the content of a pack; raises PackError."""
+    """Check the content of an old single-file pack; raises PackError."""
     features = payload.get("features") if isinstance(payload, dict) else None
     if isinstance(features, list):
         unknown = [f for f in features if isinstance(f, str) and f not in KNOWN_FEATURES]
         if unknown:
             # a Pro add-on newer than this installation (#218): ask for an update, not a cryptic error
             raise PackError("needs_update", ", ".join(unknown))
-    try:
-        clean = PAYLOAD_SCHEMA(payload)
-    except vol.Invalid as err:
-        # a value this version does not know yet (a new item kind of a newer pack release)
-        if _unknown_value(err):
-            raise PackError("needs_update", str(err)) from err
-        raise PackError("invalid_content", str(err)) from err
+    clean = _check(PAYLOAD_SCHEMA, "", payload)
     ids = [item["id"] for item in clean["items"]]
     if len(ids) != len(set(ids)):
         raise PackError("invalid_content", "item ids must be unique")
     if not ids and not clean["features"]:
         raise PackError("invalid_content", "a pack needs items or features")
-    return clean
+    # an old pack declares no licence
+    return {**clean, "licence": None}
 
 
 def verify_pack(text: str) -> dict[str, Any]:
-    """Parse a pack file and return its checked payload; raises PackError."""
+    """Parse an old single-file pack and return its checked payload; raises PackError."""
     if len(text) > MAX_PACK_SIZE:
-        raise PackError("too_large")
+        raise PackError("too_large", f"{len(text)} characters, at most {MAX_PACK_SIZE}")
     try:
         data = json.loads(text)
     except ValueError as err:
         raise PackError("not_a_pack", "not JSON") from err
     payload = _payload_of(data)
     if payload is None:
-        raise PackError("not_a_pack")
+        if isinstance(data, dict) and data.get("format") == PACK_FORMAT_V2:
+            raise PackError("not_a_pack", f"this is the {PACK_FILE} of a pack folder: import the whole folder")
+        raise PackError("not_a_pack", f'neither a pack folder nor an old pack file (format "{PACK_FORMAT}")')
     return validate_payload(payload)
+
+
+def parts_of(text: str) -> dict[str, Any]:
+    """The source kept with an old pack that verify_pack accepted: its payload with only the fields this version
+    reads, so a backup can carry the pack and a restore can check it again."""
+    payload = _payload_of(json.loads(text))
+    assert payload is not None
+    return {key: value for key, value in payload.items() if key in {str(k) for k in PAYLOAD_SCHEMA.schema}}
+
+
+# ---------------------------------------------------------------------------- the kept source of a pack
+
+
+def source_of_folder(files: dict[str, str]) -> dict[str, Any]:
+    """The source kept with a v2 pack: its data files as they were imported."""
+    return {"files": _data_files(files)}
+
+
+def verify_source(source: Any) -> dict[str, Any]:
+    """Check the kept source of an imported pack again (a backup being restored); raises PackError."""
+    if isinstance(source, dict) and isinstance(source.get("files"), dict):
+        files = source["files"]
+        if not all(isinstance(k, str) and isinstance(v, str) for k, v in files.items()):
+            raise PackError("invalid_content", "the files of a pack are texts")
+        return verify_folder(files)
+    return validate_payload(source)

@@ -2,10 +2,12 @@
 // It lives in the editor bundle (loaded with it) and is shown to admins only.
 
 import { css, html, LitElement, nothing } from "lit";
-import { importPack, removePack } from "../api.ts";
+import { importPack, importPackFolder, removePack } from "../api.ts";
 import { FEATURES, FUN, knownFeature, released, unlockedFeatures } from "../features.ts";
-import { DOG_BREEDS, PET_FURS_OF, type Building, type Pet } from "../model.ts";
+import { DOG_BREEDS, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
+import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
 import { translate, type I18nKey } from "../i18n.ts";
+import { planPackFolders } from "../pack-folder.ts";
 import { packName, type FurniturePack } from "../packs.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -173,6 +175,35 @@ export class Extensions extends LitElement {
                               ${floors.map((fl, i) => html`<option value=${i === 0 ? "" : fl.id} ?selected=${(pet.floor_id ?? floors[0].id) === fl.id}>🏠 ${fl.name}</option>`)}
                             </select>`
                           : nothing}
+                        <select
+                          title=${this.t("pet_mode")}
+                          aria-label=${this.t("pet_mode")}
+                          @change=${(e: Event) => {
+                            const still = (e.target as HTMLSelectElement).value === "static";
+                            const b = this.building!;
+                            set((p) => (p.list = p.list.map((x) => (x.id === pet.id ? setPetStatic(x, still, petFloor(b, x)) : x))));
+                          }}
+                        >
+                          <option value="roaming" ?selected=${!isStaticPet(pet)}>${this.t("pet_roaming")}</option>
+                          <option value="static" ?selected=${isStaticPet(pet)}>${this.t("pet_static")}</option>
+                        </select>
+                        ${isStaticPet(pet)
+                          ? html`<select title=${this.t("pet_pose")} aria-label=${this.t("pet_pose")} @change=${(e: Event) => change(pet.id, { pose: (e.target as HTMLSelectElement).value as Pet["pose"] })}>
+                                ${PET_POSES.map((k) => html`<option value=${k} ?selected=${(pet.pose ?? "sit") === k}>${this.t(`pet_pose_${k}`)}</option>`)}
+                              </select>
+                              <select
+                                title=${this.t("pet_turn")}
+                                aria-label=${this.t("pet_turn")}
+                                @change=${(e: Event) => {
+                                  const v = (e.target as HTMLSelectElement).value;
+                                  change(pet.id, { rotation: v === "" ? null : Number(v) });
+                                }}
+                              >
+                                <option value="" ?selected=${pet.rotation == null}>${this.t("pet_turn_auto")}</option>
+                                ${[0, 45, 90, 135, 180, 225, 270, 315].map((d) => html`<option value=${d} ?selected=${pet.rotation === d}>${d}°</option>`)}
+                              </select>
+                              <span class="fp3d-sub">${this.t("pet_static_hint")}</span>`
+                          : nothing}
                         <button class="fp3d-btn" title=${this.t("delete")} @click=${() => set((p) => (p.list = p.list.filter((x) => x.id !== pet.id)))}>✕</button>
                       </div>`,
                     )}
@@ -219,7 +250,7 @@ export class Extensions extends LitElement {
           <div>
             <b>${packName(p, this.hass?.language ?? "de")}</b>
             <span class="fp3d-sub">${p.features?.length ? this.t("pack_features", { publisher: p.publisher, n: p.features.length }) : this.t("pack_by", { publisher: p.publisher, n: p.items.length })}</span>
-            ${p.licensee ? html`<span class="fp3d-sub">${this.t("pack_licensed", { name: p.licensee })}${p.release && p.release > 1 ? ` · v${p.release}` : ""}</span>` : nothing}
+            ${p.licence || (p.release && p.release > 1) ? html`<span class="fp3d-sub">${[p.licence ? this.t("pack_licence", { licence: p.licence }) : "", p.release && p.release > 1 ? `v${p.release}` : ""].filter(Boolean).join(" · ")}</span>` : nothing}
             ${(p.features ?? []).some((f) => !knownFeature(f)) ? html`<span class="fp3d-sub fp3d-pack-error">${this.t("pack_needs_update")}</span>` : nothing}
           </div>
           <button class="fp3d-btn fp3d-danger" @click=${() => this.deletePack(p)}>${this.t("pack_remove")}</button>
@@ -229,6 +260,10 @@ export class Extensions extends LitElement {
       <label class="fp3d-btn fp3d-primary fp3d-pack-import">
         ${this.t("pack_import")}
         <input type="file" accept=".fp3dpack,.json,application/json" multiple hidden @change=${(e: Event) => this.importPackFile(e)} />
+      </label>
+      <label class="fp3d-btn fp3d-pack-import">
+        ${this.t("pack_import_folder")}
+        <input type="file" webkitdirectory multiple hidden @change=${(e: Event) => this.importPackFolder(e)} />
       </label>
       ${this._packMsg ? html`<p class="fp3d-sub ${this._packMsg.ok ? "fp3d-notice" : "fp3d-pack-error"}">${this._packMsg.text}</p>` : nothing}
       <p class="fp3d-sub">${this.t("packs_hint")}</p>
@@ -248,15 +283,54 @@ export class Extensions extends LitElement {
         const res = await importPack(this.hass, await file.text());
         done.push(this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }));
       } catch (err) {
-        const { code, message } = (err ?? {}) as { code?: string; message?: string };
-        const key = `pack_error_${code}` as I18nKey;
-        const text = this.t(key, { detail: message ?? String(err) });
-        failed.push(`${file.name}: ${text === key ? this.t("pack_error_other", { detail: message ?? String(err) }) : text}`);
+        failed.push(`${file.name}: ${this.packError(err)}`);
       }
     }
     if (done.length) this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
     const summary = files.length > 1 ? [this.t("packs_imported_n", { n: done.length, total: files.length })] : [];
     this._packMsg = { ok: failed.length === 0, text: [...summary, ...done, ...failed].join(" · ") };
+  }
+
+  /** Imports the packs in a picked folder: the folder itself, or a repository with a folder per pack. */
+  private async importPackFolder(e: Event): Promise<void> {
+    const input = e.target as HTMLInputElement;
+    const picked = [...(input.files ?? [])];
+    input.value = "";
+    if (!picked.length || !this.hass) return;
+    const byPath = new Map(picked.map((f) => [f.webkitRelativePath || f.name, f]));
+    const plans = planPackFolders([...byPath.keys()]);
+    if (!plans.length) {
+      this._packMsg = { ok: false, text: this.t("pack_error_no_pack") };
+      return;
+    }
+    const done: string[] = [];
+    const failed: string[] = [];
+    for (const plan of plans) {
+      const label = plan.root || picked[0].webkitRelativePath.split("/")[0] || "pack";
+      if (plan.refused.length) {
+        failed.push(`${label}: ${this.t("pack_error_not_data", { detail: plan.refused.join(", ") })}`);
+        continue;
+      }
+      try {
+        const files: Record<string, string> = {};
+        for (const [rel, path] of plan.files) files[rel] = await byPath.get(path)!.text();
+        const res = await importPackFolder(this.hass, files);
+        done.push(this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }));
+      } catch (err) {
+        failed.push(`${label}: ${this.packError(err)}`);
+      }
+    }
+    if (done.length) this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
+    const summary = plans.length > 1 ? [this.t("packs_imported_n", { n: done.length, total: plans.length })] : [];
+    this._packMsg = { ok: failed.length === 0, text: [...summary, ...done, ...failed].join(" · ") };
+  }
+
+  /** A refused import in words: the backend's code picks the text, its message names the file and the fault. */
+  private packError(err: unknown): string {
+    const { code, message } = (err ?? {}) as { code?: string; message?: string };
+    const key = `pack_error_${code}` as I18nKey;
+    const text = this.t(key, { detail: message ?? String(err) });
+    return text === key ? this.t("pack_error_other", { detail: message ?? String(err) }) : text;
   }
 
   private async deletePack(pack: FurniturePack): Promise<void> {

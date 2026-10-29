@@ -881,7 +881,6 @@
  "car_no_controls": "Não foram encontradas entidades comutáveis no carro (fecho, climatização, interruptor de carregamento).",
  "holo_media_playing": "a reproduzir",
  "holo_media_paused": "em pausa",
- "pack_licensed": "Licenciado para {name}",
  "pack_remove": "Remover",
  "pack_remove_confirm": "Remover o pacote “{name}”? O seu mobiliário fica na planta como caixas simples.",
  "pack_missing_item": "Mobiliário de um pacote removido",

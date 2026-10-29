@@ -881,7 +881,6 @@
  "car_no_controls": "Inga växlingsbara entiteter hittades på bilen (lås, klimat, laddbrytare).",
  "holo_media_playing": "spelar",
  "holo_media_paused": "pausad",
- "pack_licensed": "Licensierat till {name}",
  "pack_remove": "Ta bort",
  "pack_remove_confirm": "Ta bort paketet ”{name}”? Dess möbler blir kvar i planen som enkla lådor.",
  "pack_missing_item": "Möbel från ett borttaget paket",
