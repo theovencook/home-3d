@@ -552,6 +552,28 @@ in the repository's `NOTICE`.
   integrated appliances (RENGÖRA, TVÄTTAD) show the kitchen front they hide behind. KNOXHULT kitchens are whole.
 - The models and their batches are tracked in `docs/ikea-uk-models.md`.
 
+## Publishing the packs
+
+Our packs are published together in one public repository, [`theovencook/home-3d-packs`](https://github.com/theovencook/home-3d-packs),
+with one folder per pack. The bundled folders in this repository stay the source: Home 3D ships them for offline
+use, and the packs repository is a generated copy so other installs can add or update a pack by URL.
+
+1. Check out the packs repository next to this one (`git clone https://github.com/theovencook/home-3d-packs`).
+2. Run `python tools/publish_packs.py path/to/home-3d-packs`. It checks every bundled pack with the same schema and
+   limits as `tools/fp3dpack.py` and refuses to publish anything if one fails. Otherwise it copies each pack folder
+   over its copy in the checkout (files removed from a pack are removed there too) and writes `README.md` (the
+   packs, their install URLs, licence), `NOTICE` (with the IKEA trademark note while the IKEA UK pack is in) and
+   `LICENSE`. Git data and folders of other packs in the checkout are not touched.
+3. Commit and push the checkout. Before pushing, raise `release` in the `pack.json` of every pack that changed (in
+   this repository, then run the script again): the update check compares each pack's own `release`, so a pack
+   whose release did not move shows no update.
+4. Tag a release in the packs repository (`vYYYY.MM.DD`, for example `v2026.10.29`) so a version can be named in a URL:
+   `https://github.com/theovencook/home-3d-packs/tree/v2026.10.29/theovencook.core`.
+
+Each pack installs by its folder URL, for example
+`https://github.com/theovencook/home-3d-packs/tree/main/theovencook.ikea-uk`. The repository URL alone is refused
+with the list of folders to pick from.
+
 ## Your own items
 
 Editors can build items in Home 3D itself: **Extensions** → **Your own items** → **Open the item editor**. The editor
