@@ -3917,6 +3917,7 @@ export class Fp3dView3d extends LitElement {
         pets: this.building?.settings.pets?.on !== false && this.petsOn !== false ? (this.building?.settings.pets?.list ?? []) : [],
         night: () => this.hass?.states["sun.sun"]?.state === "below_horizon",
         base: (floor, f) => mountBase(floor, f),
+        surface: (floor, x, z) => surfaceHeight(floor, x, z),
         closedDoors: () => {
           const out = new Set<string>();
           const states = this.hass?.states ?? {};
