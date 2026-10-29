@@ -530,3 +530,72 @@ async def test_frontend_files_are_served_without_caching(hass: HomeAssistant, ha
     assert loader.status == 200
     assert 'const tag = "home-3d-card";' in await loader.text()
     assert not (Path(hass.config.path("www")) / "home_3d").exists()
+
+
+def _sidebar(register) -> tuple[str | None, str | None]:
+    kwargs = register.await_args.kwargs
+    return kwargs["sidebar_title"], kwargs["sidebar_icon"]
+
+
+async def test_sidebar_entry_is_shown_by_default(hass: HomeAssistant, mock_frontend) -> None:
+    await _setup(hass)
+    assert _sidebar(mock_frontend["register"]) == ("Home 3D", "mdi:floor-plan")
+
+
+async def test_options_flow_sets_show_in_sidebar(hass: HomeAssistant, mock_frontend) -> None:
+    entry = await _setup(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    # the form starts on the current value (on by default)
+    assert result["data_schema"]({})["show_in_sidebar"] is True
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"show_in_sidebar": False})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options == {"show_in_sidebar": False}
+
+
+async def test_panel_registers_without_sidebar_entry_when_option_is_off(hass: HomeAssistant, mock_frontend) -> None:
+    await async_setup_component(hass, "http", {})
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={"show_in_sidebar": False})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    register = mock_frontend["register"]
+    register.assert_awaited_once()
+    # still a registered panel (the URL works), just without a sidebar title and icon
+    assert register.await_args.kwargs["frontend_url_path"] == "home_3d"
+    assert _sidebar(register) == (None, None)
+
+
+async def test_sidebar_entry_toggles_without_a_restart(hass: HomeAssistant, mock_frontend) -> None:
+    entry = await _setup(hass)
+    register, remove_panel = mock_frontend["register"], mock_frontend["remove_panel"]
+    assert register.await_count == 1
+
+    hass.config_entries.async_update_entry(entry, options={"show_in_sidebar": False})
+    await hass.async_block_till_done()
+    # the panel is replaced in place: same URL, no sidebar entry; the entry is not reloaded
+    remove_panel.assert_called_once_with(hass, "home_3d", warn_if_unknown=False)
+    assert register.await_count == 2
+    assert register.await_args.kwargs["frontend_url_path"] == "home_3d"
+    assert _sidebar(register) == (None, None)
+    mock_frontend["add_js"].assert_called_once()
+    mock_frontend["remove_js"].assert_not_called()
+    assert hass.data[DOMAIN] is not None
+
+    hass.config_entries.async_update_entry(entry, options={"show_in_sidebar": True})
+    await hass.async_block_till_done()
+    assert register.await_count == 3
+    assert _sidebar(register) == ("Home 3D", "mdi:floor-plan")
+    mock_frontend["add_js"].assert_called_once()
+
+
+async def test_card_and_static_files_work_with_sidebar_entry_off(
+    hass: HomeAssistant, hass_client, mock_frontend
+) -> None:
+    entry = await _setup(hass)
+    hass.config_entries.async_update_entry(entry, options={"show_in_sidebar": False})
+    await hass.async_block_till_done()
+    client = await hass_client()
+    assert (await client.get("/home_3d_static/home-3d.js?v=1")).status == 200
+    # the dashboard card's resource loader is still served
+    assert (await client.get("/home_3d_static/home-3d-loader.js")).status == 200

@@ -35,6 +35,8 @@ Requires Home Assistant 2025.1 or newer.
 4. Go to *Settings → Devices & services → Add integration → Home 3D*.
 5. Open **Home 3D** in the sidebar, switch to **Editor** and draw your first floor.
 
+To keep Home 3D out of the sidebar for everyone, open the integration's **Configure** and turn off **Show in sidebar**. It takes effect at once; the panel link (`/home_3d`) and the dashboard card keep working. Each user can also hide the entry in Home Assistant's own sidebar settings.
+
 ### Manual
 
 1. Copy `custom_components/home_3d` into your Home Assistant `config/custom_components/` folder.
