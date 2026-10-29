@@ -881,7 +881,6 @@
  "car_no_controls": "Nu s-au găsit entități comutabile la mașină (încuiere, climatizare, comutator de încărcare).",
  "holo_media_playing": "redă",
  "holo_media_paused": "în pauză",
- "pack_licensed": "Licențiat pentru {name}",
  "pack_remove": "Elimină",
  "pack_remove_confirm": "Elimini pachetul „{name}”? Mobilierul lui rămâne în plan ca simple cutii.",
  "pack_missing_item": "Mobilier dintr-un pachet eliminat",
