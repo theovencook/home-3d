@@ -44,6 +44,16 @@ export const FLOOR_LOOK: Record<string, { color: number; tile: [number, number] 
   concrete: { color: 0x111827, tile: [2, 1] },
 };
 
+/** The floor materials in the realistic look (#39): dark wood, light oak, pale tiles, a beige carpet, stone and concrete. */
+export const FLOOR_REAL: Record<string, number> = {
+  wood: 0x8a5a36,
+  oak: 0xc4a274,
+  tiles: 0xcfcfca,
+  carpet: 0xaea593,
+  stone: 0xa9a49c,
+  concrete: 0x9d9d9a,
+};
+
 /** Opening resolved onto its wall, as needed for frames, sashes and blinds. */
 export interface OpeningInfo {
   opening: Opening;

@@ -70,6 +70,8 @@ import { groundUnder, isCooktopZone, mountBase, packItem, packMotion, setPacks, 
 import { withVehicles } from "../parking.ts";
 import { buildRoof, type RoofGeometry, type RoofWindowState } from "./roof.ts";
 import { SunFx } from "./sun-fx.ts";
+import { Realism } from "./realism.ts";
+import { deviceTier, shadowPlan, type ShadowPlan } from "../realistic.ts";
 import { houseShadow, shadowBox } from "./sun-shadow.ts";
 import type { SunPath } from "../sun-path.ts";
 import { GROUND, groundFace, groundFloor, roofFaces, roofWindowRoom, wallFaces } from "../solar.ts";
@@ -748,6 +750,9 @@ export class FloorplanViewer {
   private selectedSet: string[] = [];
   private theme: Theme = "neon";
   private readonly themeUniform: ThemeUniform = { value: 0 };
+  /** The realistic look (#39): lit surfaces, the sun's light and shadows, a lawn; phones get no shadows. */
+  private readonly realism = new Realism();
+  private readonly tier = deviceTier(navigator.userAgent, Math.min(screen.width || 0, screen.height || 0), navigator.maxTouchPoints || 0);
   private sun: SunState | null = null;
   private weather: WeatherView | null = null;
   /** Rain streaks and snow flakes over the plot, the sun or moon disc in the sky. */
@@ -889,6 +894,7 @@ export class FloorplanViewer {
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer = next;
+    this.applyRealism();
     const view = this.controls.view;
     this.controls.dispose();
     this.controls = this.makeControls();
@@ -1453,8 +1459,36 @@ export class FloorplanViewer {
     }
     // the neon ground grid would vanish on the light background anyway
     this.placeGround();
+    this.realism.enable(this.scene, theme === "realistic");
+    this.applyRealism();
+    // real shadows replace the drawn patches of sunlight
+    for (const fv of this.floors) {
+      fv.sunSig = "-";
+      this.buildSun(fv);
+    }
     this.buildSunFx();
     this.invalidate();
+  }
+
+  /** The realistic look's shadows on this device (null: none – phones, or the house's sun shadow switched off). */
+  private realPlan(): ShadowPlan | null {
+    return this.theme === "realistic" ? shadowPlan(this.tier, this.lowQuality, this.building?.settings.sun_shadow !== false) : null;
+  }
+
+  /** The realistic look: shadows for this device and renderer, and the light of the sun and sky as they stand. */
+  private applyRealism(): void {
+    this.realism.setPlan(this.renderer, this.realPlan());
+    this.updateRealism();
+  }
+
+  private updateRealism(): void {
+    if (!this.realism.active) return;
+    const frame = this.arcFrame();
+    const b = this.building;
+    const gf = b ? groundFloor(b) : null;
+    // the lawn lies a little under the drawn ground (outdoor areas, terraces) so they cover it
+    const lawn = gf && frame ? gf.elevation + groundUnder(gf, { x: frame.x - frame.r, z: frame.z }) - 0.03 : -0.23;
+    this.realism.update(this.sun, this.weather, b?.settings.north ?? 0, frame ? { x: frame.x, y: lawn, z: frame.z, r: Math.max(12, frame.r * 1.8) } : { x: 0, y: lawn, z: 0, r: 15 });
   }
 
   /** Furnishing mode: dragging furniture and lamps moves them instead of turning the view. */
@@ -1490,6 +1524,7 @@ export class FloorplanViewer {
     }
     this.placeSky();
     this.buildSunFx();
+    this.updateRealism();
     this.invalidate();
   }
 
@@ -1508,6 +1543,7 @@ export class FloorplanViewer {
     this.applyWeather();
     this.placeSky();
     this.buildSunFx();
+    this.updateRealism();
     this.invalidate();
   }
 
@@ -1637,7 +1673,8 @@ export class FloorplanViewer {
     const on = !!b && !!sun && b.settings.sun_shadow !== false;
     const north = (b?.settings.north ?? 0) * DEG;
     const cloud = this.weather?.cloud ?? 0;
-    const shade = on && !this.lowQuality && sun.elevation > 1 && cloud < 0.9 && !this.roomTint;
+    // the realistic look throws real shadows instead (and none on phones)
+    const shade = on && !this.lowQuality && sun.elevation > 1 && cloud < 0.9 && !this.roomTint && this.theme !== "realistic";
     const sig = shade ? `${sun.elevation.toFixed(1)},${sun.azimuth.toFixed(1)},${north},${cloud.toFixed(1)},${this.theme},${this.roofGeos.length}` : "";
     if (sig !== this.shadowSig) {
       this.shadowSig = sig;
@@ -1856,6 +1893,7 @@ export class FloorplanViewer {
   /** Target states of doors and windows (sashes and blinds move there smoothly). */
   setOpeningStates(states: Map<string, OpeningState>, instant = false): void {
     this.openingTargets = states;
+    this.realism.touch();
     // a jump in time (time travel): sashes and blinds stand at their targets at once
     if (instant)
       for (const fv of this.floors) {
@@ -2058,6 +2096,7 @@ export class FloorplanViewer {
 
   dispose(): void {
     this.projections.dispose();
+    this.realism.dispose();
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     clearTimeout(this.flowTimer);
@@ -2789,6 +2828,7 @@ export class FloorplanViewer {
     this.applyTierFlags();
     this.buildRoofMesh();
     this.buildSunFx();
+    this.applyRealism();
     this.updateGhost();
   }
 
@@ -2934,7 +2974,7 @@ export class FloorplanViewer {
    */
   private applyTierFlags(): void {
     const low = this.lowQuality;
-    this.ground.visible = !low && this.theme !== "day" && this.floors.some((f) => f.floor.rooms.length > 0);
+    this.ground.visible = !low && this.theme !== "day" && this.theme !== "realistic" && this.floors.some((f) => f.floor.rooms.length > 0);
     for (const fv of this.floors) {
       fv.patternMesh.visible = !low;
       fv.shadowMesh.visible = !low && fv.o > 0.98;
@@ -3216,7 +3256,7 @@ export class FloorplanViewer {
    */
   private buildSun(fv: FloorView): void {
     // the patches of sunlight can be switched off in the settings (#266)
-    const sun = this.building?.settings.sun_patches === false ? null : this.sun;
+    const sun = this.building?.settings.sun_patches === false || this.realPlan() ? null : this.sun;
     const north = (this.building?.settings.north ?? 0) * DEG;
     // clouds take most of the sunlight
     const cloud = this.weather?.cloud ?? 0;
@@ -4136,7 +4176,7 @@ export class FloorplanViewer {
       for (const room of fv.floor.rooms) for (const [x, z] of room.points) box.expandByPoint(new Vector3(x, 0, z));
       for (const a of fv.floor.outdoor ?? []) for (const [x, z] of a.points) box.expandByPoint(new Vector3(x, 0, z));
     }
-    this.ground.visible = !box.isEmpty() && !this.lowQuality && this.theme !== "day";
+    this.ground.visible = !box.isEmpty() && !this.lowQuality && this.theme !== "day" && this.theme !== "realistic";
     if (box.isEmpty()) return;
     if (this.ground.visible && !this.groundTexture) {
       this.groundTexture = makeGroundTexture();
@@ -5005,6 +5045,8 @@ export class FloorplanViewer {
     if (this.projections.active) this.updateProjections();
     // the house's shadow belongs to the whole house
     this.sunFx.showShadow(this.floorId === null && this.shadowSig !== "");
+    // the realistic look: lit twins for new surfaces; the tablet level redraws its shadows only when more than the camera moved
+    if (this.realism.active) this.realism.realize(this.scene, !!this.realPlan(), this.renderer, floorsMoving || openingsMoving || roofMoving || robotsMoving || fansTurning);
     this.renderer.render(this.scene, this.camera);
     this.disposeRetired();
     // labels are placed only when the view or something on it moved (style writes cost layout)

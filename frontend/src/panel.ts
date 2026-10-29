@@ -12,7 +12,7 @@ import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
 import type { MarkerMode } from "./components/view3d.ts";
 import type { HeatMode } from "./heatmap.ts";
-import { THEMES, type Theme } from "./themes.ts";
+import { lookOf, THEMES, type Theme } from "./themes.ts";
 import { keepInRoom, snapToWall } from "./geometry/snap.ts";
 import { furnitureName } from "./furniture-names.ts";
 import { confirmEntities, defaultHeight, entityName, kindOf } from "./devices.ts";
@@ -179,8 +179,7 @@ export class Floorplan3dPanel extends LitElement {
     this._pinSize = pinSize === "small" || pinSize === "large" ? pinSize : "normal";
     const heat = prefs.get("heat");
     this._heat = heat === "temperature" || heat === "humidity" || heat === "co2" || heat === "values" ? heat : "none";
-    const theme = prefs.get("theme") as Theme | "auto" | null;
-    this._theme = theme === "auto" || (theme && THEMES.includes(theme)) ? theme : "neon";
+    this._theme = lookOf(prefs.get("theme"));
     const clock = prefs.get("clock");
     this._clock = clock === "tl" || clock === "tr" || clock === "bl" || clock === "br" ? clock : "off";
     const accent = prefs.get("accent");
