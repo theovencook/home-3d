@@ -151,6 +151,8 @@ ITEM_SCHEMA = vol.Schema(
         vol.Optional("tags"): vol.All([vol.All(str, vol.Length(min=1, max=30))], vol.Length(max=12)),
         vol.Optional("family"): _ID,
         vol.Optional("variant"): vol.All({vol.All(str, vol.Length(min=2, max=5)): _TEXT}, vol.Length(min=1, max=10)),
+        # the IKEA product name ("KALLAX"): the library finds the item by it as well as by its readable name
+        vol.Optional("ikea"): vol.All(str, vol.Length(min=1, max=40)),
     }
 )
 

@@ -305,7 +305,7 @@ export class FurnitureLibrary extends LitElement {
     const shown = (shownKey && c.entries.find((e) => e.key === shownKey)) || first;
     const pic = this._thumbs.get(shown.type) ?? this._thumbs.get(first.type);
     const badge = first.light ? "💡" : first.electric ? "⚡" : "";
-    return html`<div class="fp3d-lc ${family ? "fp3d-lc-family" : ""}" title=${shown.label} @mouseleave=${() => family && this.showVariant(first.key, null, null)}>
+    return html`<div class="fp3d-lc ${family ? "fp3d-lc-family" : ""}" title=${shown.ikea ? `${shown.label} (IKEA ${shown.ikea})` : shown.label} @mouseleave=${() => family && this.showVariant(first.key, null, null)}>
       <button
         class="fp3d-lc-main"
         ?disabled=${!this.admin}

@@ -219,6 +219,17 @@ def test_library_fields_are_accepted_and_checked() -> None:
         packs.validate_payload({**PAYLOAD, "items": [{**item, "group": "Not An Id"}]})
 
 
+def test_an_item_may_carry_its_ikea_name() -> None:
+    """An item's IKEA product name is kept for the library's search; it is a short text (#5)."""
+    item = {**PAYLOAD["items"][0], "ikea": "KALLAX"}
+    clean = packs.validate_payload({**PAYLOAD, "items": [item]})
+    assert clean["items"][0]["ikea"] == "KALLAX"
+    assert "ikea" not in packs.validate_payload(PAYLOAD)["items"][0]
+    for bad in ("", "X" * 41, ["KALLAX"], 5):
+        with pytest.raises(packs.PackError):
+            packs.validate_payload({**PAYLOAD, "items": [{**item, "ikea": bad}]})
+
+
 def test_feature_packs_need_no_items_but_a_pack_needs_something() -> None:
     """A pack may list features without furniture (compatibility); an empty pack is refused."""
     pro = {**PAYLOAD, "id": "test.pro", "items": [], "features": ["camera_cockpit", "weather"]}
