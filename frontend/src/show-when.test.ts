@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Furniture } from "./model.ts";
-import { hasTimedRules, hiddenItems, itemShown, shownBuilding } from "./show-when.ts";
+import { hasTimedRules, hiddenItems, itemShown, setIntervalPart, shownBuilding, wholeInterval } from "./show-when.ts";
 import type { HassEntity } from "./types.ts";
 
 const item = (extra: Partial<Furniture> = {}): Furniture => ({ id: "tree", type: "plant", x: 0, z: 0, rotation: 0, w: 1, d: 1, h: 2, variant: null, ...extra });
@@ -65,6 +65,36 @@ test("dates and times together: garden lights only on summer evenings", () => {
   assert.equal(itemShown(f, states, at("2026-07-14T20:00")), true);
   assert.equal(itemShown(f, states, at("2026-07-14T12:00")), false);
   assert.equal(itemShown(f, states, at("2026-12-14T20:00")), false);
+});
+
+test("a time window over midnight belongs to the evening it started (#46)", () => {
+  const f = item({ show_when: { intervals: [{ from: "12-01", to: "12-31", start: "22:00", end: "02:00" }] } });
+  // the first evening and the night after it
+  assert.equal(itemShown(f, states, at("2026-12-01T01:00")), false);
+  assert.equal(itemShown(f, states, at("2026-12-01T22:30")), true);
+  assert.equal(itemShown(f, states, at("2026-12-02T01:00")), true);
+  // the last evening of the range, and the morning after it, which still belongs to it
+  assert.equal(itemShown(f, states, at("2026-12-31T23:00")), true);
+  assert.equal(itemShown(f, states, at("2027-01-01T01:30")), true);
+  assert.equal(itemShown(f, states, at("2027-01-01T02:00")), false);
+  assert.equal(itemShown(f, states, at("2027-01-01T22:30")), false);
+});
+
+test("an interval with only one end of its days or times is no interval: it never matches (#46)", () => {
+  for (const iv of [{ from: "12-01" }, { to: "12-31" }, { start: "18:00" }, { end: "06:00" }, { from: "12-01", to: "12-31", start: "18:00" }]) {
+    assert.equal(wholeInterval(iv), false, JSON.stringify(iv));
+    assert.equal(itemShown(item({ show_when: { intervals: [iv] } }), states, at("2026-12-10T19:00")), false, JSON.stringify(iv));
+  }
+  for (const iv of [{}, { from: "12-01", to: "12-31" }, { start: "18:00", end: "06:00", from: null, to: null }]) assert.equal(wholeInterval(iv), true, JSON.stringify(iv));
+});
+
+test("the editor sets both ends of a half: picking one fills the other, clearing one clears both (#46)", () => {
+  assert.deepEqual(setIntervalPart({}, { from: "12-01" }), { from: "12-01", to: "12-01" });
+  assert.deepEqual(setIntervalPart({ from: "12-01", to: "12-01" }, { to: "12-31" }), { from: "12-01", to: "12-31" });
+  assert.deepEqual(setIntervalPart({}, { end: "06:00" }), { start: "00:00", end: "06:00" });
+  assert.deepEqual(setIntervalPart({}, { start: "18:00" }), { start: "18:00", end: "00:00" });
+  assert.deepEqual(setIntervalPart({ from: "12-01", to: "12-31", start: "18:00", end: "23:00" }, { start: null }), { from: "12-01", to: "12-31", start: null, end: null });
+  assert.deepEqual(setIntervalPart({ from: "12-01", to: "12-31" }, { to: null }), { from: null, to: null });
 });
 
 test("an entity and intervals together: both must allow it", () => {

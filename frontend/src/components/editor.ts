@@ -164,6 +164,7 @@ import { effectFields } from "./effect-fields.ts";
 import { itemTempSource, roomLiveSensors, shadeKind, type LiveKind } from "../room-effects.ts";
 import { energyRole, furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
 import { isPrinter } from "../printer.ts";
+import { setIntervalPart } from "../show-when.ts";
 
 /** Items that can be fixed against moving. */
 type FixKind = "room" | "opening" | "furniture" | "device" | "wall" | "outdoor";
@@ -11855,7 +11856,8 @@ export class Fp3dEditor extends LitElement {
       const next = { ...rule, ...patch };
       this.updateFurniture({ show_when: (next.entity && next.entity !== "none") || next.intervals?.length ? next : null });
     };
-    const setAt = (i: number, patch: ShowInterval) => set({ intervals: list.map((iv, j) => (j === i ? { ...iv, ...patch } : iv)) });
+    // never half-open (#46): picking one end fills the other, clearing one clears both
+    const setAt = (i: number, patch: ShowInterval) => set({ intervals: list.map((iv, j) => (j === i ? setIntervalPart(iv, patch) : iv)) });
     // days are kept without a year ("MM-DD"); the picker shows a leap year so 29 February can be picked
     const field = (label: string, kind: "date" | "time", v: string | null | undefined, on: (v: string | null) => void) =>
       html`<label class="fp3d-field"

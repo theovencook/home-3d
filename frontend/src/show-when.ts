@@ -15,11 +15,39 @@ export function inTimes(time: string, start: string, end: string): boolean {
   return start <= end ? time >= start && time < end : time >= start || time < end;
 }
 
-/** Whether the moment lies in the interval (the parts left empty always fit). */
+/** Both first and last day, and both start and end, or neither (#46): an interval with one end alone is refused. */
+export function wholeInterval(iv: ShowInterval): boolean {
+  return !!iv.from === !!iv.to && !!iv.start === !!iv.end;
+}
+
+/**
+ * The interval with one part changed as the editor sets it, never half-open (#46): picking one end of the days or
+ * times fills the other (the same day; from or up to midnight), clearing one clears both.
+ */
+export function setIntervalPart(iv: ShowInterval, patch: ShowInterval): ShowInterval {
+  const next: ShowInterval = { ...iv, ...patch };
+  for (const [a, b, fill] of [["from", "to", null], ["start", "end", "00:00"]] as const) {
+    const changed = a in patch ? a : b in patch ? b : null;
+    if (!changed) continue;
+    const other = changed === a ? b : a;
+    if (!next[changed]) {
+      next[a] = null;
+      next[b] = null;
+    } else if (!next[other]) next[other] = fill ?? next[changed];
+  }
+  return next;
+}
+
+/** Whether the moment lies in the interval (the parts left empty always fit; a half-open interval never does). */
 function inside(iv: ShowInterval, now: Date): boolean {
-  const day = `${two(now.getMonth() + 1)}-${two(now.getDate())}`;
+  if (!wholeInterval(iv)) return false;
+  const time = `${two(now.getHours())}:${two(now.getMinutes())}`;
+  // a time window over midnight belongs to the day it started (#46): after midnight the day is the one before
+  const night = !!iv.start && !!iv.end && iv.start > iv.end && time < iv.end;
+  const started = night ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) : now;
+  const day = `${two(started.getMonth() + 1)}-${two(started.getDate())}`;
   if (iv.from && iv.to && !inDays(day, iv.from, iv.to)) return false;
-  return !iv.start || !iv.end || inTimes(`${two(now.getHours())}:${two(now.getMinutes())}`, iv.start, iv.end);
+  return !iv.start || !iv.end || inTimes(time, iv.start, iv.end);
 }
 
 /** Whether the item shows now. */

@@ -420,6 +420,12 @@ def test_item_keeps_when_it_shows() -> None:
         {"from": "12-32", "to": "12-31"},
         {"start": "24:00", "end": "06:00"},
         {"start": "7:00"},
+        # half-open: only one end of the days or of the times (#46)
+        {"from": "12-01"},
+        {"to": "12-31"},
+        {"start": "18:00"},
+        {"end": "06:00"},
+        {"from": "12-01", "to": "12-31", "start": "18:00"},
     ):
         with pytest.raises(vol.Invalid):
             FURNITURE_SCHEMA({**tree, "show_when": {"intervals": [bad]}})
