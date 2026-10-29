@@ -101,7 +101,8 @@ const DETECT_ICONS: Record<string, string> = {
 const GRID_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>';
 /** The grid connection during a power outage: the bolt crossed out (#214). */
 const GRID_OFF_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/><path d="M3 3l18 18"/></svg>';
-import { STAGE, type Theme } from "../themes.ts";
+import { STAGE, type Look, type Theme } from "../themes.ts";
+import { shownLook } from "../ha-theme.ts";
 import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { fetchImage, saveBuilding } from "../api.ts";
@@ -345,8 +346,8 @@ export class Fp3dView3d extends LitElement {
   declare heatMode: HeatMode;
   /** Imported furniture packs (a new list rebuilds pack furniture). */
   declare packs: unknown;
-  /** The look; "auto" is Day while the sun is up and Neon at night (D623). */
-  declare theme: Theme | "auto";
+  /** The look; "auto" is Day while the sun is up and Neon at night (D623), "theme" follows the HA theme (#38). */
+  declare theme: Look;
   /** Date and time in a corner of the view (D631); null or "off": none. */
   declare clock: ClockPos | null;
   private declare _clockTick: number;
@@ -1587,8 +1588,8 @@ export class Fp3dView3d extends LitElement {
     // the compass ring's letters: the first letter of each direction in the user's language
     const letter = (k: I18nKey) => translate(hass, k).charAt(0).toUpperCase();
     v.setSunPath(this.sunPathToday(hass), [letter("compass_n"), letter("compass_e"), letter("compass_s"), letter("compass_w")]);
-    // the automatic look follows the sun (setTheme ignores a look it already shows)
-    if (this.theme === "auto") v.setTheme(this.effectiveTheme());
+    // the automatic look follows the sun, the theme look this device's HA theme (setTheme ignores a look it already shows)
+    if (this.theme === "auto" || this.theme === "theme") v.setTheme(this.effectiveTheme());
     // the weather outside: clouds darken the sky, rain, snow and fog fall over the plot
     const raw = this.weather && !this.dimmed && hasFeature("weather") ? weatherState(hass, weatherEntity(hass, this.weatherEntityId ?? b.settings.weather_entity), b.settings.rain_entity) : null;
     const weather = raw ? limitEffects(raw, b.settings.weather_effects) : null;
@@ -5565,10 +5566,9 @@ export class Fp3dView3d extends LitElement {
     void this.hass.callService(domain, domain === "switch" ? "turn_on" : "press", { entity_id: drive });
   }
 
-  /** The look shown: the chosen one, or by the sun for "auto" – Day above the horizon, Neon below. */
+  /** The look shown: the chosen one, by the sun for "auto" (Day above the horizon, Neon below), by the HA theme for "theme". */
   private effectiveTheme(): Theme {
-    if (this.theme !== "auto") return this.theme;
-    return this.hass?.states["sun.sun"]?.state === "above_horizon" ? "day" : "neon";
+    return shownLook(this.theme, this.hass);
   }
 
   /** The start view: the card's own, else the one remembered in the editor. */

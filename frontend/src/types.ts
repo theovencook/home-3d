@@ -61,6 +61,8 @@ export interface HomeAssistant {
   devices?: Record<string, HassDevice>;
   states: Record<string, HassEntity>;
   config?: { unit_system?: { temperature?: string; length?: string }; latitude?: number; longitude?: number; time_zone?: string };
+  /** The theme this device shows (HA works it out per browser): its name and whether it is in dark mode. */
+  themes?: { darkMode?: boolean; theme?: string };
   connection: HassConnection;
   callWS<T>(msg: Record<string, unknown>): Promise<T>;
   callService(domain: string, service: string, data?: Record<string, unknown>): Promise<unknown>;

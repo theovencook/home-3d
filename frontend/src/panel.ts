@@ -12,7 +12,8 @@ import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
 import type { MarkerMode } from "./components/view3d.ts";
 import type { HeatMode } from "./heatmap.ts";
-import { lookOf, THEMES, type Theme } from "./themes.ts";
+import { lookOf, THEMES, type Look } from "./themes.ts";
+import { shownAccent, textOn } from "./ha-theme.ts";
 import { keepInRoom, snapToWall } from "./geometry/snap.ts";
 import { furnitureName } from "./furniture-names.ts";
 import { confirmEntities, defaultHeight, entityName, kindOf } from "./devices.ts";
@@ -118,7 +119,7 @@ export class Floorplan3dPanel extends LitElement {
   /** How large the device symbols are (this device). */
   private declare _pinSize: "small" | "normal" | "large";
   private declare _heat: HeatMode;
-  private declare _theme: Theme | "auto";
+  private declare _theme: Look;
   private declare _clock: ClockPos;
   private declare _furnish: boolean;
   private declare _selFurniture: string | null;
@@ -537,7 +538,7 @@ export class Floorplan3dPanel extends LitElement {
     const b = this.data.building;
     const saveState = this.data.saveState;
     return html`
-      <div class="fp3d-app ${this._clean && this._mode === "view" ? "fp3d-clean" : ""}" style=${this._accent ? `--fp3d-accent:${this._accent}` : ""}>
+      <div class="fp3d-app ${this._clean && this._mode === "view" ? "fp3d-clean" : ""}" style=${this.accentStyle()}>
         ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.hass} .building=${b} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
         ${this._clean && this._mode === "view" ? nothing : html`<header class="fp3d-header">
           <ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>
@@ -569,7 +570,7 @@ export class Floorplan3dPanel extends LitElement {
                 )}
               </div>
               <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("theme")}>
-                ${[...THEMES, "auto" as const].map(
+                ${["theme" as const, ...THEMES, "auto" as const].map(
                   (t) =>
                     html`<button
                       aria-pressed=${this._theme === t}
@@ -733,6 +734,16 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   /** Restart hint, save errors and unsaved edits from an earlier session. */
+  /** This device's accent: the one picked here, else the HA theme's while the look follows it (#38). */
+  private shownAccent(): string | null {
+    return shownAccent(this._theme, this._accent, this.hass, (n) => getComputedStyle(this).getPropertyValue(n));
+  }
+
+  private accentStyle(): string {
+    const accent = this.shownAccent();
+    return accent ? `--fp3d-accent:${accent};--fp3d-accent-text:${textOn(accent)}` : "";
+  }
+
   private renderNotices() {
     const d = this.data;
     const notices = [];
@@ -929,7 +940,7 @@ export class Floorplan3dPanel extends LitElement {
           .heatMode=${this._heat}
           .theme=${this._theme}
           .clock=${this._clock}
-          .accent=${this._accent}
+          .accent=${this.shownAccent()}
           ?furnish=${this._furnish && !tt}
           .selectedFurniture=${this._selFurniture}
           @furniture-select=${(e: CustomEvent<{ id: string | null }>) => (this._selFurniture = e.detail.id)}
