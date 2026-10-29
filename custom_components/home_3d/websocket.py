@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from functools import wraps
+import time
 from typing import Any
 
 from homeassistant.components import websocket_api
@@ -18,7 +18,7 @@ from .const import DATA_ASK, DATA_EDITORS, DATA_VOICE, DOMAIN, SIGNAL_ASK, SIGNA
 from .editors import Editors, EditorsError, can_edit
 from .locate.recorder import ws_locate_rec
 from .locate.ws import COMMANDS as LOCATE_COMMANDS
-from .packs import MAX_PACK_SIZE, PackError, parts_of, validate_payload, verify_pack
+from .packs import MAX_PACK_SIZE, PackError, parts_of, source_of_folder, verify_folder, verify_pack, verify_source
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
 from .storage import FloorplanData, complete
 from .timetravel import ws_timetravel_history
@@ -228,26 +228,36 @@ def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "home_3d/packs/import",
-        vol.Required("pack"): vol.All(str, vol.Length(max=MAX_PACK_SIZE)),
+        # an old single-file pack ...
+        vol.Exclusive("pack", "source"): vol.All(str, vol.Length(max=MAX_PACK_SIZE)),
+        # ... or a v2 pack folder: relative path -> file text (packs.py checks names, count and sizes)
+        vol.Exclusive("files", "source"): {str: str},
     }
 )
 @require_editor
 @websocket_api.async_response
 async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Check a pack file's content, then keep it."""
+    """Check a pack's content, then keep it with its source (a backup carries the source and checks it again)."""
     if (data := _data(hass, connection, msg)) is None:
         return
     try:
-        payload = verify_pack(msg["pack"])
+        if "files" in msg:
+            payload = verify_folder(msg["files"])
+            source = source_of_folder(msg["files"])
+        elif "pack" in msg:
+            payload = verify_pack(msg["pack"])
+            source = parts_of(msg["pack"])
+        else:
+            raise PackError("not_a_pack", "send a pack file or a pack folder")
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
         return
-    await data.async_add_pack(payload, parts_of(msg["pack"]))
+    await data.async_add_pack(payload, source)
     result = {
         "id": payload["id"],
         "name": payload["name"],
         "publisher": payload["publisher"],
-        "licensee": payload["licensee"],
+        "licence": payload["licence"],
         "items": len(payload["items"]),
     }
     connection.send_result(msg["id"], result)
@@ -315,7 +325,7 @@ async def ws_backup_import(
             skipped.append({"id": name, "reason": "no_source"})
             continue
         try:
-            clean = validate_payload(source)
+            clean = verify_source(source)
         except PackError as err:
             skipped.append({"id": name, "reason": err.code})
             continue

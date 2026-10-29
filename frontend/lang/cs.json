@@ -881,7 +881,6 @@
  "car_no_controls": "Na autě nebyly nalezeny žádné spínatelné entity (zámek, klimatizace, spínač nabíjení).",
  "holo_media_playing": "hraje",
  "holo_media_paused": "pozastaveno",
- "pack_licensed": "Licencováno pro: {name}",
  "pack_remove": "Odebrat",
  "pack_remove_confirm": "Odebrat balíček „{name}“? Jeho nábytek zůstane v plánu jako obyčejné kvádry.",
  "pack_missing_item": "Nábytek z odebraného balíčku",

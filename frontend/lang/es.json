@@ -881,7 +881,6 @@
  "car_no_controls": "No se encontraron entidades conmutables en el coche (cierre, clima, interruptor de carga).",
  "holo_media_playing": "sonando",
  "holo_media_paused": "pausa",
- "pack_licensed": "Licencia para {name}",
  "pack_remove": "Quitar",
  "pack_remove_confirm": "¿Quitar el pack «{name}»? Sus muebles se quedan en el plano como cajas simples.",
  "pack_missing_item": "Mueble de un pack retirado",

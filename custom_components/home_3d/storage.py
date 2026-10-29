@@ -151,8 +151,9 @@ class FloorplanData:
         return next((h["building"] for h in self._history if h["id"] == snapshot_id), None)
 
     async def async_add_pack(self, payload: dict[str, Any], source: dict[str, Any] | None = None) -> None:
-        """Keep an imported pack; a newer file of the same pack replaces the old one. The payload as it was in the
-        file stays with it, so a backup can carry the pack and a restore can check it again."""
+        """Keep an imported pack; a newer release of the same pack replaces the old one. Its source (the files of a
+        v2 folder, the payload of an old pack) stays with it, so a backup can carry the pack and a restore can check
+        it again."""
         entry: dict[str, Any] = {**payload, "imported_at": time.time()}
         if source is not None:
             entry["source"] = source

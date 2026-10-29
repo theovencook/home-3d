@@ -11,7 +11,6 @@ const PACK: FurniturePack = {
   id: "t.cars",
   name: "Cars",
   publisher: "t",
-  licensee: null,
   items: [
     {
       id: "wedge",
@@ -197,7 +196,6 @@ test("pack parts in a colour of their own keep it down to the ground in the ligh
     id: "t.fun",
     name: "Fun",
     publisher: "t",
-    licensee: null,
     items: [
       {
         id: "pumpkin",
@@ -263,7 +261,7 @@ test("round things cast a round shadow, lying on the ground they stand on (#719,
   const { pushFurniture, roundFootprint } = await import("./furniture.ts");
   const { GeoBuffer, LineBuffer } = await import("./geo.ts");
   const part = { shape: "cyl" as const, x: 0, z: 0, w: 1, d: 1, y: 0, h: 0.2, color: "wood" };
-  setPacks([{ id: "g", name: "G", publisher: "G", licensee: null, items: [{ id: "trampoline", name: { en: "Trampoline" }, size: [3, 3, 0.9], parts: [part] }, { id: "box", name: { en: "Box" }, size: [1, 1, 1], parts: [{ ...part, shape: "box" }] }] } as FurniturePack]);
+  setPacks([{ id: "g", name: "G", publisher: "G", items: [{ id: "trampoline", name: { en: "Trampoline" }, size: [3, 3, 0.9], parts: [part] }, { id: "box", name: { en: "Box" }, size: [1, 1, 1], parts: [{ ...part, shape: "box" }] }] } as FurniturePack]);
   try {
     assert.equal(roundFootprint({ type: "pack:g:trampoline" }), true);
     assert.equal(roundFootprint({ type: "pack:g:box" }), false);
