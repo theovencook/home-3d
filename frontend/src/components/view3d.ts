@@ -110,6 +110,7 @@ import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPa
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
+import { realisticSky, type RealisticSky } from "../realistic.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, projectionOn, released, type Feature } from "../features.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
@@ -238,6 +239,7 @@ export class Fp3dView3d extends LitElement {
     selectedSet: { attribute: false },
     selectedDevice: { attribute: false },
     _sky: { state: true },
+    _realSky: { state: true },
     quality: { attribute: false },
     showStats: { type: Boolean },
     plan2d: { attribute: false },
@@ -395,6 +397,8 @@ export class Fp3dView3d extends LitElement {
   declare selectedDevice: string | null;
   /** How much daylight there is (0 = night, 1 = day), from sun.sun. */
   private declare _sky: number;
+  /** The realistic look's sky (#39): zenith, horizon and ground from the sun and the weather entity, as a CSS gradient. */
+  private declare _realSky: RealisticSky | null;
   declare quality: Quality;
   declare showStats: boolean;
   private declare _stats: ViewerStats | null;
@@ -670,6 +674,7 @@ export class Fp3dView3d extends LitElement {
     this.selectedSet = [];
     this.selectedDevice = null;
     this._sky = 0;
+    this._realSky = null;
     this.quality = "auto";
     this.showStats = false;
     this._stats = null;
@@ -1036,7 +1041,11 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("keepRoof")) v.setKeepRoof(this.keepRoof);
     if (changed.has("hideRoof")) v.setHideRoof(this.hideRoof);
     if (changed.has("floorStack")) v.setFloorStack(this.floorStack);
-    if (changed.has("theme")) v.setTheme(this.effectiveTheme());
+    if (changed.has("theme")) {
+      v.setTheme(this.effectiveTheme());
+      // the realistic look's sky and the fog colour follow at once
+      if (!changed.has("hass")) this.syncDevices(true);
+    }
     if (changed.has("accent")) v.setAccent(this.accent ?? null);
     if (changed.has("surfaceGrab")) v.setSurfaceGrab(this.surfaceGrab ?? null);
     if (changed.has("furnishTypes")) v.setFurnishTypes(this.furnishTypes ?? null);
@@ -1585,6 +1594,9 @@ export class Fp3dView3d extends LitElement {
     const weather = raw ? limitEffects(raw, b.settings.weather_effects) : null;
     this.cloud = weather?.cloud ?? 0;
     this._sky = (elevation === null ? 0 : Math.min(1, Math.max(0, (elevation + 4) / 16))) * (1 - 0.45 * this.cloud);
+    // the realistic look draws the sky the weather entity reports (a new object only when it changed)
+    const real = this.effectiveTheme() === "realistic" ? realisticSky(elevation, weather) : null;
+    if (JSON.stringify(real) !== JSON.stringify(this._realSky)) this._realSky = real;
     // with the feature on, the viewer always gets the weather (the sun and moon disc shows on clear days too)
     const disc = weather ? weather.sky : (b.settings.weather_effects ?? ["sky"]).includes("sky");
     v.setWeather(this.weather && !this.dimmed && hasFeature("weather") ? { ...(weather ?? { rain: 0, snow: 0, fog: 0, cloud: 0, wind: 0 }), sky: this.skyColor(), disc } : null);
@@ -5664,6 +5676,8 @@ export class Fp3dView3d extends LitElement {
   }
 
   private skyColor(): [number, number, number] {
+    // the realistic look's fog takes the horizon's colour
+    if (this.effectiveTheme() === "realistic" && this._realSky) return this._realSky.horizon;
     const stage = STAGE[this.effectiveTheme()] ?? STAGE.neon;
     const sky = this._sky;
     return stage.night[0].map((v, i) => Math.round(v + (stage.day[0][i] - v) * sky)) as [number, number, number];
@@ -5694,7 +5708,9 @@ export class Fp3dView3d extends LitElement {
     const mix = (a: number[], b: number[]) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * sky)).join(",")})`;
     const stage = STAGE[this.effectiveTheme()] ?? STAGE.neon;
     // an own background (colour, gradient, picture) replaces the look's sky
-    const own = backdropCss(this.building?.settings.backdrop);
+    const real = this.effectiveTheme() === "realistic" ? this._realSky : null;
+    const rgb = (c: readonly number[]) => `rgb(${c.join(",")})`;
+    const own = backdropCss(this.building?.settings.backdrop) ?? (real ? `linear-gradient(180deg, ${rgb(real.top)} 0%, ${rgb(real.horizon)} 62%, ${rgb(real.ground)} 100%)` : null);
     const pinK = this.pinSize === "small" ? 0.8 : this.pinSize === "large" ? 1.25 : 1;
     const style = `--fp3d-pin-k:${pinK};--fp3d-sky:${mix(stage.night[0], stage.day[0])};--fp3d-ground:${mix(stage.night[1], stage.day[1])}${own ? `;background:${own}` : ""}`;
     return html`<div

@@ -2,8 +2,9 @@
 // look, so switching is instant and nothing has to be rebuilt. Signal colours (lit lamps, open windows,
 // glowing screens) are bright and saturated and stay as they are in every look.
 
-import { AdditiveBlending, NormalBlending, Vector3, type Material } from "three";
+import { AdditiveBlending, Color, NormalBlending, Vector3, type Material } from "three";
 import { THEMES, type Theme } from "../themes.ts";
+import { FLOOR_LOOK, FLOOR_REAL } from "./build.ts";
 
 export type { Theme } from "../themes.ts";
 
@@ -27,10 +28,26 @@ export function parseAccent(hex: string | null | undefined): [number, number, nu
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
+const vec3 = (hex: number) => {
+  const c = new Color(hex);
+  return `vec3(${c.r.toFixed(6)}, ${c.g.toFixed(6)}, ${c.b.toFixed(6)})`;
+};
+
+/** Realistic floors (#39): each neon floor tint (exactly as built) becomes its material's own colour; -1 for any other colour. */
+const FLOOR_GLSL = `vec3 fp3dFloor(vec3 c) {
+${Object.entries(FLOOR_REAL)
+  .map(([k, real]) => `  if (distance(c, ${vec3(FLOOR_LOOK[k].color)}) < 0.0002) return ${vec3(real)};`)
+  .join("\n")}
+  return vec3(-1.0);
+}`;
+
 const GLSL = `
 uniform int uTheme;
 uniform vec3 uAccent;
 uniform int uAccentOn;
+// the realistic look: how much a signal colour lights itself (lit lamps, open windows, screens glow in the light)
+float fp3dGlow = 0.0;
+${FLOOR_GLSL}
 vec3 fp3dThemed(vec3 c, bool line) {
   float mx = max(c.r, max(c.g, c.b));
   float mn = min(c.r, min(c.g, c.b));
@@ -43,6 +60,22 @@ vec3 fp3dThemed(vec3 c, bool line) {
   // signal colours keep their colour
   if (!line && mx > 0.45 && sat > 0.45) return c;
   float l = dot(c, vec3(0.299, 0.587, 0.114));
+  if (uTheme == 3) {
+    // realistic (#39): the lights do the shading; surfaces get light, warm colours, edges are faint dark lines and
+    // bright signal colours glow. The neon's navy cast is taken out of the hue, so its navy surfaces turn neutral
+    // while a green lawn or a brown floor keeps some of its colour.
+    if (line) return vec3(0.08, 0.09, 0.11);
+    vec3 floorTint = fp3dFloor(c);
+    if (floorTint.r >= 0.0) return floorTint;
+    if (mx > 0.45 && sat > 0.45) {
+      fp3dGlow = smoothstep(0.85, 1.0, mx) * 0.9;
+      return c;
+    }
+    vec3 hue = (c / max(mx, 0.001)) / vec3(0.21, 0.4, 1.0);
+    hue /= max(hue.r, max(hue.g, hue.b));
+    vec3 g = vec3(clamp(0.3 + l * 3.2, 0.0, 0.86)) * vec3(1.0, 0.97, 0.93);
+    return mix(g, g * hue, 0.5);
+  }
   if (uTheme == 1) {
     // blueprint: white lines on shades of blue
     if (line) return vec3(0.8, 0.9, 1.0) * min(1.0, mx * 1.15);
@@ -57,7 +90,7 @@ vec3 fp3dThemed(vec3 c, bool line) {
 `;
 
 /**
- * Maps a material's colours to the look in `uniform` (0 neon, 1 blueprint, 2 day). Composes with an
+ * Maps a material's colours to the look in `uniform` (0 neon, 1 blueprint, 2 day, 3 realistic). Composes with an
  * existing onBeforeCompile (e.g. the fold patch). `line`: edges are mapped as lines.
  */
 export function themed<T extends Material>(material: T, uniform: ThemeUniform, line = false): T {
@@ -70,13 +103,18 @@ export function themed<T extends Material>(material: T, uniform: ThemeUniform, l
     shader.uniforms.uAccentOn = accentOnUniform;
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", `#include <common>\n${GLSL}`)
-      .replace("#include <color_fragment>", `#include <color_fragment>\n  diffuseColor.rgb = fp3dThemed(diffuseColor.rgb, ${line ? "true" : "false"});`);
+      .replace(
+        "#include <color_fragment>",
+        `#include <color_fragment>\n  diffuseColor.rgb = fp3dThemed(diffuseColor.rgb, ${line ? "true" : "false"});${line ? "\n  if (uTheme == 3) diffuseColor.a *= 0.22;" : ""}`,
+      );
   };
   material.customProgramCacheKey = () => `${key()}-themed-${line ? "l" : "s"}`;
+  // the realistic look gives themed surfaces a lit twin (realism.ts); lines stay as they are
+  material.userData.fp3dThemed = line ? "line" : "surface";
   return material;
 }
 
-/** Additive glow disappears on light backgrounds: in the day look, lines are drawn normally. */
+/** Additive glow disappears on light backgrounds: in the day and realistic looks, lines are drawn normally. */
 export function lineBlending(theme: Theme): typeof AdditiveBlending | typeof NormalBlending {
-  return theme === "day" ? NormalBlending : AdditiveBlending;
+  return theme === "day" || theme === "realistic" ? NormalBlending : AdditiveBlending;
 }

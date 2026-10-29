@@ -54,5 +54,7 @@ export function makeFoldable<T extends Material>(material: T, masks: FoldMasks, 
     }
   };
   material.customProgramCacheKey = () => `fp3d-fold-${role}`;
+  // the realistic look's shadows leave out the cut wall parts as well (realism.ts)
+  material.userData.fp3dFold = { masks, role };
   return material;
 }
