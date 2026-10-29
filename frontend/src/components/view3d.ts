@@ -36,6 +36,8 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
   isPulseDrive,
   entityAreaId,
 } from "../devices.ts";
+import { effectFields } from "./effect-fields.ts";
+import { effectSettings, itemShade, motionRooms, tempShade } from "../room-effects.ts";
 import { alertColor, alertEntities, alertSources, alertText, findAlerts, isOutage, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg, mdiIcon } from "../icons.ts";
 import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
@@ -517,6 +519,8 @@ export class Fp3dView3d extends LitElement {
   declare householdCard: boolean;
   private alertSrc: AlertSources | null = null;
   private alertTimer: ReturnType<typeof setInterval> | undefined;
+  /** When the next room motion lit goes dark again (#10). */
+  private motionTimer: ReturnType<typeof setTimeout> | undefined;
   private seenAlerts = new Set<string>();
   /** A room briefly lit up after a double tap switched its lights. */
   private roomFlash: { roomId: string; until: number } | null = null;
@@ -827,6 +831,8 @@ export class Fp3dView3d extends LitElement {
     this.resizeObs = null;
     clearInterval(this.alertTimer);
     this.alertTimer = undefined;
+    clearTimeout(this.motionTimer);
+    this.motionTimer = undefined;
     clearInterval(this.cameraTimer);
     this.cameraTimer = undefined;
     this.live = null;
@@ -1616,6 +1622,7 @@ export class Fp3dView3d extends LitElement {
     v.setWeather(this.weather && !this.dimmed && hasFeature("weather") ? { ...(weather ?? { rain: 0, snow: 0, fog: 0, cloud: 0, wind: 0 }), sky: this.skyColor(), disc } : null);
     this.watchLightning(!!weather?.lightning);
     this.applyTint();
+    this.applyMotion();
     // the cheap rate (#29): the configured entity or daily window; none configured, no badge
     const cheap = cheapRate(b.energy, hass.states, new Date(this.now()));
     if (cheap !== this._cheap) this._cheap = cheap;
@@ -2524,7 +2531,8 @@ export class Fp3dView3d extends LitElement {
     if (!this.ro) this.seenAlerts = new Set(keys);
     if (keys.join() !== this._alerts.map((a) => `${a.kind}:${a.entity}`).join()) this._alerts = alerts;
     // only warnings that light rooms pulse (a quiet one shows at the top and needs no timer)
-    const pulsing = alerts.some((a) => !a.quiet);
+    // (a leak's red floor stays steady until it is dry, #10)
+    const pulsing = alerts.some((a) => !a.quiet && a.kind !== "water");
     if (pulsing && !this.alertTimer && !this.ro) this.alertTimer = setInterval(() => !document.hidden && this.applyTint(), this._low ? 200 : 100);
     if ((!pulsing || this.ro) && this.alertTimer) {
       clearInterval(this.alertTimer);
@@ -2718,6 +2726,21 @@ export class Fp3dView3d extends LitElement {
     setTimeout(() => (this._sceneFired = null), 600);
   }
 
+  /** Motion lights its room for the set time (#10); the view looks again when the first of them goes dark. */
+  private applyMotion(): void {
+    const v = this.viewer;
+    const b = this.building;
+    const hass = this.hass;
+    clearTimeout(this.motionTimer);
+    this.motionTimer = undefined;
+    if (!v || !b || !hass) return;
+    const now = this.now();
+    const lit = motionRooms(hass, b, now);
+    v.setRoomGlow(lit.rooms);
+    // a replay moves its own clock and looks again on every tick
+    if (lit.next !== null && !this.replay) this.motionTimer = setTimeout(() => this.applyMotion(), Math.max(50, lit.next - now + 20));
+  }
+
   /**
    * Floor colours of the rooms: the heatmap, the pulsing rooms of warnings and the flash of a double
    * tap; sent to the viewer only when they changed.
@@ -2756,10 +2779,12 @@ export class Fp3dView3d extends LitElement {
     v.setRoomInfo(info);
     if (this._alerts.length) {
       tint ??= new Map();
-      const k = this.ro ? 1 : 0.55 + 0.45 * Math.sin(performance.now() / 160);
+      const pulse = this.ro ? 1 : 0.55 + 0.45 * Math.sin(performance.now() / 160);
       for (const a of this._alerts) {
         // a warning without a room (a pool's: it is outside) shows at the top only, the rooms stay calm
         if (a.quiet) continue;
+        // a leak's floor stays red until it is dry; the others pulse (#10)
+        const k = a.kind === "water" ? 1 : pulse;
         const c = alertColor(a).map((x) => x * k) as [number, number, number];
         if (a.roomId) tint.set(a.roomId, c);
         // a warning of one floor lights that floor's rooms; the house (alarm, power outage) all of them
@@ -2893,9 +2918,13 @@ export class Fp3dView3d extends LitElement {
         const extra = extraRef && extraRef !== "none" ? extraRef : null;
         // a sensor whose value stands at the symbol (a boiler's water temperature, D619): a pin even without a link
         const extraSensor = f.extra && f.extra !== "none" && hass.states[f.extra] ? f.extra : null;
-        const extraText = extraSensor ? stateText(hass, hass.states[extraSensor]) : "";
+        // a radiator or hot-water cylinder with a temperature shades from cold blue to warm red with it, its pin
+        // tells the temperature (#10)
+        const shade = itemShade(hass, b, f);
+        const shadeText = shade && shade.sensor !== extraSensor && shade.sensor !== linked?.entity ? `${formatNumber(hass, fromCelsius(hass, shade.celsius), 0)} ${tempUnit(hass)}` : "";
+        const extraText = [extraSensor ? stateText(hass, hass.states[extraSensor]) : "", shadeText].filter(Boolean).join(" · ");
         const withExtra = (t: string) => (extraText ? (t ? `${t} · ${extraText}` : extraText) : t);
-        const link = linked ?? (extra || extraSensor ? { entity: null, power: null } : undefined);
+        const link = linked ?? (extra || extraSensor || shade ? { entity: null, power: null } : undefined);
         if (!link) continue;
         // a battery goes by its charge first: its power sensor is often placed on its own as well
         const id = (energyRole(f.type) === "home_battery" ? (extra ?? link.entity ?? link.power) : (link.entity ?? link.power ?? extra ?? extraSensor))!;
@@ -2967,7 +2996,17 @@ export class Fp3dView3d extends LitElement {
           }
           if (faces.length) screens.set(`${f.id}:vehicle`, { color: faces[0].color, level: faces[0].level, faces });
         }
-        if (f.type === "radiator" && ((st && kindOf(st.entity_id) === "climate") || f.heat_sensor)) {
+        if (shade?.kind === "radiator") {
+          // brighter while it heats
+          const a = st && kindOf(st.entity_id) === "climate" ? st.attributes : null;
+          const heating = heatSensorOn(hass, f.heat_sensor) ?? a?.hvac_action === "heating";
+          screens.set(f.id, { color: shade.color, level: heating ? 0.9 : 0.55, shade: true });
+        } else if (shade?.kind === "tank") {
+          // warm above, cooler below, like the water in it
+          const s = effectSettings(b);
+          const below = tempShade(shade.celsius - 0.3 * (s.tank_hot - s.tank_cold), s.tank_cold, s.tank_hot);
+          screens.set(f.id, { color: below, level: 0.8, shade: true, faces: [{ part: "strata", color: below, top: shade.color, level: 0.8 }] });
+        } else if (f.type === "radiator" && ((st && kindOf(st.entity_id) === "climate") || f.heat_sensor)) {
           // glows while it heats; brighter the further the room is below its target. A thermostat that does not tell
           // (Tuya's valves report a "work state" sensor instead) is asked through the radiator's own sensor (D637)
           const a = st && kindOf(st.entity_id) === "climate" ? st.attributes : null;
@@ -3055,7 +3094,7 @@ export class Fp3dView3d extends LitElement {
           // its pin grabs the item when furnishing
           furnitureId: f.id,
           // inverter, battery, wallbox: their own text (watts, charge, status) is always worth a pin
-          energyDevice: energyRole(f.type) === "inverter" || energyRole(f.type) === "home_battery" || energyRole(f.type) === "wallbox" || energyRole(f.type) === "meter" || !!car || !!extraSensor,
+          energyDevice: energyRole(f.type) === "inverter" || energyRole(f.type) === "home_battery" || energyRole(f.type) === "wallbox" || energyRole(f.type) === "meter" || !!car || !!extraSensor || !!shade,
           ...(standby ? { standby } : {}),
           // Auto Pro: the car's charge and range are the point of the pin – shown in full by default
           show: f.marker ?? (car || hhText ? "always" : undefined),
@@ -5117,6 +5156,8 @@ export class Fp3dView3d extends LitElement {
         ${check("rain_warning", st.rain_warning !== false, (v) => ({ rain_warning: v }))}
         ${check("alert_unavailable", !!st.alert_unavailable, (v) => ({ alert_unavailable: v }))}
         ${check("alert_names", st.alert_names !== false, (v) => ({ alert_names: v }))}
+        <h4 title=${t("effects_hint")}>${t("effects")}</h4>
+        ${effectFields(hass, st.effects, !admin, (effects) => this.setPlanSettings({ effects }))}
         ${modules.map((fields) => html`<div class="fp3d-set-module">${fields.map((f) => this.renderViewField(hass, f, admin))}</div>`)}
         <p class="fp3d-set-note">${t("view_settings_more")}</p>
       </div>`;
@@ -6107,7 +6148,7 @@ export class Fp3dView3d extends LitElement {
         cursor: pointer;
         animation: fp3d-alert-pulse 1.2s ease-in-out infinite;
       }
-      .fp3d-alert-water,
+      /* a leak is red like its floor (#10); rain at a window stays blue */
       .fp3d-alert-window_rain {
         border-left-color: #4fb3ff;
         box-shadow: 0 0 18px rgba(79, 179, 255, 0.35);
@@ -7073,6 +7114,7 @@ export class Fp3dView3d extends LitElement {
         color: var(--fp3d-muted);
       }
       .fp3d-set-field select,
+      .fp3d-set-field input,
       .fp3d-set-field textarea {
         font: inherit;
         font-size: 14px;

@@ -133,3 +133,11 @@ test("points on the plan (the energy cables' ends, #29) sit where the plan shows
   // a device's pin sits on the very point: the cable's end steps just below it, so the pin keeps its taps
   assert.deepEqual(anchorSpots([at(2, 3, "g", true)], "g", { k: 40, tx: 10, ty: 20 }, 26)[0], { on: true, x: 90, y: 166 });
 });
+
+test("a radiator or cylinder that shades with its temperature is filled with its colour in the plan (#10)", () => {
+  const floor = newFloor("g", "Ground", 0);
+  floor.furniture = [item("rad", "radiator"), item("cold", "radiator")];
+  const [rad, cold] = planItems(floor, new Map(), [], new Map([["rad", [1, 0.2, 0.1]]]));
+  assert.deepEqual([rad.glow, rad.shade], ["rgb(255,51,26)", true]);
+  assert.equal(cold.glow, null);
+});

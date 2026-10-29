@@ -490,3 +490,24 @@ def test_cheap_rate_and_wire_end_energy_sensor() -> None:
     assert FURNITURE_SCHEMA({**item, "energy": "sensor.washer_energy"})["energy"] == "sensor.washer_energy"
     with pytest.raises(vol.Invalid):
         PLACEMENT_SCHEMA({**plug, "energy": 5})
+
+
+def test_live_room_effects_are_kept_and_checked() -> None:
+    """Leak and motion sensors per room, a radiator's temperature and the effect settings (#10)."""
+    assert ROOM_SCHEMA(ROOM)["live"] is None
+    room = ROOM_SCHEMA({**ROOM, "live": {"leak": "binary_sensor.sink_leak", "motion": "none"}})
+    assert room["live"] == {"leak": "binary_sensor.sink_leak", "motion": "none"}
+    item = {"id": "f1", "type": "radiator", "x": 0, "z": 0, "rotation": 0, "w": 1, "d": 0.1, "h": 0.6, "variant": None}
+    assert FURNITURE_SCHEMA(item)["temp_sensor"] is None
+    trv = "sensor.trv_temperature"
+    assert FURNITURE_SCHEMA({**item, "temp_sensor": trv})["temp_sensor"] == trv
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    assert SETTINGS_SCHEMA(base)["effects"] is None
+    chosen = {"motion_seconds": 45, "radiator_cold": 20, "tank_hot": 60}
+    effects = SETTINGS_SCHEMA({**base, "effects": chosen})["effects"]
+    assert effects["motion_seconds"] == 45
+    assert effects["tank_hot"] == 60.0
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "effects": {"motion_seconds": -5}})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "effects": {"radiator_hot": 500}})

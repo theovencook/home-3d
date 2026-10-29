@@ -28,8 +28,10 @@ export interface PlanItem {
   /** Its device is on (a lamp lit, a TV playing …). */
   on: boolean;
   unavailable: boolean;
-  /** A light's colour while it is on ("rgb(…)"). */
+  /** A light's colour while it is on, or the colour of its temperature ("rgb(…)"). */
   glow: string | null;
+  /** It shades with its temperature (a radiator, a cylinder, #10): filled with `glow` whether on or not. */
+  shade?: boolean;
   /** The item's own colour of its main colour role (#12), or null for the look's. */
   tint: string | null;
 }
@@ -38,7 +40,7 @@ export interface PlanItem {
  * The floor's items with their pick ids (`targets`: furniture id → pick id) and their devices' states. A lamp has no
  * target: in 3D its light's marker makes the lamp tappable, so here too.
  */
-export function planItems(floor: Floor, targets: ReadonlyMap<string, string>, devices: readonly DeviceMarker[]): PlanItem[] {
+export function planItems(floor: Floor, targets: ReadonlyMap<string, string>, devices: readonly DeviceMarker[], shades: ReadonlyMap<string, readonly number[]> = new Map()): PlanItem[] {
   const byId = new Map(devices.map((d) => [d.id, d]));
   const lamps = new Map(devices.filter((d) => d.furnitureId && d.pickable).map((d) => [d.furnitureId!, d]));
   return floor.furniture.map((f) => {
@@ -46,7 +48,9 @@ export function planItems(floor: Floor, targets: ReadonlyMap<string, string>, de
     const m = pick ? byId.get(pick) : undefined;
     const on = !!m?.active && !m.unavailable;
     const tint = itemColourRoles(f.type).map((r) => roleColour(f.colors, r)).find((c) => !!c) ?? null;
-    return { f, pick, on, unavailable: !!m?.unavailable, glow: on && m?.glow ? rgb(m.glow.color) : null, tint };
+    // a radiator or cylinder in the colour of its temperature (#10)
+    const shade = shades.get(f.id);
+    return { f, pick, on, unavailable: !!m?.unavailable, glow: shade ? rgb(shade) : on && m?.glow ? rgb(m.glow.color) : null, tint, ...(shade ? { shade: true } : {}) };
   });
 }
 
