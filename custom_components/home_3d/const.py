@@ -22,6 +22,9 @@ PANEL_URL_PATH = "home_3d"
 PANEL_COMPONENT = "home-3d-panel"
 PANEL_ICON = "mdi:floor-plan"
 PANEL_TITLE = "Home 3D"
+# integration option (#8): whether the panel has an entry in the sidebar (the panel URL and the card work either way)
+CONF_SHOW_IN_SIDEBAR = "show_in_sidebar"
+DEFAULT_SHOW_IN_SIDEBAR = True
 
 SIGNAL_BUILDING_UPDATED = f"{DOMAIN}_building_updated"
 # a sentence for the open views (see voice.py) and the hass.data key of its broker

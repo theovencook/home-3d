@@ -25,8 +25,10 @@ from .card_resource import (
     loader_source,
 )
 from .const import (
+    CONF_SHOW_IN_SIDEBAR,
     DATA_EDITORS,
     DATA_PACK_UPDATES,
+    DEFAULT_SHOW_IN_SIDEBAR,
     DOMAIN,
     MAIN_BUNDLE,
     PANEL_COMPONENT,
@@ -120,6 +122,28 @@ async def _async_main_url(hass: HomeAssistant) -> str:
     return url
 
 
+async def _async_register_panel(hass: HomeAssistant, entry: ConfigEntry, url: str) -> None:
+    """Register the panel; with the sidebar option off it has no title and icon, so it stays out of the sidebar
+    while its URL (and the dashboard card) keep working (#8)."""
+    show = entry.options.get(CONF_SHOW_IN_SIDEBAR, DEFAULT_SHOW_IN_SIDEBAR)
+    await panel_custom.async_register_panel(
+        hass,
+        frontend_url_path=PANEL_URL_PATH,
+        webcomponent_name=PANEL_COMPONENT,
+        sidebar_title=PANEL_TITLE if show else None,
+        sidebar_icon=PANEL_ICON if show else None,
+        module_url=url,
+        require_admin=False,
+        config={},
+    )
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Show or hide the sidebar entry without a restart: replace the panel under the same URL."""
+    frontend.async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
+    await _async_register_panel(hass, entry, await _async_main_url(hass))
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Load the stores and register the frontend (panel and card)."""
     data = FloorplanData(hass)
@@ -155,16 +179,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # and as a dashboard resource, so a dashboard never draws the card before its script is there (#252), through
     # the loader on our own path, which tries again while the bundle is not there yet (#461)
     async_schedule_card_resource(hass, f"{LOADER_URL}?{url.split('?', 1)[1]}")
-    await panel_custom.async_register_panel(
-        hass,
-        frontend_url_path=PANEL_URL_PATH,
-        webcomponent_name=PANEL_COMPONENT,
-        sidebar_title=PANEL_TITLE,
-        sidebar_icon=PANEL_ICON,
-        module_url=url,
-        require_admin=False,
-        config={},
-    )
+    await _async_register_panel(hass, entry, url)
+    # the sidebar option (#8) applies at once: the panel is registered again, the entry is not reloaded
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
 
 
