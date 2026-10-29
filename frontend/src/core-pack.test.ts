@@ -65,3 +65,13 @@ test("theovencook.core shows off every part shape: at least one item draws with 
   const used = new Set(core.pack.items.flatMap((item) => item.parts.map((part) => part.shape)));
   for (const shape of ["box", "cyl", "loft", "sphere", "lathe", "rbox"]) assert.ok(used.has(shape as never), `no core item uses a ${shape}`);
 });
+
+test("every bundled lamp is linked as a light and has parts that glow with it", () => {
+  for (const { pack, folders } of packs) {
+    for (const item of pack.items) {
+      if (folders.get(item.id) !== "lamp") continue;
+      assert.ok(item.light, `${pack.id}/${item.id} says how it lights the room`);
+      assert.ok(item.parts.some((p) => p.glow), `${pack.id}/${item.id} has glowing parts`);
+    }
+  }
+});
