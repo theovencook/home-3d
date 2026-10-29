@@ -3,6 +3,7 @@
 // the pack "household.custom", so a placed custom item is the furniture type "pack:household.custom:<item id>".
 // An exported item is an item file, which imports on another install as it is. Pure logic, no DOM.
 
+import { MAX_PARTS, MAX_PROFILE_POINTS, PART_SHAPES } from "./item-format.ts";
 import type { FurniturePack, PackItem, PackPart } from "./packs.ts";
 
 /** The pack the backend offers the custom items as. */
@@ -45,11 +46,10 @@ export function newItem(name: string, taken: Iterable<string>): PackItem {
   };
 }
 
-/** The shapes a part can have, in the order the editor offers them. */
-export const PART_SHAPES = ["box", "cyl", "loft", "sphere", "lathe", "rbox"] as const satisfies readonly PackPart["shape"][];
-
-/** Most parts an item may have (the packs' limit). */
-export const MAX_PARTS = 60;
+/** The shapes a part can have, the most parts an item may have, the most points of a lathe's profile. */
+export { MAX_PARTS, MAX_PROFILE_POINTS, PART_SHAPES };
+// the shapes the packs know are the shapes a part can have
+PART_SHAPES satisfies readonly PackPart["shape"][];
 
 /** A lathe to start from: a vase-like profile, bottom up the outside. */
 const DEFAULT_PROFILE: [number, number][] = [
@@ -216,7 +216,14 @@ export function readItemFile(text: string, taken: Iterable<string>): { item: Cus
   try {
     data = JSON.parse(text);
   } catch {
-    return { error: "not_json" };
+    // an LLM's answer pasted as it came: the object inside a code fence or a line of chat
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    try {
+      data = JSON.parse(text.slice(start, end + 1));
+    } catch {
+      return { error: "not_json" };
+    }
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) return { error: "not_an_item" };
   const obj = data as Record<string, unknown>;
@@ -235,9 +242,6 @@ export function customPack(items: CustomItem[]): FurniturePack {
 export function customItems(packs: readonly FurniturePack[] | undefined): CustomItem[] {
   return packs?.find((p) => p.id === CUSTOM_PACK_ID)?.items ?? [];
 }
-
-/** Most points a lathe's profile may have (packs.py MAX_PROFILE_POINTS). */
-export const MAX_PROFILE_POINTS = 12;
 
 /** A lathe's profile as the editor's field shows it: "radius height" pairs separated by commas. */
 export function profileText(profile: [number, number][] | undefined): string {

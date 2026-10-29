@@ -24,17 +24,54 @@ import voluptuous as vol
 
 _LOGGER = logging.getLogger(__name__)
 
+# The lists and limits of an item. The item editor's brief for an LLM (frontend/src/item-format.ts, #14) states the
+# same ones, and a frontend test reads them from here, so keep these names and keep each a plain literal.
+PART_SHAPES = ["box", "cyl", "loft", "sphere", "lathe", "rbox"]
+COLOUR_ROLES = ["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent"]
+MOUNTS = ["floor", "surface", "wall", "ceiling"]
+LIGHTS = [
+    "ceiling",
+    "downlight",
+    "spot",
+    "panel",
+    "pendant",
+    "floor",
+    "uplight",
+    "table",
+    "wall",
+    "strip",
+    "bollard",
+    "garden",
+]
+MAX_PARTS = 60
+MAX_NAME_LENGTH = 80
+MAX_ROOMS = 12
+MAX_TAGS = 12
+MAX_TAG_LENGTH = 30
+METRES_RANGE = (0.01, 10)
+FRACTION_RANGE = (-0.5, 0.5)
+SPAN_RANGE = (0.001, 1)
+LEVEL_RANGE = (0, 1)
+WALL_Y_RANGE = (0, 3)
+ROT_RANGE = (-360, 360)
+
+
+def _range(limits: tuple[float, float]) -> vol.All:
+    """A number from limits[0] to limits[1]."""
+    return vol.All(vol.Coerce(float), vol.Range(min=limits[0], max=limits[1]))
+
+
 _ID = vol.All(str, vol.Match(r"^[a-z0-9][a-z0-9_.-]{0,39}$"))
-_TEXT = vol.All(str, vol.Length(min=1, max=80))
+_TEXT = vol.All(str, vol.Length(min=1, max=MAX_NAME_LENGTH))
 # a colour: "#rrggbb" or a role of the built-in palette (so packs follow the look of the plan)
 _COLOR = vol.Any(
     vol.Match(r"^#[0-9a-fA-F]{6}$"),
-    vol.In(["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent"]),
+    vol.In(COLOUR_ROLES),
 )
-_FRACTION = vol.All(vol.Coerce(float), vol.Range(min=-0.5, max=0.5))
-_SPAN = vol.All(vol.Coerce(float), vol.Range(min=0.001, max=1))
-_LEVEL = vol.All(vol.Coerce(float), vol.Range(min=0, max=1))
-_METRES = vol.All(vol.Coerce(float), vol.Range(min=0.01, max=10))
+_FRACTION = _range(FRACTION_RANGE)
+_SPAN = _range(SPAN_RANGE)
+_LEVEL = _range(LEVEL_RANGE)
+_METRES = _range(METRES_RANGE)
 
 # A lathe's profile: [radius, height] points turned around the part's upright axis (#4). The radius is a fraction of
 # the part's half width and half depth (1 touches the part's box), the height a fraction of the part's height.
@@ -45,7 +82,8 @@ _PROFILE = vol.All(
     vol.Length(min=2, max=MAX_PROFILE_POINTS),
 )
 # A rounded box: the radius of its rounded edges as a fraction of the part's shortest side (0.5: fully round)
-_ROUND = vol.All(vol.Coerce(float), vol.Range(min=0.01, max=0.5))
+ROUND_RANGE = (0.01, 0.5)
+_ROUND = _range(ROUND_RANGE)
 
 
 def _shape_fields(part: dict[str, Any]) -> dict[str, Any]:
@@ -62,7 +100,7 @@ def _shape_fields(part: dict[str, Any]) -> dict[str, Any]:
 # box fill their part box (squashed when w, d and h differ).
 _PART_FIELDS = vol.Schema(
     {
-        vol.Required("shape"): vol.In(["box", "cyl", "loft", "sphere", "lathe", "rbox"]),
+        vol.Required("shape"): vol.In(PART_SHAPES),
         vol.Required("x"): _FRACTION,
         vol.Required("z"): _FRACTION,
         vol.Required("w"): _SPAN,
@@ -85,7 +123,7 @@ _PART_FIELDS = vol.Schema(
         # cylinder axis: upright (default) or lying along x or z (wheels, rollers)
         vol.Optional("axis"): vol.In(["x", "y", "z"]),
         # turn of the part around its own centre (degrees around the vertical axis): spiral steps, diagonals
-        vol.Optional("rot"): vol.All(vol.Coerce(float), vol.Range(min=-360, max=360)),
+        vol.Optional("rot"): _range(ROT_RANGE),
         # free sizes (1.23): the measures that stay when the item is resized ("w", "d", "h" or several): legs,
         # arms and plates keep their size and their distance from the edge, the parts between them stretch
         vol.Optional("fix"): vol.All(str, vol.Match(r"^[wdh]{1,3}$")),
@@ -122,8 +160,8 @@ ITEM_SCHEMA = vol.Schema(
         vol.Optional("electric", default=False): bool,
         # where it stands: on the floor, on the furniture below it, on a wall (bottom at wall_y) or
         # hanging from the ceiling
-        vol.Optional("mount", default="floor"): vol.In(["floor", "surface", "wall", "ceiling"]),
-        vol.Optional("wall_y", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0, max=3)),
+        vol.Optional("mount", default="floor"): vol.In(MOUNTS),
+        vol.Optional("wall_y", default=1.0): _range(WALL_Y_RANGE),
         # its top carries other items (like a table or a worktop)
         vol.Optional("surface", default=False): bool,
         # a vehicle: offered for parking spots
@@ -131,29 +169,14 @@ ITEM_SCHEMA = vol.Schema(
         # stairs: when it reaches the floor above, it cuts a stairwell opening into that floor
         vol.Optional("hole", default=False): bool,
         # a lamp: how its light spreads (like the built-in lamp of that kind)
-        vol.Optional("light"): vol.In(
-            [
-                "ceiling",
-                "downlight",
-                "spot",
-                "panel",
-                "pendant",
-                "floor",
-                "uplight",
-                "table",
-                "wall",
-                "strip",
-                "bollard",
-                "garden",
-            ]
-        ),
-        vol.Required("parts"): vol.All([PART_SCHEMA], vol.Length(min=1, max=60)),
+        vol.Optional("light"): vol.In(LIGHTS),
+        vol.Required("parts"): vol.All([PART_SCHEMA], vol.Length(min=1, max=MAX_PARTS)),
         vol.Optional("symbol"): vol.All([SYMBOL_SCHEMA], vol.Length(max=40)),
         # the library (since 1.23): what the item is, the rooms it is made for, words that find it, and
         # variants of one thing (a table in three lengths) as a family with the variant's name by language
         vol.Optional("group"): _ID,
-        vol.Optional("room"): vol.All([_ID], vol.Length(max=12)),
-        vol.Optional("tags"): vol.All([vol.All(str, vol.Length(min=1, max=30))], vol.Length(max=12)),
+        vol.Optional("room"): vol.All([_ID], vol.Length(max=MAX_ROOMS)),
+        vol.Optional("tags"): vol.All([vol.All(str, vol.Length(min=1, max=MAX_TAG_LENGTH))], vol.Length(max=MAX_TAGS)),
         vol.Optional("family"): _ID,
         vol.Optional("variant"): vol.All({vol.All(str, vol.Length(min=2, max=5)): _TEXT}, vol.Length(min=1, max=10)),
         # the IKEA product name ("KALLAX"): the library finds the item by it as well as by its readable name
