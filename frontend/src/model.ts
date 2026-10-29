@@ -4,6 +4,7 @@
 import { packItem } from "./packs.ts";
 import type { LampModel } from "./viewer/viewer3d.ts";
 import type { ItemActions } from "./item-actions.ts";
+import type { RoleColours } from "./colour-roles.ts";
 
 export type Vec2 = [number, number];
 
@@ -185,6 +186,8 @@ export interface ShowWhen {
 }
 
 export interface Furniture {
+  /** Colour per role (#12): "#rrggbb" for each overridden role; missing roles (or null) follow the theme. */
+  colors?: RoleColours | null;
   /** Seasonal and conditional items (#15): when it shows in 3D (null = always). */
   show_when?: ShowWhen | null;
   /** Fixed against moving by accident. */
