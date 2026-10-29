@@ -27,6 +27,7 @@ import { screenName, setScreenName, setVoiceHere, setVoicePipeline, voiceOnHere,
 import { doorbellCamera, doorbellEntities, directorOnHere, HOLD_DEFAULT, HOLD_MAX, HOLD_MIN, setDirectorHere, type DirectorSettings } from "../director.ts";
 import { deviceSensors, energySummary, flowSegments, gridPoint, powerSensorFor, proposeEnergySensors, type EnergyPrefs, type FlowSegment, proposeMeters } from "../energy.ts";
 import { CLIMATE_ATTRS, isPulseDrive, isStatusSensor, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
+import { ACTION_TYPES, GESTURES, parseActionData, withGesture, type ActionType, type Gesture, type ItemAction, type ItemActions } from "../item-actions.ts";
 import { activeSections, sectionFloor, dormerParent, effectiveDormer, proposeDormer, sectionGeometry, floorOutline, polygonBox, headroomLines, ridgeHeight, sectionAbove, sectionCutsBelow, roofSectionsFromRooms, sectionFrame, sectionTurn, turnSectionAbout, wallTopUnder } from "../roof-sections.ts";
 import { bestFace, clampField, faceAt, faceCompass, fieldFace, fieldModules, GROUND, moveField, pointOnFace, proposeField, proposeGroundField, proposeWindow, proposeWallField, roofFaces, rowCounts, turnGroundField, fieldCenter, wallFaces, windowAsField, windowCorners, onFace, onField, rayOnFace, type RoofFace } from "../solar.ts";
 import type { SurfaceGrab, SurfaceRay } from "../viewer/viewer3d.ts";
@@ -4730,6 +4731,8 @@ export class Fp3dEditor extends LitElement {
       ...(camera ? { entity: "none", look_of: pl.entity_id } : { entity: pl.entity_id }),
       name: pl.name ?? null,
       ...(pl.locked ? { locked: true } : {}),
+      // own tap / hold / double-tap actions go along (#6)
+      ...(!camera && pl.actions ? { actions: pl.actions } : {}),
     };
     this.change((_, f) => {
       if (camera) f.furniture = f.furniture.filter((m) => m.look_of !== pl.entity_id);
@@ -4745,7 +4748,7 @@ export class Fp3dEditor extends LitElement {
   private furnitureToDevice(f: Furniture): void {
     const id = f.entity;
     if (!this.isEditor || !id || id === "none") return;
-    const pl: Placement = { entity_id: id, x: f.x, z: f.z, y: null, rotation: f.rotation, ...(f.name ? { name: f.name } : {}), ...(id.startsWith("light.") ? { pin: true } : {}) };
+    const pl: Placement = { entity_id: id, x: f.x, z: f.z, y: null, rotation: f.rotation, ...(f.name ? { name: f.name } : {}), ...(id.startsWith("light.") ? { pin: true } : {}), ...(f.actions ? { actions: f.actions } : {}) };
     this.change((_, floor) => {
       floor.furniture = floor.furniture.filter((m) => m.id !== f.id);
       if (!floor.placements.some((p) => p.entity_id === id)) floor.placements.push(pl);
@@ -11001,6 +11004,7 @@ export class Fp3dEditor extends LitElement {
         : nothing}
       ${isElectric(f.type) ? this.renderFurnitureLinks(f) : !NO_STATE_TYPES.has(f.type) ? html`<div class="fp3d-form fp3d-links">${this.renderStateLinks(f)}</div>` : nothing} ${GANG_TYPES.has(f.type) ? this.renderGangsForm(f) : nothing} ${TECH_TYPES.has(f.type) ? this.renderTechForm(f) : nothing} ${f.type === "parking" ? this.renderParkingForm(f) : nothing} ${f.type === "waste_bin" || f.type === "mailbox" ? this.renderHouseholdForm(f) : this.renderHouseholdExtras(f)}
       ${this.renderModuleFurnitureFields(f)}
+      ${this.renderItemActions(f.actions, f.entity && f.entity !== "none" ? f.entity : null, (a) => this.updateFurniture({ actions: a }))}
       ${/^pack:[^:]+\.vehicles:/.test(f.type) && this.isEditor
         ? html`<section>
             <p class="fp3d-sub">${this.t("vehicle_to_spot_hint")}</p>
@@ -11214,6 +11218,78 @@ export class Fp3dEditor extends LitElement {
             <button class="fp3d-btn" @click=${() => set([...list, { id: uid("preset"), label: "Radio", type: "music", content: "" }])}>+ ${this.t("preset_add")}</button>
           </div>`
         : nothing}`;
+  }
+
+  /**
+   * Own tap, hold and double-tap actions of a device or item (#6). Only editors change them; everyone who can
+   * see the view can use them.
+   */
+  private renderItemActions(actions: ItemActions | null | undefined, ownEntity: string | null, onChange: (next: ItemActions | null) => void) {
+    const admin = this.isEditor;
+    const set = (g: Gesture, patch: Partial<ItemAction> | null) => {
+      const cur = actions?.[g];
+      onChange(withGesture(actions, g, patch === null ? null : ({ ...(cur ?? { action: "default" }), ...patch } as ItemAction)));
+    };
+    const placeholder = (type: ActionType) =>
+      type === "navigate" ? "/lovelace/garden" : type === "url" ? "https://" : type === "perform_action" ? "script.turn_on" : (ownEntity ?? "light.kitchen");
+    return html`<h4>${this.t("item_actions")}</h4>
+      <p class="fp3d-sub">${this.t("item_actions_hint")}</p>
+      ${GESTURES.map((g) => {
+        const a = actions?.[g] ?? null;
+        const type: ActionType = a?.action ?? "default";
+        const runs = type !== "default" && type !== "none";
+        return html`<div class="fp3d-form fp3d-item-action" data-gesture=${g}>
+          <label class="fp3d-field fp3d-wide"
+            >${this.t(`item_gesture_${g}` as I18nKey)}
+            <select ?disabled=${!admin} @change=${(e: Event) => {
+              const v = (e.target as HTMLSelectElement).value as ActionType;
+              set(g, v === "default" ? null : { action: v, target: null, data: null });
+            }}>
+              ${ACTION_TYPES.map((t) => html`<option value=${t} ?selected=${t === type}>${this.t(`item_action_${t}` as I18nKey)}</option>`)}
+            </select></label
+          >
+          ${runs
+            ? html`<label class="fp3d-field fp3d-wide"
+                >${this.t(`item_target_${type}` as I18nKey)}
+                <input type="text" maxlength="2000" .value=${a?.target ?? ""} ?disabled=${!admin} placeholder=${placeholder(type)} @change=${(e: Event) => set(g, { target: (e.target as HTMLInputElement).value.trim() || null })}
+              /></label>`
+            : nothing}
+          ${type === "perform_action"
+            ? html`<label class="fp3d-field fp3d-wide" title=${this.t("own_data_hint")}
+                >${this.t("own_data")}
+                <textarea
+                  rows="3"
+                  spellcheck="false"
+                  ?disabled=${!admin}
+                  placeholder='{"entity_id": "script.movie_night"}'
+                  .value=${a?.data ? JSON.stringify(a.data, null, 1) : ""}
+                  @change=${(e: Event) => {
+                    const el = e.target as HTMLTextAreaElement;
+                    el.setCustomValidity("");
+                    try {
+                      set(g, { data: parseActionData(el.value) });
+                    } catch {
+                      el.setCustomValidity(this.t("own_data_bad"));
+                      el.reportValidity();
+                    }
+                  }}
+                ></textarea></label
+              >`
+            : nothing}
+          ${runs
+            ? html`<label class="fp3d-check fp3d-wide"
+                  ><input type="checkbox" .checked=${!!a?.confirm} ?disabled=${!admin} @change=${(ev: Event) => set(g, { confirm: (ev.target as HTMLInputElement).checked || undefined })} />
+                  ${this.t("item_action_confirm")}</label
+                >
+                ${a?.confirm
+                  ? html`<label class="fp3d-field fp3d-wide"
+                      >${this.t("item_action_confirm_text")}
+                      <input type="text" maxlength="300" .value=${a.confirm_text ?? ""} ?disabled=${!admin} placeholder=${this.t("item_action_confirm_placeholder")} @change=${(e: Event) => set(g, { confirm_text: (e.target as HTMLInputElement).value.trim() || null })}
+                    /></label>`
+                  : nothing}`
+            : nothing}
+        </div>`;
+      })}`;
   }
 
   /** Own buttons of the central menu (D143): label, icon, action, target and data. */
@@ -12512,6 +12588,7 @@ export class Fp3dEditor extends LitElement {
           : nothing}
         ${this.iconInput(pl.icon, (v) => this.updateDevice({ icon: v }))}
       </div>
+      ${this.renderItemActions(pl.actions, pl.entity_id, (a) => this.updateDevice({ actions: a }))}
       ${admin
         ? html`<div class="fp3d-actions">
             <button class="fp3d-btn" @click=${() => this.centreDevice()}>${this.t("device_centre")}</button>

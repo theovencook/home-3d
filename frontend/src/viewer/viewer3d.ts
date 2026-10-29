@@ -106,6 +106,8 @@ export interface ViewerOptions {
   onRoomDoubleTap?: (floorId: string, roomId: string) => void;
   /** Long press on a device marker. */
   onDeviceHold?: (entityId: string, x: number, y: number) => void;
+  /** A double tap on a device or item: true when it had an own double-tap action (#6), else the view goes back. */
+  onDeviceDoubleTap?: (entityId: string, x: number, y: number) => boolean;
   /**
    * Vertical swipe on a device (dim a lamp, move a blind): "start" returns whether the device takes
    * it; "move" reports the distance from the start (pixels, down positive).
@@ -2125,8 +2127,11 @@ export class FloorplanViewer {
       drag: (x, y) => this.dragFurniture(x, y),
       drop: () => this.dropFurniture(),
       doubleTap: (x, y) => {
-        const hit = this.floorId && this.options.onRoomDoubleTap ? this.pick(x, y) : null;
-        if (hit && !("entity" in hit) && hit.roomId) this.options.onRoomDoubleTap!(hit.floorId, hit.roomId);
+        const roomTap = !!(this.floorId && this.options.onRoomDoubleTap);
+        const hit = roomTap || (this.options.onDeviceDoubleTap && !this.furnish) ? this.pick(x, y) : null;
+        // a device or item with an own double-tap action (#6) takes it
+        if (hit && "entity" in hit && !this.furnish && this.options.onDeviceDoubleTap?.(hit.entity, x, y)) return;
+        if (roomTap && hit && !("entity" in hit) && hit.roomId) this.options.onRoomDoubleTap!(hit.floorId, hit.roomId);
         else this.options.onBack?.();
       },
     });
