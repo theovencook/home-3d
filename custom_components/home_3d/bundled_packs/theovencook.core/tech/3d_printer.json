@@ -20,6 +20,10 @@
     "maker",
     "filament"
   ],
+  "family": "3d_printer",
+  "variant": {
+    "en": "Enclosed"
+  },
   "electric": true,
   "mount": "surface",
   "parts": [

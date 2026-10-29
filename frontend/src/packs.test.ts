@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isLamp, newFloor, setTerrain, type Building, type Furniture } from "./model.ts";
-import { isCooktopZone, isPackCooktop, isPackSensor, furnitureSize, isElectric, mountBase, packDisplay, packItem, packItemName, packName, packOrigin, packsVersion, packType, setPacks, withPackItem, DRAFT_TYPE, type FurniturePack } from "./packs.ts";
+import { isCooktopZone, isPackCooktop, isPackSensor, furnitureSize, isElectric, mountBase, packAmbilight, packDisplay, packItem, packItemName, packName, packOrigin, packsVersion, packType, setPacks, withPackItem, DRAFT_TYPE, type FurniturePack } from "./packs.ts";
 
 const pack: FurniturePack = {
   id: "demo.pack",
@@ -73,6 +73,32 @@ test("a status light is no display: printers ask for a device, TVs for a media p
   ]);
   assert.equal(packDisplay("pack:t:tv"), true);
   assert.equal(packDisplay("pack:t:printer"), false);
+  setPacks([]);
+});
+
+test("a TV with glowing parts has Ambilight: they shine whenever its screen is lit, not only while it plays", () => {
+  const body = { shape: "box" as const, x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "dark" };
+  const screen = { ...body, z: 0.45, d: 0.1, screen: true };
+  const strip = { ...body, z: -0.48, d: 0.04, w: 0.9, h: 0.04, glow: true };
+  setPacks([
+    {
+      id: "t.tv",
+      name: "t",
+      publisher: "t",
+      items: [
+        { id: "tv_ambilight", name: { en: "TV" }, size: [1.2, 0.08, 0.7], parts: [body, screen, strip] },
+        { id: "tv", name: { en: "TV" }, size: [1.2, 0.08, 0.7], parts: [body, screen] },
+        { id: "speaker", name: { en: "Speaker" }, size: [0.1, 0.1, 0.15], parts: [body, strip] },
+        { id: "lamp", name: { en: "Lamp" }, size: [0.3, 0.3, 0.5], light: "table", parts: [body, screen, strip] },
+      ],
+    } as unknown as FurniturePack,
+  ]);
+  assert.equal(packAmbilight("pack:t.tv:tv_ambilight"), true);
+  // a TV without glowing parts, a speaker's ring (it shines while it plays) and a lamp (it shines with its light)
+  assert.equal(packAmbilight("pack:t.tv:tv"), false);
+  assert.equal(packAmbilight("pack:t.tv:speaker"), false);
+  assert.equal(packAmbilight("pack:t.tv:lamp"), false);
+  assert.equal(packAmbilight("sofa"), false);
   setPacks([]);
 });
 
