@@ -3589,6 +3589,7 @@ export class Fp3dView3d extends LitElement {
       rotation: f.rotation,
       mirror: !!f.mirror,
       colors: f.colors,
+      materials: f.materials,
       roll: f.tilt ?? 0,
       upright: !!f.upright,
       rise: f.rise ?? 0,

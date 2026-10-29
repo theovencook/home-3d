@@ -152,6 +152,7 @@ import "./library.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
 import { COLOUR_PRESETS, itemColourRoles, roleColour, setRoleColour, type ColourRole } from "../colour-roles.ts";
+import { MATERIALS, ownMaterial, setRoleMaterial, usualMaterial, type Material } from "../role-materials.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
@@ -11788,19 +11789,23 @@ export class Fp3dEditor extends LitElement {
   }
 
   /**
-   * Colour per role (#12): each role the item is drawn in, with a colour picker and the named presets. A role without
-   * a colour of its own follows the look; "From the look" clears it. Only editors change it.
+   * Colour and material per role (#12, #40): each role the item is drawn in, with a colour picker, the named presets and
+   * its material. A role without a colour of its own follows the look; "From the look" clears it. A role without a
+   * material of its own takes its usual one; materials show in the realistic look. Only editors change them.
    */
   private renderColourRoles(f: Furniture) {
     const roles = itemColourRoles(f.type);
     if (!roles.length) return nothing;
     const admin = this.isEditor;
     const set = (role: ColourRole, hex: string | null) => this.updateFurniture({ colors: setRoleColour(f.colors, role, hex) });
+    const setMaterial = (role: ColourRole, m: string) => this.updateFurniture({ materials: setRoleMaterial(f.materials, role, (m || null) as Material | null) });
+    const materialName = (m: Material) => this.t(`material_${m}` as I18nKey);
     return html`<div class="fp3d-form">
       <h4 class="fp3d-lib-head fp3d-wide">${this.t("colours")}</h4>
       ${roles.map((role) => {
         const own = roleColour(f.colors, role);
         const preset = own ? COLOUR_PRESETS.find((p) => p.hex === own) : undefined;
+        const mat = ownMaterial(f.materials, role);
         return html`<div class="fp3d-field fp3d-colour-role">
           <span>${this.t(`colour_role_${role}` as I18nKey)}</span>
           <span class="fp3d-colour-pick">
@@ -11810,6 +11815,11 @@ export class Fp3dEditor extends LitElement {
               <option value="" ?selected=${!own}>${this.t("colour_theme")}</option>
               ${own && !preset ? html`<option value=${own} selected>${this.t("colour_own")}</option>` : nothing}
               ${COLOUR_PRESETS.map((p) => html`<option value=${p.hex} ?selected=${p === preset}>${this.t(`colour_preset_${p.id}` as I18nKey)}</option>`)}
+            </select>
+            <select class="fp3d-material" aria-label=${this.t("material_of", { role: this.t(`colour_role_${role}` as I18nKey) })} ?disabled=${!admin}
+              @change=${(e: Event) => setMaterial(role, (e.target as HTMLSelectElement).value)}>
+              <option value="" ?selected=${!mat}>${this.t("material_usual", { material: materialName(usualMaterial(role)) })}</option>
+              ${MATERIALS.map((m) => html`<option value=${m} ?selected=${m === mat}>${materialName(m)}</option>`)}
             </select>
           </span>
         </div>`;

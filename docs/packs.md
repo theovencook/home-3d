@@ -158,7 +158,10 @@ All measures of a part are **fractions of the item's size**:
   - `lathe`: a `profile` turned around the part's upright axis (vases, lamp bases, bowls, planters).
   - `rbox`: a box with rounded edges (cushions, mattresses, appliances, soft seats); `round` sets how round.
 - `color`: `#rrggbb` or a role of the built-in palette (`body`, `fabric`, `cushion`, `wood`, `white`, `metal`,
-  `dark`, `glass`, `plant`, `pot`, `accent`). Roles follow the look of the plan, so prefer them.
+  `dark`, `glass`, `plant`, `pot`, `accent`). Roles follow the look of the plan, so prefer them. In the realistic
+  look each role also has a material (`fabric` and `cushion` fabric, `metal` metal, `glass` glass, `white` gloss, the
+  rest matt), which an editor can change per placed item in the item panel (matt, gloss, fabric, glass, metal or
+  rattan weave); a `#rrggbb` part is matt.
 - `top` (optional): another colour for the top face.
 - `edges` (optional): glowing outlines: `true` (soft blue), `"glow"` (cyan like the walls) or `"faint"`.
 - `rot` (optional): turn of the part around its own centre, in degrees around the vertical axis (−360 to 360), for
