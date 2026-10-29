@@ -18,6 +18,7 @@ from .const import DATA_ASK, DATA_EDITORS, DATA_VOICE, DOMAIN, SIGNAL_ASK, SIGNA
 from .editors import Editors, EditorsError, can_edit
 from .locate.recorder import ws_locate_rec
 from .locate.ws import COMMANDS as LOCATE_COMMANDS
+from .pack_github import checked_origin, fetch_pack
 from .packs import (
     MAX_PACK_SIZE,
     PackError,
@@ -51,6 +52,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_history_restore,
         ws_packs_list,
         ws_packs_import,
+        ws_packs_install_url,
         ws_packs_remove,
         ws_backup_export,
         ws_backup_import,
@@ -273,6 +275,37 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
 
 
 @websocket_api.websocket_command(
+    {vol.Required("type"): "home_3d/packs/install_url", vol.Required("url"): vol.All(str, vol.Length(min=1, max=500))}
+)
+@require_editor
+@websocket_api.async_response
+async def ws_packs_install_url(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Install a pack from a GitHub URL (#25): Home Assistant fetches it, checks it like a folder import and keeps
+    where it came from (`source.origin`) for update checks."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    try:
+        files, origin = await fetch_pack(hass, msg["url"])
+        payload = verify_folder(files)
+        source = {**source_of_folder(files), "origin": {**origin, "release": payload["release"]}}
+    except PackError as err:
+        connection.send_error(msg["id"], err.code, err.detail or err.code)
+        return
+    await data.async_add_pack(payload, source)
+    result = {
+        "id": payload["id"],
+        "name": payload["name"],
+        "publisher": payload["publisher"],
+        "licence": payload["licence"],
+        "items": len(payload["items"]),
+        "origin": source["origin"],
+    }
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
     {vol.Required("type"): "home_3d/packs/remove", vol.Required("pack_id"): vol.All(str, vol.Length(max=64))}
 )
 @require_editor
@@ -342,6 +375,11 @@ async def ws_backup_import(
         except PackError as err:
             skipped.append({"id": name, "reason": err.code})
             continue
+        if "origin" in source:
+            # where a pack came from (#25): kept only when it names GitHub as this version writes it
+            source = {k: v for k, v in source.items() if k != "origin"}
+            if (origin := checked_origin(entry["source"]["origin"])) is not None:
+                source["origin"] = origin
         packs.append({**clean, "source": source, "imported_at": time.time()})
     revision = await data.async_restore(complete(building), packs)
     connection.send_result(

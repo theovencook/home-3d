@@ -377,6 +377,22 @@ def test_pets_roam_unless_set_static() -> None:
         SETTINGS_SCHEMA({**base, "pets": {"list": [{**pet, "pose": "fly"}]}})
 
 
+def test_pet_coats_and_eye_colours() -> None:
+    """Pet coats and eye colours (#42): the new coats are kept, eyes are dark unless set to a known colour."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+
+    def pet(**extra: object) -> dict:
+        return SETTINGS_SCHEMA({**base, "pets": {"list": [{"id": "p1", "kind": "cat", **extra}]}})["pets"]["list"][0]
+
+    assert pet()["eyes"] == "dark"
+    for fur in ("dilute_calico", "blue_grey"):
+        assert pet(fur=fur)["fur"] == fur
+    for eyes in ("dark", "copper", "green", "yellow", "blue"):
+        assert pet(eyes=eyes)["eyes"] == eyes
+    with pytest.raises(vol.Invalid):
+        pet(eyes="purple")
+
+
 def test_item_actions() -> None:
     """Own tap, hold and double-tap actions of a placed device or a furniture item (#6)."""
     from custom_components.home_3d.schema import PLACEMENT_SCHEMA
