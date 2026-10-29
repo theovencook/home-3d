@@ -5,7 +5,7 @@
 
 import { Color } from "three";
 import type { Furniture, Vec2 } from "../model.ts";
-import { builtinBase, gangsOf, stairsULayout, POOL_VALVE_Y } from "../model.ts";
+import { builtinBase, gangsOf, stairPlan, stairsULayout, STAIR_WINDERS, POOL_VALVE_Y } from "../model.ts";
 import { isRobotVacuum, mountBase, packItem, packMotion, packMovingPart, packRobotCentre, packRobotPart, packScreen, type PackItem, type PackMotion, type PackPart } from "../packs.ts";
 import { fitParts } from "../pack-scale.ts";
 import { COLOUR_ROLES, roleColour, type RoleColours } from "../colour-roles.ts";
@@ -1058,8 +1058,7 @@ function rug(b: Builder, w: number, d: number): void {
   }
 }
 
-/** Number of winder steps in a stair's bottom quarter turn. */
-export const STAIR_WINDERS = 3;
+export { STAIR_WINDERS };
 /** Thickness of an open (floating) stair's treads. */
 const OPEN_TREAD = 0.045;
 
@@ -1073,12 +1072,8 @@ const OPEN_TREAD = 0.045;
  * metres (a few steps up to a landing, the flight going on from its side).
  */
 function stairs(b: Builder, w: number, d: number, h: number, open = false, turn: "left" | "right" | null = null, landing = 0, top = 0): void {
-  const n = Math.max(3, Math.round(h / 0.18));
+  const { n, flat, winders, skip } = stairPlan({ w, d, h, stair_turn: turn, stair_landing: landing }); // skip: steps taken before the straight flight starts
   const rise = h / n;
-  const fits = d > w + 0.3;
-  const flat = fits && landing > 0 ? Math.min(landing, n - 1) : 0;
-  const winders = !flat && turn && fits ? STAIR_WINDERS : 0;
-  const skip = flat || winders; // steps taken before the straight flight starts
   const z0s = d / 2 - (skip ? w : 0); // where the straight flight starts
   const flatTop = Math.max(0, Math.min(top, d - 0.2 * (n - skip)));
   const run = (z0s + d / 2 - flatTop) / (n - skip);

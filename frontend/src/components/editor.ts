@@ -138,6 +138,8 @@ import {
   type SillBoard,
   type ScreenPicture,
   STAIR_TYPES,
+  stairLimits,
+  stairOptionPatch,
   setTerrain,
   clearFirstState,
 } from "../model.ts";
@@ -4886,6 +4888,28 @@ export class Fp3dEditor extends LitElement {
    */
   private snapToWall(f: Furniture): { x: number; z: number; rotation: number } | null {
     return this.floor ? snapToWall(this.floor, f, this._doc.settings.wall_interior) : null;
+  }
+
+  /** Straight stairs: open treads, a turn or landing at the bottom, a flat top and a start height (#16). */
+  private renderStairOptions(f: Furniture) {
+    const admin = this.isEditor;
+    const limits = stairLimits(f);
+    const apply = (change: Parameters<typeof stairOptionPatch>[1]) => this.updateFurniture(stairOptionPatch(f, change));
+    return html`<div class="fp3d-form">
+      <label class="fp3d-check fp3d-wide"
+        ><input type="checkbox" .checked=${!!f.stair_open} ?disabled=${!admin} @change=${(e: Event) => apply({ stair_open: (e.target as HTMLInputElement).checked })} />
+        ${this.t("stair_open")}</label
+      >
+      <label class="fp3d-field fp3d-wide" title=${this.t("stair_turn_hint")}
+        >${this.t("stair_turn")}
+        <select ?disabled=${!admin || !limits.canTurn} @change=${(e: Event) => apply({ stair_turn: ((e.target as HTMLSelectElement).value || null) as "left" | "right" | null })}>
+          ${(["", "left", "right"] as const).map((v) => html`<option value=${v} ?selected=${(f.stair_turn ?? "") === v}>${this.t(`stair_turn_${v || "none"}` as I18nKey)}</option>`)}
+        </select></label
+      >
+      <span title=${this.t("stair_landing_hint")}>${this.num(this.t("stair_landing"), f.stair_landing ?? 0, (v) => apply({ stair_landing: v }), 1, 0)}</span>
+      <span title=${this.t("stair_top_hint")}>${this.len(this.t("stair_top"), f.stair_top ?? 0, (v) => apply({ stair_top: v }), 0.05, 0)}</span>
+      ${this.len(this.t("stair_start"), f.mount_y ?? 0, (v) => this.updateFurniture({ mount_y: Math.round(Math.min(MAX_MOUNT_Y, Math.max(0, v)) * 1000) / 1000 || null }), 0.05, 0)}
+    </div>`;
   }
 
   private updateFurniture(patch: Partial<Furniture>): void {
@@ -11080,6 +11104,7 @@ export class Fp3dEditor extends LitElement {
       </div>
       ${this.renderColourRoles(f)}
       ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
+      ${f.type === "stairs" ? this.renderStairOptions(f) : nothing}
       ${f.type === "stairs_u" ? html`<p class="fp3d-sub">${this.t("stairs_u_hint")}</p>` : nothing}
       ${f.type === "stairwell"
         ? html`<p class="fp3d-sub">${this.t("stairwell_hint")}</p>

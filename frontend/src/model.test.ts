@@ -257,3 +257,44 @@ test("a camera and its look stay together: either one moved takes the other alon
   syncCameraLooks(gone, base);
   assert.equal(gone.floors[0].furniture.length, 0);
 });
+
+// ---- stair options in the item panel (#16)
+const stair = (over: Partial<Furniture> = {}): Furniture => ({ id: "s", type: "stairs", x: 0, z: 0, rotation: 0, w: 1, d: 3.2, h: 2.75, variant: null, ...over });
+
+test("stair limits: a turn or landing needs a flight longer than it is wide, the flat top leaves 0.2 m per remaining step", async () => {
+  const { stairLimits } = await import("./model.ts");
+  // 2.75 m rises in 15 risers
+  const plain = stairLimits(stair());
+  assert.equal(plain.canTurn, true);
+  assert.equal(plain.maxLanding, 14);
+  assert.ok(Math.abs(plain.maxTop - (3.2 - 0.2 * 15)) < 1e-9);
+  // a winder turn takes the first three steps off the straight flight, a landing that many
+  assert.ok(Math.abs(stairLimits(stair({ stair_turn: "left" })).maxTop - (3.2 - 0.2 * 12)) < 1e-9);
+  assert.ok(Math.abs(stairLimits(stair({ stair_landing: 5 })).maxTop - (3.2 - 0.2 * 10)) < 1e-9);
+  // too short to turn: no turn, no landing, as the 3D view ignores them there
+  const short = stairLimits(stair({ d: 1.2 }));
+  assert.equal(short.canTurn, false);
+  assert.equal(short.maxLanding, 0);
+  assert.equal(short.maxTop, 0);
+});
+
+test("stair option edits: choices exclude each other and stay inside what the 3D view can draw", async () => {
+  const { stairOptionPatch } = await import("./model.ts");
+  assert.deepEqual(stairOptionPatch(stair(), { stair_open: true }), { stair_open: true });
+  assert.deepEqual(stairOptionPatch(stair({ stair_open: true }), { stair_open: false }), { stair_open: null });
+  // a turn replaces a landing and the other way round
+  assert.deepEqual(stairOptionPatch(stair({ stair_landing: 3 }), { stair_turn: "right" }), { stair_turn: "right", stair_landing: null });
+  assert.deepEqual(stairOptionPatch(stair({ stair_turn: "left" }), { stair_landing: 3 }), { stair_landing: 3, stair_turn: null });
+  assert.deepEqual(stairOptionPatch(stair({ stair_turn: "left" }), { stair_turn: null }), { stair_turn: null });
+  // landing steps are whole risers, at most one short of the stair; none means none
+  assert.deepEqual(stairOptionPatch(stair(), { stair_landing: 2.6 }), { stair_landing: 3, stair_turn: null });
+  assert.deepEqual(stairOptionPatch(stair(), { stair_landing: 99 }), { stair_landing: 14, stair_turn: null });
+  assert.deepEqual(stairOptionPatch(stair({ stair_landing: 3 }), { stair_landing: 0 }), { stair_landing: null });
+  // the flat top is limited by what is left of the flight, and a longer landing pulls it in
+  assert.deepEqual(stairOptionPatch(stair(), { stair_top: 0.504 }), { stair_top: 0.2 });
+  assert.deepEqual(stairOptionPatch(stair({ stair_top: 0.2 }), { stair_top: 0 }), { stair_top: null });
+  assert.deepEqual(stairOptionPatch(stair({ stair_turn: "left", stair_top: 0.5 }), { stair_turn: null }), { stair_turn: null, stair_top: 0.2 });
+  assert.deepEqual(stairOptionPatch(stair({ stair_landing: 3, stair_top: 0.5 }), { stair_landing: 9 }), { stair_landing: 9, stair_turn: null });
+  // a stair too short for a turn keeps no turn
+  assert.deepEqual(stairOptionPatch(stair({ d: 1.2 }), { stair_turn: "left" }), { stair_turn: null });
+});

@@ -1483,6 +1483,72 @@ export function spotDepth(type: string, h: number): number {
 /** Built-in stairs: they reach up to the next floor and cut its opening (the straight one and the U-stair). */
 export const STAIR_TYPES = new Set<string>(["stairs", "stairs_u"]);
 
+/** Number of winder steps in a straight stair's bottom quarter turn. */
+export const STAIR_WINDERS = 3;
+/** The riser height a straight stair aims for (m). */
+export const STAIR_RISER = 0.18;
+/** The least run the 3D view leaves each step before the flat top (m). */
+const STAIR_MIN_RUN = 0.2;
+
+type StairShape = Pick<Furniture, "w" | "d" | "h"> & { stair_turn?: "left" | "right" | null; stair_landing?: number | null };
+
+/**
+ * How a straight stair is laid out: `n` risers, `fits` (the flight is longer than it is wide, so a turn or a
+ * landing has room), `skip` steps taken before the straight flight (landing steps, or the winders of a turn).
+ * The 3D view draws from this, so the item panel offers exactly what it can show.
+ */
+export function stairPlan(f: StairShape): { n: number; fits: boolean; flat: number; winders: number; skip: number } {
+  const n = Math.max(3, Math.round(f.h / STAIR_RISER));
+  const fits = f.d > f.w + 0.3;
+  const flat = fits && (f.stair_landing ?? 0) > 0 ? Math.min(f.stair_landing ?? 0, n - 1) : 0;
+  const winders = !flat && f.stair_turn && fits ? STAIR_WINDERS : 0;
+  return { n, fits, flat, winders, skip: flat || winders };
+}
+
+/** What the item panel may offer a straight stair: a turn, landing steps up to this many, a flat top up to this long (m). */
+export function stairLimits(f: StairShape): { canTurn: boolean; maxLanding: number; maxTop: number } {
+  const { n, fits, skip } = stairPlan(f);
+  return { canTurn: fits, maxLanding: fits ? n - 1 : 0, maxTop: Math.max(0, Math.round((f.d - STAIR_MIN_RUN * (n - skip)) * 1000) / 1000) };
+}
+
+/**
+ * The fields to write when one stair option changes: a turn and a landing replace each other, landing steps are
+ * whole risers, the flat top stays within what is left of the flight (and is pulled in when a change shortens it),
+ * and an option switched off is removed (null) instead of kept as false or 0.
+ */
+export function stairOptionPatch(
+  f: StairShape & Pick<Furniture, "stair_top">,
+  change: { stair_open?: boolean; stair_turn?: "left" | "right" | null; stair_landing?: number; stair_top?: number },
+): Partial<Furniture> {
+  const out: Partial<Furniture> = {};
+  if (change.stair_open !== undefined) out.stair_open = change.stair_open ? true : null;
+  const next: StairShape = { ...f };
+  if (change.stair_turn !== undefined) {
+    out.stair_turn = change.stair_turn && stairLimits(f).canTurn ? change.stair_turn : null;
+    next.stair_turn = out.stair_turn;
+    if (out.stair_turn && f.stair_landing) {
+      out.stair_landing = null;
+      next.stair_landing = null;
+    }
+  }
+  if (change.stair_landing !== undefined) {
+    const steps = Math.max(0, Math.min(Math.round(change.stair_landing), stairLimits(f).maxLanding));
+    out.stair_landing = steps || null;
+    next.stair_landing = steps;
+    if (steps) {
+      out.stair_turn = null;
+      next.stair_turn = null;
+    }
+  }
+  // the flat top follows the flight it is now part of
+  const top = change.stair_top ?? f.stair_top ?? 0;
+  if (change.stair_top !== undefined || (f.stair_top && stairLimits(next).maxTop < f.stair_top)) {
+    const t = Math.max(0, Math.min(Math.round(top * 100) / 100, stairLimits(next).maxTop));
+    out.stair_top = t || null;
+  }
+  return out;
+}
+
 /**
  * Layout of the built-in U-stair (w × d, height h): n risers of equal height, the landing at the back is
  * the top of riser k. The first flight never has fewer treads than the second; both share one going.
