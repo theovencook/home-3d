@@ -347,6 +347,12 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("fan"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # mirrored left-right
         vol.Optional("mirror", default=False): bool,
+        # straight stairs (#16): open treads, a quarter turn with winders at the bottom (entered from the left or
+        # right side), that many risers of a flat bottom landing, a flat top step (m); the start height is mount_y
+        vol.Optional("stair_open"): vol.Any(None, bool),
+        vol.Optional("stair_turn"): vol.Any(None, vol.In(["left", "right"])),
+        vol.Optional("stair_landing"): vol.Any(None, vol.All(int, vol.Range(min=0, max=60))),
+        vol.Optional("stair_top"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=10))),
         # awning: the fabric's fall (degrees), the valance, a position sensor, its run time and the other direction
         vol.Optional("awning_pitch", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=80))),
         vol.Optional("awning_valance", default=True): bool,

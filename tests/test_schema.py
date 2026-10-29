@@ -287,6 +287,33 @@ def test_ceiling_fan_keeps_its_fan() -> None:
     assert "fan" not in FURNITURE_SCHEMA(fan)
 
 
+def test_stairs_keep_their_options_and_check_them() -> None:
+    """Open treads, a turn, bottom landing steps, a flat top and a start height are known fields (#16)."""
+    stairs = {"id": "s1", "type": "stairs", "x": 2, "z": 2, "rotation": 0, "w": 1, "d": 3.2, "h": 2.75, "variant": None}
+    out = FURNITURE_SCHEMA(
+        {**stairs, "stair_open": True, "stair_turn": "left", "stair_landing": 3, "stair_top": 0.5, "mount_y": 0.54}
+    )
+    assert out["stair_open"] is True
+    assert out["stair_turn"] == "left"
+    assert out["stair_landing"] == 3
+    assert out["stair_top"] == 0.5
+    assert out["mount_y"] == 0.54
+    # a plain stair stays plain, and the editor may send nulls to clear an option
+    assert not any(k.startswith("stair_") for k in FURNITURE_SCHEMA(stairs))
+    cleared = FURNITURE_SCHEMA({**stairs, "stair_open": None, "stair_turn": None, "stair_landing": None, "stair_top": None})
+    assert cleared["stair_turn"] is None and cleared["stair_landing"] is None
+    for bad in (
+        {"stair_open": "yes"},
+        {"stair_turn": "up"},
+        {"stair_landing": -1},
+        {"stair_landing": 1.5},
+        {"stair_top": -0.1},
+        {"stair_top": 50},
+    ):
+        with pytest.raises(vol.Invalid):
+            FURNITURE_SCHEMA({**stairs, **bad})
+
+
 def test_wall_socket_keeps_its_gangs() -> None:
     """A socket keeps up to four gangs, the same entity on two of them (#593); a fifth is refused."""
     base = {
