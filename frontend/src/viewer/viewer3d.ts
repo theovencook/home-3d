@@ -66,7 +66,7 @@ export { FloorMap, WalkCamera, type WalkState } from "./walk.ts";
 export const funLib = { Group, Mesh, MeshBasicMaterial, CanvasTexture, Color, PlaneGeometry, BufferGeometry: Geometry, Float32BufferAttribute, DoubleSide };
 
 export type { PipeTube };
-import { groundUnder, isCooktopZone, mountBase, packItem, packMotion, setPacks, type FurniturePack } from "../packs.ts";
+import { groundUnder, isCooktopZone, mountBase, packItem, packMotion, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "../packs.ts";
 import { withVehicles } from "../parking.ts";
 import { buildRoof, type RoofGeometry, type RoofWindowState } from "./roof.ts";
 import { SunFx } from "./sun-fx.ts";
@@ -895,9 +895,13 @@ export class FloorplanViewer {
     this.resize();
   }
 
-  /** Furniture packs (models of pack furniture); set before the building that uses them. */
-  setPacks(packs: FurniturePack[]): void {
+  /**
+   * Furniture packs (models of pack furniture); set before the building that uses them. `recipes`: the plan's recipe
+   * copies (#2), which win over the packs.
+   */
+  setPacks(packs: FurniturePack[], recipes?: Record<string, PlanRecipe>): void {
     setPacks(packs);
+    if (recipes) setPlanRecipes(recipes);
     if (this.building) {
       this.rebuild();
       this.invalidate();
@@ -908,8 +912,9 @@ export class FloorplanViewer {
     const first = this.building === null;
     this.lastWake = performance.now();
     this.building = building;
-    // this bundle's own copy of the ground (outdoor areas, earth around cellars)
+    // this bundle's own copy of the ground (outdoor areas, earth around cellars) and of the plan's recipes (#2)
     setTerrain(building);
+    setPlanRecipes(building.recipes);
     this.rebuild();
     if (first) this.fit(0);
     this.invalidate();

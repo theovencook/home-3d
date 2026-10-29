@@ -127,7 +127,8 @@ async def ws_save_building(
     if (data := _data(hass, connection, msg)) is None:
         return
     revision = await data.async_save_building(msg["building"])
-    connection.send_result(msg["id"], {"revision": revision})
+    # the plan's recipe copies as stored (#2): an open editor keeps them with its plan
+    connection.send_result(msg["id"], {"revision": revision, "recipes": data.building.get("recipes", {})})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/building/subscribe"})

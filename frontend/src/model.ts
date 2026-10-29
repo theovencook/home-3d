@@ -1,7 +1,7 @@
 // Data model shared by editor, 3D view and backend (see custom_components/home_3d/schema.py).
 // Units are metres; x grows to the right, z grows downwards (as in the 2D editor).
 
-import { packItem } from "./packs.ts";
+import { packItem, type PlanRecipe } from "./packs.ts";
 import type { LampModel } from "./viewer/viewer3d.ts";
 import type { ItemActions } from "./item-actions.ts";
 import type { RoleColours } from "./colour-roles.ts";
@@ -1192,6 +1192,8 @@ export interface Building {
   settings: BuildingSettings;
   energy: EnergySettings;
   presence: PresenceLink[];
+  /** A copy of the recipe of every pack item type the plan uses, by type (#2; filled in by the backend). */
+  recipes?: Record<string, PlanRecipe>;
 }
 
 export const DEFAULT_ENERGY: EnergySettings = {
