@@ -279,6 +279,42 @@ The size limits keep a pack within one websocket message. A larger collection is
 
 The plan keeps working when a pack is removed: its items stay in the plan as plain boxes.
 
+## Packs that ship with Home 3D
+
+Our own library comes with the integration in `custom_components/home_3d/bundled_packs/`, one folder per pack
+(`theovencook.core` for now). Home Assistant reads these folders from its own disk when the integration starts, so
+they are there on a fresh install without network access and nothing has to be imported. They are checked like an
+imported pack; a bundled pack that does not check is logged and left out.
+
+- A bundled pack shows under **Extensions** with "Comes with Home 3D" and cannot be removed. It is not part of a
+  backup: the next version of Home 3D brings it again.
+- An imported pack with the same id and at least the same `release` (a newer copy installed from the packs
+  repository) takes the bundled one's place. Removing that copy brings the bundled one back.
+
+### Adding an item to theovencook.core
+
+Every item is one file, in the folder of its library section: `theovencook.core/<group>/<item id>.json`, where
+`<group>` is one of the `group` values above (`sofa`, `seating`, `table`, `storage`, `bed`, `kitchen`, `lamp`,
+`tech`, `pets`, …) and the item's `group` field says the same. There is no index to edit: the folder is read as it
+is. Every core item has an English name.
+
+```
+custom_components/home_3d/bundled_packs/theovencook.core/
+├── pack.json
+├── LICENSE
+├── sofa/
+│   └── loveseat_simple.json
+├── lamp/
+│   └── floor_lamp_simple.json
+└── tech/
+    └── desktop_tower_simple.json
+```
+
+`tests/test_core_pack.py` checks every bundled pack and every item file against the schema and that each item sits
+in the folder of its `group`; `frontend/src/core-pack.test.ts` checks that each item shows in the library under that
+section. Adding an item does not touch `pack.json`; its `release` goes up once per Home 3D release that changes the
+pack, so installs holding an older imported copy pick up the bundled one.
+
 ## Old single-file packs (v1)
 
 Packs made for earlier versions are one JSON file: `{"payload": {…}}` or the payload itself, with

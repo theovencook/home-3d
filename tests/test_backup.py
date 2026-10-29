@@ -67,7 +67,8 @@ async def test_backup_round_trip(hass: HomeAssistant, hass_ws_client) -> None:
 
     await client.send_json_auto_id({"type": "home_3d/packs/list"})
     listed = (await client.receive_json())["result"]["packs"]
-    assert [p["id"] for p in listed] == ["test.backup"]
+    # the restored pack, after the packs that come with Home 3D (never part of a backup)
+    assert [p["id"] for p in listed if not p.get("bundled")] == ["test.backup"]
 
     # a broken building is refused before anything changes
     await client.send_json_auto_id({"type": "home_3d/backup/import", "building": {"version": 99}, "packs": []})

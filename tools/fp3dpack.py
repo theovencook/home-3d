@@ -24,14 +24,7 @@ packs = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(packs)
 
 
-def read_folder(folder: Path) -> dict[str, str]:
-    """Every file of a pack folder (relative path with "/" -> text), leaving out hidden files and folders."""
-    files: dict[str, str] = {}
-    for path in sorted(folder.rglob("*")):
-        rel = path.relative_to(folder)
-        if path.is_file() and not any(part.startswith(".") for part in rel.parts):
-            files[rel.as_posix()] = path.read_text(encoding="utf-8", errors="replace")
-    return files
+read_folder = packs.read_folder
 
 
 def check(path: Path) -> dict:

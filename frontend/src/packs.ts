@@ -110,6 +110,8 @@ export interface FurniturePack {
   features?: string[];
   items: PackItem[];
   imported_at?: number;
+  /** Ships with Home 3D (custom_components/home_3d/bundled_packs): there offline, cannot be removed. */
+  bundled?: boolean;
 }
 
 let registry: FurniturePack[] = [];
