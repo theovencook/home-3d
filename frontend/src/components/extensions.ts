@@ -3,6 +3,10 @@
 
 import { css, html, LitElement, nothing } from "lit";
 import { importPack, importPackFolder, removePack } from "../api.ts";
+import { COLOUR_ROLES } from "../colour-roles.ts";
+import { customItems } from "../custom-items.ts";
+import { KINDS, ROOMS } from "../library-index.ts";
+import { loadItems } from "../load-items.ts";
 import { FEATURES, FUN, knownFeature, released, unlockedFeatures } from "../features.ts";
 import { DOG_BREEDS, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
 import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
@@ -22,6 +26,7 @@ export class Extensions extends LitElement {
     packs: { attribute: false },
     building: { attribute: false },
     _packMsg: { state: true },
+    _itemsError: { state: true },
     _open: { state: true },
   };
 
@@ -32,12 +37,15 @@ export class Extensions extends LitElement {
   /** The plan (the fun extras keep their settings in it, e.g. the pets). */
   declare building: Building | null | undefined;
   private declare _packMsg: { ok: boolean; text: string } | null;
+  /** The item editor's bundle did not load. */
+  private declare _itemsError: string | null;
   /** Long lists opened by the viewer (the installed packs); closed, a bar sums them up. */
   private declare _open: Set<string>;
 
   constructor() {
     super();
     this._packMsg = null;
+    this._itemsError = null;
     let open: string[] = [];
     try {
       open = JSON.parse(localStorage.getItem("home3d.ext.open") ?? "[]") as string[];
@@ -108,7 +116,7 @@ export class Extensions extends LitElement {
           )}
         </div>
       </section>
-      ${this.renderFun(unlocked)} ${this.renderPacks()}
+      ${this.renderFun(unlocked)} ${this.renderItems()} ${this.renderPacks()}
     </div>`;
   }
 
@@ -239,8 +247,41 @@ export class Extensions extends LitElement {
     </div>`;
   }
 
+  /** The household's own items (#13): made, imported and exported in the item editor, editors only. */
+  private renderItems() {
+    if (!this.isEditor) return nothing;
+    const n = customItems(this.packs).length;
+    return html`<section class="fp3d-ext-card">
+      <h3>${this.t("own_items_title")}</h3>
+      <p class="fp3d-sub">${this.t("own_items_hint", { n })}</p>
+      <button class="fp3d-btn fp3d-primary fp3d-pack-import" @click=${() => this.openItemEditor()}>${this.t("own_items_open")}</button>
+      ${this._itemsError ? html`<p class="fp3d-sub fp3d-pack-error">${this._itemsError}</p>` : nothing}
+    </section>`;
+  }
+
+  private async openItemEditor(): Promise<void> {
+    const hass = this.hass;
+    if (!hass) return;
+    try {
+      const bundle = await loadItems();
+      bundle.openItemEditor({
+        hass,
+        hassSource: () => this.hass,
+        t: (key, vars) => translate(this.hass, key as I18nKey, vars),
+        items: customItems(this.packs),
+        kinds: KINDS,
+        rooms: ROOMS,
+        roles: COLOUR_ROLES,
+        changed: () => this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true })),
+      });
+      this._itemsError = null;
+    } catch (err) {
+      this._itemsError = String((err as Error)?.message ?? err);
+    }
+  }
+
   private renderPacks() {
-    const packs = this.packs ?? [];
+    const packs = (this.packs ?? []).filter((p) => !p.custom);
     const items = packs.reduce((s, p) => s + p.items.length, 0);
     return html`<section class="fp3d-ext-card">
       <h3>${this.t("packs")}</h3>

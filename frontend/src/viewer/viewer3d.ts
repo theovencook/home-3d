@@ -5571,7 +5571,7 @@ function makeGroundTexture(): CanvasTexture {
   return tex;
 }
 
-export { furnitureFront, furniturePreview, type FrontPicture, type PreviewItem } from "./preview.ts";
+export { furnitureFront, furniturePreview, itemPicture, type FrontPicture, type PreviewItem } from "./preview.ts";
 
 export function createViewer(host: HTMLElement, options?: ViewerOptions): FloorplanViewer {
   return new FloorplanViewer(host, options);

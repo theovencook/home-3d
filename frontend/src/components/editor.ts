@@ -13061,7 +13061,7 @@ export class Fp3dEditor extends LitElement {
     if (!confirm(this.t("backup_full_confirm"))) return;
     this._backupBusy = true;
     try {
-      const res = await restoreBackup(this.hass, data.building, data.packs ?? []);
+      const res = await restoreBackup(this.hass, data.building, data.packs ?? [], data.items);
       let pictures = 0;
       for (const [id, picture] of Object.entries(data.images ?? {})) {
         try {

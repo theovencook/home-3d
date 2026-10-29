@@ -28,6 +28,7 @@ from .const import (
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
 )
+from .custom_items import CustomItems
 from .packs import load_bundled, with_bundled
 from .schema import BUILDING_SCHEMA, empty_building, image_ids
 
@@ -93,6 +94,8 @@ class FloorplanData:
         self.packs: list[dict[str, Any]] = []
         # the packs that ship with Home 3D (bundled_packs/, read from the disk; never stored or backed up)
         self.bundled: list[dict[str, Any]] = []
+        # the household's own items (#13), offered as one more pack
+        self.custom = CustomItems(hass)
 
     async def async_load(self) -> None:
         """Load both stores and drop images no floor refers to any more."""
@@ -103,6 +106,7 @@ class FloorplanData:
         packs = await self._pack_store.async_load()
         self.packs = list((packs or {}).get("packs", []))
         self.bundled = await self.hass.async_add_executor_job(load_bundled)
+        await self.custom.async_load()
         history = await self._history_store.async_load()
         self._history = list((history or {}).get("snapshots", []))
         images = await self._image_store.async_load()
@@ -156,8 +160,9 @@ class FloorplanData:
 
     @property
     def offered_packs(self) -> list[dict[str, Any]]:
-        """The bundled packs and the imported ones, as the library offers them."""
-        return with_bundled(self.bundled, self.packs)
+        """The bundled packs, the imported ones and the custom items, as the library offers them."""
+        custom = self.custom.pack()
+        return with_bundled(self.bundled, self.packs) + ([custom] if custom else [])
 
     async def async_add_pack(self, payload: dict[str, Any], source: dict[str, Any] | None = None) -> None:
         """Keep an imported pack; a newer release of the same pack replaces the old one. Its source (the files of a

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isLamp, newFloor, setTerrain, type Building, type Furniture } from "./model.ts";
-import { isCooktopZone, isPackCooktop, isPackSensor, furnitureSize, isElectric, mountBase, packDisplay, packItem, packItemName, packName, packType, setPacks, type FurniturePack } from "./packs.ts";
+import { isCooktopZone, isPackCooktop, isPackSensor, furnitureSize, isElectric, mountBase, packDisplay, packItem, packItemName, packName, packsVersion, packType, setPacks, withPackItem, DRAFT_TYPE, type FurniturePack } from "./packs.ts";
 
 const pack: FurniturePack = {
   id: "demo.pack",
@@ -119,4 +119,19 @@ test("a pack's sensor models follow any sensor, other pack items and built-ins d
   assert.equal(isPackSensor("pack:home3d.smarthome:presence_mmwave"), true);
   assert.equal(isPackSensor("pack:home3d.smarthome:smart_plug"), false);
   assert.equal(isPackSensor("motion_sensor"), false);
+});
+
+test("an item being edited is drawn as a pack item without changing the installed packs (#13)", () => {
+  setPacks([pack]);
+  const version = packsVersion();
+  const draft = { id: "draft", name: { en: "Draft" }, size: [1, 1, 1] as [number, number, number], parts: [{ shape: "sphere" as const, x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "accent" }] };
+  const seen = withPackItem(DRAFT_TYPE, draft, () => packItem(DRAFT_TYPE));
+  assert.equal(seen, draft);
+  assert.equal(packItem(DRAFT_TYPE), undefined, "gone again afterwards");
+  assert.equal(packsVersion(), version, "views do not rebuild for it");
+  assert.equal(packItem(packType("demo.pack", "tv"))?.id, "tv");
+  assert.throws(() => withPackItem(DRAFT_TYPE, draft, () => {
+    throw new Error("draw failed");
+  }));
+  assert.equal(packItem(DRAFT_TYPE), undefined, "gone after a failure too");
 });

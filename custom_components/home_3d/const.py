@@ -33,3 +33,5 @@ STORAGE_KEY_VOICE = f"{DOMAIN}.voice"
 # the editors list (#7): who may change the plan, kept in .storage (see editors.py)
 DATA_EDITORS = f"{DOMAIN}_editors"
 STORAGE_KEY_EDITORS = f"{DOMAIN}.editors"
+# the household's own items, made in the item editor (#13), kept in .storage and offered as one more pack
+STORAGE_KEY_ITEMS = f"{DOMAIN}.custom_items"

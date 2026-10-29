@@ -273,6 +273,13 @@ def _item_file(path: str, text: str) -> dict[str, Any]:
     return item
 
 
+def verify_item(data: Any) -> dict[str, Any]:
+    """One item on its own, as an item file holds it (an item made in the item editor, #13): the same checks as an
+    item in a pack folder; raises PackError."""
+    path = f"{data['id']}.json" if isinstance(data, dict) and isinstance(data.get("id"), str) else "item"
+    return _check(ITEM_SCHEMA, path, _no_links(path, data))
+
+
 def _data_files(files: dict[str, str]) -> dict[str, str]:
     """The pack.json and item files of a folder, after the checks on names, count and size; raises PackError."""
     if PACK_FILE not in files:
