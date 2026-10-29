@@ -11,6 +11,7 @@ import { hasFeature } from "./features.ts";
 import { isOutage } from "./outage.ts";
 import { doorsOf, fridgeOpenTooLong } from "./household.ts";
 import { pointInPolygon } from "./model.ts";
+import { LEAK_COLOR, roomLiveSensors } from "./room-effects.ts";
 
 export { isOutage };
 
@@ -55,7 +56,12 @@ export function alertSources(hass: HomeAssistant, building: Building, weatherId?
   const rooms: AlertSources["rooms"] = [];
   for (const floor of building.floors) {
     for (const room of floor.rooms) {
-      const sensors = areaEntities(hass, room.area_id).filter((id) => id.startsWith("binary_sensor.") && !!CLASS_KIND[String(hass.states[id]?.attributes.device_class)]);
+      // smoke, gas and CO from the room's area; leak sensors as the room effects find them (placed, chosen, #10)
+      const others = areaEntities(hass, room.area_id).filter((id) => {
+        const kind = id.startsWith("binary_sensor.") ? CLASS_KIND[String(hass.states[id]?.attributes.device_class)] : undefined;
+        return !!kind && kind !== "water";
+      });
+      const sensors = [...others, ...roomLiveSensors(hass, floor, room, "leak")];
       if (sensors.length) rooms.push({ floorId: floor.id, roomId: room.id, sensors });
     }
   }
@@ -159,6 +165,11 @@ export function alertColor(a: Pick<Alert, "kind" | "color">): [number, number, n
     default:
       return [1, 0.2, 0.25];
   }
+}
+
+/** The colour a warning tints its room's floor in: a leak turns the floor red (#10), the others use their own colour. */
+export function alertTint(a: Pick<Alert, "kind" | "color">): [number, number, number] {
+  return a.kind === "water" && !a.color ? LEAK_COLOR : alertColor(a);
 }
 
 /** Short text for the banner: "Küche · Rauch: Rauchmelder". */

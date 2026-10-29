@@ -376,6 +376,11 @@ export function isUnavailable(st: HassEntity | undefined): boolean {
 /** States of a status sensor (a 3D printer, a washing machine's programme) that mean "it is working". */
 const WORKING_STATES = new Set(["run", "cooking", "running", "printing", "prepare", "preparing", "slicing", "heating", "busy", "working", "active", "washing", "rinsing", "spinning", "drying", "cleaning", "in_progress", "in progress", "on"]);
 
+/** Whether a status text means "it is working" (printing, running, washing …). */
+export function isWorkingState(state: string | undefined): boolean {
+  return !!state && WORKING_STATES.has(state.toLowerCase());
+}
+
 /** Whether an entity is a status sensor (enum states such as running / idle / finish) that furniture can follow. */
 export function isStatusSensor(st: HassEntity | undefined): boolean {
   return !!st && st.entity_id.startsWith("sensor.") && st.attributes.device_class === "enum";
@@ -411,7 +416,7 @@ export function isActive(st: HassEntity | undefined): boolean {
       return st.state === "unlocked" || st.state === "open";
     case "sensor":
       // a status sensor: a 3D printer printing, a machine running
-      return isStatusSensor(st) && WORKING_STATES.has(String(st.state).toLowerCase());
+      return isStatusSensor(st) && isWorkingState(String(st.state));
     default:
       return false;
   }

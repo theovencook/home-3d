@@ -56,7 +56,9 @@ import { buildFloorGeometry, SLAB, stairHoleParts, type FloorGeometry } from "./
 import { OrbitControls, type OrbitView } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { CameraProjections, PROJECTION_LAYER, type ProjectionSurface, type ProjectorPose } from "./projection.ts";
-import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, setLightLook, hasFixedColors } from "./furniture.ts";
+import type { RoleColours } from "../colour-roles.ts";
+import type { RoleMaterials } from "../role-materials.ts";
+import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, setLightLook, hasOwnColours } from "./furniture.ts";
 import { pushPipeTube, type PipeTube } from "./pipes.ts";
 // the walk through the house at eye height (lives with the viewer it drives)
 export { FloorMap, WalkCamera, type WalkState } from "./walk.ts";
@@ -65,10 +67,12 @@ export { FloorMap, WalkCamera, type WalkState } from "./walk.ts";
 export const funLib = { Group, Mesh, MeshBasicMaterial, CanvasTexture, Color, PlaneGeometry, BufferGeometry: Geometry, Float32BufferAttribute, DoubleSide };
 
 export type { PipeTube };
-import { groundUnder, isCooktopZone, mountBase, packItem, packMotion, setPacks, type FurniturePack } from "../packs.ts";
+import { groundUnder, isCooktopZone, mountBase, packItem, packMotion, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "../packs.ts";
 import { withVehicles } from "../parking.ts";
 import { buildRoof, type RoofGeometry, type RoofWindowState } from "./roof.ts";
 import { SunFx } from "./sun-fx.ts";
+import { Realism } from "./realism.ts";
+import { deviceTier, shadowPlan, type ShadowPlan } from "../realistic.ts";
 import { houseShadow, shadowBox } from "./sun-shadow.ts";
 import type { SunPath } from "../sun-path.ts";
 import { GROUND, groundFace, groundFloor, roofFaces, roofWindowRoom, wallFaces } from "../solar.ts";
@@ -82,6 +86,7 @@ import { buildLightSurface, lightColors, roomIndexAt, type LightKind, type Light
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
 import { circlePath, cleaningPath, stepRobot, type RobotInfo, type RobotMotion } from "./robot.ts";
 import { decorDelay, lowEndDevice, petDelay } from "./pace.ts";
+import { flowSpeed } from "./flow-style.ts";
 
 export type { RobotInfo } from "./robot.ts";
 
@@ -106,6 +111,8 @@ export interface ViewerOptions {
   onRoomDoubleTap?: (floorId: string, roomId: string) => void;
   /** Long press on a device marker. */
   onDeviceHold?: (entityId: string, x: number, y: number) => void;
+  /** A double tap on a device or item: true when it had an own double-tap action (#6), else the view goes back. */
+  onDeviceDoubleTap?: (entityId: string, x: number, y: number) => boolean;
   /**
    * Vertical swipe on a device (dim a lamp, move a blind): "start" returns whether the device takes
    * it; "move" reports the distance from the start (pixels, down positive).
@@ -158,6 +165,10 @@ export interface DeviceMarker {
   /** Lamp: turn around y (degrees), size (w, d, h) and height of what it stands on. */
   /** A mirrored lamp furniture (its pack model is drawn mirrored). */
   mirror?: boolean;
+  /** A pack lamp's own role colours (#12). */
+  colors?: RoleColours | null;
+  /** Its material per role (#40), shown in the realistic look. */
+  materials?: RoleMaterials | null;
   rotation?: number;
   size?: [number, number, number];
   base?: number;
@@ -238,6 +249,10 @@ export interface FlowPiece {
   color: [number, number, number];
   /** Width against a cable's (1; a module's pipe may be wider). */
   width?: number;
+  /** An energy cable's thickness from its power (times width): changing it moves the edges, the cable stays the same one. */
+  thick?: number;
+  /** A cable fed by several sources: its light dots in each source's colour for that share of the dots (none: the cable's colour). */
+  dots?: { color: [number, number, number]; share: number }[];
   /** A module's pipe: solid in its colour with a dark edge (readable on bright floors), a soft light running along it. */
   pipe?: boolean;
   /** Shown only in the house view (hidden while a floor is opened). */
@@ -280,10 +295,13 @@ export interface ScreenState {
   picture?: string | null;
   /** No glow frame around the screen (a logo from a picture rule stands on its own). */
   plain?: boolean;
+  /** A colour of its temperature (a radiator, a hot-water cylinder, #10): the 2D plan fills the item with it. */
+  shade?: boolean;
   /** Furniture with a state: glowing faces on top of the item instead of a screen – the whole top, or a half of it. */
   // (see also SoundSource below)
   // "gang": one rocker or socket of a wall switch or socket (`index` of `of`)
-  faces?: { part: "all" | "left" | "right" | "top" | "bottom" | "band" | "cabin" | "lights" | "burners" | "lid" | "beacon" | "gang" | "drum" | "apring" | "strata"; color: [number, number, number]; level: number; index?: number; of?: number; accent?: boolean; top?: [number, number, number] }[];
+  // "progress": a ring on the top filled to `fill` (a 3D printer's print, #11); "chamber": the pack's glow parts
+  faces?: { part: "all" | "left" | "right" | "top" | "bottom" | "band" | "cabin" | "lights" | "burners" | "lid" | "beacon" | "gang" | "drum" | "apring" | "strata" | "progress" | "chamber"; color: [number, number, number]; level: number; index?: number; of?: number; accent?: boolean; top?: [number, number, number]; fill?: number }[];
 }
 
 /** Position of the sun (from sun.sun): degrees above the horizon and clockwise from north. */
@@ -542,6 +560,8 @@ interface FloorView {
   label: HTMLButtonElement;
 }
 
+/** The floor of a room motion lights (#10). */
+const MOTION_LIGHT = new Color(1, 0.84, 0.5);
 const ACTIVE_FLOOR = new Color(0x1a2a4d);
 
 export function isLowEnd(): boolean {
@@ -667,7 +687,7 @@ export class FloorplanViewer {
     roofWinGlass: MeshBasicMaterial;
   } | null = null;
   /** The hologram's anchor: a point on the solar field (building coordinates) and the field's normal. */
-  private anchors: { p: [number, number, number]; n: [number, number, number]; floorId: string; size: number; roof: boolean; views: "house" | "all" | "floor"; room?: string | null; near?: number }[] = [];
+  private anchors: { p: [number, number, number]; n: [number, number, number]; floorId: string; size: number; roof: boolean; views: "house" | "all" | "floor"; room?: string | null; near?: number; plan?: boolean }[] = [];
   /** Told where the anchor lies on screen after every frame, how large the hologram should be and whether its front faces the camera. */
   private anchorCb: ((index: number, x: number, y: number, visible: boolean, scale: number, facing: boolean) => void) | null = null;
   /** Energie Pro: production level (0..1) per solar field; the overlays animate while any is above zero. */
@@ -737,6 +757,9 @@ export class FloorplanViewer {
   private selectedSet: string[] = [];
   private theme: Theme = "neon";
   private readonly themeUniform: ThemeUniform = { value: 0 };
+  /** The realistic look (#39): lit surfaces, the sun's light and shadows, a lawn; phones get no shadows. */
+  private readonly realism = new Realism();
+  private readonly tier = deviceTier(navigator.userAgent, Math.min(screen.width || 0, screen.height || 0), navigator.maxTouchPoints || 0);
   private sun: SunState | null = null;
   private weather: WeatherView | null = null;
   /** Rain streaks and snow flakes over the plot, the sun or moon disc in the sky. */
@@ -748,6 +771,8 @@ export class FloorplanViewer {
   private weatherLast = 0;
   /** Heatmap colour per room id (null: normal floors). */
   private roomTint: Map<string, [number, number, number]> | null = null;
+  /** Rooms motion lights (#10). */
+  private roomGlow: ReadonlySet<string> = new Set();
   private houseRadius = 20;
   private startView: StartView | null = null;
   private keepView = false;
@@ -878,6 +903,7 @@ export class FloorplanViewer {
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer = next;
+    this.applyRealism();
     const view = this.controls.view;
     this.controls.dispose();
     this.controls = this.makeControls();
@@ -885,9 +911,13 @@ export class FloorplanViewer {
     this.resize();
   }
 
-  /** Furniture packs (models of pack furniture); set before the building that uses them. */
-  setPacks(packs: FurniturePack[]): void {
+  /**
+   * Furniture packs (models of pack furniture); set before the building that uses them. `recipes`: the plan's recipe
+   * copies (#2), which win over the packs.
+   */
+  setPacks(packs: FurniturePack[], recipes?: Record<string, PlanRecipe>): void {
     setPacks(packs);
+    if (recipes) setPlanRecipes(recipes);
     if (this.building) {
       this.rebuild();
       this.invalidate();
@@ -898,8 +928,9 @@ export class FloorplanViewer {
     const first = this.building === null;
     this.lastWake = performance.now();
     this.building = building;
-    // this bundle's own copy of the ground (outdoor areas, earth around cellars)
+    // this bundle's own copy of the ground (outdoor areas, earth around cellars) and of the plan's recipes (#2)
     setTerrain(building);
+    setPlanRecipes(building.recipes);
     this.rebuild();
     if (first) this.fit(0);
     this.invalidate();
@@ -1085,7 +1116,7 @@ export class FloorplanViewer {
    * The holograms' anchors: points on the solar fields with their normals (they ride up with the roof and
    * show in the house view only), and points over devices (shown on their floor as well).
    */
-  setAnchors(anchors: { p: [number, number, number]; n: [number, number, number]; floorId: string; size: number; roof: boolean; views: "house" | "all" | "floor"; room?: string | null; near?: number }[]): void {
+  setAnchors(anchors: { p: [number, number, number]; n: [number, number, number]; floorId: string; size: number; roof: boolean; views: "house" | "all" | "floor"; room?: string | null; near?: number; plan?: boolean }[]): void {
     this.anchors = anchors;
     this.labelsDirty = true;
     this.invalidate();
@@ -1425,10 +1456,10 @@ export class FloorplanViewer {
     if (theme === this.theme) return;
     this.theme = theme;
     this.themeUniform.value = themeIndex(theme);
-    // waste bins and pack items in colours of their own keep them in the light looks: drawn anew in full colour (#609)
+    // waste bins, pack items and items in colours of their own (#12) keep them in the light looks: drawn anew in full colour (#609)
     const light = theme !== "neon";
     setLightLook(light);
-    if (this.building?.floors.some((f) => f.furniture.some((m) => m.type === "waste_bin" || hasFixedColors(m.type)))) this.rebuild();
+    if (this.building?.floors.some((f) => f.furniture.some(hasOwnColours))) this.rebuild();
     const blending = lineBlending(theme);
     const lineMats = [...this.floors.map((f) => f.materials.lines), ...(this.roof ? [this.roof.lines] : [])];
     for (const m of lineMats) {
@@ -1437,8 +1468,36 @@ export class FloorplanViewer {
     }
     // the neon ground grid would vanish on the light background anyway
     this.placeGround();
+    this.realism.enable(this.scene, theme === "realistic");
+    this.applyRealism();
+    // real shadows replace the drawn patches of sunlight
+    for (const fv of this.floors) {
+      fv.sunSig = "-";
+      this.buildSun(fv);
+    }
     this.buildSunFx();
     this.invalidate();
+  }
+
+  /** The realistic look's shadows on this device (null: none – phones, or the house's sun shadow switched off). */
+  private realPlan(): ShadowPlan | null {
+    return this.theme === "realistic" ? shadowPlan(this.tier, this.lowQuality, this.building?.settings.sun_shadow !== false) : null;
+  }
+
+  /** The realistic look: shadows for this device and renderer, and the light of the sun and sky as they stand. */
+  private applyRealism(): void {
+    this.realism.setPlan(this.renderer, this.realPlan());
+    this.updateRealism();
+  }
+
+  private updateRealism(): void {
+    if (!this.realism.active) return;
+    const frame = this.arcFrame();
+    const b = this.building;
+    const gf = b ? groundFloor(b) : null;
+    // the lawn lies a little under the drawn ground (outdoor areas, terraces) so they cover it
+    const lawn = gf && frame ? gf.elevation + groundUnder(gf, { x: frame.x - frame.r, z: frame.z }) - 0.03 : -0.23;
+    this.realism.update(this.sun, this.weather, b?.settings.north ?? 0, frame ? { x: frame.x, y: lawn, z: frame.z, r: Math.max(12, frame.r * 1.8) } : { x: 0, y: lawn, z: 0, r: 15 });
   }
 
   /** Furnishing mode: dragging furniture and lamps moves them instead of turning the view. */
@@ -1474,6 +1533,7 @@ export class FloorplanViewer {
     }
     this.placeSky();
     this.buildSunFx();
+    this.updateRealism();
     this.invalidate();
   }
 
@@ -1492,6 +1552,7 @@ export class FloorplanViewer {
     this.applyWeather();
     this.placeSky();
     this.buildSunFx();
+    this.updateRealism();
     this.invalidate();
   }
 
@@ -1621,7 +1682,8 @@ export class FloorplanViewer {
     const on = !!b && !!sun && b.settings.sun_shadow !== false;
     const north = (b?.settings.north ?? 0) * DEG;
     const cloud = this.weather?.cloud ?? 0;
-    const shade = on && !this.lowQuality && sun.elevation > 1 && cloud < 0.9 && !this.roomTint;
+    // the realistic look throws real shadows instead (and none on phones)
+    const shade = on && !this.lowQuality && sun.elevation > 1 && cloud < 0.9 && !this.roomTint && this.theme !== "realistic";
     const sig = shade ? `${sun.elevation.toFixed(1)},${sun.azimuth.toFixed(1)},${north},${cloud.toFixed(1)},${this.theme},${this.roofGeos.length}` : "";
     if (sig !== this.shadowSig) {
       this.shadowSig = sig;
@@ -1796,6 +1858,13 @@ export class FloorplanViewer {
     }
   }
 
+  /** Rooms motion lights now (#10): their floors brighten with a warm light, without dimming the room lights. */
+  setRoomGlow(rooms: ReadonlySet<string>): void {
+    if (rooms.size === this.roomGlow.size && [...rooms].every((id) => this.roomGlow.has(id))) return;
+    this.roomGlow = new Set(rooms);
+    this.applyHighlight();
+  }
+
   /** Screens of TVs and monitors that are on (by furniture id). */
   setScreens(screens: Map<string, ScreenState>): void {
     this.screens = screens;
@@ -1840,6 +1909,7 @@ export class FloorplanViewer {
   /** Target states of doors and windows (sashes and blinds move there smoothly). */
   setOpeningStates(states: Map<string, OpeningState>, instant = false): void {
     this.openingTargets = states;
+    this.realism.touch();
     // a jump in time (time travel): sashes and blinds stand at their targets at once
     if (instant)
       for (const fv of this.floors) {
@@ -2042,6 +2112,7 @@ export class FloorplanViewer {
 
   dispose(): void {
     this.projections.dispose();
+    this.realism.dispose();
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     clearTimeout(this.flowTimer);
@@ -2125,8 +2196,11 @@ export class FloorplanViewer {
       drag: (x, y) => this.dragFurniture(x, y),
       drop: () => this.dropFurniture(),
       doubleTap: (x, y) => {
-        const hit = this.floorId && this.options.onRoomDoubleTap ? this.pick(x, y) : null;
-        if (hit && !("entity" in hit) && hit.roomId) this.options.onRoomDoubleTap!(hit.floorId, hit.roomId);
+        const roomTap = !!(this.floorId && this.options.onRoomDoubleTap);
+        const hit = roomTap || (this.options.onDeviceDoubleTap && !this.furnish) ? this.pick(x, y) : null;
+        // a device or item with an own double-tap action (#6) takes it
+        if (hit && "entity" in hit && !this.furnish && this.options.onDeviceDoubleTap?.(hit.entity, x, y)) return;
+        if (roomTap && hit && !("entity" in hit) && hit.roomId) this.options.onRoomDoubleTap!(hit.floorId, hit.roomId);
         else this.options.onBack?.();
       },
     });
@@ -2770,6 +2844,7 @@ export class FloorplanViewer {
     this.applyTierFlags();
     this.buildRoofMesh();
     this.buildSunFx();
+    this.applyRealism();
     this.updateGhost();
   }
 
@@ -2915,7 +2990,7 @@ export class FloorplanViewer {
    */
   private applyTierFlags(): void {
     const low = this.lowQuality;
-    this.ground.visible = !low && this.theme !== "day" && this.floors.some((f) => f.floor.rooms.length > 0);
+    this.ground.visible = !low && this.theme !== "day" && this.theme !== "realistic" && this.floors.some((f) => f.floor.rooms.length > 0);
     for (const fv of this.floors) {
       fv.patternMesh.visible = !low;
       fv.shadowMesh.visible = !low && fv.o > 0.98;
@@ -3132,7 +3207,7 @@ export class FloorplanViewer {
     const shapeSig =
       this.wallMode +
       (this.lowQuality ? "L" : this.highQuality ? "H" : "M") +
-      lamps.map((d) => `${d.id},${d.lamp ?? d.model},${d.variant},${d.x},${d.z},${d.y},${d.rotation ?? 0},${d.roll ?? 0},${d.upright ? 1 : 0},${d.rise ?? 0},${d.size?.join("/")},${d.base ?? 0},${d.pack ?? ""},${d.mirror ? 1 : 0}`).join(";");
+      lamps.map((d) => `${d.id},${d.lamp ?? d.model},${d.variant},${d.x},${d.z},${d.y},${d.rotation ?? 0},${d.roll ?? 0},${d.upright ? 1 : 0},${d.rise ?? 0},${d.size?.join("/")},${d.base ?? 0},${d.pack ?? ""},${d.mirror ? 1 : 0}${d.colors ? JSON.stringify(d.colors) + this.theme : ""}${d.materials ? JSON.stringify(d.materials) : ""}`).join(";");
     const glows = lamps.map((d) => this.glowOf(d));
     const colorSig = lamps.map((d, i) => `${flash(d.id)},${glows[i] ? `${glows[i]!.level.toFixed(3)},${glows[i]!.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`).join(";");
     if (shapeSig !== fv.lampShapeSig || !fv.lampMesh.geometry.getAttribute("position")) {
@@ -3154,7 +3229,7 @@ export class FloorplanViewer {
         if (d.model) {
           if (!d.ownLook) pushCameraModel(buf, d.model, d.x, d.model === "camera_ceiling" ? H : d.y, d.z, d.rotation ?? 0);
         }
-        else if (packed) pushPackLamp(buf, packed, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w: pw, d: pd, h: ph, mirror: d.mirror }, d.base ?? 0, SHADE_SENTINEL);
+        else if (packed) pushPackLamp(buf, packed, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w: pw, d: pd, h: ph, mirror: d.mirror, colors: d.colors, materials: d.materials }, d.base ?? 0, SHADE_SENTINEL);
         // a ceiling fan's blades turn in a group of their own (syncFans)
         else pushLampModel(buf, { ...d, lamp: d.lamp! }, d.top ?? H, SHADE_SENTINEL, d.lamp !== "fan");
         // keyed by the furniture: two lamps may share one light (one switch for two strips)
@@ -3197,7 +3272,7 @@ export class FloorplanViewer {
    */
   private buildSun(fv: FloorView): void {
     // the patches of sunlight can be switched off in the settings (#266)
-    const sun = this.building?.settings.sun_patches === false ? null : this.sun;
+    const sun = this.building?.settings.sun_patches === false || this.realPlan() ? null : this.sun;
     const north = (this.building?.settings.north ?? 0) * DEG;
     // clouds take most of the sunlight
     const cloud = this.weather?.cloud ?? 0;
@@ -3595,6 +3670,31 @@ export class FloorplanViewer {
             }
             continue;
           }
+          if (face.part === "chamber") {
+            // a 3D printer's chamber light (#11): its glowing parts shine in the light's colour
+            const model = packItem(f.type);
+            const col = new Color(...face.color.map((v) => Math.min(1, v * (0.4 + 0.6 * face.level))) as [number, number, number]);
+            if (model) pushPackGlow(buf, model, f, base, col.getHex());
+            continue;
+          }
+          if (face.part === "progress") {
+            // a 3D printer's print (#11): a ring lying on its top, lit clockwise from the back as far as the print got
+            const r = Math.min(Math.abs(w), d) * 0.42;
+            const y = base + h + 0.008;
+            const lit = new Color(...face.color.map((v) => Math.min(1, v * (0.4 + 0.6 * face.level))) as [number, number, number]);
+            const dim = lit.clone().multiplyScalar(0.15);
+            const n = 40;
+            const done = Math.round(Math.min(1, Math.max(0, face.fill ?? 0)) * n);
+            const at = (a: number, rr: number) => P(Math.sin(a) * rr, y, -Math.cos(a) * rr);
+            for (let i = 0; i < n; i++) {
+              const a0 = (i / n) * Math.PI * 2;
+              const a1 = ((i + 1) / n) * Math.PI * 2;
+              const col = i < done ? lit : dim;
+              buf.tri(at(a0, r * 0.8), at(a0, r), at(a1, r), col);
+              buf.tri(at(a0, r * 0.8), at(a1, r), at(a1, r * 0.8), col);
+            }
+            continue;
+          }
           if (face.part === "apring") {
             // an access point's LED ring: under the disc (ceiling) or on the plate's front (wall), with a soft halo
             const wall = f.variant === "wall";
@@ -3827,11 +3927,19 @@ export class FloorplanViewer {
     const uv: number[] = [];
     const sp: number[] = [];
     const off: number[] = [];
+    // the dots' colours, up to three: rgb + where its share ends, rgb + where its share ends, rgb
+    const d1: number[] = [];
+    const d2: number[] = [];
+    const d3: number[] = [];
     for (const f of this.flows) {
       if (f.floorId !== fv.floor.id || f.pipe) continue;
       const phase = this.flowPhase.get(flowKey(f)) ?? { speed: flowSpeed(f.power), offset: 0 };
       const level = f.power > 0.5 ? Math.min(1, 0.5 + f.power / 2500) : 0.22;
       const col = f.color.map((v) => v * level);
+      const dots = f.dots?.length ? f.dots : [{ color: f.color, share: 1 }];
+      const dc = [0, 1, 2].map((i) => dots[Math.min(i, dots.length - 1)].color.map((v) => v * level));
+      const end1 = dots.length > 1 ? dots[0].share : 1;
+      const end2 = dots.length > 2 ? end1 + dots[1].share : 1;
       const len = Math.hypot(f.b[0] - f.a[0], f.b[1] - f.a[1], f.b[2] - f.a[2]);
       if (len < 1e-4) continue;
       const dir = [(f.b[0] - f.a[0]) / len, (f.b[1] - f.a[1]) / len, (f.b[2] - f.a[2]) / len];
@@ -3850,7 +3958,7 @@ export class FloorplanViewer {
           ];
       for (const [width, strength] of layers) {
         for (const n of sides) {
-          const h = (width * (f.width ?? 1)) / 2;
+          const h = (width * (f.width ?? 1) * (f.thick ?? 1)) / 2;
           const v = (q: number[], k: number) => [q[0] + n[0] * h * k, q[1] + n[1] * h * k, q[2] + n[2] * h * k];
           const quad = [
             [v(f.a, -1), f.dist, 0],
@@ -3865,17 +3973,24 @@ export class FloorplanViewer {
             uv.push(u, w);
             sp.push(phase.speed);
             off.push(phase.offset);
+            d1.push(dc[0][0] * strength, dc[0][1] * strength, dc[0][2] * strength, end1);
+            d2.push(dc[1][0] * strength, dc[1][1] * strength, dc[1][2] * strength, end2);
+            d3.push(dc[2][0] * strength, dc[2][1] * strength, dc[2][2] * strength);
           }
         }
       }
     }
     const old = fv.flowMesh.geometry;
     if (layout === fv.flowLayout && old.getAttribute("position")?.count === p.length / 3) {
-      // same cables, new power: only colours and stripe speeds change (no new geometry, no garbage)
+      // same cables, new power: only widths, colours and stripe speeds change (no new geometry, no garbage)
       for (const [name, data] of [
+        ["position", p],
         ["color", c],
         ["flowSpeed", sp],
         ["flowOffset", off],
+        ["flowDot1", d1],
+        ["flowDot2", d2],
+        ["flowDot3", d3],
       ] as const) {
         const attr = old.getAttribute(name) as Float32BufferAttribute;
         (attr.array as Float32Array).set(data);
@@ -3891,6 +4006,9 @@ export class FloorplanViewer {
     g.setAttribute("uv", new Float32BufferAttribute(uv, 2));
     g.setAttribute("flowSpeed", new Float32BufferAttribute(sp, 1));
     g.setAttribute("flowOffset", new Float32BufferAttribute(off, 1));
+    g.setAttribute("flowDot1", new Float32BufferAttribute(d1, 4));
+    g.setAttribute("flowDot2", new Float32BufferAttribute(d2, 4));
+    g.setAttribute("flowDot3", new Float32BufferAttribute(d3, 3));
     fv.flowMesh.geometry.dispose();
     fv.flowMesh.geometry = g;
     fv.flowMesh.visible = p.length > 0;
@@ -4001,7 +4119,7 @@ export class FloorplanViewer {
     for (const fv of this.floors) {
       const colors = fv.geo.floor.getAttribute("color");
       // a pulsing warning recolours its rooms only: floors whose tints and selection stay are left alone
-      const sig = fv.geo.roomTris.map((r) => `${this.roomTint?.get(r.roomId)?.join(",") ?? ""}${r.roomId === this.roomId ? "*" : ""}`).join(";");
+      const sig = fv.geo.roomTris.map((r) => `${this.roomTint?.get(r.roomId)?.join(",") ?? ""}${r.roomId === this.roomId ? "*" : ""}${this.roomGlow.has(r.roomId) ? "+" : ""}`).join(";");
       if (this.highlighted.get(colors) === sig) continue;
       this.highlighted.set(colors, sig);
       for (const r of fv.geo.roomTris) {
@@ -4009,6 +4127,8 @@ export class FloorplanViewer {
         const tint = this.roomTint?.get(r.roomId);
         // heatmap: a clear, saturated floor colour (the room light is dimmed meanwhile)
         if (tint) c.lerp(new Color(...tint).multiplyScalar(0.6), 0.9);
+        // motion lights the room: a warm light on its floor (a warning's colour wins)
+        else if (this.roomGlow.has(r.roomId)) c.lerp(MOTION_LIGHT, 0.6);
         if (r.roomId === this.roomId) c.lerp(ACTIVE_FLOOR, tint ? 0.3 : 0.75);
         for (let v = r.start * 3; v < r.end * 3; v++) colors.setXYZ(v, c.r, c.g, c.b);
       }
@@ -4074,7 +4194,7 @@ export class FloorplanViewer {
       for (const room of fv.floor.rooms) for (const [x, z] of room.points) box.expandByPoint(new Vector3(x, 0, z));
       for (const a of fv.floor.outdoor ?? []) for (const [x, z] of a.points) box.expandByPoint(new Vector3(x, 0, z));
     }
-    this.ground.visible = !box.isEmpty() && !this.lowQuality && this.theme !== "day";
+    this.ground.visible = !box.isEmpty() && !this.lowQuality && this.theme !== "day" && this.theme !== "realistic";
     if (box.isEmpty()) return;
     if (this.ground.visible && !this.groundTexture) {
       this.groundTexture = makeGroundTexture();
@@ -4943,6 +5063,8 @@ export class FloorplanViewer {
     if (this.projections.active) this.updateProjections();
     // the house's shadow belongs to the whole house
     this.sunFx.showShadow(this.floorId === null && this.shadowSig !== "");
+    // the realistic look: lit twins for new surfaces; the tablet level redraws its shadows only when more than the camera moved
+    if (this.realism.active) this.realism.realize(this.scene, !!this.realPlan(), this.renderer, floorsMoving || openingsMoving || roofMoving || robotsMoving || fansTurning);
     this.renderer.render(this.scene, this.camera);
     this.disposeRetired();
     // labels are placed only when the view or something on it moved (style writes cost layout)
@@ -5412,10 +5534,6 @@ function flowKey(f: FlowPiece): string {
   return `${f.floorId}:${f.a.map(r).join(",")}>${f.b.map(r).join(",")}${f.width ? `~${f.width}` : ""}`;
 }
 
-/** Stripe speed (m/s): still at 0 W, faster with more power (square root, so 2 kW is not 20 × 100 W). */
-function flowSpeed(power: number): number {
-  return power > 0.5 ? Math.min(2.4, 0.3 + Math.sqrt(power) / 28) : 0;
-}
 
 /**
  * A module's solid pipe (uv.x = metres along it, uv.y = across: 0..1 the core, 2..3 its dark edge): shaded like a
@@ -5453,10 +5571,10 @@ function flowMaterial(time: { value: number }): MeshBasicMaterial {
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uFlowTime = time;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nattribute float flowSpeed;\nattribute float flowOffset;\nvarying float vFlowSpeed;\nvarying float vFlowOffset;\nvarying vec2 vFlowUv;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFlowSpeed = flowSpeed;\nvFlowOffset = flowOffset;\nvFlowUv = uv;");
+      .replace("#include <common>", "#include <common>\nattribute float flowSpeed;\nattribute float flowOffset;\nattribute vec4 flowDot1;\nattribute vec4 flowDot2;\nattribute vec3 flowDot3;\nvarying vec4 vFlowDot1;\nvarying vec4 vFlowDot2;\nvarying vec3 vFlowDot3;\nvarying float vFlowSpeed;\nvarying float vFlowOffset;\nvarying vec2 vFlowUv;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFlowSpeed = flowSpeed;\nvFlowOffset = flowOffset;\nvFlowUv = uv;\nvFlowDot1 = flowDot1;\nvFlowDot2 = flowDot2;\nvFlowDot3 = flowDot3;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform float uFlowTime;\nvarying float vFlowSpeed;\nvarying float vFlowOffset;\nvarying vec2 vFlowUv;")
+      .replace("#include <common>", "#include <common>\nuniform float uFlowTime;\nvarying vec4 vFlowDot1;\nvarying vec4 vFlowDot2;\nvarying vec3 vFlowDot3;\nvarying float vFlowSpeed;\nvarying float vFlowOffset;\nvarying vec2 vFlowUv;")
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
@@ -5464,10 +5582,14 @@ function flowMaterial(time: { value: number }): MeshBasicMaterial {
         float fp3dMoving = step(0.001, abs(vFlowSpeed));
         // light dots every third of a metre, each a comet: a bright head and a tail fading out behind it,
         // so the direction (from a to b) is plain even on a still picture
-        float fp3dPhase = fract((vFlowUv.x - uFlowTime * abs(vFlowSpeed) - vFlowOffset) * 3.0);
+        float fp3dRun = (vFlowUv.x - uFlowTime * abs(vFlowSpeed) - vFlowOffset) * 3.0;
+        float fp3dPhase = fract(fp3dRun);
         float fp3dDot = exp(-(1.0 - fp3dPhase) * 7.0) * fp3dMoving;
         float fp3dCore = fp3dAcross * fp3dAcross;
-        diffuseColor.rgb *= (0.3 + 1.7 * fp3dDot) * (0.2 + 0.8 * fp3dCore);`,
+        // a blended cable: each dot keeps one source's colour all along its way, the sources in their shares (#28)
+        float fp3dPick = fract(floor(fp3dRun) * 0.6180339887);
+        vec3 fp3dDotColor = fp3dPick < vFlowDot1.w ? vFlowDot1.rgb : (fp3dPick < vFlowDot2.w ? vFlowDot2.rgb : vFlowDot3);
+        diffuseColor.rgb = (diffuseColor.rgb * 0.3 + fp3dDotColor * 1.7 * fp3dDot) * (0.2 + 0.8 * fp3dCore);`,
       );
   };
   m.customProgramCacheKey = () => "fp3d-flow";
@@ -5540,7 +5662,7 @@ function makeGroundTexture(): CanvasTexture {
   return tex;
 }
 
-export { furnitureFront, furniturePreview, type FrontPicture, type PreviewItem } from "./preview.ts";
+export { furnitureFront, furniturePreview, itemPicture, type FrontPicture, type PreviewItem } from "./preview.ts";
 
 export function createViewer(host: HTMLElement, options?: ViewerOptions): FloorplanViewer {
   return new FloorplanViewer(host, options);

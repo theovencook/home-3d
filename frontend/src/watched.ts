@@ -11,6 +11,8 @@ import { trailSources } from "./trail.ts";
 import type { HomeAssistant } from "./types.ts";
 import { weatherEntity } from "./weather.ts";
 import { householdEntities } from "./household.ts";
+import { isPrinter, printerEntities } from "./printer.ts";
+import { itemTempSource, roomLiveSensors } from "./room-effects.ts";
 
 export interface WatchLinks {
   /** Entities of each door and window. */
@@ -35,7 +37,7 @@ export function watchedEntities(hass: HomeAssistant, b: Building, w: WatchLinks)
   const presence = b.presence.flatMap((p) => [p.person, p.sensor]);
   const lights = b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => kindOf(id) === "light")));
   const furniture = [...w.furniture.values()].flatMap((l) => [l.entity, l.power]);
-  const states = b.floors.flatMap((f) => f.furniture.flatMap((m) => [m.state_entity ?? null, m.state_entity2 ?? null, m.color_entity ?? null]));
+  const states = b.floors.flatMap((f) => f.furniture.flatMap((m) => [m.state_entity ?? null, m.state_entity2 ?? null, m.color_entity ?? null, m.show_when?.entity ?? null]));
   const doors = b.floors.flatMap((f) => f.furniture.flatMap((m) => [m.door_left ?? null, m.door_right ?? null, m.soc ?? null, m.status ?? null, m.charge ?? null, m.export ?? null]));
   const roofWindowIds = (b.settings.roof?.windows ?? []).flatMap((x) => [x.cover, x.contact, x.tilt]).filter((x): x is string => !!x && x !== "none");
   // the solar fields' and strings' sensors feed the roof cables
@@ -48,6 +50,10 @@ export function watchedEntities(hass: HomeAssistant, b: Building, w: WatchLinks)
   // Haushalt Pro: the bins' calendars and sensors, the mailboxes' flaps and doors
   const household = hasFeature("household") ? [...b.floors.flatMap((f) => f.furniture.flatMap(householdEntities)), b.settings.household?.notes ?? null].filter((id): id is string => !!id && id !== "none") : [];
   const weather = weatherEntity(hass, w.weatherEntityId ?? b.settings.weather_entity);
-  const all = [...placed, ...cameraSensors, ...links, ...power, ...furniture, ...states, ...doors, ...robotRooms, ...roofWindowIds, ...solarIds, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.consumption, e.tariff, ...presence, ...lights, ...heat, ...w.warnings, ...parking, ...motion, ...household, weather, "sun.sun"];
+  // 3D printers (#11): progress, chamber light and camera on the linked entity's device
+  const printers = b.floors.flatMap((f) => f.furniture.filter((m) => isPrinter(m.type)).flatMap((m) => Object.values(printerEntities(hass, w.furniture.get(m.id)?.entity ?? null))));
+  // live room effects (#10): the rooms' motion sensors, the temperatures radiators and cylinders shade with
+  const live = b.floors.flatMap((f) => [...f.rooms.flatMap((r) => roomLiveSensors(hass, f, r, "motion")), ...f.furniture.map((m) => itemTempSource(hass, m))]);
+  const all = [...placed, ...printers, ...cameraSensors, ...links, ...power, ...furniture, ...states, ...doors, ...robotRooms, ...roofWindowIds, ...solarIds, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.consumption, e.tariff, ...presence, ...lights, ...heat, ...w.warnings, ...parking, ...motion, ...live, ...household, weather, "sun.sun"];
   return [...new Set(all.filter((id): id is string => !!id))];
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { alertEntities, alertSources, alertText, findAlerts, isOutage } from "./alerts.ts";
+import { alertColor, alertEntities, alertSources, alertText, alertTint, findAlerts, isOutage } from "./alerts.ts";
 import type { OpeningEntities } from "./devices.ts";
 import { emptyBuilding, newFloor, type Opening } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -162,4 +162,29 @@ test("a contact unavailable for 10 minutes warns only when switched on; a short 
   // a restart of Home Assistant: unavailable for a minute is no warning
   fenster.last_changed = new Date(Date.now() - 60_000).toISOString();
   assert.equal(findAlerts(hass, b, src, links).length, 0);
+});
+
+test("a wet leak sensor turns its room red until it is dry, wherever it is placed or chosen (#10)", () => {
+  const { hass, b, links } = setup();
+  const [k, bath] = b.floors[0].rooms;
+  // the bath's leak sensor placed in the kitchen (under the sink) warns there
+  b.floors[0].placements = [{ entity_id: "binary_sensor.wasser", x: 1, z: 1, y: null }];
+  hass.states["binary_sensor.wasser"].state = "on";
+  let alerts = findAlerts(hass, b, alertSources(hass, b), links);
+  assert.deepEqual(alerts.map((a) => [a.kind, a.roomId]), [["water", "k"]]);
+  // the room's floor turns red; the water alert's own colour stays blue
+  const [r, g, bl] = alertTint(alerts[0]);
+  assert.ok(r > 0.8 && g < 0.3 && bl < 0.3, "red");
+  const [wr, , wb] = alertColor(alerts[0]);
+  assert.ok(wb > 0.8 && wr < 0.4, "blue");
+  // every other warning tints its room in its own colour
+  assert.deepEqual(alertTint({ kind: "window_rain" }), alertColor({ kind: "window_rain" }));
+  // the room may name its leak sensor, or have none
+  b.floors[0].placements = [];
+  k.live = { leak: "binary_sensor.wasser" };
+  bath.live = { leak: "none" };
+  alerts = findAlerts(hass, b, alertSources(hass, b), links);
+  assert.deepEqual(alerts.map((a) => [a.kind, a.roomId]), [["water", "k"]]);
+  hass.states["binary_sensor.wasser"].state = "off";
+  assert.deepEqual(findAlerts(hass, b, alertSources(hass, b), links), []);
 });

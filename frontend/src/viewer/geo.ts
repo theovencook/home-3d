@@ -29,16 +29,43 @@ export class GeoBuffer {
   uv: number[] | null;
   /** Pattern atlas tile per vertex (floors only). */
   tile: number[] | null;
+  /**
+   * Material per vertex for the realistic look (#40, the numbers of role-materials.ts): null while everything drawn
+   * is matt, so walls and floors carry none and their geometry stays as it was.
+   */
+  m: number[] | null = null;
+  /** While an item draws: the material of a colour it draws with (its role's; undefined: not a role's colour). */
+  private materialOf: ((hex: number) => number | undefined) | null = null;
+  private mat = 0;
 
   constructor(uvs = false, tiles = false) {
     this.uv = uvs ? [] : null;
     this.tile = tiles ? [] : null;
   }
 
+  /** Draws with materials per colour (an item's roles) until it is called again; returns the ones before. */
+  useMaterials(materialOf: ((hex: number) => number | undefined) | null): ((hex: number) => number | undefined) | null {
+    const was = this.materialOf;
+    this.materialOf = materialOf;
+    this.mat = 0;
+    return was;
+  }
+
+  /**
+   * The next triangles are drawn in the colour `hex`: they take its material, or the one of `or` (a top drawn a
+   * little lighter than its side takes the side's); matt for any other colour.
+   */
+  paint(hex: number, or = hex): void {
+    const m = this.materialOf ? (this.materialOf(hex) ?? this.materialOf(or) ?? 0) : 0;
+    this.mat = m;
+    if (m && !this.m) this.m = new Array<number>(this.p.length / 3).fill(0);
+  }
+
   tri(a: number[], b: number[], c: number[], ca: Color, cb: Color = ca, cc: Color = ca, uv?: number[], fold = ALWAYS, tile: [number, number] = [0, 1]): void {
     this.p.push(...a, ...b, ...c);
     this.c.push(ca.r, ca.g, ca.b, cb.r, cb.g, cb.b, cc.r, cc.g, cc.b);
     this.f.push(fold, fold, fold);
+    if (this.m) this.m.push(this.mat, this.mat, this.mat);
     // without explicit uvs, point into an empty spot of the texture
     // no `a?.b(...x)`: old Fire-tablet WebViews (before Chrome 91) fail on it (see build.mjs)
     if (this.uv) this.uv.push(...(uv ?? [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]));
@@ -56,6 +83,7 @@ export class GeoBuffer {
     g.setAttribute("fold", new Float32BufferAttribute(this.f, 1));
     if (this.uv) g.setAttribute("uv", new Float32BufferAttribute(this.uv, 2));
     if (this.tile) g.setAttribute("tile", new Float32BufferAttribute(this.tile, 2));
+    if (this.m) g.setAttribute("fp3dMat", new Float32BufferAttribute(this.m, 1));
     g.computeBoundingSphere();
     return g;
   }
@@ -107,6 +135,7 @@ export function cutAbove(buf: GeoBuffer, fromTri: number, cut: number, fold: num
       c: buf.c.slice(v * 3, v * 3 + 3),
       uv: buf.uv ? buf.uv.slice(v * 2, v * 2 + 2) : null,
       tile: buf.tile ? buf.tile.slice(v * 2, v * 2 + 2) : null,
+      m: buf.m ? buf.m[v] : 0,
     };
   };
   type V = ReturnType<typeof read>;
@@ -115,6 +144,7 @@ export function cutAbove(buf: GeoBuffer, fromTri: number, cut: number, fold: num
     c: a.c.map((x, i) => x + (b.c[i] - x) * t),
     uv: a.uv && b.uv ? a.uv.map((x, i) => x + (b.uv![i] - x) * t) : null,
     tile: a.tile,
+    m: a.m,
   });
   const write = (tri: number, vs: V[], f: number) => {
     for (let k = 0; k < 3; k++) {
@@ -136,6 +166,7 @@ export function cutAbove(buf: GeoBuffer, fromTri: number, cut: number, fold: num
       buf.f.push(f);
       if (buf.uv) buf.uv.push(...(v.uv ?? [0.5, 0.5]));
       if (buf.tile) buf.tile.push(...(v.tile ?? [0, 1]));
+      if (buf.m) buf.m.push(v.m);
     }
     return tri;
   };
@@ -258,11 +289,14 @@ export function pushLoft(buf: GeoBuffer, lo: Vec2[], hi: Vec2[], y0: number, y1:
     const up = Math.max(0, Math.min(1, lean / Math.max(1e-6, Math.hypot(lean, y1 - y0))));
     const lo1 = shade(side, k(y0) * dir).lerp(topC, up);
     const hi1 = shade(side, k(y1) * dir).lerp(topC, up);
+    // a face leaning back more than half way is drawn like the top
+    buf.paint(up > 0.5 ? top : side, side);
     buf.tri([a[0], y0, a[1]], [A[0], y1, A[1]], [B[0], y1, B[1]], lo1, hi1, hi1);
     buf.tri([a[0], y0, a[1]], [B[0], y1, B[1]], [b[0], y0, b[1]], lo1, hi1, lo1);
   }
   const [h0, h1, h2, h3] = hi;
   if (Math.hypot(h2[0] - h0[0], h2[1] - h0[1]) > 1e-4) {
+    buf.paint(top, side);
     buf.tri([h0[0], y1, h0[1]], [h2[0], y1, h2[1]], [h1[0], y1, h1[1]], topC);
     buf.tri([h0[0], y1, h0[1]], [h3[0], y1, h3[1]], [h2[0], y1, h2[1]], topC);
   }
@@ -296,6 +330,7 @@ export function pushLyingCyl(buf: GeoBuffer, at: (along: number, across: number)
     if (n0 * out[0] + n1 * out[1] + n2 * out[2] < 0) buf.tri(p, w, q, col);
     else buf.tri(p, q, w, col);
   };
+  buf.paint(side);
   for (let i = 0; i < n; i++) {
     const mid = ((i + 0.5) / n) * Math.PI * 2;
     const col = shade(side, 0.62 + 0.4 * Math.max(0, Math.cos(mid)));
@@ -310,6 +345,7 @@ export function pushLyingCyl(buf: GeoBuffer, at: (along: number, across: number)
     [a0, axis1, axis0],
     [a1, axis0, axis1],
   ] as const) {
+    buf.paint(cap, side);
     const m = at(along, c);
     const centre: V3 = [m[0], cy, m[1]];
     const out: V3 = [to[0] - from[0], 0, to[1] - from[1]];
@@ -337,6 +373,7 @@ export function pushPrism(
   const all = holes.length ? [...poly, ...holes.flat()] : poly;
   const tris = opts.topFace === false && !opts.bottom ? [] : triangulate(poly, holes);
   if (opts.topFace !== false) {
+    buf.paint(top, side);
     const topC = new Color(top);
     for (const [i, j, l] of tris) {
       // polygon is counter-clockwise in (x, z); seen from above (+y) that is clockwise, so swap
@@ -346,6 +383,7 @@ export function pushPrism(
       buf.tri([a[0], topY(a), a[1]], [c[0], topY(c), c[1]], [b[0], topY(b), b[1]], topC, topC, topC, undefined, opts.topFold ?? fold);
     }
   }
+  buf.paint(side);
   if (opts.bottom) {
     const botC = shade(side, 0.55);
     for (const [i, j, l] of tris) {
@@ -374,3 +412,72 @@ export function pushPrism(
   }
 }
 
+
+/** A ring of a turned or rounded solid: points (counter-clockwise in x, z, the same count in every ring) at height y. */
+export interface Ring {
+  pts: Vec2[];
+  y: number;
+}
+
+/**
+ * A closed solid stitched from rings (spheres, lathes, rounded boxes, #4): each ring is joined to the next by a band
+ * of quads; the first ring is closed with a flat cap facing down, the last with one facing up (a ring shrunk to a
+ * point needs none). Rings run counter-clockwise and, as a profile seen from the side, counter-clockwise from the
+ * bottom cap to the top cap: the faces then point outwards also where a profile turns back inwards (inside a bowl).
+ * Like the prisms, sides fade darker towards the floor and vary with the direction they face; faces that tilt upwards
+ * blend towards the top colour, faces that tilt downwards darken like an underside.
+ */
+export function pushRings(buf: GeoBuffer, rings: Ring[], side: number, top: number): void {
+  if (rings.length < 2) return;
+  const topC = new Color(top);
+  const k = (y: number) => 0.5 + 0.5 * Math.min(1, Math.max(0, y / 1.6));
+  const tri = (a: V3, b: V3, c: V3) => {
+    const ux = b[0] - a[0];
+    const uy = b[1] - a[1];
+    const uz = b[2] - a[2];
+    const vx = c[0] - a[0];
+    const vy = c[1] - a[1];
+    const vz = c[2] - a[2];
+    const nx = uy * vz - uz * vy;
+    const ny = uz * vx - ux * vz;
+    const nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz);
+    if (l < 1e-10) return;
+    const flat = Math.hypot(nx, nz);
+    const facing = flat > 1e-9 ? ((nx / flat) * LIGHT[0] + (nz / flat) * LIGHT[1] + 1) / 2 : 0.5;
+    const dir = 0.8 + 0.28 * facing;
+    const up = ny / l;
+    const col = (y: number) => {
+      const c = shade(side, k(y) * dir * (up < 0 ? 1 + 0.45 * up : 1));
+      return up > 0 ? c.lerp(topC, up) : c;
+    };
+    buf.paint(up > 0.5 ? top : side, side);
+    buf.tri(a, b, c, col(a[1]), col(b[1]), col(c[1]));
+  };
+  const P = (r: Ring, i: number): V3 => {
+    const p = r.pts[i % r.pts.length];
+    return [p[0], r.y, p[1]];
+  };
+  for (let j = 0; j + 1 < rings.length; j++) {
+    const lo = rings[j];
+    const hi = rings[j + 1];
+    for (let i = 0; i < lo.pts.length; i++) {
+      tri(P(lo, i), P(hi, i), P(hi, i + 1));
+      tri(P(lo, i), P(hi, i + 1), P(lo, i + 1));
+    }
+  }
+  // caps: a fan from the ring's centre; the first ring's faces down, the last ring's up
+  const cap = (r: Ring, facesUp: boolean) => {
+    const n = r.pts.length;
+    const cx = r.pts.reduce((s, p) => s + p[0], 0) / n;
+    const cz = r.pts.reduce((s, p) => s + p[1], 0) / n;
+    if (r.pts.every((p) => Math.hypot(p[0] - cx, p[1] - cz) < 1e-6)) return;
+    const c: V3 = [cx, r.y, cz];
+    for (let i = 0; i < n; i++) {
+      if (facesUp) tri(c, P(r, i + 1), P(r, i));
+      else tri(c, P(r, i), P(r, i + 1));
+    }
+  };
+  cap(rings[0], false);
+  cap(rings[rings.length - 1], true);
+}

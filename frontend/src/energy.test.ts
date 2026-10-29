@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deviceSensors, energySummary, fieldPowers, findConsumers, flowColor, FLOW_COLORS, flowSegments, gridPoint, meterPosition, powerSensorFor, proposeEnergySensors, readPower, solarCurvePath, solarDayFromStats } from "./energy.ts";
+import { deviceSensors, energySummary, fieldPowers, findConsumers, flowColor, FLOW_COLORS, flowDots, flowSegments, sourceMix, type EnergySummary, gridPoint, meterPosition, powerSensorFor, proposeEnergySensors, readPower, solarCurvePath, solarDayFromStats } from "./energy.ts";
 import { proposeField, roofFaces } from "./solar.ts";
 import type { Building, Room } from "./model.ts";
 import { emptyBuilding, newFloor } from "./model.ts";
@@ -229,11 +229,13 @@ test("Pro cables: roof field → inverter, inverter → meter and battery, meter
   assert.equal(bat[0].power, 250);
   assert.deepEqual([bat[0].a[0], bat[0].a[2]], [7, 0.3]);
   assert.deepEqual([bat[bat.length - 1].b[0], bat[bat.length - 1].b[2]], [6, 0.3]);
-  // the wallbox hangs on the meter with its own colour; 300 W go out to the grid
+  // the wallbox hangs on the meter; 300 W go out to the grid
   assert.ok(segs.some((s) => s.kind === "wallbox" && s.power === 400));
   assert.equal(segs.find((s) => s.kind === "export")!.power, 300);
-  assert.deepEqual(flowColor("wallbox", summary), FLOW_COLORS.wallbox);
-  assert.deepEqual(flowColor("export", summary), FLOW_COLORS.export);
+  // the sun covers everything: the car, the export and the charging battery all run on solar (#28)
+  assert.deepEqual(flowColor("wallbox", summary), FLOW_COLORS.solar);
+  assert.deepEqual(flowColor("export", summary), FLOW_COLORS.solar);
+  assert.deepEqual(flowColor("battery", summary), FLOW_COLORS.solar);
 });
 
 test("field powers: own sensor first, then the string's shared by modules, the rest from the plant", () => {
@@ -358,4 +360,31 @@ test("two lights on one device each take their own meter: PowerCalc's by its nam
   );
   assert.equal(powerSensorFor(hass, "light.bad_decke"), "sensor.bad_decke_power");
   assert.equal(powerSensorFor(hass, "light.buero"), "sensor.buero_power_x");
+});
+
+// ------------------------------------------------------------------ source mix (#28)
+
+const at = (grid: number | null, solar: number | null, battery: number | null): EnergySummary => ({ grid, solar, battery, soc: null, tariff: null, consumption: null });
+
+test("source mix: a load on solar only is all solar, on grid only all grid", () => {
+  // the sun covers the house and 300 W go out
+  assert.deepEqual(sourceMix("consumer", at(-300, 1200, null)), { solar: 1, battery: 0, grid: 0 });
+  // night, no battery: everything comes from the grid
+  assert.deepEqual(sourceMix("consumer", at(800, 0, null)), { solar: 0, battery: 0, grid: 1 });
+  assert.deepEqual(flowColor("consumer", at(800, 0, null)), FLOW_COLORS.grid);
+  assert.deepEqual(flowColor("consumer", at(-300, 1200, null)), FLOW_COLORS.solar);
+});
+
+test("source mix: a heat pump on part sun, part grid is a blend of both", () => {
+  // 1.5 kW of sun and 500 W import: three quarters solar, a quarter grid
+  const mix = sourceMix("consumer", at(500, 1500, 0));
+  assert.deepEqual(mix, { solar: 0.75, battery: 0, grid: 0.25 });
+  // the cable's colour lies between yellow and blue, its dots keep the pure colours in those shares
+  const c = flowColor("consumer", at(500, 1500, 0));
+  assert.notDeepEqual(c, FLOW_COLORS.solar);
+  assert.notDeepEqual(c, FLOW_COLORS.grid);
+  assert.deepEqual(flowDots(mix), [
+    { color: FLOW_COLORS.solar, share: 0.75 },
+    { color: FLOW_COLORS.grid, share: 0.25 },
+  ]);
 });

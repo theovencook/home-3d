@@ -1,13 +1,20 @@
 """Start views of the house, a floor and a room (#206, #282)."""
 
+import json
+from pathlib import Path
+import re
+
 import pytest
 import voluptuous as vol
 
 from custom_components.home_3d.schema import (
+    ENERGY_SCHEMA,
     FURNITURE_SCHEMA,
     HOLOGRAM_SCHEMA,
+    MATERIALS,
     OPENING_SCHEMA,
     OUTDOOR_SCHEMA,
+    PLACEMENT_SCHEMA,
     ROOF_SECTION_SCHEMA,
     ROOM_SCHEMA,
     SETTINGS_SCHEMA,
@@ -150,6 +157,40 @@ def test_household_fields_are_kept_and_checked() -> None:
             FURNITURE_SCHEMA({**base, **bad})
 
 
+def test_colour_role_overrides_are_kept_and_checked() -> None:
+    """An item keeps its own colour per role (#12); an unknown role or a colour that is not #rrggbb is refused."""
+    base = {"id": "s1", "type": "sofa", "x": 1, "z": 1, "rotation": 0, "w": 2, "d": 0.9, "h": 0.85, "variant": None}
+    out = FURNITURE_SCHEMA({**base, "colors": {"fabric": "#8a8c8f", "wood": "#5c4033"}})
+    assert out["colors"] == {"fabric": "#8a8c8f", "wood": "#5c4033"}
+    assert FURNITURE_SCHEMA({**base, "colors": None})["colors"] is None
+    assert "colors" not in FURNITURE_SCHEMA(base)
+    for bad in ({"chrome": "#ffffff"}, {"wood": "brown"}, {"wood": "#12345"}, "red"):
+        with pytest.raises(vol.Invalid):
+            FURNITURE_SCHEMA({**base, "colors": bad})
+
+
+def test_material_per_colour_role_is_kept_and_checked() -> None:
+    """An item keeps its own material per role (#40); an unknown role or material is refused."""
+    base = {"id": "s1", "type": "sofa", "x": 1, "z": 1, "rotation": 0, "w": 2, "d": 0.9, "h": 0.85, "variant": None}
+    out = FURNITURE_SCHEMA({**base, "materials": {"fabric": "rattan", "wood": "gloss"}})
+    assert out["materials"] == {"fabric": "rattan", "wood": "gloss"}
+    assert FURNITURE_SCHEMA({**base, "materials": None})["materials"] is None
+    assert "materials" not in FURNITURE_SCHEMA(base)
+    for m in ("matt", "gloss", "fabric", "glass", "metal", "rattan"):
+        assert FURNITURE_SCHEMA({**base, "materials": {"body": m}})["materials"] == {"body": m}
+    for bad in ({"chrome": "metal"}, {"wood": "velvet"}, {"wood": None}, "rattan"):
+        with pytest.raises(vol.Invalid):
+            FURNITURE_SCHEMA({**base, "materials": bad})
+
+
+def test_materials_match_the_frontend() -> None:
+    """The backend checks the same materials the item panel offers (frontend/src/role-materials.ts)."""
+    src = (Path(__file__).parents[1] / "frontend" / "src" / "role-materials.ts").read_text(encoding="utf-8")
+    found = re.search(r"export const MATERIALS = (\[[^\]]*\]) as const", src)
+    assert found
+    assert json.loads(found.group(1)) == MATERIALS
+
+
 def test_household_tag_settings_are_optional() -> None:
     """The bins' tag settings: missing in old plans, kept when set, a day count out of range is refused."""
     base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
@@ -246,6 +287,35 @@ def test_ceiling_fan_keeps_its_fan() -> None:
     assert "fan" not in FURNITURE_SCHEMA(fan)
 
 
+def test_stairs_keep_their_options_and_check_them() -> None:
+    """Open treads, a turn, bottom landing steps, a flat top and a start height are known fields (#16)."""
+    stairs = {"id": "s1", "type": "stairs", "x": 2, "z": 2, "rotation": 0, "w": 1, "d": 3.2, "h": 2.75, "variant": None}
+    out = FURNITURE_SCHEMA(
+        {**stairs, "stair_open": True, "stair_turn": "left", "stair_landing": 3, "stair_top": 0.5, "mount_y": 0.54}
+    )
+    assert out["stair_open"] is True
+    assert out["stair_turn"] == "left"
+    assert out["stair_landing"] == 3
+    assert out["stair_top"] == 0.5
+    assert out["mount_y"] == 0.54
+    # a plain stair stays plain, and the editor may send nulls to clear an option
+    assert not any(k.startswith("stair_") for k in FURNITURE_SCHEMA(stairs))
+    cleared = FURNITURE_SCHEMA(
+        {**stairs, "stair_open": None, "stair_turn": None, "stair_landing": None, "stair_top": None}
+    )
+    assert cleared["stair_turn"] is None and cleared["stair_landing"] is None
+    for bad in (
+        {"stair_open": "yes"},
+        {"stair_turn": "up"},
+        {"stair_landing": -1},
+        {"stair_landing": 1.5},
+        {"stair_top": -0.1},
+        {"stair_top": 50},
+    ):
+        with pytest.raises(vol.Invalid):
+            FURNITURE_SCHEMA({**stairs, **bad})
+
+
 def test_wall_socket_keeps_its_gangs() -> None:
     """A socket keeps up to four gangs, the same entity on two of them (#593); a fifth is refused."""
     base = {
@@ -321,3 +391,169 @@ def test_door_keeps_its_opening_angle() -> None:
     assert OPENING_SCHEMA({**door, "open_angle": 15})["open_angle"] == 15
     with pytest.raises(vol.Invalid):
         OPENING_SCHEMA({**door, "open_angle": 200})
+
+
+def test_garage_door_keeps_its_style() -> None:
+    """A garage door is sectional (the default) or up-and-over (#24)."""
+    garage = {"id": "o1", "room_id": "r1", "edge": 0, "offset": 1, "type": "garage", "width": 2.3}
+    garage |= {"sill": 0, "height": 2.1}
+    assert OPENING_SCHEMA({**garage, "style": "up_and_over"})["style"] == "up_and_over"
+    assert OPENING_SCHEMA({**garage, "style": "sectional"})["style"] == "sectional"
+    with pytest.raises(vol.Invalid):
+        OPENING_SCHEMA({**garage, "style": "roller"})
+
+
+def test_item_keeps_when_it_shows() -> None:
+    """An item keeps its entity and intervals (#15); malformed days or times are refused."""
+    tree = {"id": "t1", "type": "plant", "x": 2, "z": 2, "rotation": 0, "w": 1, "d": 1, "h": 2, "variant": None}
+    rule = {
+        "entity": "switch.tree",
+        "intervals": [{"from": "12-01", "to": "01-06"}, {"start": "18:00", "end": "23:30"}],
+    }
+    out = FURNITURE_SCHEMA({**tree, "show_when": rule})["show_when"]
+    assert out["entity"] == "switch.tree"
+    assert out["intervals"][0]["from"] == "12-01"
+    assert out["intervals"][1]["end"] == "23:30"
+    assert FURNITURE_SCHEMA({**tree, "show_when": None})["show_when"] is None
+    for bad in (
+        {"from": "13-01", "to": "12-31"},
+        {"from": "12-32", "to": "12-31"},
+        {"start": "24:00", "end": "06:00"},
+        {"start": "7:00"},
+        # half-open: only one end of the days or of the times (#46)
+        {"from": "12-01"},
+        {"to": "12-31"},
+        {"start": "18:00"},
+        {"end": "06:00"},
+        {"from": "12-01", "to": "12-31", "start": "18:00"},
+    ):
+        with pytest.raises(vol.Invalid):
+            FURNITURE_SCHEMA({**tree, "show_when": {"intervals": [bad]}})
+    with pytest.raises(vol.Invalid):
+        FURNITURE_SCHEMA({**tree, "show_when": {"intervals": [{"from": "01-01", "to": "01-02"}] * 25}})
+
+
+def test_pets_roam_unless_set_static() -> None:
+    """Static pets (#17): a pet roams unless switched to static; a static one keeps its spot, turn and pose."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    roaming = SETTINGS_SCHEMA({**base, "pets": {"list": [{"id": "p1", "kind": "cat"}]}})["pets"]["list"][0]
+    assert roaming["static"] is False
+    assert roaming["pose"] is None
+    assert roaming["x"] is None and roaming["z"] is None and roaming["rotation"] is None
+    pet = {"id": "p2", "kind": "dog", "static": True, "pose": "curl", "x": 2.5, "z": -1, "rotation": 90}
+    still = SETTINGS_SCHEMA({**base, "pets": {"list": [pet]}})["pets"]["list"][0]
+    assert still["static"] is True
+    assert still["pose"] == "curl"
+    assert (still["x"], still["z"], still["rotation"]) == (2.5, -1.0, 90.0)
+    for pose in ("sit", "lie", "curl"):
+        SETTINGS_SCHEMA({**base, "pets": {"list": [{**pet, "pose": pose}]}})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "pets": {"list": [{**pet, "pose": "fly"}]}})
+
+
+def test_pet_coats_and_eye_colours() -> None:
+    """Pet coats and eye colours (#42): the new coats are kept, eyes are dark unless set to a known colour."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+
+    def pet(**extra: object) -> dict:
+        return SETTINGS_SCHEMA({**base, "pets": {"list": [{"id": "p1", "kind": "cat", **extra}]}})["pets"]["list"][0]
+
+    assert pet()["eyes"] == "dark"
+    for fur in ("dilute_calico", "blue_grey"):
+        assert pet(fur=fur)["fur"] == fur
+    for eyes in ("dark", "copper", "green", "yellow", "blue"):
+        assert pet(eyes=eyes)["eyes"] == eyes
+    with pytest.raises(vol.Invalid):
+        pet(eyes="purple")
+
+
+def test_item_actions() -> None:
+    """Own tap, hold and double-tap actions of a placed device or a furniture item (#6)."""
+    from custom_components.home_3d.schema import PLACEMENT_SCHEMA
+
+    dev = {"entity_id": "switch.gate", "x": 0, "z": 0, "y": None}
+    assert "actions" not in PLACEMENT_SCHEMA(dev)
+    actions = {
+        "tap": {
+            "action": "perform_action",
+            "target": "rest_command.gate",
+            "data": {"seconds": 5},
+            "confirm": True,
+            "confirm_text": "Open the gate?",
+        },
+        "hold": {"action": "more_info"},
+        "double_tap": None,
+    }
+    assert PLACEMENT_SCHEMA({**dev, "actions": actions})["actions"]["tap"]["data"] == {"seconds": 5}
+    sofa = {"id": "f1", "type": "sofa", "x": 0, "z": 0, "rotation": 0, "w": 2, "d": 1, "h": 0.8, "variant": None}
+    assert (
+        FURNITURE_SCHEMA({**sofa, "actions": {"tap": {"action": "navigate", "target": "/lovelace/0"}}})["actions"][
+            "tap"
+        ]["target"]
+        == "/lovelace/0"
+    )
+    with pytest.raises(vol.Invalid):
+        PLACEMENT_SCHEMA({**dev, "actions": {"tap": {"action": "javascript"}}})
+    with pytest.raises(vol.Invalid):
+        FURNITURE_SCHEMA({**sofa, "actions": {"tap": {"action": "toggle", "confirm_text": "x" * 301}}})
+
+
+def test_url_actions_are_web_addresses_only() -> None:
+    """A url action opens http(s) or a path on this Home Assistant, never javascript: or another scheme (#51)."""
+    dev = {"entity_id": "switch.gate", "x": 0, "z": 0, "y": None}
+    for ok in ("https://example.com/a?b=1", "http://192.168.1.10:8123/", "/lovelace/0", "/local/x.pdf"):
+        tap = PLACEMENT_SCHEMA({**dev, "actions": {"tap": {"action": "url", "target": ok}}})["actions"]["tap"]
+        assert tap["target"] == ok
+    for bad in ("javascript:alert(1)", " JavaScript:alert(1)", "data:text/html,x", "//evil.example", "ftp://x", "x"):
+        with pytest.raises(vol.Invalid):
+            PLACEMENT_SCHEMA({**dev, "actions": {"tap": {"action": "url", "target": bad}}})
+
+
+def test_plug_keeps_the_circuit_it_hangs_on() -> None:
+    """A placed device and an item keep the circuit they are inside, so its watts aren't counted twice (#43)."""
+    plug = {"entity_id": "switch.kettle", "x": 1, "z": 1, "y": None, "circuit": "sensor.kitchen_power"}
+    assert PLACEMENT_SCHEMA(plug)["circuit"] == "sensor.kitchen_power"
+    item = {"id": "p1", "type": "washer", "x": 2, "z": 2, "rotation": 0, "w": 0.6, "d": 0.6, "h": 0.85, "variant": None}
+    assert FURNITURE_SCHEMA({**item, "circuit": "sensor.kitchen_power"})["circuit"] == "sensor.kitchen_power"
+    assert "circuit" not in FURNITURE_SCHEMA(item)
+    with pytest.raises(vol.Invalid):
+        PLACEMENT_SCHEMA({**plug, "circuit": 5})
+    with pytest.raises(vol.Invalid):
+        FURNITURE_SCHEMA({**item, "circuit": "x" * 256})
+
+
+def test_cheap_rate_and_wire_end_energy_sensor() -> None:
+    """The cheap rate is an entity or a daily window; an item keeps the energy sensor of its wire end (#29)."""
+    energy = ENERGY_SCHEMA({"cheap_rate": "binary_sensor.off_peak", "cheap_from": "23:30", "cheap_to": "05:30"})
+    assert energy["cheap_rate"] == "binary_sensor.off_peak"
+    assert (energy["cheap_from"], energy["cheap_to"]) == ("23:30", "05:30")
+    assert ENERGY_SCHEMA({})["cheap_rate"] is None
+    with pytest.raises(vol.Invalid):
+        ENERGY_SCHEMA({"cheap_from": "25:00"})
+    plug = {"entity_id": "switch.kettle", "x": 1, "z": 1, "y": None, "energy": "sensor.kettle_energy"}
+    assert PLACEMENT_SCHEMA(plug)["energy"] == "sensor.kettle_energy"
+    item = {"id": "p1", "type": "washer", "x": 2, "z": 2, "rotation": 0, "w": 0.6, "d": 0.6, "h": 0.85, "variant": None}
+    assert FURNITURE_SCHEMA({**item, "energy": "sensor.washer_energy"})["energy"] == "sensor.washer_energy"
+    with pytest.raises(vol.Invalid):
+        PLACEMENT_SCHEMA({**plug, "energy": 5})
+
+
+def test_live_room_effects_are_kept_and_checked() -> None:
+    """Leak and motion sensors per room, a radiator's temperature and the effect settings (#10)."""
+    assert ROOM_SCHEMA(ROOM)["live"] is None
+    room = ROOM_SCHEMA({**ROOM, "live": {"leak": "binary_sensor.sink_leak", "motion": "none"}})
+    assert room["live"] == {"leak": "binary_sensor.sink_leak", "motion": "none"}
+    item = {"id": "f1", "type": "radiator", "x": 0, "z": 0, "rotation": 0, "w": 1, "d": 0.1, "h": 0.6, "variant": None}
+    assert FURNITURE_SCHEMA(item)["temp_sensor"] is None
+    trv = "sensor.trv_temperature"
+    assert FURNITURE_SCHEMA({**item, "temp_sensor": trv})["temp_sensor"] == trv
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    assert SETTINGS_SCHEMA(base)["effects"] is None
+    chosen = {"motion_seconds": 45, "radiator_cold": 20, "tank_hot": 60}
+    effects = SETTINGS_SCHEMA({**base, "effects": chosen})["effects"]
+    assert effects["motion_seconds"] == 45
+    assert effects["tank_hot"] == 60.0
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "effects": {"motion_seconds": -5}})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "effects": {"radiator_hot": 500}})

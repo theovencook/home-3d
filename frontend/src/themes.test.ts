@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { lookOf, THEMES } from "./themes.ts";
+
+test("realistic is a look beside neon, chosen per card and in the panel", () => {
+  assert.ok(THEMES.includes("realistic"));
+  assert.equal(lookOf("realistic"), "realistic");
+  assert.equal(lookOf("auto"), "auto");
+  assert.equal(lookOf("neon"), "neon");
+  assert.equal(lookOf("theme"), "theme");
+  // a look this version does not know, or none, follows the HA theme (#38)
+  assert.equal(lookOf("cartoon"), "theme");
+  assert.equal(lookOf(null), "theme");
+  assert.equal(lookOf(undefined), "theme");
+});

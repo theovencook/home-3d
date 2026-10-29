@@ -1,94 +1,636 @@
-# Möbel-Packs
+# Furniture packs
 
-Möbel-Packs bringen zusätzliche Möbel in Home 3D. Sie werden wie die eingebauten Möbel aus
-Quadern und Zylindern gebaut und laufen deshalb genauso flüssig auf schwachen Tablets.
+A furniture pack adds items to the Home 3D library. Items are built from a few simple shapes (boxes, cylinders,
+lofts, spheres, lathes and rounded boxes), like the built-in furniture, so they run just as smoothly on slow wall
+tablets.
 
-Packs werden nicht signiert: Beim Import prüft Home Assistant nur den Inhalt gegen das Schema in
-`custom_components/home_3d/packs.py`. Eine Pack-Datei ist `{"payload": {…}}` oder direkt das
-Payload-Objekt; ein `signature`-Block älterer Dateien wird ignoriert.
+Packs are **data only**: JSON that Home Assistant checks against a schema before it keeps anything. A pack carries no
+code, no pictures and no links. The schema and the limits live in `custom_components/home_3d/packs.py`; the same code
+checks a pack on import and in `tools/fp3dpack.py`.
 
-## Ablauf
+This page describes **pack format v2**. Old single-file packs (format `fp3dpack`, version 1) still import; see the end
+of the page.
 
-1. Pack-Quelle schreiben (JSON, Format unten), z. B. `private/packs/kueche.json`
-   (`private/` wird von Git ignoriert).
-2. Prüfen: `python tools/fp3dpack.py validate private/packs/kueche.json`
-3. Optional verpacken: `python tools/fp3dpack.py build private/packs/kueche.json` schreibt
-   `kueche.fp3dpack` (`{"payload": …}`).
-4. Import in Home Assistant: **Erweiterungen** → **Möbel-Pack importieren …**
+## A pack is a folder
 
-## Format
+```
+theovencook.core/
+├── pack.json                 the pack: id, name, publisher, licence
+├── LICENSE                   optional, not read
+├── README.md                 optional, not read
+├── seating/
+│   ├── bar_stool.json        one item per file
+│   └── dining_chair.json
+└── tables/
+    └── side_table.json
+```
+
+- `pack.json` sits at the top of the folder.
+- Every other `.json` file in the folder is one item. Subfolders (up to three deep) are only for keeping a large pack
+  tidy, for example one folder per category; they mean nothing to Home 3D.
+- File and folder names are lower case: letters, digits, `_` and `-` (file names may also contain `.`).
+- An item file is named after its item: `seating/bar_stool.json` holds the item `bar_stool`.
+- A `README`, `LICENSE`/`LICENCE`, `COPYING` or `CHANGELOG` file (optionally `.md` or `.txt`) at the top of the folder
+  may come along and is ignored. Hidden files and folders (`.git`, `.github`) are skipped by the importer and the
+  checker.
+- Anything else (pictures, scripts, other files) makes the import fail.
+
+A repository can hold several packs, one folder each (like `theovencook/home-3d-packs`). Pick the repository folder
+in the importer and every folder with a `pack.json` in it is imported as its own pack.
+
+## pack.json
 
 ```json
 {
-  "format": "fp3dpack",
-  "version": 1,
-  "id": "home3d.kueche",
-  "name": "Küchen-Pack",
-  "publisher": "Home 3D",
-  "description": "optional",
-  "items": [
+  "format": "home3d-pack",
+  "version": 2,
+  "id": "theovencook.core",
+  "name": "Home 3D core",
+  "publisher": "theovencook",
+  "licence": "MIT",
+  "release": 1,
+  "description": "Everyday furniture for every room."
+}
+```
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `format` | yes | Always `"home3d-pack"`. |
+| `version` | yes | Always `2`. |
+| `id` | yes | `publisher.pack`: two lower-case names joined by a dot (letters, digits, `_`, `-`; up to 30 characters each), e.g. `theovencook.ikea-uk`. |
+| `name` | yes | The pack's name as people see it (1 to 80 characters). |
+| `publisher` | yes | Who made the pack, as people see it (1 to 80 characters). |
+| `licence` | yes | The licence of the pack's content as an [SPDX id](https://spdx.org/licenses/) such as `MIT` or `CC-BY-4.0`. A pack without a licence is refused. `"license"` is read as `"licence"`. |
+| `release` | no | Release number of the pack (1 to 100000, default 1). A newer release of the same pack id replaces the installed one. |
+| `description` | no | Up to 400 characters. |
+
+No other fields are allowed. The fields of the old signed shop packs (`signature`, `licensee`, `instance`) are not
+part of v2 and make a v2 pack fail.
+
+## Item ids
+
+An item's full id is the pack id, a slash and the item id: `theovencook.core/bar_stool`. The item id is unique
+within its pack (1 to 40 characters: lower-case letters, digits, `_`, `.`, `-`), so the full id is unique across
+packs. In a saved plan, an item from a pack is stored with the furniture type `pack:theovencook.core:bar_stool`.
+
+## Placed items keep their recipe
+
+The plan keeps a copy of the recipe of every pack item placed in it, in `recipes`, by furniture type. There is one
+copy per item, however often it is placed:
+
+```json
+{
+  "recipes": {
+    "pack:theovencook.core:bar_stool": {
+      "pack": "theovencook.core",
+      "item": "bar_stool",
+      "release": 1,
+      "hash": "sha256:<hash of the recipe>",
+      "commit": "<the commit its files came from, only for a pack installed from GitHub>",
+      "recipe": {
+        "id": "bar_stool",
+        "name": { "en": "Bar stool" },
+        "size": [0.42, 0.42, 0.75],
+        "parts": [{ "shape": "cyl", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "wood" }]
+      }
+    }
+  }
+}
+```
+
+The views draw a placed item from the plan's copy, so:
+
+- removing a pack leaves its placed items looking exactly as before;
+- a newer release of a pack does not change items already placed; an item placed again later takes the same copy.
+  Only updating the item replaces its copy (see [Updates](#updates)).
+
+Home Assistant fills the copies in: when an item is placed (on save), and once for plans saved before copies
+existed, from the packs installed then. A save that sends no copies (an older frontend, a script) keeps the copies the
+plan has. Copies of items no longer in the plan are dropped. `hash` is the SHA-256 of the recipe's JSON with sorted
+keys, so it can be compared with the installed item.
+
+## How the library loads
+
+The browser never gets every recipe at once. Two websocket commands serve the library:
+
+- `home_3d/packs/list` returns every offered pack (bundled, imported, your own items) with its fields, a `hash` of its
+  items and an index of the items: every item field except `parts` and `symbol`, without the defaults the check
+  fills in (`mount: "floor"`, `electric: false` and the like). That is enough to browse, search (readable and IKEA
+  names, tags, UK synonyms), filter and size items. A pack's imported files stay in Home Assistant; only where it came
+  from (`source.origin`) is listed. Your own items come whole, since the item editor works on them.
+- `home_3d/packs/items` with `pack_id` and `items` (a list of item ids; leave it out for all) returns those items with
+  their recipes, plus the pack's `release` and `hash`. Ids the pack does not have are left out.
+
+The editor fetches a recipe when it first draws or places the item (a library card's picture, the hover preview,
+adding the item), gathering the requests of a moment into one per pack, and keeps it while the pack's `hash` stays.
+A view that only shows the plan, such as a wall tablet or a dashboard card, fetches no library at all: placed items
+draw from the plan's recipe copies. The editor and the extensions page load the library when they open.
+
+## Item files
+
+```json
+{
+  "id": "bar_stool",
+  "name": { "en": "Bar stool", "de": "Barhocker" },
+  "size": [0.42, 0.42, 0.75],
+  "group": "seating",
+  "room": ["kitchen", "dining"],
+  "tags": ["counter", "high"],
+  "parts": [
+    { "shape": "cyl", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0.93, "h": 0.07, "color": "wood", "fix": "h" },
+    { "shape": "cyl", "x": 0, "z": 0, "w": 0.12, "d": 0.12, "y": 0, "h": 0.93, "color": "metal" },
+    { "shape": "cyl", "x": 0, "z": 0, "w": 0.8, "d": 0.8, "y": 0, "h": 0.03, "color": "metal", "fix": "h" }
+  ],
+  "symbol": [{ "shape": "circle", "x": 0, "z": 0, "r": 0.5 }]
+}
+```
+
+### Required fields
+
+- `id`: the item id; it must match the file name.
+- `name`: the name by language code (`"en"`, `"de"`, …; 1 to 10 languages, 1 to 80 characters each). English, then
+  the first name, is the fallback for other languages. Write the English name first, as a readable name in UK
+  words: "Wardrobe", "Hob", "Worktop", "Bedside table", "Cooker" (not a product name: that goes in `ikea`).
+- `size`: the default size in metres as `[width, depth, height]` (0.01 to 10 each). In the plan every item can be
+  resized freely; all parts grow with it, except the measures a part keeps with `fix`.
+- `parts`: 1 to 60 parts (see below).
+
+### Parts
+
+All measures of a part are **fractions of the item's size**:
+
+- `x`, `z`: centre across and in depth (−0.5 to 0.5; the front is +z).
+- `w`, `d`: width and depth (0.001 to 1).
+- `y`: bottom (0 to 1 of the height); `h`: height (0.001 to 1).
+- `shape`:
+  - `box`: a box.
+  - `cyl`: a cylinder. Its diameter is the smaller of `w` and `d`. With `axis: "x"` or `"z"` it lies down (wheels,
+    rollers, pipes): its length is the extent along that axis and its diameter the smaller of the other extent and
+    `h`.
+  - `loft`: a box whose top face is another rectangle: `tx`/`tz` for its centre and `tw`/`td` for its size (default:
+    the same as the bottom). Use it for sloped surfaces such as bonnets, windscreens and lamp shades; a thin loft
+    with an offset top makes a slanted bar (a handrail).
+  - `sphere`: a ball that fills the part's box, squashed when `w`, `d` and `h` differ (a pouffe, a globe lamp, a
+    knob). See [Round shapes](#round-shapes).
+  - `lathe`: a `profile` turned around the part's upright axis (vases, lamp bases, bowls, planters).
+  - `rbox`: a box with rounded edges (cushions, mattresses, appliances, soft seats); `round` sets how round.
+- `color`: `#rrggbb` or a role of the built-in palette (`body`, `fabric`, `cushion`, `wood`, `white`, `metal`,
+  `dark`, `glass`, `plant`, `pot`, `accent`). Roles follow the look of the plan, so prefer them. In the realistic
+  look each role also has a material (`fabric` and `cushion` fabric, `metal` metal, `glass` glass, `white` gloss, the
+  rest matt), which an editor can change per placed item in the item panel (matt, gloss, fabric, glass, metal or
+  rattan weave); a `#rrggbb` part is matt.
+- `top` (optional): another colour for the top face.
+- `edges` (optional): glowing outlines: `true` (soft blue), `"glow"` (cyan like the walls) or `"faint"`.
+- `rot` (optional): turn of the part around its own centre, in degrees around the vertical axis (−360 to 360), for
+  spiral stairs or diagonal struts.
+- `fix` (optional): the measures the part **keeps** when the item is resized: `"w"`, `"d"`, `"h"` or several
+  (`"wdh"`). Legs, armrests, plates and handles keep their size and their distance from the item's edge, and the
+  parts between them (seat, carcass) stretch. Per axis there is a fixed zone at each end and a middle that grows; a
+  fixed part in the middle stays centred. When there is not enough room for the fixed parts (a very narrow item),
+  everything scales as before.
+- `glow` (optional, lamps): the part shines in the colour and brightness of the linked light. On a 3D printer it is
+  the chamber light (see [3D printers](#3d-printers)). On an item with a `screen` that is no lamp it is Ambilight:
+  LED strips round the back of a TV that shine in the screen's colour whenever the screen is lit
+  (`theovencook.core/tv_ambilight_55`). On a speaker without a screen it is the light ring, lit while it plays.
+- `screen` (optional): the part is a screen (TV, monitor). The item can then be linked to a media player and its
+  front (+z) shows the colour and picture of the running app, like the built-in TVs.
+- `profile` (`lathe` only, required there): see [Round shapes](#round-shapes).
+- `round` (`rbox` only, optional): see [Round shapes](#round-shapes).
+
+### Round shapes
+
+A sphere, a lathe and a rounded box fill the part's box like the other shapes: they take `x`, `z`, `w`, `d`, `y`,
+`h`, the colour roles, `top`, `edges`, `rot` and `fix`, and grow with the item. When `w` and `d` differ they are oval
+seen from above. They are low-poly (12 points around, 8 on parts under 10 cm), so a room full of them stays smooth on
+a wall tablet. In the plan a sphere and a lathe show as an ellipse as wide as they reach, a rounded box as a rectangle
+with rounded corners. An item whose largest part is a sphere or a lathe casts a round shadow.
+
+**Sphere.** Nothing more to set. A flat `h` gives a squashed ball; for a dome or half a ball, use a lathe.
+
+```json
+{
+  "id": "pouffe_round",
+  "name": { "en": "Round pouffe" },
+  "size": [0.5, 0.5, 0.4],
+  "group": "seating",
+  "parts": [
+    { "shape": "sphere", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "fabric" }
+  ]
+}
+```
+
+**Lathe.** `profile` is a list of 2 to 12 points `[radius, height]`, turned around the part's upright axis:
+
+- `radius` is a fraction of the part's half width and half depth: `1` touches the part's box, `0` is the axis.
+- `height` is a fraction of the part's height: `0` its bottom, `1` its top.
+- Write the points from the bottom up the outside, like drawing the right half of the object's silhouette. A
+  profile that starts or ends away from the axis is closed with a flat disc there, so the solid has no holes. A
+  profile can come back down on the inside (a bowl): go up the outside, over the rim and down the inside.
+
+```json
+{
+  "id": "vase_tall",
+  "name": { "en": "Tall vase" },
+  "size": [0.22, 0.22, 0.45],
+  "group": "vase",
+  "mount": "surface",
+  "parts": [
     {
-      "id": "retro_fridge",
-      "name": { "de": "Retro-Kühlschrank", "en": "Retro fridge" },
-      "size": [0.6, 0.65, 1.5],
-      "electric": true,
-      "parts": [{ "shape": "box", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "white", "edges": true }],
-      "symbol": [{ "shape": "rect", "x": 0, "z": 0, "w": 1, "d": 1 }]
+      "shape": "lathe", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "pot",
+      "profile": [[0, 0], [0.55, 0], [1, 0.35], [0.4, 0.85], [0.5, 1], [0, 1]]
     }
   ]
 }
 ```
 
-- `size`: Standardgröße in Metern (Breite, Tiefe, Höhe). Im Plan lässt sich jedes Möbel danach frei
-  skalieren; alle Teile wachsen mit – außer denen mit `fix`.
-- `fix` an einem Teil (ab Home 3D 1.23, Mindestversion setzen): welche Maße das Teil beim Skalieren
-  **behält** – `"w"`, `"d"`, `"h"` oder mehrere (`"wdh"`). Beine, Armlehnen, Platten und Griffe
-  behalten so ihre Größe und ihren Abstand zur Kante des Möbels, die Teile dazwischen (Sitzfläche,
-  Korpus) strecken sich. Je Achse gibt es damit eine feste Zone an jedem Ende und eine Mitte, die
-  wächst; ein festes Teil in der Mitte bleibt mittig. Reicht der Platz für die festen Teile nicht
-  (ein sehr schmales Möbel), skaliert alles wie früher.
-- `parts` (max. 60): `box`, `cyl` oder `loft`. Alle Maße sind **Anteile der Möbelgröße**: `x`/`z`
-  Mitte (−0,5 … 0,5, vorne ist +z), `w`/`d` Breite/Tiefe (0 … 1), `y` Unterkante und `h` Höhe (0 … 1
-  der Höhe). Ein Zylinder hat den kleineren Wert von `w` und `d` als Durchmesser; mit `axis: "x"` oder
-  `"z"` liegt er (Räder, Rollen – die Länge ist die Ausdehnung entlang der Achse, der Durchmesser der
-  kleinere Wert aus Querausdehnung und `h`). Ein `loft` ist ein Quader, dessen Oberseite ein anderes
-  Rechteck ist (`tx`/`tz` Mitte, `tw`/`td` Größe; Standard wie unten) – für schräge Flächen wie
-  Motorhauben, Windschutzscheiben oder Lampenschirme.
-  Ein Teil mit `rot` (Grad) ist um seine eigene Mitte um die Hochachse gedreht – für Wendeltreppen
-  oder diagonale Streben; ein schmaler `loft` mit versetzter Oberseite ergibt eine schräge Stange
-  (Handlauf).
-- `color`: `#rrggbb` oder eine Rolle der eingebauten Palette (`body`, `fabric`, `cushion`, `wood`,
-  `white`, `metal`, `dark`, `glass`, `plant`, `pot`, `accent`) – Rollen passen zum Look. `top` setzt
-  eine eigene Farbe für die Oberseite, `edges` zeichnet leuchtende Kanten (`true`: dezent blau,
-  `"glow"`: cyan wie die Wände, `"faint"`: sehr zart).
-- `symbol` (optional, max. 40): Draufsicht im Plan aus `rect` (`fill` für gefüllt), `circle` (`r` als
-  Anteil der kleineren Seite) und `line` (`x1`, `z1`, `x2`, `z2`). Ohne Symbol zeichnet der Plan die
-  Teile von oben.
-- `electric`: das Möbel lässt sich mit einem Schalter und Leistungssensor verknüpfen.
-- `mount`: wo das Möbel sitzt – `floor` (Standard), `surface` (auf dem Möbel darunter, z. B.
-  Kaffeemaschine auf der Arbeitsplatte), `wall` (Unterkante bei `wall_y` Metern, z. B. Wallbox) oder
-  `ceiling` (hängt von der Decke, z. B. Dunstabzug, Pendelleuchten).
-- `surface`: die Oberseite trägt andere Möbel (Tisch, Kücheninsel, Werkbank).
-- `hole`: eine Treppe – reicht sie bis zur Etage darüber, schneidet sie dort die Treppenöffnung in den
-  Boden (wie die eingebaute Treppe); die Stufen steigen von der Vorderkante (+z) nach hinten an.
-- `light`: das Möbel ist eine Leuchte und wird mit einem Licht (oder Schalter) verknüpft. Der Wert sagt,
-  wie das Licht den Raum ausleuchtet (`ceiling`, `pendant`, `floor`, `table`, `wall`, `spot`, `garden` …).
-  Teile mit `"glow": true` leuchten in Farbe und Helligkeit des Lichts.
-- `screen`: ein Teil mit `"screen": true` ist ein Bildschirm (Fernseher, Monitor). Das Möbel lässt sich
-  dann mit einem Media Player verknüpfen; die Vorderseite (+z) zeigt die Farbe der laufenden App und
-  ihr Bild, wie die eingebauten Fernseher.
-- **Bibliothek** (optional, ab Home 3D 1.23 – ältere Versionen lehnen Packs mit diesen Feldern ab,
-  also die Mindestversion setzen): `group` sagt, was das Möbel ist (`sofa`, `seating`, `table`,
-  `storage`, `bed`, `kitchen`, `appliance`, `bath`, `lamp`, `media`, `office`, `tech`, `heating`,
-  `energy`, `household`, `deco`, `plant`, `outdoor`, `kids`, `sport`, `pets`, `vehicle`, `stairs`,
-  `architecture`), `room` die Räume, für die es gedacht ist (`living`, `dining`, `kitchen`,
-  `bedroom`, `kids`, `bath`, `office`, `hall`, `utility`, `garage`, `garden`, `hobby`; leer = überall),
-  `tags` weitere Suchwörter. `family` fasst Varianten eines Möbels (ein Tisch in drei Längen) zu
-  einer Karte zusammen, `variant` (Text je Sprache wie `name`) beschriftet den Chip der Variante.
-  Ohne diese Felder ordnet Home 3D das Möbel nach seinen Wörtern und dem Pack ein; Varianten
-  erkennt es an der Größe am Ende der ID (`table_160`) und an den Zahlen im Namen.
+A bowl, its hollow 15 % above the bottom:
 
-## Feature-Namen
+```json
+{
+  "id": "bowl",
+  "name": { "en": "Bowl" },
+  "size": [0.3, 0.3, 0.12],
+  "group": "deco",
+  "mount": "surface",
+  "parts": [
+    {
+      "shape": "lathe", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "white",
+      "profile": [[0, 0], [0.6, 0], [1, 1], [0.9, 1], [0.55, 0.15], [0, 0.15]]
+    }
+  ]
+}
+```
 
-Ein Pack darf `features` tragen (z. B. `"features": ["weather"]`), wie ältere Pack-Dateien es tun. Das
-schaltet nichts frei: Alle Funktionen, deren Code in diesem Repository liegt, sind ohnehin an.
+**Rounded box.** `round` is the radius of the rounded edges as a fraction of the part's shortest side, from `0.01`
+to `0.5` (default `0.2`). At `0.5` the shortest side is fully round, like a bolster.
+
+```json
+{
+  "id": "floor_cushion",
+  "name": { "en": "Floor cushion" },
+  "size": [0.6, 0.6, 0.15],
+  "group": "seating",
+  "room": ["living", "kids"],
+  "parts": [
+    { "shape": "rbox", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "cushion", "round": 0.4 }
+  ]
+}
+```
+
+A newer Home 3D shape in an older Home 3D is refused with `needs_update` (see below), so a pack that uses these
+shapes needs a Home 3D version that knows them.
+
+### Optional item fields
+
+- `symbol`: up to 40 shapes for the plan's top view, in the same fractions: `rect` (`x`, `z`, `w`, `d`, `fill` for a
+  filled one), `circle` (`x`, `z`, `r` as a fraction of the shorter side) and `line` (`x1`, `z1`, `x2`, `z2`).
+  Without a symbol the plan draws the parts from above.
+- `electric`: the item can be linked to a switch and a power sensor.
+- `mount`: where the item sits: `floor` (default), `surface` (on the item below it, such as a coffee machine on a
+  worktop), `wall` (bottom at `wall_y` metres, 0 to 3, default 1; such as a wallbox) or `ceiling` (hangs from the
+  ceiling, such as a cooker hood or pendant lights).
+- `surface`: its top carries other items (a table, a kitchen island, a workbench).
+- `vehicle`: a vehicle; offered for parking spots.
+- `hole`: stairs. When they reach the floor above, they cut the stairwell opening into that floor, like the built-in
+  stairs; the steps rise from the front edge (+z) to the back.
+- `light`: the item is a lamp and is linked to a light (or a switch). The value says how the light spreads in the
+  room: `ceiling`, `downlight`, `spot`, `panel`, `pendant`, `floor`, `uplight`, `table`, `wall`, `strip`,
+  `bollard` or `garden`.
+- Library fields:
+  - `group`: what the item is, which is its section in the library: `sofa`, `seating`, `table`, `storage`, `bed`,
+    `kitchen`, `appliance`, `bath`, `lamp`, `media`, `office`, `tech`, `network`, `heating`, `energy`,
+    `household`, `deco`, `tray`, `frame`, `vase`, `cushion`, `throw`, `candle`, `plant`, `outdoor`, `kids`,
+    `sport`, `pets`, `vehicle`, `stairs` or `architecture`.
+  - `room`: up to 12 rooms the item is meant for: `living`, `dining`, `kitchen`, `bedroom`, `kids`, `bath`,
+    `office`, `hall`, `utility`, `garage`, `garden`, `hobby`, `conservatory`, `loft`. Empty means any room.
+  - `tags`: up to 12 more search words (1 to 30 characters each).
+  - `family`: groups variants of one thing (a table in three lengths) into one library card; `variant` (text by
+    language, like `name`) labels the variant's chip.
+  - `ikea`: the IKEA product name (1 to 40 characters, such as `"KALLAX"`). Searching for it finds the item as well
+    as its readable name does; the readable name stays the item's label.
+
+  Without these fields Home 3D sorts the item by its words and its pack id; it finds variants by a size at the end of
+  the id (`table_160`) and by the numbers in the name.
+
+  The groups and their library sections:
+
+  | Group | Section | Group | Section |
+  | --- | --- | --- | --- |
+  | `sofa` | Sofas | `household` | Household |
+  | `seating` | Seating (chairs, stools, benches) | `deco` | Decoration (rugs, mirrors, anything else) |
+  | `table` | Tables | `tray` | Trays |
+  | `storage` | Cabinets & shelves (wardrobes, chests of drawers) | `frame` | Frames & pictures |
+  | `bed` | Beds | `vase` | Vases |
+  | `kitchen` | Kitchen (units, worktops, sinks) | `cushion` | Cushions |
+  | `appliance` | Appliances (cooker, hob, fridge, washing machine) | `throw` | Throws |
+  | `bath` | Bathroom | `candle` | Candles |
+  | `lamp` | Lights | `plant` | Plants |
+  | `media` | TV & audio | `outdoor` | Garden & outdoors |
+  | `office` | Office | `kids` | Kids |
+  | `tech` | Tech & smart home (switches, sockets, sensors) | `sport` | Fitness |
+  | `network` | Network (router, switch, access point, NAS) | `pets` | Pets |
+  | `heating` | Heating & climate | `vehicle` | Vehicles |
+  | `energy` | Energy | `stairs` | Stairs & railings |
+  | | | `architecture` | Architecture |
+
+  **Other words for a thing.** The library knows the common other words for many things, UK word first: an item
+  named "Induction cooktop" is found by `hob`, a "Countertop" by `worktop`, a "Closet" by `wardrobe`, and the other
+  way round. A pack needs no `tags` for these; use `tags` for words the library does not know. The list lives in
+  `frontend/src/vocabulary.ts` (`SYNONYMS`), next to the group and room ids.
+
+No other fields are allowed, in an item or in a part.
+
+### 3D printers
+
+An item whose id names a 3D printer (`3d_printer`, `3d_printer_enclosed`, `resin_3d_printer`, …) and is `electric`
+shows the printer it is linked to. Link it to one entity of the printer's Home Assistant device, usually its print
+status sensor; Home 3D finds the rest on the same device, whatever integration made it:
+
+- while a print runs (or is paused), a ring on the item's top fills with the print's progress (a sensor in `%` whose
+  name says progress);
+- its `glow` parts shine while the printer's light (its chamber light) is on, in that light's colour;
+- a tap opens the printer's camera when its device has one (an own tap action set in the editor still wins).
+
+`theovencook.core/3d_printer` is one; see its file for a model to start from.
+
+### Camera models
+
+An item tagged `security camera` is a camera model: the editor offers it under *Camera model* for every placed camera.
+It is only the camera's look; the camera keeps its live view, field-of-view wedge and actions. Make the lens look
+along +z, like any item's front. A `ceiling` item (a dome, a turret) moves the camera to the ceiling and a `wall`
+item to the wall, with the camera's pin in the middle of the item; the wedge keeps its angle, reach and tilt.
+
+A tag with a number in it names the model as Home Assistant's device registry reports it, such as `g4 pro` or
+`rlc-810a`. A camera whose device reports that model (with or without UniFi's `UVC` prefix, or a longer name that
+starts with it, like `G5 Turret Ultra` for `g5 turret`) shows it as the model *the device reports*, and a camera placed
+from now on gets that look straight away. Cameras already in the plan keep their look until one is chosen. The
+UniFi cameras in `theovencook.core/tech/` (`unifi_g3_flex`, `unifi_g4_pro`, `unifi_g4_dome`, …) are examples.
+
+### Energy devices
+
+An `electric` item takes part in the energy flow by its `family`, like the built-in meter, inverter, home battery
+and wallbox. The editor then offers the same links as for the built-in one, and the cables run to and from it:
+
+| `family` | Plays the part of | Links |
+| --- | --- | --- |
+| `consumer_unit`, `energy_monitor` (a CT clamp box), `meter` | the meter: where the cables meet, the grid comes in | power (the grid, + = import), export |
+| `inverter` | an inverter: the solar fields' and panels' cables end here, it feeds the meter | power (its solar output) |
+| `home_battery`, `power_station` | a battery: on the nearest inverter of its floor, else on the meter | power, charge, state of charge |
+| `ev_charger` | a wallbox: its cable has its own colour | power, status |
+| `solar_panel` | a solar panel placed as an item (a garden array, a balcony panel): a cable to the nearest inverter of its floor, else to a battery there, else to the meter | power (its own output, optional) |
+
+A `meter` tagged `gas` or `water` is a gas or water meter and plays no part. Every other electric item (a smart plug,
+a heat pump) is a consumer once it has a power sensor. The meter, inverter, battery and solar panel are never
+consumers, even when their power sensor is placed on its own as well: a discharging battery is a source (the green
+share of the cables' colour), a charging one draws through its own cable. A consumer inside a circuit that has its
+own meter (a circuit monitor's channel placed in the plan) names that circuit's power sensor under *Inside circuit*:
+it keeps its own watts and its own branch, but the circuit's cable and the house total count those watts only once. Plans made before this
+existed keep counting such a plug twice until its circuit is set on the item, and the editor says so under every device that has a power
+sensor but no circuit. A hot-water cylinder whose id starts with `hot_water_cylinder`
+also takes a `water_heater` entity. `theovencook.core` has one of each in `energy/` and `heating/`.
+
+### Roof window blinds
+
+An item whose id starts with `roof_window` and ends with `_blind` (`roof_window_mk04_blind`) and is `electric` has a
+blind that follows a cover, like a motorised curtain: link it to the blind's cover (or a switch that drives it). Its
+`fabric` parts, other than cylinders, are the blind: lofts that lie on the slope from the window's low edge up to its
+high edge. Open, the blind runs up the slope to its top edge; closed, it covers the pane. The run time, a live
+position sensor and the other direction are set like a curtain's.
+
+### Architecture items and openings
+
+Doors, windows, garage doors and roof windows that cut a wall or a roof are **openings** and **roof windows** of the
+plan, not library items; they follow contacts and covers. The architecture items in `theovencook.core` are for what
+those cannot show, or for places without a wall or a roof to cut:
+
+| Item | In a wall or roof of the plan | The library item |
+| --- | --- | --- |
+| Roof window with blind | A roof window on a roof face: blind, window motor, contact | A window on a sloped ceiling the plan has no roof for (a loft room); its blind follows a cover |
+| French doors | The opening's **French doors** preset | Doors for a garden room, a summerhouse or a shed drawn from items |
+| Up-and-over garage door | A garage door opening with the style **Up-and-over door**: it tilts up into a canopy with its cover | The door's look for a garage drawn from items |
+| Bay window | Draw the room's outline with the bay and put a window on each side | A bay that stands in front of a window opening |
+| Chimney breast, half-wall with cap | A free wall can be low, but has no cap | The breast (plain, with an open fireplace or a mantelpiece) and the capped half-wall |
+
+## What the loader checks
+
+A pack is refused, with a message that names the file and the fault, when:
+
+| Check | Limit | Error code |
+| --- | --- | --- |
+| The folder has no `pack.json`, or its `format` is not `home3d-pack` | | `not_a_pack` |
+| `pack.json` has no `licence` | | `no_licence` |
+| A file is not `pack.json`, an item `.json` or a readme/licence text; a path leaves the folder or breaks the naming rules | | `not_data` |
+| Any text contains a link (`http:`, `https:`, `www.` and the like) | | `not_data` |
+| Too many items | 1,000 per pack | `too_many_items` |
+| A file is too large | 50,000 characters | `too_large` |
+| The whole pack is too large | 3,000,000 characters | `too_large` |
+| A file is not JSON, breaks the schema, or an item id does not match its file name or is used twice | 60 parts and 40 symbol shapes per item | `invalid_content` |
+| A value this version does not know yet (a newer shape, for example) | | `needs_update` |
+
+The size limits keep a pack within one websocket message. A larger collection is split into several packs.
+
+## Checking and importing
+
+1. Write the pack folder.
+2. Check it: `python tools/fp3dpack.py validate path/to/theovencook.core` (needs the Python package `voluptuous`).
+   It runs the same checks as Home Assistant and prints the pack's id, item count, release and licence.
+3. Import it in Home Assistant: **Extensions** → **Import a pack folder …**, then pick the pack folder (or a
+   repository folder that holds several packs).
+
+The plan keeps working when a pack is removed: its placed items keep their look from the plan's copies of their
+recipes (see [Placed items keep their recipe](#placed-items-keep-their-recipe)). Only items placed before copies
+existed, whose pack was already gone then, show as plain boxes.
+
+## Installing from GitHub
+
+An editor can also paste a GitHub URL into **Extensions** → **Install from GitHub**:
+
+- a repository with the pack at its root: `https://github.com/<owner>/<repo>` (the default branch);
+- a pack folder inside a repository: `https://github.com/<owner>/<repo>/tree/<branch or tag>/<folder>`, for example
+  `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.core`;
+- a release: `https://github.com/<owner>/<repo>/releases/tag/<tag>`.
+
+Home Assistant fetches the pack, not the browser, and only from `api.github.com` (the repository, the commit and its
+file list) and `raw.githubusercontent.com` (the files, at that commit). The repository must be public. Before
+anything is downloaded the file list is checked: the names (as above), at most 1,010 files in the folder and the size
+of each file; hidden files and folders and the readme and licence texts are not fetched. The files then go through
+the same checks as a folder import. A repository root that holds several packs is refused with the URLs of its pack
+folders. Branch names that contain a `/` cannot be told from the folder and are not supported.
+
+| Problem | Error code |
+| --- | --- |
+| Not a URL of a GitHub repository, folder or release | `bad_url` |
+| The repository (or branch, tag, folder) does not exist or is private | `not_found` |
+| GitHub cannot be reached, refuses (rate limit) or redirects elsewhere | `fetch_failed` |
+
+The installed pack keeps where it came from in `source.origin`, so an update check knows where to look:
+
+```json
+{
+  "type": "github",
+  "url": "https://github.com/theovencook/home-3d-packs/tree/main/theovencook.core",
+  "owner": "theovencook",
+  "repo": "home-3d-packs",
+  "ref": "main",
+  "default_branch": false,
+  "folder": "theovencook.core",
+  "commit": "<the 40-character commit id the files came from>",
+  "release": 1,
+  "fetched_at": 1793232000.0
+}
+```
+
+`ref` is the branch, tag or commit the URL named, or the default branch's name when it named none
+(`default_branch: true`); `folder` is `""` for a pack at the repository root; `release` is the pack's release number
+when it was fetched. A backup carries the origin; on restore it is kept only when it still names GitHub.
+A pack installed this way whose id is one of the packs that ship with Home 3D follows the same rule as an imported
+copy (see below).
+
+## Updates
+
+Packs installed from GitHub are checked for new releases on a schedule set under **Extensions** → **Pack updates**:
+daily, weekly (on a chosen day) or monthly (on the 1st), at a chosen time, or never (default: daily at 04:00). An
+editor can also press **Check now**.
+
+- A check reads the commit the pack's `ref` points at. When it is the installed commit, nothing more is fetched.
+  Otherwise it reads only the pack's own `pack.json` there and compares its `release` with the installed one. A
+  repository with a folder per pack (like `theovencook/home-3d-packs`) changes when any pack in it changes, so the
+  release of the pack's folder decides, not the commit: **publishers raise `release` with every change to a pack**.
+- A higher release is installed into the library. Placed items keep their recipe copies: the **Pack updates**
+  section lists every placed item whose installed item differs from its copy, with the release it has and the one
+  it would get, and **Update** replaces its copy (**Update all** does every listed item).
+- With **Update placed items automatically** on (off by default), new releases are applied to placed items without
+  asking: after a check, an import or an install, when the setting is switched on, and when a Home 3D update brings
+  a newer bundled pack.
+- A check never installs an older release. Importing or installing an older release than the one the library offers
+  asks first (the backend refuses with `older_release`; the page asks and sends it again with `confirm: true`).
+- **Pin release** keeps a pack where it is: checks skip it, auto-update leaves its placed items alone (they can still
+  be updated one by one), and importing another release of it asks first (`pinned`).
+- **Roll back to v…** puts back the release the pack had before its last update, together with the placed items that
+  had taken that update, and pins the pack so the next check does not bring the update back. Unpin it to take
+  updates again. One step back is kept per pack.
+- The household's own items (`household.custom`) are never listed: placed copies follow every edit at once. Bundled
+  packs update with Home 3D itself; their placed items follow the auto-update setting like any other pack's.
+
+The settings, pins, previous releases and last check results are kept in `.storage/home_3d.pack_updates`.
+
+## Packs that ship with Home 3D
+
+Our own library comes with the integration in `custom_components/home_3d/bundled_packs/`, one folder per pack
+(`theovencook.core` and `theovencook.ikea-uk`). Home Assistant reads these folders from its own disk when the integration starts, so
+they are there on a fresh install without network access and nothing has to be imported. They are checked like an
+imported pack; a bundled pack that does not check is logged and left out.
+
+- A bundled pack shows under **Extensions** with "Comes with Home 3D" and cannot be removed. It is not part of a
+  backup: the next version of Home 3D brings it again.
+- An imported pack with the same id and at least the same `release` takes the bundled one's place, whether it was
+  imported from files or installed from a GitHub URL (for example a newer `theovencook.core` from
+  `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.core`). An older copy is kept but the bundled
+  one is shown. Removing the copy brings the bundled one back.
+
+### Adding an item to theovencook.core
+
+Every item is one file, in the folder of its library section: `theovencook.core/<group>/<item id>.json`, where
+`<group>` is one of the `group` values above (`sofa`, `seating`, `table`, `storage`, `bed`, `kitchen`, `lamp`,
+`tech`, `pets`, …) and the item's `group` field says the same. There is no index to edit: the folder is read as it
+is. Every core item has an English name.
+
+```
+custom_components/home_3d/bundled_packs/theovencook.core/
+├── pack.json
+├── LICENSE
+├── sofa/
+│   └── loveseat_simple.json
+├── lamp/
+│   └── floor_lamp_simple.json
+└── tech/
+    └── desktop_tower_simple.json
+```
+
+`tests/test_core_pack.py` checks every bundled pack and every item file against the schema and that each item sits
+in the folder of its `group`; `frontend/src/core-pack.test.ts` checks that each item shows in the library under that
+section. Adding an item does not touch `pack.json`; its `release` goes up once per Home 3D release that changes the
+pack, so installs holding an older imported copy pick up the bundled one.
+
+### The IKEA UK pack
+
+`theovencook.ikea-uk` holds models of IKEA UK bestsellers, laid out like the core pack
+(`theovencook.ikea-uk/<group>/<item id>.json`). Each item has a readable English `name` ("Cube shelving unit 2x4")
+and the IKEA product name in `ikea` ("KALLAX"); searching either finds it. The models are our own, built from the
+shapes above with sizes read from IKEA UK product pages; no IKEA pictures or 3D files are used. The trademark note is
+in the repository's `NOTICE`.
+
+- Every size, layout and left/right version is its own item, grouped into one library card by `family`.
+- Colourways are not separate items: the parts are drawn in colour roles (the white carcass of a KALLAX in `white`,
+  a walnut veneer in `wood`), and a placed item takes its colourway from the colour presets in the item panel
+  (white gloss, black-brown, white stained oak, oak, walnut, birch, pine, acacia, anthracite, …). The colourways IKEA
+  sells are listed in the item's `tags`, so "kallax black-brown" finds it. This keeps the pack under the 500-item
+  limit for its 200 models.
+- Kitchen cabinets (METOD, ENHET) come without a worktop, as in the shop, and carry items on top: put a worktop
+  (SÄLJAN, KARLBY) on a run of them and a hob or an inset sink on that. Wall cabinets hang with their top at 2.20 m;
+  integrated appliances (RENGÖRA, TVÄTTAD) show the kitchen front they hide behind. KNOXHULT kitchens are whole.
+- The models and their batches are tracked in `docs/ikea-uk-models.md`.
+
+## Publishing the packs
+
+Our packs are published together in one public repository, [`theovencook/home-3d-packs`](https://github.com/theovencook/home-3d-packs),
+with one folder per pack. The bundled folders in this repository stay the source: Home 3D ships them for offline
+use, and the packs repository is a generated copy so other installs can add or update a pack by URL.
+
+1. Check out the packs repository next to this one (`git clone https://github.com/theovencook/home-3d-packs`).
+2. Run `python tools/publish_packs.py path/to/home-3d-packs`. It checks every bundled pack with the same schema and
+   limits as `tools/fp3dpack.py` and refuses to publish anything if one fails, or if a pack changed since its copy
+   in the checkout without a higher `release`. Otherwise it copies each pack folder
+   over its copy in the checkout (files removed from a pack are removed there too) and writes `README.md` (the
+   packs, their install URLs, licence), `NOTICE` (with the IKEA trademark note while the IKEA UK pack is in) and
+   `LICENSE`. Git data and folders of other packs in the checkout are not touched.
+3. Commit and push the checkout. Every pack that changed needs a higher `release` in its `pack.json` (raise it in
+   this repository; the script names the packs that need one): the update check compares each pack's own
+   `release`, so a pack whose release did not move shows no update.
+4. Tag a release in the packs repository (`vYYYY.MM.DD`, for example `v2026.10.29`) so a version can be named in a URL:
+   `https://github.com/theovencook/home-3d-packs/tree/v2026.10.29/theovencook.core`.
+
+After pushing, `python tools/check_pack_urls.py` fetches every pack by its folder URL from real GitHub with the
+code Home Assistant uses and runs the update check against an older commit (needs the network and Home
+Assistant's packages, so run it in the test virtualenv).
+
+Each pack installs by its folder URL, for example
+`https://github.com/theovencook/home-3d-packs/tree/main/theovencook.ikea-uk`. The repository URL alone is refused
+with the list of folders to pick from.
+
+## Your own items
+
+Editors can build items in Home 3D itself: **Extensions** → **Your own items** → **Open the item editor**. The editor
+adds parts from the shapes above on a live 3D picture, sets their colour roles and fixed measures, and gives the item
+a name, a library section (`group`), rooms, search words (`tags`) and an optional IKEA name.
+
+- A saved item is an item file like the ones in a pack folder, checked against the same schema.
+- The items are kept in Home Assistant (`.storage/home_3d.custom_items`) and shared by everyone who uses it. The
+  library shows them as the pack `household.custom` ("Your own items"), so a placed one is the furniture type
+  `pack:household.custom:<item id>`. No imported pack may use that pack id.
+- The item id comes from the name while the item is new and stays the same once it is saved, so placed copies follow
+  later changes: placed copies of an item change with it when it is saved, with no update to accept. Removing an
+  item leaves placed copies as they were last saved.
+- **Export** downloads the item as `<item id>.json`. **Import item files …** takes one or more such files (exported
+  on another install, or written by hand); an item whose id is already used either replaces that item or is kept
+  beside it under a free id. **Paste an item** takes the same JSON pasted in; an LLM's answer can be pasted as it
+  came, inside a code fence or a line of chat.
+- **Copy instructions for an LLM** copies a short brief on this format (shapes, sizes, colour roles, fixed measures,
+  the library's sections and rooms, the limits, and two core items as examples). Paste it into ChatGPT, Claude or
+  Gemini, say what item you want, and paste the answer under **Paste an item**. The brief is written from the same
+  lists and limits the backend checks (`frontend/src/item-format.ts`, held equal to `packs.py` by a test), so it
+  follows this page as the format changes.
+- Home 3D's own backup file carries the custom items as well.
+
+## Old single-file packs (v1)
+
+Packs made for earlier versions are one JSON file: `{"payload": {…}}` or the payload itself, with
+`"format": "fp3dpack"`, `"version": 1`, an `id` without a publisher prefix and all items in an `items` list. They
+still import through **Extensions** → **Import pack files …**, and `tools/fp3dpack.py validate old-pack.json` checks
+them. Their items use the same fields as above. They declare no licence. Fields of the old signed shop packs
+(`signature`, `licensee`, `instance`) are dropped on import. An old pack may list `features`; they unlock nothing,
+since every feature whose code is in this repository is always on.
+
+To move an old pack to v2: put the payload's `id`, `name`, `publisher`, `release` and `description` into a
+`pack.json` with `"format": "home3d-pack"`, `"version": 2`, a `publisher.pack` id and a `licence`, then save each
+entry of `items` as `<item id>.json`.

@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isLamp, newFloor, setTerrain, type Building, type Furniture } from "./model.ts";
-import { isCooktopZone, isPackCooktop, isPackSensor, furnitureSize, isElectric, mountBase, packDisplay, packItem, packItemName, packName, packType, setPacks, type FurniturePack } from "./packs.ts";
+import { isCooktopZone, isPackCooktop, isPackHeater, isPackSensor, furnitureSize, isElectric, mountBase, packAmbilight, packDisplay, packItem, packItemName, packName, packOrigin, packsVersion, packType, setPacks, withPackItem, DRAFT_TYPE, type FurniturePack } from "./packs.ts";
 
 const pack: FurniturePack = {
   id: "demo.pack",
   name: "Demo",
   publisher: "Demo",
-  licensee: null,
   items: [{ id: "tv", name: { de: "Fernseher groß", en: "Big TV" }, size: [2, 0.3, 1.2], electric: true, parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "dark" }] }],
 };
 
@@ -34,7 +33,6 @@ test("pack items stand on the floor, on furniture, on a wall or hang from the ce
       id: "p",
       name: "P",
       publisher: "P",
-      licensee: null,
       items: [
         { id: "island", name: { en: "Island" }, size: [2, 1, 0.9], surface: true, parts: [part] },
         { id: "coffee", name: { en: "Coffee" }, size: [0.3, 0.4, 0.4], mount: "surface", electric: true, parts: [part] },
@@ -78,6 +76,32 @@ test("a status light is no display: printers ask for a device, TVs for a media p
   setPacks([]);
 });
 
+test("a TV with glowing parts has Ambilight: they shine whenever its screen is lit, not only while it plays", () => {
+  const body = { shape: "box" as const, x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "dark" };
+  const screen = { ...body, z: 0.45, d: 0.1, screen: true };
+  const strip = { ...body, z: -0.48, d: 0.04, w: 0.9, h: 0.04, glow: true };
+  setPacks([
+    {
+      id: "t.tv",
+      name: "t",
+      publisher: "t",
+      items: [
+        { id: "tv_ambilight", name: { en: "TV" }, size: [1.2, 0.08, 0.7], parts: [body, screen, strip] },
+        { id: "tv", name: { en: "TV" }, size: [1.2, 0.08, 0.7], parts: [body, screen] },
+        { id: "speaker", name: { en: "Speaker" }, size: [0.1, 0.1, 0.15], parts: [body, strip] },
+        { id: "lamp", name: { en: "Lamp" }, size: [0.3, 0.3, 0.5], light: "table", parts: [body, screen, strip] },
+      ],
+    } as unknown as FurniturePack,
+  ]);
+  assert.equal(packAmbilight("pack:t.tv:tv_ambilight"), true);
+  // a TV without glowing parts, a speaker's ring (it shines while it plays) and a lamp (it shines with its light)
+  assert.equal(packAmbilight("pack:t.tv:tv"), false);
+  assert.equal(packAmbilight("pack:t.tv:speaker"), false);
+  assert.equal(packAmbilight("pack:t.tv:lamp"), false);
+  assert.equal(packAmbilight("sofa"), false);
+  setPacks([]);
+});
+
 test("a pack cooktop is found by its zones: thin discs on its top (they glow while it cooks)", () => {
   const zone = { shape: "cyl" as const, x: -0.2, z: -0.2, w: 0.25, d: 0.25, y: 0.99, h: 0.003, color: "metal" };
   const pack: FurniturePack = {
@@ -86,7 +110,6 @@ test("a pack cooktop is found by its zones: thin discs on its top (they glow whi
     id: "test.kitchen",
     name: "Küche",
     publisher: "t",
-    licensee: null,
     items: [
       { id: "hob_80", name: "Kochfeld", size: [0.8, 0.62, 0.92], electric: true, parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 0.95, color: "white" }, zone, { ...zone, x: 0.2 }] },
       { id: "sideboard", name: "Sideboard", size: [1.6, 0.45, 0.8], parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "wood" }, zone, { ...zone, x: 0.2 }] },
@@ -122,4 +145,34 @@ test("a pack's sensor models follow any sensor, other pack items and built-ins d
   assert.equal(isPackSensor("pack:home3d.smarthome:presence_mmwave"), true);
   assert.equal(isPackSensor("pack:home3d.smarthome:smart_plug"), false);
   assert.equal(isPackSensor("motion_sensor"), false);
+});
+
+test("an item being edited is drawn as a pack item without changing the installed packs (#13)", () => {
+  setPacks([pack]);
+  const version = packsVersion();
+  const draft = { id: "draft", name: { en: "Draft" }, size: [1, 1, 1] as [number, number, number], parts: [{ shape: "sphere" as const, x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "accent" }] };
+  const seen = withPackItem(DRAFT_TYPE, draft, () => packItem(DRAFT_TYPE));
+  assert.equal(seen, draft);
+  assert.equal(packItem(DRAFT_TYPE), undefined, "gone again afterwards");
+  assert.equal(packsVersion(), version, "views do not rebuild for it");
+  assert.equal(packItem(packType("demo.pack", "tv"))?.id, "tv");
+  assert.throws(() => withPackItem(DRAFT_TYPE, draft, () => {
+    throw new Error("draw failed");
+  }));
+  assert.equal(packItem(DRAFT_TYPE), undefined, "gone after a failure too");
+});
+
+test("a pack installed from GitHub shows where it came from (#25); an imported one shows nothing", () => {
+  const origin = { type: "github" as const, url: "https://github.com/theovencook/home-3d-packs/tree/main/theovencook.core", owner: "theovencook", repo: "home-3d-packs", ref: "main", default_branch: false, folder: "theovencook.core", commit: "a".repeat(40) };
+  assert.deepEqual(packOrigin({ ...pack, source: { origin } }), { label: "theovencook/home-3d-packs/theovencook.core @ main", url: origin.url });
+  const root = { ...origin, url: "https://github.com/theovencook/one-pack", repo: "one-pack", ref: "trunk", default_branch: true, folder: "" };
+  assert.deepEqual(packOrigin({ ...pack, source: { origin: root } }), { label: "theovencook/one-pack", url: root.url });
+  assert.equal(packOrigin(pack), null);
+  assert.equal(packOrigin({ ...pack, source: { files: {} } }), null);
+});
+
+test("a core hot-water cylinder takes a water_heater entity like the utility pack's tank (#22)", () => {
+  assert.equal(isPackHeater("pack:theovencook.core:hot_water_cylinder_200"), true);
+  assert.equal(isPackHeater("pack:theovencook.core:hot_water_cylinder"), true);
+  assert.equal(isPackHeater("pack:theovencook.core:heat_pump_outdoor_unit"), false);
 });

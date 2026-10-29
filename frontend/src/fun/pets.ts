@@ -1,13 +1,14 @@
 // Fun pack "pets": cats, dogs (five breeds, small to large) and rabbits that live in the 3D house. Each walks through
 // the doors from room to room (the walk's floor map finds the way) and rests at its own kind of places only: a cat in
-// its bed or cave, by the scratching tree, or – walking up from the front and jumping – on a real sofa, armchair or
-// bed; a dog in its bed or basket, or on the floor in front of the sofa; both visit the bowls. Nothing else (an
-// aquarium, a cage) is theirs. At night they sleep curled up. They are drawn only while they move; resting costs
-// nothing. three.js comes from the 3D bundle (passed in).
+// its bed or cave, up on its cat tree or in its bed on a wall shelf, or – walking up from the front and jumping – on a
+// real sofa, armchair or bed; a dog in its bed or basket, or on the floor in front of the sofa; both visit the bowls.
+// Nothing else (an aquarium, a cage) is theirs. At night they sleep curled up. They are drawn only while they move;
+// resting costs nothing. three.js comes from the 3D bundle (passed in).
 
 import type * as THREE from "three";
 import type { Building, Floor, Furniture, Pet, Vec2 } from "../model.ts";
 import type { FloorMap, Obstacle } from "../viewer/walk.ts";
+import { BED, isStaticPet, itemOf, petFloor, SOFA, staticPlace, type StaticPlace } from "../pet-place.ts";
 
 /** The three.js classes the pets need, lent by the 3D bundle (it has no ready-made spheres or boxes: shapes are made here). */
 export type FunLib = Pick<typeof THREE, "Group" | "Mesh" | "MeshBasicMaterial" | "CanvasTexture" | "Color" | "PlaneGeometry" | "BufferGeometry" | "Float32BufferAttribute"> & { DoubleSide: typeof THREE.DoubleSide };
@@ -35,6 +36,8 @@ export interface PetsContext {
   base: (floor: Floor, f: Furniture) => number;
   /** Doors their contact reports shut: the pets go round them (doors without a sensor count as open). */
   closedDoors?: () => ReadonlySet<string>;
+  /** Height of the plan's surfaces (desk, table) at a point: a static pet put there sits on top. */
+  surface?: (floor: Floor, x: number, z: number) => number;
 }
 
 export interface PetsController {
@@ -90,7 +93,8 @@ function shapes(lib: FunLib) {
   };
 }
 
-const FURS: Record<string, [string, string]> = {
+/** A coat: its main colour, the chest and belly, and patches (if any) over its back and head. */
+const FURS: Record<string, [string, string, ...string[]]> = {
   orange: ["#e0954a", "#fbe6cf"],
   tabby: ["#a8865d", "#e8d6bb"],
   black: ["#2c2c33", "#5a5a66"],
@@ -100,6 +104,18 @@ const FURS: Record<string, [string, string]> = {
   calico: ["#f4f0e8", "#e09045"],
   golden: ["#e3b46b", "#f7e3bd"],
   cream: ["#efe0c4", "#fff6e6"],
+  // #42: white with grey and cream patches
+  dilute_calico: ["#f3efe8", "#f7f4ee", "#8e939c", "#e3c79a"],
+  // #42: solid blue-grey all over (British shorthair), no lighter chest
+  blue_grey: ["#7f8999", "#7f8999"],
+};
+
+/** Eye colours round a dark pupil (#42); "dark" eyes have no iris, as before. */
+const IRISES: Record<string, string> = {
+  copper: "#c8682a",
+  green: "#6fae3e",
+  yellow: "#e2c22e",
+  blue: "#4f8fd8",
 };
 
 /** The look of a kind (or a dog's breed): body length/width/height, legs, head, snout, ears, tail, speed (m/s). */
@@ -141,14 +157,17 @@ interface Model {
 export function buildModel(lib: FunLib, pet: Pet): Model {
   const S = shapes(lib);
   const L = lookOf(pet);
-  const [main, second] = FURS[pet.fur] ?? FURS.orange;
+  const [main, second, ...patchColours] = FURS[pet.fur] ?? FURS.orange;
   const m1 = new lib.MeshBasicMaterial({ color: main, vertexColors: true });
   const m2 = new lib.MeshBasicMaterial({ color: second, vertexColors: true });
   const earMat = new lib.MeshBasicMaterial({ color: new lib.Color(main).multiplyScalar(0.78), vertexColors: true });
   const paw = new lib.MeshBasicMaterial({ color: new lib.Color(main).lerp(new lib.Color(second), 0.6), vertexColors: true });
   const dark = new lib.MeshBasicMaterial({ color: "#16161c" });
   const shine = new lib.MeshBasicMaterial({ color: "#ffffff" });
+  const irisColour = pet.eyes ? IRISES[pet.eyes] : undefined;
+  const iris = irisColour ? new lib.MeshBasicMaterial({ color: irisColour }) : null;
   const nose = new lib.MeshBasicMaterial({ color: pet.kind === "dog" ? "#1d1d22" : "#f08aa0" });
+  const patches = patchColours.map((c) => new lib.MeshBasicMaterial({ color: c, vertexColors: true }));
   const ball = (mat: THREE.Material, sx: number, sy: number, sz: number, x = 0, y = 0, z = 0) => {
     const m = new lib.Mesh(S.ball, mat);
     m.scale.set(sx, sy, sz);
@@ -161,6 +180,9 @@ export function buildModel(lib: FunLib, pet: Pet): Model {
   const cy = L.leg + L.hi / 2;
   // the body: a soft ellipsoid, the chest and belly lighter
   body.add(ball(m1, L.wid, L.hi, L.len, 0, cy, 0), ball(m2, L.wid * 0.78, L.hi * 0.72, L.len * 0.55, 0, cy - L.hi * 0.12, L.len * 0.16));
+  // patches (a calico's): rounded shapes just breaking through the back, one towards the tail, one at the shoulder
+  if (patches[0]) body.add(ball(patches[0], L.wid * 0.72, L.hi * 0.7, L.len * 0.5, L.wid * 0.22, cy + L.hi * 0.18, -L.len * 0.17));
+  if (patches[1]) body.add(ball(patches[1], L.wid * 0.66, L.hi * 0.7, L.len * 0.42, -L.wid * 0.24, cy + L.hi * 0.16, L.len * 0.14));
   // stubby legs with light paws, pivot at the hip
   const legs: THREE.Group[] = [];
   const lr = Math.min(0.04, L.wid * 0.17);
@@ -184,16 +206,23 @@ export function buildModel(lib: FunLib, pet: Pet): Model {
   const h = L.head;
   head.position.set(0, L.leg + L.hi * 0.9 + h * 0.45, L.len / 2 + h * 0.45);
   head.add(ball(m1, h * 2.15, h * 1.95, h * 1.95));
+  // patches over one ear and the other side of the crown, clear of the eyes
+  if (patches[0]) head.add(ball(patches[0], h * 1.3, h * 1.1, h * 1.6, h * 0.45, h * 0.45, -h * 0.05));
+  if (patches[1]) head.add(ball(patches[1], h * 1.1, h * 1.0, h * 1.3, -h * 0.5, h * 0.35, -h * 0.25));
   // muzzle: a dog's snout forward, a cat's and rabbit's small cheeks, and the nose
   const sn = Math.max(0.025, L.snout);
   head.add(ball(m2, h * 1.05, h * 0.8, sn * 1.6 + h * 0.5, 0, -h * 0.32, h * 0.72 + sn * 0.45));
   head.add(ball(nose, h * 0.28, h * 0.2, h * 0.2, 0, -h * 0.12, h * 0.95 + sn * 1.1));
   const eyes: THREE.Group[] = [];
   for (const side of [-1, 1]) {
-    // the eyes: dark, round, with a shine (closed when sleeping)
+    // the eyes: dark, round, with a shine (closed when sleeping); coloured ones have an iris round the dark pupil
     const e = new lib.Group();
     e.position.set(side * h * 0.42, h * 0.12, h * 0.82);
-    e.add(ball(dark, h * 0.34, h * 0.38, h * 0.2), ball(shine, h * 0.11, h * 0.11, h * 0.08, side * -h * 0.05, h * 0.08, h * 0.08));
+    if (iris) {
+      const slit = L.ears === "cat";
+      e.add(ball(iris, h * 0.34, h * 0.38, h * 0.2), ball(dark, h * (slit ? 0.1 : 0.17), h * (slit ? 0.3 : 0.2), h * 0.12, 0, 0, h * 0.05));
+    } else e.add(ball(dark, h * 0.34, h * 0.38, h * 0.2));
+    e.add(ball(shine, h * 0.11, h * 0.11, h * 0.08, side * -h * 0.05, h * 0.08, h * 0.08));
     head.add(e);
     eyes.push(e);
     if (L.ears === "cat") {
@@ -269,13 +298,13 @@ interface Spot {
   visit?: boolean;
 }
 
-/** The item's own name: a pack item's id after the pack ("pack:home3d.pets:cat_bed" → "cat_bed"). */
-const itemOf = (type: string) => type.slice(type.lastIndexOf(":") + 1).toLowerCase();
-const SOFA = /^(sofa|armchair|chesterfield|corner_(left|right|sofa))|sofa/;
-const BED = /^bed(_|$)/;
-const CAT_HOME = /^(cat_bed|cat_cave|cat_tree)$/;
+// a pack's own sizes and versions count too: cat_bed_donut_large, cat_tree_tall, pet_bowls_raised (#23)
+const CAT_BED = /^cat_(bed|cave)(_|$)/;
+const CAT_TREE = /^cat_tree(_|$)/;
+/** A cat bed on a shelf on the wall: up there, jumped onto from the floor in front. */
+const CAT_SHELF = /^cat_shelf_bed(_|$)/;
 const DOG_HOME = /^(dog_bed|dog_basket|dog_house)$/;
-const BOWLS = /^(bowls|pet_feeder|water_fountain)$/;
+const BOWLS = /^(bowls|pet_bowls?|pet_feeder|water_fountain)(_|$)/;
 
 /** A rug on the floor: its rectangle (centre, half sizes, turn) and its top. */
 interface Rug {
@@ -333,7 +362,7 @@ function pointIn(p: Vec2, poly: readonly Vec2[]): boolean {
 }
 
 /** Favourite places on a floor, only the ones of its kind (an aquarium or a cage never is one). */
-function spotsFor(floor: Floor, kind: Pet["kind"], map: FloorMap): Spot[] {
+function spotsFor(floor: Floor, kind: Pet["kind"], map: FloorMap, base: (floor: Floor, f: Furniture) => number): Spot[] {
   const out: Spot[] = [];
   const along = (f: Furniture, k: number): Vec2 => {
     const a = (f.rotation * Math.PI) / 180;
@@ -346,11 +375,14 @@ function spotsFor(floor: Floor, kind: Pet["kind"], map: FloorMap): Spot[] {
   };
   for (const f of floor.furniture) {
     const t = itemOf(f.type);
-    const own = kind === "cat" ? CAT_HOME.test(t) : kind === "dog" ? DOG_HOME.test(t) : false;
-    if (own) {
-      // in its bed or cave; by the scratching tree; in front of the dog house
-      const p = t === "cat_tree" || t === "dog_house" ? along(f, f.d / 2 + 0.3) : ([f.x, f.z] as Vec2);
-      out.push({ p, y: t === "cat_tree" || t === "dog_house" ? 0 : 0.06, approach: null, face: facing(f), sleep: true });
+    if (kind === "cat" && (CAT_TREE.test(t) || CAT_SHELF.test(t))) {
+      // up on the top of the cat tree, or in the bed on its shelf: jumped onto from the floor in front
+      const y = base(floor, f) + (CAT_TREE.test(t) ? Math.max(0.06, f.h - 0.05) : f.h * 0.4);
+      out.push({ p: [f.x, f.z], y, approach: along(f, f.d / 2 + 0.3), face: facing(f), sleep: true });
+    } else if (kind === "cat" ? CAT_BED.test(t) : kind === "dog" ? DOG_HOME.test(t) : false) {
+      // in its bed or cave; in front of the dog house
+      const p = t === "dog_house" ? along(f, f.d / 2 + 0.3) : ([f.x, f.z] as Vec2);
+      out.push({ p, y: t === "dog_house" ? 0 : 0.06, approach: null, face: facing(f), sleep: true });
     } else if (BOWLS.test(t) && kind !== "rabbit") out.push({ p: along(f, f.d / 2 + 0.25), y: 0, approach: null, face: facing(f) + Math.PI, sleep: false, visit: true });
     else if ((SOFA.test(t) || BED.test(t)) && !t.includes("bunk") && !t.startsWith("dog") && !t.startsWith("cat")) {
       const bed = BED.test(t) || t === "sofa_bed";
@@ -525,6 +557,8 @@ interface Animal {
   stairsEntry?: Vec2 | null;
   /** On the steps: the way left (lower floor's coordinates) and the floor it ends on. */
   climb: { pts: [number, number, number][]; to: string } | null;
+  /** A static pet (#17): where it stays and in which pose (it never walks). */
+  still: StaticPlace | null;
 }
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -569,15 +603,12 @@ export function startPets(ctx: PetsContext): PetsController {
     a.map = info.map;
     a.rooms = info.rooms;
     let spots = info.spots.get(a.pet.kind);
-    if (!spots) info.spots.set(a.pet.kind, (spots = spotsFor(info.floor, a.pet.kind, info.map)));
+    if (!spots) info.spots.set(a.pet.kind, (spots = spotsFor(info.floor, a.pet.kind, info.map, ctx.base)));
     a.spots = spots;
     viewer.floorMap.get(id)?.group.add(a.model.root);
   };
 
-  const floorFor = (b: Building, pet: Pet): Floor | undefined => {
-    const withRooms = b.floors.filter((f) => f.rooms.some((r) => r.points.length >= 3));
-    return withRooms.find((f) => f.id === pet.floor_id) ?? [...withRooms].sort((x, y) => Math.abs(x.elevation) - Math.abs(y.elevation))[0];
-  };
+  const floorFor = petFloor;
 
   /** A random free place in a room. */
   const somewhere = (a: Animal): Vec2 => {
@@ -679,6 +710,44 @@ export function startPets(ctx: PetsContext): PetsController {
     a.model.zzz.visible = a.mode === "sleep";
   };
 
+  /**
+   * A static pet's pose, held: sitting upright on its haunches, lying like a loaf, or curled up asleep (head tucked,
+   * eyes shut, the tail round it).
+   */
+  const posture = (a: Animal, s: StaticPlace) => {
+    const L = a.look;
+    const m = a.model;
+    m.root.position.set(s.pos[0], s.y + (s.y < 0.05 ? rugTop(floors.get(a.floorId)?.rugs ?? [], s.pos) : 0), s.pos[1]);
+    m.root.rotation.y = s.heading;
+    m.zzz.visible = false;
+    if (s.pose === "sit") {
+      // the body tilts up at the front round its feet, the rear down on the floor; front legs straight, rear tucked
+      const tilt = -0.5;
+      const ry = L.leg + L.hi * 0.2;
+      const rz = -L.len * 0.4;
+      m.body.rotation.x = tilt;
+      m.body.position.y = -(ry * Math.cos(tilt) - rz * Math.sin(tilt));
+      m.legs.forEach((l, i) => {
+        l.rotation.x = i < 2 ? -tilt : 0;
+        l.scale.y = i < 2 ? 1 : 0.08;
+      });
+      m.head.rotation.set(-tilt * 0.8, 0, 0);
+      m.tail.rotation.set(-1.5, 0, 0.7);
+      for (const e of m.eyes) e.scale.y = 1;
+      return;
+    }
+    const curl = s.pose === "curl";
+    m.body.rotation.x = 0;
+    m.body.position.y = -(L.leg + L.hi * 0.12);
+    m.legs.forEach((l) => {
+      l.rotation.x = 0;
+      l.scale.y = 0.08;
+    });
+    m.head.rotation.set(curl ? 0.45 : 0.12, curl ? 0.6 : 0, 0);
+    m.tail.rotation.set(-1.45, 0, curl ? 1.4 : 0.9);
+    for (const e of m.eyes) e.scale.y = curl ? 0.12 : 1;
+  };
+
   /** At the end of the way: up onto the spot (a cat, from the front) facing the room, or a short stop at the bowls. */
   const arrive = (a: Animal, now: number) => {
     if (a.stairs) {
@@ -723,6 +792,7 @@ export function startPets(ctx: PetsContext): PetsController {
   };
 
   const step = (a: Animal, dt: number, now: number): boolean => {
+    if (a.still) return false;
     if (a.jump) {
       const j = a.jump;
       j.t = Math.min(1, j.t + dt / 0.45);
@@ -898,7 +968,8 @@ export function startPets(ctx: PetsContext): PetsController {
     for (const pet of pets) {
       // a pet that went up or down the stairs stays on that floor
       const prev = before.get(pet.id);
-      const floor = (prev && prev.pet.floor_id === pet.floor_id ? b.floors.find((f) => f.id === prev.floorId) : undefined) ?? floorFor(b, pet);
+      const still = isStaticPet(pet);
+      const floor = (!still && prev && !prev.still && prev.pet.floor_id === pet.floor_id ? b.floors.find((f) => f.id === prev.floorId) : undefined) ?? floorFor(b, pet);
       if (!floor || !viewer.floorMap.get(floor.id) || !floorInfo(floor.id).rooms.length) continue;
       const old = prev;
       const a: Animal = {
@@ -922,17 +993,30 @@ export function startPets(ctx: PetsContext): PetsController {
         stairs: null,
         stairsEntry: null,
         climb: null,
+        still: null,
       };
       toFloor(a, floor.id);
+      if (still) {
+        // a static pet: at its spot, else (none set yet) at one of its own places or anywhere in a room
+        const own = a.spots.find((s) => s.sleep && !s.approach) ?? a.spots.find((s) => s.sleep);
+        a.still = staticPlace(floor, pet, ctx.surface) ?? (own ? { pos: own.p, y: own.y, heading: own.face ?? 0, pose: pet.pose ?? "sit" } : { pos: somewhere(a), y: 0, heading: 0, pose: pet.pose ?? "sit" });
+        a.pos = a.still.pos;
+        a.y = a.still.y;
+        a.until = Infinity;
+        posture(a, a.still);
+        animals.push(a);
+        continue;
+      }
       // a pet already living here keeps its place (up on a sofa it starts in front of it)
-      a.pos = old && old.floorId === floor.id && !old.climb ? (old.on?.approach ?? old.pos) : somewhere(a);
+      a.pos = old && !old.still && old.floorId === floor.id && !old.climb ? (old.on?.approach ?? old.pos) : somewhere(a);
       pose(a);
       animals.push(a);
     }
     buildFish(b);
     last = 0;
     viewer.invalidate();
-    if (animals.length) raf = requestAnimationFrame(tick);
+    // static pets hold still: the frames run only for the ones that roam
+    if (animals.some((a) => !a.still)) raf = requestAnimationFrame(tick);
   };
 
   update(ctx.building, ctx.pets);

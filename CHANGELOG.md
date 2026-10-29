@@ -3,12 +3,68 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+### Library and packs
+
+- **Pack format v2:** a pack is a folder (`pack.json` plus one JSON file per item, no code), checked like before. A pack holds up to 1000 items.
+- **Bundled packs:** `theovencook.core` (furniture, lamps, media, office and network gear, kitchen and bath, heating and energy, decor, plants, outdoor, vehicles and architecture) and `theovencook.ikea-uk` (IKEA UK models, searchable by their IKEA name) come with the integration.
+- **Library vocabulary:** items sort into rooms and kinds, and the search knows UK words as well as US ones.
+- **Install a pack from a GitHub URL:** a repository, or a pack folder inside one (`.../tree/main/theovencook.core`), installs without a file upload. Only data is fetched; code, pictures and links are refused.
+- **Updates, pin and roll back:** packs installed from GitHub are checked daily, weekly or monthly (or on demand). A newer release changes nothing in the house until you update the items one by one, or switch on auto-update. A pack can be pinned to its release or rolled back to the previous one; placed items show an update badge.
+- **Plans keep a recipe copy of every placed item:** a house still looks the same after a pack is updated, replaced or removed. Removing a pack leaves its furniture in the plan.
+- **The library loads light:** the pack list sends an index of every item; the recipes come on demand and are kept in the browser.
+- **Saves keep recipe copies:** a pack update that happened on the server while an editor was open is no longer undone by that editor's next save.
+- **Pack install and update robustness:** clearer errors for a missing release, a bad size or a repository that does not exist.
+- `tools/publish_packs.py` and `tools/check_pack_urls.py` publish the bundled packs to a pack repository and check that they install by URL.
+
+### Items and the item editor
+
+- **Item editor:** build your own furniture from simple shapes. The items are kept in Home Assistant, appear in the library for everyone in the household, and can be exported and imported as files.
+- **Copy instructions for an LLM:** the editor copies a short brief on the item format; paste it into a chat assistant, say what you want and paste the answer back as an item.
+- **New shapes:** sphere, lathe (turned parts) and rounded box.
+- **Colour per role with presets:** parts take colour roles (body, fabric, wood, metal …), and one click re-colours a whole item. A **material per colour role** (matt, gloss, fabric, glass, metal, rattan) shows in the realistic look.
+- **Show when:** an item can show only between two dates, between two times, or while an entity is available (seasonal decorations). A time window over midnight belongs to the evening it started.
+- **Tap, hold and double-tap actions** per item: toggle, more info, camera, navigate, open a web address or perform a Home Assistant action, with an optional question first. Only a Home Assistant administrator adds or changes a perform action.
+- **Stair options** in the item panel, validated by the backend.
+- **Real UniFi camera models** for the camera items.
+- **3D printer** with a progress ring and chamber light; **static pets** (sit, lie, curl up) and more **pet coats and eye colours**.
+
+### Looks and views
+
+- **Follow the Home Assistant theme:** the panel takes its colours from the active theme.
+- **Realistic look:** a mode beside neon with lit materials, the sun from `sun.sun` with moving shadows (not on phones) and a sky that follows the weather entity. It can be chosen per card and in the panel; neon is unchanged.
+- **Read-only 2D view:** a flat plan in its own small bundle, with the realistic theme's look and the cable ends.
+- **Show in sidebar:** an option on the integration to hide the panel from the sidebar.
+
+### Energy and room effects
+
+- **Energy cables are coloured by where the power comes from** (grid, solar, battery). A smart plug inside a circuit is no longer counted twice, and a discharging battery is a source, a charging one a load. Plans made before this keep counting a plug twice until its circuit is set on the item; the editor flags devices with a power sensor but no circuit.
+- **Cheap-rate badge:** shown while a cheap-rate binary sensor (or a daily time window) is on. Hovering or tapping the end of a cable shows today's kWh from its energy sensor; without one nothing is shown.
+- **Room effects:** a wet leak sensor turns its room's floor red until it is dry, motion lights a room for a configurable time, radiators shade from cold blue to warm red, and a hot-water cylinder shows its tank temperature.
+
+### Editors and safety
+
+- **Editors list** (see 0.1.0) also decides who may install packs and edit items. Importing a backup and restoring an earlier version replace the whole plan, actions included, so they need a Home Assistant administrator; the editor disables them for everyone else. A web address action is limited to http(s) or a path on the same Home Assistant.
+
+### Developer
+
+- The bundle budgets went up: main 722 to 780 KB, 3D 836 to 900 KB, editor 944 to 1024 KB (the 2D plan bundle has its own 72 KB budget).
+- mypy runs clean in a CI-like environment (Python 3.13, `requirements_test.txt`).
+- Less duplication: one `COLOUR_ROLES`, one household pack id, one walk over the placed pack items, one `lazyBundle` for the lazily loaded bundles and one HH:MM helper.
+
 ## Home 3D 0.1.0
 
 - Forked from NeonPlan 3D 0a947aa; shop, licence, telemetry and modules removed; Pro features unlocked.
 - Renamed to Home 3D (Home Assistant domain `home_3d`). This is a fresh integration: it does not take over
   NeonPlan 3D data or backups.
 - Furniture packs are no longer signed: pack import checks the content only.
+- **Editors list:** ⚙ Settings → 👥 Editors (admins only) picks who may change the plan; by default every admin.
+  A non-admin on the list gets the Editor and Extensions tabs; everyone else views and controls devices only, and
+  Home Assistant refuses their saves. The list always keeps at least one admin.
+- **Static pets:** in Extensions → Fun a pet can be switched from roaming to staying at its spot, sitting, lying
+  or curled up, facing a chosen way. Put on a sofa, bed or desk it lies on top. Drag its paw in the plan editor to
+  move it; roaming pets behave as before.
 
 ## 2.0.7
 

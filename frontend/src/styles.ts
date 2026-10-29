@@ -117,6 +117,19 @@ export const controls = css`
     width: 100%;
     cursor: pointer;
   }
+  /* colour per role (#12): a swatch beside the presets; a role following the look shows a faded swatch */
+  .fp3d-colour-pick {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 6px;
+  }
+  /* its material (#40) on a line of its own under the colour */
+  .fp3d-colour-pick .fp3d-material {
+    grid-column: 1 / -1;
+  }
+  .fp3d-field input[type="color"].fp3d-colour-unset {
+    opacity: 0.35;
+  }
   .fp3d-field select option,
   select option {
     /* the opened list keeps the dark look (else light text on the browser's white list) */

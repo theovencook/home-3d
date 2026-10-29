@@ -26,7 +26,9 @@ import { backdropImage } from "../backdrop.ts";
 import { screenName, setScreenName, setVoiceHere, setVoicePipeline, voiceOnHere, voicePipeline } from "../load-voice.ts";
 import { doorbellCamera, doorbellEntities, directorOnHere, HOLD_DEFAULT, HOLD_MAX, HOLD_MIN, setDirectorHere, type DirectorSettings } from "../director.ts";
 import { deviceSensors, energySummary, flowSegments, gridPoint, powerSensorFor, proposeEnergySensors, type EnergyPrefs, type FlowSegment, proposeMeters } from "../energy.ts";
+import { energySensorFor } from "../wire-ends.ts";
 import { CLIMATE_ATTRS, isPulseDrive, isStatusSensor, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
+import { ACTION_TYPES, GESTURES, actionTypeChoosable, parseActionData, performActionLocked, withGesture, type ActionType, type Gesture, type ItemAction, type ItemActions } from "../item-actions.ts";
 import { activeSections, sectionFloor, dormerParent, effectiveDormer, proposeDormer, sectionGeometry, floorOutline, polygonBox, headroomLines, ridgeHeight, sectionAbove, sectionCutsBelow, roofSectionsFromRooms, sectionFrame, sectionTurn, turnSectionAbout, wallTopUnder } from "../roof-sections.ts";
 import { bestFace, clampField, faceAt, faceCompass, fieldFace, fieldModules, GROUND, moveField, pointOnFace, proposeField, proposeGroundField, proposeWindow, proposeWallField, roofFaces, rowCounts, turnGroundField, fieldCenter, wallFaces, windowAsField, windowCorners, onFace, onField, rayOnFace, type RoofFace } from "../solar.ts";
 import type { SurfaceGrab, SurfaceRay } from "../viewer/viewer3d.ts";
@@ -106,6 +108,8 @@ import {
   type Building,
   type Floor,
   type Furniture,
+  type ShowInterval,
+  type ShowWhen,
   type FurnitureType,
   type LampMount,
   type RoofSection,
@@ -126,8 +130,7 @@ import {
   type OpeningType,
   type Room,
   type Vec2,
-  DOOR_STYLES,
-  WINDOW_STYLES,
+  openingStyles,
   SILL_BOARDS,
   openingStyle,
   isFrontDoor,
@@ -135,6 +138,8 @@ import {
   type SillBoard,
   type ScreenPicture,
   STAIR_TYPES,
+  stairLimits,
+  stairOptionPatch,
   setTerrain,
   clearFirstState,
 } from "../model.ts";
@@ -142,14 +147,25 @@ import { windowGetsWell } from "../geometry/wells.ts";
 import { controls, tokens } from "../styles.ts";
 import "./entity-picker.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
-import { fetchBackup, restoreBackup, type BackupFile } from "../api.ts";
+import { fetchBackup, fetchPackUpdates, getEditors, restoreBackup, setEditors, updatePlacedItems, type BackupFile } from "../api.ts";
+import { libraryUpdates } from "../pack-updates.ts";
+import { lastAdmin, pickEditor, type EditorUser } from "../editors.ts";
 import { load3d } from "../load3d.ts";
+import { ensureRecipes, packTypesIn } from "../pack-recipes.ts";
 import "./library.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
+import { detectCameraModel, isCameraModel, setCameraLook } from "../camera-models.ts";
+import { COLOUR_PRESETS, itemColourRoles, roleColour, setRoleColour, type ColourRole } from "../colour-roles.ts";
+import { MATERIALS, ownMaterial, setRoleMaterial, usualMaterial, type Material } from "../role-materials.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
+import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
-import { furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, type FurniturePack } from "../packs.ts";
+import { effectFields } from "./effect-fields.ts";
+import { itemTempSource, roomLiveSensors, shadeKind, type LiveKind } from "../room-effects.ts";
+import { energyRole, furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
+import { isPrinter } from "../printer.ts";
+import { setIntervalPart } from "../show-when.ts";
 
 /** Items that can be fixed against moving. */
 type FixKind = "room" | "opening" | "furniture" | "device" | "wall" | "outdoor";
@@ -157,12 +173,16 @@ type FixKind = "room" | "opening" | "furniture" | "device" | "wall" | "outdoor";
 /** Highest mount height the backend accepts (schema: 0–10 m); "40" meant as centimetres would refuse every save. */
 const MAX_MOUNT_Y = 10;
 
+/** A paw (24 × 24), the static pets' mark in the plan. */
+const PAW = "M8.3 3.5a2 1.6 0 1 1 0 3.2 2 1.6 0 0 1 0-3.2m7.4 0a2 1.6 0 1 1 0 3.2 2 1.6 0 0 1 0-3.2M4.5 8a1.8 1.5 0 1 1 0 3 1.8 1.5 0 0 1 0-3m15 0a1.8 1.5 0 1 1 0 3 1.8 1.5 0 0 1 0-3M12 10c2.5 0 4.6 1.9 5.3 4.3.6 2 .2 3.7-1.3 4.5-1.4.8-2.6-.2-4-.2s-2.6 1-4 .2c-1.5-.8-1.9-2.5-1.3-4.5C7.4 11.9 9.5 10 12 10";
+
 type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "hole" | "wall" | "roof" | "energy" | "pool";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
   | { kind: "vertex"; roomId: string; index: number; base: Building; moved: boolean }
   | { kind: "device"; entityId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
+  | { kind: "pet"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "opening"; id: string; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "furnset"; ids: string[]; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
@@ -200,7 +220,7 @@ interface Guides {
 }
 
 /** Drags that change the document live (restored when cancelled, recorded in the history when done). */
-const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", "furnset", "rotate", "resize", "outdoor", "roofmove", "roofcorner", "roofvertex", "outvertex", "outbox", "pipept", "poolport", "pooldev", "pooljoint", "solarmove", "solarturn", "cablept", "holopt", "bgmove", "bgscale", "bgrotate"]);
+const EDIT_DRAGS = new Set(["vertex", "room", "device", "pet", "opening", "furniture", "furnset", "rotate", "resize", "outdoor", "roofmove", "roofcorner", "roofvertex", "outvertex", "outbox", "pipept", "poolport", "pooldev", "pooljoint", "solarmove", "solarturn", "cablept", "holopt", "bgmove", "bgscale", "bgrotate"]);
 
 const HISTORY = 100;
 /** An angle turned on by `d` degrees, kept between -180 and 180. */
@@ -210,7 +230,7 @@ const turnBy = (a: number, d: number): number => {
 };
 
 /** Topics of the ⚙ settings menu (everything that belongs to the whole plan). */
-type SettingsTopic = "house" | "weather" | "director" | "voice" | "locate" | "favorites" | "backdrop" | "terrain" | "backup";
+type SettingsTopic = "house" | "weather" | "director" | "voice" | "locate" | "favorites" | "backdrop" | "terrain" | "backup" | "editors";
 
 /** Wall view side bar: what stands or hangs at a wall, by kind. */
 const WALL_CATS: Record<string, string[]> = {
@@ -337,9 +357,14 @@ const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRigh
 // furniture without a top to light: no "State from" box
 const NO_STATE_TYPES = new Set(["parking", "stairwell", "rug", "grid_point", "waste_bin", "mailbox", "wall_switch", "wall_socket", "wifi_ap", "water_heater"]);
 
+/** A device of the energy tool: the built-in meter, inverter, battery, wallbox and grid point, and pack energy items (#22). */
+function isEnergyDevice(type: string): boolean {
+  return (ENERGY_DEVICES as readonly string[]).includes(type) || energyRole(type) !== null;
+}
+
 /** A gas or water meter from a pack (its reading in m³ or litres, no power): family "meter" tagged gas or water. */
 function volumeMeter(type: string): boolean {
-  const item = packItem(type);
+  const item = packInfo(type);
   return item?.family === "meter" && (item.tags ?? []).some((t) => /^(gas|water|wasser)$/i.test(t));
 }
 
@@ -358,6 +383,7 @@ export class Fp3dEditor extends LitElement {
     narrow: { type: Boolean },
     packs: { attribute: false },
     _preview: { state: true },
+    _libUpdates: { state: true },
     _doc: { state: true },
     _doc3d: { state: true },
     _split: { state: true },
@@ -441,16 +467,21 @@ export class Fp3dEditor extends LitElement {
     _images: { state: true },
     _canUndo: { state: true },
     _canRedo: { state: true },
+    canEdit: { attribute: false },
   };
 
   declare hass: HomeAssistant;
   declare building: Building;
+  /** On the editors list (#7), from the panel's controller; unset: admins are. */
+  declare canEdit: boolean | undefined;
   declare narrow: boolean;
   /** Imported furniture packs (from the panel's controller). */
   declare packs: FurniturePack[] | undefined;
   /** Result of the last pack import. */
   /** Picture of the furniture under the pointer in the library. */
   private declare _preview: { type: string; url: string | null; left: number; top: number } | null;
+  /** The furniture types of placed items with an update (#48), shown on the library's cards. */
+  private declare _libUpdates: ReadonlySet<string>;
   private declare _doc: Building;
   /** The draft as the 3D pane shows it (follows _doc with a short delay, so drags stay smooth). */
   private declare _doc3d: Building;
@@ -781,6 +812,7 @@ export class Fp3dEditor extends LitElement {
     }
     this._sideMin = min;
     this._preview = null;
+    this._libUpdates = new Set();
     this._measureLen = 3;
     this._packages = false;
     this._rectSize = [4, 3];
@@ -853,6 +885,30 @@ export class Fp3dEditor extends LitElement {
       if (!this._doc.floors.some((f) => f.id === this._floorId)) this._floorId = this._doc.floors[0]?.id ?? null;
       if (!this.floor?.rooms.some((r) => r.id === this._roomId)) this._roomId = null;
     }
+    // the plan's recipe copies (#2): placed items keep their look whatever the installed packs say
+    setPlanRecipes(this._doc?.recipes);
+    if (changed.has("_doc") || changed.has("packs")) this.fetchPlacedRecipes();
+    // a plan or library from the backend: which placed items have an update now (#48)
+    if ((changed.has("building") || changed.has("packs")) && this.isEditor) this.refreshLibUpdates();
+  }
+
+  private recipesAsked = new Set<string>();
+
+  /**
+   * Library items in the plan that neither the plan's copies nor the fetched recipes draw yet (#44: a camera look, a
+   * parking spot's vehicle, an item placed a moment ago): fetch their recipes once, then draw them again. The next
+   * save brings the plan's copies of them anyway.
+   */
+  private fetchPlacedRecipes(): void {
+    if (!this.hass || !this._doc || !this.packs?.length) return;
+    const types = packTypesIn(this._doc).filter((t) => !packItem(t) && !this.recipesAsked.has(t));
+    if (!types.length) return;
+    for (const t of types) this.recipesAsked.add(t);
+    void ensureRecipes(this.hass, types).then(() => {
+      if (!types.some((t) => packItem(t))) return;
+      if (this._split || this._wallView) this._doc3d = { ...this.docWithDraft() };
+      this.requestUpdate();
+    });
   }
 
   protected firstUpdated(): void {
@@ -957,7 +1013,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Bar under the 3D pane: turn or delete the selected item or device (as when furnishing in the panel). */
   private render3dBar() {
-    if (!this.isAdmin) return nothing;
+    if (!this.isEditor) return nothing;
     const f = this.furnitureItem;
     const d = this.device;
     if (f) {
@@ -1136,8 +1192,8 @@ export class Fp3dEditor extends LitElement {
         .showEnergy=${false}
         .holograms=${this._tool === "energy" ? true : null}
         .flows=${false}
-        ?furnish=${this.isAdmin}
-        .surfaceGrab=${this.isAdmin && this.houseTool ? this.surfaceGrabber : null}
+        ?furnish=${this.isEditor}
+        .surfaceGrab=${this.isEditor && this.houseTool ? this.surfaceGrabber : null}
         .furnishTypes=${this._tool === "energy" ? ENERGY_DEVICES : this._tool === "roof" ? [] : null}
         .selectedFurniture=${this._furnitureId}
         .selectedDevice=${this._deviceId}
@@ -1226,8 +1282,14 @@ export class Fp3dEditor extends LitElement {
     return this.floor?.rooms.find((r) => r.id === this._roomId);
   }
 
-  private get isAdmin(): boolean {
-    return this.hass?.user?.is_admin ?? true;
+  /** On the editors list (#7): may change the plan. Unset (a backend before #7): admins are. */
+  private get isEditor(): boolean {
+    return this.canEdit ?? this.hass?.user?.is_admin ?? true;
+  }
+
+  /** A Home Assistant admin: locating, Assist's sentence files and the editors list stay theirs. */
+  private get isHaAdmin(): boolean {
+    return this.hass?.user?.is_admin ?? false;
   }
 
   /** Replace the document; `base` (the state before the change) goes into the undo history. */
@@ -1473,7 +1535,7 @@ export class Fp3dEditor extends LitElement {
       this.pickWall(world);
       return;
     }
-    if (this._bgLevel && this.isAdmin && this.floor?.background) {
+    if (this._bgLevel && this.isEditor && this.floor?.background) {
       // straighten: the second tap turns the picture so the tapped wall runs exactly along x or z
       const pts = [...this._bgLevel, world];
       if (pts.length < 2) this._bgLevel = pts;
@@ -1488,7 +1550,7 @@ export class Fp3dEditor extends LitElement {
       this.drag = { kind: "bgrotate", base: this._doc, moved: false, start: Math.atan2(world[1] - c[1], world[0] - c[0]), rot: bg.rotation ?? 0 };
       return;
     }
-    if (this._bgRuler && this._bgRuler.length < 2 && this.isAdmin && this.floor?.background) {
+    if (this._bgRuler && this._bgRuler.length < 2 && this.isEditor && this.floor?.background) {
       // the ruler: two taps on a stretch of known length in the picture
       this._bgRuler = [...this._bgRuler, world];
       return;
@@ -1501,7 +1563,7 @@ export class Fp3dEditor extends LitElement {
         : { kind: "bgmove", start: world, bx: bg.x, bz: bg.z, base: this._doc, moved: false };
       return;
     }
-    if (this._bgEdit && this.isAdmin && this.floor?.background) {
+    if (this._bgEdit && this.isEditor && this.floor?.background) {
       // the background picture: its corner scales it, its body moves it; anything else ends the editing
       const bg = this.floor.background;
       if (target.closest("[data-bg-handle]")) {
@@ -1529,18 +1591,18 @@ export class Fp3dEditor extends LitElement {
         // an energy device by its marker (above solar fields on the roof): selected and moved like furniture
         this._solarId = null;
         this.selectItem("furniture", marker);
-        this.drag = this.isAdmin ? { kind: "furniture", id: marker, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+        this.drag = this.isEditor ? { kind: "furniture", id: marker, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
         return;
       }
       if (this._tool === "energy" && target.closest("[data-holo-pt]")) {
         // the free hologram's handle
-        this.drag = this.isAdmin ? { kind: "holopt", base: this._doc, moved: false } : { kind: "pan", last: local };
+        this.drag = this.isEditor ? { kind: "holopt", base: this._doc, moved: false } : { kind: "pan", last: local };
         return;
       }
       if (this._tool === "energy") {
         const pt = target.closest("[data-cable-pt]")?.getAttribute("data-cable-pt");
         const lockedCable = (id: string) => !!this._doc.settings.roof.cables?.find((c) => c.id === id)?.locked;
-        if (pt && this.isAdmin && !lockedCable(pt.slice(0, pt.lastIndexOf(":")))) {
+        if (pt && this.isEditor && !lockedCable(pt.slice(0, pt.lastIndexOf(":")))) {
           const i = pt.lastIndexOf(":");
           const id = pt.slice(0, i);
           const index = Number(pt.slice(i + 1));
@@ -1557,7 +1619,7 @@ export class Fp3dEditor extends LitElement {
           return;
         }
         const line = target.closest("[data-cable-line]")?.getAttribute("data-cable-line");
-        if (line && this.isAdmin && !lockedCable(line)) {
+        if (line && this.isEditor && !lockedCable(line)) {
           // a click on the laid cable puts a new point there and takes it along (piece i lies before point i)
           const index = Number(target.closest("[data-cable-line]")?.getAttribute("data-cable-seg") ?? 0);
           const base = this._doc;
@@ -1572,7 +1634,7 @@ export class Fp3dEditor extends LitElement {
         if (cable) {
           this._cableId = cable;
           // grabbing an automatic cable lays it by hand right away, with a new point under the pointer to drag
-          if (this.isAdmin && this._floorId && !this._doc.settings.roof.cables?.some((c) => c.id === cable)) {
+          if (this.isEditor && this._floorId && !this._doc.settings.roof.cables?.some((c) => c.id === cable)) {
             const base = this._doc;
             this.layCable(cable);
             const laid = this._doc.settings.roof.cables?.find((c) => c.id === cable);
@@ -1602,14 +1664,14 @@ export class Fp3dEditor extends LitElement {
       }
       const solar = this._tool === "energy" ? target.closest("[data-solar]")?.getAttribute("data-solar") : null;
       const turn = this._tool === "energy" ? target.closest("[data-solar-turn]")?.getAttribute("data-solar-turn") : null;
-      if (turn && this.isAdmin) {
+      if (turn && this.isEditor) {
         this.drag = { kind: "solarturn", id: turn, base: this._doc, moved: false };
         return;
       }
       if (solar) {
         const cell = target.closest("[data-cell]")?.getAttribute("data-cell");
         // pick mode on the selected field: a tap switches the module on or off
-        if (this._solarPick && solar === this._solarId && cell && this.isAdmin) {
+        if (this._solarPick && solar === this._solarId && cell && this.isEditor) {
           this.toggleSolarCell(cell);
           this.drag = { kind: "pan", last: local };
           return;
@@ -1623,7 +1685,7 @@ export class Fp3dEditor extends LitElement {
         const hit = face ? this.faceHit(face, world) : null;
         const grab = field && hit ? { du: hit.u - field.u, ds: Number.isNaN(hit.s) ? 0 : hit.s - field.v } : null;
         // solar fields are fittings like furniture: the plan lock (rooms, walls, openings) does not hold them
-        this.drag = this.isAdmin && !field?.locked ? { kind: "solarmove", id: solar, start: world, startScreen: local, base: this._doc, moved: false, grab } : { kind: "pan", last: local };
+        this.drag = this.isEditor && !field?.locked ? { kind: "solarmove", id: solar, start: world, startScreen: local, base: this._doc, moved: false, grab } : { kind: "pan", last: local };
         return;
       }
       const win = this._tool === "roof" ? target.closest("[data-roofwin]")?.getAttribute("data-roofwin") : null;
@@ -1634,7 +1696,7 @@ export class Fp3dEditor extends LitElement {
         const face = w ? roofFaces(this._doc).find((f) => f.key === w.face) : undefined;
         const hit = face ? pointOnFace(face, world) : null;
         const grab = w && hit ? { du: hit.u - w.u, ds: hit.s - w.v } : null;
-        this.drag = this.isAdmin && !w?.locked ? { kind: "solarmove", id: win, start: world, startScreen: local, base: this._doc, moved: false, grab, win: true } : { kind: "pan", last: local };
+        this.drag = this.isEditor && !w?.locked ? { kind: "solarmove", id: win, start: world, startScreen: local, base: this._doc, moved: false, grab, win: true } : { kind: "pan", last: local };
         return;
       }
       if (this._tool === "roof") this._roofWinId = null;
@@ -1643,7 +1705,7 @@ export class Fp3dEditor extends LitElement {
         // an energy device (inverter, battery, wallbox): selected and moved like furniture
         this._solarId = null;
         this.selectItem("furniture", device);
-        this.drag = this.isAdmin ? { kind: "furniture", id: device, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+        this.drag = this.isEditor ? { kind: "furniture", id: device, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
         return;
       }
       if (this._tool === "energy") {
@@ -1653,18 +1715,18 @@ export class Fp3dEditor extends LitElement {
         this.drag = { kind: "pan", last: local };
         return;
       }
-      if (vertex && this.isAdmin) {
+      if (vertex && this.isEditor) {
         const [id, idx] = vertex.split(":");
         this.drag = { kind: "roofvertex", id, index: Number(idx), base: this._doc, moved: false };
-      } else if (corner && this.isAdmin) {
+      } else if (corner && this.isEditor) {
         const [id, cx, cz] = corner.split(":");
         this.drag = { kind: "roofcorner", id, corner: [cx === "1" ? 1 : 0, cz === "1" ? 1 : 0], base: this._doc, moved: false };
       } else if (body) {
         const fixed = this.roofFixed(this._doc.settings.roof.sections?.find((x) => x.id === body));
         if (fixed && this._roofId === body) this._fixedHint = true;
         this._roofId = body;
-        this.drag = this.isAdmin && !fixed ? { kind: "roofmove", id: body, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
-      } else if (this.isAdmin) {
+        this.drag = this.isEditor && !fixed ? { kind: "roofmove", id: body, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+      } else if (this.isEditor) {
         this._roofId = null;
         const start = this.snap(world, undefined, e.altKey);
         this.drag = { kind: "rect", start, end: start, roof: true };
@@ -1685,7 +1747,7 @@ export class Fp3dEditor extends LitElement {
       if (!this.placeOpening(this._openingPreset, local)) this.drag = { kind: "pan", last: local };
       return;
     }
-    if (this.isAdmin && (this._tool === "select" || this._tool === "furniture") && (e.shiftKey || this._multiMode)) {
+    if (this.isEditor && (this._tool === "select" || this._tool === "furniture") && (e.shiftKey || this._multiMode)) {
       // several furniture items: shift-click (or the multi mode on touch) adds or removes one, a drag draws a frame
       const fEl = target.closest("[data-furniture]");
       if (fEl) {
@@ -1694,8 +1756,14 @@ export class Fp3dEditor extends LitElement {
       } else this.drag = { kind: "marquee", start: world, end: world, add: true };
       return;
     }
+    const petEl = target.closest("[data-pet]");
+    if (petEl && this.isEditor) {
+      // a static pet (#17): dragged to its spot
+      this.drag = { kind: "pet", id: petEl.getAttribute("data-pet")!, start: world, startScreen: local, base: this._doc, moved: false };
+      return;
+    }
     const deviceEl = target.closest("[data-device]");
-    if (deviceEl && this.isAdmin) {
+    if (deviceEl && this.isEditor) {
       this.drag = { kind: "device", entityId: deviceEl.getAttribute("data-device")!, start: world, startScreen: local, base: this._doc, moved: false };
       return;
     }
@@ -1703,22 +1771,22 @@ export class Fp3dEditor extends LitElement {
     if (openingEl) {
       const id = openingEl.getAttribute("data-opening")!;
       this.selectItem("opening", id);
-      this.drag = this.isAdmin ? { kind: "opening", id, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+      this.drag = this.isEditor ? { kind: "opening", id, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
       return;
     }
     const resizeEl = target.closest("[data-resize]");
-    if (resizeEl && this.isAdmin) {
+    if (resizeEl && this.isEditor) {
       const [id, sx, sz] = resizeEl.getAttribute("data-resize")!.split(":");
       this.drag = { kind: "resize", id, corner: [sx === "1" ? 1 : -1, sz === "1" ? 1 : -1], base: this._doc, moved: false };
       return;
     }
     const rotateEl = target.closest("[data-rotate]");
-    if (rotateEl && this.isAdmin) {
+    if (rotateEl && this.isEditor) {
       this.drag = { kind: "rotate", id: rotateEl.getAttribute("data-rotate")!, base: this._doc, moved: false };
       return;
     }
     const aimEl = target.closest("[data-aim]");
-    if (aimEl && this.isAdmin) {
+    if (aimEl && this.isEditor) {
       this.drag = { kind: "aim", entityId: aimEl.getAttribute("data-aim")!, base: this._doc, moved: false };
       return;
     }
@@ -1737,7 +1805,7 @@ export class Fp3dEditor extends LitElement {
         this.selectItem("furniture", id);
       }
       const set = this.selection();
-      this.drag = !this.isAdmin
+      this.drag = !this.isEditor
         ? { kind: "pan", last: local }
         : set.length > 1
           ? { kind: "furnset", ids: set, start: world, startScreen: local, base: this._doc, moved: false }
@@ -1746,12 +1814,12 @@ export class Fp3dEditor extends LitElement {
     }
     const vertexEl = target.closest("[data-vertex]");
     const midEl = target.closest("[data-mid]");
-    if (vertexEl && this.room && this.isAdmin) {
+    if (vertexEl && this.room && this.isEditor) {
       this._vertex = Number(vertexEl.getAttribute("data-vertex"));
       this.drag = { kind: "vertex", roomId: this.room.id, index: this._vertex, base: this._doc, moved: false };
       return;
     }
-    if (midEl && this.room && this.isAdmin) {
+    if (midEl && this.room && this.isEditor) {
       const i = Number(midEl.getAttribute("data-mid"));
       const pts = this.room.points;
       const a = pts[i];
@@ -1792,7 +1860,7 @@ export class Fp3dEditor extends LitElement {
       return;
     }
     const wallEndEl = target.closest("[data-wall-end]");
-    if (wallEndEl && this.isAdmin) {
+    if (wallEndEl && this.isEditor) {
       const [id, end] = wallEndEl.getAttribute("data-wall-end")!.split(":");
       this.drag = { kind: "wallmove", id, end: end as "a" | "b", start: world, startScreen: local, base: this._doc, moved: false };
       return;
@@ -1801,17 +1869,17 @@ export class Fp3dEditor extends LitElement {
     if (freeWallEl) {
       const id = freeWallEl.getAttribute("data-free-wall")!;
       this.selectItem("wall", id);
-      this.drag = this.isAdmin ? { kind: "wallmove", id, end: null, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+      this.drag = this.isEditor ? { kind: "wallmove", id, end: null, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
       return;
     }
     const outBoxEl = target.closest("[data-out-box]");
-    if (outBoxEl && this.isAdmin) {
+    if (outBoxEl && this.isEditor) {
       const [id, i] = outBoxEl.getAttribute("data-out-box")!.split(":");
       this.drag = { kind: "outbox", id, corner: Number(i), base: this._doc, moved: false };
       return;
     }
     const outVertexEl = target.closest("[data-out-vertex]");
-    if (outVertexEl && this.isAdmin) {
+    if (outVertexEl && this.isEditor) {
       const [id, i] = outVertexEl.getAttribute("data-out-vertex")!.split(":");
       this.drag = { kind: "outvertex", id, index: Number(i), base: this._doc, moved: false };
       return;
@@ -1821,7 +1889,7 @@ export class Fp3dEditor extends LitElement {
       // the drawn element is the topmost area; a smaller one under the point (a pool in the lawn) wins
       const id = this.outdoorAt(world) ?? outdoorEl.getAttribute("data-outdoor")!;
       this.selectItem("outdoor", id);
-      this.drag = this.isAdmin ? { kind: "outdoor", id, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+      this.drag = this.isEditor ? { kind: "outdoor", id, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
       return;
     }
     const roomId = target.closest("[data-room]")?.getAttribute("data-room") ?? this.roomAt(world);
@@ -1829,7 +1897,7 @@ export class Fp3dEditor extends LitElement {
       if (roomId !== this._roomId) this._vertex = null;
       this.selectItem("room", roomId);
       this.drag =
-        this.isAdmin && this._tool !== "furniture"
+        this.isEditor && this._tool !== "furniture"
         ? { kind: "room", roomId, start: world, startScreen: local, base: this._doc, moved: false }
         : { kind: "pan", last: local };
       return;
@@ -2378,6 +2446,15 @@ export class Fp3dEditor extends LitElement {
         this.change((_, floor) => patchItem(floor.placements.find((q) => q.entity_id === drag.entityId), { x, z }), drag.base, false);
         break;
       }
+      case "pet": {
+        if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
+        drag.moved = true;
+        const pet = drag.base.settings.pets?.list.find((p) => p.id === drag.id);
+        if (pet?.x == null || pet.z == null) return;
+        const [px, pz] = [pet.x, pet.z];
+        this.change((doc) => movePet(doc, drag.id, px + world[0] - drag.start[0], pz + world[1] - drag.start[1], e.altKey ? 0.01 : this._doc.settings.grid), drag.base, false);
+        break;
+      }
     }
   }
 
@@ -2478,6 +2555,9 @@ export class Fp3dEditor extends LitElement {
         else if (this.poolArea) this.openCard(this.poolArea.id, `dev:${drag.id}`);
         break;
       }
+      case "pet":
+        if (drag.moved) this.pushHistory(drag.base);
+        break;
       case "device":
         if (drag.moved) this.pushHistory(drag.base);
         // a tap on a device selects it (and the room it stands in)
@@ -2689,7 +2769,7 @@ export class Fp3dEditor extends LitElement {
 
   private deleteFreeWall(): void {
     const id = this._wallId;
-    if (!id || !this.isAdmin || !this.confirmFixedDelete("wall", id)) return;
+    if (!id || !this.isEditor || !this.confirmFixedDelete("wall", id)) return;
     this.change((_, floor) => {
       floor.walls = (floor.walls ?? []).filter((w) => w.id !== id);
       floor.openings = floor.openings.filter((o) => o.wall !== id);
@@ -2707,7 +2787,7 @@ export class Fp3dEditor extends LitElement {
         <line class="fp3d-hit" x1=${x0} y1=${y0} x2=${x1} y2=${y1} />
         <line class="fp3d-free-wall-line" x1=${x0} y1=${y0} x2=${x1} y2=${y1} />
       </g>
-      ${sel && this.isAdmin && !isFixed(w, true, this._doc.settings)
+      ${sel && this.isEditor && !isFixed(w, true, this._doc.settings)
         ? svg`<g class="fp3d-vertex" data-wall-end=${`${w.id}:a`}><circle cx=${x0} cy=${y0} r="16" class="fp3d-hit" /><circle cx=${x0} cy=${y0} r="6" /></g>
             <g class="fp3d-vertex" data-wall-end=${`${w.id}:b`}><circle cx=${x1} cy=${y1} r="16" class="fp3d-hit" /><circle cx=${x1} cy=${y1} r="6" /></g>`
         : nothing}`;
@@ -2715,7 +2795,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderFreeWallForm(w: FreeWall) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const length = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
     const setLength = (v: number) => {
       const l = Math.max(0.1, v);
@@ -2794,7 +2874,7 @@ export class Fp3dEditor extends LitElement {
 
   private deleteOutdoor(): void {
     const id = this._outdoorId;
-    if (!id || !this.isAdmin || !this.confirmFixedDelete("outdoor", id)) return;
+    if (!id || !this.isEditor || !this.confirmFixedDelete("outdoor", id)) return;
     // a pool with its pipes is a lot of work: ask first
     const a = this.floor?.outdoor.find((o) => o.id === id);
     const pipes = a?.pool?.pipes?.length ?? 0;
@@ -2805,7 +2885,7 @@ export class Fp3dEditor extends LitElement {
 
   private duplicateOutdoor(): void {
     const a = this.outdoorArea;
-    if (!a || !this.isAdmin) return;
+    if (!a || !this.isEditor) return;
     const copy: OutdoorArea = { ...a, id: uid("outdoor"), points: a.points.map(([x, z]) => [round(x + 0.5), round(z + 0.5)]) };
     this.change((_, floor) => floor.outdoor.push(copy));
     this.selectItem("outdoor", copy.id);
@@ -2896,7 +2976,7 @@ export class Fp3dEditor extends LitElement {
   /** Moves the selected item by (dx, dz) metres; false when nothing movable is selected. */
   private nudge(dx: number, dz: number): boolean {
     const floor = this.floor;
-    if (!floor || !this.isAdmin) return false;
+    if (!floor || !this.isEditor) return false;
     const fix = this.selectedFix;
     const set = this._furnitureId ? this.selection() : [];
     if ((fix && this.isFixedItem(fix.kind, fix.id)) || set.some((id) => this.isFixedItem("furniture", id))) {
@@ -3031,7 +3111,7 @@ export class Fp3dEditor extends LitElement {
 
   private deleteRoom(): void {
     const id = this._roomId;
-    if (!id || !this.isAdmin || !this.confirmFixedDelete("room", id)) return;
+    if (!id || !this.isEditor || !this.confirmFixedDelete("room", id)) return;
     this.change((_, floor) => {
       const room = floor.rooms.find((r) => r.id === id);
       floor.rooms = floor.rooms.filter((r) => r.id !== id);
@@ -3044,7 +3124,7 @@ export class Fp3dEditor extends LitElement {
 
   private duplicateRoom(): void {
     const room = this.room;
-    if (!room || !this.isAdmin) return;
+    if (!room || !this.isEditor) return;
     const id = uid("room");
     this.change((_, floor) => floor.rooms.push({ ...structuredClone(room), id, points: room.points.map(([x, z]) => [round(x + 0.5), round(z + 0.5)]) }));
     this._roomId = id;
@@ -3074,7 +3154,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Switch to a roof of sections; without sections yet, propose them from the rooms. */
   private useRoofSections(regenerate = false): void {
-    if (!this.isAdmin) return;
+    if (!this.isEditor) return;
     const has = (this._doc.settings.roof.sections ?? []).length > 0;
     if (regenerate && has && !confirm(this.t("roof_regen_confirm"))) return;
     this.change((doc) => {
@@ -3085,7 +3165,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private addRoofSection(lo: Vec2, hi: Vec2): void {
-    if (!this.isAdmin) return;
+    if (!this.isEditor) return;
     // eaves on the walls of the rooms below (a garage), whatever floor the plan shows; over no room
     // (a terrace, a carport) a canopy: a flat pent roof on posts, 2.4 m above the ground floor
     const walls = wallTopUnder(this._doc, lo[0], lo[1], hi[0], hi[1]);
@@ -3120,7 +3200,7 @@ export class Fp3dEditor extends LitElement {
   private takeRoofOutline(): void {
     const floor = this.floor;
     const id = this._roofId;
-    if (!floor || !id || !this.isAdmin) return;
+    if (!floor || !id || !this.isEditor) return;
     const outline = floorOutline(floor.rooms, floor.walls ?? [], this._doc.settings.wall_exterior, this._doc.settings.wall_interior);
     if (!outline) return;
     const points = outline.map(([x, z]) => [round(x), round(z)] as Vec2);
@@ -3130,7 +3210,7 @@ export class Fp3dEditor extends LitElement {
   /** A dormer on a side of the selected section, in its middle; then the dormer is selected. */
   private addDormer(side: "a" | "b"): void {
     const parent = this.roofSection;
-    if (!parent || !this.isAdmin) return;
+    if (!parent || !this.isEditor) return;
     const d = proposeDormer(parent, side, uid("roof"));
     this.change((doc) => {
       doc.settings.roof.sections = [...(doc.settings.roof.sections ?? []), d];
@@ -3140,7 +3220,7 @@ export class Fp3dEditor extends LitElement {
 
   private updateRoofSection(patch: Partial<RoofSection>): void {
     const id = this._roofId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isEditor) return;
     if (patch.locked === false) this._fixedHint = false;
     this.change((doc) => {
       const sec = doc.settings.roof.sections?.find((x) => x.id === id);
@@ -3151,7 +3231,7 @@ export class Fp3dEditor extends LitElement {
   /** Turn the selected section to `angle` degrees (clockwise in the plan); its dormers and cross gables come along (#634, #724). */
   private turnRoofSection(angle: number): void {
     const id = this._roofId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isEditor) return;
     this.change((doc) => {
       const sections = doc.settings.roof.sections ?? [];
       const sec = sections.find((x) => x.id === id);
@@ -3170,14 +3250,14 @@ export class Fp3dEditor extends LitElement {
 
   private deleteRoofSection(): void {
     const id = this._roofId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isEditor) return;
     this.change((doc) => (doc.settings.roof.sections = (doc.settings.roof.sections ?? []).filter((x) => x.id !== id)));
     this._roofId = null;
   }
 
   private duplicateRoofSection(): void {
     const sec = this.roofSection;
-    if (!sec || !this.isAdmin) return;
+    if (!sec || !this.isEditor) return;
     const copy = { ...structuredClone(sec), id: uid("roof"), x0: round(sec.x0 + 1), x1: round(sec.x1 + 1), z0: round(sec.z0 + 1), z1: round(sec.z1 + 1) };
     if (sec.pivot) copy.pivot = [round(sec.pivot[0] + 1), round(sec.pivot[1] + 1)];
     this.change((doc) => (doc.settings.roof.sections = [...(doc.settings.roof.sections ?? []), copy]));
@@ -3210,13 +3290,13 @@ export class Fp3dEditor extends LitElement {
           <g class="fp3d-roof-ridge">${ridge}</g>
           <text x=${cx} y=${cy - 14}>${label}</text>
         </g>
-        ${sel && this.isAdmin && !this.roofFixed(sec) && shape
+        ${sel && this.isEditor && !this.roofFixed(sec) && shape
           ? shape.map((p, k) => {
               const [x, y] = this.toScreen(p);
               return svg`<g class="fp3d-vertex" data-roof-vertex=${`${sec.id}:${k}`}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>`;
             })
           : nothing}
-        ${sel && this.isAdmin && !this.roofFixed(sec) && !shape && !sectionTurn(sec)
+        ${sel && this.isEditor && !this.roofFixed(sec) && !shape && !sectionTurn(sec)
           ? ([[0, 0], [1, 0], [1, 1], [0, 1]] as const).map(([kx, kz]) => {
               const [x, y] = this.toScreen([kx ? Math.max(sec.x0, sec.x1) : Math.min(sec.x0, sec.x1), kz ? Math.max(sec.z0, sec.z1) : Math.min(sec.z0, sec.z1)]);
               return svg`<g class="fp3d-vertex" data-roof-corner=${`${sec.id}:${kx}:${kz}`}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>`;
@@ -3241,7 +3321,7 @@ export class Fp3dEditor extends LitElement {
       if (!face || (face.wall && face.wall.floorId !== this._floorId)) return nothing;
       const sel = f.id === this._solarId;
       let handle: unknown = nothing;
-      if (sel && face.unbounded && this.isAdmin && !f.locked) {
+      if (sel && face.unbounded && this.isEditor && !f.locked) {
         const [cx, cz] = fieldCenter(face, f);
         const r = ((f.rotation ?? 0) * Math.PI) / 180;
         const reach = 0.9 + Math.max(...fieldModules(face, f, true).flatMap((m) => m.corners.map((p) => Math.hypot(p[0] - cx, p[2] - cz)))) * 0.5;
@@ -3287,7 +3367,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private addRoofWindow(): void {
-    if (!this.isAdmin) return;
+    if (!this.isEditor) return;
     const faces = roofFaces(this._doc).filter((f) => !f.flat);
     const face = bestFace(faces, this._doc.settings.north ?? 0) ?? roofFaces(this._doc)[0];
     if (!face) return;
@@ -3299,7 +3379,7 @@ export class Fp3dEditor extends LitElement {
 
   private updateRoofWindow(patch: Partial<RoofWindow>): void {
     const id = this._roofWinId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isEditor) return;
     this.change((doc) => {
       const w = doc.settings.roof.windows?.find((x) => x.id === id);
       if (!w) return;
@@ -3311,7 +3391,7 @@ export class Fp3dEditor extends LitElement {
 
   private deleteRoofWindow(): void {
     const id = this._roofWinId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isEditor) return;
     this.change((doc) => (doc.settings.roof.windows = (doc.settings.roof.windows ?? []).filter((x) => x.id !== id)));
     this._roofWinId = null;
   }
@@ -3337,12 +3417,12 @@ export class Fp3dEditor extends LitElement {
             })}
           </div>`
         : nothing}
-      <div class="fp3d-actions"><button class="fp3d-btn" ?disabled=${!this.isAdmin || !faces.size} @click=${() => this.addRoofWindow()}>+ ${this.t("roof_window")}</button></div>
+      <div class="fp3d-actions"><button class="fp3d-btn" ?disabled=${!this.isEditor || !faces.size} @click=${() => this.addRoofWindow()}>+ ${this.t("roof_window")}</button></div>
     </section>`;
   }
 
   private renderRoofWindowForm(w: RoofWindow) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const faces = roofFaces(this._doc);
     const set = (patch: Partial<RoofWindow>) => this.updateRoofWindow(patch);
     const index = (this._doc.settings.roof.windows ?? []).findIndex((x) => x.id === w.id) + 1;
@@ -3420,15 +3500,17 @@ export class Fp3dEditor extends LitElement {
   private cableLabel(key: string): string {
     const furn = (id: string) => {
       const m = this._doc.floors.flatMap((f) => f.furniture).find((x) => x.id === id);
-      return m ? m.name || this.t(`furn_${m.type}` as I18nKey) : "?";
+      return m ? m.name || this.typeName(m.type) : "?";
     };
-    const meter = this._doc.floors.flatMap((f) => f.furniture).find((x) => x.type === "meter");
+    const meter = this._doc.floors.flatMap((f) => f.furniture).find((x) => energyRole(x.type) === "meter");
     const meterName = meter ? meter.name || this.t("furn_meter") : this.t("energy_meter");
     if (key === "grid") return `${meterName} → ${this.t("furn_grid_point")}`;
     const [kind, id] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
     if (kind === "solar") {
       const fields = this._doc.settings.roof.solar ?? [];
       const i = fields.findIndex((f) => f.id === id);
+      // a solar panel placed as an item (#22)
+      if (i < 0 && this._doc.floors.some((fl) => fl.furniture.some((m) => m.id === id))) return `${furn(id)} → ${this.t("furn_inverter")}`;
       const f = fields[i];
       return `${f?.name || `${this.t("solar_field")} ${i + 1}`} → ${this.t("furn_inverter")}`;
     }
@@ -3438,7 +3520,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Lay a cable by hand: its automatic way (on the plan) becomes points to drag. */
   private layCable(key: string): void {
-    if (!this.isAdmin || !this._floorId) return;
+    if (!this.isEditor || !this._floorId) return;
     const pts: Vec2[] = [];
     for (const seg of this.cableSegments().filter((x) => x.key === key)) {
       for (const q of [seg.a, seg.b]) {
@@ -3494,7 +3576,7 @@ export class Fp3dEditor extends LitElement {
   private renderCableSettings() {
     const keys = this.cableKeys();
     if (!keys.length) return nothing;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const cables = this._doc.settings.roof.cables ?? [];
     const sel = this._cableId ? cables.find((c) => c.id === this._cableId) : undefined;
     return html`<section>
@@ -3545,7 +3627,7 @@ export class Fp3dEditor extends LitElement {
   private renderEnergyMarkers() {
     const floor = this.floor;
     if (!floor) return nothing;
-    const icons: Record<string, string> = { inverter: "⚡", home_battery: "🔋", wallbox: "🔌", meter: "📟", grid_point: "🏁" };
+    const icons: Record<string, string> = { inverter: "⚡", home_battery: "🔋", wallbox: "🔌", meter: "📟", grid_point: "🏁", solar: "☀" };
     const h = this._doc.settings.roof.hologram;
     const holoPt = hasFeature("energy_pro") && h?.place === "free" && Number.isFinite(h.x) && Number.isFinite(h.z) ? this.toScreen([h.x!, h.z!]) : null;
     return svg`<g class="fp3d-energy-markers">${
@@ -3558,15 +3640,15 @@ export class Fp3dEditor extends LitElement {
         </g>`
         : nothing
     }${floor.furniture
-      .filter((m) => (ENERGY_DEVICES as readonly string[]).includes(m.type))
+      .filter((m) => isEnergyDevice(m.type))
       .map((m) => {
         const [x, y] = this.toScreen([m.x, m.z]);
         const sel = m.id === this._furnitureId;
         return svg`<g data-energy-device=${m.id} class=${`fp3d-energy-marker${sel ? " fp3d-energy-marker-sel" : ""}`}>
           <circle cx=${x} cy=${y} r="17" />
-          <text x=${x} y=${y + 6} class="fp3d-energy-icon">${icons[m.type] ?? "⚡"}</text>
-          ${sel ? svg`<text x=${x} y=${y + 32} class="fp3d-energy-name">${this.t(`furn_${m.type}` as I18nKey)}</text>` : nothing}
-          <title>${this.t(`furn_${m.type}` as I18nKey)}</title>
+          <text x=${x} y=${y + 6} class="fp3d-energy-icon">${icons[energyRole(m.type) ?? m.type] ?? "⚡"}</text>
+          ${sel ? svg`<text x=${x} y=${y + 32} class="fp3d-energy-name">${this.typeName(m.type)}</text>` : nothing}
+          <title>${this.typeName(m.type)}</title>
         </g>`;
       })}</g>`;
   }
@@ -3591,7 +3673,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private addSolarField(): void {
-    if (!this.isAdmin) return;
+    if (!this.isEditor) return;
     const faces = roofFaces(this._doc);
     const used = new Set((this._doc.settings.roof.solar ?? []).map((f) => f.face));
     // the sunniest face that has no field yet, else the sunniest one
@@ -3613,7 +3695,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private addWallField(): void {
-    if (!this.isAdmin) return;
+    if (!this.isEditor) return;
     const floorId = this._floorId ?? this._doc.floors[0]?.id;
     const field = floorId ? proposeWallField(this._doc, uid("pv"), floorId) : null;
     if (!field) return;
@@ -3622,7 +3704,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private addGroundField(): void {
-    if (!this.isAdmin) return;
+    if (!this.isEditor) return;
     const field = proposeGroundField(this._doc, uid("pv"));
     this.change((doc) => (doc.settings.roof.solar = [...(doc.settings.roof.solar ?? []), field]));
     this._solarId = field.id;
@@ -3630,7 +3712,7 @@ export class Fp3dEditor extends LitElement {
 
   private updateSolar(patch: Partial<SolarField>): void {
     const id = this._solarId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isEditor) return;
     if (patch.locked === false) this._fixedHint = false;
     this.change((doc) => {
       const f = doc.settings.roof.solar?.find((x) => x.id === id);
@@ -3645,7 +3727,7 @@ export class Fp3dEditor extends LitElement {
   /** Put the selected field into a string ("new" makes one), or take it out (null). */
   private setSolarString(value: string | null): void {
     const id = this._solarId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isEditor) return;
     this.change((doc) => {
       const roof = doc.settings.roof;
       const f = roof.solar?.find((x) => x.id === id);
@@ -3665,7 +3747,7 @@ export class Fp3dEditor extends LitElement {
   private updateSolarString(patch: Partial<SolarString>): void {
     const field = this._doc.settings.roof.solar?.find((x) => x.id === this._solarId);
     const sid = field?.string;
-    if (!sid || !this.isAdmin) return;
+    if (!sid || !this.isEditor) return;
     this.change((doc) => {
       const s = doc.settings.roof.strings?.find((x) => x.id === sid);
       if (s) Object.assign(s, patch);
@@ -3683,7 +3765,7 @@ export class Fp3dEditor extends LitElement {
 
   private updateSolarField(edit: (f: SolarField) => void): void {
     const id = this._solarId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isEditor) return;
     this.change((doc) => {
       const f = doc.settings.roof.solar?.find((x) => x.id === id);
       if (f) edit(f);
@@ -3692,7 +3774,7 @@ export class Fp3dEditor extends LitElement {
 
   private deleteSolar(): void {
     const id = this._solarId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isEditor) return;
     this.change((doc) => {
       const roof = doc.settings.roof;
       roof.solar = (roof.solar ?? []).filter((x) => x.id !== id);
@@ -3707,7 +3789,7 @@ export class Fp3dEditor extends LitElement {
     const fields = this._doc.settings.roof.solar ?? [];
     const roofList = roofFaces(this._doc);
     const faces = new Map(fields.map((f) => [f.id, fieldFace(this._doc, f, roofList)] as const));
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     return html`<section>
       ${this.renderRoofFloors()}
       <h3>☀ ${this.t("solar_fields")}</h3>
@@ -3747,7 +3829,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderSolarForm(f: SolarField) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const faces = roofFaces(this._doc);
     const walls = wallFaces(this._doc);
     const face = fieldFace(this._doc, f, faces);
@@ -3896,7 +3978,7 @@ export class Fp3dEditor extends LitElement {
             // the inverters, and the batteries with a solar input of their own (a power station, D410)
             const named = (type: "inverter" | "home_battery") =>
               this._doc.floors
-                .flatMap((fl) => fl.furniture.filter((m) => m.type === type).map((m) => ({ m, fl })))
+                .flatMap((fl) => fl.furniture.filter((m) => energyRole(m.type) === type).map((m) => ({ m, fl })))
                 .map(({ m, fl }, i) => {
                   const entity = linked?.get(m.id)?.entity;
                   const own = m.name?.trim() || (entity && this.hass ? entityName(this.hass, entity) : "");
@@ -3931,7 +4013,7 @@ export class Fp3dEditor extends LitElement {
   /** Sidebar of the roof tool: the selected section's form, or the overview of all sections. */
   private renderRoofPanel() {
     const roof = this._doc.settings.roof;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const sec = roof.type === "custom" ? this.roofSection : undefined;
     const win = this._roofWinId ? roof.windows?.find((x) => x.id === this._roofWinId) : undefined;
     if (win) return this.renderRoofWindowForm(win);
@@ -3965,7 +4047,7 @@ export class Fp3dEditor extends LitElement {
   private renderEnergyPanel() {
     const field = this._solarId ? this._doc.settings.roof.solar?.find((x) => x.id === this._solarId) : undefined;
     if (field) return this.renderSolarForm(field);
-    const device = this._furnitureId ? this.floor?.furniture.find((x) => x.id === this._furnitureId && (ENERGY_DEVICES as readonly string[]).includes(x.type)) : undefined;
+    const device = this._furnitureId ? this.floor?.furniture.find((x) => x.id === this._furnitureId && isEnergyDevice(x.type)) : undefined;
     if (device)
       return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("furniture", null)}>‹ ${this.t("tool_energy")}</button>
         ${this.renderFurnitureForm(device)}`;
@@ -3979,7 +4061,7 @@ export class Fp3dEditor extends LitElement {
    */
   private renderHologramSettings() {
     const fields = this._doc.settings.roof.solar ?? [];
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const h = this._doc.settings.roof.hologram ?? DEFAULT_HOLOGRAM;
     const free = h.place === "free";
     const set = (patch: Partial<HologramSettings>) => this.change((d) => (d.settings.roof.hologram = { ...(d.settings.roof.hologram ?? DEFAULT_HOLOGRAM), ...patch }));
@@ -4052,6 +4134,12 @@ export class Fp3dEditor extends LitElement {
     return a?.device_class === "power" || a?.unit_of_measurement === "W" || a?.unit_of_measurement === "kW";
   }
 
+  /** The name of a furniture type: a pack item's own name, else the built-in type's. */
+  private typeName(type: string): string {
+    const item = packInfo(type);
+    return item ? packItemName(item, this.hass?.language ?? "en") : this.t(`furn_${type}` as I18nKey);
+  }
+
   /** The power sensor of an energy device: set by hand, or the one found on its Home Assistant device. */
   private devicePower(m: Furniture, links: Map<string, { power: string | null }>): string | null {
     return m.power && m.power !== "none" ? m.power : (links.get(m.id)?.power ?? null);
@@ -4062,7 +4150,7 @@ export class Fp3dEditor extends LitElement {
     const doc = this._doc;
     const links = this.hass ? furnitureEntities(this.hass, doc.floors) : new Map<string, { power: string | null }>();
     const all = doc.floors.flatMap((fl) => fl.furniture.map((m) => ({ m, fl })));
-    const of = (type: string) => all.filter((x) => x.m.type === type);
+    const of = (type: string) => all.filter((x) => (energyRole(x.m.type) ?? x.m.type) === type);
     const goTo = (x: (typeof all)[number]) => {
       this._floorId = x.fl.id;
       this._solarId = null;
@@ -4098,7 +4186,7 @@ export class Fp3dEditor extends LitElement {
       ${rows.map((r) =>
         r.href
           ? html`<a class="fp3d-chk fp3d-chk-${r.state}" href=${r.href} target="_blank" rel="noopener"><span>${r.state === "ok" ? "✓" : r.state === "todo" ? "○" : "·"}</span>${r.label}</a>`
-          : html`<button class="fp3d-chk fp3d-chk-${r.state}" ?disabled=${!this.isAdmin && !!r.action && r.state !== "ok"} @click=${r.action}><span>${r.state === "ok" ? "✓" : r.state === "todo" ? "○" : "·"}</span>${r.label}</button>`,
+          : html`<button class="fp3d-chk fp3d-chk-${r.state}" ?disabled=${!this.isEditor && !!r.action && r.state !== "ok"} @click=${r.action}><span>${r.state === "ok" ? "✓" : r.state === "todo" ? "○" : "·"}</span>${r.label}</button>`,
       )}
     </section>`;
   }
@@ -4120,7 +4208,7 @@ export class Fp3dEditor extends LitElement {
    */
   private addEnergyDevice(type: string): void {
     const floor = this.floor;
-    if (!floor || !this.isAdmin) return;
+    if (!floor || !this.isEditor) return;
     if (type === "grid_point") {
       // the grid connection goes where the cable would reach the street by itself; then it can be dragged
       const auto = gridPoint(this._doc);
@@ -4175,8 +4263,8 @@ export class Fp3dEditor extends LitElement {
 
   /** Inverters, batteries and wallboxes of all floors, and buttons to add them on the floor shown. */
   private renderEnergyDevices() {
-    const admin = this.isAdmin;
-    const list = this._doc.floors.flatMap((fl) => fl.furniture.filter((m) => (ENERGY_DEVICES as readonly string[]).includes(m.type)).map((m) => ({ fl, m })));
+    const admin = this.isEditor;
+    const list = this._doc.floors.flatMap((fl) => fl.furniture.filter((m) => isEnergyDevice(m.type)).map((m) => ({ fl, m })));
     return html`<section>
       <h3>⚡ ${this.t("energy_devices")}</h3>
       <p class="fp3d-sub">${this.t("energy_devices_hint")}</p>
@@ -4193,7 +4281,7 @@ export class Fp3dEditor extends LitElement {
                     this.showPoint(m.x, m.z);
                   }}
                 >
-                  <span>${m.name || this.t(`furn_${m.type}` as I18nKey)} · ${fl.name}</span>
+                  <span>${m.name || this.typeName(m.type)} · ${fl.name}</span>
                 </button>
               </div>`,
             )}
@@ -4217,7 +4305,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderRoofSectionForm(sec: RoofSection) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const set = (patch: Partial<RoofSection>) => this.updateRoofSection(patch);
     // side a is the top (ridge across the plan) or the left (ridge up and down the plan)
     const sides = sec.axis === "x" ? [this.t("roof_side_top"), this.t("roof_side_bottom")] : [this.t("roof_side_left"), this.t("roof_side_right")];
@@ -4370,7 +4458,7 @@ export class Fp3dEditor extends LitElement {
 
   private toggleFixed(kind: FixKind, id: string): void {
     // rooms, walls, doors, windows and outdoor areas follow the plan lock alone
-    if (!this.isAdmin || (kind !== "furniture" && kind !== "device")) return;
+    if (!this.isEditor || (kind !== "furniture" && kind !== "device")) return;
     const next = !this.isFixedItem(kind, id);
     // released: the "fixed, release first" hint has done its job
     if (!next) this._fixedHint = false;
@@ -4381,7 +4469,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private toggleLockPlan(): void {
-    if (!this.isAdmin) return;
+    if (!this.isEditor) return;
     if (this._doc.settings.lock_plan) this._fixedHint = false;
     this.change((doc) => (doc.settings.lock_plan = !doc.settings.lock_plan));
   }
@@ -4413,7 +4501,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Select the item under a plan point and open its menu. */
   private openContext(target: Element, local: [number, number]): void {
-    if (!this.isAdmin || !this.floor) return;
+    if (!this.isEditor || !this.floor) return;
     const world = this.toWorld(...local);
     const attr = (sel: string) => target.closest(`[${sel}]`)?.getAttribute(sel) ?? null;
     let hit: [FixKind, string] | null = null;
@@ -4486,7 +4574,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Lock button in the form of an item. */
   private fixButton(kind: FixKind, id: string) {
-    if (!this.isAdmin) return nothing;
+    if (!this.isEditor) return nothing;
     if (kind !== "furniture" && kind !== "device") {
       // part of the floor plan: shows the plan lock, a click releases it
       return this._doc.settings.lock_plan
@@ -4560,7 +4648,7 @@ export class Fp3dEditor extends LitElement {
   /** Add a door or window on the room edge nearest to a screen point. */
   private placeOpening(preset: OpeningPreset, screen: [number, number]): boolean {
     const floor = this.floor;
-    if (!floor || !this.isAdmin) return false;
+    if (!floor || !this.isEditor) return false;
     let best: { room: Room; edge: number; d: number; wall?: string; roomId?: string } | null = null;
     for (const w of floor.walls ?? []) {
       const host = openingHost({ room_id: "", edge: 0, wall: w.id }, floor.rooms, floor.walls ?? []);
@@ -4635,7 +4723,7 @@ export class Fp3dEditor extends LitElement {
 
   private deleteOpening(): void {
     const id = this._openingId;
-    if (!id || !this.isAdmin || !this.confirmFixedDelete("opening", id)) return;
+    if (!id || !this.isEditor || !this.confirmFixedDelete("opening", id)) return;
     this.change((_, floor) => (floor.openings = floor.openings.filter((o) => o.id !== id)));
     this._openingId = null;
   }
@@ -4650,7 +4738,7 @@ export class Fp3dEditor extends LitElement {
         max="150"
         step="5"
         .value=${String(Math.round((value ?? 1) * 100))}
-        ?disabled=${!this.isAdmin}
+        ?disabled=${!this.isEditor}
         @change=${(e: Event) => {
           const v = Math.min(150, Math.max(10, Number((e.target as HTMLInputElement).value) || 100)) / 100;
           set(Math.abs(v - 1) < 0.001 ? null : v);
@@ -4690,7 +4778,7 @@ export class Fp3dEditor extends LitElement {
 
   /** A vehicle placed as plain furniture becomes a parking spot with this vehicle (presence and Auto Pro live there). */
   private vehicleToSpot(f: Furniture): void {
-    if (!this.isAdmin) return;
+    if (!this.isEditor) return;
     const [w, d, h] = furnitureSize("parking");
     const spot: Furniture = { id: uid("furniture"), type: "parking", x: f.x, z: f.z, rotation: f.rotation, w: Math.max(w, round(f.w + 0.5)), d: Math.max(d, round(f.d + 0.4)), h, variant: null, vehicle: f.type, ...(f.name ? { name: f.name } : {}) };
     this.change((_, floor) => {
@@ -4702,11 +4790,14 @@ export class Fp3dEditor extends LitElement {
 
   /** Replace a placed device by a furniture item linked to it, where the pin stood (one undo step). */
   private deviceToFurniture(pl: Placement, type: string): void {
-    if (!this.isAdmin) return;
-    const [w, d, h] = furnitureSize(type);
+    if (!this.isEditor) return;
     // a camera keeps its pin with everything set there (field of view, wedge, Kamera-Cockpit): the model is only its
-    // look – one item that replaces the last one and moves with the camera (#779)
-    const camera = pl.entity_id.startsWith("camera.");
+    // look – one item that replaces the last one and moves with the camera (#779); a camera model sets its mount (#9)
+    if (pl.entity_id.startsWith("camera.")) {
+      this.change((_, f) => setCameraLook(f, pl.entity_id, type));
+      return;
+    }
+    const [w, d, h] = furnitureSize(type);
     const item: Furniture = {
       id: uid("furniture"),
       type,
@@ -4717,16 +4808,16 @@ export class Fp3dEditor extends LitElement {
       d,
       h,
       variant: null,
-      ...(camera ? { entity: "none", look_of: pl.entity_id } : { entity: pl.entity_id }),
+      entity: pl.entity_id,
       name: pl.name ?? null,
       ...(pl.locked ? { locked: true } : {}),
+      // own tap / hold / double-tap actions go along (#6)
+      ...(pl.actions ? { actions: pl.actions } : {}),
     };
     this.change((_, f) => {
-      if (camera) f.furniture = f.furniture.filter((m) => m.look_of !== pl.entity_id);
-      else f.placements = f.placements.filter((p) => p.entity_id !== pl.entity_id);
+      f.placements = f.placements.filter((p) => p.entity_id !== pl.entity_id);
       f.furniture.push(item);
     });
-    if (camera) return;
     this._deviceId = null;
     this.selectItem("furniture", item.id);
   }
@@ -4734,8 +4825,8 @@ export class Fp3dEditor extends LitElement {
   /** Turn a furniture item linked by hand back into a plain device pin at its place. */
   private furnitureToDevice(f: Furniture): void {
     const id = f.entity;
-    if (!this.isAdmin || !id || id === "none") return;
-    const pl: Placement = { entity_id: id, x: f.x, z: f.z, y: null, rotation: f.rotation, ...(f.name ? { name: f.name } : {}), ...(id.startsWith("light.") ? { pin: true } : {}) };
+    if (!this.isEditor || !id || id === "none") return;
+    const pl: Placement = { entity_id: id, x: f.x, z: f.z, y: null, rotation: f.rotation, ...(f.name ? { name: f.name } : {}), ...(id.startsWith("light.") ? { pin: true } : {}), ...(f.actions ? { actions: f.actions } : {}) };
     this.change((_, floor) => {
       floor.furniture = floor.furniture.filter((m) => m.id !== f.id);
       if (!floor.placements.some((p) => p.entity_id === id)) floor.placements.push(pl);
@@ -4744,8 +4835,37 @@ export class Fp3dEditor extends LitElement {
     this.selectItem("device", id);
   }
 
+  /**
+   * A camera's real shape (#9): the camera models of the packs (the core pack's UniFi cameras), the one its device
+   * reports marked. Only its look: the pin keeps the live view, the wedge and the actions.
+   */
+  private renderCameraModel(pl: Placement) {
+    const lang = this.hass?.language ?? "en";
+    const packs = this.packs ?? [];
+    const models = packs
+      .flatMap((p) => p.items.filter(isCameraModel).map((it) => ({ type: packType(p.id, it.id), label: packItemName(it, lang) })))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    if (!models.length) return nothing;
+    const look = this.floor?.furniture.find((m) => m.look_of === pl.entity_id)?.type ?? "";
+    const found = this.hass ? detectCameraModel(this.hass, pl.entity_id, packs) : null;
+    return html`<label class="fp3d-field fp3d-wide" title=${this.t("camera_model_hint")}
+      >${this.t("camera_model")}
+      <select
+        ?disabled=${!this.isEditor}
+        @change=${(e: Event) => {
+          const v = (e.target as HTMLSelectElement).value;
+          this.change((_, f) => setCameraLook(f, pl.entity_id, v || null));
+        }}
+      >
+        <option value="" ?selected=${!look}>${this.t("camera_look_builtin")}</option>
+        ${look && !models.some((m) => m.type === look) ? html`<option value=${look} selected>${furnitureName(this.hass, look)}</option>` : nothing}
+        ${models.map((m) => html`<option value=${m.type} ?selected=${m.type === look}>${m.type === found ? this.t("camera_model_found", { name: m.label }) : m.label}</option>`)}
+      </select></label
+    >`;
+  }
+
   private renderAsFurniture(pl: Placement) {
-    if (!this.isAdmin) return nothing;
+    if (!this.isEditor) return nothing;
     const options = this.furnitureFor(pl.entity_id);
     if (!options.length) return nothing;
     // a camera with a look of its own can go back to the built-in camera model
@@ -4766,9 +4886,15 @@ export class Fp3dEditor extends LitElement {
     >`;
   }
 
+  /** Add a library item: its recipe first (#44), so it shows as itself at once. */
   private addFurniture(type: string, mirror = false): void {
+    if (!this.hass) return;
+    void ensureRecipes(this.hass, [type]).then(() => this.placeFurniture(type, mirror));
+  }
+
+  private placeFurniture(type: string, mirror: boolean): void {
     const floor = this.floor;
-    if (!floor || !this.isAdmin) return;
+    if (!floor || !this.isEditor) return;
     const [w, d, h0] = furnitureSize(type);
     // stairs reach up to the next floor
     const above = this._doc.floors.filter((f) => f.elevation > floor.elevation).sort((p, q) => p.elevation - q.elevation)[0];
@@ -4799,6 +4925,28 @@ export class Fp3dEditor extends LitElement {
     return this.floor ? snapToWall(this.floor, f, this._doc.settings.wall_interior) : null;
   }
 
+  /** Straight stairs: open treads, a turn or landing at the bottom, a flat top and a start height (#16). */
+  private renderStairOptions(f: Furniture) {
+    const admin = this.isEditor;
+    const limits = stairLimits(f);
+    const apply = (change: Parameters<typeof stairOptionPatch>[1]) => this.updateFurniture(stairOptionPatch(f, change));
+    return html`<div class="fp3d-form">
+      <label class="fp3d-check fp3d-wide"
+        ><input type="checkbox" .checked=${!!f.stair_open} ?disabled=${!admin} @change=${(e: Event) => apply({ stair_open: (e.target as HTMLInputElement).checked })} />
+        ${this.t("stair_open")}</label
+      >
+      <label class="fp3d-field fp3d-wide" title=${this.t("stair_turn_hint")}
+        >${this.t("stair_turn")}
+        <select ?disabled=${!admin || !limits.canTurn} @change=${(e: Event) => apply({ stair_turn: ((e.target as HTMLSelectElement).value || null) as "left" | "right" | null })}>
+          ${(["", "left", "right"] as const).map((v) => html`<option value=${v} ?selected=${(f.stair_turn ?? "") === v}>${this.t(`stair_turn_${v || "none"}` as I18nKey)}</option>`)}
+        </select></label
+      >
+      <span title=${this.t("stair_landing_hint")}>${this.num(this.t("stair_landing"), f.stair_landing ?? 0, (v) => apply({ stair_landing: v }), 1, 0)}</span>
+      <span title=${this.t("stair_top_hint")}>${this.len(this.t("stair_top"), f.stair_top ?? 0, (v) => apply({ stair_top: v }), 0.05, 0)}</span>
+      ${this.len(this.t("stair_start"), f.mount_y ?? 0, (v) => this.updateFurniture({ mount_y: Math.round(Math.min(MAX_MOUNT_Y, Math.max(0, v)) * 1000) / 1000 || null }), 0.05, 0)}
+    </div>`;
+  }
+
   private updateFurniture(patch: Partial<Furniture>): void {
     const id = this._furnitureId;
     // a field may report its change after the item was deselected or the floor changed (on blur): then nothing to do
@@ -4811,13 +4959,13 @@ export class Fp3dEditor extends LitElement {
 
   private mirrorFurniture(): void {
     const f = this.furnitureItem;
-    if (!f || !this.isAdmin) return;
+    if (!f || !this.isEditor) return;
     this.updateFurniture({ mirror: !f.mirror });
   }
 
   private rotateFurniture(delta: number): void {
     const f = this.furnitureItem;
-    if (!f || !this.isAdmin) return;
+    if (!f || !this.isEditor) return;
     const set = this.selection();
     if (set.length > 1) return this.rotateSelection(delta);
     this.updateFurniture({ rotation: (((f.rotation + delta) % 360) + 360) % 360 });
@@ -4825,7 +4973,7 @@ export class Fp3dEditor extends LitElement {
 
   private deleteFurniture(): void {
     const id = this._furnitureId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isEditor) return;
     const set = this.selection();
     if (set.length > 1) {
       const fixed = set.some((x) => this.isFixedItem("furniture", x));
@@ -4842,7 +4990,7 @@ export class Fp3dEditor extends LitElement {
 
   private duplicateFurniture(): void {
     const f = this.furnitureItem;
-    if (!f || !this.isAdmin) return;
+    if (!f || !this.isEditor) return;
     const set = this.selection();
     if (set.length > 1) {
       // the copy of a block is a block of its own
@@ -4954,7 +5102,7 @@ export class Fp3dEditor extends LitElement {
   /** Place entities in the selected room; an entity already placed elsewhere moves here. */
   private placeDevices(entityIds: string[], zone?: Room): void {
     const room = zone ?? this.room;
-    if (!room || !entityIds.length || !this.isAdmin) return;
+    if (!room || !entityIds.length || !this.isEditor) return;
     const ids = new Set(entityIds);
     this.change((doc, floor) => {
       for (const f of doc.floors) {
@@ -4966,6 +5114,9 @@ export class Fp3dEditor extends LitElement {
         // outside (an outdoor area acting as a room) a light stays a pin: no ceiling lamp over the lawn
         if (!pl.entity_id.startsWith("light.") || room.outdoor) {
           floor.placements.push(pl);
+          // a camera whose device names a known model gets that shape right away (#9); changed by hand any time
+          const model = pl.entity_id.startsWith("camera.") && this.hass ? detectCameraModel(this.hass, pl.entity_id, this.packs ?? []) : null;
+          if (model) setCameraLook(floor, pl.entity_id, model);
           continue;
         }
         // a light becomes a ceiling lamp that is tapped directly in 3D
@@ -5023,7 +5174,7 @@ export class Fp3dEditor extends LitElement {
   /** Straighten edges that are almost along an axis (a corner a centimetre off makes slanted walls in 3D, #333). */
   private straightenFloor(): void {
     const floor = this.floor;
-    if (!floor || !this.isAdmin) return;
+    if (!floor || !this.isEditor) return;
     const { rooms, fixed } = straightenEdges(floor.rooms);
     if (!fixed) {
       this._notice = this.t("straighten_none");
@@ -5036,7 +5187,7 @@ export class Fp3dEditor extends LitElement {
   /** Close gaps between rooms of this floor and take the gap as interior wall thickness. */
   private closeFloorGaps(): void {
     const floor = this.floor;
-    if (!floor || !this.isAdmin) return;
+    if (!floor || !this.isEditor) return;
     const { rooms, gaps } = closeGaps(floor.rooms);
     if (!gaps.length) {
       this._notice = this.t("gaps_none");
@@ -5087,7 +5238,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Move everything on the floor by (dx, dz): rooms, furniture, devices, outdoor areas, free walls and the background. */
   private shiftFloor(dx: number, dz: number): void {
-    if (!this.isAdmin || (!dx && !dz)) return;
+    if (!this.isEditor || (!dx && !dz)) return;
     const mv = (p: Vec2): Vec2 => [round(p[0] + dx), round(p[1] + dz)];
     const one = (floor: Floor) => {
       for (const r of floor.rooms) r.points = r.points.map(mv);
@@ -5140,7 +5291,7 @@ export class Fp3dEditor extends LitElement {
   /** Turn everything on the floor by 90° (clockwise in the plan) about the middle of its rooms: when a floor was drawn the wrong way round. */
   private turnFloor(): void {
     const floor = this.floor;
-    if (!floor || !this.isAdmin) return;
+    if (!floor || !this.isEditor) return;
     // with "all floors" the house turns about the middle of every room on every floor
     const pts = (this._shiftAll ? this._doc.floors : [floor]).flatMap((f) => f.rooms.flatMap((r) => r.points));
     if (!pts.length) return;
@@ -5266,7 +5417,7 @@ export class Fp3dEditor extends LitElement {
   private renderFloorMenu() {
     const floors = this._doc.floors;
     const floor = this.floor;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const open = this._toolMenu === "floor";
     const close = () => ((this._toolMenu = null), (this._floorMenu = false));
     return html`<div class="fp3d-seg fp3d-seg-menu">
@@ -5344,7 +5495,7 @@ export class Fp3dEditor extends LitElement {
    * tool in use. Undo and redo stay, the view switches (fit, 3D beside, wall view, lock) are in a view menu.
    */
   private renderToolBar(floor: Floor | undefined) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const off = !floor || !admin;
     type Choice = { label: string; on: boolean; pick: () => void };
     type Entry = { tool: Tool; label: string; choices?: () => Choice[] };
@@ -5477,18 +5628,19 @@ export class Fp3dEditor extends LitElement {
    * modules. One button in the toolbar opens the list; a topic opens as a dialog over the plan.
    */
   private renderSettingsMenu(closeTools: () => void) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const open = this._settingsMenu;
     const all: { key: SettingsTopic; icon: string; label: string; admin: boolean }[] = [
       { key: "house", icon: "🏠", label: this.t("settings_house"), admin: true },
       { key: "weather", icon: "🌦", label: this.t("settings_weather"), admin: true },
       { key: "director", icon: "🎬", label: this.t("card_director"), admin: true },
       { key: "voice", icon: "🎙", label: this.t("voice"), admin: false },
-      ...(released("locate") ? [{ key: "locate" as const, icon: "📡", label: this.t("locate"), admin: true }] : []),
+      ...(released("locate") && this.isHaAdmin ? [{ key: "locate" as const, icon: "📡", label: this.t("locate"), admin: true }] : []),
       { key: "favorites", icon: "⭐", label: this.t("favorites"), admin: true },
       { key: "backdrop", icon: "🖼", label: this.t("backdrop"), admin: true },
       { key: "terrain", icon: "⛰", label: this.t("terrain"), admin: true },
       { key: "backup", icon: "💾", label: this.t("backup"), admin: true },
+      ...(this.isHaAdmin ? [{ key: "editors" as const, icon: "👥", label: this.t("editors_title"), admin: true }] : []),
     ];
     const topics = all.filter((t) => admin || !t.admin);
     const toggle = () => {
@@ -5543,6 +5695,7 @@ export class Fp3dEditor extends LitElement {
       backdrop: this.t("backdrop"),
       terrain: this.t("terrain"),
       backup: this.t("backup"),
+      editors: this.t("editors_title"),
     };
     const body =
       topic === "house"
@@ -5559,7 +5712,9 @@ export class Fp3dEditor extends LitElement {
                   ? this.renderBackdrop()
                   : topic === "terrain"
                     ? this.renderTerrain()
-                    : this.renderBackup();
+                    : topic === "editors"
+                      ? this.renderEditors()
+                      : this.renderBackup();
     return html`<div class="fp3d-dialog-veil" @click=${(e: Event) => e.target === e.currentTarget && close()}>
       <div class="fp3d-dialog" role="dialog" aria-label=${titles[topic]} tabindex="-1" @keydown=${(e: KeyboardEvent) => e.key === "Escape" && close()}>
         <div class="fp3d-dialog-head">
@@ -5622,7 +5777,8 @@ export class Fp3dEditor extends LitElement {
               ${floor ? this.renderFreeWalls(floor) : nothing}
               ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
-              ${this.room && this.isAdmin && this._tool === "select" && !this._openingId && !this._furnitureId && !this.isFixedItem("room", this.room.id) ? this.renderHandles(this.room) : nothing}
+              ${floor && this._tool === "select" ? this.renderPets(floor) : nothing}
+              ${this.room && this.isEditor && this._tool === "select" && !this._openingId && !this._furnitureId && !this.isFixedItem("room", this.room.id) ? this.renderHandles(this.room) : nothing}
               ${floor ? this.renderOutdoorHandles(floor) : nothing}
               ${this.room && this._tool === "select" ? this.renderSplitMarks(this.room) : nothing}
               ${floor ? this.renderHeadroom(floor) : nothing}
@@ -5669,7 +5825,7 @@ export class Fp3dEditor extends LitElement {
 
   /** The picture has handles (move, scale, turn) only while "Move and scale" is switched on, with the select tool. */
   private bgHandles(): boolean {
-    return !!this.floor?.background && this.isAdmin && this._tool === "select" && this._bgEdit;
+    return !!this.floor?.background && this.isEditor && this._tool === "select" && this._bgEdit;
   }
 
   /** The ruler's points and line over the background (#183), or the straighten line. */
@@ -5792,7 +5948,7 @@ export class Fp3dEditor extends LitElement {
 
   /** A sloping wall on a room edge: its heights at the edge's start and end corner, or null for a plain wall (D569). */
   private setEdgeSlope(room: Room, edge: number, slope: [number, number] | null): void {
-    if (!this.isAdmin) return;
+    if (!this.isEditor) return;
     this.change((_, f) => {
       const r = f.rooms.find((x) => x.id === room.id);
       if (!r) return;
@@ -5806,7 +5962,7 @@ export class Fp3dEditor extends LitElement {
   /** Set a wall height on a room edge (and on the rooms sharing it), or on one part of a split edge only. */
   private setEdgeHeight(room: Room, edge: number, height: number | null, part?: number): void {
     const floor = this.floor;
-    if (!floor || !this.isAdmin) return;
+    if (!floor || !this.isEditor) return;
     if (part !== undefined) {
       const n = this.edgeParts(room, edge).length;
       this.change((_, f) => {
@@ -5852,7 +6008,7 @@ export class Fp3dEditor extends LitElement {
     const sensors = cameraMotionSensors(hass, cameraId);
     const kinds = [...new Set(sensors.map((id) => detectionKind(hass, id)))];
     const pro = hasFeature("camera_cockpit");
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const set = (list: string[] | null) => this.updateDevice({ detect_sensors: list });
     const detectClass = (id: string) => id.startsWith("binary_sensor.") && ["motion", "occupancy", "presence"].includes(String(hass.states[id]?.attributes.device_class));
     // the list to tick: the camera's own sensors and every one chosen before
@@ -5889,7 +6045,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Cut a wall (or one part of it) in the middle: a split point of its own, the new part keeps the height. */
   private splitEdge(room: Room, edge: number, part: number | undefined): void {
-    if (!this.isAdmin) return;
+    if (!this.isEditor) return;
     const pts = room.points;
     const len = Math.hypot(pts[(edge + 1) % pts.length][0] - pts[edge][0], pts[(edge + 1) % pts.length][1] - pts[edge][1]);
     const starts = this.edgeParts(room, edge);
@@ -6017,12 +6173,12 @@ export class Fp3dEditor extends LitElement {
                 ? html`${this.len(this.t("wall_slope_start", { n: i + 1 }), slope[0], (v) => this.setEdgeSlope(room, i, [v, slope[1]]), 0.05, 0.05)}
                   ${this.len(this.t("wall_slope_end", { n: ((i + 1) % n) + 1 }), slope[1], (v) => this.setEdgeSlope(room, i, [slope[0], v]), 0.05, 0.05)}`
                 : this.len(this.t("wall_height"), h ?? H, (v) => set(v >= H - 0.005 ? null : Math.max(0.05, v)), 0.05, 0.05)}
-            ${this.isAdmin && part === undefined && h !== 0
+            ${this.isEditor && part === undefined && h !== 0
               ? html`<button class="fp3d-btn" aria-pressed=${!!slope} title=${this.t("wall_slope_hint")} @click=${() => this.setEdgeSlope(room, i, slope ? null : [h ?? H, h ?? H])}>◢ ${this.t("wall_slope")}</button>`
               : nothing}
-            ${this.isAdmin && h !== null ? html`<button class="fp3d-btn" title=${this.t("wall_height_full")} @click=${() => set(null)}>↥</button>` : nothing}
-            ${this.isAdmin && h !== 0 ? html`<button class="fp3d-btn" title=${this.t("wall_none_hint")} @click=${() => set(0)}>${this.t("wall_none")}</button>` : nothing}
-            ${this.isAdmin && partLen >= 0.4 ? html`<button class="fp3d-btn" title=${this.t("wall_split_hint")} @click=${() => this.splitEdge(room, i, part)}>✂</button>` : nothing}
+            ${this.isEditor && h !== null ? html`<button class="fp3d-btn" title=${this.t("wall_height_full")} @click=${() => set(null)}>↥</button>` : nothing}
+            ${this.isEditor && h !== 0 ? html`<button class="fp3d-btn" title=${this.t("wall_none_hint")} @click=${() => set(0)}>${this.t("wall_none")}</button>` : nothing}
+            ${this.isEditor && partLen >= 0.4 ? html`<button class="fp3d-btn" title=${this.t("wall_split_hint")} @click=${() => this.splitEdge(room, i, part)}>✂</button>` : nothing}
             ${(part === undefined || part === 0) && h !== 0 ? html`<button class="fp3d-btn" title=${this.t("wall_view_open")} @click=${() => this.openWallView(room.id, i)}>▦</button>` : nothing}
             ${(part === undefined || part === 0) && h !== 0
               ? html`<span class="fp3d-wide fp3d-split-row" title=${this.t("wall_thickness_hint")}
@@ -6031,13 +6187,13 @@ export class Fp3dEditor extends LitElement {
                     const t = Math.min(1.5, Math.max(0.02, Math.round(v * 1000) / 1000));
                     setThick(i, Math.abs(t - def) < 0.0005 ? null : t);
                   }, 0.01, 0.02)}
-                  ${this.isAdmin && room.wall_thickness?.[i] != null ? html`<button class="fp3d-btn" title=${this.t("wall_thickness_reset")} @click=${() => setThick(i, null)}>↺</button>` : nothing}</span
+                  ${this.isEditor && room.wall_thickness?.[i] != null ? html`<button class="fp3d-btn" title=${this.t("wall_thickness_reset")} @click=${() => setThick(i, null)}>↺</button>` : nothing}</span
                 >`
               : nothing}
             ${part !== undefined && part > 0 && (room.wall_splits?.[i] ?? []).some((d) => Math.abs(d - starts[part]) < 1e-3)
               ? html`<span class="fp3d-wide fp3d-split-row"
                   >${this.len(this.t("wall_split_at"), starts[part], (v) => this.moveSplit(room, i, starts[part], v), 0.05, 0.1)}
-                  ${this.isAdmin ? html`<button class="fp3d-btn" title=${this.t("wall_join_hint")} @click=${() => this.joinSplit(room, i, starts[part], part)}>⨉</button>` : nothing}</span
+                  ${this.isEditor ? html`<button class="fp3d-btn" title=${this.t("wall_join_hint")} @click=${() => this.joinSplit(room, i, starts[part], part)}>⨉</button>` : nothing}</span
                 >`
               : nothing}
           </div>`;
@@ -6051,7 +6207,7 @@ export class Fp3dEditor extends LitElement {
   /** Corner handles of the selected outdoor area (a rectangle stays a rectangle while dragging). */
   private renderOutdoorHandles(floor: Floor) {
     const a = this._outdoorId ? floor.outdoor.find((x) => x.id === this._outdoorId) : undefined;
-    if (!a || !this.isAdmin || (this._tool !== "select" && !(this._tool === "pool" && !this._pipeMode)) || this._doc.settings.lock_plan) return nothing;
+    if (!a || !this.isEditor || (this._tool !== "select" && !(this._tool === "pool" && !this._pipeMode)) || this._doc.settings.lock_plan) return nothing;
     if (a.pool_shape) {
       // a round or oval pool: the corners of its box (it keeps its shape while it grows)
       const b = bounds(a.points);
@@ -6082,7 +6238,7 @@ export class Fp3dEditor extends LitElement {
 
   /** An outdoor area like a room (#100): a Home Assistant area (with its devices) and a name for chip and 3D. */
   private renderOutdoorZone(a: OutdoorArea) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const areas = Object.values(this.hass?.areas ?? {}).sort((x, y) => x.name.localeCompare(y.name));
     return html`<label class="fp3d-field fp3d-wide" title=${this.t("outdoor_area_hint")}
         >${this.t("area")}
@@ -6138,7 +6294,7 @@ export class Fp3dEditor extends LitElement {
             </svg>
             <span>${entityName(hass, g.primary, areaName)}</span>
           </button>
-          ${this.isAdmin
+          ${this.isEditor
             ? html`<button
                   class="fp3d-pin ${hidden.has(g.primary) ? "fp3d-pin-on" : ""}"
                   aria-pressed=${hidden.has(g.primary)}
@@ -6168,21 +6324,21 @@ export class Fp3dEditor extends LitElement {
                       ${pinned.has(g.primary) ? "★" : "☆"}
                     </button>`}`
             : nothing}
-          ${this.isAdmin
+          ${this.isEditor
             ? placed.has(g.primary)
               ? html`<button class="fp3d-link" @click=${() => this.removeDevice(g.primary)}>${this.t("devices_remove")}</button>`
               : html`<button class="fp3d-link" @click=${() => this.placeDevices([g.primary], zone)}>${this.t("devices_place")}</button>`
             : nothing}
         </div>`,
       )}
-      ${this.isAdmin && open.length > 1
+      ${this.isEditor && open.length > 1
         ? html`<button class="fp3d-link fp3d-place-all" @click=${() => this.placeDevices(open, zone)}>${this.t("devices_place_all_n", { n: open.length })}</button>`
         : nothing}
     </div>`;
   }
 
   private renderOutdoorForm(a: OutdoorArea) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const rect = isAxisRect(a.points);
     const b = bounds(a.points);
     const setRect = (field: "x" | "z" | "w" | "d", v: number) => {
@@ -6482,7 +6638,7 @@ export class Fp3dEditor extends LitElement {
     const f = this._wallSel ? floor?.furniture.find((m) => m.id === this._wallSel) : undefined;
     const el = this.wall3dEl as unknown as { viewer?: { camera: { position: { x: number; y: number; z: number }; fov: number } } } | null;
     const v = el?.viewer;
-    if (!floor || !f || !v || !this.isAdmin) return;
+    if (!floor || !f || !v || !this.isEditor) return;
     e.preventDefault();
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -6664,7 +6820,7 @@ export class Fp3dEditor extends LitElement {
     if (!missing.length) return;
     for (const f of missing) this.wallPicsAsked.add(this.wallPicKey(frame, f));
     try {
-      const mod = await load3d();
+      const [mod] = await Promise.all([load3d(), this.hass ? ensureRecipes(this.hass, missing.map((f) => f.type)) : undefined]);
       for (const f of missing) {
         const pic = mod.furnitureFront({ type: f.type, w: f.w, d: f.d, h: f.h, variant: f.variant, lamp: LAMP_MODEL[f.type] ?? null }, this.wallTurn(frame, f), 180, this.packs ?? [], 3.2);
         this.wallPics.set(this.wallPicKey(frame, f), pic);
@@ -6693,7 +6849,7 @@ export class Fp3dEditor extends LitElement {
     const X = (s: number) => (frame.rightward ? s : L - s);
     const span = (s0: number, s1: number) => [Math.min(X(s0), X(s1)), Math.abs(s1 - s0)] as const;
     const Y = (y: number) => H - y;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     // the chosen piece: one at the wall, or (3D) any piece of the room – its span along the wall and distance from it
     const selF = this._wallSel ? floor.furniture.find((m) => m.id === this._wallSel) : undefined;
     const sel = selF
@@ -7094,7 +7250,7 @@ export class Fp3dEditor extends LitElement {
                 return;
               }
               if (this.wvPinch) return;
-              if (rc && this._runMode && this.isAdmin) {
+              if (rc && this._runMode && this.isEditor) {
                 e.stopPropagation();
                 const q = rc.pt(e);
                 this.wvTap = q;
@@ -7118,7 +7274,7 @@ export class Fp3dEditor extends LitElement {
             if (rc && this.jointDrag) this.jointMove(e, rc);
             else if (rc && this.fitDrag) this.fittingMove(e, rc);
             else if (rc && this.runDrag) this.runPointMove(e, rc);
-            else if (rc && this._runMode === "draw" && this.techPress && this.isAdmin && (e.buttons & 1 || e.pointerType === "touch")) {
+            else if (rc && this._runMode === "draw" && this.techPress && this.isEditor && (e.buttons & 1 || e.pointerType === "touch")) {
               // the pen on the wall: the stroke grows under the pointer; its line begins with the first movement
               const q = rc.pt(e);
               const press = this.techPress;
@@ -7362,7 +7518,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Deletes the chosen pieces of the wall view (several or a fixed one only after asking). */
   private deleteOnWall(ids: string[]): void {
-    if (!ids.length || !this.isAdmin) return;
+    if (!ids.length || !this.isEditor) return;
     if (ids.length > 1) {
       if (!confirm(this.t(ids.some((id) => this.isFixedItem("furniture", id)) ? "block_delete_fixed" : "block_delete", { n: ids.length }))) return;
     } else if (!this.confirmFixedDelete("furniture", ids[0])) return;
@@ -7397,7 +7553,7 @@ export class Fp3dEditor extends LitElement {
    */
   private addOnWall(type: string, frame: WallFrame, room: Room): void {
     const floor = this.floor;
-    if (!floor || !this.isAdmin) return;
+    if (!floor || !this.isEditor) return;
     this.rememberWallType(type);
     const gap = this._wallGap;
     if (gap) return this.addIntoGap(type, frame, room, gap);
@@ -7453,7 +7609,7 @@ export class Fp3dEditor extends LitElement {
   private wallRecent(): string[] {
     try {
       const list = JSON.parse(localStorage.getItem("home3d.wallRecent") ?? "[]");
-      return Array.isArray(list) ? list.filter((t): t is string => typeof t === "string" && (FURNITURE_TYPES.includes(t as never) || !!packItem(t))) : [];
+      return Array.isArray(list) ? list.filter((t): t is string => typeof t === "string" && (FURNITURE_TYPES.includes(t as never) || !!packInfo(t))) : [];
     } catch {
       return [];
     }
@@ -7529,7 +7685,7 @@ export class Fp3dEditor extends LitElement {
           ? html`<p class="fp3d-sub">${this.t("wv_gap_hint")}</p>`
           : nothing}
       ${cat ? html`<h4>${this.t(`wv_cat_${cat}` as I18nKey)}</h4>` : nothing}
-      ${recent.length ? html`<h4>${this.t("wv_recent")}</h4><div class="fp3d-wv-tiles">${recent.map((t) => item(t, packItem(t) ? packItemName(packItem(t)!, lang) : label(t)))}</div>` : nothing}
+      ${recent.length ? html`<h4>${this.t("wv_recent")}</h4><div class="fp3d-wv-tiles">${recent.map((t) => item(t, packInfo(t) ? packItemName(packInfo(t)!, lang) : label(t)))}</div>` : nothing}
       ${(cat || q || gap) && !hits.length ? html`<p class="fp3d-sub">${this.t(gap ? "wv_none_fits" : "furniture_search_none")}</p>` : nothing}
       <div class="fp3d-wv-tiles">${hits.slice(0, 40).map((it) => item(it.type, it.label))}</div>
     </aside>`;
@@ -7541,7 +7697,7 @@ export class Fp3dEditor extends LitElement {
     if (!missing.length) return;
     for (const t of missing) this.kitPicsAsked.add(t);
     try {
-      const mod = await load3d();
+      const [mod] = await Promise.all([load3d(), this.hass ? ensureRecipes(this.hass, missing) : undefined]);
       for (const t of missing) {
         const [w, d, h] = furnitureSize(t);
         this.kitPics.set(t, mod.furniturePreview({ type: t, w, d, h, variant: null, lamp: LAMP_MODEL[t] ?? null }, 120, this.packs ?? []));
@@ -7556,9 +7712,9 @@ export class Fp3dEditor extends LitElement {
   private renderWallKit(frame: WallFrame, room: Room, rc: RunCtx | null) {
     const pool = !!rc;
     const energy = hasFeature("energy_pro");
-    if (!pool) return this.isAdmin ? this.renderWallFurniture(frame, room) : nothing;
+    if (!pool) return this.isEditor ? this.renderWallFurniture(frame, room) : nothing;
     if (this._techMode && rc) return this.renderTechKit(frame, room, rc);
-    if (!this.isAdmin || (!pool && !energy)) return nothing;
+    if (!this.isEditor || (!pool && !energy)) return nothing;
     const add = (t: string) => html`<button class="fp3d-btn" @click=${() => this.addOnWall(t, frame, room)}>+ ${this.t(`furn_${t}` as I18nKey)}</button>`;
     const fit = (mode: "valve" | "sight", label: I18nKey) =>
       html`<button class="fp3d-btn ${this._runMode === mode ? "fp3d-primary" : ""}" title=${this.t("wall_run_fit")} @click=${() => this.kitFitting(rc, mode)}>+ ${this.t(label)}</button>`;
@@ -7709,7 +7865,7 @@ export class Fp3dEditor extends LitElement {
 
   /** A press on the wall while laying a pipe or placing a fitting. */
   private runDown(e: PointerEvent, c: RunCtx): void {
-    if (!this._runMode || !this.isAdmin) return;
+    if (!this._runMode || !this.isEditor) return;
     e.stopPropagation();
     this._techAsk = null;
     // the pen of "Technik zeichnen": the press only marks where; the stroke begins with the first movement, and a
@@ -7725,7 +7881,7 @@ export class Fp3dEditor extends LitElement {
    */
   private runDown3d(e: PointerEvent): void {
     const c = this.runCtx3d;
-    if (!this._runMode || !c || e.button !== 0 || !this.isAdmin || !this._wallView3d) return;
+    if (!this._runMode || !c || e.button !== 0 || !this.isEditor || !this._wallView3d) return;
     type V = {
       renderer: { domElement: HTMLElement };
       floorMap: Map<string, { y: number }>;
@@ -8257,7 +8413,7 @@ export class Fp3dEditor extends LitElement {
     if (this._runMode) return;
     e.stopPropagation();
     this._wallSel = null;
-    if (this._runSel?.pipe !== run.id || !this.isAdmin) {
+    if (this._runSel?.pipe !== run.id || !this.isEditor) {
       this._runSel = { pipe: run.id, pt: null };
       return;
     }
@@ -8284,7 +8440,7 @@ export class Fp3dEditor extends LitElement {
 
   /** A press on a pipe's point: drag it along the wall and up or down; a double click takes it out. */
   private runPointDown(e: PointerEvent, c: RunCtx, pipeId: string, i: number): void {
-    if (this._runMode || !this.isAdmin) return;
+    if (this._runMode || !this.isEditor) return;
     e.stopPropagation();
     const nodeAt = poolNodeAt(this._doc, c.floor, c.pool);
     if (this.doubleTap(e, `runpt:${pipeId}:${i}`)) {
@@ -8354,7 +8510,7 @@ export class Fp3dEditor extends LitElement {
    * takes it out.
    */
   private fittingDown(e: PointerEvent, c: RunCtx, pipeId: string, id: string): void {
-    if (this._runMode || !this.isAdmin) return;
+    if (this._runMode || !this.isEditor) return;
     e.stopPropagation();
     this._runSel = { pipe: pipeId, pt: null };
     if (this.doubleTap(e, `fitting:${id}`)) {
@@ -8369,7 +8525,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private jointDown(e: PointerEvent, id: string, d: number): void {
-    if (this._runMode || !this.isAdmin) return;
+    if (this._runMode || !this.isEditor) return;
     e.stopPropagation();
     this.jointDrag = { id, d, base: this._doc, moved: false };
     (e.currentTarget as Element).closest("svg")?.setPointerCapture(e.pointerId);
@@ -8565,7 +8721,7 @@ export class Fp3dEditor extends LitElement {
     const nodeAt = poolNodeAt(this._doc, c.floor, c.pool);
     const laid = laidPipe(q, nodeAt);
     const pt = sel.pt;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const loose: "from" | "to" | null = !q.to ? "to" : !q.from ? "from" : null;
     return html`<b>${this.t("wall_run_pipe")}</b>
       ${pt !== null && laid.heights?.[pt] !== undefined
@@ -8626,12 +8782,12 @@ export class Fp3dEditor extends LitElement {
     const a = this.poolArea;
     const node = target.closest("[data-pool-node]")?.getAttribute("data-pool-node") ?? null;
     if (this._jointPlace && a) {
-      if (this.isAdmin) this.placeJointPlan(a, this._jointPlace, world, target.closest("[data-pipe]")?.getAttribute("data-pipe") ?? null);
+      if (this.isEditor) this.placeJointPlan(a, this._jointPlace, world, target.closest("[data-pipe]")?.getAttribute("data-pipe") ?? null);
       this._jointPlace = null;
       return true;
     }
     if (this._pipeMode) {
-      if (!this.isAdmin) return true;
+      if (!this.isEditor) return true;
       if (!a) {
         // several pools and none chosen: a tap on one chooses it for the pipes
         const hit = floor.outdoor.find((o) => o.type === "pool" && o.points.length >= 3 && pointInPolygon(world, o.points));
@@ -8667,7 +8823,7 @@ export class Fp3dEditor extends LitElement {
       return true;
     }
     const split = (v: string): [string, number] => [v.slice(0, v.lastIndexOf(":")), Number(v.slice(v.lastIndexOf(":") + 1))];
-    if (a && this.isAdmin) {
+    if (a && this.isEditor) {
       const pt = target.closest("[data-pipe-pt]")?.getAttribute("data-pipe-pt");
       if (pt) {
         const [pipe, i] = split(pt);
@@ -8702,13 +8858,13 @@ export class Fp3dEditor extends LitElement {
       this._pipeId = pipeEl;
       return true;
     }
-    if (node && a && this.isAdmin) {
+    if (node && a && this.isEditor) {
       if (node.startsWith("port:")) this.drag = { kind: "poolport", pool: a.id, id: node.slice(5), base: this._doc, moved: false };
       else if (node.startsWith("joint:")) this.drag = { kind: "pooljoint", pool: a.id, id: splitNode(node).id, start: world, base: this._doc, moved: false };
       else this.drag = { kind: "pooldev", id: node.slice(4), start: world, base: this._doc, moved: false };
       return true;
     }
-    if (this.isAdmin) {
+    if (this.isEditor) {
       const box = target.closest("[data-out-box]")?.getAttribute("data-out-box");
       if (box) {
         const [id, c] = split(box);
@@ -8727,7 +8883,7 @@ export class Fp3dEditor extends LitElement {
     if (out && floor.outdoor.some((x) => x.id === out && x.type === "pool")) {
       this.selectItem("outdoor", out);
       this._pipeId = null;
-      if (this.isAdmin) this.drag = { kind: "outdoor", id: out, start: world, startScreen: local, base: this._doc, moved: false };
+      if (this.isEditor) this.drag = { kind: "outdoor", id: out, start: world, startScreen: local, base: this._doc, moved: false };
       return true;
     }
     this._pipeId = null;
@@ -8808,7 +8964,7 @@ export class Fp3dEditor extends LitElement {
   /** A port on the pool: skimmer and inlets on the rim (spread over its sides), the drain in the middle, the waste drain beside the technical room. */
   private addPoolPort(kind: PoolPort["kind"]): void {
     const a = this.poolArea;
-    if (!a || !this.isAdmin) return;
+    if (!a || !this.isEditor) return;
     const ports = a.pool?.ports ?? [];
     const n = a.points.length;
     const mid = (i: number): Vec2 => {
@@ -8861,7 +9017,7 @@ export class Fp3dEditor extends LitElement {
 
   private togglePoolValve(id: string): void {
     const f = this._doc.floors.flatMap((x) => x.furniture).find((m) => m.id === id);
-    if (!f || f.type !== "pool_valve" || !this.isAdmin) return;
+    if (!f || f.type !== "pool_valve" || !this.isEditor) return;
     this.change((d) => {
       const m = d.floors.flatMap((x) => x.furniture).find((q) => q.id === id);
       if (m) m.valve_open = m.valve_open === false ? null : false;
@@ -8966,7 +9122,7 @@ export class Fp3dEditor extends LitElement {
     const card = this._card;
     const a = card ? this._doc.floors.flatMap((f) => f.outdoor).find((o) => o.id === card.pool) : undefined;
     if (!card || !a) return nothing;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const { kind, id } = splitNode(card.part);
     const joint = kind === "joint" ? a.pool?.joints?.find((x) => x.id === id) : undefined;
     const dev = kind === "dev" ? this._doc.floors.flatMap((f) => f.furniture).find((m) => m.id === id) : undefined;
@@ -9202,7 +9358,7 @@ export class Fp3dEditor extends LitElement {
         const q = splitNode(n).port ?? "";
         const end = at[q] ?? at[""] ?? [180, 70];
         const lit = on(n);
-        return svg`<g class="fp3d-pc-stub ${lit ? "fp3d-on" : ""}" @click=${() => this.isAdmin && !lit && (this._cardJoin = { port: n, to: "", vias: [] })}>
+        return svg`<g class="fp3d-pc-stub ${lit ? "fp3d-on" : ""}" @click=${() => this.isEditor && !lit && (this._cardJoin = { port: n, to: "", vias: [] })}>
           <line x1=${centre[0]} y1=${centre[1]} x2=${end[0]} y2=${end[1]} />
           <circle cx=${end[0]} cy=${end[1]} r="7" />
           <title>${q ? this.portText(n) : ""}</title>
@@ -9349,7 +9505,7 @@ export class Fp3dEditor extends LitElement {
         <polyline class="fp3d-pipe-hit" points=${line} />
         <polyline class="fp3d-pipe ${sel ? "fp3d-pipe-sel" : ""}" points=${line} />
         <path class="fp3d-pipe-arrow" d="M -6 -5 L 5 0 L -6 5 Z" transform=${`translate(${(x0 + x1) / 2} ${(y0 + y1) / 2}) rotate(${ang})`} />
-        ${sel && this.isAdmin
+        ${sel && this.isEditor
           ? svg`${pts.slice(0, -1).map((q, i) => svg`<line class="fp3d-pipe-seg" data-pipe-seg=${`${p.id}:${i + 1 - lead}`} x1=${q[0]} y1=${q[1]} x2=${pts[i + 1][0]} y2=${pts[i + 1][1]} />`)}
               ${p.points.map((q, i) => {
                 const [x, y] = this.toScreen(q);
@@ -9411,7 +9567,7 @@ export class Fp3dEditor extends LitElement {
   private renderPoolTech(a: OutdoorArea) {
     // pool equipment, ports and pipes: only with a module that knows pipes (Pool Pro)
     if (!this.pipeRules) return nothing;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const ports = a.pool?.ports ?? [];
     const pipes = a.pool?.pipes ?? [];
     const devs = this._doc.floors.flatMap((f) => f.furniture).filter((m) => (POOL_DEVICES as readonly string[]).includes(m.type));
@@ -9522,7 +9678,7 @@ export class Fp3dEditor extends LitElement {
 
   /** A pool's shape and size (a round one by its diameter, an oval one by its box) and whether it stands above ground. */
   private renderPoolShape(a: OutdoorArea) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const b = bounds(a.points);
     const shape = a.pool_shape;
     const resize = (x0: number, z0: number, x1: number, z1: number) => shape && this.updateOutdoor({ points: poolShapePoints(shape, x0, z0, x1, z1) });
@@ -9566,7 +9722,7 @@ export class Fp3dEditor extends LitElement {
       openings: () => [],
       energy: () => null,
       consumers: () => [],
-      canEdit: () => this.isAdmin,
+      canEdit: () => this.isEditor,
       updateBuilding: (mutate) => this.change((doc) => mutate(doc)),
       callService: (domain, service, data) => hass.callService(domain, service, data),
       newId: (prefix) => uid(prefix),
@@ -9616,7 +9772,7 @@ export class Fp3dEditor extends LitElement {
   /** A module's fields, drawn like the editor's own. */
   private renderFields(fields: ModuleField[], wrap = true) {
     if (!fields.length) return nothing;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const field = (f: ModuleField) => {
       switch (f.kind) {
         case "heading":
@@ -9696,7 +9852,7 @@ export class Fp3dEditor extends LitElement {
       const [hx, hy] = this.toScreen([f.x - Math.sin(a) * reach, f.z + Math.cos(a) * reach]);
       const [fx, fy] = this.toScreen([f.x - Math.sin(a) * (f.d / 2), f.z + Math.cos(a) * (f.d / 2)]);
       const lit = isLamp(f.type) && !!f.entity && f.entity !== "none" && this.hass?.states[f.entity]?.state === "on";
-      return svg`<g data-furniture=${f.id} class=${`fp3d-furn${sel || member ? " fp3d-furn-sel" : ""}${lit ? " fp3d-furn-lit" : ""}${(ENERGY_DEVICES as readonly string[]).includes(f.type) ? " fp3d-energy-item" : ""}`}>
+      return svg`<g data-furniture=${f.id} class=${`fp3d-furn${sel || member ? " fp3d-furn-sel" : ""}${lit ? " fp3d-furn-lit" : ""}${isEnergyDevice(f.type) ? " fp3d-energy-item" : ""}`}>
         <g transform="translate(${cx} ${cy}) rotate(${f.rotation}) scale(${f.mirror ? -k : k} ${k})">
           <rect class="fp3d-furn-body" x=${-f.w / 2} y=${-f.d / 2} width=${f.w} height=${f.d} />
           <g class="fp3d-furn-sym">${furnitureSymbol(f.type, f.w, f.d)}</g>
@@ -9704,7 +9860,7 @@ export class Fp3dEditor extends LitElement {
         </g>
         ${big ? svg`<text x=${cx} y=${cy + 4}>${furnitureName(this.hass, f.type)}</text>` : nothing}
       </g>
-      ${sel && this.isAdmin && !f.locked
+      ${sel && this.isEditor && !f.locked
         ? ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([sx, sz]) => {
             const [x, y] = this.toScreen([f.x + (sx * f.w * Math.cos(a)) / 2 - (sz * f.d * Math.sin(a)) / 2, f.z + (sx * f.w * Math.sin(a)) / 2 + (sz * f.d * Math.cos(a)) / 2]);
             return svg`<g class="fp3d-resize" data-resize=${`${f.id}:${sx}:${sz}`}>
@@ -9721,7 +9877,7 @@ export class Fp3dEditor extends LitElement {
           })()
         : nothing}
       ${sel && f.locked ? svg`<text class="fp3d-lock" x=${hx} y=${hy + 5}>🔒</text>` : nothing}
-      ${sel && this.isAdmin && !f.locked
+      ${sel && this.isEditor && !f.locked
         ? svg`<g class="fp3d-rotate" data-rotate=${f.id}>
             <line x1=${fx} y1=${fy} x2=${hx} y2=${hy} />
             <circle cx=${hx} cy=${hy} r="16" class="fp3d-hit" />
@@ -9887,6 +10043,19 @@ export class Fp3dEditor extends LitElement {
     })}</g>`;
   }
 
+  /** Fun pack "pets": the static pets of this floor (#17), a paw at each one's spot, dragged to move it. */
+  private renderPets(floor: Floor) {
+    if (!hasFeature("fun_pets") || this._doc.settings.pets?.on === false) return nothing;
+    return svg`<g>${staticPetsOn(this._doc, floor.id).map((pet) => {
+      const [x, y] = this.toScreen([pet.x!, pet.z!]);
+      return svg`<g data-pet=${pet.id} class="fp3d-device fp3d-pet" transform="translate(${x} ${y})">
+        <title>${pet.name || this.t(`pet_kind_${pet.kind}`)}</title>
+        <circle r="18" class="fp3d-hit" /><circle r="12" />
+        <path d=${PAW} transform="translate(-7.2 -7.2) scale(0.6)" />
+      </g>`;
+    })}</g>`;
+  }
+
   private renderDevices(floor: Floor) {
     return svg`<g>${floor.placements.map((pl) => {
       const kind = kindOf(pl.entity_id);
@@ -9920,7 +10089,7 @@ export class Fp3dEditor extends LitElement {
     const [hx, hy] = at(0, reach);
     return svg`<g class="fp3d-wedge ${sel ? "fp3d-wedge-sel" : ""}">
       ${fov >= 360 ? svg`<circle cx=${cx} cy=${cy} r=${rp} />` : svg`<path d=${path} />`}
-      ${sel && this.isAdmin && !pl.locked
+      ${sel && this.isEditor && !pl.locked
         ? svg`<g class="fp3d-rotate" data-aim=${pl.entity_id}>
             <line x1=${cx} y1=${cy} x2=${hx} y2=${hy} />
             <circle cx=${hx} cy=${hy} r="16" class="fp3d-hit" />
@@ -10057,7 +10226,7 @@ export class Fp3dEditor extends LitElement {
         inputmode="text"
         spellcheck="false"
         .value=${formatImperial(value)}
-        ?disabled=${!this.isAdmin}
+        ?disabled=${!this.isEditor}
         @change=${(e: Event) => {
           const input = e.target as HTMLInputElement;
           const v = parseLength(input.value, "imperial");
@@ -10076,7 +10245,7 @@ export class Fp3dEditor extends LitElement {
         step=${step}
         min=${min ?? nothing}
         .value=${String(round(value))}
-        ?disabled=${!this.isAdmin}
+        ?disabled=${!this.isEditor}
         @change=${(e: Event) => {
           const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
           if (Number.isFinite(v)) onChange(v);
@@ -10201,7 +10370,7 @@ export class Fp3dEditor extends LitElement {
   private renderSide(floor: Floor | undefined) {
     const floors = this._doc?.floors ?? [];
     const room = this.room;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const areas = Object.values(this.hass?.areas ?? {}).sort((a, b) => a.name.localeCompare(b.name));
     if (this._tool === "roof") return this.renderRoofPanel();
     if (this._tool === "energy") return this.renderEnergyPanel();
@@ -10347,7 +10516,7 @@ export class Fp3dEditor extends LitElement {
             <button class="fp3d-row fp3d-room-btn" @click=${() => this.selectItem("room", r.id)}>
               <span>${r.name}</span><span class="fp3d-muted">${this.area(polygonArea(r.points))}</span>
             </button>
-            ${this.isAdmin && floor.rooms.length > 1
+            ${this.isEditor && floor.rooms.length > 1
               ? html`<button class="fp3d-pin" title=${this.t("room_order_up")} ?disabled=${i === 0} @click=${() => this.moveRoom(r.id, -1)}>↑</button>
                   <button class="fp3d-pin" title=${this.t("room_order_down")} ?disabled=${i === floor.rooms.length - 1} @click=${() => this.moveRoom(r.id, 1)}>↓</button>`
               : nothing}
@@ -10374,7 +10543,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderRoomForm(room: Room, areas: { area_id: string; name: string }[]) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const rect = isAxisRect(room.points);
     const b = bounds(room.points);
     return html`<section>
@@ -10432,7 +10601,7 @@ export class Fp3dEditor extends LitElement {
       </div>
       <p class="fp3d-sub" title=${this.t("room_area_net_hint")}>${this.t("room_area_net", { a: this.area(polygonArea(room.points)), n: this.area(netRoomArea(room, this.floor!, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior })) })}</p>
       <p class="fp3d-sub fp3d-room-id">${this.t("room_id")} <code title=${this.t("license_copy")} @click=${() => void navigator.clipboard?.writeText(room.id).catch(() => undefined)}>${room.id}</code></p>
-      ${this.renderEdgeHeights(room)} ${this.renderRoomClimate(room)} ${this.renderRoomOpenings(room)}
+      ${this.renderEdgeHeights(room)} ${this.renderRoomClimate(room)} ${this.renderRoomLive(room)} ${this.renderRoomOpenings(room)}
       <details class="fp3d-points" ?open=${!rect}>
         <summary>${this.t("points")} (${room.points.length})</summary>
         ${room.points.map(
@@ -10472,7 +10641,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Adds the furniture of a room package (lamps link to the room's lights automatically). */
   private applyPackage(room: Room, pkg: PackageId): void {
-    if (!this.isAdmin) return;
+    if (!this.isEditor) return;
     const items = furnishRoom(room, pkg, () => uid("furniture"));
     this.change((_, floor) => floor.furniture.push(...items));
     this._packages = false;
@@ -10493,7 +10662,7 @@ export class Fp3dEditor extends LitElement {
 
   private placeSpots(room: Room): void {
     const f = this._spots;
-    if (!f || !this.isAdmin) return;
+    if (!f || !this.isEditor) return;
     const [w, d, h] = FURNITURE_SIZE[f.type];
     const items = spotGrid(room, f.rows, f.cols).map(([x, z]) => ({
       id: uid("furniture"),
@@ -10545,7 +10714,7 @@ export class Fp3dEditor extends LitElement {
     return html`<label class="fp3d-field fp3d-wide" title=${this.t("marker_icon_hint")}
       >${this.t("marker_icon")}
       <span class="fp3d-icon-row">
-        <input type="text" placeholder="mdi:thermometer" .value=${value ?? ""} ?disabled=${!this.isAdmin} @change=${(e: Event) => onChange((e.target as HTMLInputElement).value.trim().replace(/^mdi:/, "") || null)} />
+        <input type="text" placeholder="mdi:thermometer" .value=${value ?? ""} ?disabled=${!this.isEditor} @change=${(e: Event) => onChange((e.target as HTMLInputElement).value.trim().replace(/^mdi:/, "") || null)} />
         ${name ? unsafeHTML(`<ha-icon icon="${name.replace(/[^a-z0-9:-]/gi, "")}"></ha-icon>`) : nothing}
       </span></label
     >`;
@@ -10555,7 +10724,7 @@ export class Fp3dEditor extends LitElement {
   private markerSelect(value: MarkerShow | null, onChange: (v: MarkerShow | null) => void) {
     return html`<label class="fp3d-field fp3d-wide" title=${this.t("marker_show_hint")}
       >${this.t("marker_show")}
-      <select ?disabled=${!this.isAdmin} @change=${(e: Event) => onChange(((e.target as HTMLSelectElement).value || null) as MarkerShow | null)}>
+      <select ?disabled=${!this.isEditor} @change=${(e: Event) => onChange(((e.target as HTMLSelectElement).value || null) as MarkerShow | null)}>
         <option value="" ?selected=${!value}>${this.t("marker_show_auto")}</option>
         ${MARKER_SHOWS.map((m) => html`<option value=${m} ?selected=${m === value}>${this.t(`marker_show_${m}` as I18nKey)}</option>`)}
       </select></label
@@ -10586,6 +10755,22 @@ export class Fp3dEditor extends LitElement {
       .sort((a, b) => a.label.localeCompare(b.label));
   }
 
+  /** The circuit a device hangs on (a circuit monitor's channel), so its watts are not counted on top of it (#43). */
+  private circuitSelect(value: string | null, own: string | null, onChange: (v: string | null) => void) {
+    const options = this.entityOptions((id) => this.isPowerSensor(id)).filter((o) => o.id !== own);
+    return html`${this.entitySelect(this.t("energy_circuit"), value ?? "none", undefined, options, (v) => onChange(v && v !== "none" ? v : null))}
+      <p class="fp3d-sub fp3d-wide">${this.t("energy_circuit_hint")}</p>
+      ${value ? nothing : html`<p class="fp3d-sub fp3d-wide fp3d-warn">${this.t("energy_circuit_unset")}</p>`}`;
+  }
+
+  /** The energy sensor whose today's kWh its cable end shows (#29): found on the device unless chosen here. */
+  private wireEnergySelect(value: string | null, power: string, onChange: (v: string | null) => void) {
+    const options = this.entityOptions((id) => id.startsWith("sensor.") && this.hass?.states[id]?.attributes.device_class === "energy");
+    const auto = this.hass ? energySensorFor(this.hass, power) : null;
+    return html`${this.entitySelect(this.t("energy_wire_sensor"), value, auto, options, onChange)}
+      <p class="fp3d-sub fp3d-wide">${this.t("energy_wire_sensor_hint")}</p>`;
+  }
+
   private entitySelect(label: string, value: string | null, auto: string | null | undefined, options: { id: string; label: string }[], onChange: (v: string | null) => void) {
     const autoLabel =
       auto === undefined ? null : auto ? this.t("entity_auto", { name: entityName(this.hass, auto) }) : this.t("entity_auto_none");
@@ -10599,7 +10784,7 @@ export class Fp3dEditor extends LitElement {
         .fixed=${fixed}
         .value=${current}
         .placeholder=${this.t("entity_search")}
-        ?disabled=${!this.isAdmin}
+        ?disabled=${!this.isEditor}
         @change=${(e: CustomEvent<{ value: string }>) => {
           e.stopPropagation();
           onChange(e.detail.value === "__auto" ? null : e.detail.value);
@@ -10623,7 +10808,7 @@ export class Fp3dEditor extends LitElement {
     if (o.type !== "door") return nothing;
     const style = openingStyle(o, this.openingIsExterior(o));
     if (style !== "sidelight" && style !== "sidelights") return nothing;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const width = (key: "sidelight_width" | "sidelight_width2", label: I18nKey) => html`<label class="fp3d-field"
       >${this.t(label)}
       <input
@@ -10650,12 +10835,12 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderStyleSelect(o: Opening) {
-    const styles: readonly OpeningStyle[] = o.type === "door" ? DOOR_STYLES : WINDOW_STYLES;
+    const styles = openingStyles(o.type);
     const auto = openingStyle({ type: o.type, style: null }, this.openingIsExterior(o));
     const current = o.style && (styles as readonly string[]).includes(o.style) ? o.style : "";
     return html`<label class="fp3d-field fp3d-wide"
       >${this.t("opening_style")}
-      <select ?disabled=${!this.isAdmin} @change=${(e: Event) => this.updateOpening({ style: ((e.target as HTMLSelectElement).value || null) as OpeningStyle | null })}>
+      <select ?disabled=${!this.isEditor} @change=${(e: Event) => this.updateOpening({ style: ((e.target as HTMLSelectElement).value || null) as OpeningStyle | null })}>
         <option value="" ?selected=${!current}>${this.t("style_auto", { style: this.t(`style_${auto}` as I18nKey) })}</option>
         ${styles.map((s) => html`<option value=${s} ?selected=${s === current}>${this.t(`style_${s}` as I18nKey)}</option>`)}
       </select></label
@@ -10663,7 +10848,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderOpeningForm(o: Opening) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const window = o.type === "window";
     const garage = o.type === "garage";
     // what "automatic" would pick: resolve with the opening's own links cleared
@@ -10763,7 +10948,7 @@ export class Fp3dEditor extends LitElement {
         ${this.len(this.t("opening_position"), o.offset, (v) => this.updateOpening({ offset: Math.max(0, v) }), 0.01, 0)}
         ${window ? this.len(this.t("sill"), o.sill, (v) => this.updateOpening({ sill: Math.max(0, v) }), 0.01, 0) : nothing}
         ${this.len(this.t("opening_height"), o.height, (v) => this.updateOpening({ height: Math.max(0.3, v) }), 0.01, 0.3)}
-        ${window && this.isAdmin
+        ${window && this.isEditor
           ? html`<div class="fp3d-actions fp3d-wide">
               <button
                 class="fp3d-btn"
@@ -10778,7 +10963,7 @@ export class Fp3dEditor extends LitElement {
               </button>
             </div>`
           : nothing}
-        ${garage ? nothing : this.renderStyleSelect(o)}
+        ${this.renderStyleSelect(o)}
         ${window
           ? html`<label class="fp3d-field fp3d-wide" title=${this.t("sill_board_hint")}
               >${this.t("sill_board")}
@@ -10790,7 +10975,7 @@ export class Fp3dEditor extends LitElement {
         ${this.renderSidelightFields(o)}
         <label class="fp3d-field fp3d-wide" title=${this.t("opening_mark_hint")}
           >${this.t("opening_mark")}
-          <select ?disabled=${!this.isAdmin} @change=${(e: Event) => this.updateOpening({ mark: (e.target as HTMLSelectElement).value === "closed" ? "closed" : null })}>
+          <select ?disabled=${!this.isEditor} @change=${(e: Event) => this.updateOpening({ mark: (e.target as HTMLSelectElement).value === "closed" ? "closed" : null })}>
             <option value="" ?selected=${o.mark !== "closed"}>${this.t("opening_mark_open")}</option>
             <option value="closed" ?selected=${o.mark === "closed"}>${this.t("opening_mark_closed")}</option>
           </select></label
@@ -10886,7 +11071,7 @@ export class Fp3dEditor extends LitElement {
 
   private renderFurnitureForm(f: Furniture) {
     if (this.selection().length > 1) return this.renderBlockForm();
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     return html`<section>
       <div class="fp3d-h3row"><h3>${f.name || this.t("furniture")}</h3>${this.fixButton("furniture", f.id)}</div>
       ${f.group
@@ -10953,7 +11138,9 @@ export class Fp3dEditor extends LitElement {
               ${f.mount_y != null ? html`<button class="fp3d-btn fp3d-field-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ mount_y: null })}>${this.t("height_auto")}</button>` : nothing}`
           : nothing}
       </div>
+      ${this.renderColourRoles(f)}
       ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
+      ${f.type === "stairs" ? this.renderStairOptions(f) : nothing}
       ${f.type === "stairs_u" ? html`<p class="fp3d-sub">${this.t("stairs_u_hint")}</p>` : nothing}
       ${f.type === "stairwell"
         ? html`<p class="fp3d-sub">${this.t("stairwell_hint")}</p>
@@ -10987,7 +11174,9 @@ export class Fp3dEditor extends LitElement {
         : nothing}
       ${isElectric(f.type) ? this.renderFurnitureLinks(f) : !NO_STATE_TYPES.has(f.type) ? html`<div class="fp3d-form fp3d-links">${this.renderStateLinks(f)}</div>` : nothing} ${GANG_TYPES.has(f.type) ? this.renderGangsForm(f) : nothing} ${TECH_TYPES.has(f.type) ? this.renderTechForm(f) : nothing} ${f.type === "parking" ? this.renderParkingForm(f) : nothing} ${f.type === "waste_bin" || f.type === "mailbox" ? this.renderHouseholdForm(f) : this.renderHouseholdExtras(f)}
       ${this.renderModuleFurnitureFields(f)}
-      ${/^pack:[^:]+\.vehicles:/.test(f.type) && this.isAdmin
+      ${this.renderShowWhen(f)}
+      ${this.renderItemActions(f.actions, f.entity && f.entity !== "none" ? f.entity : null, (a) => this.updateFurniture({ actions: a }))}
+      ${/^pack:[^:]+\.vehicles:/.test(f.type) && this.isEditor
         ? html`<section>
             <p class="fp3d-sub">${this.t("vehicle_to_spot_hint")}</p>
             <div class="fp3d-actions"><button class="fp3d-btn fp3d-primary" @click=${() => this.vehicleToSpot(f)}>🅿 ${this.t("vehicle_to_spot")}</button></div>
@@ -11062,13 +11251,15 @@ export class Fp3dEditor extends LitElement {
   /** Grid, solar, battery and house sensors: from the devices in the plan unless chosen here. */
   private renderEnergyBalance() {
     const e = this._doc.energy;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const attr = (id: string, key: string) => this.hass?.states[id]?.attributes[key] as string | undefined;
     const power = this.entityOptions((id) => this.isPowerSensor(id));
     const soc = this.entityOptions((id) => numberish(id) && attr(id, "device_class") === "battery");
     const tariff = this.entityOptions(
       (id) => numberish(id) && (attr(id, "device_class") === "monetary" || /\/(kWh|MWh)$/.test(attr(id, "unit_of_measurement") ?? "")),
     );
+    // the cheap rate (#29): anything that is on while it runs (a binary sensor, a schedule, an input boolean)
+    const cheap = this.entityOptions((id) => /^(binary_sensor|schedule|input_boolean|switch)\./.test(id));
     const pick = (key: "grid" | "solar" | "battery" | "battery_soc" | "consumption" | "tariff") => (v: string | null) => this.setEnergy({ [key]: v === "none" ? null : v });
     // gas and water meters: counters of that device class, or in m³, litres, ft³ or gallons
     const meter = (kind: "gas" | "water") =>
@@ -11108,6 +11299,18 @@ export class Fp3dEditor extends LitElement {
         ${this.entitySelect(this.t("energy_water_meter"), e.water ?? null, undefined, meter("water"), (v) => this.setEnergy({ water: v === "none" ? null : v }))}
       </div>
       <p class="fp3d-sub">${this.t("energy_meters_hint")}</p>
+      <div class="fp3d-form">
+        ${this.entitySelect(this.t("energy_cheap_rate"), e.cheap_rate ?? null, undefined, cheap, (v) => this.setEnergy({ cheap_rate: v === "none" ? null : v }))}
+        <label class="fp3d-field"
+          >${this.t("energy_cheap_from")}
+          <input type="time" .value=${e.cheap_from ?? ""} ?disabled=${!admin} @change=${(ev: Event) => this.setEnergy({ cheap_from: (ev.target as HTMLInputElement).value || null })}
+        /></label>
+        <label class="fp3d-field"
+          >${this.t("energy_cheap_to")}
+          <input type="time" .value=${e.cheap_to ?? ""} ?disabled=${!admin} @change=${(ev: Event) => this.setEnergy({ cheap_to: (ev.target as HTMLInputElement).value || null })}
+        /></label>
+      </div>
+      <p class="fp3d-sub">${this.t("energy_cheap_hint")}</p>
       <div class="fp3d-actions">
         <button class="fp3d-btn" ?disabled=${!admin || !this.hass} @click=${() => this.importEnergyPrefs()}>${this.t("energy_import_prefs")}</button>
       </div>
@@ -11200,6 +11403,81 @@ export class Fp3dEditor extends LitElement {
             <button class="fp3d-btn" @click=${() => set([...list, { id: uid("preset"), label: "Radio", type: "music", content: "" }])}>+ ${this.t("preset_add")}</button>
           </div>`
         : nothing}`;
+  }
+
+  /**
+   * Own tap, hold and double-tap actions of a device or item (#6). Only editors change them; everyone who can
+   * see the view can use them.
+   */
+  private renderItemActions(actions: ItemActions | null | undefined, ownEntity: string | null, onChange: (next: ItemActions | null) => void) {
+    const admin = this.isEditor;
+    const set = (g: Gesture, patch: Partial<ItemAction> | null) => {
+      const cur = actions?.[g];
+      onChange(withGesture(actions, g, patch === null ? null : ({ ...(cur ?? { action: "default" }), ...patch } as ItemAction)));
+    };
+    const placeholder = (type: ActionType) =>
+      type === "navigate" ? "/lovelace/garden" : type === "url" ? "https://" : type === "perform_action" ? "script.turn_on" : (ownEntity ?? "light.kitchen");
+    return html`<h4>${this.t("item_actions")}</h4>
+      <p class="fp3d-sub">${this.t("item_actions_hint")}</p>
+      ${admin && !this.isHaAdmin ? html`<p class="fp3d-sub">${this.t("item_action_perform_admin")}</p>` : nothing}
+      ${GESTURES.map((g) => {
+        const a = actions?.[g] ?? null;
+        const type: ActionType = a?.action ?? "default";
+        const runs = type !== "default" && type !== "none";
+        // a perform_action only an admin changes (#51): an editor may replace it, not edit it
+        const locked = !admin || performActionLocked(a, this.isHaAdmin);
+        return html`<div class="fp3d-form fp3d-item-action" data-gesture=${g}>
+          <label class="fp3d-field fp3d-wide"
+            >${this.t(`item_gesture_${g}` as I18nKey)}
+            <select ?disabled=${!admin} @change=${(e: Event) => {
+              const v = (e.target as HTMLSelectElement).value as ActionType;
+              set(g, v === "default" ? null : { action: v, target: null, data: null });
+            }}>
+              ${ACTION_TYPES.map((t) => html`<option value=${t} ?selected=${t === type} ?disabled=${!actionTypeChoosable(t, a, this.isHaAdmin)}>${this.t(`item_action_${t}` as I18nKey)}</option>`)}
+            </select></label
+          >
+          ${runs
+            ? html`<label class="fp3d-field fp3d-wide"
+                >${this.t(`item_target_${type}` as I18nKey)}
+                <input type="text" maxlength="2000" .value=${a?.target ?? ""} ?disabled=${locked} placeholder=${placeholder(type)} @change=${(e: Event) => set(g, { target: (e.target as HTMLInputElement).value.trim() || null })}
+              /></label>`
+            : nothing}
+          ${type === "perform_action"
+            ? html`<label class="fp3d-field fp3d-wide" title=${this.t("own_data_hint")}
+                >${this.t("own_data")}
+                <textarea
+                  rows="3"
+                  spellcheck="false"
+                  ?disabled=${locked}
+                  placeholder='{"entity_id": "script.movie_night"}'
+                  .value=${a?.data ? JSON.stringify(a.data, null, 1) : ""}
+                  @change=${(e: Event) => {
+                    const el = e.target as HTMLTextAreaElement;
+                    el.setCustomValidity("");
+                    try {
+                      set(g, { data: parseActionData(el.value) });
+                    } catch {
+                      el.setCustomValidity(this.t("own_data_bad"));
+                      el.reportValidity();
+                    }
+                  }}
+                ></textarea></label
+              >`
+            : nothing}
+          ${runs
+            ? html`<label class="fp3d-check fp3d-wide"
+                  ><input type="checkbox" .checked=${!!a?.confirm} ?disabled=${locked} @change=${(ev: Event) => set(g, { confirm: (ev.target as HTMLInputElement).checked || undefined })} />
+                  ${this.t("item_action_confirm")}</label
+                >
+                ${a?.confirm
+                  ? html`<label class="fp3d-field fp3d-wide"
+                      >${this.t("item_action_confirm_text")}
+                      <input type="text" maxlength="300" .value=${a.confirm_text ?? ""} ?disabled=${locked} placeholder=${this.t("item_action_confirm_placeholder")} @change=${(e: Event) => set(g, { confirm_text: (e.target as HTMLInputElement).value.trim() || null })}
+                    /></label>`
+                  : nothing}`
+            : nothing}
+        </div>`;
+      })}`;
   }
 
   /** Own buttons of the central menu (D143): label, icon, action, target and data. */
@@ -11382,6 +11660,53 @@ export class Fp3dEditor extends LitElement {
     </details>`;
   }
 
+  /** The editors list (#7) as the backend last sent it; null until asked. */
+  private editorsList: { users: EditorUser[]; custom: boolean } | null = null;
+  private editorsAsked = false;
+  private editorsMsg: string | null = null;
+
+  /** Who may change the plan: every user with a tick; the default is every admin. Admins only. */
+  private renderEditors() {
+    const hass = this.hass;
+    if (!hass) return nothing;
+    const answer = (p: Promise<{ users: EditorUser[]; custom: boolean }>) =>
+      p
+        .then((res) => {
+          this.editorsList = res;
+          this.editorsMsg = null;
+        })
+        .catch((err: unknown) => {
+          const code = (err as { code?: string } | null)?.code;
+          this.editorsMsg = this.t(code === "no_admin" ? "editors_no_admin" : "editors_failed");
+        })
+        .finally(() => this.requestUpdate());
+    if (!this.editorsAsked) {
+      this.editorsAsked = true;
+      void answer(getEditors(hass));
+    }
+    const list = this.editorsList;
+    return html`<div class="fp3d-form">
+      <p class="fp3d-sub fp3d-wide">${this.t("editors_hint")}</p>
+      ${list
+        ? list.users.map(
+            (u) => html`<label class="fp3d-check fp3d-wide"
+              ><input
+                type="checkbox"
+                .checked=${u.editor}
+                ?disabled=${u.editor && lastAdmin(list.users, u.id)}
+                @change=${(e: Event) => void answer(setEditors(hass, pickEditor(list.users, u.id, (e.target as HTMLInputElement).checked)))}
+              />
+              ${u.name || u.id}${u.is_admin ? html` <span class="fp3d-sub">(${this.t("editors_admin")})</span>` : nothing}</label
+            >`,
+          )
+        : html`<p class="fp3d-sub fp3d-wide">${this.t("loading")}</p>`}
+      ${this.editorsMsg ? html`<p class="fp3d-sub fp3d-wide fp3d-pack-error">${this.editorsMsg}</p>` : nothing}
+      ${list?.custom
+        ? html`<div class="fp3d-actions fp3d-wide"><button class="fp3d-btn" @click=${() => void answer(setEditors(hass, null))}>${this.t("editors_reset")}</button></div>`
+        : nothing}
+    </div>`;
+  }
+
   private voicePipes: { id: string; name: string; stt: boolean }[] | null = null;
   private voicePipesAsked = false;
   private voiceSentences: SentenceMode | null = null;
@@ -11414,7 +11739,7 @@ export class Fp3dEditor extends LitElement {
       <label class="fp3d-field fp3d-wide"
         >${this.t("voice_sentences")}
         <select
-          ?disabled=${!this.isAdmin || this.voiceSentences === null}
+          ?disabled=${!this.isHaAdmin || this.voiceSentences === null}
           @change=${(e: Event) => {
             const mode = (e.target as HTMLSelectElement).value as SentenceMode;
             this.voiceSentences = mode;
@@ -11533,6 +11858,41 @@ export class Fp3dEditor extends LitElement {
     </details>`;
   }
 
+  /** When the item shows (#15): while an entity is available and/or inside intervals of days and times of day (editors only). */
+  private renderShowWhen(f: Furniture) {
+    const rule: ShowWhen = f.show_when ?? {};
+    const list = rule.intervals ?? [];
+    const off = !this.isEditor;
+    const set = (patch: ShowWhen) => {
+      const next = { ...rule, ...patch };
+      this.updateFurniture({ show_when: (next.entity && next.entity !== "none") || next.intervals?.length ? next : null });
+    };
+    // never half-open (#46): picking one end fills the other, clearing one clears both
+    const setAt = (i: number, patch: ShowInterval) => set({ intervals: list.map((iv, j) => (j === i ? setIntervalPart(iv, patch) : iv)) });
+    // days are kept without a year ("MM-DD"); the picker shows a leap year so 29 February can be picked
+    const field = (label: string, kind: "date" | "time", v: string | null | undefined, on: (v: string | null) => void) =>
+      html`<label class="fp3d-field"
+        >${label}
+        <input type=${kind} ?disabled=${off} .value=${v ? (kind === "date" ? `2028-${v}` : v) : ""} @change=${(e: Event) => {
+          const raw = (e.target as HTMLInputElement).value;
+          on(raw ? (kind === "date" ? raw.slice(5) : raw) : null);
+        }}
+      /></label>`;
+    return html`<details class="fp3d-section" ?open=${!!f.show_when}>
+      <summary>${this.t("show_when")}</summary>
+      <div class="fp3d-form">
+        ${this.entitySelect(this.t("show_when_entity"), rule.entity ?? null, undefined, this.entityOptions(() => true), (v) => set({ entity: v === "none" ? null : v }))}
+        ${list.map(
+          (iv, i) => html`${field(this.t("show_from"), "date", iv.from, (v) => setAt(i, { from: v }))} ${field(this.t("show_to"), "date", iv.to, (v) => setAt(i, { to: v }))}
+            ${field(this.t("show_start"), "time", iv.start, (v) => setAt(i, { start: v }))} ${field(this.t("show_end"), "time", iv.end, (v) => setAt(i, { end: v }))}
+            <button class="fp3d-pin" title=${this.t("delete")} ?disabled=${off} @click=${() => set({ intervals: list.filter((_, j) => j !== i) })}>✕</button>`,
+        )}
+      </div>
+      ${off || list.length >= 12 ? nothing : html`<div class="fp3d-actions"><button class="fp3d-btn" @click=${() => set({ intervals: [...list, {}] })}>+ ${this.t("show_add_interval")}</button></div>`}
+      <p class="fp3d-sub">${this.t("show_when_hint")}</p>
+    </details>`;
+  }
+
   /** "State from": an entity lights the item's top (two light its halves) – any furniture, a bed with occupancy mats too (#116). */
   private renderStateLinks(f: Furniture) {
     return html`${this.entitySelect(this.t("furn_state_entity"), f.state_entity ?? null, undefined, this.entityOptions((id) => /^(binary_sensor|switch|input_boolean|light|fan|person|device_tracker|sensor)\./.test(id)), (v) => this.updateFurniture(clearFirstState(f, v)))}
@@ -11541,7 +11901,7 @@ export class Fp3dEditor extends LitElement {
                     ${f.state_entity2 && f.state_entity2 !== "none"
                       ? html`<label class="fp3d-field"
                           >${this.t("furn_state_split")}
-                          <select ?disabled=${!this.isAdmin} @change=${(e: Event) => this.updateFurniture({ state_split: (e.target as HTMLSelectElement).value === "top_bottom" ? "top_bottom" : "left_right" })}>
+                          <select ?disabled=${!this.isEditor} @change=${(e: Event) => this.updateFurniture({ state_split: (e.target as HTMLSelectElement).value === "top_bottom" ? "top_bottom" : "left_right" })}>
                             <option value="left_right" ?selected=${f.state_split !== "top_bottom"}>${this.t("furn_state_left_right")}</option>
                             <option value="top_bottom" ?selected=${f.state_split === "top_bottom"}>${this.t("furn_state_top_bottom")}</option>
                           </select></label
@@ -11549,6 +11909,46 @@ export class Fp3dEditor extends LitElement {
                       : nothing}`
                 : nothing}
               <p class="fp3d-sub fp3d-wide">${this.t("furn_state_hint")}</p>`;
+  }
+
+  /**
+   * Colour and material per role (#12, #40): each role the item is drawn in, with a colour picker, the named presets and
+   * its material. A role without a colour of its own follows the look; "From the look" clears it. A role without a
+   * material of its own takes its usual one; materials show in the realistic look. Only editors change them.
+   */
+  private renderColourRoles(f: Furniture) {
+    const roles = itemColourRoles(f.type);
+    if (!roles.length) return nothing;
+    const admin = this.isEditor;
+    const set = (role: ColourRole, hex: string | null) => this.updateFurniture({ colors: setRoleColour(f.colors, role, hex) });
+    const setMaterial = (role: ColourRole, m: string) => this.updateFurniture({ materials: setRoleMaterial(f.materials, role, (m || null) as Material | null) });
+    const materialName = (m: Material) => this.t(`material_${m}` as I18nKey);
+    return html`<div class="fp3d-form">
+      <h4 class="fp3d-lib-head fp3d-wide">${this.t("colours")}</h4>
+      ${roles.map((role) => {
+        const own = roleColour(f.colors, role);
+        const preset = own ? COLOUR_PRESETS.find((p) => p.hex === own) : undefined;
+        const mat = ownMaterial(f.materials, role);
+        return html`<div class="fp3d-field fp3d-colour-role">
+          <span>${this.t(`colour_role_${role}` as I18nKey)}</span>
+          <span class="fp3d-colour-pick">
+            <input type="color" class=${own ? "" : "fp3d-colour-unset"} aria-label=${this.t(`colour_role_${role}` as I18nKey)} .value=${own ?? "#808080"} ?disabled=${!admin}
+              @change=${(e: Event) => set(role, (e.target as HTMLInputElement).value)} />
+            <select ?disabled=${!admin} @change=${(e: Event) => set(role, (e.target as HTMLSelectElement).value || null)}>
+              <option value="" ?selected=${!own}>${this.t("colour_theme")}</option>
+              ${own && !preset ? html`<option value=${own} selected>${this.t("colour_own")}</option>` : nothing}
+              ${COLOUR_PRESETS.map((p) => html`<option value=${p.hex} ?selected=${p === preset}>${this.t(`colour_preset_${p.id}` as I18nKey)}</option>`)}
+            </select>
+            <select class="fp3d-material" aria-label=${this.t("material_of", { role: this.t(`colour_role_${role}` as I18nKey) })} ?disabled=${!admin}
+              @change=${(e: Event) => setMaterial(role, (e.target as HTMLSelectElement).value)}>
+              <option value="" ?selected=${!mat}>${this.t("material_usual", { material: materialName(usualMaterial(role)) })}</option>
+              ${MATERIALS.map((m) => html`<option value=${m} ?selected=${m === mat}>${materialName(m)}</option>`)}
+            </select>
+          </span>
+        </div>`;
+      })}
+      <p class="fp3d-sub fp3d-wide">${this.t("colours_hint")}</p>
+    </div>`;
   }
 
   /** Awning: its fall, the valance, a position sensor, its run time and the other direction (with the cover above). */
@@ -11564,7 +11964,7 @@ export class Fp3dEditor extends LitElement {
    * (a teaser while it is locked).
    */
   private renderHouseholdForm(f: Furniture) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const pro = hasFeature("household");
     const teaser = nothing;
     const select = <T extends string>(label: string, value: T, options: readonly T[], key: (o: T) => I18nKey, onChange: (v: T) => void) =>
@@ -11683,7 +12083,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderAwningFields(f: Furniture) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const sensors = this.entityOptions((id) => id.startsWith("sensor.") || id.startsWith("input_number.") || id.startsWith("number."));
     // each kind with the sizes it usually has: width, projection (depth), height above the floor, fall
     const KINDS: Record<string, { w: number; d: number; y: number; pitch: number | null }> = {
@@ -11724,7 +12124,7 @@ export class Fp3dEditor extends LitElement {
 
   /** A motorised curtain or roll-down screen from a pack (#511): run time, a live position sensor, the other direction. */
   private renderMotionFields(f: Furniture) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const sensors = this.entityOptions((id) => id.startsWith("sensor.") || id.startsWith("input_number.") || id.startsWith("number."));
     const side = f.variant === "left" || f.variant === "right" ? f.variant : "both";
     return html`${packMotion(f.type) === "curtain"
@@ -11749,7 +12149,7 @@ export class Fp3dEditor extends LitElement {
   /** Wi-Fi access point (D582) and water heater: how it is mounted and its entities. */
   private renderTechForm(f: Furniture) {
     if (!this.hass) return nothing;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const ap = f.type === "wifi_ap";
     const mounts = ["", "wall"] as const;
     const setMount = (v: string) => {
@@ -11779,7 +12179,7 @@ export class Fp3dEditor extends LitElement {
   /** Wall switch or socket (D523, #593): its gangs, and per gang what it switches (a socket also its power sensor). */
   private renderGangsForm(f: Furniture) {
     if (!this.hass) return nothing;
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const gangs = gangsOf(f);
     const socket = f.type === "wall_socket";
     const switches = this.entityOptions((id) => /^(light|switch|input_boolean|fan)\./.test(id));
@@ -11843,8 +12243,8 @@ export class Fp3dEditor extends LitElement {
             /^(media_player|switch|input_boolean|light)\./.test(id) || (packMotion(f.type) === "screen" && id.startsWith("cover."))
           : f.type === "awning"
             ? id.startsWith("cover.")
-            : packMotion(f.type) === "curtain"
-            ? // a motorised curtain: its motor's cover (or a switch that drives it, #511)
+            : packMotion(f.type) === "curtain" || packMotion(f.type) === "blind"
+            ? // a motorised curtain or a roof window's blind: its motor's cover (or a switch that drives it, #511, #24)
               /^(cover|switch|input_boolean)\./.test(id)
             : f.type === "radiator" || f.type === "ac_unit"
             ? id.startsWith("climate.")
@@ -11857,7 +12257,8 @@ export class Fp3dEditor extends LitElement {
                 // a pack's heat pump indoor unit, boiler or buffer tank: its water_heater entity (#645)
                 (isPackHeater(f.type) && id.startsWith("water_heater.")) ||
                 // a pack's sensor model (motion, presence, contact, leak …): any sensor, with or without a class (#810)
-                (isPackSensor(f.type) && /^(binary_sensor|sensor)\./.test(id)) ||
+                // a 3D printer (#11): any of its sensors (OctoPrint reports printing as a binary sensor)
+                ((isPackSensor(f.type) || isPrinter(f.type)) && /^(binary_sensor|sensor)\./.test(id)) ||
                 isStatusSensor(hass.states[id]) ||
                 // alarms that report as binary sensors (binary_sensor.…_smoke, #490); a smoke detector takes any
                 (id.startsWith("binary_sensor.") && (f.type.endsWith("smoke_detector") || ALARM_CLASSES.has(String(hass.states[id]?.attributes.device_class ?? "")))),
@@ -11878,8 +12279,18 @@ export class Fp3dEditor extends LitElement {
           ? html`${this.entitySelect(this.t("heat_sensor"), f.heat_sensor ?? null, undefined, this.entityOptions((id) => /^(binary_sensor|sensor|switch|input_boolean|number)\./.test(id)), (v) => this.updateFurniture({ heat_sensor: v && v !== "none" ? v : null }))}
               <p class="fp3d-sub fp3d-wide">${this.t("heat_sensor_hint")}</p>`
           : nothing}
+        ${shadeKind(f.type)
+          ? html`${this.entitySelect(
+                this.t("temp_sensor"),
+                f.temp_sensor ?? null,
+                itemTempSource(hass, { ...f, temp_sensor: null }),
+                this.entityOptions((id) => (id.startsWith("sensor.") && hass.states[id]?.attributes.device_class === "temperature") || /^(climate|water_heater)\./.test(id)),
+                (v) => this.updateFurniture({ temp_sensor: v }),
+              )}
+              <p class="fp3d-sub fp3d-wide">${this.t("temp_sensor_hint")}</p>`
+          : nothing}
         ${f.type === "awning" ? this.renderAwningFields(f) : packMotion(f.type) ? this.renderMotionFields(f) : nothing}
-        ${!lamp && !(ENERGY_DEVICES as readonly string[]).includes(f.type) && !hasScreen(f.type) ? this.renderStateLinks(f) : nothing}
+        ${!lamp && !isEnergyDevice(f.type) && !hasScreen(f.type) ? this.renderStateLinks(f) : nothing}
         ${lamp && f.entity && f.entity !== "none"
           ? html`${this.entitySelect(this.t("furn_color_entity"), f.color_entity ?? null, undefined, this.entityOptions((id) => id.startsWith("light.") && id !== f.entity), (v) => this.updateFurniture({ color_entity: v === "none" ? null : v }))}
               <p class="fp3d-sub fp3d-wide">${this.t("furn_color_entity_hint")}</p>`
@@ -11887,13 +12298,13 @@ export class Fp3dEditor extends LitElement {
         ${lamp ? this.glowScaleField(f.glow_scale, (v) => this.updateFurniture({ glow_scale: v })) : nothing}
         ${lamp && f.entity && f.entity !== "none"
           ? html`<label class="fp3d-check fp3d-wide" title=${this.t("furn_only_color_hint")}
-                ><input type="checkbox" .checked=${!!f.only_color} ?disabled=${!this.isAdmin} @change=${(ev: Event) => this.updateFurniture({ only_color: (ev.target as HTMLInputElement).checked ? "#ffd400" : null })} />
+                ><input type="checkbox" .checked=${!!f.only_color} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ only_color: (ev.target as HTMLInputElement).checked ? "#ffd400" : null })} />
                 ${this.t("furn_only_color")}</label
               >
               ${f.only_color
                 ? html`<label class="fp3d-field"
                       >${this.t("furn_only_color_pick")}
-                      <input type="color" .value=${f.only_color} ?disabled=${!this.isAdmin} @change=${(ev: Event) => this.updateFurniture({ only_color: (ev.target as HTMLInputElement).value })} /></label>
+                      <input type="color" .value=${f.only_color} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ only_color: (ev.target as HTMLInputElement).value })} /></label>
                     <p class="fp3d-sub fp3d-wide">${this.t("furn_only_color_hint")}</p>`
                 : nothing}`
           : nothing}
@@ -11914,13 +12325,13 @@ export class Fp3dEditor extends LitElement {
         ${lamp || f.type === "grid_point" || volumeMeter(f.type)
           ? nothing
           : this.entitySelect(
-              this.t(f.type === "meter" ? "energy_grid" : f.type === "inverter" ? "energy_solar_sensor" : f.type === "home_battery" ? "energy_battery_sensor" : "furn_power"),
+              this.t(energyRole(f.type) === "meter" ? "energy_grid" : energyRole(f.type) === "inverter" ? "energy_solar_sensor" : energyRole(f.type) === "home_battery" ? "energy_battery_sensor" : "furn_power"),
               f.power ?? null,
               autoPick("power"),
               power,
               (v) => this.updateFurniture({ power: v }),
             )}
-        ${!lamp && f.power && f.power !== "none" && !(ENERGY_DEVICES as readonly string[]).includes(f.type)
+        ${!lamp && f.power && f.power !== "none" && !isEnergyDevice(f.type)
           ? html`<label class="fp3d-field" title=${this.t("furn_run_w_hint")}
               >${this.t("furn_run_w")}
               <input
@@ -11930,21 +12341,23 @@ export class Fp3dEditor extends LitElement {
                 step="5"
                 placeholder="10"
                 .value=${f.run_w ? String(f.run_w) : ""}
-                ?disabled=${!this.isAdmin}
+                ?disabled=${!this.isEditor}
                 @change=${(ev: Event) => {
                   const v = Number((ev.target as HTMLInputElement).value);
                   this.updateFurniture({ run_w: v > 0 ? Math.min(5000, Math.round(v)) : null });
                 }}
             /></label>`
           : nothing}
-        ${hasFeature("energy_pro") && !lamp && !["grid_point", "meter", "inverter", "home_battery"].includes(f.type)
+        ${!lamp && f.power && f.power !== "none" && !isEnergyDevice(f.type) ? this.circuitSelect(f.circuit ?? null, f.power, (v) => this.updateFurniture({ circuit: v })) : nothing}
+        ${!lamp && f.power && f.power !== "none" && !isEnergyDevice(f.type) ? this.wireEnergySelect(f.energy ?? null, f.power, (v) => this.updateFurniture({ energy: v })) : nothing}
+        ${hasFeature("energy_pro") && !lamp && !["grid_point", "meter", "inverter", "home_battery"].includes(energyRole(f.type) ?? f.type)
           ? html`<label class="fp3d-check fp3d-wide" title=${this.t("furn_holo_hint")}
-              ><input type="checkbox" .checked=${!!f.holo} ?disabled=${!this.isAdmin} @change=${(ev: Event) => this.updateFurniture({ holo: (ev.target as HTMLInputElement).checked })} />
+              ><input type="checkbox" .checked=${!!f.holo} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ holo: (ev.target as HTMLInputElement).checked })} />
               ${this.t("furn_holo")}</label
             >`
-          : hasFeature("energy_pro") && f.type === "inverter"
+          : hasFeature("energy_pro") && energyRole(f.type) === "inverter"
             ? html`<label class="fp3d-check fp3d-wide" title=${this.t("furn_plant_card_hint")}
-                ><input type="checkbox" .checked=${f.plant_card !== false} ?disabled=${!this.isAdmin} @change=${(ev: Event) => this.updateFurniture({ plant_card: (ev.target as HTMLInputElement).checked ? undefined : false })} />
+                ><input type="checkbox" .checked=${f.plant_card !== false} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ plant_card: (ev.target as HTMLInputElement).checked ? undefined : false })} />
                 ${this.t("furn_plant_card")}</label
               >
               ${f.plant_card !== false
@@ -11953,20 +12366,20 @@ export class Fp3dEditor extends LitElement {
                 : nothing}`
             : nothing}
       </div>
-      ${f.type === "meter"
+      ${energyRole(f.type) === "meter"
         ? html`<div class="fp3d-form fp3d-links">
             ${this.entitySelect(this.t("furn_export"), f.export ?? null, undefined, power, (v) => this.updateFurniture({ export: v === "none" ? null : v }))}
             <p class="fp3d-sub fp3d-wide">${this.t("furn_export_hint")}</p>
           </div>`
         : nothing}
-      ${f.type === "inverter" && (this._doc.settings.roof.solar ?? []).length
+      ${energyRole(f.type) === "inverter" && (this._doc.settings.roof.solar ?? []).length
         ? (() => {
             // which strings feed this inverter, so it can be told apart from the others (#213)
             const strings = (this._doc.settings.roof.strings ?? []).filter((st) => st.inverter === f.id).map((st) => st.name);
             return html`<p class="fp3d-sub fp3d-wide">${strings.length ? this.t("inverter_strings", { names: strings.join(", ") }) : this.t("inverter_strings_none")}</p>`;
           })()
         : nothing}
-      ${f.type === "home_battery"
+      ${energyRole(f.type) === "home_battery"
         ? html`<div class="fp3d-form fp3d-links">
             ${this.entitySelect(
               this.t("furn_soc"),
@@ -11979,7 +12392,7 @@ export class Fp3dEditor extends LitElement {
             <p class="fp3d-sub fp3d-wide">${this.t("furn_charge_hint")}</p>
           </div>`
         : nothing}
-      ${f.type === "wallbox"
+      ${energyRole(f.type) === "wallbox"
         ? html`<div class="fp3d-form fp3d-links">
             ${this.entitySelect(
               this.t("furn_wallbox_status"),
@@ -11995,7 +12408,7 @@ export class Fp3dEditor extends LitElement {
         : nothing}
       ${!lamp || f.entity
         ? html`<label class="fp3d-check fp3d-wide" title=${this.t("device_confirm_hint")}
-            ><input type="checkbox" .checked=${!!f.confirm} ?disabled=${!this.isAdmin} @change=${(ev: Event) => this.updateFurniture({ confirm: (ev.target as HTMLInputElement).checked })} />
+            ><input type="checkbox" .checked=${!!f.confirm} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ confirm: (ev.target as HTMLInputElement).checked })} />
             ${this.t("device_confirm")}</label
           >
           <div class="fp3d-form">${this.markerSelect(f.marker ?? null, (v) => this.updateFurniture({ marker: v }))}${this.iconInput(f.icon, (v) => this.updateFurniture({ icon: v }))}</div>`
@@ -12024,7 +12437,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Parking spot: presence sensor, the vehicle shown, its size, and an optional vehicle type sensor. */
   private renderParkingForm(f: Furniture) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const lang = this.hass?.language ?? "en";
     const vehicles = (this.packs ?? []).flatMap((p) => p.items.filter((it) => it.vehicle).map((it) => ({ id: packType(p.id, it.id), label: `${packItemName(it, lang)} · ${packName(p, lang)}` })));
     // presence: GPS trackers (a car's own integration, a phone) before the many network trackers of a router (#227)
@@ -12046,7 +12459,7 @@ export class Fp3dEditor extends LitElement {
     // the room's height against the vehicle's: a hint when it would not fit
     const floor = this.floor;
     const room = floor?.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
-    const item = f.vehicle ? packItem(f.vehicle) : undefined;
+    const item = f.vehicle ? packInfo(f.vehicle) : undefined;
     const carH = item ? item.size[2] * (f.scale ?? 1) : 0;
     const tooTall = !!room && !!floor && carH > floor.height + 1e-6;
     return html`<div class="fp3d-form fp3d-links">
@@ -12127,7 +12540,7 @@ export class Fp3dEditor extends LitElement {
    * group lists its values with a picture; in order, the first matching rule wins.
    */
   private renderPictureRules(f: Furniture) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const rules = f.pictures ?? [];
     if (!hasFeature("screens")) {
       return html`<div class="fp3d-wide">
@@ -12316,10 +12729,47 @@ export class Fp3dEditor extends LitElement {
 
   /** A card's picture: drawn by the 3D bundle like the hover preview, smaller. */
   private libraryThumb = async (entry: LibraryEntry): Promise<string | null> => {
-    const mod = await load3d();
+    const [mod] = await Promise.all([load3d(), this.hass ? ensureRecipes(this.hass, [entry.type]) : undefined]);
+    // no recipe (offline, the pack just went): no picture, so none is kept that shows a plain box
+    if (isPackType(entry.type) && !packItem(entry.type)) return null;
     const [w, d, h] = entry.size;
     return mod.furniturePreview({ type: entry.type, w, d, h, variant: null, lamp: LAMP_MODEL[entry.type] ?? null }, 96, this.packs ?? []);
   };
+
+  private libUpdatesAsked = false;
+
+  /** Ask which placed items have an update (#48); a request already under way is asked again once it is back. */
+  private refreshLibUpdates(): void {
+    if (!this.hass) return;
+    if (this.libUpdatesAsking) {
+      this.libUpdatesAsked = true;
+      return;
+    }
+    this.libUpdatesAsking = true;
+    void fetchPackUpdates(this.hass)
+      .then((status) => (this._libUpdates = libraryUpdates(status)))
+      .catch(() => (this._libUpdates = new Set()))
+      .finally(() => {
+        this.libUpdatesAsking = false;
+        if (this.libUpdatesAsked) {
+          this.libUpdatesAsked = false;
+          this.refreshLibUpdates();
+        }
+      });
+  }
+
+  private libUpdatesAsking = false;
+
+  /** Update the placed items of a library card to the installed release (#48); the plan comes back with a new revision. */
+  private async updateFromLibrary(types: string[]): Promise<void> {
+    if (!this.hass) return;
+    try {
+      await updatePlacedItems(this.hass, types);
+    } catch (err) {
+      this._notice = String((err as { message?: string })?.message ?? err);
+    }
+    this.refreshLibUpdates();
+  }
 
   private renderFurnitureLibrary() {
     const room = this.room;
@@ -12331,9 +12781,11 @@ export class Fp3dEditor extends LitElement {
         .entries=${this.libraryEntries(lang)}
         .language=${lang}
         .roomHint=${room ? roomKindOf(room.name) : null}
-        .admin=${this.isAdmin}
+        .admin=${this.isEditor}
         .t=${(k: string, v?: Record<string, string | number>) => this.t(k as I18nKey, v)}
         .thumb=${this.libraryThumb}
+        .updates=${this._libUpdates}
+        @library-update=${(e: CustomEvent<{ types: string[] }>) => void this.updateFromLibrary(e.detail.types)}
         @library-add=${(e: CustomEvent<{ type: string; mirror?: boolean }>) => this.addFurniture(e.detail.type, !!e.detail.mirror)}
         @library-preview=${(e: CustomEvent<{ type: string | null; element: HTMLElement | null }>) => {
           if (e.detail.type && e.detail.element) void this.showPreview(e.detail.type, e.detail.element);
@@ -12354,7 +12806,7 @@ export class Fp3dEditor extends LitElement {
     const place = { left: Math.max(8, r.left - 196), top: Math.max(8, Math.min(window.innerHeight - 200, r.top + r.height / 2 - 95)) };
     this._preview = { type, url: null, ...place };
     try {
-      const mod = await load3d();
+      const [mod] = await Promise.all([load3d(), this.hass ? ensureRecipes(this.hass, [type]) : undefined]);
       const [w, d, h] = furnitureSize(type);
       const url = mod.furniturePreview({ type, w, d, h, variant: null, lamp: LAMP_MODEL[type] ?? null }, 180, this.packs ?? []);
       if (this._preview?.type === type) this._preview = { type, url, ...place };
@@ -12373,7 +12825,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderDeviceForm(pl: Placement) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const kind = kindOf(pl.entity_id);
     const light = kind === "light";
     const mount = pl.mount ?? "ceiling";
@@ -12402,7 +12854,7 @@ export class Fp3dEditor extends LitElement {
                   <option value="wall" ?selected=${(pl.mount ?? "wall") === "wall"}>${this.t("camera_mount_wall")}</option>
                   <option value="ceiling" ?selected=${pl.mount === "ceiling"}>${this.t("camera_mount_ceiling")}</option>
                 </select></label
-              >`
+              >${this.renderCameraModel(pl)}`
             : nothing}
         ${this.len(this.t("x"), pl.x, (v) => this.updateDevice({ x: v }))} ${this.len(this.t("z"), pl.z, (v) => this.updateDevice({ z: v }))}
         ${this.len(this.t("marker_height"), pl.y ?? auto, (v) => this.updateDevice({ y: Math.max(0, v) }), 0.05, 0)}
@@ -12434,6 +12886,8 @@ export class Fp3dEditor extends LitElement {
               ${this.t("furn_holo")}</label
             >`
           : nothing}
+        ${powerSensorFor(this.hass!, pl.entity_id) ? this.circuitSelect(pl.circuit ?? null, powerSensorFor(this.hass!, pl.entity_id), (v) => this.updateDevice({ circuit: v })) : nothing}
+        ${powerSensorFor(this.hass!, pl.entity_id) ? this.wireEnergySelect(pl.energy ?? null, powerSensorFor(this.hass!, pl.entity_id)!, (v) => this.updateDevice({ energy: v })) : nothing}
         ${this.markerSelect(pl.marker ?? null, (v) => this.updateDevice({ marker: v }))}
         <label class="fp3d-field fp3d-wide" title=${this.t("device_name_hint")}
           >${this.t("device_name")}
@@ -12451,6 +12905,7 @@ export class Fp3dEditor extends LitElement {
           : nothing}
         ${this.iconInput(pl.icon, (v) => this.updateDevice({ icon: v }))}
       </div>
+      ${this.renderItemActions(pl.actions, pl.entity_id, (a) => this.updateDevice({ actions: a }))}
       ${admin
         ? html`<div class="fp3d-actions">
             <button class="fp3d-btn" @click=${() => this.centreDevice()}>${this.t("device_centre")}</button>
@@ -12471,7 +12926,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderDeviceList(room: Room) {
-    const admin = this.isAdmin;
+    const admin = this.isEditor;
     const hass = this.hass;
     const areaName = room.area_id ? hass?.areas?.[room.area_id]?.name : undefined;
     const area = hass ? areaEntities(hass, room.area_id).filter((id) => isPlaceable(kindOf(id))) : [];
@@ -12663,6 +13118,32 @@ export class Fp3dEditor extends LitElement {
       : html`<p class="fp3d-sub">${this.t("devices_none")}</p>`;
   }
 
+  /** A room's leak and motion sensors for the live effects (#10): chosen ones, or every one of the room. */
+  private renderRoomLive(room: Room) {
+    const hass = this.hass;
+    if (!hass) return nothing;
+    const set = (key: LiveKind, v: string | null) => {
+      const next = { ...(room.live ?? {}), [key]: v };
+      const empty = Object.values(next).every((x) => x == null);
+      this.updateRoom({ live: empty ? null : next });
+    };
+    const chosen = !!room.live && Object.values(room.live).some((x) => x != null);
+    const field = (key: LiveKind, label: string) => {
+      const auto = roomLiveSensors(hass, this.floor ?? null, { ...room, live: null }, key);
+      const classes = key === "leak" ? ["moisture"] : ["motion", "occupancy", "presence"];
+      const options = this.entityOptions((id) => id.startsWith("binary_sensor.") && classes.includes(String(hass.states[id]?.attributes.device_class ?? "")))
+        .map((o) => ({ ...o, rank: entityAreaId(hass, o.id) === room.area_id ? 0 : 1 }))
+        .sort((a, b) => a.rank - b.rank)
+        .map(({ id, label }) => ({ id, label }));
+      return this.entitySelect(label, room.live?.[key] ?? null, auto[0] ?? null, options, (v) => set(key, v));
+    };
+    return html`<details class="fp3d-points" ?open=${chosen}>
+      <summary>${this.t("room_live")}</summary>
+      <div class="fp3d-form">${field("leak", this.t("room_live_leak"))} ${field("motion", this.t("room_live_motion"))}</div>
+      <p class="fp3d-sub">${this.t("room_live_hint")}</p>
+    </details>`;
+  }
+
   /** Room climate: temperature, humidity and CO2 from chosen sensors, or picked automatically. */
   private renderRoomClimate(room: Room) {
     const hass = this.hass;
@@ -12707,7 +13188,7 @@ export class Fp3dEditor extends LitElement {
               ${this.len(this.t("z"), bg.z, (v) => this.updateFloor({ background: { ...bg, z: v } }))}
               ${this.len(this.t("background_width"), bg.width, (v) => this.updateFloor({ background: { ...bg, width: Math.max(0.1, v) } }), 0.01, 0.1)}
               ${this.num(this.t("background_rotation"), bg.rotation ?? 0, (v) => this.updateFloor({ background: { ...bg, rotation: Math.round(v * 10) / 10 } }), 0.5)}
-              ${this.isAdmin
+              ${this.isEditor
                 ? html`<button
                       class="fp3d-btn fp3d-wide ${this._bgEdit ? "fp3d-primary" : ""}"
                       aria-pressed=${this._bgEdit}
@@ -12774,7 +13255,7 @@ export class Fp3dEditor extends LitElement {
     await this.loadHistory();
   }
 
-  /** Everything in one file: the plan, every stored picture and the packs (with their signatures). */
+  /** Everything in one file: the plan, every stored picture and the packs (with their sources). */
   private async exportBackup(): Promise<void> {
     if (!this.hass) return;
     this._backupBusy = true;
@@ -12816,7 +13297,7 @@ export class Fp3dEditor extends LitElement {
     if (!confirm(this.t("backup_full_confirm"))) return;
     this._backupBusy = true;
     try {
-      const res = await restoreBackup(this.hass, data.building, data.packs ?? []);
+      const res = await restoreBackup(this.hass, data.building, data.packs ?? [], data.items);
       let pictures = 0;
       for (const [id, picture] of Object.entries(data.images ?? {})) {
         try {
@@ -12891,7 +13372,7 @@ export class Fp3dEditor extends LitElement {
               ${this._history.map(
                 (h) => html`<div class="fp3d-row fp3d-dev-row">
                   <span>${this.snapshotTime(h)} <span class="fp3d-muted">· ${this.t("backup_summary", { rooms: h.rooms, furniture: h.furniture })}</span></span>
-                  <button class="fp3d-link" @click=${() => this.restoreFromHistory(h)}>${this.t("backup_restore")}</button>
+                  <button class="fp3d-link" ?disabled=${!this.isHaAdmin} title=${this.isHaAdmin ? "" : this.t("backup_admin_only")} @click=${() => this.restoreFromHistory(h)}>${this.t("backup_restore")}</button>
                 </div>`,
               )}
             </div>`
@@ -12908,11 +13389,14 @@ export class Fp3dEditor extends LitElement {
       <h4 class="fp3d-lib-head">${this.t("backup_full")}</h4>
       <div class="fp3d-actions">
         <button class="fp3d-btn" ?disabled=${this._backupBusy} @click=${() => this.exportBackup()}>${this._backupBusy ? "…" : this.t("backup_full_export")}</button>
-        <label class="fp3d-btn fp3d-upload"
-          >${this.t("backup_full_import")}<input type="file" accept="application/json,.json" @change=${this.importBackup}
-        /></label>
+        ${this.isHaAdmin
+          ? html`<label class="fp3d-btn fp3d-upload"
+              >${this.t("backup_full_import")}<input type="file" accept="application/json,.json" @change=${this.importBackup}
+            /></label>`
+          : html`<button class="fp3d-btn" disabled title=${this.t("backup_admin_only")}>${this.t("backup_full_import")}</button>`}
       </div>
       <p class="fp3d-sub">${this.t("backup_full_hint")}</p>
+      ${this.isHaAdmin ? nothing : html`<p class="fp3d-sub">${this.t("backup_admin_only")}</p>`}
     </details>`;
   }
 
@@ -13099,6 +13583,10 @@ export class Fp3dEditor extends LitElement {
           ><input type="checkbox" .checked=${!!s.alert_unavailable} @change=${(ev: Event) => set({ alert_unavailable: (ev.target as HTMLInputElement).checked })} />
           ${this.t("alert_unavailable")}</label
         >
+        ${this.hass
+          ? html`<p class="fp3d-sub fp3d-wide"><b>${this.t("effects")}</b> · ${this.t("effects_hint")}</p>
+              ${effectFields(this.hass, s.effects, !this.isEditor, (effects) => set({ effects }), "fp3d-field")}`
+          : nothing}
         ${this.hass
           ? html`${this.entitySelect(
                 this.t("outage_entity"),

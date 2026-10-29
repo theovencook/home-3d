@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Opening } from "../model.ts";
 import type { OpeningInfo } from "./build.ts";
-import { sillBoards, stackedOnOpening } from "./openings.ts";
+import { buildOpeningParts, sillBoards, stackedOnOpening } from "./openings.ts";
 
 /** A window (or door) on the wall along x from (sx, sz), as the floor builder describes it. */
 function info(id: string, sx: number, width: number, sill: number, top: number, extra: Partial<Opening> & { axis?: [number, number]; exterior?: boolean; sz?: number } = {}): OpeningInfo {
@@ -77,4 +77,36 @@ test("a board chosen by hand shows on a window down to the floor; a glass wall h
   assert.deepEqual(sillBoards(glass, [glass]), { inside: false, outside: false });
   const glassBoard = info("gb", 1, 2.4, 0.9, 2.4, { style: "glass_wall", sill_board: "inside" });
   assert.deepEqual(sillBoards(glassBoard, [glassBoard]), { inside: true, outside: false });
+});
+
+/** A garage door's leaf (y and z of every vertex) at a closed fraction: 2.4 m wide, 2.1 m high, the garage towards +z. */
+function garageLeaf(style: Opening["style"], closed: number): { y: number[]; z: number[] } {
+  const g = info("g", 0, 2.4, 0, 2.1, { type: "garage", style });
+  const parts = buildOpeningParts([g], new Map([["g", { open: 0, tilt: 0, cover: closed, sensed: true }]]), 3);
+  const pos = parts.blinds.getAttribute("position");
+  const y: number[] = [];
+  const z: number[] = [];
+  for (let i = 0; i < pos.count; i++) {
+    y.push(pos.getY(i));
+    z.push(pos.getZ(i));
+  }
+  return { y, z };
+}
+
+test("an up-and-over garage door hangs in its opening when shut and tilts up into a canopy when open (#24)", () => {
+  const shut = garageLeaf("up_and_over", 1);
+  assert.ok(shut.y.length > 0);
+  assert.ok(Math.min(...shut.y) < 0.05 && Math.max(...shut.y) > 2.05, "shut: from the ground to the head");
+  assert.ok(Math.max(...shut.z) - Math.min(...shut.z) < 0.1, "shut: upright in the wall");
+  const open = garageLeaf("up_and_over", 0);
+  assert.ok(Math.min(...open.y) > 1.9, `open: lying under the head (${Math.min(...open.y)})`);
+  // about a third sticks out over the drive as a canopy, the rest lies in the garage
+  assert.ok(Math.min(...open.z) < -0.5 && Math.min(...open.z) > -1, `canopy ${Math.min(...open.z)}`);
+  assert.ok(Math.max(...open.z) > 1.1, `inside ${Math.max(...open.z)}`);
+  // half way: tilted, neither upright nor flat
+  const half = garageLeaf("up_and_over", 0.5);
+  assert.ok(Math.min(...half.y) > 0.3 && Math.min(...half.y) < 1.9, `half ${Math.min(...half.y)}`);
+  // a sectional door rolls up into the garage and never sticks out
+  const sectional = garageLeaf(null, 0);
+  assert.ok(Math.min(...sectional.z) > -0.2);
 });

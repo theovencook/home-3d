@@ -1,8 +1,11 @@
 // Data model shared by editor, 3D view and backend (see custom_components/home_3d/schema.py).
 // Units are metres; x grows to the right, z grows downwards (as in the 2D editor).
 
-import { packItem } from "./packs.ts";
+import { packItem, type PlanRecipe } from "./packs.ts";
 import type { LampModel } from "./viewer/viewer3d.ts";
+import type { ItemActions } from "./item-actions.ts";
+import type { RoleColours } from "./colour-roles.ts";
+import type { RoleMaterials } from "./role-materials.ts";
 
 export type Vec2 = [number, number];
 
@@ -16,11 +19,19 @@ export interface RoomClimate {
 /** A wall height on a room edge, or one per part of a split edge. */
 export type WallHeight = number | null | (number | null)[];
 
+/** A room's leak and motion sensors for the live effects (#10): null = all of the room's, "none" = none. */
+export interface RoomLive {
+  leak?: EntityRef;
+  motion?: EntityRef;
+}
+
 export interface Room {
   /** An outdoor area acting as a room (made by outdoorZones, never stored among the rooms). */
   outdoor?: boolean;
   /** Room temperature, humidity and CO2: chosen sensors instead of the automatic pick. */
   climate?: RoomClimate | null;
+  /** Leak and motion sensors chosen instead of the automatic pick (#10). */
+  live?: RoomLive | null;
   id: string;
   name: string;
   /** Further names the voice answers to ("Stube", "Lounge"). */
@@ -167,7 +178,29 @@ export interface Gang {
   power?: string | null;
 }
 
+/** One stretch of time an item shows in (#15): days of the year and/or times of the day. */
+export interface ShowInterval {
+  /** First and last day, "MM-DD", both included (null = every day); a first day after the last runs over the new year. */
+  from?: string | null;
+  to?: string | null;
+  /** Time of day, "HH:MM", from start up to end (null = all day); a start after the end runs over midnight. */
+  start?: string | null;
+  end?: string | null;
+}
+
+/** When an item shows (#15): while an entity is available, and/or inside one of the intervals. Null = always. */
+export interface ShowWhen {
+  entity?: EntityRef;
+  intervals?: ShowInterval[];
+}
+
 export interface Furniture {
+  /** Colour per role (#12): "#rrggbb" for each overridden role; missing roles (or null) follow the theme. */
+  colors?: RoleColours | null;
+  /** Material per role (#40): the realistic look shows them; missing roles (or null) take their usual one. */
+  materials?: RoleMaterials | null;
+  /** Seasonal and conditional items (#15): when it shows in 3D (null = always). */
+  show_when?: ShowWhen | null;
   /** Fixed against moving by accident. */
   locked?: boolean | null;
   /** Furniture block: items with the same group id are selected, moved and turned together (a kitchen, a wall unit). */
@@ -266,6 +299,10 @@ export interface Furniture {
   export?: EntityRef;
   /** Energie Pro: a glass card over the device with its power now, today's kWh and the day curve. */
   holo?: boolean;
+  /** The power sensor of the circuit it hangs on (a circuit monitor's channel): its watts are inside that one's (#43). */
+  circuit?: EntityRef;
+  /** The energy sensor (kWh) its wire end shows today's use of (null = found on the device, "none" = none) – #29. */
+  energy?: EntityRef;
   /** Energie Pro, inverter: false hides the plant's card over its field. */
   plant_card?: boolean;
   /** Energie Pro, inverter: its plant card moved from its field's middle along the eave (m, + = right) and up the slope (#335). */
@@ -276,6 +313,8 @@ export interface Furniture {
   room_sensor?: EntityRef;
   /** Ask before switching the linked entity. */
   confirm?: boolean;
+  /** Own tap, hold and double-tap actions (#6); none set = what the item does by its type. */
+  actions?: ItemActions | null;
   /** Its marker in 3D: automatic (null), always shown, shown without watts, or hidden. */
   marker?: MarkerShow | null;
   /** Height of the bottom edge above the floor (null = default: the floor, a pack item's mount, a surface below). */
@@ -289,6 +328,8 @@ export interface Furniture {
   color_entity?: EntityRef;
   /** Any electric item: a sensor whose value stands at its symbol – a boiler's water temperature, a humidity (D619). */
   extra?: EntityRef;
+  /** Radiator or hot-water cylinder: the temperature it shades with (#10); null = automatic, "none" = no shading. */
+  temp_sensor?: EntityRef;
   /** Mirrored (left-right) – an L-sofa the other way round, a cabinet with its door on the other side. */
   mirror?: boolean;
   /** LED strip: tilt about its length (°; 0 = lying flat, 90 = its face points sideways, e.g. along a roof slope). */
@@ -359,6 +400,8 @@ export interface Placement {
   tilt?: number | null;
   /** Ask before switching this device (3D tap, quick menu, room panel). */
   confirm?: boolean;
+  /** Own tap, hold and double-tap actions (#6); none set = what the device does by its kind. */
+  actions?: ItemActions | null;
   /** Its marker in 3D: automatic (null), always shown, shown without watts, or hidden. */
   marker?: MarkerShow | null;
   /** An own symbol for the marker: a Material Design icon name without "mdi:" (null = by kind). */
@@ -371,6 +414,10 @@ export interface Placement {
   glow_scale?: number | null;
   /** Energie Pro: a glass card over the device (a smart plug) with its power, today's kWh and the day curve (D178). */
   holo?: boolean;
+  /** The power sensor of the circuit it hangs on (a circuit monitor's channel): its watts are inside that one's (#43). */
+  circuit?: string | null;
+  /** The energy sensor (kWh) its wire end shows today's use of (null = found on the device, "none" = none) – #29. */
+  energy?: string | null;
   /** Cameras: show the field-of-view wedge on the floor (null = yes). */
   cone?: boolean | null;
   /** Cameras: detection pins (person, car, animal) over the camera (null = yes); false leaves only the wedge turning red (#267). */
@@ -667,21 +714,49 @@ export interface Pet {
   name: string;
   /** Fur colour preset (see PET_FURS). */
   fur: string;
+  /** Eye colour (see PET_EYES; none: dark). */
+  eyes?: PetEyes | null;
   /** A dog's breed (see DOG_BREEDS; null: labrador). */
   breed?: string | null;
   /** The floor it lives on (null: the ground floor). */
   floor_id?: string | null;
+  /** Static (#17): it stays at its spot (x, z on its floor) in its pose instead of roaming the house. */
+  static?: boolean;
+  /** A static pet's pose (null: sitting). */
+  pose?: PetPose | null;
+  x?: number | null;
+  z?: number | null;
+  /** Which way a static pet faces, degrees like furniture (null: the front of what it lies on, else 0). */
+  rotation?: number | null;
 }
 
-export const PET_FURS = ["orange", "tabby", "black", "white", "grey", "brown", "calico", "golden", "cream"] as const;
+export const PET_POSES = ["sit", "lie", "curl"] as const;
+export type PetPose = (typeof PET_POSES)[number];
+
+export const PET_FURS = ["orange", "tabby", "black", "white", "grey", "brown", "calico", "golden", "cream", "dilute_calico", "blue_grey"] as const;
 /** The furs each kind comes in (the first is the default). */
 export const PET_FURS_OF: Record<Pet["kind"], readonly string[]> = {
-  cat: ["orange", "tabby", "black", "white", "grey", "calico", "cream"],
+  cat: ["orange", "tabby", "black", "white", "grey", "calico", "cream", "dilute_calico", "blue_grey"],
   dog: ["golden", "cream", "brown", "black", "white", "grey"],
   rabbit: ["white", "grey", "brown", "black", "cream"],
 };
+/** Eye colours (#42), the first is the default. */
+export const PET_EYES = ["dark", "copper", "green", "yellow", "blue"] as const;
+export type PetEyes = (typeof PET_EYES)[number];
 /** Dog breeds, small to large. */
 export const DOG_BREEDS = ["dachshund", "pug", "terrier", "labrador", "shepherd"] as const;
+
+/** Live room effects (#10); a missing value takes its default (EFFECT_DEFAULTS in room-effects.ts). */
+export interface EffectSettings {
+  /** Seconds a room stays lit after motion starts (0 = motion lights nothing). */
+  motion_seconds?: number | null;
+  /** Radiator: the temperature (°C) it is fully blue at and fully red at. */
+  radiator_cold?: number | null;
+  radiator_hot?: number | null;
+  /** Hot-water cylinder: the tank temperature (°C) it is fully blue at and fully red at. */
+  tank_cold?: number | null;
+  tank_hot?: number | null;
+}
 
 export interface BuildingSettings {
   /** The background behind the 3D house (null: the look's own sky): a colour, a gradient or a picture. */
@@ -740,6 +815,8 @@ export interface BuildingSettings {
    * the window would look shut although nobody knows. Off by default.
    */
   alert_unavailable?: boolean;
+  /** Live room effects (#10): how long motion lights a room, the temperatures radiators and cylinders shade between. */
+  effects?: EffectSettings | null;
   /** An entity that reports a power outage (a grid or UPS sensor); null = no outage warning (#214). */
   outage_entity?: string | null;
   /** Sunlight falls through the windows as patches on the floor (default on, #266). */
@@ -1141,6 +1218,11 @@ export interface EnergySettings {
   /** Energie Pro: gas and water meters (counters such as m³ or litres); the house card shows today's use. */
   gas?: string | null;
   water?: string | null;
+  /** An entity that is "on" while the cheap rate runs (a binary sensor, schedule or input boolean); wins over the window (#29). */
+  cheap_rate?: string | null;
+  /** The cheap rate as a daily window, "HH:MM" from the start up to the end (a start after the end runs over midnight). */
+  cheap_from?: string | null;
+  cheap_to?: string | null;
 }
 
 /** A person and the sensor whose state names the room they are in (ESPresense, Bermuda, …). */
@@ -1155,6 +1237,8 @@ export interface Building {
   settings: BuildingSettings;
   energy: EnergySettings;
   presence: PresenceLink[];
+  /** A copy of the recipe of every pack item type the plan uses, by type (#2; filled in by the backend). */
+  recipes?: Record<string, PlanRecipe>;
 }
 
 export const DEFAULT_ENERGY: EnergySettings = {
@@ -1398,6 +1482,72 @@ export function spotDepth(type: string, h: number): number {
 
 /** Built-in stairs: they reach up to the next floor and cut its opening (the straight one and the U-stair). */
 export const STAIR_TYPES = new Set<string>(["stairs", "stairs_u"]);
+
+/** Number of winder steps in a straight stair's bottom quarter turn. */
+export const STAIR_WINDERS = 3;
+/** The riser height a straight stair aims for (m). */
+export const STAIR_RISER = 0.18;
+/** The least run the 3D view leaves each step before the flat top (m). */
+const STAIR_MIN_RUN = 0.2;
+
+type StairShape = Pick<Furniture, "w" | "d" | "h"> & { stair_turn?: "left" | "right" | null; stair_landing?: number | null };
+
+/**
+ * How a straight stair is laid out: `n` risers, `fits` (the flight is longer than it is wide, so a turn or a
+ * landing has room), `skip` steps taken before the straight flight (landing steps, or the winders of a turn).
+ * The 3D view draws from this, so the item panel offers exactly what it can show.
+ */
+export function stairPlan(f: StairShape): { n: number; fits: boolean; flat: number; winders: number; skip: number } {
+  const n = Math.max(3, Math.round(f.h / STAIR_RISER));
+  const fits = f.d > f.w + 0.3;
+  const flat = fits && (f.stair_landing ?? 0) > 0 ? Math.min(f.stair_landing ?? 0, n - 1) : 0;
+  const winders = !flat && f.stair_turn && fits ? STAIR_WINDERS : 0;
+  return { n, fits, flat, winders, skip: flat || winders };
+}
+
+/** What the item panel may offer a straight stair: a turn, landing steps up to this many, a flat top up to this long (m). */
+export function stairLimits(f: StairShape): { canTurn: boolean; maxLanding: number; maxTop: number } {
+  const { n, fits, skip } = stairPlan(f);
+  return { canTurn: fits, maxLanding: fits ? n - 1 : 0, maxTop: Math.max(0, Math.round((f.d - STAIR_MIN_RUN * (n - skip)) * 1000) / 1000) };
+}
+
+/**
+ * The fields to write when one stair option changes: a turn and a landing replace each other, landing steps are
+ * whole risers, the flat top stays within what is left of the flight (and is pulled in when a change shortens it),
+ * and an option switched off is removed (null) instead of kept as false or 0.
+ */
+export function stairOptionPatch(
+  f: StairShape & Pick<Furniture, "stair_top">,
+  change: { stair_open?: boolean; stair_turn?: "left" | "right" | null; stair_landing?: number; stair_top?: number },
+): Partial<Furniture> {
+  const out: Partial<Furniture> = {};
+  if (change.stair_open !== undefined) out.stair_open = change.stair_open ? true : null;
+  const next: StairShape = { ...f };
+  if (change.stair_turn !== undefined) {
+    out.stair_turn = change.stair_turn && stairLimits(f).canTurn ? change.stair_turn : null;
+    next.stair_turn = out.stair_turn;
+    if (out.stair_turn && f.stair_landing) {
+      out.stair_landing = null;
+      next.stair_landing = null;
+    }
+  }
+  if (change.stair_landing !== undefined) {
+    const steps = Math.max(0, Math.min(Math.round(change.stair_landing), stairLimits(f).maxLanding));
+    out.stair_landing = steps || null;
+    next.stair_landing = steps;
+    if (steps) {
+      out.stair_turn = null;
+      next.stair_turn = null;
+    }
+  }
+  // the flat top follows the flight it is now part of
+  const top = change.stair_top ?? f.stair_top ?? 0;
+  if (change.stair_top !== undefined || (f.stair_top && stairLimits(next).maxTop < f.stair_top)) {
+    const t = Math.max(0, Math.min(Math.round(top * 100) / 100, stairLimits(next).maxTop));
+    out.stair_top = t || null;
+  }
+  return out;
+}
 
 /**
  * Layout of the built-in U-stair (w × d, height h): n risers of equal height, the landing at the back is
@@ -1716,10 +1866,18 @@ export const OPENING_DEFAULTS = {
 export const DOOR_STYLES = ["interior", "front", "front_glass", "sidelight", "sidelights", "glass", "sliding", "passage"] as const;
 /** "glass_wall": fixed floor-to-ceiling glazing without sashes, slim mullions (an indoor glass wall, #163). */
 export const WINDOW_STYLES = ["standard", "bars", "glass_wall"] as const;
-export type OpeningStyle = (typeof DOOR_STYLES)[number] | (typeof WINDOW_STYLES)[number];
+/** Garage doors: a sectional door rolls up under the ceiling; an up-and-over door tilts up in one piece (#24). */
+export const GARAGE_STYLES = ["sectional", "up_and_over"] as const;
+export type OpeningStyle = (typeof DOOR_STYLES)[number] | (typeof WINDOW_STYLES)[number] | (typeof GARAGE_STYLES)[number];
+
+/** The styles an opening of this type can have. */
+export function openingStyles(type: OpeningType): readonly OpeningStyle[] {
+  return type === "door" ? DOOR_STYLES : type === "garage" ? GARAGE_STYLES : WINDOW_STYLES;
+}
 
 /** The style an opening is drawn with: its own, or the automatic one for its wall. */
 export function openingStyle(o: Pick<Opening, "type" | "style">, exterior: boolean): OpeningStyle {
+  if (o.type === "garage") return o.style && (GARAGE_STYLES as readonly string[]).includes(o.style) ? o.style : "sectional";
   if (o.type === "door") return o.style && (DOOR_STYLES as readonly string[]).includes(o.style) ? o.style : exterior ? "front" : "interior";
   return o.style && (WINDOW_STYLES as readonly string[]).includes(o.style) ? o.style : "standard";
 }

@@ -11,6 +11,8 @@ export interface CardConfig {
   floor?: string;
   /** Start in this room (its id from the editor): a display for one room, e.g. for the kids. */
   room?: string;
+  /** Start as the read-only 2D plan (#41) instead of the 3D view (default "3d"). */
+  view?: "3d" | "2d";
   /** A start view of this card's own (theta, phi, radius and target as the editor shows them); default: the plan's. */
   start_view?: StartView;
   height?: number;
@@ -51,8 +53,8 @@ export interface CardConfig {
   /** Heatmap of the rooms: none | temperature | humidity | co2. */
   heatmap?: "none" | "temperature" | "humidity" | "co2";
   /** Look: neon | blueprint | day. */
-  /** The look; "auto" shows Day while the sun is up and Neon at night. */
-  theme?: "neon" | "blueprint" | "day" | "auto";
+  /** The look; "auto" shows Day while the sun is up and Neon at night; "theme" (the default) follows the HA theme. */
+  theme?: "theme" | "neon" | "blueprint" | "day" | "realistic" | "auto";
   /** Date and time in a corner of the view (default off). */
   clock?: ClockPos;
   /** Accent colour for the neon look and the card's chips ("#rrggbb"); leave out for the stock cyan. */
@@ -118,5 +120,10 @@ export interface CardConfig {
   idle_orbit?: boolean;
 }
 
-export const CARD_CONTROLS = ["walls", "floors", "temperature", "humidity", "co2"] as const;
+export const CARD_CONTROLS = ["view", "walls", "floors", "temperature", "humidity", "co2"] as const;
 export type CardControl = (typeof CARD_CONTROLS)[number];
+
+/** Whether the card shows the 2D plan (#41): the card's own 2D/3D switch (`chosen`, null: not used) wins over its view option. */
+export function showsPlan2d(config: CardConfig | undefined, chosen: boolean | null): boolean {
+  return chosen ?? config?.view === "2d";
+}

@@ -7,8 +7,13 @@ so saving keeps working after a frontend update until Home Assistant restarts wi
 from __future__ import annotations
 
 import math
+import re
 
 import voluptuous as vol
+
+from .const import TIME_PATTERN
+from .packs import COLOUR_ROLES
+from .recipes import recipes_validator
 
 MAX_FLOORS = 20
 MAX_ROOMS = 200
@@ -57,6 +62,14 @@ ROOM_SCHEMA = vol.Schema(
                 vol.Optional("temperature", default=None): _SENSOR_REF,
                 vol.Optional("humidity", default=None): _SENSOR_REF,
                 vol.Optional("co2", default=None): _SENSOR_REF,
+            },
+        ),
+        # leak and motion sensors chosen for the live room effects (None = automatic, "none" = none, #10)
+        vol.Optional("live", default=None): vol.Any(
+            None,
+            {
+                vol.Optional("leak", default=None): _SENSOR_REF,
+                vol.Optional("motion", default=None): _SENSOR_REF,
             },
         ),
         vol.Required("id"): _ID,
@@ -116,9 +129,13 @@ ROOM_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+# the materials a colour role can take (#40, frontend/src/role-materials.ts); the realistic look shows them
+MATERIALS = ["matt", "gloss", "fabric", "glass", "metal", "rattan"]
 # door looks (room door, front doors with glass and sidelights, glass and sliding door) and window looks
 _OPENING_STYLES = ["interior", "front", "front_glass", "sidelight", "sidelights", "glass", "sliding", "passage"]
 _OPENING_STYLES += ["standard", "bars", "glass_wall"]
+# garage doors: sectional (the default) or up-and-over (#24)
+_OPENING_STYLES += ["sectional", "up_and_over"]
 
 OPENING_SCHEMA = vol.Schema(
     {
@@ -225,6 +242,77 @@ _VEHICLE_TYPE_SCHEMA = vol.Schema(
 # the kinds of waste a bin can take (household.ts WASTE_KINDS)
 WASTE_KINDS = ["rest", "bio", "paper", "plastic", "glass", "garden", "recycling", "other"]
 
+# seasonal and conditional items (#15): while an entity is available and/or inside an interval of days ("MM-DD",
+# both included, over the new year when from > to) and/or times of day ("HH:MM", over midnight when start > end, the
+# night then belonging to the day it started); each pair is given whole or not at all (#46)
+_DAY = vol.Any(None, vol.Match(r"^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"))
+_TIME = vol.Any(None, vol.Match(TIME_PATTERN))
+
+
+def _whole_interval(interval: dict) -> dict:
+    """Both first and last day and both start and end, or neither: one end alone is no interval (#46)."""
+    for first, last in (("from", "to"), ("start", "end")):
+        if (interval[first] is None) != (interval[last] is None):
+            raise vol.Invalid(f"an interval needs both {first} and {last}, or neither")
+    return interval
+
+
+SHOW_WHEN_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("intervals", default=[]): vol.All(
+            [
+                vol.All(
+                    vol.Schema(
+                        {
+                            vol.Optional("from", default=None): _DAY,
+                            vol.Optional("to", default=None): _DAY,
+                            vol.Optional("start", default=None): _TIME,
+                            vol.Optional("end", default=None): _TIME,
+                        }
+                    ),
+                    _whole_interval,
+                )
+            ],
+            vol.Length(max=12),
+        ),
+    }
+)
+
+# a url action opens a web page or a path on this Home Assistant, never javascript: or another scheme (#51)
+_WEB_ADDRESS = re.compile(r"^(https?://[^\s]+|/(?!/)\S*)$", re.IGNORECASE)
+
+
+def _web_address_only(action: dict) -> dict:
+    if action["action"] == "url" and action.get("target") and not _WEB_ADDRESS.match(action["target"]):
+        raise vol.Invalid("a url action opens http(s) addresses or paths on this Home Assistant only", path=["target"])
+    return action
+
+
+# own tap, hold and double-tap actions of a placed device or furniture item (#6); a gesture left out (or
+# "default") keeps what the item does by its kind
+_ITEM_ACTION = vol.Any(
+    None,
+    vol.All(
+        vol.Schema(
+            {
+                vol.Required("action"): vol.In(
+                    ["default", "none", "toggle", "more_info", "camera", "navigate", "url", "perform_action"]
+                ),
+                vol.Optional("target"): vol.Any(None, vol.All(str, vol.Length(max=2000))),
+                vol.Optional("data"): vol.Any(None, dict),
+                vol.Optional("confirm"): bool,
+                vol.Optional("confirm_text"): vol.Any(None, vol.All(str, vol.Length(max=300))),
+            }
+        ),
+        _web_address_only,
+    ),
+)
+_ITEM_ACTIONS = vol.Any(
+    None,
+    {vol.Optional("tap"): _ITEM_ACTION, vol.Optional("hold"): _ITEM_ACTION, vol.Optional("double_tap"): _ITEM_ACTION},
+)
+
 FURNITURE_SCHEMA = vol.Schema(
     {
         vol.Required("id"): _ID,
@@ -259,6 +347,10 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("export", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # Energie Pro: a hologram card over the device (power now, today's kWh, day curve)
         vol.Optional("holo", default=False): bool,
+        # the power sensor of the circuit it is inside (a circuit monitor's channel): not counted twice (#43)
+        vol.Optional("circuit"): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # the energy sensor (kWh) its wire end shows today's use of (#29; left out = found on the device)
+        vol.Optional("energy"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # Energie Pro, inverter: False hides the plant's card over its field
         vol.Optional("plant_card"): bool,
         # Energie Pro, inverter: its plant card moved along the eave / up the slope (m)
@@ -269,6 +361,7 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("room_sensor", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # ask before switching the linked entity
         vol.Optional("confirm", default=False): bool,
+        vol.Optional("actions"): _ITEM_ACTIONS,
         # its marker in 3D: None = automatic, always, without watts, or hidden
         vol.Optional("marker", default=None): vol.Any(None, vol.In(["always", "no_power", "never"])),
         # an own symbol for the marker: a Material Design icon name without "mdi:"
@@ -286,16 +379,32 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("color_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # any electric item: a sensor whose value stands at its symbol (a boiler's water temperature)
         vol.Optional("extra", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # radiator or hot-water cylinder: the temperature it shades with (None = automatic, "none" = none, #10)
+        vol.Optional("temp_sensor", default=None): _SENSOR_REF,
         # ceiling fan with light: its fan entity (the blades turn with its speed)
         vol.Optional("fan"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # mirrored left-right
         vol.Optional("mirror", default=False): bool,
+        # straight stairs (#16): open treads, a quarter turn with winders at the bottom (entered from the left or
+        # right side), that many risers of a flat bottom landing, a flat top step (m); the start height is mount_y
+        vol.Optional("stair_open"): vol.Any(None, bool),
+        vol.Optional("stair_turn"): vol.Any(None, vol.In(["left", "right"])),
+        vol.Optional("stair_landing"): vol.Any(None, vol.All(int, vol.Range(min=0, max=60))),
+        vol.Optional("stair_top"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=10))),
         # awning: the fabric's fall (degrees), the valance, a position sensor, its run time and the other direction
         vol.Optional("awning_pitch", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=80))),
         vol.Optional("awning_valance", default=True): bool,
         vol.Optional("awning_position", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("awning_time", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=2, max=300))),
         vol.Optional("awning_invert", default=False): bool,
+        # its own colour per role (#12); roles left out follow the theme
+        vol.Optional("colors"): vol.Any(
+            None, vol.Schema({vol.In(COLOUR_ROLES): vol.Match(r"^#[0-9a-fA-F]{6}$")}, extra=vol.PREVENT_EXTRA)
+        ),
+        # its own material per role (#40); roles left out take their usual one
+        vol.Optional("materials"): vol.Any(
+            None, vol.Schema({vol.In(COLOUR_ROLES): vol.In(MATERIALS)}, extra=vol.PREVENT_EXTRA)
+        ),
         # household: a waste bin's kind and colours, its calendar (Haushalt Pro); a mailbox's emptying door
         vol.Optional("bin_kind"): vol.Any(None, vol.In(WASTE_KINDS)),
         vol.Optional("bin_color"): vol.Any(None, vol.Match(r"^#[0-9a-fA-F]{6}$")),
@@ -358,6 +467,8 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("locked", default=None): vol.Any(None, bool),
         # a module's own data for this item
         vol.Optional("mods"): _MODULE_DATA,
+        # when it shows in 3D (None = always)
+        vol.Optional("show_when"): vol.Any(None, SHOW_WHEN_SCHEMA),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -380,6 +491,7 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Optional("tilt", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=90))),
         # ask before switching this device from the 3D view, the quick menu or the room panel
         vol.Optional("confirm", default=False): bool,
+        vol.Optional("actions"): _ITEM_ACTIONS,
         # its marker in 3D: None = automatic, always, without watts, or hidden
         vol.Optional("marker", default=None): vol.Any(None, vol.In(["always", "no_power", "never"])),
         # an own symbol for the marker: a Material Design icon name without "mdi:"
@@ -394,6 +506,10 @@ PLACEMENT_SCHEMA = vol.Schema(
         ),
         # Energie Pro: a glass card over the placed device (a smart plug)
         vol.Optional("holo", default=False): bool,
+        # the power sensor of the circuit it is inside (a circuit monitor's channel): not counted twice (#43)
+        vol.Optional("circuit"): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # the energy sensor (kWh) its wire end shows today's use of (#29; left out = found on the device)
+        vol.Optional("energy"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # cameras: show the field-of-view wedge on the floor (None = yes)
         vol.Optional("cone", default=None): vol.Any(None, bool),
         # detection pins over the camera (None = shown); off leaves only the wedge turning red
@@ -790,6 +906,17 @@ SETTINGS_SCHEMA = vol.Schema(
         # warnings name the device after the room
         vol.Optional("alert_names", default=True): bool,
         vol.Optional("alert_unavailable", default=False): bool,
+        # live room effects (#10): seconds motion lights a room, the temperatures radiators and cylinders shade between
+        vol.Optional("effects", default=None): vol.Any(
+            None,
+            {
+                vol.Optional("motion_seconds"): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=0, max=3600))),
+                **{
+                    vol.Optional(key): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=-20, max=100)))
+                    for key in ("radiator_cold", "radiator_hot", "tank_cold", "tank_hot")
+                },
+            },
+        ),
         # an entity that reports a power outage (None = no outage warning)
         vol.Optional("outage_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # sunlight through the windows as patches on the floor
@@ -893,11 +1020,27 @@ SETTINGS_SCHEMA = vol.Schema(
                                     vol.Required("kind"): vol.In(["cat", "dog", "rabbit"]),
                                     vol.Optional("name", default=""): vol.All(str, vol.Length(max=30)),
                                     vol.Optional("fur", default="orange"): vol.All(str, vol.Length(max=20)),
+                                    # eye colour (#42): dark unless set
+                                    vol.Optional("eyes", default="dark"): vol.In(
+                                        ["dark", "copper", "green", "yellow", "blue"]
+                                    ),
                                     vol.Optional("breed", default=None): vol.Any(
                                         None, vol.All(str, vol.Length(max=20))
                                     ),
                                     vol.Optional("floor_id", default=None): vol.Any(
                                         None, vol.All(str, vol.Length(max=64))
+                                    ),
+                                    # static (#17): stays at its spot in a pose instead of roaming
+                                    vol.Optional("static", default=False): bool,
+                                    vol.Optional("pose", default=None): vol.Any(None, vol.In(["sit", "lie", "curl"])),
+                                    vol.Optional("x", default=None): vol.Any(
+                                        None, vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000))
+                                    ),
+                                    vol.Optional("z", default=None): vol.Any(
+                                        None, vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000))
+                                    ),
+                                    vol.Optional("rotation", default=None): vol.Any(
+                                        None, vol.All(vol.Coerce(float), vol.Range(min=-360, max=360))
                                     ),
                                 },
                                 extra=vol.ALLOW_EXTRA,
@@ -933,6 +1076,9 @@ ENERGY_DEFAULTS = {
     "tariff": None,
     "gas": None,
     "water": None,
+    "cheap_rate": None,
+    "cheap_from": None,
+    "cheap_to": None,
 }
 
 # Power sensors in watts: grid positive = import, battery positive = discharging (both can be inverted)
@@ -950,6 +1096,11 @@ ENERGY_SCHEMA = vol.Schema(
         # Energie Pro: gas and water meters (counters, e.g. m³); the house card shows today's use
         vol.Optional("gas", default=None): _ENTITY,
         vol.Optional("water", default=None): _ENTITY,
+        # the cheap rate (#29): an entity that is "on" while it runs, or a daily window "HH:MM" (over midnight when
+        # the start is after the end); the entity wins
+        vol.Optional("cheap_rate", default=None): _ENTITY,
+        vol.Optional("cheap_from", default=None): _TIME,
+        vol.Optional("cheap_to", default=None): _TIME,
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -967,6 +1118,8 @@ BUILDING_SCHEMA = vol.Schema(
         vol.Required("settings"): SETTINGS_SCHEMA,
         vol.Optional("energy", default=lambda: dict(ENERGY_DEFAULTS)): ENERGY_SCHEMA,
         vol.Optional("presence", default=list): vol.All([PRESENCE_SCHEMA], vol.Length(max=50)),
+        # a copy of the recipe of every pack item type the plan uses (#2, see recipes.py)
+        vol.Optional("recipes", default=dict): recipes_validator,
     },
     extra=vol.ALLOW_EXTRA,
 )

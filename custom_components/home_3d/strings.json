@@ -29,5 +29,16 @@
         }
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Home 3D",
+        "description": "Where Home 3D appears. The panel link and the dashboard card work either way, and you can still hide the entry for yourself in Home Assistant's own sidebar settings.",
+        "data": {
+          "show_in_sidebar": "Show in sidebar"
+        }
+      }
+    }
   }
 }

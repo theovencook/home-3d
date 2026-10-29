@@ -48,3 +48,36 @@ test("the room sensors are only watched for the heatmap or the room values; a ch
   assert.ok(ids.includes("weather.b"));
   assert.ok(!ids.includes("weather.a"));
 });
+
+test("the entity an item follows is watched, so it hides or comes back when that entity does (#15)", () => {
+  const { hass, b, openings, furniture } = setup();
+  b.floors[0].furniture = [{ id: "tree", type: "plant", x: 1, z: 1, rotation: 0, w: 1, d: 1, h: 2, variant: null, show_when: { entity: "switch.tree_lights" } }];
+  const ids = watchedEntities(hass, b, { openings, furniture, heat: false, warnings: [], weatherEntityId: null });
+  assert.ok(ids.includes("switch.tree_lights"));
+});
+
+test("a 3D printer's progress, chamber light and camera are watched, found on its linked entity's device (#11)", () => {
+  const { hass, b, openings, furniture } = setup();
+  const reg = hass.entities as Record<string, unknown>;
+  const states = hass.states as Record<string, unknown>;
+  for (const [id, attributes] of [["sensor.p_status", { device_class: "enum" }], ["sensor.p_progress", { unit_of_measurement: "%" }], ["light.p_chamber", {}], ["camera.p_cam", {}]] as const) {
+    reg[id] = { entity_id: id, device_id: "printer" };
+    states[id] = { entity_id: id, state: "on", attributes };
+  }
+  b.floors[0].furniture = [{ id: "p", type: "pack:theovencook.core:3d_printer", x: 1, z: 1, rotation: 0, w: 0.4, d: 0.4, h: 0.5, variant: null }];
+  furniture.set("p", { entity: "sensor.p_status", power: null });
+  const ids = watchedEntities(hass, b, { openings, furniture, heat: false, warnings: [], weatherEntityId: null });
+  for (const id of ["sensor.p_status", "sensor.p_progress", "light.p_chamber", "camera.p_cam"]) assert.ok(ids.includes(id), id);
+});
+
+test("a room's chosen motion sensor and a radiator's temperature are watched for the live effects (#10)", () => {
+  const { hass, b, openings, furniture } = setup();
+  const states = hass.states as Record<string, unknown>;
+  states["binary_sensor.hall_pir"] = { entity_id: "binary_sensor.hall_pir", state: "off", attributes: { device_class: "motion" } };
+  states["sensor.rad_temp"] = { entity_id: "sensor.rad_temp", state: "30", attributes: { device_class: "temperature" } };
+  b.floors[0].rooms[0].live = { motion: "binary_sensor.hall_pir" };
+  b.floors[0].furniture = [{ id: "rad", type: "radiator", x: 1, z: 1, rotation: 0, w: 1, d: 0.1, h: 0.6, variant: null, temp_sensor: "sensor.rad_temp" }];
+  const ids = watchedEntities(hass, b, { openings, furniture, heat: false, warnings: [], weatherEntityId: null });
+  assert.ok(ids.includes("binary_sensor.hall_pir"));
+  assert.ok(ids.includes("sensor.rad_temp"));
+});

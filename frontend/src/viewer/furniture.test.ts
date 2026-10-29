@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Furniture } from "../model.ts";
 import { mountBase, setPacks, type FurniturePack } from "../packs.ts";
-import { newFloor } from "../model.ts";
-import { hasFixedColors, packGlowCentre, packMotionParts, pushFurniture, screenPictureSize, setLightLook } from "./furniture.ts";
+import { FURNITURE_SIZE, FURNITURE_TYPES, isLamp, newFloor } from "../model.ts";
+import { COLOUR_ROLES, itemColourRoles } from "../colour-roles.ts";
+import { hasFixedColors, hasOwnColours, packGlowCentre, packMotionParts, pushAwning, pushFridgeDoors, pushFurniture, pushPackLamp, pushPackMotion, screenPictureSize, setLightLook } from "./furniture.ts";
 import { packMotion, type PackItem } from "../packs.ts";
-import { GeoBuffer, LineBuffer } from "./geo.ts";
+import { GeoBuffer, LineBuffer, pushPrism } from "./geo.ts";
 
-const PACK: FurniturePack = {
+const PACK: Omit<FurniturePack, "items"> & { items: PackItem[] } = {
   id: "t.cars",
   name: "Cars",
   publisher: "t",
-  licensee: null,
   items: [
     {
       id: "wedge",
@@ -192,12 +192,34 @@ test("a motorised curtain opens to both ends and a roll-down screen rolls up wit
   assert.ok(Math.abs(half[0].y + half[0].h - 0.92) < 1e-9 && Math.abs(half[0].h - 0.425) < 1e-9);
 });
 
+test("a roof window's blind follows its cover and slides up the slope towards its top edge (#24)", () => {
+  assert.equal(packMotion("pack:theovencook.core:roof_window_mk04_blind"), "blind");
+  assert.equal(packMotion("pack:theovencook.core:roof_window_mk04"), null);
+  // the window lies on the slope: low at the front (+z), high at the back; the blind is the fabric loft along it
+  const blind = { shape: "loft" as const, x: 0, z: 0.4, w: 0.9, d: 0.1, y: 0.05, h: 0.9, tx: 0, tz: -0.4, tw: 0.9, td: 0.1, color: "fabric" };
+  const frame = { ...blind, w: 1, color: "body" };
+  // the blind's roller box, in the blind's fabric colour, stays where it is
+  const roller = { shape: "cyl" as const, axis: "x" as const, x: 0, z: -0.45, w: 1, d: 0.1, y: 0.9, h: 0.1, color: "fabric" };
+  const item = { id: "roof_window_mk04_blind", name: { en: "Roof window" }, size: [0.78, 0.9, 0.6], parts: [frame, blind, roller] } as unknown as PackItem;
+  // closed: the blind covers the whole pane; the frame and the roller stay put
+  const shut = packMotionParts(item, "blind", 0);
+  assert.equal(shut.length, 1);
+  assert.deepEqual(shut[0], blind);
+  // half open: it reaches half way down the slope from its top edge, which stays where it is
+  const half = packMotionParts(item, "blind", 0.5)[0];
+  assert.ok(Math.abs(half.y + half.h - 0.95) < 1e-9 && Math.abs(half.h - 0.45) < 1e-9, `${half.y} ${half.h}`);
+  assert.ok(Math.abs(half.z) < 1e-9, `${half.z}`);
+  assert.equal(half.tz, -0.4);
+  // fully open: a sliver at the top edge
+  const open = packMotionParts(item, "blind", 1)[0];
+  assert.ok(open.h < 0.05 && open.z < -0.38, `${open.h} ${open.z}`);
+});
+
 test("pack parts in a colour of their own keep it down to the ground in the light looks (#609)", () => {
   const pumpkin: FurniturePack = {
     id: "t.fun",
     name: "Fun",
     publisher: "t",
-    licensee: null,
     items: [
       {
         id: "pumpkin",
@@ -263,7 +285,7 @@ test("round things cast a round shadow, lying on the ground they stand on (#719,
   const { pushFurniture, roundFootprint } = await import("./furniture.ts");
   const { GeoBuffer, LineBuffer } = await import("./geo.ts");
   const part = { shape: "cyl" as const, x: 0, z: 0, w: 1, d: 1, y: 0, h: 0.2, color: "wood" };
-  setPacks([{ id: "g", name: "G", publisher: "G", licensee: null, items: [{ id: "trampoline", name: { en: "Trampoline" }, size: [3, 3, 0.9], parts: [part] }, { id: "box", name: { en: "Box" }, size: [1, 1, 1], parts: [{ ...part, shape: "box" }] }] } as FurniturePack]);
+  setPacks([{ id: "g", name: "G", publisher: "G", items: [{ id: "trampoline", name: { en: "Trampoline" }, size: [3, 3, 0.9], parts: [part] }, { id: "box", name: { en: "Box" }, size: [1, 1, 1], parts: [{ ...part, shape: "box" }] }] } as FurniturePack]);
   try {
     assert.equal(roundFootprint({ type: "pack:g:trampoline" }), true);
     assert.equal(roundFootprint({ type: "pack:g:box" }), false);
@@ -379,4 +401,276 @@ test("a loft ladder stands steeply under its hatch: its foot lands well inside t
   const run = foot - (-0.55 + 0.06);
   assert.ok(run > 0.7 && run < 0.9, `foot ${run.toFixed(2)} m out`);
   assert.ok(foot <= 0.55);
+});
+
+// ---------------------------------------------------------------------------- spheres, lathes, rounded boxes (#4)
+
+/** A pack item of one part filling the whole item, drawn at `size` (w, d, h) without a turn. */
+function solo(part: PackItem["parts"][number], size: [number, number, number] = [1, 1, 1], mirror = false) {
+  setPacks([{ id: "t.shapes", name: "Shapes", publisher: "t", items: [{ id: "solo", name: { en: "Solo" }, size: [1, 1, 1], parts: [part] }] }]);
+  const buf = new GeoBuffer();
+  const lines = new LineBuffer();
+  const [w, d, h] = size;
+  pushFurniture(buf, lines, new GeoBuffer(), { id: "s", type: "pack:t.shapes:solo", x: 0, z: 0, rotation: 0, w, d, h, variant: null, entity: null, power: null, mirror });
+  const xs = buf.p.filter((_, i) => i % 3 === 0);
+  const ys = buf.p.filter((_, i) => i % 3 === 1);
+  const zs = buf.p.filter((_, i) => i % 3 === 2);
+  const span = (v: number[]) => [Math.min(...v), Math.max(...v)];
+  // the signed volume of a closed mesh (six times the volume) is positive when its faces point outwards
+  return { buf, lines, volume: orientation(buf) / 6, x: span(xs), y: span(ys), z: span(zs) };
+}
+
+const FULL = { x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "pot" } as const;
+const near1 = (a: number, b: number, tol = 1e-6) => Math.abs(a - b) <= tol;
+
+test("a sphere fills its part box, squashed when the item is, and is a closed low-poly solid facing outwards", () => {
+  const ball = solo({ shape: "sphere", ...FULL }, [2, 1, 0.5]);
+  assert.ok(ball.buf.p.every(Number.isFinite));
+  assert.ok(near1(ball.x[0], -1, 0.01) && near1(ball.x[1], 1, 0.01), `x ${ball.x}`);
+  assert.ok(near1(ball.z[0], -0.5, 0.01) && near1(ball.z[1], 0.5, 0.01), `z ${ball.z}`);
+  assert.ok(near1(ball.y[0], 0) && near1(ball.y[1], 0.5), `y ${ball.y}`);
+  // an ellipsoid of 2 × 1 × 0.5 m holds π/6 · 1 m³; the low-poly one a little less
+  const exact = (Math.PI / 6) * 2 * 1 * 0.5;
+  assert.ok(ball.volume > exact * 0.85 && ball.volume <= exact, `volume ${ball.volume} of ${exact}`);
+  assert.ok(ball.buf.count <= 160, `${ball.buf.count} triangles`);
+  // mirrored it still faces outwards
+  assert.ok(near1(solo({ shape: "sphere", ...FULL }, [2, 1, 0.5], true).volume, ball.volume, 1e-6));
+});
+
+test("a lathe turns its profile into a closed solid facing outwards, whichever way the profile is written", () => {
+  // a straight profile at the part's edge is a (12-sided) cylinder: π · 0.5 · 0.25 · 0.8 m³ for 1 × 0.5 × 0.8 m
+  const drum = solo({ shape: "lathe", ...FULL, profile: [[1, 0], [1, 1]] }, [1, 0.5, 0.8]);
+  const exact = Math.PI * 0.5 * 0.25 * 0.8;
+  assert.ok(drum.volume > exact * 0.9 && drum.volume <= exact, `volume ${drum.volume} of ${exact}`);
+  assert.ok(near1(drum.y[0], 0) && near1(drum.y[1], 0.8) && near1(drum.x[1], 0.5, 1e-6) && near1(drum.z[1], 0.25, 0.01));
+  // the same profile from the top down
+  assert.ok(near1(solo({ shape: "lathe", ...FULL, profile: [[1, 1], [1, 0]] }, [1, 0.5, 0.8]).volume, drum.volume, 1e-9));
+  // a vase: a foot, a belly and a narrow neck; mirrored it is the same solid
+  const profile: [number, number][] = [[0, 0], [0.6, 0], [1, 0.4], [0.35, 0.9], [0.45, 1], [0, 1]];
+  const vase = solo({ shape: "lathe", ...FULL, profile }, [0.3, 0.3, 0.5]);
+  assert.ok(vase.volume > 0 && vase.volume < 0.3 * 0.3 * 0.5, `volume ${vase.volume}`);
+  assert.ok(near1(solo({ shape: "lathe", ...FULL, profile }, [0.3, 0.3, 0.5], true).volume, vase.volume, 1e-9));
+  // a bowl: up the outside, over the rim and down the inside: its hollow takes volume away from the full solid
+  const full = solo({ shape: "lathe", ...FULL, profile: [[0, 0], [0.7, 0], [1, 1], [0, 1]] }).volume;
+  const bowl = solo({ shape: "lathe", ...FULL, profile: [[0, 0], [0.7, 0], [1, 1], [0.9, 1], [0.6, 0.15], [0, 0.15]] }).volume;
+  assert.ok(bowl > 0 && bowl < full * 0.5, `bowl ${bowl} of ${full}`);
+  // at most 12 profile points stay low-poly: 11 bands of 12 quads and two caps
+  const twelve = solo({ shape: "lathe", ...FULL, profile: Array.from({ length: 12 }, (_, i) => [0.5 + 0.04 * i, i / 11] as [number, number]) });
+  assert.ok(twelve.buf.count <= 11 * 24 + 24, `${twelve.buf.count} triangles`);
+});
+
+test("a rounded box fills its part box with rounded edges; fully rounded it is a pill", () => {
+  const box = 1.2 * 0.6 * 0.4;
+  const soft = solo({ shape: "rbox", ...FULL }, [1.2, 0.6, 0.4]);
+  assert.ok(near1(soft.x[0], -0.6) && near1(soft.x[1], 0.6) && near1(soft.z[1], 0.3) && near1(soft.y[1], 0.4), `${soft.x} ${soft.z} ${soft.y}`);
+  // the default rounding (0.2 of the shortest side: 8 cm) shaves a little off the corners
+  assert.ok(soft.volume < box && soft.volume > box * 0.9, `volume ${soft.volume} of ${box}`);
+  const pill = solo({ shape: "rbox", ...FULL, round: 0.5 }, [1.2, 0.6, 0.4]);
+  assert.ok(pill.volume < soft.volume && pill.volume > box * 0.6, `pill ${pill.volume}`);
+  assert.ok(soft.buf.count <= 200, `${soft.buf.count} triangles`);
+  assert.ok(near1(solo({ shape: "rbox", ...FULL }, [1.2, 0.6, 0.4], true).volume, soft.volume, 1e-9));
+  // its outline follows the rounded corners
+  assert.ok(solo({ shape: "rbox", ...FULL, edges: true }, [1.2, 0.6, 0.4]).lines.p.length / 6 === 16);
+});
+
+test("round parts keep their measures when the item grows, like the other fixed parts", () => {
+  // a cabinet on four ball feet: the feet keep their size and their corners, the carcass stretches
+  const foot = (x: number, z: number) => ({ shape: "sphere", x, z, w: 0.1, d: 0.1, y: 0, h: 0.1, color: "metal", fix: "wdh" }) as const;
+  setPacks([{ id: "t.shapes", name: "Shapes", publisher: "t", items: [{ id: "cab", name: { en: "Cabinet" }, size: [0.5, 0.5, 0.5], parts: [{ shape: "rbox", x: 0, z: 0, w: 1, d: 1, y: 0.1, h: 0.9, color: "wood", round: 0.1 }, foot(-0.45, -0.45), foot(0.45, 0.45)] }] }]);
+  const buf = new GeoBuffer();
+  pushFurniture(buf, new LineBuffer(), new GeoBuffer(), { id: "c", type: "pack:t.shapes:cab", x: 0, z: 0, rotation: 0, w: 1, d: 1, h: 1, variant: null, entity: null, power: null });
+  // the feet: everything below the carcass (5 cm), 5 cm wide each, in the corners of the larger item
+  const low: number[][] = [];
+  for (let i = 0; i < buf.p.length; i += 3) if (buf.p[i + 1] < 0.05 - 1e-6) low.push([buf.p[i], buf.p[i + 2]]);
+  const xs = low.map((p) => p[0]);
+  assert.ok(near1(Math.min(...xs), -0.5, 0.002) && near1(Math.max(...xs), 0.5, 0.002), `feet ${Math.min(...xs)}..${Math.max(...xs)}`);
+  assert.ok(low.every(([x]) => Math.abs(Math.abs(x) - 0.475) <= 0.025 + 1e-6), "each foot stays 5 cm wide");
+});
+
+test("a pouffe (a sphere) and a planter (a lathe) cast a round shadow; a rounded box does not (#4)", async () => {
+  const { roundFootprint } = await import("./furniture.ts");
+  const part = { x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "fabric" } as const;
+  setPacks([{ id: "g", name: "G", publisher: "G", items: [
+    { id: "pouffe", name: { en: "Pouffe" }, size: [0.5, 0.5, 0.4], parts: [{ ...part, shape: "sphere" }] },
+    { id: "planter", name: { en: "Planter" }, size: [0.5, 0.5, 0.6], parts: [{ ...part, shape: "lathe", profile: [[0.7, 0], [1, 1]] }] },
+    { id: "cushion", name: { en: "Cushion" }, size: [0.5, 0.5, 0.2], parts: [{ ...part, shape: "rbox" }] },
+  ] }]);
+  try {
+    assert.equal(roundFootprint({ type: "pack:g:pouffe" }), true);
+    assert.equal(roundFootprint({ type: "pack:g:planter" }), true);
+    assert.equal(roundFootprint({ type: "pack:g:cushion" }), false);
+  } finally {
+    setPacks([]);
+  }
+});
+
+/** The vertex colours of an item as "r,g,b" strings, to compare two builds. */
+function vertexColours(f: Furniture): string[] {
+  const buf = new GeoBuffer();
+  pushFurniture(buf, new LineBuffer(), new GeoBuffer(), f);
+  const out: string[] = [];
+  for (let i = 0; i + 2 < buf.c.length; i += 3) out.push(`${buf.c[i].toFixed(4)},${buf.c[i + 1].toFixed(4)},${buf.c[i + 2].toFixed(4)}`);
+  return out;
+}
+
+test("a colour role override recolours only that role's parts, and clearing it goes back to the theme (#12)", () => {
+  const sofa: Furniture = { id: "s", type: "sofa", x: 0, z: 0, rotation: 0, w: 2, d: 0.9, h: 0.85, variant: null, entity: null, power: null };
+  const theme = vertexColours(sofa);
+  const red = vertexColours({ ...sofa, colors: { fabric: "#ff0000" } });
+  assert.equal(red.length, theme.length);
+  const changed = red.filter((c, i) => c !== theme[i]);
+  assert.ok(changed.length > 0, "the fabric turns red");
+  assert.ok(changed.every((c) => { const [r, g, b] = c.split(",").map(Number); return r > g * 2 && r > b * 2; }), "only red vertices changed");
+  // the cushions (another role) and the wooden feet keep the theme colour
+  assert.ok(red.some((c, i) => c === theme[i]), "other roles untouched");
+  assert.deepEqual(vertexColours({ ...sofa, colors: {} }), theme, "an empty override is the theme");
+  assert.deepEqual(vertexColours({ ...sofa, colors: null }), theme, "a cleared override is the theme");
+});
+
+test("pack items and the moving parts drawn apart (curtain, awning, fridge doors) take the item's role colours (#12)", () => {
+  setPacks([PACK]);
+  const wedge: Furniture = { id: "w", type: "pack:t.cars:wedge", x: 0, z: 0, rotation: 0, w: 2, d: 4, h: 1, variant: null, entity: null, power: null };
+  const theme = vertexColours(wedge);
+  const own = vertexColours({ ...wedge, colors: { body: "#00ff00" } });
+  assert.ok(own.some((c, i) => c !== theme[i]), "the pack's body part turns green");
+  assert.ok(own.some((c, i) => c === theme[i]), "its dark wheel keeps the theme");
+  const colours = (draw: (buf: GeoBuffer) => void) => {
+    const buf = new GeoBuffer();
+    draw(buf);
+    return buf.c.join(",");
+  };
+  const curtain = { id: "curtain", name: { en: "Curtain" }, size: [2.4, 0.15, 2.4], parts: [{ shape: "box", x: -0.25, z: 0, w: 0.5, d: 1, y: 0, h: 1, color: "fabric" }] } as unknown as PackItem;
+  const at = { x: 0, z: 0, rotation: 0, w: 2.4, d: 0.15, h: 2.4, variant: null };
+  assert.notEqual(colours((b) => pushPackMotion(b, curtain, "curtain", { ...at, colors: { fabric: "#ff0000" } }, 0, 0)), colours((b) => pushPackMotion(b, curtain, "curtain", at, 0, 0)));
+  const awning = { x: 0, z: 0, rotation: 0, w: 3, d: 2, h: 0.3, variant: null };
+  assert.notEqual(colours((b) => pushAwning(b, { ...awning, colors: { fabric: "#ff0000" } }, 2.5, 1)), colours((b) => pushAwning(b, awning, 2.5, 1)));
+  const lamp = { x: 0, z: 0, rotation: 0, w: 2, d: 4, h: 1 };
+  assert.notEqual(colours((b) => pushPackLamp(b, PACK.items[0], { ...lamp, colors: { body: "#00ff00" } }, 0, 0xffffff)), colours((b) => pushPackLamp(b, PACK.items[0], lamp, 0, 0xffffff)));
+  const fridge = { x: 0, z: 0, rotation: 0, w: 0.9, d: 0.7, h: 1.8 };
+  assert.notEqual(colours((b) => pushFridgeDoors(b, { ...fridge, colors: { body: "#00ff00" } }, 0, 0.5, 0.5)), colours((b) => pushFridgeDoors(b, fridge, 0, 0.5, 0.5)));
+});
+
+test("an item with its own role colours is drawn anew when the look changes; one without is not (#12)", () => {
+  const f: Furniture = { id: "s", type: "sofa", x: 0, z: 0, rotation: 0, w: 2, d: 0.9, h: 0.85, variant: null, entity: null, power: null };
+  assert.equal(hasOwnColours(f), false);
+  assert.equal(hasOwnColours({ ...f, colors: {} }), false);
+  assert.equal(hasOwnColours({ ...f, colors: { wood: "#8b5a2b" } }), true);
+  assert.equal(hasOwnColours({ ...f, type: "waste_bin" }), true);
+  // the light looks draw an own colour in full, the neon look toned down
+  const neon = vertexColours({ ...f, colors: { fabric: "#3060c0" } });
+  setLightLook(true);
+  const light = vertexColours({ ...f, colors: { fabric: "#3060c0" } });
+  setLightLook(false);
+  assert.notDeepEqual(neon, light);
+});
+
+test("every built-in item lists exactly the roles its model is drawn in, moving parts included (#12)", () => {
+  setPacks([]);
+  const wrong: string[] = [];
+  for (const type of FURNITURE_TYPES) {
+    if (isLamp(type)) continue;
+    const [w, d, h] = FURNITURE_SIZE[type];
+    const f: Furniture = { id: "f", type, x: 0, z: 0, rotation: 0, w, d, h, variant: null, entity: null, power: null };
+    const draw = (g: Furniture) => {
+      const buf = new GeoBuffer();
+      pushFurniture(buf, new LineBuffer(), new GeoBuffer(), g);
+      if (type === "awning") pushAwning(buf, g, 2.5, 1);
+      if (type === "fridge_smart") pushFridgeDoors(buf, g, 0, 0.5, 0.5);
+      return buf.c.join(",");
+    };
+    const theme = draw(f);
+    const used = COLOUR_ROLES.filter((role) => draw({ ...f, colors: { [role]: "#ff00ff" } }) !== theme);
+    const listed = itemColourRoles(type);
+    if (used.join() !== listed.join()) wrong.push(`${type}: [${used.map((r) => `"${r}"`).join(", ")}]`);
+  }
+  assert.deepEqual(wrong, [], "update BUILTIN_ROLES in colour-roles.ts");
+});
+
+/** The materials (#40) an item's geometry carries per vertex: the shader numbers, counted. */
+function materialCounts(buf: GeoBuffer): Map<number, number> {
+  const attr = buf.geometry().getAttribute("fp3dMat");
+  const out = new Map<number, number>();
+  if (!attr) return out;
+  for (let i = 0; i < attr.count; i++) out.set(attr.getX(i), (out.get(attr.getX(i)) ?? 0) + 1);
+  return out;
+}
+
+const MATT = 0;
+const GLOSS = 1;
+const FABRIC = 2;
+const GLASS = 3;
+const METAL = 4;
+const RATTAN = 5;
+
+test("each vertex carries its role's material for the realistic look; the colours stay exactly as before (#40)", () => {
+  const sofa: Furniture = { id: "s", type: "sofa", x: 0, z: 0, rotation: 0, w: 2, d: 0.9, h: 0.85, variant: null, entity: null, power: null };
+  const usual = new GeoBuffer();
+  pushFurniture(usual, new LineBuffer(), new GeoBuffer(), sofa);
+  const plain = materialCounts(usual);
+  // fabric and cushions are fabric, the wooden feet matt
+  assert.ok(plain.get(FABRIC)! > 0, "fabric");
+  assert.ok(plain.get(MATT)! > 0, "matt feet");
+  assert.equal(plain.has(RATTAN), false);
+  assert.equal([...plain.values()].reduce((a, b) => a + b, 0), usual.p.length / 3, "one material per vertex");
+
+  const rattan = new GeoBuffer();
+  pushFurniture(rattan, new LineBuffer(), new GeoBuffer(), { ...sofa, materials: { fabric: "rattan" } });
+  const woven = materialCounts(rattan);
+  assert.ok(woven.get(RATTAN)! > 0, "the fabric role is rattan");
+  assert.ok(woven.get(FABRIC)! > 0, "the cushions stay fabric");
+  assert.ok(woven.get(FABRIC)! < plain.get(FABRIC)!);
+  assert.equal(woven.get(MATT), plain.get(MATT), "the feet stay matt");
+  // neon and the other looks never see materials: the same triangles in the same colours
+  assert.deepEqual(rattan.c, usual.c);
+  assert.deepEqual(rattan.p, usual.p);
+});
+
+test("a surface drawn without materials (walls, floors) carries none: matt, and its geometry is as before (#40)", () => {
+  const buf = new GeoBuffer();
+  pushPrism(buf, [[0, 0], [1, 0], [1, 1], [0, 1]], 0, 2.5, 0x223355, 0x334466);
+  assert.equal(buf.geometry().getAttribute("fp3dMat"), undefined);
+  // a matt item added to the buffer does not need one either
+  pushFurniture(buf, new LineBuffer(), new GeoBuffer(), { id: "t", type: "table", x: 0, z: 0, rotation: 0, w: 1.6, d: 0.9, h: 0.75, variant: null, entity: null, power: null });
+  assert.equal(buf.geometry().getAttribute("fp3dMat"), undefined);
+  // a metal one after the walls: the walls before it read matt
+  pushFurniture(buf, new LineBuffer(), new GeoBuffer(), { id: "r", type: "radiator", x: 0, z: 0, rotation: 0, w: 1, d: 0.1, h: 0.6, variant: null, entity: null, power: null });
+  const counts = materialCounts(buf);
+  assert.ok(counts.get(METAL)! > 0);
+  assert.ok(counts.get(MATT)! >= 36, "walls and table matt");
+});
+
+test("pack parts take their roles' materials, a part's top its own role's; moving parts and lamps take them too (#40)", () => {
+  const chair: PackItem = {
+    id: "chair",
+    name: { en: "Chair" },
+    size: [0.5, 0.5, 0.9],
+    parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0.5, h: 0.1, color: "wood", top: "cushion" }],
+  } as unknown as PackItem;
+  setPacks([{ ...PACK, items: [...PACK.items, chair] }]);
+  try {
+    const f: Furniture = { id: "c", type: "pack:t.cars:chair", x: 0, z: 0, rotation: 0, w: 0.5, d: 0.5, h: 0.9, variant: null, entity: null, power: null };
+    const buf = new GeoBuffer();
+    pushFurniture(buf, new LineBuffer(), new GeoBuffer(), { ...f, materials: { wood: "metal", cushion: "glass" } });
+    const counts = materialCounts(buf);
+    // a box: 2 top triangles in the cushion's glass, the sides (and the bottom, above the floor) in the wood's metal
+    assert.equal(counts.get(GLASS), 6);
+    assert.ok(counts.get(METAL)! >= 24);
+    const at = { x: 0, z: 0, rotation: 0, w: 2.4, d: 0.15, h: 2.4, variant: null };
+    const curtain = { id: "curtain", name: { en: "Curtain" }, size: [2.4, 0.15, 2.4], parts: [{ shape: "box", x: -0.25, z: 0, w: 0.5, d: 1, y: 0, h: 1, color: "fabric" }] } as unknown as PackItem;
+    const moving = new GeoBuffer();
+    pushPackMotion(moving, curtain, "curtain", { ...at, materials: { fabric: "gloss" } }, 0, 0);
+    assert.ok(materialCounts(moving).get(GLOSS)! > 0, "a curtain");
+    const lamp = new GeoBuffer();
+    pushPackLamp(lamp, PACK.items[0], { x: 0, z: 0, rotation: 0, w: 2, d: 4, h: 1, materials: { body: "metal" } }, 0, 0xffffff);
+    assert.ok(materialCounts(lamp).get(METAL)! > 0, "a pack lamp");
+    const doors = new GeoBuffer();
+    pushFridgeDoors(doors, { x: 0, z: 0, rotation: 0, w: 0.9, d: 0.7, h: 1.8, materials: { body: "metal" } }, 0, 0.5, 0.5);
+    assert.ok(materialCounts(doors).get(METAL)! > 0, "fridge doors");
+    const awning = new GeoBuffer();
+    pushAwning(awning, { x: 0, z: 0, rotation: 0, w: 3, d: 2, h: 0.3, variant: null, materials: { fabric: "rattan", body: "metal" } }, 2.5, 1);
+    const shade = materialCounts(awning);
+    assert.ok(shade.get(RATTAN)! > 0 && shade.get(METAL)! > 0, "an awning's cloth and cassette");
+  } finally {
+    setPacks([]);
+  }
 });

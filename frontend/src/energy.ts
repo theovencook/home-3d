@@ -11,6 +11,7 @@ import type { Building, CableRoute, EnergySettings, Floor, Furniture, Room, Sola
 import { fieldCenter, fieldFace, fieldSize, roofFaces, topFloor, wallFaces } from "./solar.ts";
 import { entityAreaId, isHubDevice, powerSensorsOf } from "./devices.ts";
 import { pointInPolygon, signedArea } from "./model.ts";
+import { energyRole, type EnergyRole } from "./packs.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 
 export type FlowKind = "consumer" | "grid" | "export" | "solar" | "battery" | "inverter" | "wallbox";
@@ -51,12 +52,37 @@ export interface Consumer {
   power: number;
   /** A wallbox: its cable is drawn in its own colour. */
   wallbox?: boolean;
+  /** The power sensor of the circuit it hangs on (a circuit monitor's channel): its watts are inside that circuit's (#43). */
+  circuit?: string;
+  /** The energy sensor linked on the item for today's kWh at its wire end ("none" = none; left out = found, #29). */
+  energy?: string;
+}
+
+/**
+ * Whether an item's own power sensor is a load on the house cables (#43): a consumer or a wallbox. The meter, the
+ * inverters, the solar panels and the batteries have cables of their own; a battery's discharge is a source and its
+ * charging runs on the battery cable, so neither is a consumer on top.
+ */
+export function isLoad(type: string): boolean {
+  const role = energyRole(type);
+  return role === null || role === "wallbox";
+}
+
+/**
+ * The watts each consumer adds on its own cable (#43): a circuit's own watts less the consumers inside it (they
+ * hang on it with their own branch), so a smart plug in a circuit is not counted again on top of its circuit.
+ */
+export function ownLoads(consumers: readonly Consumer[]): number[] {
+  const inside = new Map<string, number>();
+  const circuits = new Set(consumers.map((c) => c.powerEntity));
+  for (const c of consumers) if (c.circuit && c.circuit !== c.powerEntity && circuits.has(c.circuit)) inside.set(c.circuit, (inside.get(c.circuit) ?? 0) + c.power);
+  return consumers.map((c) => Math.max(0, c.power - (inside.get(c.powerEntity) ?? 0)));
 }
 
 const CABLE_Y = 0.03;
 type V3 = [number, number, number];
 
-/** Power sensors the placed energy devices bring along (meter = grid, inverters = solar, battery). */
+/** Power sensors the placed energy devices bring along (meter = grid, inverters and solar panels = solar, battery). */
 export interface DeviceSensors {
   grid: string | null;
   /** The meter's separate export sensor (its power sensor then reports import only). */
@@ -81,12 +107,13 @@ export function deviceSensors(building: Building, power: (f: Furniture) => strin
   for (const floor of building.floors) {
     for (const f of floor.furniture) {
       const p = power(f);
-      if (f.type === "meter") {
+      const role = energyRole(f.type);
+      if (role === "meter") {
         out.grid ??= p;
         out.gridExport ??= ref(f.export);
       }
-      else if (f.type === "inverter" && p && !out.solar.includes(p)) out.solar.push(p);
-      else if (f.type === "home_battery") {
+      else if ((role === "inverter" || role === "solar") && p && !out.solar.includes(p)) out.solar.push(p);
+      else if (role === "home_battery") {
         if (p && !out.battery.includes(p)) out.battery.push(p);
         const charge = ref(f.charge);
         if (charge && !out.charge.includes(charge)) out.charge.push(charge);
@@ -102,7 +129,7 @@ export function deviceSensors(building: Building, power: (f: Furniture) => strin
 /** Where the cables meet: the meter cabinet in the plan, else the meter spot set in older plans. */
 export function meterPosition(building: Building): { floor_id: string; x: number; z: number } | null {
   for (const floor of building.floors) {
-    const m = floor.furniture.find((f) => f.type === "meter");
+    const m = floor.furniture.find((f) => energyRole(f.type) === "meter");
     if (m) return { floor_id: floor.id, x: m.x, z: m.z };
   }
   return building.energy.meter;
@@ -220,10 +247,14 @@ export function powerSensorFor(hass: HomeAssistant, entityId: string): string | 
   return list.find((e) => area === null || entityAreaId(hass, e) === null || entityAreaId(hass, e) === area) ?? null;
 }
 
-/** Placed entities that report power, with their position and current power. */
-export function findConsumers(hass: HomeAssistant, building: Building): Consumer[] {
+/**
+ * Placed entities that report power, with their position and current power. The sources' sensors are none: the
+ * balance sensors and those of the placed meter, inverters, solar panels and batteries (a battery's power sensor is
+ * often placed on its own as well, but its discharge is no load, #43).
+ */
+export function findConsumers(hass: HomeAssistant, building: Building, devices: DeviceSensors = deviceSensors(building)): Consumer[] {
   const e = building.energy;
-  const sources = new Set([e.grid, e.solar, e.battery].filter(Boolean));
+  const sources = new Set([e.grid, e.solar, e.battery, devices.grid, devices.gridExport, ...devices.solar, ...devices.battery, ...devices.charge].filter(Boolean));
   const out: Consumer[] = [];
   const seen = new Set<string>();
   for (const floor of building.floors) {
@@ -231,7 +262,8 @@ export function findConsumers(hass: HomeAssistant, building: Building): Consumer
       const sensor = powerSensorFor(hass, pl.entity_id);
       if (!sensor || sources.has(sensor) || seen.has(sensor)) continue;
       seen.add(sensor);
-      out.push({ id: pl.entity_id, powerEntity: sensor, floorId: floor.id, x: pl.x, z: pl.z, power: Math.max(0, readPower(hass.states[sensor]) ?? 0) });
+      const circuit = ref(pl.circuit);
+      out.push({ id: pl.entity_id, powerEntity: sensor, floorId: floor.id, x: pl.x, z: pl.z, power: Math.max(0, readPower(hass.states[sensor]) ?? 0), ...(circuit ? { circuit } : {}), ...(pl.energy ? { energy: pl.energy } : {}) });
     }
   }
   return out;
@@ -277,7 +309,7 @@ export function energySummary(hass: HomeAssistant, building: Building, consumers
   let consumption: number | null = e.consumption ? readPower(hass.states[e.consumption]) : null;
   if (consumption !== null) consumption = Math.max(0, consumption);
   else if (grid !== null || solar !== null || battery !== null) consumption = Math.max(0, (grid ?? 0) + Math.max(0, solar ?? 0) + (battery ?? 0));
-  else if (consumers.length) consumption = consumers.reduce((s, c) => s + c.power, 0);
+  else if (consumers.length) consumption = ownLoads(consumers).reduce((s, w) => s + w, 0);
   return {
     grid,
     solar: solar === null ? null : Math.max(0, solar),
@@ -623,6 +655,8 @@ export function flowSegments({ building, consumers, summary, battery, fieldPower
     }
     return best;
   };
+  const closest = <T extends { x: number; z: number }>(list: T[], p: { x: number; z: number }): T | null =>
+    list.reduce((best: T | null, x) => (!best || Math.hypot(x.x - p.x, x.z - p.z) < Math.hypot(best.x - p.x, best.z - p.z) ? x : best), null);
   // every battery hangs on the nearest inverter of its floor (a hybrid inverter), else on the meter
   const batteryPower = (bat: DevicePos) => own(bat.id) ?? (batteries.length === 1 ? (summary.battery ?? 0) : 0);
   const onInverter = new Map<string, DevicePos>();
@@ -631,8 +665,15 @@ export function flowSegments({ building, consumers, summary, battery, fieldPower
     if (inv) onInverter.set(bat.id, inv);
   }
 
-  const targets: (Target & { power: number })[] = consumers.map((c) => ({ floorId: c.floorId, x: c.x, z: c.z, kind: (c.wallbox ? "wallbox" : "consumer") as FlowKind, power: c.power }));
-  for (const bat of batteries) if (!onInverter.has(bat.id) && summary.battery !== null) targets.push({ floorId: bat.floorId, x: bat.x, z: bat.z, kind: "battery", power: Math.abs(batteryPower(bat)) });
+  // a consumer inside a circuit has its own branch: the circuit's cable only adds what is left (#43)
+  const loads = ownLoads(consumers);
+  // `load`: what a target draws through a shared cable; a discharging battery gives instead (negative, #43)
+  const targets: (Target & { power: number; load: number })[] = consumers.map((c, i) => ({ floorId: c.floorId, x: c.x, z: c.z, kind: (c.wallbox ? "wallbox" : "consumer") as FlowKind, power: loads[i], load: loads[i] }));
+  for (const bat of batteries) {
+    if (onInverter.has(bat.id) || summary.battery === null) continue;
+    const p = batteryPower(bat);
+    targets.push({ floorId: bat.floorId, x: bat.x, z: bat.z, kind: "battery", power: Math.abs(p), load: -p });
+  }
   const key = `${meter.floor_id}:${meter.x},${meter.z}|${targets.map((t) => `${t.floorId}:${t.x},${t.z}:${t.kind}`).join(";")}`;
   let perBuilding = planCache.get(building);
   if (!perBuilding) planCache.set(building, (perBuilding = new Map()));
@@ -648,7 +689,8 @@ export function flowSegments({ building, consumers, summary, battery, fieldPower
     a: s.a,
     b: s.b,
     dist: s.dist,
-    power: s.members.reduce((sum, m) => sum + targets[m].power, 0),
+    // a battery's own cable carries its watts either way; a cable shared with loads what they draw beyond its discharge
+    power: s.kind === "battery" ? s.members.reduce((sum, m) => sum + targets[m].power, 0) : Math.max(0, s.members.reduce((sum, m) => sum + targets[m].load, 0)),
     kind: s.kind,
   }));
 
@@ -717,7 +759,24 @@ export function flowSegments({ building, consumers, summary, battery, fieldPower
         out.push(...tag(absolutePolyline(building, manualPoints(building, hand, start, [target.x, floor.elevation + targetY, target.z]), power, "solar", floor), `solar:${f.id}`));
       } else out.push(...tag(solarRoute(building, f, power, target, targetY), `solar:${f.id}`));
     }
-  } else if (summary.solar !== null && !inverters.length) {
+  }
+  // solar panels placed as items (a garden array, a panel on the shed, #22): each to the nearest inverter of its floor,
+  // else to a battery there (a power station with its own solar input), else to the meter
+  const panels = devicesOf(building, "solar");
+  for (const panel of panels) {
+    const power = Math.max(0, own(panel.id) ?? (fields.length ? 0 : (summary.solar ?? 0) / panels.length));
+    const inv = nearest(panel);
+    const station = inv ? null : closest(batteries.filter((x) => x.floorId === panel.floorId), panel);
+    if (inv) fieldsOf.set(inv.id, (fieldsOf.get(inv.id) ?? 0) + power);
+    else if (station && onInverter.get(station.id)) {
+      const via = onInverter.get(station.id)!;
+      fieldsOf.set(via.id, (fieldsOf.get(via.id) ?? 0) + power);
+    }
+    const target = inv ?? station ?? { floorId: meter.floor_id, x: meter.x, z: meter.z, h: 0, variant: null };
+    const targetY = inv ? 1.1 + inv.h : station ? (station.variant === "wall" ? 0.5 + station.h : 0.9) : 1.5;
+    out.push(...tag(deviceRoute(building, panel, Math.min(0.3, panel.h), target, targetY, power, "solar", 0), `solar:${panel.id}`));
+  }
+  if (!(fieldPower && fields.length) && summary.solar !== null && !inverters.length && !panels.length) {
     // older plans without fields or an inverter: the sun comes down from above the ceiling to the meter
     out.push({ floorId: meterFloor.id, a: [meter.x + 0.08, meterFloor.height + 0.6, meter.z + 0.08], b: [meter.x + 0.08, CABLE_Y, meter.z + 0.08], dist: 0, power: summary.solar, kind: "solar" });
   }
@@ -836,10 +895,10 @@ export function gridPoint(building: Building): { floorId: string; wall: Vec2; en
   return { floorId: floor.id, wall: [q[0] + out[0] * (ext / 2 + 0.05), q[1] + out[1] * (ext / 2 + 0.05)], end: [q[0] + out[0] * t, q[1] + out[1] * t], height: 0 };
 }
 
-/** All energy devices of a type in the plan (where cables start or end). */
-export function devicesOf(building: Building, type: Furniture["type"]): DevicePos[] {
+/** All energy devices of a role in the plan (where cables start or end): built-in ones and pack items (#22). */
+export function devicesOf(building: Building, role: EnergyRole | "grid_point"): DevicePos[] {
   const out: DevicePos[] = [];
-  for (const floor of building.floors) for (const m of floor.furniture) if (m.type === type) out.push({ id: m.id, type: m.type, floorId: floor.id, x: m.x, z: m.z, h: m.h, variant: m.variant ?? null });
+  for (const floor of building.floors) for (const m of floor.furniture) if ((energyRole(m.type) ?? m.type) === role) out.push({ id: m.id, type: m.type, floorId: floor.id, x: m.x, z: m.z, h: m.h, variant: m.variant ?? null });
   return out;
 }
 
@@ -1127,34 +1186,60 @@ export function fieldPowers(hass: HomeAssistant, building: Building, solar: numb
   return out;
 }
 
-/**
- * Cable colours: the sun yellow, the battery green, the wallbox blue, export cyan, import red-violet; the house
- * cables take the colour of what feeds the house right now.
- */
+/** Cable colours by source: the sun yellow, the battery green, the grid blue (#28). */
 export const FLOW_COLORS = {
   solar: [1, 0.78, 0.2] as [number, number, number],
   battery: [0.25, 1, 0.6] as [number, number, number],
-  wallbox: [0.3, 0.75, 1] as [number, number, number],
-  house: [0.6, 0.72, 1] as [number, number, number],
-  export: [0.2, 0.95, 1] as [number, number, number],
-  import: [1, 0.3, 0.65] as [number, number, number],
+  grid: [0.3, 0.55, 1] as [number, number, number],
 };
 
+export type Source = keyof typeof FLOW_COLORS;
+/** Where a cable's power comes from right now: the share of each source (0..1, adding up to 1). */
+export type SourceMix = Record<Source, number>;
+
+const SOURCES: Source[] = ["solar", "battery", "grid"];
+
+function shares(solar: number, battery: number, grid: number, fallback: Source): SourceMix {
+  const total = solar + battery + grid;
+  if (total <= 0) return { solar: 0, battery: 0, grid: 0, [fallback]: 1 };
+  return { solar: solar / total, battery: battery / total, grid: grid / total };
+}
+
+/**
+ * The source mix of a cable. The sources' own cables carry their source (the battery's only while it discharges);
+ * everything that draws power (the house, the wallbox, a charging battery, the export) shares one pool: the sun,
+ * the battery's discharge and the grid import, in proportion to what each gives right now.
+ */
+export function sourceMix(kind: FlowKind, summary: EnergySummary): SourceMix {
+  const sun = Math.max(0, summary.solar ?? 0);
+  const discharge = Math.max(0, summary.battery ?? 0);
+  const imported = Math.max(0, summary.grid ?? 0);
+  if (kind === "grid") return shares(0, 0, 1, "grid");
+  if (kind === "solar") return shares(1, 0, 0, "solar");
+  if (kind === "battery" && discharge > 0) return shares(0, 1, 0, "battery");
+  // the inverter's feed: the sun and the battery's discharge behind it
+  if (kind === "inverter") return shares(sun, discharge, 0, "solar");
+  return shares(sun, discharge, imported, kind === "battery" ? "battery" : kind === "export" ? "solar" : "grid");
+}
+
+/** The colour of a mix: the sources' colours weighted by their shares, kept as bright as the pure colours. */
+export function mixColor(mix: SourceMix): [number, number, number] {
+  const c: [number, number, number] = [0, 0, 0];
+  let bright = 0;
+  for (const s of SOURCES) {
+    const col = FLOW_COLORS[s];
+    for (let i = 0; i < 3; i++) c[i] += col[i] * mix[s];
+    bright += Math.max(...col) * mix[s];
+  }
+  const top = Math.max(...c);
+  return top > 0 ? (c.map((v) => (v * bright) / top) as [number, number, number]) : c;
+}
+
+/** The light dots of a blended cable: each source's pure colour for its share of the dots (a 50/50 blend of the sun and the grid would wash out to white). */
+export function flowDots(mix: SourceMix): { color: [number, number, number]; share: number }[] {
+  return SOURCES.filter((s) => mix[s] > 0).map((s) => ({ color: FLOW_COLORS[s], share: mix[s] }));
+}
+
 export function flowColor(kind: FlowKind, summary: EnergySummary): [number, number, number] {
-  if (kind === "grid") return FLOW_COLORS.import;
-  if (kind === "export") return FLOW_COLORS.export;
-  if (kind === "solar") return FLOW_COLORS.solar;
-  if (kind === "battery") return FLOW_COLORS.battery;
-  if (kind === "wallbox") return FLOW_COLORS.wallbox;
-  // the inverter's feed: the sun, or the battery's discharge at night
-  if (kind === "inverter") return (summary.solar ?? 0) > 5 ? FLOW_COLORS.solar : FLOW_COLORS.battery;
-  // what feeds the house: grid import, the part of the sun not exported, battery discharge
-  const shares: [number, [number, number, number]][] = [
-    [Math.max(0, summary.grid ?? 0), FLOW_COLORS.house],
-    [Math.max(0, (summary.solar ?? 0) - Math.max(0, -(summary.grid ?? 0)) - Math.max(0, -(summary.battery ?? 0))), FLOW_COLORS.solar],
-    [Math.max(0, summary.battery ?? 0), FLOW_COLORS.battery],
-  ];
-  // mixed colours wash out to white on the dark floor, so the largest source wins
-  const [best] = shares.reduce((a, b) => (b[0] > a[0] ? b : a));
-  return best > 0 ? shares.find((s) => s[0] === best)![1] : FLOW_COLORS.house;
+  return mixColor(sourceMix(kind, summary));
 }

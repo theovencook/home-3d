@@ -3,7 +3,7 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { fetchBuilding, listPacks, saveBuilding, subscribeBuilding } from "./api.ts";
 import { normalizeBuilding, type Building } from "./model.ts";
-import { setPacks, type FurniturePack } from "./packs.ts";
+import { recipeHashes, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
@@ -55,14 +55,21 @@ export class BuildingController implements ReactiveController {
   backendVersion: string | null = null;
   /** Unsaved edits from an earlier session, offered for restoring. */
   draft: Draft | null = null;
-  /** Imported furniture packs. */
+  /** The library (#44): the offered packs with an index of their items, loaded when an editor first needs it. */
   packs: FurniturePack[] = [];
+  /** This user is on the editors list (#7): sees the Editor and Extensions and may change the plan. The backend
+   * says so with the building; an older one that does not falls back to "admins edit". The backend refuses
+   * changes from anyone else either way. */
+  canEdit = false;
   /** The packs were fetched once (what is installed is known). */
   packsLoaded = false;
+  private libraryLoading: Promise<void> | null = null;
 
   private readonly host: ReactiveControllerHost;
   private hass: HomeAssistant | null = null;
   private revision = -1;
+  /** The hashes of the plan's recipe copies as the backend last sent them (#45). */
+  private recipeBases: Record<string, string> = {};
   private ownRevisions = new Set<number>();
   private unsubscribe: (() => Promise<void>) | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -97,6 +104,7 @@ export class BuildingController implements ReactiveController {
   /** Local edit: shown immediately, saved after a short pause. */
   edit(building: Building): void {
     this.building = building;
+    setPlanRecipes(building.recipes);
     this.pending = building;
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => void this.flush(), SAVE_DELAY);
@@ -151,7 +159,16 @@ export class BuildingController implements ReactiveController {
     this.host.requestUpdate();
     this.saving = (async () => {
       try {
-        const revision = await saveBuilding(this.hass!, building);
+        const bases = this.recipeBases;
+        const { revision, recipes } = await saveBuilding(this.hass!, building, bases);
+        // the copies the backend made for items placed now: the plan keeps them, also when their pack goes (#2);
+        // and the ones it changed meanwhile (an update, a rollback, #45) replace the copies this plan started from
+        if (recipes) {
+          adoptRecipes(building, recipes, bases);
+          if (this.building && this.building !== building) adoptRecipes(this.building, recipes, bases);
+          if (this.building) setPlanRecipes(this.building.recipes);
+          this.recipeBases = recipeHashes(recipes);
+        }
         this.ownRevisions.add(revision);
         this.revision = revision;
         this.saveState = this.pending ? "saving" : "saved";
@@ -171,7 +188,9 @@ export class BuildingController implements ReactiveController {
 
   private async start(): Promise<void> {
     if (!this.hass) return;
-    await Promise.all([this.reloadPacks(), this.reload()]);
+    // the library is not loaded here: placed items draw from the plan's recipe copies (#2), so a view that only
+    // shows the plan (a wall tablet) never fetches it; the editor and the extensions page ask for it (#44)
+    await this.reload();
     if (!this.unsubscribe && this.connected) {
       try {
         this.unsubscribe = await subscribeBuilding(this.hass, (revision) => {
@@ -183,6 +202,13 @@ export class BuildingController implements ReactiveController {
         // older backend or connection loss: changes from elsewhere show after a reload
       }
     }
+  }
+
+  /** Load the library unless it is loaded or loading (the editor and the extensions page call it when they open). */
+  loadLibrary(): Promise<void> {
+    if (this.packsLoaded) return Promise.resolve();
+    this.libraryLoading ??= this.reloadPacks().finally(() => (this.libraryLoading = null));
+    return this.libraryLoading;
   }
 
   /** Load the furniture packs again (after an import or removal). */
@@ -204,7 +230,10 @@ export class BuildingController implements ReactiveController {
     try {
       const res = await fetchBuilding(this.hass);
       this.building = normalizeBuilding(res.building);
+      setPlanRecipes(this.building.recipes);
+      this.recipeBases = recipeHashes(this.building.recipes);
       this.backendVersion = res.version ?? null;
+      this.canEdit = res.can_edit ?? !!this.hass.user?.is_admin;
       if (this.draft === null && !this.pending) this.draft = readDraft();
       this.revision = res.revision;
       this.error = null;
@@ -214,6 +243,15 @@ export class BuildingController implements ReactiveController {
     this.host.requestUpdate();
   }
 }
+
+/** Add the recipe copies a plan lacks and take the backend's copy where the plan still has the one it started from
+ * (`bases`); a copy changed in the plan since stays. */
+function adoptRecipes(building: Building, recipes: Record<string, PlanRecipe>, bases: Record<string, string>): void {
+  const own = building.recipes ?? {};
+  const kept = Object.entries(own).filter(([type, copy]) => !(type in recipes) || copy.hash !== bases[type]);
+  building.recipes = { ...recipes, ...Object.fromEntries(kept) };
+}
+
 
 function errorText(err: unknown): string {
   if (err && typeof err === "object" && "message" in err) return String((err as { message: unknown }).message);

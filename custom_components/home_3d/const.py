@@ -22,6 +22,9 @@ PANEL_URL_PATH = "home_3d"
 PANEL_COMPONENT = "home-3d-panel"
 PANEL_ICON = "mdi:floor-plan"
 PANEL_TITLE = "Home 3D"
+# integration option (#8): whether the panel has an entry in the sidebar (the panel URL and the card work either way)
+CONF_SHOW_IN_SIDEBAR = "show_in_sidebar"
+DEFAULT_SHOW_IN_SIDEBAR = True
 
 SIGNAL_BUILDING_UPDATED = f"{DOMAIN}_building_updated"
 # a sentence for the open views (see voice.py) and the hass.data key of its broker
@@ -30,3 +33,13 @@ DATA_ASK = f"{DOMAIN}_ask"
 # the voice settings (which sentences Assist hands to Home 3D), kept in .storage
 DATA_VOICE = f"{DOMAIN}_voice"
 STORAGE_KEY_VOICE = f"{DOMAIN}.voice"
+# the editors list (#7): who may change the plan, kept in .storage (see editors.py)
+DATA_EDITORS = f"{DOMAIN}_editors"
+STORAGE_KEY_EDITORS = f"{DOMAIN}.editors"
+# the household's own items, made in the item editor (#13), kept in .storage and offered as one more pack
+STORAGE_KEY_ITEMS = f"{DOMAIN}.custom_items"
+# pack updates (#26): the settings, pins and previous releases, kept in .storage (see pack_updates.py)
+DATA_PACK_UPDATES = f"{DOMAIN}_pack_updates"
+STORAGE_KEY_PACK_UPDATES = f"{DOMAIN}.pack_updates"
+# a time of day as the plan and the update settings store it: "HH:MM", 00:00 to 23:59 (frontend show-when.ts HHMM)
+TIME_PATTERN = r"^([01][0-9]|2[0-3]):[0-5][0-9]$"
