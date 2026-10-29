@@ -218,7 +218,7 @@ PACK_FORMAT_V2 = "home3d-pack"
 PACK_VERSION_V2 = 2
 PACK_FILE = "pack.json"
 # limits of a pack folder: items, characters per file and in all (one websocket message carries the folder)
-MAX_ITEMS = 500
+MAX_ITEMS = 1000
 MAX_FILE_SIZE = 50_000
 MAX_FOLDER_SIZE = 3_000_000
 # an item file: lower-case names, at most three folders deep ("seating/chairs/stool.json")

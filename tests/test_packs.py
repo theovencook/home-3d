@@ -342,6 +342,16 @@ def test_a_v2_pack_with_a_bad_item_is_refused_naming_the_file() -> None:
     assert err.value.code == "invalid_content"
 
 
+def test_a_v2_pack_holds_up_to_a_thousand_items() -> None:
+    # the core pack outgrew 500; a pack takes 1000 items, the 1001st is refused
+    full = _folder(**{f"i{n}.json": _item(f"i{n}") for n in range(1000)})
+    assert len(packs.verify_folder(full)["items"]) == 1000
+    over = _folder(**{f"i{n}.json": _item(f"i{n}") for n in range(1001)})
+    with pytest.raises(packs.PackError) as err:
+        packs.verify_folder(over)
+    assert err.value.code == "too_many_items"
+
+
 def test_a_v2_pack_over_the_limits_is_refused() -> None:
     # one file larger than a file may be
     big = _item("cube_chair", tags=["x"])
