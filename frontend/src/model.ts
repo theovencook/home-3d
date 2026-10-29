@@ -288,6 +288,8 @@ export interface Furniture {
   export?: EntityRef;
   /** Energie Pro: a glass card over the device with its power now, today's kWh and the day curve. */
   holo?: boolean;
+  /** The power sensor of the circuit it hangs on (a circuit monitor's channel): its watts are inside that one's (#43). */
+  circuit?: EntityRef;
   /** Energie Pro, inverter: false hides the plant's card over its field. */
   plant_card?: boolean;
   /** Energie Pro, inverter: its plant card moved from its field's middle along the eave (m, + = right) and up the slope (#335). */
@@ -397,6 +399,8 @@ export interface Placement {
   glow_scale?: number | null;
   /** Energie Pro: a glass card over the device (a smart plug) with its power, today's kWh and the day curve (D178). */
   holo?: boolean;
+  /** The power sensor of the circuit it hangs on (a circuit monitor's channel): its watts are inside that one's (#43). */
+  circuit?: string | null;
   /** Cameras: show the field-of-view wedge on the floor (null = yes). */
   cone?: boolean | null;
   /** Cameras: detection pins (person, car, animal) over the camera (null = yes); false leaves only the wedge turning red (#267). */

@@ -8,6 +8,7 @@ from custom_components.home_3d.schema import (
     HOLOGRAM_SCHEMA,
     OPENING_SCHEMA,
     OUTDOOR_SCHEMA,
+    PLACEMENT_SCHEMA,
     ROOF_SECTION_SCHEMA,
     ROOM_SCHEMA,
     SETTINGS_SCHEMA,
@@ -422,3 +423,16 @@ def test_item_actions() -> None:
         PLACEMENT_SCHEMA({**dev, "actions": {"tap": {"action": "javascript"}}})
     with pytest.raises(vol.Invalid):
         FURNITURE_SCHEMA({**sofa, "actions": {"tap": {"action": "toggle", "confirm_text": "x" * 301}}})
+
+
+def test_plug_keeps_the_circuit_it_hangs_on() -> None:
+    """A placed device and an item keep the circuit they are inside, so its watts aren't counted twice (#43)."""
+    plug = {"entity_id": "switch.kettle", "x": 1, "z": 1, "y": None, "circuit": "sensor.kitchen_power"}
+    assert PLACEMENT_SCHEMA(plug)["circuit"] == "sensor.kitchen_power"
+    item = {"id": "p1", "type": "washer", "x": 2, "z": 2, "rotation": 0, "w": 0.6, "d": 0.6, "h": 0.85, "variant": None}
+    assert FURNITURE_SCHEMA({**item, "circuit": "sensor.kitchen_power"})["circuit"] == "sensor.kitchen_power"
+    assert "circuit" not in FURNITURE_SCHEMA(item)
+    with pytest.raises(vol.Invalid):
+        PLACEMENT_SCHEMA({**plug, "circuit": 5})
+    with pytest.raises(vol.Invalid):
+        FURNITURE_SCHEMA({**item, "circuit": "x" * 256})

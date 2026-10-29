@@ -52,6 +52,29 @@ export interface Consumer {
   power: number;
   /** A wallbox: its cable is drawn in its own colour. */
   wallbox?: boolean;
+  /** The power sensor of the circuit it hangs on (a circuit monitor's channel): its watts are inside that circuit's (#43). */
+  circuit?: string;
+}
+
+/**
+ * Whether an item's own power sensor is a load on the house cables (#43): a consumer or a wallbox. The meter, the
+ * inverters, the solar panels and the batteries have cables of their own; a battery's discharge is a source and its
+ * charging runs on the battery cable, so neither is a consumer on top.
+ */
+export function isLoad(type: string): boolean {
+  const role = energyRole(type);
+  return role === null || role === "wallbox";
+}
+
+/**
+ * The watts each consumer adds on its own cable (#43): a circuit's own watts less the consumers inside it (they
+ * hang on it with their own branch), so a smart plug in a circuit is not counted again on top of its circuit.
+ */
+export function ownLoads(consumers: readonly Consumer[]): number[] {
+  const inside = new Map<string, number>();
+  const circuits = new Set(consumers.map((c) => c.powerEntity));
+  for (const c of consumers) if (c.circuit && c.circuit !== c.powerEntity && circuits.has(c.circuit)) inside.set(c.circuit, (inside.get(c.circuit) ?? 0) + c.power);
+  return consumers.map((c) => Math.max(0, c.power - (inside.get(c.powerEntity) ?? 0)));
 }
 
 const CABLE_Y = 0.03;
@@ -222,10 +245,14 @@ export function powerSensorFor(hass: HomeAssistant, entityId: string): string | 
   return list.find((e) => area === null || entityAreaId(hass, e) === null || entityAreaId(hass, e) === area) ?? null;
 }
 
-/** Placed entities that report power, with their position and current power. */
-export function findConsumers(hass: HomeAssistant, building: Building): Consumer[] {
+/**
+ * Placed entities that report power, with their position and current power. The sources' sensors are none: the
+ * balance sensors and those of the placed meter, inverters, solar panels and batteries (a battery's power sensor is
+ * often placed on its own as well, but its discharge is no load, #43).
+ */
+export function findConsumers(hass: HomeAssistant, building: Building, devices: DeviceSensors = deviceSensors(building)): Consumer[] {
   const e = building.energy;
-  const sources = new Set([e.grid, e.solar, e.battery].filter(Boolean));
+  const sources = new Set([e.grid, e.solar, e.battery, devices.grid, devices.gridExport, ...devices.solar, ...devices.battery, ...devices.charge].filter(Boolean));
   const out: Consumer[] = [];
   const seen = new Set<string>();
   for (const floor of building.floors) {
@@ -233,7 +260,8 @@ export function findConsumers(hass: HomeAssistant, building: Building): Consumer
       const sensor = powerSensorFor(hass, pl.entity_id);
       if (!sensor || sources.has(sensor) || seen.has(sensor)) continue;
       seen.add(sensor);
-      out.push({ id: pl.entity_id, powerEntity: sensor, floorId: floor.id, x: pl.x, z: pl.z, power: Math.max(0, readPower(hass.states[sensor]) ?? 0) });
+      const circuit = ref(pl.circuit);
+      out.push({ id: pl.entity_id, powerEntity: sensor, floorId: floor.id, x: pl.x, z: pl.z, power: Math.max(0, readPower(hass.states[sensor]) ?? 0), ...(circuit ? { circuit } : {}) });
     }
   }
   return out;
@@ -279,7 +307,7 @@ export function energySummary(hass: HomeAssistant, building: Building, consumers
   let consumption: number | null = e.consumption ? readPower(hass.states[e.consumption]) : null;
   if (consumption !== null) consumption = Math.max(0, consumption);
   else if (grid !== null || solar !== null || battery !== null) consumption = Math.max(0, (grid ?? 0) + Math.max(0, solar ?? 0) + (battery ?? 0));
-  else if (consumers.length) consumption = consumers.reduce((s, c) => s + c.power, 0);
+  else if (consumers.length) consumption = ownLoads(consumers).reduce((s, w) => s + w, 0);
   return {
     grid,
     solar: solar === null ? null : Math.max(0, solar),
@@ -635,8 +663,15 @@ export function flowSegments({ building, consumers, summary, battery, fieldPower
     if (inv) onInverter.set(bat.id, inv);
   }
 
-  const targets: (Target & { power: number })[] = consumers.map((c) => ({ floorId: c.floorId, x: c.x, z: c.z, kind: (c.wallbox ? "wallbox" : "consumer") as FlowKind, power: c.power }));
-  for (const bat of batteries) if (!onInverter.has(bat.id) && summary.battery !== null) targets.push({ floorId: bat.floorId, x: bat.x, z: bat.z, kind: "battery", power: Math.abs(batteryPower(bat)) });
+  // a consumer inside a circuit has its own branch: the circuit's cable only adds what is left (#43)
+  const loads = ownLoads(consumers);
+  // `load`: what a target draws through a shared cable; a discharging battery gives instead (negative, #43)
+  const targets: (Target & { power: number; load: number })[] = consumers.map((c, i) => ({ floorId: c.floorId, x: c.x, z: c.z, kind: (c.wallbox ? "wallbox" : "consumer") as FlowKind, power: loads[i], load: loads[i] }));
+  for (const bat of batteries) {
+    if (onInverter.has(bat.id) || summary.battery === null) continue;
+    const p = batteryPower(bat);
+    targets.push({ floorId: bat.floorId, x: bat.x, z: bat.z, kind: "battery", power: Math.abs(p), load: -p });
+  }
   const key = `${meter.floor_id}:${meter.x},${meter.z}|${targets.map((t) => `${t.floorId}:${t.x},${t.z}:${t.kind}`).join(";")}`;
   let perBuilding = planCache.get(building);
   if (!perBuilding) planCache.set(building, (perBuilding = new Map()));
@@ -652,7 +687,8 @@ export function flowSegments({ building, consumers, summary, battery, fieldPower
     a: s.a,
     b: s.b,
     dist: s.dist,
-    power: s.members.reduce((sum, m) => sum + targets[m].power, 0),
+    // a battery's own cable carries its watts either way; a cable shared with loads what they draw beyond its discharge
+    power: s.kind === "battery" ? s.members.reduce((sum, m) => sum + targets[m].power, 0) : Math.max(0, s.members.reduce((sum, m) => sum + targets[m].load, 0)),
     kind: s.kind,
   }));
 

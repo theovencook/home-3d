@@ -347,7 +347,11 @@ and wallbox. The editor then offers the same links as for the built-in one, and 
 | `solar_panel` | a solar panel placed as an item (a garden array, a balcony panel): a cable to the nearest inverter of its floor, else to a battery there, else to the meter | power (its own output, optional) |
 
 A `meter` tagged `gas` or `water` is a gas or water meter and plays no part. Every other electric item (a smart plug,
-a heat pump) is a consumer once it has a power sensor. A hot-water cylinder whose id starts with `hot_water_cylinder`
+a heat pump) is a consumer once it has a power sensor. The meter, inverter, battery and solar panel are never
+consumers, even when their power sensor is placed on its own as well: a discharging battery is a source (the green
+share of the cables' colour), a charging one draws through its own cable. A consumer inside a circuit that has its
+own meter (a circuit monitor's channel placed in the plan) names that circuit's power sensor under *Inside circuit*:
+it keeps its own watts and its own branch, but the circuit's cable and the house total count those watts only once. A hot-water cylinder whose id starts with `hot_water_cylinder`
 also takes a `water_heater` entity. `theovencook.core` has one of each in `energy/` and `heating/`.
 
 ## What the loader checks
