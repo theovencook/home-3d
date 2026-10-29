@@ -10659,6 +10659,13 @@ export class Fp3dEditor extends LitElement {
       .sort((a, b) => a.label.localeCompare(b.label));
   }
 
+  /** The circuit a device hangs on (a circuit monitor's channel), so its watts are not counted on top of it (#43). */
+  private circuitSelect(value: string | null, own: string | null, onChange: (v: string | null) => void) {
+    const options = this.entityOptions((id) => this.isPowerSensor(id)).filter((o) => o.id !== own);
+    return html`${this.entitySelect(this.t("energy_circuit"), value ?? "none", undefined, options, (v) => onChange(v && v !== "none" ? v : null))}
+      <p class="fp3d-sub fp3d-wide">${this.t("energy_circuit_hint")}</p>`;
+  }
+
   private entitySelect(label: string, value: string | null, auto: string | null | undefined, options: { id: string; label: string }[], onChange: (v: string | null) => void) {
     const autoLabel =
       auto === undefined ? null : auto ? this.t("entity_auto", { name: entityName(this.hass, auto) }) : this.t("entity_auto_none");
@@ -12198,6 +12205,7 @@ export class Fp3dEditor extends LitElement {
                 }}
             /></label>`
           : nothing}
+        ${!lamp && f.power && f.power !== "none" && !isEnergyDevice(f.type) ? this.circuitSelect(f.circuit ?? null, f.power, (v) => this.updateFurniture({ circuit: v })) : nothing}
         ${hasFeature("energy_pro") && !lamp && !["grid_point", "meter", "inverter", "home_battery"].includes(energyRole(f.type) ?? f.type)
           ? html`<label class="fp3d-check fp3d-wide" title=${this.t("furn_holo_hint")}
               ><input type="checkbox" .checked=${!!f.holo} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ holo: (ev.target as HTMLInputElement).checked })} />
@@ -12695,6 +12703,7 @@ export class Fp3dEditor extends LitElement {
               ${this.t("furn_holo")}</label
             >`
           : nothing}
+        ${powerSensorFor(this.hass!, pl.entity_id) ? this.circuitSelect(pl.circuit ?? null, powerSensorFor(this.hass!, pl.entity_id), (v) => this.updateDevice({ circuit: v })) : nothing}
         ${this.markerSelect(pl.marker ?? null, (v) => this.updateDevice({ marker: v }))}
         <label class="fp3d-field fp3d-wide" title=${this.t("device_name_hint")}
           >${this.t("device_name")}
