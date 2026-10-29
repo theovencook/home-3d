@@ -11,7 +11,8 @@ import { fitParts } from "../pack-scale.ts";
 import { COLOUR_ROLES, roleColour, type RoleColours } from "../colour-roles.ts";
 import { binColors, binShape, householdCountry, mailboxShape, type BinShape, type MailboxShape } from "../household.ts";
 import type { Floor } from "../model.ts";
-import { ALWAYS, DEG, EDGE_TOP, GeoBuffer, LineBuffer, pushLoft, pushLyingCyl, pushPrism, shade } from "./geo.ts";
+import { ALWAYS, DEG, EDGE_TOP, GeoBuffer, LineBuffer, pushLoft, pushLyingCyl, pushPrism, pushRings, shade, type Ring } from "./geo.ts";
+import { latheRings, roundedBoxRings, sphereRings } from "./rings.ts";
 
 /** The theme's colour per role (and a lighter top for some); the looks map them in the shaders. */
 const THEME = {
@@ -133,6 +134,21 @@ class Builder {
           this.line(at(a, across + Math.sin(t0) * r), at(a, across + Math.sin(t1) * r), cy + Math.cos(t0) * r, cy + Math.cos(t1) * r, edges);
         }
       }
+    }
+  }
+
+  /** A closed solid from rings in local coordinates (spheres, lathes, rounded boxes); `edges` outlines its widest ring. */
+  rings(rings: Ring[], side: number, top = side, edges: Color | null = null): void {
+    // a mirroring transform turns the rings clockwise: they run the other way round to face outwards again
+    const world = rings.map((r) => {
+      const pts = r.pts.map(([x, z]) => this.tf(x, z));
+      return { pts: this.mirrored ? pts.reverse() : pts, y: r.y };
+    });
+    pushRings(this.buf, world, side, top);
+    if (edges) {
+      const reach = (r: Ring) => Math.max(...r.pts.map(([x, z]) => Math.hypot(x - r.pts[0][0], z - r.pts[0][1])));
+      const widest = world.reduce((m, r) => (reach(r) > reach(m) + 1e-9 ? r : m), world[0]);
+      for (let i = 0; i < widest.pts.length; i++) this.line(widest.pts[i], widest.pts[(i + 1) % widest.pts.length], widest.y, widest.y, edges);
     }
   }
 
@@ -1635,13 +1651,17 @@ function builtInScreen(f: Furniture, w: number, d: number, h: number, floor?: Fl
   return null;
 }
 
-/** Round things cast a round shadow: a round table, a plant, a pack item whose largest part is an upright cylinder (#719). */
+/**
+ * Round things cast a round shadow: a round table, a plant, a pack item whose largest part is an upright cylinder
+ * (#719), a sphere or a lathe (#4).
+ */
 export function roundFootprint(f: Pick<Furniture, "type">): boolean {
   if (f.type === "table_round" || f.type === "plant") return true;
   const item = packItem(f.type);
   if (!item?.parts.length) return false;
   const big = item.parts.reduce((m, p) => (p.w * p.d > m.w * m.d ? p : m), item.parts[0]);
-  return big.shape === "cyl" && (big.axis ?? "y") === "y" && big.w >= 0.85 && big.d >= 0.85;
+  const round = (big.shape === "cyl" && (big.axis ?? "y") === "y") || big.shape === "sphere" || big.shape === "lathe";
+  return round && big.w >= 0.85 && big.d >= 0.85;
 }
 
 /**
@@ -2050,6 +2070,12 @@ function packModel(
     if (p.shape === "cyl" && (p.axis === "x" || p.axis === "z")) {
       bb.lyingCyl(p.axis, p.x * w, p.z * d, y0, y1, p.axis === "x" ? p.w * w : p.d * d, p.axis === "x" ? p.d * d : p.w * w, side, top, 14, edges);
     } else if (p.shape === "cyl") bb.cyl(p.x * w, p.z * d, (Math.min(p.w * w, p.d * d)) / 2, y0, y1, side, top, 14, edges);
+    else if (p.shape === "sphere") bb.rings(sphereRings(p.x * w, p.z * d, (p.w * w) / 2, (p.d * d) / 2, y0, y1), side, top, edges);
+    else if (p.shape === "lathe") bb.rings(latheRings(p.x * w, p.z * d, (p.w * w) / 2, (p.d * d) / 2, y0, y1, p.profile ?? [[1, 0], [1, 1]]), side, top, edges);
+    else if (p.shape === "rbox") {
+      const r = (p.round ?? 0.2) * Math.min(p.w * w, p.d * d, y1 - y0);
+      bb.rings(roundedBoxRings((p.x - p.w / 2) * w, (p.x + p.w / 2) * w, (p.z - p.d / 2) * d, (p.z + p.d / 2) * d, y0, y1, r), side, top, edges);
+    }
     else if (p.shape === "loft") {
       const tx = p.tx ?? p.x;
       const tz = p.tz ?? p.z;

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import json
+import pathlib
+import re
 from types import SimpleNamespace
 
 from homeassistant.core import HomeAssistant
@@ -94,6 +96,59 @@ def test_sloped_and_lying_parts_are_accepted() -> None:
     bad["items"][0]["parts"][1]["axis"] = "w"
     with pytest.raises(packs.PackError):
         packs.verify_pack(_pack(bad))
+
+
+def test_spheres_lathes_and_rounded_boxes_are_accepted_in_a_v2_item() -> None:
+    """Three more shapes (#4): a sphere fills its part box, a lathe turns a profile, a rounded box rounds its edges."""
+    box = {"x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "pot"}
+    vase = _item(
+        "vase",
+        parts=[
+            {"shape": "sphere", **box, "fix": "wdh"},
+            {"shape": "lathe", **box, "profile": [[0, 0], [0.6, 0], [1, 0.4], [0.35, 1]]},
+            {"shape": "rbox", **box, "round": 0.3},
+            {"shape": "rbox", **box},
+        ],
+    )
+    pack = packs.verify_folder(_folder(**{"deco/vase.json": vase}))
+    parts = pack["items"][0]["parts"]
+    assert [p["shape"] for p in parts] == ["sphere", "lathe", "rbox", "rbox"]
+    assert parts[1]["profile"] == [[0, 0], [0.6, 0], [1, 0.4], [0.35, 1]]
+    assert parts[2]["round"] == 0.3
+    assert parts[0]["fix"] == "wdh"
+
+
+@pytest.mark.parametrize(
+    ("part", "why"),
+    [
+        ({"shape": "lathe"}, "a lathe needs its profile"),
+        ({"shape": "lathe", "profile": [[0.5, 0]]}, "a profile has at least two points"),
+        ({"shape": "lathe", "profile": [[0.5, n / 20] for n in range(13)]}, "at most twelve points"),
+        ({"shape": "lathe", "profile": [[1.2, 0], [1, 1]]}, "the radius stays within the part"),
+        ({"shape": "lathe", "profile": [[0.5, 0], [0.5, 1.5]]}, "the height stays within the part"),
+        ({"shape": "lathe", "profile": [[0.5, 0, 1], [0.5, 1]]}, "a point is a radius and a height"),
+        ({"shape": "box", "profile": [[0.5, 0], [0.5, 1]]}, "only a lathe has a profile"),
+        ({"shape": "rbox", "round": 0.8}, "rounding is at most half the shortest side"),
+        ({"shape": "rbox", "round": 0}, "a rounded box is rounded"),
+        ({"shape": "sphere", "round": 0.2}, "only a rounded box has a rounding"),
+    ],
+)
+def test_bad_new_shape_fields_are_refused(part: dict, why: str) -> None:
+    item = _item("vase", parts=[{"x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "pot", **part}])
+    with pytest.raises(packs.PackError) as err:
+        packs.verify_folder(_folder(**{"vase.json": item}))
+    assert err.value.code == "invalid_content", why
+
+
+def test_every_item_example_in_the_pack_docs_is_valid() -> None:
+    """The examples in docs/packs.md (one per shape) are what pack authors copy: they must pass the checks."""
+    docs = (pathlib.Path(__file__).parent.parent / "docs" / "packs.md").read_text(encoding="utf-8")
+    examples = [json.loads(block) for block in re.findall(r"```json\n(.*?)```", docs, re.DOTALL)]
+    items = {e["id"]: e for e in examples if "parts" in e}
+    shapes = {p["shape"] for item in items.values() for p in item["parts"]}
+    assert {"sphere", "lathe", "rbox"} <= shapes
+    pack = packs.verify_folder(_folder(**{f"{i}.json": item for i, item in items.items()}))
+    assert len(pack["items"]) == len(items)
 
 
 def test_pack_content_is_checked() -> None:

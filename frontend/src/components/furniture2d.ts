@@ -11,6 +11,7 @@ const rect = (x0: number, z0: number, x1: number, z1: number, cls = "") => svg`<
 const line = (x0: number, z0: number, x1: number, z1: number, cls = "") => svg`<line class=${cls} x1=${x0} y1=${z0} x2=${x1} y2=${z1} />`;
 const circle = (x: number, z: number, r: number, cls = "") => svg`<circle class=${cls} cx=${x} cy=${z} r=${r} />`;
 const ellipse = (x: number, z: number, rx: number, rz: number, cls = "") => svg`<ellipse class=${cls} cx=${x} cy=${z} rx=${rx} ry=${rz} />`;
+const roundRect = (x0: number, z0: number, x1: number, z1: number, r: number, cls = "") => svg`<rect class=${cls} x=${Math.min(x0, x1)} y=${Math.min(z0, z1)} width=${Math.abs(x1 - x0)} height=${Math.abs(z1 - z0)} rx=${r} />`;
 
 /** Door or drawer divisions along the front edge. */
 function fronts(w: number, d: number, n: number): Part[] {
@@ -261,11 +262,28 @@ function packSymbol(item: PackItem, w: number, d: number): Part[] {
           : line(s.x1 * w, s.z1 * d, s.x2 * w, s.z2 * d),
     );
   }
-  return item.parts
-    .filter((p) => p.w < 0.98 || p.d < 0.98)
-    .map((p) =>
-      p.shape === "cyl" && (p.axis ?? "y") === "y"
-        ? circle(p.x * w, p.z * d, Math.min(p.w * w, p.d * d) / 2)
-        : rect((p.x - p.w / 2) * w, (p.z - p.d / 2) * d, (p.x + p.w / 2) * w, (p.z + p.d / 2) * d),
-    );
+  return item.parts.filter((p) => p.w < 0.98 || p.d < 0.98).map((p) => partFromAbove(p, w, d, item.size[2]));
+}
+
+/** A pack part seen from above: round parts as circles and ellipses as far as they reach, a rounded box rounded. */
+function partFromAbove(p: PackItem["parts"][number], w: number, d: number, h: number): Part {
+  const x0 = (p.x - p.w / 2) * w;
+  const x1 = (p.x + p.w / 2) * w;
+  const z0 = (p.z - p.d / 2) * d;
+  const z1 = (p.z + p.d / 2) * d;
+  switch (p.shape) {
+    case "cyl":
+      return (p.axis ?? "y") === "y" ? circle(p.x * w, p.z * d, Math.min(p.w * w, p.d * d) / 2) : rect(x0, z0, x1, z1);
+    case "sphere":
+      return ellipse(p.x * w, p.z * d, (p.w * w) / 2, (p.d * d) / 2);
+    case "lathe": {
+      const reach = Math.max(0, ...(p.profile ?? [[1, 0]]).map(([r]) => r));
+      return ellipse(p.x * w, p.z * d, (reach * p.w * w) / 2, (reach * p.d * d) / 2);
+    }
+    case "rbox":
+      // rounded like the 3D part (of its shortest side; the plan knows the item's default height only)
+      return roundRect(x0, z0, x1, z1, (p.round ?? 0.2) * Math.min(p.w * w, p.d * d, p.h * h));
+    default:
+      return rect(x0, z0, x1, z1);
+  }
 }

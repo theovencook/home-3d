@@ -18,8 +18,11 @@ export function isPackCooktop(type: string): boolean {
 }
 
 export interface PackPart {
-  /** A box, a cylinder, or a loft: a box whose top face is another rectangle (sloped sides). */
-  shape: "box" | "cyl" | "loft";
+  /**
+   * A box, a cylinder, a loft (a box whose top face is another rectangle: sloped sides), a sphere filling the part's
+   * box, a lathe (`profile` turned around the upright axis) or a box with rounded edges (`round`).
+   */
+  shape: "box" | "cyl" | "loft" | "sphere" | "lathe" | "rbox";
   /** Centre across and in depth (fractions -0.5..0.5 of the item's width and depth, front at +z). */
   x: number;
   z: number;
@@ -49,6 +52,10 @@ export interface PackPart {
   axis?: "x" | "y" | "z";
   /** Turn of the part around its own centre (degrees around the vertical axis). */
   rot?: number;
+  /** Lathe: [radius, height] points, the radius a fraction of the part's half width and depth, the height of its height. */
+  profile?: [number, number][];
+  /** Rounded box: the radius of its edges as a fraction of the part's shortest side (0.01 to 0.5, default 0.2). */
+  round?: number;
 }
 
 export type PackSymbol =
