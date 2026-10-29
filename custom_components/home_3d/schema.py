@@ -117,6 +117,8 @@ ROOM_SCHEMA = vol.Schema(
 )
 
 # door looks (room door, front doors with glass and sidelights, glass and sliding door) and window looks
+# the colour roles parts are drawn in (frontend colour-roles.ts)
+COLOUR_ROLES = ["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent"]
 _OPENING_STYLES = ["interior", "front", "front_glass", "sidelight", "sidelights", "glass", "sliding", "passage"]
 _OPENING_STYLES += ["standard", "bars", "glass_wall"]
 
@@ -341,6 +343,10 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("awning_position", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("awning_time", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=2, max=300))),
         vol.Optional("awning_invert", default=False): bool,
+        # its own colour per role (#12); roles left out follow the theme
+        vol.Optional("colors"): vol.Any(
+            None, vol.Schema({vol.In(COLOUR_ROLES): vol.Match(r"^#[0-9a-fA-F]{6}$")}, extra=vol.PREVENT_EXTRA)
+        ),
         # household: a waste bin's kind and colours, its calendar (Haushalt Pro); a mailbox's emptying door
         vol.Optional("bin_kind"): vol.Any(None, vol.In(WASTE_KINDS)),
         vol.Optional("bin_color"): vol.Any(None, vol.Match(r"^#[0-9a-fA-F]{6}$")),

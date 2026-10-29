@@ -1127,34 +1127,60 @@ export function fieldPowers(hass: HomeAssistant, building: Building, solar: numb
   return out;
 }
 
-/**
- * Cable colours: the sun yellow, the battery green, the wallbox blue, export cyan, import red-violet; the house
- * cables take the colour of what feeds the house right now.
- */
+/** Cable colours by source: the sun yellow, the battery green, the grid blue (#28). */
 export const FLOW_COLORS = {
   solar: [1, 0.78, 0.2] as [number, number, number],
   battery: [0.25, 1, 0.6] as [number, number, number],
-  wallbox: [0.3, 0.75, 1] as [number, number, number],
-  house: [0.6, 0.72, 1] as [number, number, number],
-  export: [0.2, 0.95, 1] as [number, number, number],
-  import: [1, 0.3, 0.65] as [number, number, number],
+  grid: [0.3, 0.55, 1] as [number, number, number],
 };
 
+export type Source = keyof typeof FLOW_COLORS;
+/** Where a cable's power comes from right now: the share of each source (0..1, adding up to 1). */
+export type SourceMix = Record<Source, number>;
+
+const SOURCES: Source[] = ["solar", "battery", "grid"];
+
+function shares(solar: number, battery: number, grid: number, fallback: Source): SourceMix {
+  const total = solar + battery + grid;
+  if (total <= 0) return { solar: 0, battery: 0, grid: 0, [fallback]: 1 };
+  return { solar: solar / total, battery: battery / total, grid: grid / total };
+}
+
+/**
+ * The source mix of a cable. The sources' own cables carry their source (the battery's only while it discharges);
+ * everything that draws power (the house, the wallbox, a charging battery, the export) shares one pool: the sun,
+ * the battery's discharge and the grid import, in proportion to what each gives right now.
+ */
+export function sourceMix(kind: FlowKind, summary: EnergySummary): SourceMix {
+  const sun = Math.max(0, summary.solar ?? 0);
+  const discharge = Math.max(0, summary.battery ?? 0);
+  const imported = Math.max(0, summary.grid ?? 0);
+  if (kind === "grid") return shares(0, 0, 1, "grid");
+  if (kind === "solar") return shares(1, 0, 0, "solar");
+  if (kind === "battery" && discharge > 0) return shares(0, 1, 0, "battery");
+  // the inverter's feed: the sun and the battery's discharge behind it
+  if (kind === "inverter") return shares(sun, discharge, 0, "solar");
+  return shares(sun, discharge, imported, kind === "battery" ? "battery" : kind === "export" ? "solar" : "grid");
+}
+
+/** The colour of a mix: the sources' colours weighted by their shares, kept as bright as the pure colours. */
+export function mixColor(mix: SourceMix): [number, number, number] {
+  const c: [number, number, number] = [0, 0, 0];
+  let bright = 0;
+  for (const s of SOURCES) {
+    const col = FLOW_COLORS[s];
+    for (let i = 0; i < 3; i++) c[i] += col[i] * mix[s];
+    bright += Math.max(...col) * mix[s];
+  }
+  const top = Math.max(...c);
+  return top > 0 ? (c.map((v) => (v * bright) / top) as [number, number, number]) : c;
+}
+
+/** The light dots of a blended cable: each source's pure colour for its share of the dots (a 50/50 blend of the sun and the grid would wash out to white). */
+export function flowDots(mix: SourceMix): { color: [number, number, number]; share: number }[] {
+  return SOURCES.filter((s) => mix[s] > 0).map((s) => ({ color: FLOW_COLORS[s], share: mix[s] }));
+}
+
 export function flowColor(kind: FlowKind, summary: EnergySummary): [number, number, number] {
-  if (kind === "grid") return FLOW_COLORS.import;
-  if (kind === "export") return FLOW_COLORS.export;
-  if (kind === "solar") return FLOW_COLORS.solar;
-  if (kind === "battery") return FLOW_COLORS.battery;
-  if (kind === "wallbox") return FLOW_COLORS.wallbox;
-  // the inverter's feed: the sun, or the battery's discharge at night
-  if (kind === "inverter") return (summary.solar ?? 0) > 5 ? FLOW_COLORS.solar : FLOW_COLORS.battery;
-  // what feeds the house: grid import, the part of the sun not exported, battery discharge
-  const shares: [number, [number, number, number]][] = [
-    [Math.max(0, summary.grid ?? 0), FLOW_COLORS.house],
-    [Math.max(0, (summary.solar ?? 0) - Math.max(0, -(summary.grid ?? 0)) - Math.max(0, -(summary.battery ?? 0))), FLOW_COLORS.solar],
-    [Math.max(0, summary.battery ?? 0), FLOW_COLORS.battery],
-  ];
-  // mixed colours wash out to white on the dark floor, so the largest source wins
-  const [best] = shares.reduce((a, b) => (b[0] > a[0] ? b : a));
-  return best > 0 ? shares.find((s) => s[0] === best)![1] : FLOW_COLORS.house;
+  return mixColor(sourceMix(kind, summary));
 }
