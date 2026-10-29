@@ -143,6 +143,12 @@ class FloorplanData:
         async_dispatcher_send(self.hass, SIGNAL_BUILDING_UPDATED, self.revision)
         return self.revision
 
+    async def async_follow_custom_items(self) -> None:
+        """After a custom item changed (#13): placed copies of it follow the change at once (#26)."""
+        building = with_recipes(self.building, self.building.get("recipes"), self.offered_packs)
+        if building.get("recipes") != self.building.get("recipes"):
+            await self.async_save_building(building)
+
     async def async_snapshot(self) -> None:
         """Keep the current building as a restore point."""
         self._history.append(

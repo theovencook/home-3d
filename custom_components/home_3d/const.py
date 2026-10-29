@@ -35,3 +35,6 @@ DATA_EDITORS = f"{DOMAIN}_editors"
 STORAGE_KEY_EDITORS = f"{DOMAIN}.editors"
 # the household's own items, made in the item editor (#13), kept in .storage and offered as one more pack
 STORAGE_KEY_ITEMS = f"{DOMAIN}.custom_items"
+# pack updates (#26): the settings, pins and previous releases, kept in .storage (see pack_updates.py)
+DATA_PACK_UPDATES = f"{DOMAIN}_pack_updates"
+STORAGE_KEY_PACK_UPDATES = f"{DOMAIN}.pack_updates"

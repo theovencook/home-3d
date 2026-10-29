@@ -26,6 +26,7 @@ from .card_resource import (
 )
 from .const import (
     DATA_EDITORS,
+    DATA_PACK_UPDATES,
     DOMAIN,
     MAIN_BUNDLE,
     PANEL_COMPONENT,
@@ -36,6 +37,7 @@ from .const import (
 )
 from .editors import Editors
 from .locate.service import DATA_LOCATE, LocateService
+from .pack_updates import PackUpdates
 from .storage import FloorplanData
 from .voice import async_remove_sentences, async_setup_voice, async_unload_voice
 from .websocket import async_register_commands
@@ -124,6 +126,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await data.async_load()
     hass.data[DOMAIN] = data
 
+    # pack updates (#26): settings, pins, previous releases and the scheduled check; a Home 3D update that brought a
+    # newer bundled pack is applied to placed items now when auto-update is on
+    updates = PackUpdates(hass, data)
+    await updates.async_load()
+    hass.data[DATA_PACK_UPDATES] = updates
+    updates.schedule()
+    await updates.async_auto_update()
+
     # who may change the plan (#7)
     editors = Editors(hass)
     await editors.async_load()
@@ -169,6 +179,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if (locate := hass.data.pop(DATA_LOCATE, None)) is not None:
         locate.stop()
+    if (updates := hass.data.pop(DATA_PACK_UPDATES, None)) is not None:
+        updates.stop()
     hass.data.pop(DATA_EDITORS, None)
     hass.data.pop(DOMAIN, None)
     return True

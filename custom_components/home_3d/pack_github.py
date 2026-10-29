@@ -26,7 +26,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 from yarl import URL
 
-from .packs import MAX_FILE_SIZE, MAX_FOLDER_SIZE, MAX_ITEMS, PACK_FILE, PackError, data_paths
+from .packs import MAX_FILE_SIZE, MAX_FOLDER_SIZE, MAX_ITEMS, PACK_FILE, PackError, _pack_file, data_paths
 
 # the only hosts a pack is fetched from (a redirect elsewhere is refused)
 ALLOWED_HOSTS = frozenset({"github.com", "api.github.com", "raw.githubusercontent.com"})
@@ -245,6 +245,32 @@ async def fetch_pack(hass: HomeAssistant, url: str) -> tuple[dict[str, str], dic
         "fetched_at": time.time(),
     }
     return dict(zip(wanted, texts, strict=True)), origin
+
+
+# ---------------------------------------------------------------------------- update checks (#26)
+
+
+async def latest_release(hass: HomeAssistant, origin: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    """Where an installed pack's ref points now: the commit, and the pack's own pack.json there (None when the
+    commit is the installed one: one request when nothing moved). A packs repository holds a folder per pack, so a new
+    commit may change only other packs: the caller compares the pack's release, not the commit. Raises PackError."""
+    session = async_get_clientsession(hass)
+    name = f"{origin['owner']}/{origin['repo']}"
+    api = f"https://api.github.com/repos/{name}"
+    commit = await _get_json(session, f"{api}/commits/{origin['ref']}", f'{name} at "{origin["ref"]}"')
+    sha = commit.get("sha") if isinstance(commit, dict) else None
+    if not isinstance(sha, str) or not _SHA.match(sha):
+        raise PackError("fetch_failed", f'{name} at "{origin["ref"]}": GitHub named no commit')
+    if sha == origin["commit"]:
+        return sha, None
+    prefix = f"{origin['folder']}/" if origin["folder"] else ""
+    body = await _get(
+        session, f"https://raw.githubusercontent.com/{name}/{sha}/{prefix}{PACK_FILE}", MAX_FILE_BYTES, PACK_FILE
+    )
+    try:
+        return sha, _pack_file(body.decode("utf-8"))
+    except UnicodeDecodeError as err:
+        raise PackError("invalid_content", f"{PACK_FILE}: not UTF-8 text") from err
 
 
 # ---------------------------------------------------------------------------- the kept origin

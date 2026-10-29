@@ -23,6 +23,8 @@ from .packs import ITEM_SCHEMA, PackError, _no_links, recipe_hash
 _LOGGER = logging.getLogger(__name__)
 
 PACK_TYPE_PREFIX = "pack:"
+# the household's own items (#13, custom_items.CUSTOM_PACK_ID; not imported here, which needs Home Assistant)
+CUSTOM_TYPE_PREFIX = f"{PACK_TYPE_PREFIX}household.custom:"
 # one copy per pack item type in use; a plan has at most 20 floors of 1000 items
 MAX_RECIPES = 2000
 
@@ -105,13 +107,20 @@ def with_recipes(building: dict[str, Any], kept: dict[str, Any] | None, packs: l
 
     A type keeps the copy the building brings, else the one the plan kept before (`kept`: a client that does not know
     recipes, or an older frontend, sends none), else gets a copy of the installed item. A type whose pack is gone and
-    that has no copy stays without one (it shows as a plain box, as before).
+    that has no copy stays without one (it shows as a plain box, as before). The household's own items (#13) are the
+    exception: their copies follow the item as it is now (#26), and keep the last copy only once the item is gone.
     """
     own = building.get("recipes") or {}
     kept = kept or {}
     installed: dict[str, tuple[dict[str, Any], dict[str, Any]]] | None = None
     recipes: dict[str, dict[str, Any]] = {}
     for type_ in sorted(used_pack_types(building)):
+        if type_.startswith(CUSTOM_TYPE_PREFIX):
+            if installed is None:
+                installed = installed_copies(packs)
+            if type_ in installed:
+                recipes[type_] = recipe_copy(*installed[type_])
+                continue
         if type_ in own:
             recipes[type_] = own[type_]
         elif type_ in kept:
