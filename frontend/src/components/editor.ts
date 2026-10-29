@@ -155,7 +155,7 @@ import { COLOUR_PRESETS, itemColourRoles, roleColour, setRoleColour, type Colour
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
-import { furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
+import { energyRole, furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
 import { isPrinter } from "../printer.ts";
 
 /** Items that can be fixed against moving. */
@@ -347,6 +347,11 @@ const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRigh
 
 // furniture without a top to light: no "State from" box
 const NO_STATE_TYPES = new Set(["parking", "stairwell", "rug", "grid_point", "waste_bin", "mailbox", "wall_switch", "wall_socket", "wifi_ap", "water_heater"]);
+
+/** A device of the energy tool: the built-in meter, inverter, battery, wallbox and grid point, and pack energy items (#22). */
+function isEnergyDevice(type: string): boolean {
+  return (ENERGY_DEVICES as readonly string[]).includes(type) || energyRole(type) !== null;
+}
 
 /** A gas or water meter from a pack (its reading in m³ or litres, no power): family "meter" tagged gas or water. */
 function volumeMeter(type: string): boolean {
@@ -3460,15 +3465,17 @@ export class Fp3dEditor extends LitElement {
   private cableLabel(key: string): string {
     const furn = (id: string) => {
       const m = this._doc.floors.flatMap((f) => f.furniture).find((x) => x.id === id);
-      return m ? m.name || this.t(`furn_${m.type}` as I18nKey) : "?";
+      return m ? m.name || this.typeName(m.type) : "?";
     };
-    const meter = this._doc.floors.flatMap((f) => f.furniture).find((x) => x.type === "meter");
+    const meter = this._doc.floors.flatMap((f) => f.furniture).find((x) => energyRole(x.type) === "meter");
     const meterName = meter ? meter.name || this.t("furn_meter") : this.t("energy_meter");
     if (key === "grid") return `${meterName} → ${this.t("furn_grid_point")}`;
     const [kind, id] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
     if (kind === "solar") {
       const fields = this._doc.settings.roof.solar ?? [];
       const i = fields.findIndex((f) => f.id === id);
+      // a solar panel placed as an item (#22)
+      if (i < 0 && this._doc.floors.some((fl) => fl.furniture.some((m) => m.id === id))) return `${furn(id)} → ${this.t("furn_inverter")}`;
       const f = fields[i];
       return `${f?.name || `${this.t("solar_field")} ${i + 1}`} → ${this.t("furn_inverter")}`;
     }
@@ -3585,7 +3592,7 @@ export class Fp3dEditor extends LitElement {
   private renderEnergyMarkers() {
     const floor = this.floor;
     if (!floor) return nothing;
-    const icons: Record<string, string> = { inverter: "⚡", home_battery: "🔋", wallbox: "🔌", meter: "📟", grid_point: "🏁" };
+    const icons: Record<string, string> = { inverter: "⚡", home_battery: "🔋", wallbox: "🔌", meter: "📟", grid_point: "🏁", solar: "☀" };
     const h = this._doc.settings.roof.hologram;
     const holoPt = hasFeature("energy_pro") && h?.place === "free" && Number.isFinite(h.x) && Number.isFinite(h.z) ? this.toScreen([h.x!, h.z!]) : null;
     return svg`<g class="fp3d-energy-markers">${
@@ -3598,15 +3605,15 @@ export class Fp3dEditor extends LitElement {
         </g>`
         : nothing
     }${floor.furniture
-      .filter((m) => (ENERGY_DEVICES as readonly string[]).includes(m.type))
+      .filter((m) => isEnergyDevice(m.type))
       .map((m) => {
         const [x, y] = this.toScreen([m.x, m.z]);
         const sel = m.id === this._furnitureId;
         return svg`<g data-energy-device=${m.id} class=${`fp3d-energy-marker${sel ? " fp3d-energy-marker-sel" : ""}`}>
           <circle cx=${x} cy=${y} r="17" />
-          <text x=${x} y=${y + 6} class="fp3d-energy-icon">${icons[m.type] ?? "⚡"}</text>
-          ${sel ? svg`<text x=${x} y=${y + 32} class="fp3d-energy-name">${this.t(`furn_${m.type}` as I18nKey)}</text>` : nothing}
-          <title>${this.t(`furn_${m.type}` as I18nKey)}</title>
+          <text x=${x} y=${y + 6} class="fp3d-energy-icon">${icons[energyRole(m.type) ?? m.type] ?? "⚡"}</text>
+          ${sel ? svg`<text x=${x} y=${y + 32} class="fp3d-energy-name">${this.typeName(m.type)}</text>` : nothing}
+          <title>${this.typeName(m.type)}</title>
         </g>`;
       })}</g>`;
   }
@@ -3936,7 +3943,7 @@ export class Fp3dEditor extends LitElement {
             // the inverters, and the batteries with a solar input of their own (a power station, D410)
             const named = (type: "inverter" | "home_battery") =>
               this._doc.floors
-                .flatMap((fl) => fl.furniture.filter((m) => m.type === type).map((m) => ({ m, fl })))
+                .flatMap((fl) => fl.furniture.filter((m) => energyRole(m.type) === type).map((m) => ({ m, fl })))
                 .map(({ m, fl }, i) => {
                   const entity = linked?.get(m.id)?.entity;
                   const own = m.name?.trim() || (entity && this.hass ? entityName(this.hass, entity) : "");
@@ -4005,7 +4012,7 @@ export class Fp3dEditor extends LitElement {
   private renderEnergyPanel() {
     const field = this._solarId ? this._doc.settings.roof.solar?.find((x) => x.id === this._solarId) : undefined;
     if (field) return this.renderSolarForm(field);
-    const device = this._furnitureId ? this.floor?.furniture.find((x) => x.id === this._furnitureId && (ENERGY_DEVICES as readonly string[]).includes(x.type)) : undefined;
+    const device = this._furnitureId ? this.floor?.furniture.find((x) => x.id === this._furnitureId && isEnergyDevice(x.type)) : undefined;
     if (device)
       return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("furniture", null)}>‹ ${this.t("tool_energy")}</button>
         ${this.renderFurnitureForm(device)}`;
@@ -4092,6 +4099,12 @@ export class Fp3dEditor extends LitElement {
     return a?.device_class === "power" || a?.unit_of_measurement === "W" || a?.unit_of_measurement === "kW";
   }
 
+  /** The name of a furniture type: a pack item's own name, else the built-in type's. */
+  private typeName(type: string): string {
+    const item = packItem(type);
+    return item ? packItemName(item, this.hass?.language ?? "en") : this.t(`furn_${type}` as I18nKey);
+  }
+
   /** The power sensor of an energy device: set by hand, or the one found on its Home Assistant device. */
   private devicePower(m: Furniture, links: Map<string, { power: string | null }>): string | null {
     return m.power && m.power !== "none" ? m.power : (links.get(m.id)?.power ?? null);
@@ -4102,7 +4115,7 @@ export class Fp3dEditor extends LitElement {
     const doc = this._doc;
     const links = this.hass ? furnitureEntities(this.hass, doc.floors) : new Map<string, { power: string | null }>();
     const all = doc.floors.flatMap((fl) => fl.furniture.map((m) => ({ m, fl })));
-    const of = (type: string) => all.filter((x) => x.m.type === type);
+    const of = (type: string) => all.filter((x) => (energyRole(x.m.type) ?? x.m.type) === type);
     const goTo = (x: (typeof all)[number]) => {
       this._floorId = x.fl.id;
       this._solarId = null;
@@ -4216,7 +4229,7 @@ export class Fp3dEditor extends LitElement {
   /** Inverters, batteries and wallboxes of all floors, and buttons to add them on the floor shown. */
   private renderEnergyDevices() {
     const admin = this.isEditor;
-    const list = this._doc.floors.flatMap((fl) => fl.furniture.filter((m) => (ENERGY_DEVICES as readonly string[]).includes(m.type)).map((m) => ({ fl, m })));
+    const list = this._doc.floors.flatMap((fl) => fl.furniture.filter((m) => isEnergyDevice(m.type)).map((m) => ({ fl, m })));
     return html`<section>
       <h3>⚡ ${this.t("energy_devices")}</h3>
       <p class="fp3d-sub">${this.t("energy_devices_hint")}</p>
@@ -4233,7 +4246,7 @@ export class Fp3dEditor extends LitElement {
                     this.showPoint(m.x, m.z);
                   }}
                 >
-                  <span>${m.name || this.t(`furn_${m.type}` as I18nKey)} · ${fl.name}</span>
+                  <span>${m.name || this.typeName(m.type)} · ${fl.name}</span>
                 </button>
               </div>`,
             )}
@@ -9743,7 +9756,7 @@ export class Fp3dEditor extends LitElement {
       const [hx, hy] = this.toScreen([f.x - Math.sin(a) * reach, f.z + Math.cos(a) * reach]);
       const [fx, fy] = this.toScreen([f.x - Math.sin(a) * (f.d / 2), f.z + Math.cos(a) * (f.d / 2)]);
       const lit = isLamp(f.type) && !!f.entity && f.entity !== "none" && this.hass?.states[f.entity]?.state === "on";
-      return svg`<g data-furniture=${f.id} class=${`fp3d-furn${sel || member ? " fp3d-furn-sel" : ""}${lit ? " fp3d-furn-lit" : ""}${(ENERGY_DEVICES as readonly string[]).includes(f.type) ? " fp3d-energy-item" : ""}`}>
+      return svg`<g data-furniture=${f.id} class=${`fp3d-furn${sel || member ? " fp3d-furn-sel" : ""}${lit ? " fp3d-furn-lit" : ""}${isEnergyDevice(f.type) ? " fp3d-energy-item" : ""}`}>
         <g transform="translate(${cx} ${cy}) rotate(${f.rotation}) scale(${f.mirror ? -k : k} ${k})">
           <rect class="fp3d-furn-body" x=${-f.w / 2} y=${-f.d / 2} width=${f.w} height=${f.d} />
           <g class="fp3d-furn-sym">${furnitureSymbol(f.type, f.w, f.d)}</g>
@@ -12127,7 +12140,7 @@ export class Fp3dEditor extends LitElement {
               <p class="fp3d-sub fp3d-wide">${this.t("heat_sensor_hint")}</p>`
           : nothing}
         ${f.type === "awning" ? this.renderAwningFields(f) : packMotion(f.type) ? this.renderMotionFields(f) : nothing}
-        ${!lamp && !(ENERGY_DEVICES as readonly string[]).includes(f.type) && !hasScreen(f.type) ? this.renderStateLinks(f) : nothing}
+        ${!lamp && !isEnergyDevice(f.type) && !hasScreen(f.type) ? this.renderStateLinks(f) : nothing}
         ${lamp && f.entity && f.entity !== "none"
           ? html`${this.entitySelect(this.t("furn_color_entity"), f.color_entity ?? null, undefined, this.entityOptions((id) => id.startsWith("light.") && id !== f.entity), (v) => this.updateFurniture({ color_entity: v === "none" ? null : v }))}
               <p class="fp3d-sub fp3d-wide">${this.t("furn_color_entity_hint")}</p>`
@@ -12162,13 +12175,13 @@ export class Fp3dEditor extends LitElement {
         ${lamp || f.type === "grid_point" || volumeMeter(f.type)
           ? nothing
           : this.entitySelect(
-              this.t(f.type === "meter" ? "energy_grid" : f.type === "inverter" ? "energy_solar_sensor" : f.type === "home_battery" ? "energy_battery_sensor" : "furn_power"),
+              this.t(energyRole(f.type) === "meter" ? "energy_grid" : energyRole(f.type) === "inverter" ? "energy_solar_sensor" : energyRole(f.type) === "home_battery" ? "energy_battery_sensor" : "furn_power"),
               f.power ?? null,
               autoPick("power"),
               power,
               (v) => this.updateFurniture({ power: v }),
             )}
-        ${!lamp && f.power && f.power !== "none" && !(ENERGY_DEVICES as readonly string[]).includes(f.type)
+        ${!lamp && f.power && f.power !== "none" && !isEnergyDevice(f.type)
           ? html`<label class="fp3d-field" title=${this.t("furn_run_w_hint")}
               >${this.t("furn_run_w")}
               <input
@@ -12185,12 +12198,12 @@ export class Fp3dEditor extends LitElement {
                 }}
             /></label>`
           : nothing}
-        ${hasFeature("energy_pro") && !lamp && !["grid_point", "meter", "inverter", "home_battery"].includes(f.type)
+        ${hasFeature("energy_pro") && !lamp && !["grid_point", "meter", "inverter", "home_battery"].includes(energyRole(f.type) ?? f.type)
           ? html`<label class="fp3d-check fp3d-wide" title=${this.t("furn_holo_hint")}
               ><input type="checkbox" .checked=${!!f.holo} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ holo: (ev.target as HTMLInputElement).checked })} />
               ${this.t("furn_holo")}</label
             >`
-          : hasFeature("energy_pro") && f.type === "inverter"
+          : hasFeature("energy_pro") && energyRole(f.type) === "inverter"
             ? html`<label class="fp3d-check fp3d-wide" title=${this.t("furn_plant_card_hint")}
                 ><input type="checkbox" .checked=${f.plant_card !== false} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ plant_card: (ev.target as HTMLInputElement).checked ? undefined : false })} />
                 ${this.t("furn_plant_card")}</label
@@ -12201,20 +12214,20 @@ export class Fp3dEditor extends LitElement {
                 : nothing}`
             : nothing}
       </div>
-      ${f.type === "meter"
+      ${energyRole(f.type) === "meter"
         ? html`<div class="fp3d-form fp3d-links">
             ${this.entitySelect(this.t("furn_export"), f.export ?? null, undefined, power, (v) => this.updateFurniture({ export: v === "none" ? null : v }))}
             <p class="fp3d-sub fp3d-wide">${this.t("furn_export_hint")}</p>
           </div>`
         : nothing}
-      ${f.type === "inverter" && (this._doc.settings.roof.solar ?? []).length
+      ${energyRole(f.type) === "inverter" && (this._doc.settings.roof.solar ?? []).length
         ? (() => {
             // which strings feed this inverter, so it can be told apart from the others (#213)
             const strings = (this._doc.settings.roof.strings ?? []).filter((st) => st.inverter === f.id).map((st) => st.name);
             return html`<p class="fp3d-sub fp3d-wide">${strings.length ? this.t("inverter_strings", { names: strings.join(", ") }) : this.t("inverter_strings_none")}</p>`;
           })()
         : nothing}
-      ${f.type === "home_battery"
+      ${energyRole(f.type) === "home_battery"
         ? html`<div class="fp3d-form fp3d-links">
             ${this.entitySelect(
               this.t("furn_soc"),
@@ -12227,7 +12240,7 @@ export class Fp3dEditor extends LitElement {
             <p class="fp3d-sub fp3d-wide">${this.t("furn_charge_hint")}</p>
           </div>`
         : nothing}
-      ${f.type === "wallbox"
+      ${energyRole(f.type) === "wallbox"
         ? html`<div class="fp3d-form fp3d-links">
             ${this.entitySelect(
               this.t("furn_wallbox_status"),
