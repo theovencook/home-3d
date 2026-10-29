@@ -26,6 +26,7 @@ import { backdropImage } from "../backdrop.ts";
 import { screenName, setScreenName, setVoiceHere, setVoicePipeline, voiceOnHere, voicePipeline } from "../load-voice.ts";
 import { doorbellCamera, doorbellEntities, directorOnHere, HOLD_DEFAULT, HOLD_MAX, HOLD_MIN, setDirectorHere, type DirectorSettings } from "../director.ts";
 import { deviceSensors, energySummary, flowSegments, gridPoint, powerSensorFor, proposeEnergySensors, type EnergyPrefs, type FlowSegment, proposeMeters } from "../energy.ts";
+import { energySensorFor } from "../wire-ends.ts";
 import { CLIMATE_ATTRS, isPulseDrive, isStatusSensor, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
 import { ACTION_TYPES, GESTURES, parseActionData, withGesture, type ActionType, type Gesture, type ItemAction, type ItemActions } from "../item-actions.ts";
 import { activeSections, sectionFloor, dormerParent, effectiveDormer, proposeDormer, sectionGeometry, floorOutline, polygonBox, headroomLines, ridgeHeight, sectionAbove, sectionCutsBelow, roofSectionsFromRooms, sectionFrame, sectionTurn, turnSectionAbout, wallTopUnder } from "../roof-sections.ts";
@@ -10700,6 +10701,14 @@ export class Fp3dEditor extends LitElement {
       <p class="fp3d-sub fp3d-wide">${this.t("energy_circuit_hint")}</p>`;
   }
 
+  /** The energy sensor whose today's kWh its cable end shows (#29): found on the device unless chosen here. */
+  private wireEnergySelect(value: string | null, power: string, onChange: (v: string | null) => void) {
+    const options = this.entityOptions((id) => id.startsWith("sensor.") && this.hass?.states[id]?.attributes.device_class === "energy");
+    const auto = this.hass ? energySensorFor(this.hass, power) : null;
+    return html`${this.entitySelect(this.t("energy_wire_sensor"), value, auto, options, onChange)}
+      <p class="fp3d-sub fp3d-wide">${this.t("energy_wire_sensor_hint")}</p>`;
+  }
+
   private entitySelect(label: string, value: string | null, auto: string | null | undefined, options: { id: string; label: string }[], onChange: (v: string | null) => void) {
     const autoLabel =
       auto === undefined ? null : auto ? this.t("entity_auto", { name: entityName(this.hass, auto) }) : this.t("entity_auto_none");
@@ -11186,6 +11195,8 @@ export class Fp3dEditor extends LitElement {
     const tariff = this.entityOptions(
       (id) => numberish(id) && (attr(id, "device_class") === "monetary" || /\/(kWh|MWh)$/.test(attr(id, "unit_of_measurement") ?? "")),
     );
+    // the cheap rate (#29): anything that is on while it runs (a binary sensor, a schedule, an input boolean)
+    const cheap = this.entityOptions((id) => /^(binary_sensor|schedule|input_boolean|switch)\./.test(id));
     const pick = (key: "grid" | "solar" | "battery" | "battery_soc" | "consumption" | "tariff") => (v: string | null) => this.setEnergy({ [key]: v === "none" ? null : v });
     // gas and water meters: counters of that device class, or in m³, litres, ft³ or gallons
     const meter = (kind: "gas" | "water") =>
@@ -11225,6 +11236,18 @@ export class Fp3dEditor extends LitElement {
         ${this.entitySelect(this.t("energy_water_meter"), e.water ?? null, undefined, meter("water"), (v) => this.setEnergy({ water: v === "none" ? null : v }))}
       </div>
       <p class="fp3d-sub">${this.t("energy_meters_hint")}</p>
+      <div class="fp3d-form">
+        ${this.entitySelect(this.t("energy_cheap_rate"), e.cheap_rate ?? null, undefined, cheap, (v) => this.setEnergy({ cheap_rate: v === "none" ? null : v }))}
+        <label class="fp3d-field"
+          >${this.t("energy_cheap_from")}
+          <input type="time" .value=${e.cheap_from ?? ""} ?disabled=${!admin} @change=${(ev: Event) => this.setEnergy({ cheap_from: (ev.target as HTMLInputElement).value || null })}
+        /></label>
+        <label class="fp3d-field"
+          >${this.t("energy_cheap_to")}
+          <input type="time" .value=${e.cheap_to ?? ""} ?disabled=${!admin} @change=${(ev: Event) => this.setEnergy({ cheap_to: (ev.target as HTMLInputElement).value || null })}
+        /></label>
+      </div>
+      <p class="fp3d-sub">${this.t("energy_cheap_hint")}</p>
       <div class="fp3d-actions">
         <button class="fp3d-btn" ?disabled=${!admin || !this.hass} @click=${() => this.importEnergyPrefs()}>${this.t("energy_import_prefs")}</button>
       </div>
@@ -12249,6 +12272,7 @@ export class Fp3dEditor extends LitElement {
             /></label>`
           : nothing}
         ${!lamp && f.power && f.power !== "none" && !isEnergyDevice(f.type) ? this.circuitSelect(f.circuit ?? null, f.power, (v) => this.updateFurniture({ circuit: v })) : nothing}
+        ${!lamp && f.power && f.power !== "none" && !isEnergyDevice(f.type) ? this.wireEnergySelect(f.energy ?? null, f.power, (v) => this.updateFurniture({ energy: v })) : nothing}
         ${hasFeature("energy_pro") && !lamp && !["grid_point", "meter", "inverter", "home_battery"].includes(energyRole(f.type) ?? f.type)
           ? html`<label class="fp3d-check fp3d-wide" title=${this.t("furn_holo_hint")}
               ><input type="checkbox" .checked=${!!f.holo} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ holo: (ev.target as HTMLInputElement).checked })} />
@@ -12747,6 +12771,7 @@ export class Fp3dEditor extends LitElement {
             >`
           : nothing}
         ${powerSensorFor(this.hass!, pl.entity_id) ? this.circuitSelect(pl.circuit ?? null, powerSensorFor(this.hass!, pl.entity_id), (v) => this.updateDevice({ circuit: v })) : nothing}
+        ${powerSensorFor(this.hass!, pl.entity_id) ? this.wireEnergySelect(pl.energy ?? null, powerSensorFor(this.hass!, pl.entity_id)!, (v) => this.updateDevice({ energy: v })) : nothing}
         ${this.markerSelect(pl.marker ?? null, (v) => this.updateDevice({ marker: v }))}
         <label class="fp3d-field fp3d-wide" title=${this.t("device_name_hint")}
           >${this.t("device_name")}
