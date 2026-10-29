@@ -2,6 +2,7 @@
 
 import { css, html, LitElement, nothing, svg, type PropertyValues } from "lit";
 import { linesField } from "./lines-field.ts";
+import { actionIndex, gestureAction, runItemAction, TapSequencer, type ActionOwner, type ItemAction } from "../item-actions.ts";
 import { carState, type CarState, heatSensorOn, roomClimateValue,
   appColor,
   areaEntities,
@@ -136,6 +137,7 @@ import type { HassEntity, HomeAssistant } from "../types.ts";
 import type { DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SoundSource, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 import { wallLayout } from "../camera-wall.ts";
 import { watchedEntities } from "../watched.ts";
+import { hasTimedRules, hiddenItems, shownBuilding } from "../show-when.ts";
 import { backdropCss } from "../backdrop.ts";
 import { loadVoice, micProbeAsked, micProbeDone, voicePipeline } from "../load-voice.ts";
 import { answerAsk, subscribeAsk, type Ask } from "../api.ts";
@@ -200,6 +202,7 @@ export class Fp3dView3d extends LitElement {
   static properties = {
     hass: { attribute: false },
     building: { attribute: false },
+    canEdit: { attribute: false },
     floorId: { attribute: false },
     roomId: { attribute: false },
     wallMode: { attribute: false },
@@ -257,6 +260,7 @@ export class Fp3dView3d extends LitElement {
     ghostOn: { attribute: false },
     _central: { state: true },
     _sheet: { state: true },
+    _ask: { state: true },
     _settingsOpen: { state: true },
     _note: { state: true },
     _thumbsCompact: { state: true },
@@ -300,6 +304,8 @@ export class Fp3dView3d extends LitElement {
 
   declare hass: HomeAssistant;
   declare building: Building | null;
+  /** On the editors list (#7): may change the plan's settings from the view. Unset: admins may (a backend before #7). */
+  declare canEdit: boolean | undefined;
   /** Time travel: the replayed moment (hass is then the past, read-only); null = live. */
   declare replay: ReplayInfo | null;
   /** Time travel: a tapped device's state at the replayed moment, next to the finger. */
@@ -337,6 +343,9 @@ export class Fp3dView3d extends LitElement {
   declare clock: ClockPos | null;
   private declare _clockTick: number;
   private clockTimer: ReturnType<typeof setInterval> | undefined;
+  /** Seasonal and conditional items (#15): the plan the viewer shows (hidden items left out), what it was made of, and the minute tick. */
+  private shownPlan: { from: Building; hidden: string; plan: Building } | null = null;
+  private showTimer: ReturnType<typeof setTimeout> | undefined;
   /** Accent colour for the neon look ("#rrggbb"), null for the stock cyan. */
   declare accent: string | null;
   /** Show the energy values at the top (cards can switch them off). */
@@ -524,6 +533,12 @@ export class Fp3dView3d extends LitElement {
   private declare _sheet: { id: string; floorId: string | null; roomId: string | null } | null;
   /** The ⚙ settings over the view are open. */
   private declare _settingsOpen: boolean;
+  /** An own action asking first (#6): its question, and the answer to give. */
+  private declare _ask: { text: string; answer: (yes: boolean) => void } | null;
+  /** Items with own tap, hold or double-tap actions, by the id a tap on them reports (#6). */
+  private actionOwners = new Map<string, ActionOwner>();
+  /** Tells a tap from a double tap on items that have a double-tap action. */
+  private readonly taps = new TapSequencer();
   /** A short note at the bottom (a module's "sent"), with its timer. */
   private declare _note: string | null;
   private noteTimer: ReturnType<typeof setTimeout> | undefined;
@@ -768,6 +783,8 @@ export class Fp3dView3d extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     document.removeEventListener("visibilitychange", this.onVisible);
+    this.taps.cancel();
+    this._ask?.answer(false);
     this.stopWalk();
     this.pets?.dispose();
     this.pets = null;
@@ -779,6 +796,8 @@ export class Fp3dView3d extends LitElement {
     this.unwatchAsk();
     clearInterval(this.clockTimer);
     this.clockTimer = undefined;
+    clearTimeout(this.showTimer);
+    this.showTimer = undefined;
     this.resizeObs?.disconnect();
     this.resizeObs = null;
     clearInterval(this.alertTimer);
@@ -868,6 +887,7 @@ export class Fp3dView3d extends LitElement {
         onBack: () => this.fire("back", {}),
         onDeviceTap: (id, x, y) => this.onDeviceTap(id, x, y),
         onDeviceHold: (id, x, y) => this.onDeviceHold(id, x, y),
+        onDeviceDoubleTap: (id) => !this.ro && this.taps.doubleTap(id),
         onRoomDoubleTap: (floorId, roomId) => this.onRoomDoubleTap(floorId, roomId),
         onDeviceSwipe: (id, phase, dy, x, y) => this.onDeviceSwipe(id, phase, dy, x, y),
         onFurnitureSelect: (id) => this.fire("furniture-select", { id }),
@@ -900,7 +920,7 @@ export class Fp3dView3d extends LitElement {
       if (this.building) {
         this.shownStartView = JSON.stringify(this.startViewOf());
         this.viewer.setStartView(this.startViewOf());
-        this.viewer.setBuilding(this.building);
+        this.viewer.setBuilding(this.viewPlan(this.building));
       }
       this.scheduleThumbs();
       this.syncDevices(true);
@@ -953,7 +973,7 @@ export class Fp3dView3d extends LitElement {
       const startChanged = this.shownStartView !== undefined && this.shownStartView !== start;
       this.shownStartView = start;
       v.setStartView(this.startViewOf());
-      v.setBuilding(this.building);
+      v.setBuilding(this.viewPlan(this.building));
       if (startChanged && this.floorId === null) v.resetView();
     }
     if (changed.has("building") || changed.has("packs") || changed.has("petsOn")) void this.syncPets();
@@ -1016,9 +1036,20 @@ export class Fp3dView3d extends LitElement {
    */
   private syncDevices(force: boolean, timed = false): void {
     const v = this.viewer;
-    const b = this.building;
-    if (!v || !b || !this.hass) return;
+    const full = this.building;
+    if (!v || !full || !this.hass) return;
     const hass = this.hass;
+    // seasonal and conditional items (#15): one came or went – the viewer gets the plan without the hidden ones
+    const before = this.shownPlan?.plan;
+    const b = this.viewPlan(full);
+    if (b !== before) {
+      v.setBuilding(b);
+      force = true;
+    }
+    if (hasTimedRules(full) && !this.replay) this.showTimer ??= setTimeout(() => {
+      this.showTimer = undefined;
+      this.syncDevices(false);
+    }, 60050 - (Date.now() % 60000));
     if (force || !this.openingLinks || this.linkedRegistry !== hass.entities) {
       this.openingLinks = openingEntities(hass, b.floors);
       this.furnitureLinks = furnitureEntities(hass, b.floors);
@@ -1129,6 +1160,12 @@ export class Fp3dView3d extends LitElement {
     // a tap on the item itself does what a tap on its module marker does
     for (const m of this.scene) if (m.kind === "marker" && m.card && m.furnitureId && !furniture.targets.has(m.furnitureId)) furniture.targets.set(m.furnitureId, `module:${m.id}`);
     v.setTrail(trail, this.replay ? this.robotPaths(hass, b) : []);
+    // own actions (#6): an item without an entity becomes tappable as "item:<id>"
+    this.actionOwners = actionIndex(b.floors, (id) => furniture.targets.get(id), (f) => {
+      const e = this.furnitureLinks?.get(f.id)?.entity;
+      return e && e !== "none" ? e : null;
+    });
+    for (const floor of b.floors) for (const f of floor.furniture) if (!furniture.targets.has(f.id) && this.actionOwners.has(`item:${f.id}`)) furniture.targets.set(f.id, `item:${f.id}`);
     v.setPickTargets(furniture.targets, this.openingTargets());
     v.setScreens(furniture.screens);
     v.setFridgeDoors(fridgeDoors(hass, b.floors));
@@ -3641,6 +3678,9 @@ export class Fp3dView3d extends LitElement {
 
   /** Long press: the quick menu at the device, or the details for devices without one. */
   private onDeviceHold(entityId: string, x: number, y: number): void {
+    const own = this.ro ? null : gestureAction(this.actionOwners.get(entityId), "hold");
+    if (own) return this.runOwnAction(own, this.actionOwners.get(entityId)!, x, y);
+    if (entityId.startsWith("item:")) return;
     if (entityId.startsWith("opening:")) return this.onOpeningTap(entityId.slice(8), x, y, true);
     // a wall switch or socket: the quick menu of its one entity, else the frame's menu
     if (entityId.startsWith("gangs:")) {
@@ -4657,10 +4697,10 @@ export class Fp3dView3d extends LitElement {
         return hit?.kind === "device" && hit.id ? (spoken().find((d) => d.id === hit.id) ?? null) : null;
       },
       dimmed: () => this.dimmed,
-      canEdit: () => !!this.hass?.user?.is_admin && !this.ro,
+      canEdit: () => this.mayEdit,
       updateBuilding: (mutate) => {
         const cur = this.building;
-        if (!cur || !this.hass || this.ro || !this.hass.user?.is_admin) return;
+        if (!cur || !this.hass || !this.mayEdit) return;
         const next = structuredClone(cur);
         mutate(next);
         this.building = next;
@@ -4848,7 +4888,7 @@ export class Fp3dView3d extends LitElement {
             </div>`
           : nothing}
         ${sheet.lines?.length ? html`<div class="fp3d-sheet-lines">${sheet.lines.map((l) => html`<p>${l}</p>`)}</div>` : nothing}
-        ${hass.user?.is_admin && !this.ro && modulesWithSettings().length
+        ${this.mayEdit && modulesWithSettings().length
           ? html`<button class="fp3d-sheet-gear" @click=${() => {
               // the sentences and speakers are set in the ⚙ menu: open it at the modules' sections
               close();
@@ -4859,10 +4899,23 @@ export class Fp3dView3d extends LitElement {
       </div>`;
   }
 
-  /** Changes the plan's settings from the ⚙ menu and saves them (administrators only). */
+  /** The plan as the 3D view shows it (#15): the same object while the same items are hidden, so the viewer does not rebuild. */
+  private viewPlan(b: Building): Building {
+    const now = new Date(this.replay?.t ?? Date.now());
+    const hidden = this.hass ? hiddenItems(b, this.hass.states, now).join("|") : "";
+    if (this.shownPlan?.from !== b || this.shownPlan.hidden !== hidden) this.shownPlan = { from: b, hidden, plan: hidden && this.hass ? shownBuilding(b, this.hass.states, now) : b };
+    return this.shownPlan.plan;
+  }
+
+  /** Whether this user may change the plan here (editors only, never while replaying). */
+  private get mayEdit(): boolean {
+    return (this.canEdit ?? !!this.hass?.user?.is_admin) && !this.ro;
+  }
+
+  /** Changes the plan's settings from the ⚙ menu and saves them (editors only). */
   private setPlanSettings(patch: Partial<Building["settings"]>): void {
     const cur = this.building;
-    if (!cur || !this.hass?.user?.is_admin || this.ro) return;
+    if (!cur || !this.hass || !this.mayEdit) return;
     const next = structuredClone(cur);
     Object.assign(next.settings, patch);
     this.building = next;
@@ -4879,7 +4932,7 @@ export class Fp3dView3d extends LitElement {
     const b = this.building;
     if (!hass || !b || !this._settingsOpen) return nothing;
     const t = (k: I18nKey) => translate(hass, k);
-    const admin = !!hass.user?.is_admin && !this.ro;
+    const admin = this.mayEdit;
     const st = b.settings;
     const check = (key: I18nKey, on: boolean, patch: (v: boolean) => Partial<Building["settings"]>, hint?: I18nKey) =>
       html`<label class="fp3d-set-check" title=${hint ? t(hint) : ""}
@@ -5270,7 +5323,72 @@ export class Fp3dView3d extends LitElement {
     if (floor && f) this.viewer?.focus(floor.id, f.x, f.z, mountBase(floor, f) + f.h * 0.6, `module:${m.id}`);
   }
 
+  /** A tap on a device or item: its own tap / double-tap action (#6), else what it does by its kind. */
   private onDeviceTap(entityId: string, x = 0, y = 0): void {
+    const owner = this.ro ? undefined : this.actionOwners.get(entityId);
+    if (!owner) return this.defaultTap(entityId, x, y);
+    const double = gestureAction(owner, "double_tap");
+    this.taps.tap(
+      entityId,
+      !!double,
+      () => {
+        const own = gestureAction(owner, "tap");
+        if (own) this.runOwnAction(own, owner, x, y);
+        else this.defaultTap(entityId, x, y);
+      },
+      () => double && this.runOwnAction(double, owner, x, y),
+    );
+  }
+
+  /** Run an own action; one that asks first asks in the app's own dialog. */
+  private runOwnAction(action: ItemAction, owner: ActionOwner, x: number, y: number): void {
+    const hass = this.hass;
+    if (!hass) return;
+    void runItemAction(action, owner.entity, {
+      callService: (domain, service, data) => hass.callService(domain, service, data),
+      moreInfo: (id) => openMoreInfo(this, id),
+      camera: (id) => (this._menu = { entity: id, x, y }),
+      navigate: (path) => {
+        history.pushState(null, "", path);
+        window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+      },
+      openUrl: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
+      confirm: (text) => this.ask(text ?? translate(hass, "action_confirm_default", { name: owner.entity ? entityName(hass, owner.entity) : translate(hass, "action_this_item") })),
+    }).catch((err: unknown) => this.showNote(translate(hass, "action_failed", { error: err instanceof Error ? err.message : String(err) })));
+  }
+
+  /** Ask a question in the app's own dialog; true for yes. A question still open is answered no. */
+  private ask(text: string): Promise<boolean> {
+    this._ask?.answer(false);
+    return new Promise((resolve) => {
+      this._ask = {
+        text,
+        answer: (yes) => {
+          this._ask = null;
+          resolve(yes);
+        },
+      };
+    });
+  }
+
+  private renderAsk() {
+    const a = this._ask;
+    if (!a) return nothing;
+    const t = (k: I18nKey) => translate(this.hass, k);
+    return html`<div class="fp3d-sheet-backdrop" @click=${() => a.answer(false)}></div>
+      <div class="fp3d-sheet fp3d-ask" role="alertdialog" aria-modal="true" aria-label=${t("action_confirm_title")} @keydown=${(e: KeyboardEvent) => e.key === "Escape" && a.answer(false)}>
+        <p class="fp3d-ask-text">${a.text}</p>
+        <div class="fp3d-ask-buttons">
+          <button class="fp3d-btn" @click=${() => a.answer(false)}>${t("cancel")}</button>
+          <button class="fp3d-btn fp3d-primary" autofocus @click=${() => a.answer(true)}>${t("action_confirm_ok")}</button>
+        </div>
+      </div>`;
+  }
+
+  /** What a tap does by the device's kind (no own action). */
+  private defaultTap(entityId: string, x = 0, y = 0): void {
+    // an item that is only tappable for its own actions (no tap action of its own)
+    if (entityId.startsWith("item:")) return;
     // trail pins and lamps without a light are drawn, but nothing of Home Assistant stands behind them
     if (entityId.startsWith("trail:") || entityId.startsWith("lamp:")) return;
     if (entityId.startsWith("module:")) return this.openModuleCard(entityId.slice(7));
@@ -5524,7 +5642,7 @@ export class Fp3dView3d extends LitElement {
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderLegend()}
-      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderSettings()} ${this.renderNote()}
+      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderAsk()} ${this.renderSettings()} ${this.renderNote()}
       ${this.clean ? nothing : this.renderProHint()} ${this.renderMenu()} ${this.renderEye()}
       ${this.renderMic()}
       ${this.pivotMark && !this._walk ? html`<span class="fp3d-pivot" aria-hidden="true"></span>` : nothing}
@@ -6672,6 +6790,21 @@ export class Fp3dView3d extends LitElement {
         font-size: 12px;
       }
       /* a module's sheet and the ⚙ settings: a glass box in the middle, over a dim backdrop */
+      .fp3d-ask {
+        z-index: 9;
+        width: min(360px, calc(100% - 24px));
+      }
+      .fp3d-ask-text {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.4;
+        white-space: pre-line;
+      }
+      .fp3d-ask-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
       .fp3d-sheet-backdrop {
         position: absolute;
         inset: 0;

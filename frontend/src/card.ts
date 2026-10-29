@@ -349,6 +349,7 @@ clearTimeout(this.cleanTimer);
         ${b && b.floors.some((f) => f.rooms.length)
           ? html`<fp3d-view3d
               .hass=${this.tt.hass(this.hass)}
+              .canEdit=${this.data.canEdit}
               .replay=${this.tt.session?.replay ?? null}
               .building=${b}
               .packs=${this.data.packs}

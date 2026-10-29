@@ -3,6 +3,7 @@
 
 import { packItem } from "./packs.ts";
 import type { LampModel } from "./viewer/viewer3d.ts";
+import type { ItemActions } from "./item-actions.ts";
 
 export type Vec2 = [number, number];
 
@@ -167,7 +168,25 @@ export interface Gang {
   power?: string | null;
 }
 
+/** One stretch of time an item shows in (#15): days of the year and/or times of the day. */
+export interface ShowInterval {
+  /** First and last day, "MM-DD", both included (null = every day); a first day after the last runs over the new year. */
+  from?: string | null;
+  to?: string | null;
+  /** Time of day, "HH:MM", from start up to end (null = all day); a start after the end runs over midnight. */
+  start?: string | null;
+  end?: string | null;
+}
+
+/** When an item shows (#15): while an entity is available, and/or inside one of the intervals. Null = always. */
+export interface ShowWhen {
+  entity?: EntityRef;
+  intervals?: ShowInterval[];
+}
+
 export interface Furniture {
+  /** Seasonal and conditional items (#15): when it shows in 3D (null = always). */
+  show_when?: ShowWhen | null;
   /** Fixed against moving by accident. */
   locked?: boolean | null;
   /** Furniture block: items with the same group id are selected, moved and turned together (a kitchen, a wall unit). */
@@ -276,6 +295,8 @@ export interface Furniture {
   room_sensor?: EntityRef;
   /** Ask before switching the linked entity. */
   confirm?: boolean;
+  /** Own tap, hold and double-tap actions (#6); none set = what the item does by its type. */
+  actions?: ItemActions | null;
   /** Its marker in 3D: automatic (null), always shown, shown without watts, or hidden. */
   marker?: MarkerShow | null;
   /** Height of the bottom edge above the floor (null = default: the floor, a pack item's mount, a surface below). */
@@ -359,6 +380,8 @@ export interface Placement {
   tilt?: number | null;
   /** Ask before switching this device (3D tap, quick menu, room panel). */
   confirm?: boolean;
+  /** Own tap, hold and double-tap actions (#6); none set = what the device does by its kind. */
+  actions?: ItemActions | null;
   /** Its marker in 3D: automatic (null), always shown, shown without watts, or hidden. */
   marker?: MarkerShow | null;
   /** An own symbol for the marker: a Material Design icon name without "mdi:" (null = by kind). */

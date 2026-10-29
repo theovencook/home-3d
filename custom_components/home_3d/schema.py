@@ -225,6 +225,50 @@ _VEHICLE_TYPE_SCHEMA = vol.Schema(
 # the kinds of waste a bin can take (household.ts WASTE_KINDS)
 WASTE_KINDS = ["rest", "bio", "paper", "plastic", "glass", "garden", "recycling", "other"]
 
+# seasonal and conditional items (#15): while an entity is available and/or inside an interval of days ("MM-DD",
+# both included, over the new year when from > to) and/or times of day ("HH:MM", over midnight when start > end)
+_DAY = vol.Any(None, vol.Match(r"^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"))
+_TIME = vol.Any(None, vol.Match(r"^([01][0-9]|2[0-3]):[0-5][0-9]$"))
+SHOW_WHEN_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("intervals", default=[]): vol.All(
+            [
+                vol.Schema(
+                    {
+                        vol.Optional("from", default=None): _DAY,
+                        vol.Optional("to", default=None): _DAY,
+                        vol.Optional("start", default=None): _TIME,
+                        vol.Optional("end", default=None): _TIME,
+                    }
+                )
+            ],
+            vol.Length(max=12),
+        ),
+    }
+)
+
+# own tap, hold and double-tap actions of a placed device or furniture item (#6); a gesture left out (or
+# "default") keeps what the item does by its kind
+_ITEM_ACTION = vol.Any(
+    None,
+    vol.Schema(
+        {
+            vol.Required("action"): vol.In(
+                ["default", "none", "toggle", "more_info", "camera", "navigate", "url", "perform_action"]
+            ),
+            vol.Optional("target"): vol.Any(None, vol.All(str, vol.Length(max=2000))),
+            vol.Optional("data"): vol.Any(None, dict),
+            vol.Optional("confirm"): bool,
+            vol.Optional("confirm_text"): vol.Any(None, vol.All(str, vol.Length(max=300))),
+        }
+    ),
+)
+_ITEM_ACTIONS = vol.Any(
+    None,
+    {vol.Optional("tap"): _ITEM_ACTION, vol.Optional("hold"): _ITEM_ACTION, vol.Optional("double_tap"): _ITEM_ACTION},
+)
+
 FURNITURE_SCHEMA = vol.Schema(
     {
         vol.Required("id"): _ID,
@@ -269,6 +313,7 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("room_sensor", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # ask before switching the linked entity
         vol.Optional("confirm", default=False): bool,
+        vol.Optional("actions"): _ITEM_ACTIONS,
         # its marker in 3D: None = automatic, always, without watts, or hidden
         vol.Optional("marker", default=None): vol.Any(None, vol.In(["always", "no_power", "never"])),
         # an own symbol for the marker: a Material Design icon name without "mdi:"
@@ -358,6 +403,8 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("locked", default=None): vol.Any(None, bool),
         # a module's own data for this item
         vol.Optional("mods"): _MODULE_DATA,
+        # when it shows in 3D (None = always)
+        vol.Optional("show_when"): vol.Any(None, SHOW_WHEN_SCHEMA),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -380,6 +427,7 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Optional("tilt", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=90))),
         # ask before switching this device from the 3D view, the quick menu or the room panel
         vol.Optional("confirm", default=False): bool,
+        vol.Optional("actions"): _ITEM_ACTIONS,
         # its marker in 3D: None = automatic, always, without watts, or hidden
         vol.Optional("marker", default=None): vol.Any(None, vol.In(["always", "no_power", "never"])),
         # an own symbol for the marker: a Material Design icon name without "mdi:"

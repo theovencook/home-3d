@@ -25,6 +25,7 @@ from .card_resource import (
     loader_source,
 )
 from .const import (
+    DATA_EDITORS,
     DOMAIN,
     MAIN_BUNDLE,
     PANEL_COMPONENT,
@@ -33,6 +34,7 @@ from .const import (
     PANEL_URL_PATH,
     URL_BASE,
 )
+from .editors import Editors
 from .locate.service import DATA_LOCATE, LocateService
 from .storage import FloorplanData
 from .voice import async_remove_sentences, async_setup_voice, async_unload_voice
@@ -122,6 +124,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await data.async_load()
     hass.data[DOMAIN] = data
 
+    # who may change the plan (#7)
+    editors = Editors(hass)
+    await editors.async_load()
+    hass.data[DATA_EDITORS] = editors
+
     # locating (who and what is where, from the Bluetooth scanners): idle unless an admin switched it on
     locate = LocateService(hass)
     await locate.async_load()
@@ -162,6 +169,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if (locate := hass.data.pop(DATA_LOCATE, None)) is not None:
         locate.stop()
+    hass.data.pop(DATA_EDITORS, None)
     hass.data.pop(DOMAIN, None)
     return True
 

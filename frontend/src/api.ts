@@ -1,10 +1,12 @@
 // Websocket calls to the backend (custom_components/home_3d/websocket.py).
 
+import type { EditorUser } from "./editors.ts";
 import type { Building } from "./model.ts";
 import type { FurniturePack } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
-export async function fetchBuilding(hass: HomeAssistant): Promise<{ building: Building; revision: number; version?: string }> {
+/** `can_edit`: the user is on the editors list (missing from backends before #7). */
+export async function fetchBuilding(hass: HomeAssistant): Promise<{ building: Building; revision: number; version?: string; can_edit?: boolean }> {
   return hass.callWS({ type: "home_3d/building/get" });
 }
 
@@ -136,4 +138,15 @@ export async function getVoiceSettings(hass: HomeAssistant): Promise<{ sentences
 
 export async function setVoiceSentences(hass: HomeAssistant, sentences: SentenceMode): Promise<{ sentences: SentenceMode; kept?: string[] }> {
   return hass.callWS({ type: "home_3d/voice/settings/set", sentences });
+}
+
+/** Everyone who signs in and whether they are on the editors list (#7; admins only). `custom` is false while
+ * the list is the default: every admin. */
+export function getEditors(hass: HomeAssistant): Promise<{ users: EditorUser[]; custom: boolean }> {
+  return hass.callWS({ type: "home_3d/editors/get" });
+}
+
+/** Pick the editors (null: every admin again). A list without an admin is refused ("no_admin"). */
+export function setEditors(hass: HomeAssistant, editors: string[] | null): Promise<{ users: EditorUser[]; custom: boolean }> {
+  return hass.callWS({ type: "home_3d/editors/set", editors });
 }

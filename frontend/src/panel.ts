@@ -225,8 +225,9 @@ export class Floorplan3dPanel extends LitElement {
     }
   }
 
-  private get isAdmin(): boolean {
-    return this.hass?.user?.is_admin ?? false;
+  /** On the editors list (#7): sees the Editor and Extensions tabs. Everyone else views and controls devices. */
+  private get canEdit(): boolean {
+    return this.data.canEdit;
   }
 
   private setMode(mode: Mode): void {
@@ -532,7 +533,7 @@ export class Floorplan3dPanel extends LitElement {
         ${this._clean && this._mode === "view" ? nothing : html`<header class="fp3d-header">
           <ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>
           <h1>Home 3D</h1>
-          ${this.isAdmin
+          ${this.canEdit
             ? html`<div class="fp3d-seg" role="tablist">
                 <button role="tab" aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
                 <button role="tab" aria-pressed=${this._mode === "editor"} @click=${() => this.setMode("editor")}>${this.t("editor")}</button>
@@ -652,7 +653,7 @@ export class Floorplan3dPanel extends LitElement {
                       ${right ? "◨" : "◧"}
                     </button>`,
                 )}
-                ${this.isAdmin
+                ${this.canEdit
                   ? html`<button
                         title=${`${this.t("start_view")}: ${this.t("start_view_set")}`}
                         aria-label=${this.t("start_view_set")}
@@ -712,9 +713,9 @@ export class Floorplan3dPanel extends LitElement {
         ${this.data.error && !b ? html`<p class="fp3d-message">${this.t("load_error")}: ${this.data.error}</p>` : nothing}
         ${!b && !this.data.error ? html`<p class="fp3d-message">${this.t("loading")}</p>` : nothing}
         ${b
-          ? this._mode === "editor" && this.isAdmin
+          ? this._mode === "editor" && this.canEdit
             ? this.renderEditor(b)
-            : this._mode === "extensions" && this.isAdmin
+            : this._mode === "extensions" && this.canEdit
               ? this.renderExtensions()
               : this.renderView(b)
           : nothing}
@@ -740,7 +741,7 @@ export class Floorplan3dPanel extends LitElement {
     if (d.saveState === "error" && d.saveError) {
       notices.push(html`<div class="fp3d-notice fp3d-notice-error">${this.t("save_failed_detail", { error: d.saveError })}</div>`);
     }
-    if (d.draft && this.isAdmin) {
+    if (d.draft && this.canEdit) {
       const at = new Date(d.draft.savedAt).toLocaleString(this.hass?.language);
       notices.push(
         html`<div class="fp3d-notice">
@@ -765,6 +766,7 @@ export class Floorplan3dPanel extends LitElement {
     return html`<fp3d-extensions
       class="fp3d-body"
       .hass=${this.hass}
+      .canEdit=${this.data.canEdit}
       .packs=${this.data.packs}
       .building=${this.data.building}
       @building-edit=${(e: CustomEvent<Building>) => this.data.edit(e.detail)}
@@ -783,6 +785,7 @@ export class Floorplan3dPanel extends LitElement {
     return html`<fp3d-editor
       class="fp3d-body"
       .hass=${this.hass}
+      .canEdit=${this.data.canEdit}
       .building=${b}
       .narrow=${this.narrow}
       .packs=${this.data.packs}
@@ -810,8 +813,8 @@ export class Floorplan3dPanel extends LitElement {
   private renderView(b: Building) {
     if (!b.floors.length || !b.floors.some((f) => f.rooms.length)) {
       return html`<div class="fp3d-empty">
-        <p>${this.t(this.isAdmin ? "no_building_admin" : "no_building")}</p>
-        ${this.isAdmin
+        <p>${this.t(this.canEdit ? "no_building_admin" : "no_building")}</p>
+        ${this.canEdit
           ? html`<button class="fp3d-btn fp3d-primary" @click=${() => this.setMode("editor")}>${this.t("open_editor")}</button>
               <p class="fp3d-phone-only">${this.t("phone_hint")}</p>`
           : nothing}
@@ -880,6 +883,7 @@ export class Floorplan3dPanel extends LitElement {
       <div class="fp3d-stage-wrap ${this._roomId ? "fp3d-room-open" : ""} ${this._controlsRight ? "fp3d-side-right" : ""} ${tt ? "fp3d-tt" : ""}">
         <fp3d-view3d
           class="fp3d-body"
+          .canEdit=${this.data.canEdit}
           .pivotMark=${this._pinHover}
           .hass=${this.tt.hass(this.hass)}
           .replay=${this.tt.session?.replay ?? null}

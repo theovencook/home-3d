@@ -17,6 +17,7 @@ export const ISSUES_URL = "https://github.com/theovencook/home-3d/issues";
 export class Extensions extends LitElement {
   static properties = {
     hass: { attribute: false },
+    canEdit: { attribute: false },
     packs: { attribute: false },
     building: { attribute: false },
     _packMsg: { state: true },
@@ -24,6 +25,8 @@ export class Extensions extends LitElement {
   };
 
   declare hass: HomeAssistant | undefined;
+  /** On the editors list (#7); unset: admins are (a backend before #7). */
+  declare canEdit: boolean | undefined;
   declare packs: FurniturePack[] | undefined;
   /** The plan (the fun extras keep their settings in it, e.g. the pets). */
   declare building: Building | null | undefined;
@@ -74,8 +77,8 @@ export class Extensions extends LitElement {
     </button>`;
   }
 
-  private get isAdmin(): boolean {
-    return this.hass?.user?.is_admin ?? false;
+  private get isEditor(): boolean {
+    return this.canEdit ?? this.hass?.user?.is_admin ?? false;
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -142,7 +145,7 @@ export class Extensions extends LitElement {
           ? html`<div class="fp3d-ext-feature fp3d-ext-on">
               <b>✓ ${this.t("fun_name_pets")}</b>
               <span class="fp3d-sub">${this.t("fun_feature_pets")}</span>
-              ${this.isAdmin && this.building
+              ${this.isEditor && this.building
                 ? html`<label class="fp3d-check"><input type="checkbox" .checked=${on} @change=${(e: Event) => set((p) => (p.on = (e.target as HTMLInputElement).checked))} /> ${this.t("pets_show")}</label>
                     ${list.map(
                       (pet) => html`<div class="fp3d-pet-row">
@@ -192,7 +195,7 @@ export class Extensions extends LitElement {
     return html`<div class="fp3d-ext-feature fp3d-ext-on">
       <b>✓ 🎃 ${this.t("fun_name_halloween")}</b>
       <span class="fp3d-sub">${this.t("fun_feature_halloween")}</span>
-      ${this.isAdmin && this.building
+      ${this.isEditor && this.building
         ? html`<label class="fp3d-check"
             ><input
               type="checkbox"

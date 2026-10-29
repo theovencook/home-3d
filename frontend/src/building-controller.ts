@@ -57,6 +57,10 @@ export class BuildingController implements ReactiveController {
   draft: Draft | null = null;
   /** Imported furniture packs. */
   packs: FurniturePack[] = [];
+  /** This user is on the editors list (#7): sees the Editor and Extensions and may change the plan. The backend
+   * says so with the building; an older one that does not falls back to "admins edit". The backend refuses
+   * changes from anyone else either way. */
+  canEdit = false;
   /** The packs were fetched once (what is installed is known). */
   packsLoaded = false;
 
@@ -205,6 +209,7 @@ export class BuildingController implements ReactiveController {
       const res = await fetchBuilding(this.hass);
       this.building = normalizeBuilding(res.building);
       this.backendVersion = res.version ?? null;
+      this.canEdit = res.can_edit ?? !!this.hass.user?.is_admin;
       if (this.draft === null && !this.pending) this.draft = readDraft();
       this.revision = res.revision;
       this.error = null;
