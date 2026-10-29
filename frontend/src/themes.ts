@@ -4,9 +4,12 @@ export type Theme = "neon" | "blueprint" | "day" | "realistic";
 
 export const THEMES: Theme[] = ["neon", "blueprint", "day", "realistic"];
 
-/** A look as stored by a card or the panel: one this version knows, "auto", or neon. */
-export function lookOf(value: string | null | undefined): Theme | "auto" {
-  return value === "auto" || THEMES.includes(value as Theme) ? (value as Theme | "auto") : "neon";
+/** A look as a card or the panel stores it: a fixed look, "auto" (by the sun) or "theme" (by the HA theme, #38). */
+export type Look = Theme | "auto" | "theme";
+
+/** A look as stored by a card or the panel: one this version knows; none (or an unknown one) follows the HA theme. */
+export function lookOf(value: string | null | undefined): Look {
+  return value === "auto" || value === "theme" || THEMES.includes(value as Theme) ? (value as Look) : "theme";
 }
 
 /** Background of the 3D stage per look (sky in the middle, ground at the edges), night and day. */
