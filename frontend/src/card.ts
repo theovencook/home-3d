@@ -9,9 +9,10 @@ import "./components/view3d.ts";
 import { languageReady, loadLanguage, translate, type I18nKey } from "./i18n.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
-import type { CardConfig, CardControl } from "./card-config.ts";
+import { showsPlan2d, type CardConfig, type CardControl } from "./card-config.ts";
 import { nightActive } from "./kiosk.ts";
 import { lookOf } from "./themes.ts";
+import { shownAccent, textOn } from "./ha-theme.ts";
 import { loadCardEditor } from "./load-card-editor.ts";
 import type { WallMode } from "./viewer/viewer3d.ts";
 import { hasFeature, type Feature } from "./features.ts";
@@ -38,6 +39,7 @@ export class Floorplan3dCard extends LitElement {
     _walls: { state: true },
     _heat: { state: true },
     _explode: { state: true },
+    _plan2d: { state: true },
     _fullscreen: { state: true },
     _pseudoFull: { state: true },
     _vh: { state: true },
@@ -59,6 +61,8 @@ export class Floorplan3dCard extends LitElement {
   private declare _walls: WallMode | null;
   private declare _heat: HeatMode | null;
   private declare _explode: boolean | null;
+  /** The card's 2D/3D switch (#41; null: as configured). */
+  private declare _plan2d: boolean | null;
   private declare _fullscreen: boolean;
   /** Full screen made by the card itself (no Fullscreen API): spread over the page. */
   private declare _pseudoFull: boolean;
@@ -86,6 +90,7 @@ export class Floorplan3dCard extends LitElement {
     this._walls = savedWalls();
     this._heat = null;
     this._explode = null;
+    this._plan2d = null;
     this._fullscreen = false;
     this._pseudoFull = false;
     this._vh = window.innerHeight;
@@ -156,6 +161,7 @@ export class Floorplan3dCard extends LitElement {
     this.tt.stop();
     this._roomId = this._config?.room ?? null;
     this._floorId = undefined;
+    this._plan2d = null;
     this.view3d()?.resetView();
     if (this._config?.idle_orbit) this._orbit = true;
   }
@@ -260,6 +266,7 @@ clearTimeout(this.cleanTimer);
     this._walls = savedWalls();
     this._heat = null;
     this._explode = null;
+    this._plan2d = null;
     this._orbit = false;
     this._night = nightActive(config.night, this.hass);
     this._clean = config.controls_hidden === true;
@@ -329,6 +336,7 @@ clearTimeout(this.cleanTimer);
     const walls = this._walls ?? c?.walls ?? "auto";
     const heat = this._heat ?? c?.heatmap ?? "none";
     const explode = this._explode ?? c?.explode ?? true;
+    const flat = showsPlan2d(c, this._plan2d);
     // full screen, the screen below the dashboard header, or a fixed height
     // full screen takes the whole screen by CSS (a measured height went stale on some screens, #426); "fill"
     // reaches the bottom edge exactly: the card's 1 px border above and below is all that is left (#344)
@@ -344,8 +352,9 @@ clearTimeout(this.cleanTimer);
     const tt = this.tt.active;
     const eye = c?.controls_hidden !== undefined || (c?.controls_hide_after ?? 0) > 0;
     const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
-    const accent = /^#[0-9a-f]{6}$/i.test(c?.accent ?? "") ? c!.accent : null;
-    return html`<ha-card class="${this._night ? "fp3d-night" : ""} ${this._pseudoFull ? "fp3d-pseudo-full" : ""}" style=${accent ? `--fp3d-accent:${accent}` : ""} @pointerdown=${this.touch} @keydown=${this.onKey} @wheel=${this.touch}>
+    // the card's own accent, else (while the look follows the HA theme) the theme's primary colour (#38)
+    const accent = shownAccent(lookOf(c?.theme), c?.accent, this.hass, (n) => getComputedStyle(this).getPropertyValue(n));
+    return html`<ha-card class="${this._night ? "fp3d-night" : ""} ${this._pseudoFull ? "fp3d-pseudo-full" : ""}" style=${accent ? `--fp3d-accent:${accent};--fp3d-accent-text:${textOn(accent)}` : ""} @pointerdown=${this.touch} @keydown=${this.onKey} @wheel=${this.touch}>
       <div class="fp3d-card-body ${tt ? "fp3d-tt" : ""}" style="height:${size}">
         ${b && b.floors.some((f) => f.rooms.length)
           ? html`<fp3d-view3d
@@ -354,6 +363,7 @@ clearTimeout(this.cleanTimer);
               .replay=${this.tt.session?.replay ?? null}
               .building=${b}
               .packs=${this.data.packs}
+              .plan2d=${flat}
               .floorId=${floorId}
               .roomId=${this._roomId}
               .wallMode=${walls}
@@ -373,7 +383,7 @@ clearTimeout(this.cleanTimer);
               .heatMode=${heat}
               .theme=${lookOf(this._config?.theme)}
               .clock=${this._config?.clock ?? null}
-              .accent=${this._config?.accent ?? null}
+              .accent=${accent}
               .showEnergy=${this._config?.energy ?? true}
               .flows=${this._config?.flows ?? null}
               .holograms=${this._config?.holograms ?? null}
@@ -433,6 +443,7 @@ clearTimeout(this.cleanTimer);
               class="fp3d-card-panel"
               .hass=${this.tt.hass(this.hass)}
               ?readOnly=${tt}
+              ?noLook=${flat}
               .room=${b.floors.flatMap((f) => zonesOf(f)).find((r) => r.id === this._roomId) ?? null}
               .floor=${b.floors.find((f) => zonesOf(f).some((r) => r.id === this._roomId)) ?? null}
               .building=${b}
@@ -451,13 +462,19 @@ clearTimeout(this.cleanTimer);
                   </button>`
                 : nothing}
               ${c?.camera_wall ? html`<button class="fp3d-chip" aria-pressed=${this._cameraWall} title=${t("camera_wall_hint")} @click=${() => (this._cameraWall = !this._cameraWall)}>${t("cameras_short")}</button>` : nothing}
-              ${shows("walls")
+              ${shows("view")
+                ? html`<div class="fp3d-seg" role="group" aria-label=${t("plan_view")}>
+                    <button aria-pressed=${!flat} @click=${() => (this._plan2d = false)}>${t("view_3d")}</button>
+                    <button aria-pressed=${flat} @click=${() => (this._plan2d = true)}>${t("view_2d")}</button>
+                  </div>`
+                : nothing}
+              ${shows("walls") && !flat
                 ? html`<div class="fp3d-seg">
                     <button aria-pressed=${walls === "auto"} @click=${() => this.setWalls("auto")}>${t("walls_auto")}</button>
                     <button aria-pressed=${walls === "cut"} @click=${() => this.setWalls("cut")}>${t("walls_cut")}</button>
                   </div>`
                 : nothing}
-              ${shows("floors") && b.floors.length > 1 && !floorId
+              ${shows("floors") && !flat && b.floors.length > 1 && !floorId
                 ? html`<div class="fp3d-seg">
                     <button aria-pressed=${explode} @click=${() => (this._explode = true)}>${t("floors_apart")}</button>
                     <button aria-pressed=${!explode} @click=${() => (this._explode = false)}>${t("floors_stacked")}</button>

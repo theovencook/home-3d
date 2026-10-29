@@ -1,13 +1,20 @@
-// The realistic look (#39) in the 3D view: the themed surfaces get a lit twin (Lambert, flat shaded, so the plan's
-// geometry needs no normals), the sun from sun.sun lights them and throws shadows, the sky lights them from above, and
+// The realistic look (#39) in the 3D view: the themed surfaces get a lit twin (Blinn-Phong, flat shaded, so the plan's
+// geometry needs no normals; matt surfaces have no highlight and light like Lambert), the sun from sun.sun lights them and throws shadows, the sky lights them from above, and
 // a lawn under the house catches the shadow. The neon materials stay untouched: leaving the look gives them back.
 //
 // Cheap on purpose: one directional light with one shadow map (none on phones, a small one that is only redrawn when
-// something other than the camera moved on the tablet level), Lambert instead of physically based materials, and
+// something other than the camera moved on the tablet level), Blinn-Phong instead of physically based materials, and
 // the twins are shared by every mesh of a neon material (a handful per floor).
+//
+// Materials per colour role (#40): every vertex of a placed item carries its role's material (geo.ts `fp3dMat`, the
+// numbers of role-materials.ts) and the twins draw it procedurally, without images: gloss and metal catch the sun and
+// reflect the sky, glass is see-through (every other pixel left out, so it needs no sorting), fabric has a soft weave
+// and sheen, rattan a basket weave. Patterns finer than a pixel fade to their average, so nothing shimmers.
 
 import {
   BasicShadowMap,
+  BufferAttribute,
+  type BufferGeometry,
   CanvasTexture,
   CircleGeometry,
   Color,
@@ -18,6 +25,7 @@ import {
   MeshBasicMaterial,
   MeshDepthMaterial,
   MeshLambertMaterial,
+  MeshPhongMaterial,
   NormalBlending,
   PCFShadowMap,
   SRGBColorSpace,
@@ -48,11 +56,13 @@ export class Realism {
   private readonly sunLight = new DirectionalLight(0xffffff, 0);
   private readonly skyLight = new HemisphereLight(0xc4d8ee, 0x58604a, 1);
   private readonly lawn: Mesh<CircleGeometry, MeshLambertMaterial>;
-  private readonly twins = new Map<MeshBasicMaterial, MeshLambertMaterial>();
+  private readonly twins = new Map<MeshBasicMaterial, MeshPhongMaterial>();
   private readonly depths = new WeakMap<FoldMasks, Map<FoldRole, MeshDepthMaterial>>();
   private meshes = new Set<Mesh>();
   private on = false;
   private plan: ShadowPlan | null = null;
+  /** The renderer smooths edges: glass (#40) is drawn as coverage of the pixel instead of every other pixel. */
+  private smooth = false;
   /** The shadow map must be drawn again (the sun moved, the house changed). */
   private dirty = true;
 
@@ -95,6 +105,7 @@ export class Realism {
   setPlan(renderer: WebGLRenderer, plan: ShadowPlan | null): void {
     const was = this.plan;
     this.plan = plan;
+    this.smooth = !!renderer.getContextAttributes?.()?.antialias;
     const on = this.on && !!plan;
     const size = plan?.size ?? 0;
     if (renderer.shadowMap.enabled !== on) {
@@ -172,6 +183,7 @@ export class Realism {
       if (!basic) return;
       seen.add(mesh);
       mesh.material = this.twin(basic);
+      withMaterials(mesh.geometry);
       // a floor that fades out lets the light through
       const solid = basic.visible && basic.depthWrite && (!basic.transparent || basic.opacity > 0.85);
       mesh.castShadow = shadows && solid;
@@ -180,7 +192,7 @@ export class Realism {
       mesh.customDepthMaterial = fold && fold.role !== "glass" ? this.depth(fold.masks, fold.role) : undefined;
     });
     this.meshes = seen;
-    for (const [basic, twin] of this.twins) sync(basic, twin);
+    for (const [basic, twin] of this.twins) sync(basic, twin, this.smooth);
     if (renderer && this.plan && !this.plan.live && (this.dirty || moving)) renderer.shadowMap.needsUpdate = true;
     this.dirty = false;
   }
@@ -195,13 +207,14 @@ export class Realism {
     this.sunLight.dispose();
   }
 
-  private twin(basic: MeshBasicMaterial): MeshLambertMaterial {
+  private twin(basic: MeshBasicMaterial): MeshPhongMaterial {
     let twin = this.twins.get(basic);
     if (twin) return twin;
-    twin = new MeshLambertMaterial({ vertexColors: basic.vertexColors, map: basic.map, flatShading: true });
+    // no highlight of its own: matt surfaces light like Lambert, the materials per role (#40) bring theirs
+    twin = new MeshPhongMaterial({ vertexColors: basic.vertexColors, map: basic.map, flatShading: true, specular: 0x000000 });
     twin.userData.fp3dBasic = basic;
     twin.userData.fp3dVersion = basic.version;
-    sync(basic, twin);
+    sync(basic, twin, this.smooth);
     // the neon material's patches (look, cut walls), and bright signal colours light themselves (theme.ts: fp3dGlow)
     twin.onBeforeCompile = (shader, renderer) => {
       basic.onBeforeCompile(shader, renderer);
@@ -209,6 +222,7 @@ export class Realism {
         "#include <emissivemap_fragment>",
         "#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * fp3dGlow;",
       );
+      withRoleMaterials(shader);
     };
     twin.customProgramCacheKey = () => `${basic.customProgramCacheKey()}-lit`;
     const owned = twin;
@@ -246,7 +260,7 @@ function fadeTexture(): CanvasTexture | null {
 }
 
 /** The neon material's state that changes while it is shown, copied to its twin. */
-function sync(basic: MeshBasicMaterial, twin: MeshLambertMaterial): void {
+function sync(basic: MeshBasicMaterial, twin: MeshPhongMaterial, smooth: boolean): void {
   twin.opacity = basic.opacity;
   twin.transparent = basic.transparent;
   twin.visible = basic.visible;
@@ -258,6 +272,12 @@ function sync(basic: MeshBasicMaterial, twin: MeshLambertMaterial): void {
   twin.polygonOffsetFactor = basic.polygonOffsetFactor;
   twin.polygonOffsetUnits = basic.polygonOffsetUnits;
   twin.color.copy(basic.color);
+  // glass as coverage only where nothing is blended (a fading floor stays as it is)
+  const coverage = smooth && !basic.transparent;
+  if (twin.alphaToCoverage !== coverage) {
+    twin.alphaToCoverage = coverage;
+    twin.needsUpdate = true;
+  }
   if (twin.map !== basic.map) {
     twin.map = basic.map;
     twin.needsUpdate = true;
@@ -267,3 +287,125 @@ function sync(basic: MeshBasicMaterial, twin: MeshLambertMaterial): void {
     twin.needsUpdate = true;
   }
 }
+
+/** A geometry drawn without materials (walls, floors) reads matt: material 0 for each of its vertices. */
+function withMaterials(geo: BufferGeometry): void {
+  const pos = geo.getAttribute("position");
+  if (!pos) return;
+  const mat = geo.getAttribute("fp3dMat");
+  // an item's own materials are kept; the matt one is made again when the geometry grew
+  if (mat && (mat.count === pos.count || !("name" in mat) || mat.name !== "fp3dMatt")) return;
+  const matt = new BufferAttribute(new Float32Array(pos.count), 1);
+  matt.name = "fp3dMatt";
+  geo.setAttribute("fp3dMat", matt);
+}
+
+/**
+ * The materials per colour role (#40, role-materials.ts) in a lit twin's shader: 0 matt, 1 gloss, 2 fabric, 3 glass,
+ * 4 metal, 5 rattan weave. Patterns lie on the plane a face lies in most, in world metres.
+ */
+function withRoleMaterials(shader: { vertexShader: string; fragmentShader: string }): void {
+  shader.vertexShader = shader.vertexShader
+    .replace("#include <common>", "#include <common>\nattribute float fp3dMat;\nflat varying int vFp3dMat;\nvarying vec3 vFp3dWorld;")
+    .replace("#include <project_vertex>", "#include <project_vertex>\n  vFp3dMat = int(fp3dMat + 0.5);\n  vFp3dWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+  shader.fragmentShader = shader.fragmentShader
+    .replace("#include <common>", `#include <common>\n${MATERIAL_GLSL}`)
+    .replace("#include <specularmap_fragment>", `#include <specularmap_fragment>\n${MATERIAL_PATTERN}`)
+    .replace("#include <lights_phong_fragment>", `#include <lights_phong_fragment>\n${MATERIAL_LIGHT}`)
+    .replace("#include <lights_fragment_end>", `#include <lights_fragment_end>\n${MATERIAL_SKY}`);
+}
+
+const MATERIAL_GLSL = `
+flat varying int vFp3dMat;
+varying vec3 vFp3dWorld;
+float fp3dHash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+// smooth value noise: the soft unevenness of a fabric
+float fp3dNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(fp3dHash(i), fp3dHash(i + vec2(1.0, 0.0)), f.x), mix(fp3dHash(i + vec2(0.0, 1.0)), fp3dHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+// how much of a pattern (t in repeats) is still bigger than a pixel: 0 when finer, then only its average shows
+float fp3dSharp(vec2 t) {
+  return clamp(1.5 - max(fwidth(t.x), fwidth(t.y)) * 2.5, 0.0, 1.0);
+}
+`;
+
+const MATERIAL_PATTERN = `
+  int fp3dM = vFp3dMat;
+  vec3 fp3dBase = diffuseColor.rgb;
+  vec3 fp3dN = abs(normalize(cross(dFdx(vFp3dWorld), dFdy(vFp3dWorld))));
+  vec2 fp3dUv = fp3dN.y > max(fp3dN.x, fp3dN.z) ? vFp3dWorld.xz : (fp3dN.x > fp3dN.z ? vFp3dWorld.zy : vFp3dWorld.xy);
+  if (fp3dM == 3) {
+    // glass: see-through without sorting: with antialiasing as coverage of the pixel, else every other pixel left out
+    #ifdef ALPHA_TO_COVERAGE
+      diffuseColor.a *= 0.45;
+    #else
+      if (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 0.5) discard;
+    #endif
+    // a cool, pale tint
+    diffuseColor.rgb = mix(fp3dBase, vec3(0.72, 0.84, 0.86), 0.5) * 0.6;
+  } else if (fp3dM == 2) {
+    // fabric: a soft unevenness and, close up, a plain weave of threads about 3 mm apart
+    vec2 t = fp3dUv * 2000.0;
+    float weave = (sin(t.x) * sin(t.y)) * fp3dSharp(t / 6.2832);
+    float nap = fp3dNoise(fp3dUv * 18.0) - 0.5;
+    diffuseColor.rgb *= 0.9 + 0.08 * weave + 0.12 * nap;
+  } else if (fp3dM == 5) {
+    // rattan: a basket weave of cells 5 cm across, two round strands each, turned a quarter in every other cell, dark
+    // gaps between the cells; from afar the cells still show when the strands are finer than a pixel
+    vec2 c = fp3dUv / 0.05;
+    vec2 cell = floor(c);
+    vec2 f = fract(c);
+    bool across = mod(cell.x + cell.y, 2.0) < 0.5;
+    float strand = fract((across ? f.y : f.x) * 2.0);
+    float rounded = 1.0 - pow(abs(strand * 2.0 - 1.0), 2.0);
+    float gap = smoothstep(0.0, 0.08, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
+    float strands = mix(0.9, 0.62 + 0.48 * rounded, fp3dSharp(c * 2.0));
+    float cells = mix(0.9, (across ? 1.0 : 0.8) * (0.6 + 0.4 * gap), fp3dSharp(c));
+    diffuseColor.rgb *= strands * cells;
+  } else if (fp3dM == 4) {
+    // metal: little diffuse light, its colour is in its highlight and reflection
+    diffuseColor.rgb = fp3dBase * 0.3;
+  }
+`;
+
+const MATERIAL_LIGHT = `
+  if (fp3dM == 1) {
+    material.specularColor = vec3(0.45);
+    material.specularShininess = 90.0;
+  } else if (fp3dM == 4) {
+    material.specularColor = mix(fp3dBase, vec3(1.0), 0.3) * 1.3;
+    material.specularShininess = 45.0;
+  } else if (fp3dM == 3) {
+    material.specularColor = vec3(0.9);
+    material.specularShininess = 160.0;
+  } else if (fp3dM == 5) {
+    material.specularColor = vec3(0.12);
+    material.specularShininess = 20.0;
+  }
+`;
+
+const MATERIAL_SKY = `
+  if (fp3dM != 0) {
+    // the sky and the ground in shiny surfaces (a bright sky above the horizon, the dark ground below it), more at a
+    // glancing angle (Schlick); a sheen on fabric
+    float fp3dFresnel = pow(1.0 - clamp(dot(geometryNormal, geometryViewDir), 0.0, 1.0), 5.0);
+    vec3 fp3dR = normalize((vec4(reflect(-geometryViewDir, geometryNormal), 0.0) * viewMatrix).xyz);
+    #if NUM_HEMI_LIGHTS > 0
+      vec3 fp3dSky = hemisphereLights[0].skyColor;
+      vec3 fp3dGround = hemisphereLights[0].groundColor * 0.6;
+    #else
+      vec3 fp3dSky = vec3(0.4);
+      vec3 fp3dGround = vec3(0.1);
+    #endif
+    vec3 fp3dEnv = mix(fp3dGround, fp3dSky, smoothstep(-0.15, 0.35, fp3dR.y));
+    if (fp3dM == 1) reflectedLight.indirectSpecular += fp3dEnv * (0.05 + 0.35 * fp3dFresnel);
+    else if (fp3dM == 4) reflectedLight.indirectSpecular += fp3dEnv * mix(fp3dBase, vec3(1.0), fp3dFresnel) * 0.7;
+    else if (fp3dM == 3) reflectedLight.indirectSpecular += fp3dEnv * (0.12 + 0.6 * fp3dFresnel);
+    else if (fp3dM == 2) reflectedLight.indirectDiffuse += fp3dSky * fp3dBase * fp3dFresnel * 0.6;
+  }
+`;

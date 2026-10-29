@@ -47,6 +47,7 @@ export class Fp3dQuickMenu extends LitElement {
     confirmSwitch: { type: Boolean },
     doorLock: { type: Boolean },
     pro: { type: Boolean },
+    noLook: { type: Boolean },
     low: { type: Boolean, reflect: true },
     _tick: { state: true },
   };
@@ -63,6 +64,8 @@ export class Fp3dQuickMenu extends LitElement {
   declare doorLock: boolean;
   /** The camera cockpit is unlocked (otherwise the look-through button shows a lock). */
   declare pro: boolean;
+  /** The 2D plan (#41) has no camera to look through: the button stays away. */
+  declare noLook: boolean;
   /** Tablet level: no blur behind the menu. */
   declare low: boolean;
   /** Bumped every few seconds while a camera menu is open, so its snapshot refreshes. */
@@ -89,9 +92,11 @@ export class Fp3dQuickMenu extends LitElement {
     return html`<button class="qm-camera" title=${this.t("camera_live")} @click=${() => this.details()}>
         ${src ? html`<img src=${src} alt=${entityName(this.hass, this.entity)} />` : html`<span class="qm-note">${stateText(this.hass, st)}</span>`}
       </button>
-      <button class="qm-details qm-look" @click=${() => this.dispatchEvent(new CustomEvent("camera-look", { detail: { entity: this.entity }, bubbles: true, composed: true }))}>
-        ${this.pro ? "" : "🔒 "}${this.t("through_camera")}
-      </button>`;
+      ${this.noLook
+        ? nothing
+        : html`<button class="qm-details qm-look" @click=${() => this.dispatchEvent(new CustomEvent("camera-look", { detail: { entity: this.entity }, bubbles: true, composed: true }))}>
+            ${this.pro ? "" : "🔒 "}${this.t("through_camera")}
+          </button>`}`;
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {

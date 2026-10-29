@@ -7,8 +7,9 @@ test("realistic is a look beside neon, chosen per card and in the panel", () => 
   assert.equal(lookOf("realistic"), "realistic");
   assert.equal(lookOf("auto"), "auto");
   assert.equal(lookOf("neon"), "neon");
-  // a look this version does not know, or none, is neon
-  assert.equal(lookOf("cartoon"), "neon");
-  assert.equal(lookOf(null), "neon");
-  assert.equal(lookOf(undefined), "neon");
+  assert.equal(lookOf("theme"), "theme");
+  // a look this version does not know, or none, follows the HA theme (#38)
+  assert.equal(lookOf("cartoon"), "theme");
+  assert.equal(lookOf(null), "theme");
+  assert.equal(lookOf(undefined), "theme");
 });
