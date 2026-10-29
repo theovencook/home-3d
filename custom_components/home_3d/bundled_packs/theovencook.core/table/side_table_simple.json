@@ -18,6 +18,10 @@
     "end table",
     "pedestal"
   ],
+  "family": "round_side_table",
+  "variant": {
+    "en": "Pedestal"
+  },
   "surface": true,
   "parts": [
     {
