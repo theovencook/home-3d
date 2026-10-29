@@ -55,7 +55,8 @@ function plan(action: ItemAction, itemEntity: string | null, env: ActionEnv): ((
     case "navigate":
       return target ? () => env.navigate(target) : null;
     case "url":
-      return target ? () => env.openUrl(target) : null;
+      // http(s) or a path on this Home Assistant only, never javascript: or another scheme (#51)
+      return /^(https?:\/\/\S+|\/(?!\/)\S*)$/i.test(target) ? () => env.openUrl(target) : null;
     case "toggle":
     case "more_info":
     case "camera": {

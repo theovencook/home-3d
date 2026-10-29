@@ -163,3 +163,77 @@ async def test_item_actions_follow_the_editors_list(
     await viewer.send_json_auto_id({"type": "home_3d/building/get"})
     got = (await viewer.receive_json())["result"]["building"]["floors"][0]["placements"][0]
     assert got["actions"]["tap"]["action"] == "more_info"
+
+
+async def _non_admin_editor(hass: HomeAssistant, hass_ws_client, admin_id: str, user_id: str, token: str):
+    admin = await hass_ws_client(hass)
+    await admin.send_json_auto_id({"type": "home_3d/editors/set", "editors": [admin_id, user_id]})
+    assert (await admin.receive_json())["success"]
+    return admin, await hass_ws_client(hass, token)
+
+
+def _with_tap(action: dict) -> dict:
+    building = copy.deepcopy(BUILDING)
+    building["floors"][0]["placements"] = [
+        {"entity_id": "lock.front", "x": 1, "z": 1, "y": None, "actions": {"tap": action}}
+    ]
+    return building
+
+
+async def test_only_an_admin_adds_or_changes_a_perform_action(
+    hass: HomeAssistant, hass_ws_client, hass_admin_user, hass_read_only_user, hass_read_only_access_token
+) -> None:
+    """A perform_action runs in the session of whoever taps, an admin too (#51): a non-admin editor can't set one."""
+    await _setup(hass)
+    admin, editor = await _non_admin_editor(
+        hass, hass_ws_client, hass_admin_user.id, hass_read_only_user.id, hass_read_only_access_token
+    )
+    unlock = {"action": "perform_action", "target": "lock.unlock", "data": {"entity_id": "lock.front"}, "confirm": True}
+    await editor.send_json_auto_id({"type": "home_3d/building/save", "building": _with_tap(unlock)})
+    result = await editor.receive_json()
+    assert not result["success"]
+    assert result["error"]["code"] == "unauthorized"
+
+    await admin.send_json_auto_id({"type": "home_3d/building/save", "building": _with_tap(unlock)})
+    assert (await admin.receive_json())["success"]
+
+    # the editor still changes everything else, the admin's action kept as it is
+    moved = _with_tap(unlock)
+    moved["floors"][0]["placements"][0]["x"] = 2
+    await editor.send_json_auto_id({"type": "home_3d/building/save", "building": moved})
+    assert (await editor.receive_json())["success"]
+    # ... and may remove it
+    await editor.send_json_auto_id({"type": "home_3d/building/save", "building": _with_tap({"action": "more_info"})})
+    assert (await editor.receive_json())["success"]
+    # but not change it (dropping the question counts)
+    await admin.send_json_auto_id({"type": "home_3d/building/save", "building": _with_tap(unlock)})
+    assert (await admin.receive_json())["success"]
+    for changed in ({**unlock, "confirm": False}, {**unlock, "target": "lock.open"}):
+        await editor.send_json_auto_id({"type": "home_3d/building/save", "building": _with_tap(changed)})
+        assert (await editor.receive_json())["error"]["code"] == "unauthorized", changed
+
+
+async def test_backup_import_and_restore_are_admin_only(
+    hass: HomeAssistant, hass_ws_client, hass_admin_user, hass_read_only_user, hass_read_only_access_token
+) -> None:
+    """They replace the whole plan, actions and all (#51): a non-admin editor is refused."""
+    await _setup(hass)
+    admin, editor = await _non_admin_editor(
+        hass, hass_ws_client, hass_admin_user.id, hass_read_only_user.id, hass_read_only_access_token
+    )
+    await admin.send_json_auto_id({"type": "home_3d/building/save", "building": BUILDING})
+    assert (await admin.receive_json())["success"]
+    await admin.send_json_auto_id({"type": "home_3d/history/snapshot"})
+    assert (await admin.receive_json())["success"]
+    await admin.send_json_auto_id({"type": "home_3d/history/list"})
+    snapshot = (await admin.receive_json())["result"]["snapshots"][0]["id"]
+    for command in (
+        {"type": "home_3d/backup/import", "building": BUILDING},
+        {"type": "home_3d/history/restore", "snapshot_id": snapshot},
+    ):
+        await editor.send_json_auto_id(command)
+        result = await editor.receive_json()
+        assert not result["success"], command
+        assert result["error"]["code"] == "unauthorized", command
+        await admin.send_json_auto_id(command)
+        assert (await admin.receive_json())["success"], command

@@ -8,6 +8,7 @@ at least one admin: otherwise nobody could open the editor to change it back.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from homeassistant.auth.models import User
@@ -77,3 +78,23 @@ def can_edit(hass: HomeAssistant, user: User | None) -> bool:
     if editors is None:
         return bool(user and user.is_admin)
     return editors.can_edit(user)
+
+
+def performed_actions(building: dict[str, Any]) -> set[tuple[str, str, str, str]]:
+    """Every `perform_action` item action of a plan, by the item and gesture it sits on (#51).
+
+    Such an action runs any Home Assistant action in the session of whoever taps, an admin too, so only an admin adds
+    or changes one. Compared by what it does: the item, gesture, action, its data and whether (and what) it asks first.
+    """
+    found: set[tuple[str, str, str, str]] = set()
+    for floor in building.get("floors", []):
+        owners = [("furniture", item.get("id"), item) for item in floor.get("furniture", [])]
+        owners += [("placement", item.get("entity_id"), item) for item in floor.get("placements", [])]
+        for kind, owner_id, item in owners:
+            for gesture, action in (item.get("actions") or {}).items():
+                if not action or action.get("action") != "perform_action":
+                    continue
+                what = [action.get("target"), action.get("data") or {}, bool(action.get("confirm"))]
+                what.append(action.get("confirm_text") or None)
+                found.add((kind, str(owner_id), gesture, json.dumps(what, sort_keys=True)))
+    return found

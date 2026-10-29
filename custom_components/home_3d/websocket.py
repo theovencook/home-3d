@@ -24,7 +24,7 @@ from .const import (
     SIGNAL_BUILDING_UPDATED,
 )
 from .custom_items import not_reserved
-from .editors import Editors, EditorsError, can_edit
+from .editors import Editors, EditorsError, can_edit, performed_actions
 from .locate.recorder import ws_locate_rec
 from .locate.ws import COMMANDS as LOCATE_COMMANDS
 from .pack_github import checked_origin, fetch_pack
@@ -144,8 +144,11 @@ async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveC
 async def ws_save_building(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Replace the building."""
+    """Replace the building. A new or changed `perform_action` item action needs an admin (#51)."""
     if (data := _data(hass, connection, msg)) is None:
+        return
+    if not connection.user.is_admin and performed_actions(msg["building"]) - performed_actions(data.building):
+        connection.send_error(msg["id"], "unauthorized", "Only an admin adds or changes an item's perform action")
         return
     revision = await data.async_save_building(msg["building"])
     # the plan's recipe copies as stored (#2): an open editor keeps them with its plan
@@ -232,6 +235,7 @@ async def ws_history_snapshot(
 @websocket_api.websocket_command(
     {vol.Required("type"): "home_3d/history/restore", vol.Required("snapshot_id"): _IMAGE_ID}
 )
+@websocket_api.require_admin
 @require_editor
 @websocket_api.async_response
 async def ws_history_restore(
@@ -551,6 +555,7 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         vol.Optional("items"): [dict],
     }
 )
+@websocket_api.require_admin
 @require_editor
 @websocket_api.async_response
 async def ws_backup_import(

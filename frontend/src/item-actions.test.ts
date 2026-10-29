@@ -53,6 +53,20 @@ test("navigate opens a dashboard path and url opens an address; without one noth
   ]);
 });
 
+test("url opens only http(s) addresses and paths on this Home Assistant (#51)", async () => {
+  const { env, done } = recorder();
+  for (const ok of ["http://192.168.1.10/", "/local/manual.pdf"]) {
+    assert.equal(await runItemAction({ action: "url", target: ok }, null, env), true, ok);
+  }
+  for (const bad of ["javascript:alert(1)", " JavaScript:alert(1)", "data:text/html,x", "//evil.example", "vbscript:x"]) {
+    assert.equal(await runItemAction({ action: "url", target: bad }, null, env), false, bad);
+  }
+  assert.deepEqual(done, [
+    ["url", "http://192.168.1.10/"],
+    ["url", "/local/manual.pdf"],
+  ]);
+});
+
 test("an action that asks first shows the editor's text and runs nothing when cancelled", async () => {
   const no = recorder(false);
   const gate = { action: "perform_action", target: "script.open_gate", confirm: true, confirm_text: "Open the gate?" } as const;

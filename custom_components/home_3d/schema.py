@@ -7,6 +7,7 @@ so saving keeps working after a frontend update until Home Assistant restarts wi
 from __future__ import annotations
 
 import math
+import re
 
 import voluptuous as vol
 
@@ -264,20 +265,33 @@ SHOW_WHEN_SCHEMA = vol.Schema(
     }
 )
 
+# a url action opens a web page or a path on this Home Assistant, never javascript: or another scheme (#51)
+_WEB_ADDRESS = re.compile(r"^(https?://[^\s]+|/(?!/)\S*)$", re.IGNORECASE)
+
+
+def _web_address_only(action: dict) -> dict:
+    if action["action"] == "url" and action.get("target") and not _WEB_ADDRESS.match(action["target"]):
+        raise vol.Invalid("a url action opens http(s) addresses or paths on this Home Assistant only", path=["target"])
+    return action
+
+
 # own tap, hold and double-tap actions of a placed device or furniture item (#6); a gesture left out (or
 # "default") keeps what the item does by its kind
 _ITEM_ACTION = vol.Any(
     None,
-    vol.Schema(
-        {
-            vol.Required("action"): vol.In(
-                ["default", "none", "toggle", "more_info", "camera", "navigate", "url", "perform_action"]
-            ),
-            vol.Optional("target"): vol.Any(None, vol.All(str, vol.Length(max=2000))),
-            vol.Optional("data"): vol.Any(None, dict),
-            vol.Optional("confirm"): bool,
-            vol.Optional("confirm_text"): vol.Any(None, vol.All(str, vol.Length(max=300))),
-        }
+    vol.All(
+        vol.Schema(
+            {
+                vol.Required("action"): vol.In(
+                    ["default", "none", "toggle", "more_info", "camera", "navigate", "url", "perform_action"]
+                ),
+                vol.Optional("target"): vol.Any(None, vol.All(str, vol.Length(max=2000))),
+                vol.Optional("data"): vol.Any(None, dict),
+                vol.Optional("confirm"): bool,
+                vol.Optional("confirm_text"): vol.Any(None, vol.All(str, vol.Length(max=300))),
+            }
+        ),
+        _web_address_only,
     ),
 )
 _ITEM_ACTIONS = vol.Any(

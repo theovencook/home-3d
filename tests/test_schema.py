@@ -492,6 +492,17 @@ def test_item_actions() -> None:
         FURNITURE_SCHEMA({**sofa, "actions": {"tap": {"action": "toggle", "confirm_text": "x" * 301}}})
 
 
+def test_url_actions_are_web_addresses_only() -> None:
+    """A url action opens http(s) or a path on this Home Assistant, never javascript: or another scheme (#51)."""
+    dev = {"entity_id": "switch.gate", "x": 0, "z": 0, "y": None}
+    for ok in ("https://example.com/a?b=1", "http://192.168.1.10:8123/", "/lovelace/0", "/local/x.pdf"):
+        tap = PLACEMENT_SCHEMA({**dev, "actions": {"tap": {"action": "url", "target": ok}}})["actions"]["tap"]
+        assert tap["target"] == ok
+    for bad in ("javascript:alert(1)", " JavaScript:alert(1)", "data:text/html,x", "//evil.example", "ftp://x", "x"):
+        with pytest.raises(vol.Invalid):
+            PLACEMENT_SCHEMA({**dev, "actions": {"tap": {"action": "url", "target": bad}}})
+
+
 def test_plug_keeps_the_circuit_it_hangs_on() -> None:
     """A placed device and an item keep the circuit they are inside, so its watts aren't counted twice (#43)."""
     plug = {"entity_id": "switch.kettle", "x": 1, "z": 1, "y": None, "circuit": "sensor.kitchen_power"}
