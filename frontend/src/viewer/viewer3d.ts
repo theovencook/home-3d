@@ -82,6 +82,7 @@ import { buildLightSurface, lightColors, roomIndexAt, type LightKind, type Light
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
 import { circlePath, cleaningPath, stepRobot, type RobotInfo, type RobotMotion } from "./robot.ts";
 import { decorDelay, lowEndDevice, petDelay } from "./pace.ts";
+import { flowSpeed } from "./flow-style.ts";
 
 export type { RobotInfo } from "./robot.ts";
 
@@ -240,6 +241,10 @@ export interface FlowPiece {
   color: [number, number, number];
   /** Width against a cable's (1; a module's pipe may be wider). */
   width?: number;
+  /** An energy cable's thickness from its power (times width): changing it moves the edges, the cable stays the same one. */
+  thick?: number;
+  /** A cable fed by several sources: its light dots in each source's colour for that share of the dots (none: the cable's colour). */
+  dots?: { color: [number, number, number]; share: number }[];
   /** A module's pipe: solid in its colour with a dark edge (readable on bright floors), a soft light running along it. */
   pipe?: boolean;
   /** Shown only in the house view (hidden while a floor is opened). */
@@ -3832,11 +3837,19 @@ export class FloorplanViewer {
     const uv: number[] = [];
     const sp: number[] = [];
     const off: number[] = [];
+    // the dots' colours, up to three: rgb + where its share ends, rgb + where its share ends, rgb
+    const d1: number[] = [];
+    const d2: number[] = [];
+    const d3: number[] = [];
     for (const f of this.flows) {
       if (f.floorId !== fv.floor.id || f.pipe) continue;
       const phase = this.flowPhase.get(flowKey(f)) ?? { speed: flowSpeed(f.power), offset: 0 };
       const level = f.power > 0.5 ? Math.min(1, 0.5 + f.power / 2500) : 0.22;
       const col = f.color.map((v) => v * level);
+      const dots = f.dots?.length ? f.dots : [{ color: f.color, share: 1 }];
+      const dc = [0, 1, 2].map((i) => dots[Math.min(i, dots.length - 1)].color.map((v) => v * level));
+      const end1 = dots.length > 1 ? dots[0].share : 1;
+      const end2 = dots.length > 2 ? end1 + dots[1].share : 1;
       const len = Math.hypot(f.b[0] - f.a[0], f.b[1] - f.a[1], f.b[2] - f.a[2]);
       if (len < 1e-4) continue;
       const dir = [(f.b[0] - f.a[0]) / len, (f.b[1] - f.a[1]) / len, (f.b[2] - f.a[2]) / len];
@@ -3855,7 +3868,7 @@ export class FloorplanViewer {
           ];
       for (const [width, strength] of layers) {
         for (const n of sides) {
-          const h = (width * (f.width ?? 1)) / 2;
+          const h = (width * (f.width ?? 1) * (f.thick ?? 1)) / 2;
           const v = (q: number[], k: number) => [q[0] + n[0] * h * k, q[1] + n[1] * h * k, q[2] + n[2] * h * k];
           const quad = [
             [v(f.a, -1), f.dist, 0],
@@ -3870,17 +3883,24 @@ export class FloorplanViewer {
             uv.push(u, w);
             sp.push(phase.speed);
             off.push(phase.offset);
+            d1.push(dc[0][0] * strength, dc[0][1] * strength, dc[0][2] * strength, end1);
+            d2.push(dc[1][0] * strength, dc[1][1] * strength, dc[1][2] * strength, end2);
+            d3.push(dc[2][0] * strength, dc[2][1] * strength, dc[2][2] * strength);
           }
         }
       }
     }
     const old = fv.flowMesh.geometry;
     if (layout === fv.flowLayout && old.getAttribute("position")?.count === p.length / 3) {
-      // same cables, new power: only colours and stripe speeds change (no new geometry, no garbage)
+      // same cables, new power: only widths, colours and stripe speeds change (no new geometry, no garbage)
       for (const [name, data] of [
+        ["position", p],
         ["color", c],
         ["flowSpeed", sp],
         ["flowOffset", off],
+        ["flowDot1", d1],
+        ["flowDot2", d2],
+        ["flowDot3", d3],
       ] as const) {
         const attr = old.getAttribute(name) as Float32BufferAttribute;
         (attr.array as Float32Array).set(data);
@@ -3896,6 +3916,9 @@ export class FloorplanViewer {
     g.setAttribute("uv", new Float32BufferAttribute(uv, 2));
     g.setAttribute("flowSpeed", new Float32BufferAttribute(sp, 1));
     g.setAttribute("flowOffset", new Float32BufferAttribute(off, 1));
+    g.setAttribute("flowDot1", new Float32BufferAttribute(d1, 4));
+    g.setAttribute("flowDot2", new Float32BufferAttribute(d2, 4));
+    g.setAttribute("flowDot3", new Float32BufferAttribute(d3, 3));
     fv.flowMesh.geometry.dispose();
     fv.flowMesh.geometry = g;
     fv.flowMesh.visible = p.length > 0;
@@ -5417,10 +5440,6 @@ function flowKey(f: FlowPiece): string {
   return `${f.floorId}:${f.a.map(r).join(",")}>${f.b.map(r).join(",")}${f.width ? `~${f.width}` : ""}`;
 }
 
-/** Stripe speed (m/s): still at 0 W, faster with more power (square root, so 2 kW is not 20 × 100 W). */
-function flowSpeed(power: number): number {
-  return power > 0.5 ? Math.min(2.4, 0.3 + Math.sqrt(power) / 28) : 0;
-}
 
 /**
  * A module's solid pipe (uv.x = metres along it, uv.y = across: 0..1 the core, 2..3 its dark edge): shaded like a
@@ -5458,10 +5477,10 @@ function flowMaterial(time: { value: number }): MeshBasicMaterial {
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uFlowTime = time;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nattribute float flowSpeed;\nattribute float flowOffset;\nvarying float vFlowSpeed;\nvarying float vFlowOffset;\nvarying vec2 vFlowUv;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFlowSpeed = flowSpeed;\nvFlowOffset = flowOffset;\nvFlowUv = uv;");
+      .replace("#include <common>", "#include <common>\nattribute float flowSpeed;\nattribute float flowOffset;\nattribute vec4 flowDot1;\nattribute vec4 flowDot2;\nattribute vec3 flowDot3;\nvarying vec4 vFlowDot1;\nvarying vec4 vFlowDot2;\nvarying vec3 vFlowDot3;\nvarying float vFlowSpeed;\nvarying float vFlowOffset;\nvarying vec2 vFlowUv;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFlowSpeed = flowSpeed;\nvFlowOffset = flowOffset;\nvFlowUv = uv;\nvFlowDot1 = flowDot1;\nvFlowDot2 = flowDot2;\nvFlowDot3 = flowDot3;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform float uFlowTime;\nvarying float vFlowSpeed;\nvarying float vFlowOffset;\nvarying vec2 vFlowUv;")
+      .replace("#include <common>", "#include <common>\nuniform float uFlowTime;\nvarying vec4 vFlowDot1;\nvarying vec4 vFlowDot2;\nvarying vec3 vFlowDot3;\nvarying float vFlowSpeed;\nvarying float vFlowOffset;\nvarying vec2 vFlowUv;")
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
@@ -5469,10 +5488,14 @@ function flowMaterial(time: { value: number }): MeshBasicMaterial {
         float fp3dMoving = step(0.001, abs(vFlowSpeed));
         // light dots every third of a metre, each a comet: a bright head and a tail fading out behind it,
         // so the direction (from a to b) is plain even on a still picture
-        float fp3dPhase = fract((vFlowUv.x - uFlowTime * abs(vFlowSpeed) - vFlowOffset) * 3.0);
+        float fp3dRun = (vFlowUv.x - uFlowTime * abs(vFlowSpeed) - vFlowOffset) * 3.0;
+        float fp3dPhase = fract(fp3dRun);
         float fp3dDot = exp(-(1.0 - fp3dPhase) * 7.0) * fp3dMoving;
         float fp3dCore = fp3dAcross * fp3dAcross;
-        diffuseColor.rgb *= (0.3 + 1.7 * fp3dDot) * (0.2 + 0.8 * fp3dCore);`,
+        // a blended cable: each dot keeps one source's colour all along its way, the sources in their shares (#28)
+        float fp3dPick = fract(floor(fp3dRun) * 0.6180339887);
+        vec3 fp3dDotColor = fp3dPick < vFlowDot1.w ? vFlowDot1.rgb : (fp3dPick < vFlowDot2.w ? vFlowDot2.rgb : vFlowDot3);
+        diffuseColor.rgb = (diffuseColor.rgb * 0.3 + fp3dDotColor * 1.7 * fp3dDot) * (0.2 + 0.8 * fp3dCore);`,
       );
   };
   m.customProgramCacheKey = () => "fp3d-flow";

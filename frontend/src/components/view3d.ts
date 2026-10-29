@@ -39,7 +39,7 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
 import { alertColor, alertEntities, alertSources, alertText, findAlerts, isOutage, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg, mdiIcon } from "../icons.ts";
 import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
-import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, fieldLevels, fieldPowers, findConsumers, flowColor, flowSegments, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type StatRow } from "../energy.ts";
+import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, fieldLevels, fieldPowers, findConsumers, flowDots, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type FlowKind, type StatRow } from "../energy.ts";
 import { fieldFace, fieldSize, roofFaces, roofWindowRoom } from "../solar.ts";
 import { type CustomButton, type EntityRef, DEFAULT_HOLOGRAM, lockAlong, type PoolPipe, type RoofWindow, type SolarField, uid } from "../model.ts";
 
@@ -131,6 +131,7 @@ import { pipePieces, poolAreas, poolNodeAt, poolWallNormal, underBasin, PIPE_IDL
 import type { PipeTube } from "../viewer/viewer3d.ts";
 import type { PoolPiece } from "../viewer/pool-water.ts";
 import { lowSyncDelay } from "../viewer/pace.ts";
+import { flowWidth } from "../viewer/flow-style.ts";
 import { floorCounts, floorInfoText, locatedPersons, personLook, personsInRooms, personsShown } from "../presence.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
@@ -1507,6 +1508,7 @@ export class Fp3dView3d extends LitElement {
     // the modules live with their production (at night, and without Pro, they rest)
     v.setSolarLevels(powers && !this.dimmed ? fieldLevels(b, powers) : new Map());
     // the energy cables (Energie Pro) and the pool's pipes share the viewer's flow layer
+    const mixes = (kind: FlowKind) => sourceMix(kind, summary);
     const energyFlows =
       !pro || !(this.flows ?? this._flows) || this.dimmed
         ? []
@@ -1516,7 +1518,10 @@ export class Fp3dView3d extends LitElement {
             b: f.b,
             dist: f.dist,
             power: f.power,
-            color: flowColor(f.kind, summary),
+            // the colour of the sources feeding it, each source's own colour on its share of the dots; thicker with the watts (#28)
+            color: mixColor(mixes(f.kind)),
+            dots: flowDots(mixes(f.kind)),
+            thick: flowWidth(f.power),
           }));
     const pool = this.poolPipes(b);
     // a module's lines (pipes, a loop in the ground) flow in the same layer; its surfaces lie over floors and lawns
