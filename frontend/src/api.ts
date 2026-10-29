@@ -226,7 +226,7 @@ export async function saveCustomItem(hass: HomeAssistant, item: PackItem): Promi
   return res.item;
 }
 
-/** Remove a custom item (placed copies stay in the plan as plain boxes). */
+/** Remove a custom item (placed copies stay in the plan and keep their recipe copy). */
 export async function removeCustomItem(hass: HomeAssistant, itemId: string): Promise<void> {
   await hass.callWS({ type: "home_3d/items/remove", item_id: itemId });
 }
