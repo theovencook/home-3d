@@ -1,8 +1,8 @@
 """Start views of the house, a floor and a room (#206, #282)."""
 
 import json
-import re
 from pathlib import Path
+import re
 
 import pytest
 import voluptuous as vol

@@ -354,7 +354,9 @@ FURNITURE_SCHEMA = vol.Schema(
             None, vol.Schema({vol.In(COLOUR_ROLES): vol.Match(r"^#[0-9a-fA-F]{6}$")}, extra=vol.PREVENT_EXTRA)
         ),
         # its own material per role (#40); roles left out take their usual one
-        vol.Optional("materials"): vol.Any(None, vol.Schema({vol.In(COLOUR_ROLES): vol.In(MATERIALS)}, extra=vol.PREVENT_EXTRA)),
+        vol.Optional("materials"): vol.Any(
+            None, vol.Schema({vol.In(COLOUR_ROLES): vol.In(MATERIALS)}, extra=vol.PREVENT_EXTRA)
+        ),
         # household: a waste bin's kind and colours, its calendar (Haushalt Pro); a mailbox's emptying door
         vol.Optional("bin_kind"): vol.Any(None, vol.In(WASTE_KINDS)),
         vol.Optional("bin_color"): vol.Any(None, vol.Match(r"^#[0-9a-fA-F]{6}$")),
