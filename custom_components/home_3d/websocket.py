@@ -14,12 +14,21 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.loader import async_get_integration
 import voluptuous as vol
 
-from .const import DATA_ASK, DATA_EDITORS, DATA_VOICE, DOMAIN, SIGNAL_ASK, SIGNAL_BUILDING_UPDATED
+from .const import (
+    DATA_ASK,
+    DATA_EDITORS,
+    DATA_PACK_UPDATES,
+    DATA_VOICE,
+    DOMAIN,
+    SIGNAL_ASK,
+    SIGNAL_BUILDING_UPDATED,
+)
 from .custom_items import not_reserved
 from .editors import Editors, EditorsError, can_edit
 from .locate.recorder import ws_locate_rec
 from .locate.ws import COMMANDS as LOCATE_COMMANDS
 from .pack_github import checked_origin, fetch_pack
+from .pack_updates import SETTINGS_FIELDS, PackUpdates
 from .packs import (
     MAX_PACK_SIZE,
     PackError,
@@ -56,6 +65,12 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_packs_import,
         ws_packs_install_url,
         ws_packs_remove,
+        ws_packs_updates,
+        ws_packs_updates_settings,
+        ws_packs_update_items,
+        ws_packs_check,
+        ws_packs_pin,
+        ws_packs_rollback,
         ws_items_save,
         ws_items_remove,
         ws_backup_export,
@@ -248,13 +263,15 @@ def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
         vol.Exclusive("pack", "source"): vol.All(str, vol.Length(max=MAX_PACK_SIZE)),
         # ... or a v2 pack folder: relative path -> file text (packs.py checks names, count and sizes)
         vol.Exclusive("files", "source"): {str: str},
+        # an older release than the installed one, or another release of a pinned pack, was confirmed (#26)
+        vol.Optional("confirm", default=False): bool,
     }
 )
 @require_editor
 @websocket_api.async_response
 async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Check a pack's content, then keep it with its source (a backup carries the source and checks it again)."""
-    if (data := _data(hass, connection, msg)) is None:
+    if _data(hass, connection, msg) is None or (updates := _updates(hass, connection, msg)) is None:
         return
     try:
         if "files" in msg:
@@ -266,10 +283,10 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
         else:
             raise PackError("not_a_pack", "send a pack file or a pack folder")
         not_reserved(payload)
+        await updates.async_install(payload, source, confirm=msg["confirm"])
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
         return
-    await data.async_add_pack(payload, source)
     result = {
         "id": payload["id"],
         "name": payload["name"],
@@ -281,7 +298,11 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
 
 
 @websocket_api.websocket_command(
-    {vol.Required("type"): "home_3d/packs/install_url", vol.Required("url"): vol.All(str, vol.Length(min=1, max=500))}
+    {
+        vol.Required("type"): "home_3d/packs/install_url",
+        vol.Required("url"): vol.All(str, vol.Length(min=1, max=500)),
+        vol.Optional("confirm", default=False): bool,
+    }
 )
 @require_editor
 @websocket_api.async_response
@@ -290,16 +311,16 @@ async def ws_packs_install_url(
 ) -> None:
     """Install a pack from a GitHub URL (#25): Home Assistant fetches it, checks it like a folder import and keeps
     where it came from (`source.origin`) for update checks."""
-    if (data := _data(hass, connection, msg)) is None:
+    if _data(hass, connection, msg) is None or (updates := _updates(hass, connection, msg)) is None:
         return
     try:
         files, origin = await fetch_pack(hass, msg["url"])
         payload = not_reserved(verify_folder(files))
         source = {**source_of_folder(files), "origin": {**origin, "release": payload["release"]}}
+        await updates.async_install(payload, source, confirm=msg["confirm"])
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
         return
-    await data.async_add_pack(payload, source)
     result = {
         "id": payload["id"],
         "name": payload["name"],
@@ -330,6 +351,108 @@ async def ws_packs_remove(hass: HomeAssistant, connection: websocket_api.ActiveC
     connection.send_result(msg["id"])
 
 
+# ---------------------------------------------------------------------------- pack updates (#26)
+
+
+def _updates(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> PackUpdates | None:
+    updates: PackUpdates | None = hass.data.get(DATA_PACK_UPDATES)
+    if updates is None:
+        connection.send_error(msg["id"], "not_loaded", "Home 3D is not set up")
+    return updates
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/packs/updates"})
+@callback
+def ws_packs_updates(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The update settings, the installed packs (pinned, previous release, last check) and the placed items with an
+    update."""
+    if (updates := _updates(hass, connection, msg)) is not None:
+        connection.send_result(msg["id"], updates.status())
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/packs/updates/settings", **SETTINGS_FIELDS})
+@require_editor
+@websocket_api.async_response
+async def ws_packs_updates_settings(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Change the update settings: auto-update, and how often and when packs are checked."""
+    if (updates := _updates(hass, connection, msg)) is None:
+        return
+    await updates.async_set({k: v for k, v in msg.items() if k not in ("id", "type")})
+    connection.send_result(msg["id"], updates.status())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_3d/packs/update_items",
+        # the furniture types to update; left out: every placed item with an update
+        vol.Optional("types"): vol.All([vol.All(str, vol.Length(max=200))], vol.Length(max=2000)),
+    }
+)
+@require_editor
+@websocket_api.async_response
+async def ws_packs_update_items(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Update placed items to the installed release of their pack (their recipe copies in the plan)."""
+    if (updates := _updates(hass, connection, msg)) is None:
+        return
+    updated, revision = await updates.async_apply(msg.get("types"))
+    connection.send_result(msg["id"], {"updated": updated, "revision": revision})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/packs/check"})
+@require_editor
+@websocket_api.async_response
+async def ws_packs_check(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Check the packs installed from GitHub for a new release now."""
+    if (updates := _updates(hass, connection, msg)) is None:
+        return
+    result = await updates.async_check()
+    connection.send_result(msg["id"], {**updates.status(), **result})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_3d/packs/pin",
+        vol.Required("pack_id"): vol.All(str, vol.Length(max=64)),
+        vol.Required("pinned"): bool,
+    }
+)
+@require_editor
+@websocket_api.async_response
+async def ws_packs_pin(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Pin a pack to its installed release (or unpin it)."""
+    if (updates := _updates(hass, connection, msg)) is None:
+        return
+    try:
+        await updates.async_pin(msg["pack_id"], msg["pinned"])
+    except PackError as err:
+        connection.send_error(msg["id"], err.code, err.detail or err.code)
+        return
+    connection.send_result(msg["id"], updates.status())
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "home_3d/packs/rollback", vol.Required("pack_id"): vol.All(str, vol.Length(max=64))}
+)
+@require_editor
+@websocket_api.async_response
+async def ws_packs_rollback(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Put back the release a pack had before its last update; the pack is pinned to it."""
+    if (updates := _updates(hass, connection, msg)) is None:
+        return
+    try:
+        result = await updates.async_rollback(msg["pack_id"])
+    except PackError as err:
+        connection.send_error(msg["id"], err.code, err.detail or err.code)
+        return
+    connection.send_result(msg["id"], {**updates.status(), **result})
+
+
 # ---------------------------------------------------------------------------- custom items (#13)
 
 
@@ -338,7 +461,7 @@ async def ws_packs_remove(hass: HomeAssistant, connection: websocket_api.ActiveC
 @websocket_api.async_response
 async def ws_items_save(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Keep an item made in the item editor (or imported from an item file); it is checked like a pack's item and
-    replaces a custom item with the same id."""
+    replaces a custom item with the same id, and placed copies of it change with it."""
     if (data := _data(hass, connection, msg)) is None:
         return
     try:
@@ -346,6 +469,8 @@ async def ws_items_save(hass: HomeAssistant, connection: websocket_api.ActiveCon
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
         return
+    # placed copies of the item follow the change (#26)
+    await data.async_follow_custom_items()
     connection.send_result(msg["id"], {"item": item})
 
 
