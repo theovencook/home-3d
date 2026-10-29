@@ -364,7 +364,7 @@ A pack is refused, with a message that names the file and the fault, when:
 | `pack.json` has no `licence` | | `no_licence` |
 | A file is not `pack.json`, an item `.json` or a readme/licence text; a path leaves the folder or breaks the naming rules | | `not_data` |
 | Any text contains a link (`http:`, `https:`, `www.` and the like) | | `not_data` |
-| Too many items | 500 per pack | `too_many_items` |
+| Too many items | 1,000 per pack | `too_many_items` |
 | A file is too large | 50,000 characters | `too_large` |
 | The whole pack is too large | 3,000,000 characters | `too_large` |
 | A file is not JSON, breaks the schema, or an item id does not match its file name or is used twice | 60 parts and 40 symbol shapes per item | `invalid_content` |
@@ -395,7 +395,7 @@ An editor can also paste a GitHub URL into **Extensions** → **Install from Git
 
 Home Assistant fetches the pack, not the browser, and only from `api.github.com` (the repository, the commit and its
 file list) and `raw.githubusercontent.com` (the files, at that commit). The repository must be public. Before
-anything is downloaded the file list is checked: the names (as above), at most 510 files in the folder and the size
+anything is downloaded the file list is checked: the names (as above), at most 1,010 files in the folder and the size
 of each file; hidden files and folders and the readme and licence texts are not fetched. The files then go through
 the same checks as a folder import. A repository root that holds several packs is refused with the URLs of its pack
 folders. Branch names that contain a `/` cannot be told from the folder and are not supported.

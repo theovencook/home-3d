@@ -277,7 +277,7 @@ async def test_code_and_oversized_files_are_refused_before_anything_is_downloade
     assert not _raw_fetched(aioclient_mock)
 
     aioclient_mock.clear_requests()
-    _mock_repo(aioclient_mock, {**_pack_files(), **{f"i{n}.json": "{}" for n in range(600)}})
+    _mock_repo(aioclient_mock, {**_pack_files(), **{f"i{n}.json": "{}" for n in range(1100)}})
     result = await _install(client, f"https://github.com/{OWNER}/{REPO}")
     assert result["error"]["code"] == "too_many_items"
     assert not _raw_fetched(aioclient_mock)
