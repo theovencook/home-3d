@@ -59,3 +59,9 @@ test("every bundled item shows in the library under the category its folder name
     }
   }
 });
+
+test("theovencook.core shows off every part shape: at least one item draws with each", () => {
+  const core = packs.find((p) => p.pack.id === "theovencook.core")!;
+  const used = new Set(core.pack.items.flatMap((item) => item.parts.map((part) => part.shape)));
+  for (const shape of ["box", "cyl", "loft", "sphere", "lathe", "rbox"]) assert.ok(used.has(shape as never), `no core item uses a ${shape}`);
+});
