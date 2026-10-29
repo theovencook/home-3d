@@ -452,7 +452,8 @@ def test_plug_keeps_the_circuit_it_hangs_on() -> None:
 def test_cheap_rate_and_wire_end_energy_sensor() -> None:
     """The cheap rate is an entity or a daily window; an item keeps the energy sensor of its wire end (#29)."""
     energy = ENERGY_SCHEMA({"cheap_rate": "binary_sensor.off_peak", "cheap_from": "23:30", "cheap_to": "05:30"})
-    assert (energy["cheap_rate"], energy["cheap_from"], energy["cheap_to"]) == ("binary_sensor.off_peak", "23:30", "05:30")
+    assert energy["cheap_rate"] == "binary_sensor.off_peak"
+    assert (energy["cheap_from"], energy["cheap_to"]) == ("23:30", "05:30")
     assert ENERGY_SCHEMA({})["cheap_rate"] is None
     with pytest.raises(vol.Invalid):
         ENERGY_SCHEMA({"cheap_from": "25:00"})
