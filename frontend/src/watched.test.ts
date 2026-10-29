@@ -69,3 +69,15 @@ test("a 3D printer's progress, chamber light and camera are watched, found on it
   const ids = watchedEntities(hass, b, { openings, furniture, heat: false, warnings: [], weatherEntityId: null });
   for (const id of ["sensor.p_status", "sensor.p_progress", "light.p_chamber", "camera.p_cam"]) assert.ok(ids.includes(id), id);
 });
+
+test("a room's chosen motion sensor and a radiator's temperature are watched for the live effects (#10)", () => {
+  const { hass, b, openings, furniture } = setup();
+  const states = hass.states as Record<string, unknown>;
+  states["binary_sensor.hall_pir"] = { entity_id: "binary_sensor.hall_pir", state: "off", attributes: { device_class: "motion" } };
+  states["sensor.rad_temp"] = { entity_id: "sensor.rad_temp", state: "30", attributes: { device_class: "temperature" } };
+  b.floors[0].rooms[0].live = { motion: "binary_sensor.hall_pir" };
+  b.floors[0].furniture = [{ id: "rad", type: "radiator", x: 1, z: 1, rotation: 0, w: 1, d: 0.1, h: 0.6, variant: null, temp_sensor: "sensor.rad_temp" }];
+  const ids = watchedEntities(hass, b, { openings, furniture, heat: false, warnings: [], weatherEntityId: null });
+  assert.ok(ids.includes("binary_sensor.hall_pir"));
+  assert.ok(ids.includes("sensor.rad_temp"));
+});

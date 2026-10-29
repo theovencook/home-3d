@@ -159,6 +159,8 @@ import { MATERIALS, ownMaterial, setRoleMaterial, usualMaterial, type Material }
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
+import { effectFields } from "./effect-fields.ts";
+import { itemTempSource, roomLiveSensors, shadeKind, type LiveKind } from "../room-effects.ts";
 import { energyRole, furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
 import { isPrinter } from "../printer.ts";
 
@@ -10564,7 +10566,7 @@ export class Fp3dEditor extends LitElement {
       </div>
       <p class="fp3d-sub" title=${this.t("room_area_net_hint")}>${this.t("room_area_net", { a: this.area(polygonArea(room.points)), n: this.area(netRoomArea(room, this.floor!, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior })) })}</p>
       <p class="fp3d-sub fp3d-room-id">${this.t("room_id")} <code title=${this.t("license_copy")} @click=${() => void navigator.clipboard?.writeText(room.id).catch(() => undefined)}>${room.id}</code></p>
-      ${this.renderEdgeHeights(room)} ${this.renderRoomClimate(room)} ${this.renderRoomOpenings(room)}
+      ${this.renderEdgeHeights(room)} ${this.renderRoomClimate(room)} ${this.renderRoomLive(room)} ${this.renderRoomOpenings(room)}
       <details class="fp3d-points" ?open=${!rect}>
         <summary>${this.t("points")} (${room.points.length})</summary>
         ${room.points.map(
@@ -12237,6 +12239,16 @@ export class Fp3dEditor extends LitElement {
           ? html`${this.entitySelect(this.t("heat_sensor"), f.heat_sensor ?? null, undefined, this.entityOptions((id) => /^(binary_sensor|sensor|switch|input_boolean|number)\./.test(id)), (v) => this.updateFurniture({ heat_sensor: v && v !== "none" ? v : null }))}
               <p class="fp3d-sub fp3d-wide">${this.t("heat_sensor_hint")}</p>`
           : nothing}
+        ${shadeKind(f.type)
+          ? html`${this.entitySelect(
+                this.t("temp_sensor"),
+                f.temp_sensor ?? null,
+                itemTempSource(hass, { ...f, temp_sensor: null }),
+                this.entityOptions((id) => (id.startsWith("sensor.") && hass.states[id]?.attributes.device_class === "temperature") || /^(climate|water_heater)\./.test(id)),
+                (v) => this.updateFurniture({ temp_sensor: v }),
+              )}
+              <p class="fp3d-sub fp3d-wide">${this.t("temp_sensor_hint")}</p>`
+          : nothing}
         ${f.type === "awning" ? this.renderAwningFields(f) : packMotion(f.type) ? this.renderMotionFields(f) : nothing}
         ${!lamp && !isEnergyDevice(f.type) && !hasScreen(f.type) ? this.renderStateLinks(f) : nothing}
         ${lamp && f.entity && f.entity !== "none"
@@ -13027,6 +13039,32 @@ export class Fp3dEditor extends LitElement {
       : html`<p class="fp3d-sub">${this.t("devices_none")}</p>`;
   }
 
+  /** A room's leak and motion sensors for the live effects (#10): chosen ones, or every one of the room. */
+  private renderRoomLive(room: Room) {
+    const hass = this.hass;
+    if (!hass) return nothing;
+    const set = (key: LiveKind, v: string | null) => {
+      const next = { ...(room.live ?? {}), [key]: v };
+      const empty = Object.values(next).every((x) => x == null);
+      this.updateRoom({ live: empty ? null : next });
+    };
+    const chosen = !!room.live && Object.values(room.live).some((x) => x != null);
+    const field = (key: LiveKind, label: string) => {
+      const auto = roomLiveSensors(hass, this.floor ?? null, { ...room, live: null }, key);
+      const classes = key === "leak" ? ["moisture"] : ["motion", "occupancy", "presence"];
+      const options = this.entityOptions((id) => id.startsWith("binary_sensor.") && classes.includes(String(hass.states[id]?.attributes.device_class ?? "")))
+        .map((o) => ({ ...o, rank: entityAreaId(hass, o.id) === room.area_id ? 0 : 1 }))
+        .sort((a, b) => a.rank - b.rank)
+        .map(({ id, label }) => ({ id, label }));
+      return this.entitySelect(label, room.live?.[key] ?? null, auto[0] ?? null, options, (v) => set(key, v));
+    };
+    return html`<details class="fp3d-points" ?open=${chosen}>
+      <summary>${this.t("room_live")}</summary>
+      <div class="fp3d-form">${field("leak", this.t("room_live_leak"))} ${field("motion", this.t("room_live_motion"))}</div>
+      <p class="fp3d-sub">${this.t("room_live_hint")}</p>
+    </details>`;
+  }
+
   /** Room climate: temperature, humidity and CO2 from chosen sensors, or picked automatically. */
   private renderRoomClimate(room: Room) {
     const hass = this.hass;
@@ -13463,6 +13501,10 @@ export class Fp3dEditor extends LitElement {
           ><input type="checkbox" .checked=${!!s.alert_unavailable} @change=${(ev: Event) => set({ alert_unavailable: (ev.target as HTMLInputElement).checked })} />
           ${this.t("alert_unavailable")}</label
         >
+        ${this.hass
+          ? html`<p class="fp3d-sub fp3d-wide"><b>${this.t("effects")}</b> · ${this.t("effects_hint")}</p>
+              ${effectFields(this.hass, s.effects, !this.isEditor, (effects) => set({ effects }), "fp3d-field")}`
+          : nothing}
         ${this.hass
           ? html`${this.entitySelect(
                 this.t("outage_entity"),

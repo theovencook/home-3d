@@ -1,6 +1,6 @@
 # IKEA UK models
 
-Models: 200. Done: 40 (114 items).
+Models: 200. Done: 200 (408 items).
 
 The 200 IKEA UK models the `theovencook.ikea-uk` pack is built towards (tickets #30 to #34), so each batch picks
 from this list without overlap. Most come from the IKEA UK best-seller list as it stood on 29 October 2026
@@ -210,43 +210,47 @@ Best-seller rank: its place on the IKEA UK best-seller list on 29 October 2026; 
 
 | # | Model | IKEA name | Group | Best-seller rank | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Gaming desk | UTESPELARE | `office` | 154 | to do |
-| 2 | Gaming chair | HUVUDSPELARE | `seating` | 271 | to do |
-| 3 | Swivel chair | LOBERGET / MALSKÄR | `seating` | 81 | to do |
-| 4 | Monitor stand with drawer | ELLOVEN | `office` | 29 | to do |
-| 5 | Sit/stand desk | TROTTEN | `office` | - | to do |
-| 6 | Desk | BEKANT | `office` | - | to do |
-| 7 | Drawer unit on castors | HELMER | `office` | - | to do |
-| 8 | Desk | ALEX | `office` | - | to do |
-| 9 | Shelf unit | VESKEN | `bath` | 100 | to do |
-| 10 | Trolley | VESKEN | `bath` | 106 | to do |
-| 11 | High cabinet | NYSJÖN | `bath` | 84 | to do |
-| 12 | Wash-basin base cabinet | NYSJÖN | `bath` | 267 | to do |
-| 13 | Mirror cabinet | HEMNES | `bath` | - | to do |
-| 14 | Wash-stand | GODMORGON | `bath` | - | to do |
-| 15 | Mirror cabinet | ENHET | `bath` | 120 | to do |
-| 16 | Cabinet | LILLÅNGEN | `bath` | - | to do |
-| 17 | Shelving unit | RÅGRUND | `bath` | - | to do |
-| 18 | Children's table with 2 chairs | LÄTT | `kids` | 93 | to do |
-| 19 | Children's table | FLISAT | `kids` | 133 | to do |
-| 20 | Children's chair | MAMMUT | `kids` | 182 | to do |
-| 21 | Children's stool | FÖRSIKTIG | `kids` | 128 | to do |
-| 22 | Children's desk chair | LOBERGET / SIBBEN | `kids` | 48 | to do |
-| 23 | Cot | GULLIVER | `kids` | 216 | to do |
-| 24 | Changing table | GULLIVER | `kids` | 217 | to do |
-| 25 | Cot | SNIGLAR | `kids` | 224 | to do |
-| 26 | Changing table | SNIGLAR | `kids` | 285 | to do |
-| 27 | Bunk bed frame | TUFFING | `kids` | 50 | to do |
-| 28 | Bunk bed frame | SVÄRTA | `kids` | - | to do |
-| 29 | Storage combination | TROFAST | `kids` | - | to do |
-| 30 | Storage combination | SMÅSTAD | `kids` | - | to do |
-| 31 | Soft toy shark | BLÅHAJ | `kids` | 90 | to do |
-| 32 | Soft toy bear | DJUNGELSKOG | `kids` | 143 | to do |
-| 33 | Bed tent | ELDFLUGA | `kids` | 42 | to do |
-| 34 | Box | SKUBB | `storage` | 109 | to do |
-| 35 | Box | DRÖNA | `storage` | 113 | to do |
-| 36 | Shelving unit | IVAR | `storage` | - | to do |
-| 37 | Shelving unit | BROR | `storage` | - | to do |
-| 38 | Shoe rack | MACKAPÄR | `storage` | 277 | to do |
-| 39 | Shoe cabinet | HEMNES | `storage` | - | to do |
-| 40 | Rack with knobs | HÖVOLM | `storage` | 148 | to do |
+| 1 | Gaming desk | UTESPELARE | `office` | 154 | done, 1 item |
+| 2 | Gaming chair | HUVUDSPELARE | `seating` | 271 | done, 1 item |
+| 3 | Swivel chair | LOBERGET / MALSKÄR | `seating` | 81 | done, 1 item |
+| 4 | Monitor stand with drawer | ELLOVEN | `office` | 29 | done, 1 item |
+| 5 | Sit/stand desk | TROTTEN | `office` | - | done, 4 items (2 sit/stand, 2 fixed height) |
+| 6 | Desk | BEKANT | `office` | - | dropped (IKEA UK no longer sells the desk), replaced by 41 |
+| 7 | Drawer unit on castors | HELMER | `office` | - | done, 1 item |
+| 8 | Desk | ALEX | `office` | - | done, 2 items |
+| 9 | Shelf unit | VESKEN | `bath` | 100 | done, 2 items |
+| 10 | Trolley | VESKEN | `bath` | 106 | done, 1 item |
+| 11 | High cabinet | NYSJÖN | `bath` | 84 | done, 2 items |
+| 12 | Wash-basin base cabinet | NYSJÖN | `bath` | 267 | done, 2 items |
+| 13 | Mirror cabinet | HEMNES | `bath` | - | done, 2 items |
+| 14 | Wash-stand | GODMORGON | `bath` | - | dropped (IKEA UK no longer sells it), replaced by 42 |
+| 15 | Mirror cabinet | ENHET | `bath` | 120 | done, 2 items |
+| 16 | Cabinet | LILLÅNGEN | `bath` | - | dropped (IKEA UK no longer sells it), replaced by 43 |
+| 17 | Shelving unit | RÅGRUND | `bath` | - | done, 2 items |
+| 18 | Children's table with 2 chairs | LÄTT | `kids` | 93 | done, 1 item |
+| 19 | Children's table | FLISAT | `kids` | 133 | done, 2 items |
+| 20 | Children's chair | MAMMUT | `kids` | 182 | done, 3 items (chair, stool, table) |
+| 21 | Children's stool | FÖRSIKTIG | `kids` | 128 | done, 1 item |
+| 22 | Children's desk chair | LOBERGET / SIBBEN | `kids` | 48 | done, 1 item |
+| 23 | Cot | GULLIVER | `kids` | 216 | done, 1 item |
+| 24 | Changing table | GULLIVER | `kids` | 217 | done, 1 item |
+| 25 | Cot | SNIGLAR | `kids` | 224 | done, 2 items |
+| 26 | Changing table | SNIGLAR | `kids` | 285 | done, 1 item |
+| 27 | Bunk bed frame | TUFFING | `kids` | 50 | done, 2 items (bunk and loft) |
+| 28 | Bunk bed frame | SVÄRTA | `kids` | - | done, 1 item |
+| 29 | Storage combination | TROFAST | `kids` | - | done, 4 items |
+| 30 | Storage combination | SMÅSTAD | `kids` | - | done, 3 items |
+| 31 | Soft toy shark | BLÅHAJ | `kids` | 90 | done, 2 items |
+| 32 | Soft toy bear | DJUNGELSKOG | `kids` | 143 | done, 1 item |
+| 33 | Bed tent | ELDFLUGA | `kids` | 42 | done, 1 item |
+| 34 | Box | SKUBB | `storage` | 109 | done, 2 items |
+| 35 | Box | DRÖNA | `storage` | 113 | done, 2 items |
+| 36 | Shelving unit | IVAR | `storage` | - | done, 4 items |
+| 37 | Shelving unit | BROR | `storage` | - | done, 3 items |
+| 38 | Shoe rack | MACKAPÄR | `storage` | 277 | done, 2 items |
+| 39 | Shoe cabinet | HEMNES | `storage` | - | dropped (IKEA UK no longer sells it), replaced by 44 |
+| 40 | Rack with knobs | HÖVOLM | `storage` | 148 | done, 1 item |
+| 41 | Desk | MITTZON | `office` | - | done, 3 items |
+| 42 | Wash-stand | TÄNNFORSEN | `bath` | - | done, 2 items |
+| 43 | High cabinet | TÄNNFORSEN | `bath` | - | done, 1 item |
+| 44 | Shoe cabinet | STÄLL | `storage` | - | done, 2 items |

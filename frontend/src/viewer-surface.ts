@@ -51,6 +51,7 @@ export type ViewerSurface = Pick<
   | "setQuality"
   | "setRobots"
   | "setRoofWindows"
+  | "setRoomGlow"
   | "setRoomInfo"
   | "setRoomTint"
   | "setScreens"

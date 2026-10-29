@@ -61,6 +61,14 @@ ROOM_SCHEMA = vol.Schema(
                 vol.Optional("co2", default=None): _SENSOR_REF,
             },
         ),
+        # leak and motion sensors chosen for the live room effects (None = automatic, "none" = none, #10)
+        vol.Optional("live", default=None): vol.Any(
+            None,
+            {
+                vol.Optional("leak", default=None): _SENSOR_REF,
+                vol.Optional("motion", default=None): _SENSOR_REF,
+            },
+        ),
         vol.Required("id"): _ID,
         vol.Required("name"): _NAME,
         # further names the voice answers to
@@ -343,6 +351,8 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("color_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # any electric item: a sensor whose value stands at its symbol (a boiler's water temperature)
         vol.Optional("extra", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # radiator or hot-water cylinder: the temperature it shades with (None = automatic, "none" = none, #10)
+        vol.Optional("temp_sensor", default=None): _SENSOR_REF,
         # ceiling fan with light: its fan entity (the blades turn with its speed)
         vol.Optional("fan"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # mirrored left-right
@@ -868,6 +878,17 @@ SETTINGS_SCHEMA = vol.Schema(
         # warnings name the device after the room
         vol.Optional("alert_names", default=True): bool,
         vol.Optional("alert_unavailable", default=False): bool,
+        # live room effects (#10): seconds motion lights a room, the temperatures radiators and cylinders shade between
+        vol.Optional("effects", default=None): vol.Any(
+            None,
+            {
+                vol.Optional("motion_seconds"): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=0, max=3600))),
+                **{
+                    vol.Optional(key): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=-20, max=100)))
+                    for key in ("radiator_cold", "radiator_hot", "tank_cold", "tank_hot")
+                },
+            },
+        ),
         # an entity that reports a power outage (None = no outage warning)
         vol.Optional("outage_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # sunlight through the windows as patches on the floor

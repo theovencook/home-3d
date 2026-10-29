@@ -295,6 +295,8 @@ export interface ScreenState {
   picture?: string | null;
   /** No glow frame around the screen (a logo from a picture rule stands on its own). */
   plain?: boolean;
+  /** A colour of its temperature (a radiator, a hot-water cylinder, #10): the 2D plan fills the item with it. */
+  shade?: boolean;
   /** Furniture with a state: glowing faces on top of the item instead of a screen – the whole top, or a half of it. */
   // (see also SoundSource below)
   // "gang": one rocker or socket of a wall switch or socket (`index` of `of`)
@@ -558,6 +560,8 @@ interface FloorView {
   label: HTMLButtonElement;
 }
 
+/** The floor of a room motion lights (#10). */
+const MOTION_LIGHT = new Color(1, 0.84, 0.5);
 const ACTIVE_FLOOR = new Color(0x1a2a4d);
 
 export function isLowEnd(): boolean {
@@ -767,6 +771,8 @@ export class FloorplanViewer {
   private weatherLast = 0;
   /** Heatmap colour per room id (null: normal floors). */
   private roomTint: Map<string, [number, number, number]> | null = null;
+  /** Rooms motion lights (#10). */
+  private roomGlow: ReadonlySet<string> = new Set();
   private houseRadius = 20;
   private startView: StartView | null = null;
   private keepView = false;
@@ -1850,6 +1856,13 @@ export class FloorplanViewer {
       }
       this.buildSunFx();
     }
+  }
+
+  /** Rooms motion lights now (#10): their floors brighten with a warm light, without dimming the room lights. */
+  setRoomGlow(rooms: ReadonlySet<string>): void {
+    if (rooms.size === this.roomGlow.size && [...rooms].every((id) => this.roomGlow.has(id))) return;
+    this.roomGlow = new Set(rooms);
+    this.applyHighlight();
   }
 
   /** Screens of TVs and monitors that are on (by furniture id). */
@@ -4106,7 +4119,7 @@ export class FloorplanViewer {
     for (const fv of this.floors) {
       const colors = fv.geo.floor.getAttribute("color");
       // a pulsing warning recolours its rooms only: floors whose tints and selection stay are left alone
-      const sig = fv.geo.roomTris.map((r) => `${this.roomTint?.get(r.roomId)?.join(",") ?? ""}${r.roomId === this.roomId ? "*" : ""}`).join(";");
+      const sig = fv.geo.roomTris.map((r) => `${this.roomTint?.get(r.roomId)?.join(",") ?? ""}${r.roomId === this.roomId ? "*" : ""}${this.roomGlow.has(r.roomId) ? "+" : ""}`).join(";");
       if (this.highlighted.get(colors) === sig) continue;
       this.highlighted.set(colors, sig);
       for (const r of fv.geo.roomTris) {
@@ -4114,6 +4127,8 @@ export class FloorplanViewer {
         const tint = this.roomTint?.get(r.roomId);
         // heatmap: a clear, saturated floor colour (the room light is dimmed meanwhile)
         if (tint) c.lerp(new Color(...tint).multiplyScalar(0.6), 0.9);
+        // motion lights the room: a warm light on its floor (a warning's colour wins)
+        else if (this.roomGlow.has(r.roomId)) c.lerp(MOTION_LIGHT, 0.6);
         if (r.roomId === this.roomId) c.lerp(ACTIVE_FLOOR, tint ? 0.3 : 0.75);
         for (let v = r.start * 3; v < r.end * 3; v++) colors.setXYZ(v, c.r, c.g, c.b);
       }
