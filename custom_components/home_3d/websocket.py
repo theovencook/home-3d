@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from functools import wraps
+import time
 from typing import Any
 
 from homeassistant.components import websocket_api
