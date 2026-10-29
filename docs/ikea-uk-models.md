@@ -114,46 +114,48 @@ Best-seller rank: its place on the IKEA UK best-seller list on 29 October 2026; 
 
 | # | Model | IKEA name | Group | Best-seller rank | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Chest of drawers | HEMNES | `storage` | - | to do |
-| 2 | Bedside table | HEMNES | `bed` | - | to do |
-| 3 | Bed frame | HEMNES | `bed` | - | to do |
-| 4 | Bed frame with storage | BRIMNES | `bed` | - | to do |
-| 5 | Wardrobe with 3 doors | BRIMNES | `storage` | 222 | to do |
-| 6 | Day-bed with 2 drawers | BRIMNES | `bed` | 153 | to do |
-| 7 | Chest of drawers | STORKLINTA | `storage` | - | to do |
-| 8 | Bed frame | STORKLINTA | `bed` | - | to do |
-| 9 | Chest of drawers | NORDLI | `storage` | - | to do |
-| 10 | Chest of drawers | KULLEN | `storage` | - | to do |
-| 11 | Chest of drawers | GURSKEN | `storage` | - | to do |
-| 12 | Chest of drawers | KILBERGET | `storage` | - | to do |
-| 13 | Chest of drawers | FÅGELFJÄLLET | `storage` | - | to do |
-| 14 | Chest of drawers | LILLBERGET | `storage` | - | to do |
-| 15 | Chest of drawers | GULLABERG | `storage` | - | to do |
-| 16 | Chest of drawers | ANKARUDDEN | `storage` | - | to do |
-| 17 | Chest of drawers | HAUGA | `storage` | - | to do |
-| 18 | Bed frame | NEIDEN | `bed` | 257 | to do |
-| 19 | Upholstered bed frame | SLATTUM | `bed` | 243 | to do |
-| 20 | Upholstered bed storage box | GLADSTAD | `bed` | 291 | to do |
-| 21 | Headboard | TOLKNING | `bed` | 273 | to do |
-| 22 | Mattress base | LYNGÖR | `bed` | 265 | to do |
-| 23 | Ottoman bed | MALM | `bed` | - | to do |
-| 24 | Bed frame | IDANÄS | `bed` | - | to do |
-| 25 | Wardrobe | NORDKISA | `storage` | - | to do |
-| 26 | Wardrobe | RAKKESTAD | `storage` | - | to do |
-| 27 | Corner wardrobe | PAX | `storage` | - | to do |
-| 28 | Mirror door | ÅHEIM | `storage` | 117 | to do |
-| 29 | Clothes rack | MULIG | `storage` | 57 | to do |
-| 30 | Standing mirror | KNAPPER | `deco` | 215 | to do |
-| 31 | Mirror | HOVET | `deco` | 196 | to do |
-| 32 | Mirror | NISSEDAL | `deco` | - | to do |
-| 33 | Pocket sprung mattress | VALEVÅG | `bed` | 250 | to do |
-| 34 | Pocket sprung mattress | VESTERÖY | `bed` | 241 | to do |
-| 35 | Foam mattress | ÅFJÄLL | `bed` | 286 | to do |
-| 36 | Laundry bag with stand | JÄLL | `household` | 64 | to do |
-| 37 | Room darkening curtains | VILBORG | `deco` | 126 | to do |
-| 38 | Block-out pleated blind | SCHOTTIS | `deco` | 219 | to do |
-| 39 | LED wall lamp | UPPLYST | `lamp` | 235 | to do |
-| 40 | LED clamp spotlight | NÄVLINGE | `lamp` | 223 | to do |
+| 1 | Chest of drawers | HEMNES | `storage` | - | done, 2 items |
+| 2 | Bedside table | HEMNES | `bed` | - | done, 1 item |
+| 3 | Bed frame | HEMNES | `bed` | - | dropped (IKEA UK no longer sells it), replaced by 41 |
+| 4 | Bed frame with storage | BRIMNES | `bed` | - | done, 2 items |
+| 5 | Wardrobe with 3 doors | BRIMNES | `storage` | 222 | done, 2 items |
+| 6 | Day-bed with 2 drawers | BRIMNES | `bed` | 153 | done, 1 item |
+| 7 | Chest of drawers | STORKLINTA | `storage` | - | done, 4 items |
+| 8 | Bed frame | STORKLINTA | `bed` | - | done, 2 items |
+| 9 | Chest of drawers | NORDLI | `storage` | - | done, 3 items |
+| 10 | Chest of drawers | KULLEN | `storage` | - | dropped (IKEA UK no longer sells it), replaced by 42 |
+| 11 | Chest of drawers | GURSKEN | `storage` | - | done, 1 item |
+| 12 | Chest of drawers | KILBERGET | `storage` | - | done, 3 items |
+| 13 | Chest of drawers | FÅGELFJÄLLET | `storage` | - | done, 3 items |
+| 14 | Chest of drawers | LILLBERGET | `storage` | - | done, 3 items |
+| 15 | Chest of drawers | GULLABERG | `storage` | - | done, 3 items |
+| 16 | Chest of drawers | ANKARUDDEN | `storage` | - | done, 2 items |
+| 17 | Chest of drawers | HAUGA | `storage` | - | done, 3 items |
+| 18 | Bed frame | NEIDEN | `bed` | 257 | done, 2 items |
+| 19 | Upholstered bed frame | SLATTUM | `bed` | 243 | done, 2 items |
+| 20 | Upholstered bed storage box | GLADSTAD | `bed` | 291 | done, 1 item |
+| 21 | Headboard | TOLKNING | `bed` | 273 | done, 1 item |
+| 22 | Mattress base | LYNGÖR | `bed` | 265 | done, 2 items |
+| 23 | Ottoman bed | MALM | `bed` | - | done, 2 items |
+| 24 | Bed frame | IDANÄS | `bed` | - | done, 1 item |
+| 25 | Wardrobe | NORDKISA | `storage` | - | done, 2 items |
+| 26 | Wardrobe | RAKKESTAD | `storage` | - | done, 2 items |
+| 27 | Corner wardrobe | PAX | `storage` | - | done, 1 item |
+| 28 | Mirror door | ÅHEIM | `storage` | 117 | done, 2 items |
+| 29 | Clothes rack | MULIG | `storage` | 57 | done, 1 item |
+| 30 | Standing mirror | KNAPPER | `deco` | 215 | done, 1 item |
+| 31 | Mirror | HOVET | `deco` | 196 | done, 1 item |
+| 32 | Mirror | NISSEDAL | `deco` | - | done, 3 items |
+| 33 | Pocket sprung mattress | VALEVÅG | `bed` | 250 | done, 2 items |
+| 34 | Pocket sprung mattress | VESTERÖY | `bed` | 241 | done, 2 items |
+| 35 | Foam mattress | ÅFJÄLL | `bed` | 286 | done, 2 items |
+| 36 | Laundry bag with stand | JÄLL | `household` | 64 | done, 1 item |
+| 37 | Room darkening curtains | VILBORG | `deco` | 126 | done, 1 item |
+| 38 | Block-out pleated blind | SCHOTTIS | `deco` | 219 | done, 1 item |
+| 39 | LED wall lamp | UPPLYST | `lamp` | 235 | done, 1 item |
+| 40 | LED clamp spotlight | NÄVLINGE | `lamp` | 223 | done, 1 item |
+| 41 | Bed frame | GULLABERG | `bed` | - | done, 2 items |
+| 42 | Bed frame | FÅGELFJÄLLET | `bed` | - | done, 1 item |
 
 ## Batch 4: kitchen and dining (#33)
 
