@@ -123,6 +123,10 @@ export const controls = css`
     grid-template-columns: 44px 1fr;
     gap: 6px;
   }
+  /* its material (#40) on a line of its own under the colour */
+  .fp3d-colour-pick .fp3d-material {
+    grid-column: 1 / -1;
+  }
   .fp3d-field input[type="color"].fp3d-colour-unset {
     opacity: 0.35;
   }

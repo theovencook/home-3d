@@ -14,3 +14,8 @@ Bundled fonts (custom_components/home_3d/frontend/fonts/) are licensed under the
 License 1.1; their licence files are kept next to them:
 - Figtree (figtree-LICENSE.txt)
 - Bricolage Grotesque (bricolage-grotesque-LICENSE.txt)
+
+IKEA is a trademark of Inter IKEA Systems B.V. The IKEA UK pack
+(custom_components/home_3d/bundled_packs/theovencook.ikea-uk/) names IKEA products only so they can be found;
+its models are our own work, built from simple shapes. Home 3D is not affiliated with, sponsored by or endorsed by
+IKEA or Inter IKEA Systems B.V.

@@ -121,6 +121,8 @@ ROOM_SCHEMA = vol.Schema(
 # door looks (room door, front doors with glass and sidelights, glass and sliding door) and window looks
 # the colour roles parts are drawn in (frontend colour-roles.ts)
 COLOUR_ROLES = ["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent"]
+# the materials a colour role can take (#40, frontend/src/role-materials.ts); the realistic look shows them
+MATERIALS = ["matt", "gloss", "fabric", "glass", "metal", "rattan"]
 _OPENING_STYLES = ["interior", "front", "front_glass", "sidelight", "sidelights", "glass", "sliding", "passage"]
 _OPENING_STYLES += ["standard", "bars", "glass_wall"]
 # garage doors: sectional (the default) or up-and-over (#24)
@@ -352,6 +354,10 @@ FURNITURE_SCHEMA = vol.Schema(
         # its own colour per role (#12); roles left out follow the theme
         vol.Optional("colors"): vol.Any(
             None, vol.Schema({vol.In(COLOUR_ROLES): vol.Match(r"^#[0-9a-fA-F]{6}$")}, extra=vol.PREVENT_EXTRA)
+        ),
+        # its own material per role (#40); roles left out take their usual one
+        vol.Optional("materials"): vol.Any(
+            None, vol.Schema({vol.In(COLOUR_ROLES): vol.In(MATERIALS)}, extra=vol.PREVENT_EXTRA)
         ),
         # household: a waste bin's kind and colours, its calendar (Haushalt Pro); a mailbox's emptying door
         vol.Optional("bin_kind"): vol.Any(None, vol.In(WASTE_KINDS)),
