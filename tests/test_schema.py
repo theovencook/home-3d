@@ -499,10 +499,12 @@ def test_live_room_effects_are_kept_and_checked() -> None:
     assert room["live"] == {"leak": "binary_sensor.sink_leak", "motion": "none"}
     item = {"id": "f1", "type": "radiator", "x": 0, "z": 0, "rotation": 0, "w": 1, "d": 0.1, "h": 0.6, "variant": None}
     assert FURNITURE_SCHEMA(item)["temp_sensor"] is None
-    assert FURNITURE_SCHEMA({**item, "temp_sensor": "sensor.trv_temperature"})["temp_sensor"] == "sensor.trv_temperature"
+    trv = "sensor.trv_temperature"
+    assert FURNITURE_SCHEMA({**item, "temp_sensor": trv})["temp_sensor"] == trv
     base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
     assert SETTINGS_SCHEMA(base)["effects"] is None
-    effects = SETTINGS_SCHEMA({**base, "effects": {"motion_seconds": 45, "radiator_cold": 20, "tank_hot": 60}})["effects"]
+    chosen = {"motion_seconds": 45, "radiator_cold": 20, "tank_hot": 60}
+    effects = SETTINGS_SCHEMA({**base, "effects": chosen})["effects"]
     assert effects["motion_seconds"] == 45
     assert effects["tank_hot"] == 60.0
     with pytest.raises(vol.Invalid):
