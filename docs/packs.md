@@ -133,7 +133,9 @@ All measures of a part are **fractions of the item's size**:
   fixed part in the middle stays centred. When there is not enough room for the fixed parts (a very narrow item),
   everything scales as before.
 - `glow` (optional, lamps): the part shines in the colour and brightness of the linked light. On a 3D printer it is
-  the chamber light (see [3D printers](#3d-printers)).
+  the chamber light (see [3D printers](#3d-printers)). On an item with a `screen` that is no lamp it is Ambilight:
+  LED strips round the back of a TV that shine in the screen's colour whenever the screen is lit
+  (`theovencook.core/tv_ambilight_55`). On a speaker without a screen it is the light ring, lit while it plays.
 - `screen` (optional): the part is a screen (TV, monitor). The item can then be linked to a media player and its
   front (+z) shows the colour and picture of the running app, like the built-in TVs.
 - `profile` (`lathe` only, required there): see [Round shapes](#round-shapes).

@@ -241,6 +241,15 @@ export function packScreen(type: string): PackPart | undefined {
 }
 
 /**
+ * A pack TV with Ambilight: an item with a screen whose glowing parts (strips round its back) are no lamp. They shine
+ * in the screen's colour whenever the screen is lit, as Ambilight does, not only while it plays like a speaker's ring.
+ */
+export function packAmbilight(type: string): boolean {
+  const item = packItem(type);
+  return !!item && !item.light && item.parts.some((p) => p.screen) && item.parts.some((p) => p.glow);
+}
+
+/**
  * A pack item with a real display (a TV, a monitor, a smart display) rather than a small status light (a
  * printer's panel, a wallbox's LED): one of its screen parts is at least 6 cm on both sides of its face.
  */

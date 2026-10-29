@@ -59,3 +59,13 @@ test("every bundled item shows in the library under the category its folder name
     }
   }
 });
+
+test("every bundled lamp is linked as a light and has parts that glow with it", () => {
+  for (const { pack, folders } of packs) {
+    for (const item of pack.items) {
+      if (folders.get(item.id) !== "lamp") continue;
+      assert.ok(item.light, `${pack.id}/${item.id} says how it lights the room`);
+      assert.ok(item.parts.some((p) => p.glow), `${pack.id}/${item.id} has glowing parts`);
+    }
+  }
+});
