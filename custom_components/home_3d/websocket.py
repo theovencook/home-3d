@@ -18,7 +18,7 @@ from .const import DATA_ASK, DATA_EDITORS, DATA_VOICE, DOMAIN, SIGNAL_ASK, SIGNA
 from .editors import Editors, EditorsError, can_edit
 from .locate.recorder import ws_locate_rec
 from .locate.ws import COMMANDS as LOCATE_COMMANDS
-from .packs import MAX_PACK_SIZE, PackError, parts_of, source_of_folder, verify_folder, verify_pack, verify_source
+from .packs import MAX_PACK_SIZE, PackError, is_bundled, parts_of, source_of_folder, verify_folder, verify_pack, verify_source
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
 from .storage import FloorplanData, complete
 from .timetravel import ws_timetravel_history
@@ -219,10 +219,10 @@ async def ws_history_restore(
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/packs/list"})
 @callback
 def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Return the imported furniture packs (every user needs them to see the furniture)."""
+    """Return the bundled and the imported furniture packs (every user needs them to see the furniture)."""
     if (data := _data(hass, connection, msg)) is None:
         return
-    connection.send_result(msg["id"], {"packs": data.packs})
+    connection.send_result(msg["id"], {"packs": data.offered_packs})
 
 
 @websocket_api.websocket_command(
@@ -269,10 +269,14 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
 @require_editor
 @websocket_api.async_response
 async def ws_packs_remove(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Remove an imported pack."""
+    """Remove an imported pack (a bundled pack comes with Home 3D and stays; removing an imported copy of it brings
+    the bundled one back)."""
     if (data := _data(hass, connection, msg)) is None:
         return
     if not await data.async_remove_pack(msg["pack_id"]):
+        if is_bundled(data.bundled, msg["pack_id"]):
+            connection.send_error(msg["id"], "bundled", "This pack comes with Home 3D and cannot be removed")
+            return
         connection.send_error(msg["id"], "not_found", "Pack not found")
         return
     connection.send_result(msg["id"])

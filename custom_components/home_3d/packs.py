@@ -13,10 +13,14 @@ This module only depends on voluptuous, so tools/fp3dpack.py (which checks packs
 from __future__ import annotations
 
 import json
+import logging
+from pathlib import Path
 import re
 from typing import Any
 
 import voluptuous as vol
+
+_LOGGER = logging.getLogger(__name__)
 
 _ID = vol.All(str, vol.Match(r"^[a-z0-9][a-z0-9_.-]{0,39}$"))
 _TEXT = vol.All(str, vol.Length(min=1, max=80))
@@ -279,6 +283,50 @@ def verify_folder(files: dict[str, str]) -> dict[str, Any]:
             raise PackError("invalid_content", f'the item id "{item["id"]}" is used twice')
         seen.add(item["id"])
     return {**pack, "features": [], "items": items}
+
+
+def read_folder(folder: Path) -> dict[str, str]:
+    """Every file of a pack folder on disk (relative path with "/" -> text), leaving out hidden files and folders."""
+    files: dict[str, str] = {}
+    for path in sorted(folder.rglob("*")):
+        rel = path.relative_to(folder)
+        if path.is_file() and not any(part.startswith(".") for part in rel.parts):
+            files[rel.as_posix()] = path.read_text(encoding="utf-8", errors="replace")
+    return files
+
+
+# ---------------------------------------------------------------------------- packs that ship with Home 3D
+
+# The packs bundled with the integration: one folder per pack (theovencook.core, ...), read from the disk at setup,
+# so they are there on a fresh install without network access. They are checked like an imported pack.
+BUNDLED_DIR = Path(__file__).parent / "bundled_packs"
+
+
+def load_bundled(root: Path = BUNDLED_DIR) -> list[dict[str, Any]]:
+    """The checked bundled packs, marked "bundled"; a folder that does not check is logged and left out."""
+    found: list[dict[str, Any]] = []
+    if not root.is_dir():
+        return found
+    for folder in sorted(p for p in root.iterdir() if (p / PACK_FILE).is_file()):
+        try:
+            found.append({**verify_folder(read_folder(folder)), "bundled": True})
+        except PackError as err:
+            _LOGGER.error("Bundled pack %s does not check: %s", folder.name, err)
+    return found
+
+
+def with_bundled(bundled: list[dict[str, Any]], imported: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """All packs to offer: the bundled ones, then the imported ones, one per pack id. When a pack is both bundled
+    and imported (a copy installed from the packs repository), the higher release wins; on a tie the imported one."""
+    release = {p["id"]: p.get("release", 1) for p in imported}
+    kept = [p for p in bundled if release.get(p["id"], 0) < p.get("release", 1)]
+    shadowed = {p["id"] for p in kept}
+    return kept + [p for p in imported if p["id"] not in shadowed]
+
+
+def is_bundled(bundled: list[dict[str, Any]], pack_id: str) -> bool:
+    """Whether a pack id is one of the bundled packs."""
+    return any(p["id"] == pack_id for p in bundled)
 
 
 # ---------------------------------------------------------------------------- old single-file packs (v1)
