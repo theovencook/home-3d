@@ -137,6 +137,8 @@ async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveC
     {
         vol.Required("type"): "home_3d/building/save",
         vol.Required("building"): BUILDING_SCHEMA,
+        # the hashes of the recipe copies the client started from (#45), by pack item type
+        vol.Optional("recipe_bases"): vol.All({str: vol.All(str, vol.Length(max=100))}, vol.Length(max=2000)),
     }
 )
 @require_editor
@@ -150,7 +152,7 @@ async def ws_save_building(
     if not connection.user.is_admin and performed_actions(msg["building"]) - performed_actions(data.building):
         connection.send_error(msg["id"], "unauthorized", "Only an admin adds or changes an item's perform action")
         return
-    revision = await data.async_save_building(msg["building"])
+    revision = await data.async_save_building(msg["building"], msg.get("recipe_bases"))
     # the plan's recipe copies as stored (#2): an open editor keeps them with its plan
     connection.send_result(msg["id"], {"revision": revision, "recipes": data.building.get("recipes", {})})
 

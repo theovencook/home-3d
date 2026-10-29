@@ -155,6 +155,39 @@ async def test_a_newer_release_does_not_change_placed_items_until_they_are_updat
     assert updated["hash"] == packs.recipe_hash(new_item) != old["hash"]
 
 
+async def test_an_open_editors_save_keeps_an_update_made_on_the_server_meanwhile(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """The race of #45: an editor loaded the plan, the server updated a placed item, then the editor saves its older
+    copy. It sends the hashes it started from, so the server keeps the newer copy unless the editor changed it."""
+    client = await _client(hass, hass_ws_client)
+    await _call(client, type="home_3d/packs/import", files=_files())
+    await _call(client, type="home_3d/building/save", building=_building(_furniture("a", CHAIR_TYPE)))
+    opened = (await _call(client, type="home_3d/building/get"))["building"]
+    bases = {t: c["hash"] for t, c in opened["recipes"].items()}
+
+    await _call(client, type="home_3d/packs/import", files=_files(release=2, size=[1.2, 0.9, 0.8]))
+    await _call(client, type="home_3d/packs/update_items", types=[CHAIR_TYPE])
+
+    # the editor moves the chair and saves the copy it loaded
+    edited = copy.deepcopy(opened)
+    edited["floors"][0]["furniture"][0]["x"] = 2
+    saved = await _call(client, type="home_3d/building/save", building=edited, recipe_bases=bases)
+    plan = (await _call(client, type="home_3d/building/get"))["building"]
+    assert plan["floors"][0]["furniture"][0]["x"] == 2
+    assert plan["recipes"][CHAIR_TYPE]["release"] == 2
+    # the answer brings the newer copy, so the editor picks it up
+    assert saved["recipes"][CHAIR_TYPE]["release"] == 2
+
+    # a copy the editor did change on purpose (it differs from the one it started from) still wins
+    mine = {**opened["recipes"][CHAIR_TYPE], "recipe": {**opened["recipes"][CHAIR_TYPE]["recipe"], "size": [2, 2, 2]}}
+    bases = {CHAIR_TYPE: plan["recipes"][CHAIR_TYPE]["hash"]}
+    mine_plan = {**plan, "recipes": {CHAIR_TYPE: mine}}
+    await _call(client, type="home_3d/building/save", building=mine_plan, recipe_bases=bases)
+    kept = (await _call(client, type="home_3d/building/get"))["building"]["recipes"][CHAIR_TYPE]
+    assert kept["recipe"]["size"] == [2, 2, 2]
+
+
 async def test_the_plan_keeps_only_the_recipes_it_uses(hass: HomeAssistant, hass_ws_client) -> None:
     client = await _client(hass, hass_ws_client)
     await _call(client, type="home_3d/packs/import", files=_files())

@@ -252,6 +252,11 @@ export function setPlanRecipes(recipes: Record<string, PlanRecipe> | undefined):
   version++;
 }
 
+/** The hash of each recipe copy by type: sent with a save that changes no copy, so the backend keeps newer ones (#45). */
+export function recipeHashes(recipes: Record<string, PlanRecipe> | undefined): Record<string, string> {
+  return Object.fromEntries(Object.entries(recipes ?? {}).map(([type, copy]) => [type, copy.hash]));
+}
+
 /** The plan recipes last handed over (for another bundle's registry). */
 export function getPlanRecipes(): Record<string, PlanRecipe> | undefined {
   return planRecipes;

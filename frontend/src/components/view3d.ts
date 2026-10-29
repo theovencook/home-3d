@@ -109,7 +109,7 @@ import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from 
 import { furnitureName } from "../furniture-names.ts";
 import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
-import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion } from "../packs.ts";
+import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
@@ -4895,7 +4895,7 @@ export class Fp3dView3d extends LitElement {
         const next = structuredClone(cur);
         mutate(next);
         this.building = next;
-        saveBuilding(this.hass, next).catch((err) => this.serviceFailed("home_3d/building/save", err));
+        saveBuilding(this.hass, next, recipeHashes(next.recipes)).catch((err) => this.serviceFailed("home_3d/building/save", err));
       },
       callService: (domain, service, data) => (this.hass ? this.hass.callService(domain, service, data) : Promise.resolve()),
       newId: (prefix) => uid(prefix),
@@ -5110,7 +5110,7 @@ export class Fp3dView3d extends LitElement {
     const next = structuredClone(cur);
     Object.assign(next.settings, patch);
     this.building = next;
-    saveBuilding(this.hass, next).catch((err) => this.serviceFailed("home_3d/building/save", err));
+    saveBuilding(this.hass, next, recipeHashes(next.recipes)).catch((err) => this.serviceFailed("home_3d/building/save", err));
   }
 
   /**

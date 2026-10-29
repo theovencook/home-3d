@@ -141,3 +141,44 @@ test("showing the plan never loads the library; opening the editor loads it once
   c.hostDisconnected();
   setPlanRecipes(undefined);
 });
+
+// An update made on the server while an editor has the plan open is not undone by its next save (#45)
+
+test("a save sends the recipe hashes it started from and takes the server's newer copy", async () => {
+  const older = chairCopy([0.5, 0.5, 0.9]);
+  const newer = { ...chairCopy([1.2, 0.9, 0.8]), release: 2 };
+  const sent: Record<string, unknown>[] = [];
+  const host = { addController() {}, removeController() {}, requestUpdate() {}, updateComplete: Promise.resolve(true) };
+  const c = new BuildingController(host);
+  const hass = {
+    user: { is_admin: true },
+    callWS: async (msg: Record<string, unknown> & { type: string }) => {
+      if (msg.type === "home_3d/building/get") return { building: plan([chairAt("a")], { [CHAIR]: structuredClone(older) }), revision: 3, can_edit: true };
+      // meanwhile the server updated the chair (packs/update_items): it keeps its copy and answers with it
+      if (msg.type === "home_3d/building/save") {
+        sent.push(structuredClone(msg));
+        return { revision: 5, recipes: { [CHAIR]: newer } };
+      }
+      throw new Error(`unexpected ${msg.type}`);
+    },
+    connection: { subscribeMessage: async () => async () => undefined },
+  } as unknown as HomeAssistant;
+  c.setHass(hass);
+  c.hostConnected();
+  await new Promise((r) => setTimeout(r, 0));
+
+  const moved = structuredClone(c.building!);
+  moved.floors[0].furniture[0].x = 2;
+  c.edit(moved);
+  await c.flush();
+  assert.deepEqual(sent[0].recipe_bases, { [CHAIR]: older.hash });
+  assert.equal(c.building?.recipes?.[CHAIR]?.release, 2);
+  assert.deepEqual(packItem(CHAIR)?.size, [1.2, 0.9, 0.8]);
+
+  // the next save starts from the newer copy
+  c.edit(structuredClone(c.building!));
+  await c.flush();
+  assert.deepEqual(sent[1].recipe_bases, { [CHAIR]: newer.hash });
+  c.hostDisconnected();
+  setPlanRecipes(undefined);
+});

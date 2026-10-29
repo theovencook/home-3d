@@ -102,13 +102,27 @@ def installed_copies(packs: list[dict[str, Any]]) -> dict[str, tuple[dict[str, A
     return {f"{PACK_TYPE_PREFIX}{p['id']}:{i['id']}": (p, i) for p in packs for i in p.get("items", [])}
 
 
-def with_recipes(building: dict[str, Any], kept: dict[str, Any] | None, packs: list[dict[str, Any]]) -> dict[str, Any]:
+def _unchanged_but_stale(sent: dict[str, Any], kept: dict[str, Any] | None, base: str | None) -> bool:
+    """The client sends the copy it started from while the plan's copy has changed since."""
+    return base is not None and kept is not None and sent["hash"] == base and kept.get("hash") != base
+
+
+def with_recipes(
+    building: dict[str, Any],
+    kept: dict[str, Any] | None,
+    packs: list[dict[str, Any]],
+    bases: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """The building with a recipe copy for every pack item type it uses, and no others.
 
     A type keeps the copy the building brings, else the one the plan kept before (`kept`: a client that does not know
     recipes, or an older frontend, sends none), else gets a copy of the installed item. A type whose pack is gone and
     that has no copy stays without one (it shows as a plain box, as before). The household's own items (#13) are the
     exception: their copies follow the item as it is now (#26), and keep the last copy only once the item is gone.
+
+    `bases` are the hashes of the copies the client started from (#45): a copy it sends unchanged while the kept one
+    has changed since (an update, a rollback or a custom item followed on the server meanwhile) gives way to the kept
+    one.
     """
     own = building.get("recipes") or {}
     kept = kept or {}
@@ -121,7 +135,7 @@ def with_recipes(building: dict[str, Any], kept: dict[str, Any] | None, packs: l
             if type_ in installed:
                 recipes[type_] = recipe_copy(*installed[type_])
                 continue
-        if type_ in own:
+        if type_ in own and not _unchanged_but_stale(own[type_], kept.get(type_), (bases or {}).get(type_)):
             recipes[type_] = own[type_]
         elif type_ in kept:
             recipes[type_] = kept[type_]

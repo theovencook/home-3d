@@ -127,7 +127,7 @@ class FloorplanData:
                 self._images.pop(image_id)
             await self._save_images()
 
-    async def async_save_building(self, building: dict[str, Any]) -> int:
+    async def async_save_building(self, building: dict[str, Any], recipe_bases: dict[str, str] | None = None) -> int:
         """Store a validated building, bump the revision and notify subscribers.
 
         The state before the save becomes a restore point when the last one is older than
@@ -137,8 +137,8 @@ class FloorplanData:
         if self.building.get("floors") and time.time() - last > HISTORY_INTERVAL:
             await self.async_snapshot()
         # every pack item type in the plan keeps its recipe copy (#2): the one sent, else the one kept so far, else
-        # a copy of the installed item
-        building = with_recipes(building, self.building.get("recipes"), self.offered_packs)
+        # a copy of the installed item; one the client sends as it started from it gives way to a newer kept one (#45)
+        building = with_recipes(building, self.building.get("recipes"), self.offered_packs, recipe_bases)
         self.building = building
         self.revision += 1
         await self._building_store.async_save({"revision": self.revision, "building": building})
