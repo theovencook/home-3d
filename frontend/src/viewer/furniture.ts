@@ -8,12 +8,14 @@ import type { Furniture, Vec2 } from "../model.ts";
 import { builtinBase, gangsOf, stairsULayout, POOL_VALVE_Y } from "../model.ts";
 import { isRobotVacuum, mountBase, packItem, packMotion, packMovingPart, packRobotCentre, packRobotPart, packScreen, type PackItem, type PackMotion, type PackPart } from "../packs.ts";
 import { fitParts } from "../pack-scale.ts";
+import { COLOUR_ROLES, roleColour, type RoleColours } from "../colour-roles.ts";
 import { binColors, binShape, householdCountry, mailboxShape, type BinShape, type MailboxShape } from "../household.ts";
 import type { Floor } from "../model.ts";
 import { ALWAYS, DEG, EDGE_TOP, GeoBuffer, LineBuffer, pushLoft, pushLyingCyl, pushPrism, pushRings, shade, type Ring } from "./geo.ts";
 import { latheRings, roundedBoxRings, sphereRings } from "./rings.ts";
 
-const C = {
+/** The theme's colour per role (and a lighter top for some); the looks map them in the shaders. */
+const THEME = {
   body: 0x172238,
   bodyTop: 0x1d2b47,
   fabric: 0x1a2644,
@@ -31,6 +33,11 @@ const C = {
   pot: 0x1d2640,
   accent: 0x2b8fb3,
 };
+
+type Palette = Record<keyof typeof THEME, number>;
+
+/** The palette the models draw with: the theme's, or the one of the item being drawn with its own role colours (#12). */
+let C: Palette = THEME;
 
 const EDGE_FURN = shade(0x5b7cff, 0.3);
 const EDGE_FAINT = shade(0x5b7cff, 0.17);
@@ -431,6 +438,12 @@ function fridge(b: Builder, w: number, d: number, h: number): void {
 /** A real colour toned into the neon look: darker for a body, a little brighter for a lid. */
 const tone = (hex: string, k: number) => shade(parseInt(hex.slice(1), 16), k).getHex();
 
+/** In the light looks at least as bright as the looks keep a colour (a dark brown or green bin too). */
+function full(hex: string): number {
+  const mx = Math.max(...new Color(hex).toArray());
+  return tone(hex, mx > 0.05 ? Math.max(1, 0.62 / mx) : 1);
+}
+
 /**
  * The blueprint and day looks keep only bright, strong colours and turn the rest into their own tones: waste bins
  * are drawn in their full colour there, or a brown or blue bin turns blue or grey like any cupboard (#609).
@@ -438,6 +451,34 @@ const tone = (hex: string, k: number) => shade(parseInt(hex.slice(1), 16), k).ge
 let lightLook = false;
 export function setLightLook(on: boolean): void {
   lightLook = on;
+}
+
+/**
+ * The theme's palette with an item's own role colours (#12): toned into the neon look like a waste bin (darker sides,
+ * a lighter top), in full in the light looks. Roles without an override keep the theme's colour.
+ */
+function paletteWith(colors: RoleColours | null | undefined): Palette {
+  let out: Palette | null = null;
+  for (const role of COLOUR_ROLES) {
+    const hex = roleColour(colors, role);
+    if (!hex) continue;
+    out ??= { ...THEME };
+    out[role] = lightLook ? full(hex) : tone(hex, 0.55);
+    const top = `${role}Top`;
+    if (top in out) out[top as keyof Palette] = lightLook ? full(hex) : tone(hex, 0.75);
+  }
+  return out ?? THEME;
+}
+
+/** Draws with an item's own role colours, then goes back to the theme's palette. */
+function withColours<T>(colors: RoleColours | null | undefined, draw: () => T): T {
+  const prev = C;
+  C = paletteWith(colors);
+  try {
+    return draw();
+  } finally {
+    C = prev;
+  }
 }
 
 /** Vertex colours from `from` on: saturated ones darkened by the shading are lifted back to a kept brightness. */
@@ -459,11 +500,6 @@ export function keepBright(c: number[], from: number): void {
  * handle at the back (-z), a 1100 l container stands on four castors, a sack is tied at the top.
  */
 function wasteBin(b: Builder, w: number, d: number, h: number, shape: BinShape, colors: [string, string]): void {
-  // in the light looks at least as bright as the looks keep a colour (a dark brown or green bin too)
-  const full = (hex: string) => {
-    const mx = Math.max(...new Color(hex).toArray());
-    return tone(hex, mx > 0.05 ? Math.max(1, 0.62 / mx) : 1);
-  };
   const body = lightLook ? full(colors[0]) : tone(colors[0], 0.55);
   const lid = lightLook ? full(colors[1]) : tone(colors[1], 0.8);
   const lidTop = tone(colors[1], 1);
@@ -660,7 +696,11 @@ export const FRIDGE_DOOR = 0.06;
  * whose fabric runs out on top, "side" a side awning pulled out sideways from a post (a privacy screen). `out` is how
  * far it is run out (0 … 1); `base` the cassette's underside above the floor (a side awning: its top).
  */
-export function pushAwning(buf: GeoBuffer, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h" | "variant" | "awning_pitch" | "awning_valance">, base: number, out: number): void {
+export function pushAwning(buf: GeoBuffer, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h" | "variant" | "awning_pitch" | "awning_valance" | "colors">, base: number, out: number): void {
+  withColours(f.colors, () => drawAwning(buf, f, base, out));
+}
+
+function drawAwning(buf: GeoBuffer, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h" | "variant" | "awning_pitch" | "awning_valance">, base: number, out: number): void {
   const a = f.rotation * DEG;
   const c = Math.cos(a);
   const s = Math.sin(a);
@@ -711,8 +751,10 @@ export function pushAwning(buf: GeoBuffer, f: Pick<Furniture, "x" | "z" | "rotat
   const body = new Color(C.body);
   const top = new Color(C.bodyTop);
   const accent = new Color(C.accent);
-  const stripeA = new Color(0x1d6f8a);
-  const stripeB = new Color(0x0f2f45);
+  // the striped fabric, or the item's own fabric colour (#12) in two shades
+  const ownFabric = C.fabric !== THEME.fabric;
+  const stripeA = new Color(ownFabric ? C.fabricTop : 0x1d6f8a);
+  const stripeB = new Color(ownFabric ? C.fabric : 0x0f2f45);
   // a striped sheet between two local edges (p0–p1 the first edge, q0–q1 the second), stripes across the first edge
   const sheet = (p0: number[], p1: number[], q0: number[], q1: number[], n: number) => {
     const mix = (u: number[], v: number[], k: number) => [u[0] + (v[0] - u[0]) * k, u[1] + (v[1] - u[1]) * k, u[2] + (v[2] - u[2]) * k];
@@ -821,9 +863,9 @@ export function pushAwning(buf: GeoBuffer, f: Pick<Furniture, "x" | "z" | "rotat
   if (reach > 0.05) valance(end[1], end[0]);
 }
 
-export function pushFridgeDoors(buf: GeoBuffer, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h" | "mirror">, base: number, left: number, right: number): void {
+export function pushFridgeDoors(buf: GeoBuffer, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h" | "mirror" | "colors">, base: number, left: number, right: number): void {
   const p0 = buf.p.length;
-  pushFridgeDoorsUnflipped(buf, f, base, left, right);
+  withColours(f.colors, () => pushFridgeDoorsUnflipped(buf, f, base, left, right));
   if (f.mirror) flipWinding(buf, p0);
 }
 
@@ -842,7 +884,7 @@ function pushFridgeDoorsUnflipped(buf: GeoBuffer, f: Pick<Furniture, "x" | "z" |
   // a door: u runs from the hinge along the door (positive to the right), v through its thickness (0 = front face)
   const door = (hx: number, sign: 1 | -1, angle: number) => {
     const open = angle / opening;
-    const front = new Color(0x1f2d4c).lerp(red, open);
+    const front = new Color(C.body !== THEME.body ? C.bodyTop : 0x1f2d4c).lerp(red, open);
     const side = new Color(C.body).lerp(red, open * 0.8);
     const ca = Math.cos(angle);
     const sa = Math.sin(angle);
@@ -1668,7 +1710,7 @@ function contactShadow(shadow: GeoBuffer, tf: Tf, w: number, d: number, strength
 export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Furniture, base = 0, still = false): void {
   // a mirrored item needs no rewinding here: boxes, lofts and upright cylinders wind themselves (ccw),
   // lying cylinders and the contact shadow rewind themselves when the transform mirrors (#159)
-  pushUpright(buf, lines, shadow, f, base, still);
+  withColours(f.colors, () => pushUpright(buf, lines, shadow, f, base, still));
 }
 
 /** Swap the second and third vertex of every triangle from `from` on (positions, colours, folds, uvs, tiles). */
@@ -1980,6 +2022,14 @@ export function hasFixedColors(type: string): boolean {
   return !!packItem(type)?.parts.some((p) => p.color?.startsWith("#") || p.top?.startsWith("#"));
 }
 
+/**
+ * Drawn in colours of its own, which the light looks show in full: a waste bin, a pack item with "#rrggbb" parts, an
+ * item with its own role colours (#12). Such items are drawn anew on a look change.
+ */
+export function hasOwnColours(f: Pick<Furniture, "type" | "colors">): boolean {
+  return f.type === "waste_bin" || hasFixedColors(f.type) || COLOUR_ROLES.some((r) => roleColour(f.colors, r));
+}
+
 /** Colour of a pack part: a palette role (so packs follow the look) or "#rrggbb". */
 function packColor(value: string | undefined, top: boolean): number | null {
   if (!value) return null;
@@ -2103,14 +2153,14 @@ export function pushPackGlow(buf: GeoBuffer, item: PackItem, f: Pick<Furniture, 
  * (open = curtain drawn aside, screen rolled up). The curtain's panels gather towards both ends; the screen's cloth
  * and bar hang from the roller as far as it is down.
  */
-export function pushPackMotion(buf: GeoBuffer, item: PackItem, kind: PackMotion, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h" | "mirror" | "variant">, base: number, open: number): void {
+export function pushPackMotion(buf: GeoBuffer, item: PackItem, kind: PackMotion, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h" | "mirror" | "variant" | "colors">, base: number, open: number): void {
   const parts = packMotionParts(item, kind, open, f.variant === "left" || f.variant === "right" ? f.variant : "both");
   const a = f.rotation * DEG;
   const c = Math.cos(a);
   const s = Math.sin(a);
   const mx = f.mirror ? -1 : 1;
   const tf: Tf = (x, z) => [f.x + mx * x * c - z * s, f.z + mx * x * s + z * c];
-  packModel(new Builder(buf, new LineBuffer(), tf), { ...item, parts }, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h), base, null);
+  withColours(f.colors, () => packModel(new Builder(buf, new LineBuffer(), tf), { ...item, parts }, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h), base, null));
 }
 
 /** The moving parts of such an item where they are at `open` (in the item's fractions of its size). */
@@ -2172,7 +2222,7 @@ export function packGlowCentre(item: PackItem, f: Pick<Furniture, "x" | "z" | "r
   return [f.x + mx * x * c - z * s, base + sy / weight, f.z + mx * x * s + z * c];
 }
 
-export function pushPackLamp(buf: GeoBuffer, item: PackItem, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h" | "mirror">, base: number, glow: number): void {
+export function pushPackLamp(buf: GeoBuffer, item: PackItem, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h" | "mirror" | "colors">, base: number, glow: number): void {
   const a = f.rotation * DEG;
   const c = Math.cos(a);
   const s = Math.sin(a);
@@ -2180,5 +2230,5 @@ export function pushPackLamp(buf: GeoBuffer, item: PackItem, f: Pick<Furniture, 
   const mx = f.mirror ? -1 : 1;
   const tf: Tf = (x, z) => [f.x + mx * x * c - z * s, f.z + mx * x * s + z * c];
   // lamps have no outlines: their edges are dropped
-  packModel(new Builder(buf, new LineBuffer(), tf), item, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h), base, glow);
+  withColours(f.colors, () => packModel(new Builder(buf, new LineBuffer(), tf), item, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h), base, glow));
 }
