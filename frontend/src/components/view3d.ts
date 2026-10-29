@@ -106,7 +106,7 @@ import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from 
 import { furnitureName } from "../furniture-names.ts";
 import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
-import { getPacks, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion } from "../packs.ts";
+import { getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
@@ -918,7 +918,7 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setKeepRoof(this.keepRoof);
       this.viewer.setHideRoof(this.hideRoof);
       this._low = this.viewer.low;
-      this.viewer.setPacks([...getPacks()]);
+      this.viewer.setPacks([...getPacks()], getPlanRecipes());
       if (this.hass) void syncModules(this.hass, getPacks()).then(() => this.syncDevices(true));
       this.shownPacks = packsVersion();
       if (this.building) {
@@ -964,7 +964,7 @@ export class Fp3dView3d extends LitElement {
     // packs arrive with the building (or after an import): the viewer rebuilds pack furniture
     if (this.shownPacks !== packsVersion()) {
       this.shownPacks = packsVersion();
-      v.setPacks([...getPacks()]);
+      v.setPacks([...getPacks()], getPlanRecipes());
       if (this.hass) void syncModules(this.hass, getPacks()).then(() => this.syncDevices(true));
       // vehicles in parking spots come from packs too: look them up again now that the packs are here
       if (this.hass && this.building) v.setParked(parkedVehicles(this.hass, this.building));

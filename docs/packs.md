@@ -73,6 +73,42 @@ An item's full id is the pack id, a slash and the item id: `theovencook.core/bar
 within its pack (1 to 40 characters: lower-case letters, digits, `_`, `.`, `-`), so the full id is unique across
 packs. In a saved plan, an item from a pack is stored with the furniture type `pack:theovencook.core:bar_stool`.
 
+## Placed items keep their recipe
+
+The plan keeps a copy of the recipe of every pack item placed in it, in `recipes`, by furniture type. There is one
+copy per item, however often it is placed:
+
+```json
+{
+  "recipes": {
+    "pack:theovencook.core:bar_stool": {
+      "pack": "theovencook.core",
+      "item": "bar_stool",
+      "release": 1,
+      "hash": "sha256:<hash of the recipe>",
+      "commit": "<the commit its files came from, only for a pack installed from GitHub>",
+      "recipe": {
+        "id": "bar_stool",
+        "name": { "en": "Bar stool" },
+        "size": [0.42, 0.42, 0.75],
+        "parts": [{ "shape": "cyl", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "wood" }]
+      }
+    }
+  }
+}
+```
+
+The views draw a placed item from the plan's copy, so:
+
+- removing a pack leaves its placed items looking exactly as before;
+- a newer release of a pack does not change items already placed; an item placed again later takes the same copy.
+  Only updating the item replaces its copy.
+
+Home Assistant fills the copies in: when an item is placed (on save), and once for plans saved before copies
+existed, from the packs installed then. A save that sends no copies (an older frontend, a script) keeps the copies the
+plan has. Copies of items no longer in the plan are dropped. `hash` is the SHA-256 of the recipe's JSON with sorted
+keys, so it can be compared with the installed item.
+
 ## Item files
 
 ```json
@@ -323,7 +359,9 @@ The size limits keep a pack within one websocket message. A larger collection is
 3. Import it in Home Assistant: **Extensions** → **Import a pack folder …**, then pick the pack folder (or a
    repository folder that holds several packs).
 
-The plan keeps working when a pack is removed: its items stay in the plan as plain boxes.
+The plan keeps working when a pack is removed: its placed items keep their look from the plan's copies of their
+recipes (see [Placed items keep their recipe](#placed-items-keep-their-recipe)). Only items placed before copies
+existed, whose pack was already gone then, show as plain boxes.
 
 ## Installing from GitHub
 
@@ -407,6 +445,23 @@ custom_components/home_3d/bundled_packs/theovencook.core/
 in the folder of its `group`; `frontend/src/core-pack.test.ts` checks that each item shows in the library under that
 section. Adding an item does not touch `pack.json`; its `release` goes up once per Home 3D release that changes the
 pack, so installs holding an older imported copy pick up the bundled one.
+
+## Your own items
+
+Editors can build items in Home 3D itself: **Extensions** → **Your own items** → **Open the item editor**. The editor
+adds parts from the shapes above on a live 3D picture, sets their colour roles and fixed measures, and gives the item
+a name, a library section (`group`), rooms, search words (`tags`) and an optional IKEA name.
+
+- A saved item is an item file like the ones in a pack folder, checked against the same schema.
+- The items are kept in Home Assistant (`.storage/home_3d.custom_items`) and shared by everyone who uses it. The
+  library shows them as the pack `household.custom` ("Your own items"), so a placed one is the furniture type
+  `pack:household.custom:<item id>`. No imported pack may use that pack id.
+- The item id comes from the name while the item is new and stays the same once it is saved, so placed copies follow
+  later changes. Removing an item leaves placed copies in the plan as plain boxes.
+- **Export** downloads the item as `<item id>.json`. **Import item files …** takes one or more such files (exported
+  on another install, or written by hand); an item whose id is already used either replaces that item or is kept
+  beside it under a free id.
+- Home 3D's own backup file carries the custom items as well.
 
 ## Old single-file packs (v1)
 

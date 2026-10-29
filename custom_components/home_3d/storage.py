@@ -28,7 +28,9 @@ from .const import (
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
 )
+from .custom_items import CustomItems
 from .packs import load_bundled, with_bundled
+from .recipes import with_recipes
 from .schema import BUILDING_SCHEMA, empty_building, image_ids
 
 _LOGGER = logging.getLogger(__name__)
@@ -93,16 +95,25 @@ class FloorplanData:
         self.packs: list[dict[str, Any]] = []
         # the packs that ship with Home 3D (bundled_packs/, read from the disk; never stored or backed up)
         self.bundled: list[dict[str, Any]] = []
+        # the household's own items (#13), offered as one more pack
+        self.custom = CustomItems(hass)
 
     async def async_load(self) -> None:
         """Load both stores and drop images no floor refers to any more."""
+        packs = await self._pack_store.async_load()
+        self.packs = list((packs or {}).get("packs", []))
+        self.bundled = await self.hass.async_add_executor_job(load_bundled)
+        await self.custom.async_load()
         stored = await self._building_store.async_load()
         if stored:
             self.building = complete(stored.get("building") or empty_building())
             self.revision = int(stored.get("revision", 0))
-        packs = await self._pack_store.async_load()
-        self.packs = list((packs or {}).get("packs", []))
-        self.bundled = await self.hass.async_add_executor_job(load_bundled)
+            # a plan saved before #2 (or placed while a client did not send recipes) picks up the recipes of its
+            # pack items from the installed packs, and keeps them from now on
+            building = with_recipes(self.building, self.building.get("recipes"), self.offered_packs)
+            if building.get("recipes") != self.building.get("recipes"):
+                self.building = building
+                await self._building_store.async_save({"revision": self.revision, "building": building})
         history = await self._history_store.async_load()
         self._history = list((history or {}).get("snapshots", []))
         images = await self._image_store.async_load()
@@ -123,6 +134,9 @@ class FloorplanData:
         last = self._history[-1]["saved_at"] if self._history else 0
         if self.building.get("floors") and time.time() - last > HISTORY_INTERVAL:
             await self.async_snapshot()
+        # every pack item type in the plan keeps its recipe copy (#2): the one sent, else the one kept so far, else
+        # a copy of the installed item
+        building = with_recipes(building, self.building.get("recipes"), self.offered_packs)
         self.building = building
         self.revision += 1
         await self._building_store.async_save({"revision": self.revision, "building": building})
@@ -156,8 +170,9 @@ class FloorplanData:
 
     @property
     def offered_packs(self) -> list[dict[str, Any]]:
-        """The bundled packs and the imported ones, as the library offers them."""
-        return with_bundled(self.bundled, self.packs)
+        """The bundled packs, the imported ones and the custom items, as the library offers them."""
+        custom = self.custom.pack()
+        return with_bundled(self.bundled, self.packs) + ([custom] if custom else [])
 
     async def async_add_pack(self, payload: dict[str, Any], source: dict[str, Any] | None = None) -> None:
         """Keep an imported pack; a newer release of the same pack replaces the old one. Its source (the files of a
