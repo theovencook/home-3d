@@ -11,6 +11,7 @@ import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
 import type { CardConfig, CardControl } from "./card-config.ts";
 import { nightActive } from "./kiosk.ts";
+import { lookOf } from "./themes.ts";
 import { loadCardEditor } from "./load-card-editor.ts";
 import type { WallMode } from "./viewer/viewer3d.ts";
 import { hasFeature, type Feature } from "./features.ts";
@@ -370,7 +371,7 @@ clearTimeout(this.cleanTimer);
               .ghostOn=${this._config?.ghost !== false}
               .buttons=${this._config?.buttons?.map((b, i) => ({ id: `card_${i}`, ...b })) ?? null}
               .heatMode=${heat}
-              .theme=${this._config?.theme ?? "neon"}
+              .theme=${lookOf(this._config?.theme)}
               .clock=${this._config?.clock ?? null}
               .accent=${this._config?.accent ?? null}
               .showEnergy=${this._config?.energy ?? true}

@@ -319,7 +319,7 @@ export class Floorplan3dCardEditor extends LitElement {
             }}
           />
         </label>
-        ${this.select("theme", "theme", [["neon", "theme_neon"], ["blueprint", "theme_blueprint"], ["day", "theme_day"], ["auto", "theme_auto"]], v.theme)}
+        ${this.select("theme", "theme", [["neon", "theme_neon"], ["blueprint", "theme_blueprint"], ["day", "theme_day"], ["realistic", "theme_realistic"], ["auto", "theme_auto"]], v.theme)}
         ${this.select("clock", "clock", [["off", "clock_off"], ["tl", "clock_tl"], ["tr", "clock_tr"], ["bl", "clock_bl"], ["br", "clock_br"]], v.clock ?? "off")}
         <label class="field"
           >${this.t("accent")}
