@@ -378,3 +378,104 @@ test("a loft ladder stands steeply under its hatch: its foot lands well inside t
   assert.ok(run > 0.7 && run < 0.9, `foot ${run.toFixed(2)} m out`);
   assert.ok(foot <= 0.55);
 });
+
+// ---------------------------------------------------------------------------- spheres, lathes, rounded boxes (#4)
+
+/** A pack item of one part filling the whole item, drawn at `size` (w, d, h) without a turn. */
+function solo(part: PackItem["parts"][number], size: [number, number, number] = [1, 1, 1], mirror = false) {
+  setPacks([{ id: "t.shapes", name: "Shapes", publisher: "t", items: [{ id: "solo", name: { en: "Solo" }, size: [1, 1, 1], parts: [part] }] }]);
+  const buf = new GeoBuffer();
+  const lines = new LineBuffer();
+  const [w, d, h] = size;
+  pushFurniture(buf, lines, new GeoBuffer(), { id: "s", type: "pack:t.shapes:solo", x: 0, z: 0, rotation: 0, w, d, h, variant: null, entity: null, power: null, mirror });
+  const xs = buf.p.filter((_, i) => i % 3 === 0);
+  const ys = buf.p.filter((_, i) => i % 3 === 1);
+  const zs = buf.p.filter((_, i) => i % 3 === 2);
+  const span = (v: number[]) => [Math.min(...v), Math.max(...v)];
+  // the signed volume of a closed mesh (six times the volume) is positive when its faces point outwards
+  return { buf, lines, volume: orientation(buf) / 6, x: span(xs), y: span(ys), z: span(zs) };
+}
+
+const FULL = { x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "pot" } as const;
+const near1 = (a: number, b: number, tol = 1e-6) => Math.abs(a - b) <= tol;
+
+test("a sphere fills its part box, squashed when the item is, and is a closed low-poly solid facing outwards", () => {
+  const ball = solo({ shape: "sphere", ...FULL }, [2, 1, 0.5]);
+  assert.ok(ball.buf.p.every(Number.isFinite));
+  assert.ok(near1(ball.x[0], -1, 0.01) && near1(ball.x[1], 1, 0.01), `x ${ball.x}`);
+  assert.ok(near1(ball.z[0], -0.5, 0.01) && near1(ball.z[1], 0.5, 0.01), `z ${ball.z}`);
+  assert.ok(near1(ball.y[0], 0) && near1(ball.y[1], 0.5), `y ${ball.y}`);
+  // an ellipsoid of 2 × 1 × 0.5 m holds π/6 · 1 m³; the low-poly one a little less
+  const exact = (Math.PI / 6) * 2 * 1 * 0.5;
+  assert.ok(ball.volume > exact * 0.85 && ball.volume <= exact, `volume ${ball.volume} of ${exact}`);
+  assert.ok(ball.buf.count <= 160, `${ball.buf.count} triangles`);
+  // mirrored it still faces outwards
+  assert.ok(near1(solo({ shape: "sphere", ...FULL }, [2, 1, 0.5], true).volume, ball.volume, 1e-6));
+});
+
+test("a lathe turns its profile into a closed solid facing outwards, whichever way the profile is written", () => {
+  // a straight profile at the part's edge is a (12-sided) cylinder: π · 0.5 · 0.25 · 0.8 m³ for 1 × 0.5 × 0.8 m
+  const drum = solo({ shape: "lathe", ...FULL, profile: [[1, 0], [1, 1]] }, [1, 0.5, 0.8]);
+  const exact = Math.PI * 0.5 * 0.25 * 0.8;
+  assert.ok(drum.volume > exact * 0.9 && drum.volume <= exact, `volume ${drum.volume} of ${exact}`);
+  assert.ok(near1(drum.y[0], 0) && near1(drum.y[1], 0.8) && near1(drum.x[1], 0.5, 1e-6) && near1(drum.z[1], 0.25, 0.01));
+  // the same profile from the top down
+  assert.ok(near1(solo({ shape: "lathe", ...FULL, profile: [[1, 1], [1, 0]] }, [1, 0.5, 0.8]).volume, drum.volume, 1e-9));
+  // a vase: a foot, a belly and a narrow neck; mirrored it is the same solid
+  const profile: [number, number][] = [[0, 0], [0.6, 0], [1, 0.4], [0.35, 0.9], [0.45, 1], [0, 1]];
+  const vase = solo({ shape: "lathe", ...FULL, profile }, [0.3, 0.3, 0.5]);
+  assert.ok(vase.volume > 0 && vase.volume < 0.3 * 0.3 * 0.5, `volume ${vase.volume}`);
+  assert.ok(near1(solo({ shape: "lathe", ...FULL, profile }, [0.3, 0.3, 0.5], true).volume, vase.volume, 1e-9));
+  // a bowl: up the outside, over the rim and down the inside: its hollow takes volume away from the full solid
+  const full = solo({ shape: "lathe", ...FULL, profile: [[0, 0], [0.7, 0], [1, 1], [0, 1]] }).volume;
+  const bowl = solo({ shape: "lathe", ...FULL, profile: [[0, 0], [0.7, 0], [1, 1], [0.9, 1], [0.6, 0.15], [0, 0.15]] }).volume;
+  assert.ok(bowl > 0 && bowl < full * 0.5, `bowl ${bowl} of ${full}`);
+  // at most 12 profile points stay low-poly: 11 bands of 12 quads and two caps
+  const twelve = solo({ shape: "lathe", ...FULL, profile: Array.from({ length: 12 }, (_, i) => [0.5 + 0.04 * i, i / 11] as [number, number]) });
+  assert.ok(twelve.buf.count <= 11 * 24 + 24, `${twelve.buf.count} triangles`);
+});
+
+test("a rounded box fills its part box with rounded edges; fully rounded it is a pill", () => {
+  const box = 1.2 * 0.6 * 0.4;
+  const soft = solo({ shape: "rbox", ...FULL }, [1.2, 0.6, 0.4]);
+  assert.ok(near1(soft.x[0], -0.6) && near1(soft.x[1], 0.6) && near1(soft.z[1], 0.3) && near1(soft.y[1], 0.4), `${soft.x} ${soft.z} ${soft.y}`);
+  // the default rounding (0.2 of the shortest side: 8 cm) shaves a little off the corners
+  assert.ok(soft.volume < box && soft.volume > box * 0.9, `volume ${soft.volume} of ${box}`);
+  const pill = solo({ shape: "rbox", ...FULL, round: 0.5 }, [1.2, 0.6, 0.4]);
+  assert.ok(pill.volume < soft.volume && pill.volume > box * 0.6, `pill ${pill.volume}`);
+  assert.ok(soft.buf.count <= 200, `${soft.buf.count} triangles`);
+  assert.ok(near1(solo({ shape: "rbox", ...FULL }, [1.2, 0.6, 0.4], true).volume, soft.volume, 1e-9));
+  // its outline follows the rounded corners
+  assert.ok(solo({ shape: "rbox", ...FULL, edges: true }, [1.2, 0.6, 0.4]).lines.p.length / 6 === 16);
+});
+
+test("round parts keep their measures when the item grows, like the other fixed parts", () => {
+  // a cabinet on four ball feet: the feet keep their size and their corners, the carcass stretches
+  const foot = (x: number, z: number) => ({ shape: "sphere", x, z, w: 0.1, d: 0.1, y: 0, h: 0.1, color: "metal", fix: "wdh" }) as const;
+  setPacks([{ id: "t.shapes", name: "Shapes", publisher: "t", items: [{ id: "cab", name: { en: "Cabinet" }, size: [0.5, 0.5, 0.5], parts: [{ shape: "rbox", x: 0, z: 0, w: 1, d: 1, y: 0.1, h: 0.9, color: "wood", round: 0.1 }, foot(-0.45, -0.45), foot(0.45, 0.45)] }] }]);
+  const buf = new GeoBuffer();
+  pushFurniture(buf, new LineBuffer(), new GeoBuffer(), { id: "c", type: "pack:t.shapes:cab", x: 0, z: 0, rotation: 0, w: 1, d: 1, h: 1, variant: null, entity: null, power: null });
+  // the feet: everything below the carcass (5 cm), 5 cm wide each, in the corners of the larger item
+  const low: number[][] = [];
+  for (let i = 0; i < buf.p.length; i += 3) if (buf.p[i + 1] < 0.05 - 1e-6) low.push([buf.p[i], buf.p[i + 2]]);
+  const xs = low.map((p) => p[0]);
+  assert.ok(near1(Math.min(...xs), -0.5, 0.002) && near1(Math.max(...xs), 0.5, 0.002), `feet ${Math.min(...xs)}..${Math.max(...xs)}`);
+  assert.ok(low.every(([x]) => Math.abs(Math.abs(x) - 0.475) <= 0.025 + 1e-6), "each foot stays 5 cm wide");
+});
+
+test("a pouffe (a sphere) and a planter (a lathe) cast a round shadow; a rounded box does not (#4)", async () => {
+  const { roundFootprint } = await import("./furniture.ts");
+  const part = { x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "fabric" } as const;
+  setPacks([{ id: "g", name: "G", publisher: "G", items: [
+    { id: "pouffe", name: { en: "Pouffe" }, size: [0.5, 0.5, 0.4], parts: [{ ...part, shape: "sphere" }] },
+    { id: "planter", name: { en: "Planter" }, size: [0.5, 0.5, 0.6], parts: [{ ...part, shape: "lathe", profile: [[0.7, 0], [1, 1]] }] },
+    { id: "cushion", name: { en: "Cushion" }, size: [0.5, 0.5, 0.2], parts: [{ ...part, shape: "rbox" }] },
+  ] }]);
+  try {
+    assert.equal(roundFootprint({ type: "pack:g:pouffe" }), true);
+    assert.equal(roundFootprint({ type: "pack:g:planter" }), true);
+    assert.equal(roundFootprint({ type: "pack:g:cushion" }), false);
+  } finally {
+    setPacks([]);
+  }
+});
