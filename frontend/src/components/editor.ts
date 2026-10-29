@@ -129,8 +129,7 @@ import {
   type OpeningType,
   type Room,
   type Vec2,
-  DOOR_STYLES,
-  WINDOW_STYLES,
+  openingStyles,
   SILL_BOARDS,
   openingStyle,
   isFrontDoor,
@@ -10764,7 +10763,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderStyleSelect(o: Opening) {
-    const styles: readonly OpeningStyle[] = o.type === "door" ? DOOR_STYLES : WINDOW_STYLES;
+    const styles = openingStyles(o.type);
     const auto = openingStyle({ type: o.type, style: null }, this.openingIsExterior(o));
     const current = o.style && (styles as readonly string[]).includes(o.style) ? o.style : "";
     return html`<label class="fp3d-field fp3d-wide"
@@ -10892,7 +10891,7 @@ export class Fp3dEditor extends LitElement {
               </button>
             </div>`
           : nothing}
-        ${garage ? nothing : this.renderStyleSelect(o)}
+        ${this.renderStyleSelect(o)}
         ${window
           ? html`<label class="fp3d-field fp3d-wide" title=${this.t("sill_board_hint")}
               >${this.t("sill_board")}
@@ -12144,8 +12143,8 @@ export class Fp3dEditor extends LitElement {
             /^(media_player|switch|input_boolean|light)\./.test(id) || (packMotion(f.type) === "screen" && id.startsWith("cover."))
           : f.type === "awning"
             ? id.startsWith("cover.")
-            : packMotion(f.type) === "curtain"
-            ? // a motorised curtain: its motor's cover (or a switch that drives it, #511)
+            : packMotion(f.type) === "curtain" || packMotion(f.type) === "blind"
+            ? // a motorised curtain or a roof window's blind: its motor's cover (or a switch that drives it, #511, #24)
               /^(cover|switch|input_boolean)\./.test(id)
             : f.type === "radiator" || f.type === "ac_unit"
             ? id.startsWith("climate.")
