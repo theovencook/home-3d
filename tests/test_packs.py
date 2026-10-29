@@ -37,6 +37,11 @@ PAYLOAD = {
 }
 
 
+def _imported(listed: list[dict]) -> list[dict]:
+    """The imported packs of a pack list (it starts with the packs that come with Home 3D)."""
+    return [p for p in listed if not p.get("bundled")]
+
+
 def _pack(payload: dict) -> str:
     return json.dumps({"payload": payload})
 
@@ -182,14 +187,14 @@ async def test_import_list_and_remove(hass: HomeAssistant, hass_ws_client) -> No
     assert not result["success"] and result["error"]["code"] == "not_a_pack"
 
     await client.send_json_auto_id({"type": "home_3d/packs/list"})
-    listed = (await client.receive_json())["result"]["packs"]
+    listed = _imported((await client.receive_json())["result"]["packs"])
     assert [p["id"] for p in listed] == ["test.starter"]
     assert listed[0]["items"][0]["name"]["de"] == "Würfelsessel"
 
     await client.send_json_auto_id({"type": "home_3d/packs/remove", "pack_id": "test.starter"})
     assert (await client.receive_json())["success"]
     await client.send_json_auto_id({"type": "home_3d/packs/list"})
-    assert (await client.receive_json())["result"]["packs"] == []
+    assert _imported((await client.receive_json())["result"]["packs"]) == []
 
 
 def test_turned_parts_and_stairs_holes_are_accepted() -> None:
@@ -412,7 +417,7 @@ async def test_a_v2_pack_folder_imports_and_lists(hass: HomeAssistant, hass_ws_c
     }
 
     await client.send_json_auto_id({"type": "home_3d/packs/list"})
-    listed = (await client.receive_json())["result"]["packs"]
+    listed = _imported((await client.receive_json())["result"]["packs"])
     assert [p["id"] for p in listed] == ["test.starter"]
     assert listed[0]["licence"] == "MIT"
     assert sorted(item["id"] for item in listed[0]["items"]) == ["cube_chair", "side_table"]
@@ -447,7 +452,7 @@ async def test_a_v2_pack_comes_back_from_a_backup(hass: HomeAssistant, hass_ws_c
     result = await client.receive_json()
     assert result["success"] and result["result"]["packs"] == 1 and result["result"]["skipped"] == []
     await client.send_json_auto_id({"type": "home_3d/packs/list"})
-    listed = (await client.receive_json())["result"]["packs"]
+    listed = _imported((await client.receive_json())["result"]["packs"])
     assert listed[0]["id"] == "test.starter" and listed[0]["licence"] == "MIT"
 
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isLamp, newFloor, setTerrain, type Building, type Furniture } from "./model.ts";
-import { isCooktopZone, isPackCooktop, isPackSensor, furnitureSize, isElectric, mountBase, packDisplay, packItem, packItemName, packName, packType, setPacks, type FurniturePack } from "./packs.ts";
+import { isCooktopZone, isPackCooktop, isPackSensor, furnitureSize, isElectric, mountBase, packDisplay, packItem, packItemName, packName, packOrigin, packType, setPacks, type FurniturePack } from "./packs.ts";
 
 const pack: FurniturePack = {
   id: "demo.pack",
@@ -119,4 +119,13 @@ test("a pack's sensor models follow any sensor, other pack items and built-ins d
   assert.equal(isPackSensor("pack:home3d.smarthome:presence_mmwave"), true);
   assert.equal(isPackSensor("pack:home3d.smarthome:smart_plug"), false);
   assert.equal(isPackSensor("motion_sensor"), false);
+});
+
+test("a pack installed from GitHub shows where it came from (#25); an imported one shows nothing", () => {
+  const origin = { type: "github" as const, url: "https://github.com/theovencook/home-3d-packs/tree/main/theovencook.core", owner: "theovencook", repo: "home-3d-packs", ref: "main", default_branch: false, folder: "theovencook.core", commit: "a".repeat(40) };
+  assert.deepEqual(packOrigin({ ...pack, source: { origin } }), { label: "theovencook/home-3d-packs/theovencook.core @ main", url: origin.url });
+  const root = { ...origin, url: "https://github.com/theovencook/one-pack", repo: "one-pack", ref: "trunk", default_branch: true, folder: "" };
+  assert.deepEqual(packOrigin({ ...pack, source: { origin: root } }), { label: "theovencook/one-pack", url: root.url });
+  assert.equal(packOrigin(pack), null);
+  assert.equal(packOrigin({ ...pack, source: { files: {} } }), null);
 });

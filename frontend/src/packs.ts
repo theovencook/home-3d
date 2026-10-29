@@ -112,6 +112,38 @@ export interface FurniturePack {
   features?: string[];
   items: PackItem[];
   imported_at?: number;
+  /** Ships with Home 3D (custom_components/home_3d/bundled_packs): there offline, cannot be removed. */
+  bundled?: boolean;
+  /** What was imported: the files of a v2 folder (or an old pack's payload), and where it came from (#25). */
+  source?: { files?: Record<string, string>; origin?: PackOrigin };
+}
+
+/** Where a pack installed from a GitHub URL came from (#25); an update check compares `commit` (#26). */
+export interface PackOrigin {
+  type: "github";
+  /** The pasted URL in its plain form. */
+  url: string;
+  owner: string;
+  repo: string;
+  /** The branch, tag or commit the URL named, or the default branch. */
+  ref: string;
+  /** True when the URL named no ref, so the pack follows the repository's default branch. */
+  default_branch: boolean;
+  /** The pack folder inside the repository; "" for the repository root. */
+  folder: string;
+  /** The commit the files were fetched at. */
+  commit: string;
+  /** The pack's release number when it was fetched. */
+  release?: number;
+  fetched_at?: number;
+}
+
+/** Where an installed pack came from, for the pack list: null for a pack imported from files. */
+export function packOrigin(pack: FurniturePack): { label: string; url: string } | null {
+  const origin = pack.source?.origin;
+  if (origin?.type !== "github") return null;
+  const path = [origin.owner, origin.repo, origin.folder].filter(Boolean).join("/");
+  return { label: origin.default_branch ? path : `${path} @ ${origin.ref}`, url: origin.url };
 }
 
 let registry: FurniturePack[] = [];
