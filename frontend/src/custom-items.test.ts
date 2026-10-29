@@ -164,3 +164,15 @@ test("until it is saved, a new item's id follows its name", () => {
   assert.equal(setDetails(draft, { name: "Table lamp" }, ["table_lamp"]).id, "table_lamp_2");
   assert.equal(setDetails(draft, { tags: "x" }, []).id, "new_item", "only a new name changes it");
 });
+
+test("an LLM's answer reads as the item it holds, fenced or with a line of chat around it", () => {
+  const item = { id: "stool", name: { en: "Stool" }, size: [0.3, 0.3, 0.45], parts: [{ shape: "cyl", x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "wood" }] };
+  const json = JSON.stringify(item, null, 2);
+  for (const answer of [json, `\`\`\`json\n${json}\n\`\`\``, `Here is your stool:\n\n\`\`\`json\n${json}\n\`\`\`\n\nWant a taller one?`, `  ${json}  \n`]) {
+    const read = readItemFile(answer, []);
+    assert.ok("item" in read, answer);
+    assert.deepEqual(read.item, item);
+  }
+  assert.deepEqual(readItemFile("Sorry, I can't help with that.", []), { error: "not_json" });
+  assert.deepEqual(readItemFile("```json\n{ broken\n```", []), { error: "not_json" });
+});

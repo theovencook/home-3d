@@ -3,10 +3,11 @@
 // from a named preset); a role without an override follows the theme. Pure data and helpers, no three.js: the
 // editor, the 3D bundle and later looks and materials (#39, #40) share this list.
 
+import { COLOUR_ROLES } from "./item-format.ts";
 import { isPackType, packItem } from "./packs.ts";
 
-/** The colour roles, in the order the item panel lists them. */
-export const COLOUR_ROLES = ["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent"] as const;
+/** The colour roles, in the order the item panel lists them (item-format.ts holds them, as the backend does). */
+export { COLOUR_ROLES };
 
 export type ColourRole = (typeof COLOUR_ROLES)[number];
 

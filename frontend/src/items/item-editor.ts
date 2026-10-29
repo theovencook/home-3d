@@ -24,10 +24,12 @@ import {
   type CustomItem,
   type ItemDetails,
 } from "../custom-items.ts";
+import { LIGHTS, MOUNTS } from "../item-format.ts";
 import { load3d } from "../load3d.ts";
 import type { PackPart } from "../packs.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
+import { llmBrief } from "./llm-brief.ts";
 
 export type Translate = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -49,8 +51,6 @@ export interface ItemEditorOptions {
   open?: string;
 }
 
-const LIGHTS = ["ceiling", "downlight", "spot", "panel", "pendant", "floor", "uplight", "table", "wall", "strip", "bollard", "garden"] as const;
-const MOUNTS = ["floor", "surface", "wall", "ceiling"] as const;
 const HEX = /^#[0-9a-f]{6}$/i;
 /** Views to jump to: [yaw, pitch]. */
 const VIEWS: [string, number, number][] = [
@@ -59,6 +59,24 @@ const VIEWS: [string, number, number][] = [
   ["ie_view_side", 90, 0],
   ["ie_view_top", 0, 80],
 ];
+
+/** Text onto the clipboard; the old way (a selected text area) where the Clipboard API is missing or refused. */
+async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch (err) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.append(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    if (!ok) throw err;
+  }
+}
 
 function download(name: string, text: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
@@ -82,6 +100,8 @@ export class ItemEditor extends LitElement {
     _yaw: { state: true },
     _pitch: { state: true },
     _addShape: { state: true },
+    _paste: { state: true },
+    _note: { state: true },
   };
 
   declare options: ItemEditorOptions;
@@ -97,6 +117,10 @@ export class ItemEditor extends LitElement {
   private declare _yaw: number;
   private declare _pitch: number;
   private declare _addShape: PackPart["shape"];
+  /** The paste box's text (null: closed). */
+  private declare _paste: string | null;
+  /** What happened to the brief for an LLM (or an import with no item open), shown in the list. */
+  private declare _note: { ok: boolean; text: string } | null;
   private drawn = "";
   private drawing = false;
   private drag: { x: number; y: number; yaw: number; pitch: number } | null = null;
@@ -113,6 +137,8 @@ export class ItemEditor extends LitElement {
     this._yaw = 35;
     this._pitch = 25;
     this._addShape = "box";
+    this._paste = null;
+    this._note = null;
   }
 
   connectedCallback(): void {
@@ -250,16 +276,43 @@ export class ItemEditor extends LitElement {
     }
   }
 
+  /** The brief for an LLM (#14) onto the clipboard. */
+  private async copyBrief(): Promise<void> {
+    try {
+      await copyText(llmBrief({ kinds: this.options.kinds, rooms: this.options.rooms }));
+      this._note = { ok: true, text: this.t("ie_brief_copied") };
+    } catch (err) {
+      this._note = { ok: false, text: this.t("ie_brief_failed", { why: String((err as Error)?.message ?? err) }) };
+    }
+  }
+
   /** Item files (exported here or written by hand or by an LLM) become custom items; the backend checks each. */
   private async importFiles(e: Event): Promise<void> {
     const input = e.target as HTMLInputElement;
     const files = [...(input.files ?? [])];
     input.value = "";
     if (!files.length || !this.leave()) return;
+    await this.importTexts(await Promise.all(files.map(async (f) => ({ name: f.name, text: await f.text() }))));
+  }
+
+  /** An item pasted in (an LLM's answer as it came); the box closes once it is imported. */
+  private async importPasted(): Promise<void> {
+    const text = this._paste?.trim();
+    if (!text || this._busy || !this.leave()) return;
+    this._busy = true;
+    try {
+      if (await this.importTexts([{ name: this.t("ie_paste"), text }])) this._paste = null;
+    } finally {
+      this._busy = false;
+    }
+  }
+
+  /** Item texts (files or a paste) become custom items; true when every one was imported. */
+  private async importTexts(files: { name: string; text: string }[]): Promise<boolean> {
     const done: CustomItem[] = [];
     const failed: string[] = [];
     for (const file of files) {
-      const text = await file.text();
+      const text = file.text;
       const first = readItemFile(text, []);
       if ("error" in first) {
         failed.push(this.t("ie_import_failed", { file: file.name, why: this.t(`ie_err_${first.error}`) }));
@@ -286,6 +339,9 @@ export class ItemEditor extends LitElement {
     }
     const ok = done.length ? [this.t("ie_imported", { names: done.map((i) => this.itemName(i)).join(", ") })] : [];
     this._msg = { ok: failed.length === 0, text: [...ok, ...failed].join(" · ") };
+    // no item open to show the message under: the list shows it
+    this._note = this._draft ? null : this._msg;
+    return failed.length === 0;
   }
 
   // ------------------------------------------------------------------ rendering
@@ -313,6 +369,15 @@ export class ItemEditor extends LitElement {
         ${this.t("ie_import")}
         <input type="file" accept=".json,application/json" multiple hidden @change=${(e: Event) => this.importFiles(e)} />
       </label>
+      <button class="fp3d-btn ie-paste-open" aria-expanded=${this._paste !== null} @click=${() => (this._paste = this._paste === null ? "" : null)}>${this.t("ie_paste")}</button>
+      ${this._paste !== null
+        ? html`<label class="fp3d-field ie-paste"
+              >${this.t("ie_paste_label")}<textarea rows="6" spellcheck="false" .value=${this._paste} @input=${(e: Event) => (this._paste = (e.target as HTMLTextAreaElement).value)}></textarea
+            ></label>
+            <button class="fp3d-btn fp3d-primary ie-paste-import" ?disabled=${!this._paste.trim() || this._busy} @click=${() => this.importPasted()}>${this.t("ie_paste_import")}</button>`
+        : nothing}
+      <button class="fp3d-btn ie-brief" title=${this.t("ie_brief_hint")} @click=${() => this.copyBrief()}>${this.t("ie_brief")}</button>
+      ${this._note ? html`<p class="ie-msg ${this._note.ok ? "ok" : "bad"}" role="status">${this._note.text}</p>` : nothing}
       ${this._items.length ? nothing : html`<p class="ie-sub">${this.t("ie_none")}</p>`}
       <ul>
         ${this._items.map(
@@ -695,7 +760,8 @@ export class ItemEditor extends LitElement {
         color: var(--fp3d-muted);
       }
       input,
-      select {
+      select,
+      textarea {
         font: inherit;
         font-size: 14px;
         color: var(--fp3d-text);
@@ -704,6 +770,11 @@ export class ItemEditor extends LitElement {
         border-radius: 8px;
         padding: 6px 8px;
         min-width: 0;
+      }
+      textarea {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        resize: vertical;
       }
       input[type="color"] {
         padding: 2px;
