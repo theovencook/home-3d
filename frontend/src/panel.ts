@@ -61,6 +61,7 @@ export class Floorplan3dPanel extends LitElement {
     _mode: { state: true },
     _showOpen: { state: true },
     _editorReady: { state: true },
+    _editorError: { state: true },
     _floorId: { state: true },
     _roomId: { state: true },
     _wallMode: { state: true },
@@ -105,6 +106,8 @@ export class Floorplan3dPanel extends LitElement {
   private declare _showOpen: boolean;
   /** The editor bundle is loaded (it is fetched the first time the editor opens). */
   private declare _editorReady: boolean;
+  /** Why the editor bundle failed to load (shown on its tabs instead of "Loading …"; opening a tab again retries). */
+  private declare _editorError: string | null;
   private declare _floorId: string | null;
   private declare _roomId: string | null;
   private declare _wallMode: WallMode;
@@ -168,6 +171,7 @@ export class Floorplan3dPanel extends LitElement {
     this._mode = "view";
     this._showOpen = false;
     this._editorReady = !!customElements.get("fp3d-editor");
+    this._editorError = null;
     this._floorId = null;
     this._roomId = null;
     // the wall view stays as it was last set on this device (#309)
@@ -238,6 +242,7 @@ export class Floorplan3dPanel extends LitElement {
   private setMode(mode: Mode): void {
     if (mode === this._mode) return;
     this.tt.stop();
+    this._editorError = null;
     if (mode === "view") void this.data.flush();
     this._mode = mode;
   }
@@ -775,16 +780,25 @@ export class Floorplan3dPanel extends LitElement {
     return notices.length ? html`<div class="fp3d-notices">${notices}</div>` : nothing;
   }
 
+  /**
+   * "Loading …" while the editor bundle (editor and extensions page) is fetched, or why it failed (#52: a failure used
+   * to leave "Loading …" up for good); nothing once it is there.
+   */
+  private editorPending() {
+    if (this._editorReady) return null;
+    if (this._editorError) return html`<div class="fp3d-empty"><p>${this.t("load_error")}: ${this._editorError}</p></div>`;
+    loadEditor().then(
+      () => (this._editorReady = true),
+      (err: unknown) => (this._editorError = String(err)),
+    );
+    return html`<div class="fp3d-empty"><p>${this.t("loading")}</p></div>`;
+  }
+
   /** The extensions page (built-in features, fun extras, packs); it comes with the editor bundle. */
   private renderExtensions() {
     void this.data.loadLibrary();
-    if (!this._editorReady) {
-      loadEditor().then(
-        () => (this._editorReady = true),
-        (err: unknown) => (this.data.error = String(err)),
-      );
-      return html`<div class="fp3d-empty"><p>${this.t("loading")}</p></div>`;
-    }
+    const pending = this.editorPending();
+    if (pending) return pending;
     return html`<fp3d-extensions
       class="fp3d-body"
       .hass=${this.hass}
@@ -799,13 +813,8 @@ export class Floorplan3dPanel extends LitElement {
   private renderEditor(b: Building) {
     // the library (#44) is only loaded for the editor and the extensions page
     void this.data.loadLibrary();
-    if (!this._editorReady) {
-      loadEditor().then(
-        () => (this._editorReady = true),
-        (err: unknown) => (this.data.error = String(err)),
-      );
-      return html`<div class="fp3d-empty"><p>${this.t("loading")}</p></div>`;
-    }
+    const pending = this.editorPending();
+    if (pending) return pending;
     return html`<fp3d-editor
       class="fp3d-body"
       .hass=${this.hass}

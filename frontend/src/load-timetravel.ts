@@ -8,7 +8,7 @@ import { lazyBundle } from "./lazy-bundle.ts";
 /** Content hash of the time travel bundle, set by the build (see build.mjs). */
 declare const __FP3D_TIMETRAVEL_HASH__: string;
 
-export const loadTimeTravel = lazyBundle<typeof TimeTravelBundle>("home-3d-timetravel", __FP3D_TIMETRAVEL_HASH__);
+export const loadTimeTravel = lazyBundle<typeof TimeTravelBundle>("home-3d-timetravel", () => __FP3D_TIMETRAVEL_HASH__);
 
 /** The time travel of a panel or card: started, replaying, or off. */
 export class TimeTravel {

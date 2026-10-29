@@ -6,7 +6,7 @@ import { lazyBundle } from "./lazy-bundle.ts";
 /** Content hash of the voice bundle, set by the build (see build.mjs). */
 declare const __FP3D_VOICE_HASH__: string;
 
-export const loadVoice = lazyBundle<typeof VoiceBundle>("home-3d-voice", __FP3D_VOICE_HASH__);
+export const loadVoice = lazyBundle<typeof VoiceBundle>("home-3d-voice", () => __FP3D_VOICE_HASH__);
 
 /**
  * Whether the microphone probe was asked for in the address ("?fp3d_mic=1", also after "#"). Remembered for this tab:

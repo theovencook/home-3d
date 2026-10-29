@@ -6,4 +6,4 @@ import { lazyBundle } from "./lazy-bundle.ts";
 /** Content hash of the fun bundle, set by the build (see build.mjs). */
 declare const __FP3D_FUN_HASH__: string;
 
-export const loadFun = lazyBundle<typeof FunBundle>("home-3d-fun", __FP3D_FUN_HASH__);
+export const loadFun = lazyBundle<typeof FunBundle>("home-3d-fun", () => __FP3D_FUN_HASH__);
