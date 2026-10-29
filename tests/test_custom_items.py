@@ -5,6 +5,7 @@ imports on another install and checks like any pack item."""
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from homeassistant.core import HomeAssistant
 import pytest
@@ -222,3 +223,24 @@ async def test_no_other_way_in_can_take_the_custom_items_id(
     result = await client.receive_json()
     assert result["result"]["skipped"] == [{"id": CUSTOM, "reason": "reserved"}]
     assert _custom(await _packs(client)) is None
+
+
+async def test_an_item_an_llm_wrote_from_the_brief_imports_as_it_is(hass: HomeAssistant, hass_ws_client) -> None:
+    """#14: the item editor copies a brief for an LLM; the answer an LLM gave (kept verbatim in the fixture) saves
+    without hand editing and is offered to the library as written."""
+    answer = (Path(__file__).parent / "fixtures" / "llm_item_answer.txt").read_text(encoding="utf8")
+    item = json.loads(answer)
+    await _setup(hass)
+    admin = await hass_ws_client(hass)
+    await admin.send_json_auto_id({"type": "home_3d/items/save", "item": item})
+    result = await admin.receive_json()
+    assert result["success"], result
+    pack = _custom(await _packs(admin))
+    assert pack is not None
+    saved = pack["items"][0]
+    assert saved["id"] == "oak_bedside_table"
+    # as written (the backend only adds its defaults)
+    assert {k: saved[k] for k in item if k != "parts"} == {k: v for k, v in item.items() if k != "parts"}
+    assert [{k: part[k] for k in written} for part, written in zip(saved["parts"], item["parts"], strict=True)] == item[
+        "parts"
+    ]
