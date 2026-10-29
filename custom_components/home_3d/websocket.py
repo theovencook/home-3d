@@ -30,6 +30,7 @@ from .locate.ws import COMMANDS as LOCATE_COMMANDS
 from .pack_github import checked_origin, fetch_pack
 from .pack_updates import SETTINGS_FIELDS, PackUpdates
 from .packs import (
+    MAX_ITEMS,
     MAX_PACK_SIZE,
     PackError,
     is_bundled,
@@ -62,6 +63,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_history_snapshot,
         ws_history_restore,
         ws_packs_list,
+        ws_packs_items,
         ws_packs_import,
         ws_packs_install_url,
         ws_packs_remove,
@@ -250,10 +252,36 @@ async def ws_history_restore(
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/packs/list"})
 @callback
 def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Return the bundled and the imported furniture packs (every user needs them to see the furniture)."""
+    """Return the bundled and the imported furniture packs in their light form (#44): an index of the items, enough to
+    browse and search the library. The recipes come with `packs/items`; placed items draw from the plan's copies."""
     if (data := _data(hass, connection, msg)) is None:
         return
-    connection.send_result(msg["id"], {"packs": data.offered_packs})
+    connection.send_result(msg["id"], {"packs": data.library})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_3d/packs/items",
+        vol.Required("pack_id"): vol.All(str, vol.Length(max=64)),
+        # the ids of the items wanted; without them every item of the pack
+        vol.Optional("items"): vol.All([vol.All(str, vol.Length(max=40))], vol.Length(max=MAX_ITEMS)),
+    }
+)
+@callback
+def ws_packs_items(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The recipes of a pack's items, on demand (#44), with the pack's hash and release: a browser keeps them while
+    the hash stays. Ids the pack does not have are left out."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    pack = next((p for p in data.offered_packs if p["id"] == msg["pack_id"]), None)
+    if pack is None:
+        connection.send_error(msg["id"], "not_found", "Pack not found")
+        return
+    listed = next(p for p in data.library if p["id"] == pack["id"])
+    wanted = set(msg["items"]) if "items" in msg else None
+    items = [item for item in pack["items"] if wanted is None or item["id"] in wanted]
+    result = {"pack_id": pack["id"], "release": pack.get("release", 1), "hash": listed["hash"], "items": items}
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command(

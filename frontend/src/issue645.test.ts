@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { canLift, clearFirstState, type Furniture } from "./model.ts";
-import { isPackHeater, packRobotCentre, packRobotPart, packType, setPacks, type FurniturePack } from "./packs.ts";
+import { isPackHeater, packRobotCentre, packRobotPart, packType, setPacks, type FurniturePack, type PackItem } from "./packs.ts";
 import { hiddenInHa, isRelevant } from "./devices.ts";
 import { pushFurniture, pushPackRobot } from "./viewer/furniture.ts";
 import { GeoBuffer, LineBuffer } from "./viewer/geo.ts";
 
 // a dock at the back, the robot (a disc with a bumper light) in front of it, like the Smart Home pack's model
-const PACK: FurniturePack = {
+const PACK: Omit<FurniturePack, "items"> & { items: PackItem[] } = {
   id: "t.home",
   name: "Home",
   publisher: "t",

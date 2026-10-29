@@ -91,10 +91,7 @@ def test_core_appliances_can_be_linked_to_a_switch_and_a_power_sensor() -> None:
 
 
 def _core_files(release: int) -> dict[str, str]:
-    # a few items are enough to stand in for the pack: the whole core twice would not fit one websocket message
     files = packs.read_folder(CORE)
-    items = sorted((p, t) for p, t in files.items() if p != packs.PACK_FILE)[:5]
-    files = {packs.PACK_FILE: files[packs.PACK_FILE]} | dict(items)
     meta = json.loads(files["pack.json"])
     files["pack.json"] = json.dumps({**meta, "release": release, "name": f"Core release {release}"})
     return files

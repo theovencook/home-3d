@@ -18,7 +18,7 @@ import { keepInRoom, snapToWall } from "./geometry/snap.ts";
 import { furnitureName } from "./furniture-names.ts";
 import { confirmEntities, defaultHeight, entityName, kindOf } from "./devices.ts";
 import { canLift, zonesOf, type LampMount } from "./model.ts";
-import { mountBase, packsVersion } from "./packs.ts";
+import { mountBase } from "./packs.ts";
 import { hasFeature, labOn } from "./features.ts";
 import { mountLocateLab } from "./locate-lab.ts";
 import { directorOnHere } from "./director.ts";
@@ -500,8 +500,9 @@ export class Floorplan3dPanel extends LitElement {
     if (!this.locateLab && this.hass?.user?.is_admin && this.data.building && labOn()) {
       this.locateLab = mountLocateLab(() => ({ hass: this.hass, building: this.data.building }));
     }
-    // a link with ?tt=07:42 or ?tt=-3h opens the time travel there, once the plan and the packs are loaded
-    if (this.ttLinked || !this.data.building || !packsVersion() || this._mode !== "view" || !this.view3d()) return;
+    // a link with ?tt=07:42 or ?tt=-3h opens the time travel there, once the plan is loaded (it brings the recipes of
+    // its items; the view needs no library, #44)
+    if (this.ttLinked || !this.data.building || this._mode !== "view" || !this.view3d()) return;
     this.ttLinked = true;
     const at = new URLSearchParams(location.search).get("tt");
     if (at !== null && hasFeature("time_travel")) this.toggleTimeTravel(at);
@@ -776,6 +777,7 @@ export class Floorplan3dPanel extends LitElement {
 
   /** The extensions page (built-in features, fun extras, packs); it comes with the editor bundle. */
   private renderExtensions() {
+    void this.data.loadLibrary();
     if (!this._editorReady) {
       loadEditor().then(
         () => (this._editorReady = true),
@@ -795,6 +797,8 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   private renderEditor(b: Building) {
+    // the library (#44) is only loaded for the editor and the extensions page
+    void this.data.loadLibrary();
     if (!this._editorReady) {
       loadEditor().then(
         () => (this._editorReady = true),

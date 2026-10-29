@@ -95,6 +95,13 @@ export interface PackItem {
   ikea?: string;
 }
 
+/**
+ * An item as the library lists it (#44): everything but its recipe, enough to browse, search, filter and size it. The
+ * recipe (`parts`, `symbol`) comes on demand (pack-recipes.ts) and is then filled into this very object, so every
+ * bundle handed the same packs has it.
+ */
+export type PackItemInfo = Omit<PackItem, "parts" | "symbol"> & Partial<Pick<PackItem, "parts" | "symbol">>;
+
 export interface FurniturePack {
   /** "home3d-pack" (v2, a folder) or "fp3dpack" (an old single file). */
   format?: string;
@@ -110,7 +117,10 @@ export interface FurniturePack {
   release?: number;
   /** Feature names the pack lists (compatibility only; see features.ts). */
   features?: string[];
-  items: PackItem[];
+  /** "sha256:…" of the pack's items (#44): fetched recipes are kept while it stays. */
+  hash?: string;
+  /** The library's index of the items; an item has its recipe once fetched (or always, for the household's own). */
+  items: PackItemInfo[];
   imported_at?: number;
   /** Ships with Home 3D (custom_components/home_3d/bundled_packs): there offline, cannot be removed. */
   bundled?: boolean;
@@ -167,16 +177,60 @@ export interface PlanRecipe {
 }
 
 let registry: FurniturePack[] = [];
-let items = new Map<string, PackItem>();
+let items = new Map<string, PackItemInfo>();
 let planItems = new Map<string, PackItem>();
 let planRecipes: Record<string, PlanRecipe> | undefined;
 let planKey = "";
 let version = 0;
 
 export function setPacks(packs: FurniturePack[]): void {
+  // recipes fetched for a pack that is still the same (its hash) stay with the new list
+  for (const pack of packs) {
+    const before = pack.hash ? registry.find((p) => p.id === pack.id && p.hash === pack.hash) : undefined;
+    if (!before || before === pack) continue;
+    for (const it of pack.items) {
+      const had = !hasRecipe(it) ? items.get(packType(pack.id, it.id)) : undefined;
+      if (had && hasRecipe(had)) addRecipe(it, had);
+    }
+  }
   registry = packs;
   items = new Map(packs.flatMap((p) => p.items.map((it) => [packType(p.id, it.id), it] as const)));
   version++;
+}
+
+/** Whether a listed item has its recipe (fetched, or sent whole). */
+export function hasRecipe(item: PackItemInfo): item is PackItem {
+  return Array.isArray(item.parts);
+}
+
+function addRecipe(entry: PackItemInfo, recipe: PackItem): void {
+  entry.parts = recipe.parts;
+  if (recipe.symbol) entry.symbol = recipe.symbol;
+}
+
+/** The ids of the listed items of `types` that have no recipe yet, by pack id; other types are left out. */
+export function missingRecipes(types: readonly string[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const type of new Set(types)) {
+    const entry = items.get(type);
+    if (!entry || hasRecipe(entry)) continue;
+    const pack = registry.find((p) => type === packType(p.id, entry.id));
+    if (pack) out.set(pack.id, [...(out.get(pack.id) ?? []), entry.id]);
+  }
+  return out;
+}
+
+/**
+ * Recipes fetched for a pack (`packs/items`): they go into the listed items, when the pack is still the one listed
+ * (`hash`). The version stays: what was drawn before had no recipe and asked for it.
+ */
+export function addRecipes(packId: string, hash: string | undefined, recipes: readonly PackItem[]): void {
+  const pack = registry.find((p) => p.id === packId);
+  if (!pack || (pack.hash && hash && pack.hash !== hash)) return;
+  for (const recipe of recipes) {
+    const entry = items.get(packType(packId, recipe.id));
+    if (entry && !hasRecipe(entry) && Array.isArray(recipe.parts)) addRecipe(entry, recipe);
+  }
 }
 
 export function getPacks(): readonly FurniturePack[] {
@@ -270,7 +324,7 @@ export function packMovingPart(kind: PackMotion, p: PackPart): boolean {
  */
 export function isPackSensor(type: string): boolean {
   if (!isPackType(type)) return false;
-  return packItem(type)?.family === "sensor" || /:(\w+_sensor|door_contact|presence_mmwave)$/.test(type);
+  return packInfo(type)?.family === "sensor" || /:(\w+_sensor|door_contact|presence_mmwave)$/.test(type);
 }
 
 /** A robot vacuum: the built-in dock, or one from a pack (the smart home pack's robot with its dock, #470). */
@@ -322,7 +376,7 @@ const ENERGY_FAMILIES: Record<string, EnergyRole> = {
  */
 export function energyRole(type: string): EnergyRole | null {
   if (type === "meter" || type === "inverter" || type === "home_battery" || type === "wallbox") return type;
-  const item = packItem(type);
+  const item = packInfo(type);
   const role = item?.family ? (ENERGY_FAMILIES[item.family] ?? null) : null;
   if (role === "meter" && (item!.tags ?? []).some((t) => /^(gas|water|wasser)$/i.test(t))) return null;
   return role;
@@ -357,25 +411,36 @@ export function packDisplay(type: string): boolean {
   });
 }
 
-/** The pack item of a furniture type: the plan's copy of its recipe, else the installed item (#2). */
+/**
+ * The pack item of a furniture type with its recipe: the plan's copy (#2), else the installed item once its recipe is
+ * there (#44: pack-recipes.ts fetches it). Undefined while neither is: nothing draws an item without its recipe.
+ */
 export function packItem(type: string): PackItem | undefined {
+  if (!isPackType(type)) return undefined;
+  const listed = items.get(type);
+  return planItems.get(type) ?? (listed && hasRecipe(listed) ? listed : undefined);
+}
+
+/** What the library knows of a pack item, with or without its recipe: names, size, mount, kind (#44). */
+export function packInfo(type: string): PackItemInfo | undefined {
   if (!isPackType(type)) return undefined;
   return planItems.get(type) ?? items.get(type);
 }
 
 /** Default size of any furniture type. */
 export function furnitureSize(type: string): [number, number, number] {
-  return (FURNITURE_SIZE as Record<string, [number, number, number]>)[type] ?? packItem(type)?.size ?? [0.6, 0.6, 0.8];
+  return (FURNITURE_SIZE as Record<string, [number, number, number]>)[type] ?? packInfo(type)?.size ?? [0.6, 0.6, 0.8];
 }
 
 /** Whether a type can be linked with entities (power sensor, switch …). */
 export function isElectric(type: string): boolean {
   // a pack item that only lights (a mirror with light, an aquarium) links a light like any lamp
-  return ELECTRIC_FURNITURE.has(type) || !!packItem(type)?.electric || !!packItem(type)?.light;
+  const item = packInfo(type);
+  return ELECTRIC_FURNITURE.has(type) || !!item?.electric || !!item?.light;
 }
 
 /** Name of a pack item in a language (English, then the first name as fallback). */
-export function packItemName(item: PackItem, language: string): string {
+export function packItemName(item: Pick<PackItemInfo, "id" | "name">, language: string): string {
   const lang = language.split("-")[0];
   return item.name[lang] ?? item.name.en ?? Object.values(item.name)[0] ?? item.id;
 }
@@ -388,7 +453,7 @@ export function packName(pack: { id: string; name: string }, _language: string):
 
 /** Height of the bottom of a pack item, a wall light or an LED strip above the floor (0 for other built-in furniture). */
 export function mountBase(floor: Floor, f: Pick<Furniture, "type" | "x" | "z" | "h"> & { mount_y?: number | null; variant?: string | null }): number {
-  const item = packItem(f.type);
+  const item = packInfo(f.type);
   if (f.mount_y != null) return f.mount_y;
   // an access point under the ceiling, a slim water heater on the wall (drawn from 0 and lifted by this)
   const tech = techBase(f, floor.height);

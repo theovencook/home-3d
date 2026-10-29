@@ -4,7 +4,7 @@
 // An exported item is an item file, which imports on another install as it is. Pure logic, no DOM.
 
 import { MAX_PARTS, MAX_PROFILE_POINTS, PART_SHAPES } from "./item-format.ts";
-import type { FurniturePack, PackItem, PackPart } from "./packs.ts";
+import { hasRecipe, type FurniturePack, type PackItem, type PackPart } from "./packs.ts";
 
 /** The pack the backend offers the custom items as. */
 export const CUSTOM_PACK_ID = "household.custom";
@@ -240,7 +240,8 @@ export function customPack(items: CustomItem[]): FurniturePack {
 
 /** The custom items among the packs the backend lists (none while there are none). */
 export function customItems(packs: readonly FurniturePack[] | undefined): CustomItem[] {
-  return packs?.find((p) => p.id === CUSTOM_PACK_ID)?.items ?? [];
+  // the household's own items come whole (#44): they are few, and the item editor works on them
+  return (packs?.find((p) => p.id === CUSTOM_PACK_ID)?.items ?? []).filter(hasRecipe);
 }
 
 /** A lathe's profile as the editor's field shows it: "radius height" pairs separated by commas. */

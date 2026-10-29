@@ -354,10 +354,7 @@ async def test_a_url_install_of_a_bundled_pack_follows_the_import_rule(
 ) -> None:
     """theovencook.core from the packs repository: an older copy leaves the bundled one in place (listed first), a
     copy with at least its release takes its place with its origin, removing that copy brings the bundled one back."""
-    # a few items stand in for the pack: the whole core twice would not fit one websocket message
     core = packs.read_folder(packs.BUNDLED_DIR / "theovencook.core")
-    items = sorted((p, t) for p, t in core.items() if p != packs.PACK_FILE)[:5]
-    core = {packs.PACK_FILE: core[packs.PACK_FILE]} | dict(items)
     meta = json.loads(core["pack.json"])
     url = f"https://github.com/{OWNER}/{REPO}/tree/main/theovencook.core"
 

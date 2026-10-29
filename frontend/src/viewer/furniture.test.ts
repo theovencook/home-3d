@@ -8,7 +8,7 @@ import { hasFixedColors, hasOwnColours, packGlowCentre, packMotionParts, pushAwn
 import { packMotion, type PackItem } from "../packs.ts";
 import { GeoBuffer, LineBuffer, pushPrism } from "./geo.ts";
 
-const PACK: FurniturePack = {
+const PACK: Omit<FurniturePack, "items"> & { items: PackItem[] } = {
   id: "t.cars",
   name: "Cars",
   publisher: "t",

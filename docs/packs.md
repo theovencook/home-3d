@@ -109,6 +109,23 @@ existed, from the packs installed then. A save that sends no copies (an older fr
 plan has. Copies of items no longer in the plan are dropped. `hash` is the SHA-256 of the recipe's JSON with sorted
 keys, so it can be compared with the installed item.
 
+## How the library loads
+
+The browser never gets every recipe at once. Two websocket commands serve the library:
+
+- `home_3d/packs/list` returns every offered pack (bundled, imported, your own items) with its fields, a `hash` of its
+  items and an index of the items: every item field except `parts` and `symbol`, without the defaults the check
+  fills in (`mount: "floor"`, `electric: false` and the like). That is enough to browse, search (readable and IKEA
+  names, tags, UK synonyms), filter and size items. A pack's imported files stay in Home Assistant; only where it came
+  from (`source.origin`) is listed. Your own items come whole, since the item editor works on them.
+- `home_3d/packs/items` with `pack_id` and `items` (a list of item ids; leave it out for all) returns those items with
+  their recipes, plus the pack's `release` and `hash`. Ids the pack does not have are left out.
+
+The editor fetches a recipe when it first draws or places the item (a library card's picture, the hover preview,
+adding the item), gathering the requests of a moment into one per pack, and keeps it while the pack's `hash` stays.
+A view that only shows the plan, such as a wall tablet or a dashboard card, fetches no library at all: placed items
+draw from the plan's recipe copies. The editor and the extensions page load the library when they open.
+
 ## Item files
 
 ```json

@@ -106,3 +106,38 @@ test("an item placed in this session keeps the copy the backend stored, when its
   c.hostDisconnected();
   setPlanRecipes(undefined);
 });
+
+// The library is loaded only where it is used (#44): showing the plan needs none of it
+
+test("showing the plan never loads the library; opening the editor loads it once", async () => {
+  const asked: string[] = [];
+  const host = { addController() {}, removeController() {}, requestUpdate() {}, updateComplete: Promise.resolve(true) };
+  const c = new BuildingController(host);
+  const hass = {
+    user: { is_admin: true },
+    callWS: async (msg: { type: string }) => {
+      asked.push(msg.type);
+      if (msg.type === "home_3d/building/get") return { building: plan([chairAt("a")], { [CHAIR]: chairCopy([0.5, 0.5, 0.9]) }), revision: 3, can_edit: true };
+      if (msg.type === "home_3d/packs/list") return { packs: [] };
+      throw new Error(`unexpected ${msg.type}`);
+    },
+    connection: { subscribeMessage: async () => async () => undefined },
+  } as unknown as HomeAssistant;
+  c.setHass(hass);
+  c.hostConnected();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(asked, ["home_3d/building/get"]);
+  assert.equal(c.packsLoaded, false);
+  // the plan draws from its own copies
+  assert.deepEqual(packItem(CHAIR)?.size, [0.5, 0.5, 0.9]);
+
+  await Promise.all([c.loadLibrary(), c.loadLibrary()]);
+  await c.loadLibrary();
+  assert.deepEqual(asked.filter((t) => t === "home_3d/packs/list").length, 1);
+  assert.equal(c.packsLoaded, true);
+  // after an import the list comes again
+  await c.reloadPacks();
+  assert.deepEqual(asked.filter((t) => t === "home_3d/packs/list").length, 2);
+  c.hostDisconnected();
+  setPlanRecipes(undefined);
+});
