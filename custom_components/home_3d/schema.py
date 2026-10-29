@@ -311,6 +311,8 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("holo", default=False): bool,
         # the power sensor of the circuit it is inside (a circuit monitor's channel): not counted twice (#43)
         vol.Optional("circuit"): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # the energy sensor (kWh) its wire end shows today's use of (#29; left out = found on the device)
+        vol.Optional("energy"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # Energie Pro, inverter: False hides the plant's card over its field
         vol.Optional("plant_card"): bool,
         # Energie Pro, inverter: its plant card moved along the eave / up the slope (m)
@@ -456,6 +458,8 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Optional("holo", default=False): bool,
         # the power sensor of the circuit it is inside (a circuit monitor's channel): not counted twice (#43)
         vol.Optional("circuit"): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # the energy sensor (kWh) its wire end shows today's use of (#29; left out = found on the device)
+        vol.Optional("energy"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # cameras: show the field-of-view wedge on the floor (None = yes)
         vol.Optional("cone", default=None): vol.Any(None, bool),
         # detection pins over the camera (None = shown); off leaves only the wedge turning red
@@ -1011,6 +1015,9 @@ ENERGY_DEFAULTS = {
     "tariff": None,
     "gas": None,
     "water": None,
+    "cheap_rate": None,
+    "cheap_from": None,
+    "cheap_to": None,
 }
 
 # Power sensors in watts: grid positive = import, battery positive = discharging (both can be inverted)
@@ -1028,6 +1035,11 @@ ENERGY_SCHEMA = vol.Schema(
         # Energie Pro: gas and water meters (counters, e.g. m³); the house card shows today's use
         vol.Optional("gas", default=None): _ENTITY,
         vol.Optional("water", default=None): _ENTITY,
+        # the cheap rate (#29): an entity that is "on" while it runs, or a daily window "HH:MM" (over midnight when
+        # the start is after the end); the entity wins
+        vol.Optional("cheap_rate", default=None): _ENTITY,
+        vol.Optional("cheap_from", default=None): _TIME,
+        vol.Optional("cheap_to", default=None): _TIME,
     },
     extra=vol.ALLOW_EXTRA,
 )

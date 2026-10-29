@@ -4,6 +4,7 @@ import pytest
 import voluptuous as vol
 
 from custom_components.home_3d.schema import (
+    ENERGY_SCHEMA,
     FURNITURE_SCHEMA,
     HOLOGRAM_SCHEMA,
     OPENING_SCHEMA,
@@ -446,3 +447,18 @@ def test_plug_keeps_the_circuit_it_hangs_on() -> None:
         PLACEMENT_SCHEMA({**plug, "circuit": 5})
     with pytest.raises(vol.Invalid):
         FURNITURE_SCHEMA({**item, "circuit": "x" * 256})
+
+
+def test_cheap_rate_and_wire_end_energy_sensor() -> None:
+    """The cheap rate is an entity or a daily window; an item keeps the energy sensor of its wire end (#29)."""
+    energy = ENERGY_SCHEMA({"cheap_rate": "binary_sensor.off_peak", "cheap_from": "23:30", "cheap_to": "05:30"})
+    assert (energy["cheap_rate"], energy["cheap_from"], energy["cheap_to"]) == ("binary_sensor.off_peak", "23:30", "05:30")
+    assert ENERGY_SCHEMA({})["cheap_rate"] is None
+    with pytest.raises(vol.Invalid):
+        ENERGY_SCHEMA({"cheap_from": "25:00"})
+    plug = {"entity_id": "switch.kettle", "x": 1, "z": 1, "y": None, "energy": "sensor.kettle_energy"}
+    assert PLACEMENT_SCHEMA(plug)["energy"] == "sensor.kettle_energy"
+    item = {"id": "p1", "type": "washer", "x": 2, "z": 2, "rotation": 0, "w": 0.6, "d": 0.6, "h": 0.85, "variant": None}
+    assert FURNITURE_SCHEMA({**item, "energy": "sensor.washer_energy"})["energy"] == "sensor.washer_energy"
+    with pytest.raises(vol.Invalid):
+        PLACEMENT_SCHEMA({**plug, "energy": 5})

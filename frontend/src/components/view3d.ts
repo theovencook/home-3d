@@ -149,6 +149,8 @@ import type { ClockPos } from "../card-config.ts";
 import { Director, HOLD_DEFAULT, directorAny, doorbellCamera, doorbellEntities, doorbellRang, triggerFired, type DirectorSettings, type Shot } from "../director.ts";
 import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
 import { sunPath, type SunPath } from "../sun-path.ts";
+import { cheapRate } from "../cheap-rate.ts";
+import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 /** "room": no symbols in the house and floor views, in a room only that room's (D477, D595). */
@@ -245,6 +247,10 @@ export class Fp3dView3d extends LitElement {
     _holos: { state: true },
     _rows: { state: true },
     _meters: { state: true },
+    _cheap: { state: true },
+    _wires: { state: true },
+    _wireKwh: { state: true },
+    _wireOpen: { state: true },
     _holoOpen: { state: true },
     _wallboxW: { state: true },
     _plants: { state: true },
@@ -791,6 +797,8 @@ export class Fp3dView3d extends LitElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    clearInterval(this.wireTimer);
+    this.wireKey = "";
     document.removeEventListener("visibilitychange", this.onVisible);
     this.taps.cancel();
     this._ask?.answer(false);
@@ -1517,14 +1525,19 @@ export class Fp3dView3d extends LitElement {
     const room = this._walk ? this.walkRoomPts : null;
     const keep = anchors.map((a) => !this._walk || (!!room && pointInPolygon([a.p[0], a.p[2]], room)));
     const shownCards = cards.filter((_, i) => keep[i]);
-    v.setAnchors(anchors.filter((_, i) => keep[i]));
+    // the energy cables' ends at the consumers (#29): hovered or tapped they tell today's kWh; their anchors follow the cards'
+    const cables = pro && !!(this.flows ?? this._flows) && !this.dimmed;
+    const wires = cables && !this._walk ? wireEnds(hass, consumers).filter((w) => b.floors.some((f) => f.id === w.floorId)) : [];
+    if (JSON.stringify(wires) !== JSON.stringify(this._wires)) this._wires = wires;
+    this.holoCount = shownCards.length;
+    const wireAnchors = wires.map((w) => ({ p: [w.x, b.floors.find((f) => f.id === w.floorId)!.elevation + 0.03, w.z] as [number, number, number], n: [0, 1, 0] as [number, number, number], floorId: w.floorId, size: 1, roof: false, views: "all" as const }));
+    v.setAnchors([...anchors.filter((_, i) => keep[i]), ...wireAnchors]);
     if (JSON.stringify(shownCards) !== JSON.stringify(this._holos)) this._holos = shownCards;
     // the modules live with their production (at night, and without Pro, they rest)
     v.setSolarLevels(powers && !this.dimmed ? fieldLevels(b, powers) : new Map());
     // the energy cables (Energie Pro) and the pool's pipes share the viewer's flow layer
     const mixes = (kind: FlowKind) => sourceMix(kind, summary);
-    const energyFlows =
-      !pro || !(this.flows ?? this._flows) || this.dimmed
+    const energyFlows = !cables
         ? []
         : flowSegments({ building: b, consumers, summary, battery: batteryPlaced ?? null, fieldPower: powers, devicePower: this.devicePowers(hass, b) }).map((f) => ({
             floorId: f.floorId,
@@ -1572,7 +1585,10 @@ export class Fp3dView3d extends LitElement {
     v.setWeather(this.weather && !this.dimmed && hasFeature("weather") ? { ...(weather ?? { rain: 0, snow: 0, fog: 0, cloud: 0, wind: 0 }), sky: this.skyColor(), disc } : null);
     this.watchLightning(!!weather?.lightning);
     this.applyTint();
-    const hasEnergy = summary.grid !== null || summary.solar !== null || summary.battery !== null || summary.tariff !== null;
+    // the cheap rate (#29): the configured entity or daily window; none configured, no badge
+    const cheap = cheapRate(b.energy, hass.states, new Date(this.now()));
+    if (cheap !== this._cheap) this._cheap = cheap;
+    const hasEnergy = summary.grid !== null || summary.solar !== null || summary.battery !== null || summary.tariff !== null || cheap !== null;
     const energy = hasEnergy ? summary : null;
     // a new object would make Lit render again; only changed values do
     if (JSON.stringify(energy) !== JSON.stringify(this._energy)) this._energy = energy;
@@ -1593,6 +1609,7 @@ export class Fp3dView3d extends LitElement {
     // Energie Pro: today's gas and water use on the house card
     const energyPro = hasFeature("energy_pro");
     this.watchMeters(energyPro ? (b.energy.gas ?? null) : null, energyPro ? (b.energy.water ?? null) : null);
+    this.watchWireKwh(wires);
     if (began) this.syncMs = this.syncMs * 0.8 + (performance.now() - began) * 0.2;
   }
 
@@ -1833,6 +1850,70 @@ export class Fp3dView3d extends LitElement {
     this.meterTimer = setInterval(() => void fetch(), 300000);
   }
 
+  /** Today's kWh at the wire ends (#29): fetched every five minutes while the cables show, by power sensor. */
+  private declare _cheap: boolean | null;
+  private declare _wires: WireEnd[];
+  private declare _wireKwh: Map<string, number> | null;
+  /** The wire end tapped open (its key), so a touch screen shows its kWh too. */
+  private declare _wireOpen: string | null;
+  /** How many of the viewer's anchors are glass cards; the wire ends' anchors follow them. */
+  private holoCount = 0;
+  private wireKey = "";
+  private wireTimer?: ReturnType<typeof setInterval>;
+
+  private watchWireKwh(wires: readonly WireEnd[]): void {
+    const key = this.replay ? "" : wires.map((w) => `${w.key}=${w.energy ?? ""}`).join(",");
+    if (key === this.wireKey) return;
+    this.wireKey = key;
+    clearInterval(this.wireTimer);
+    this.wireTimer = undefined;
+    if (!key) {
+      this._wireKwh = null;
+      return;
+    }
+    // the first look always (a page opened in the background shows them once it comes up), then while it is seen
+    const fetch = async (always = false) => {
+      if (!this.hass || (document.hidden && !always)) return;
+      const got = await fetchTodayKwh(this.hass, wires);
+      if (this.wireKey === key && got) this._wireKwh = got;
+    };
+    void fetch(true);
+    this.wireTimer = setInterval(() => void fetch(), 300000);
+  }
+
+  /** A wire end follows its point on the cable (called with the cards' anchors). */
+  private placeWire(index: number, x: number, y: number, on: boolean): void {
+    const el = this.renderRoot.querySelector<HTMLElement>(`.fp3d-wire[data-wire="${index}"]`);
+    if (!el) return;
+    if (el.hidden !== !on) el.hidden = !on;
+    if (on) el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
+  }
+
+  /** The energy cables' ends (#29): a small dot at every consumer; hovered, focused or tapped it shows today's kWh. */
+  private renderWires() {
+    if (!this._wires?.length) return nothing;
+    const hass = this.hass;
+    return this._wires.map((w, i) => {
+      const kwh = this._wireKwh?.get(w.key);
+      const value = kwh === undefined ? "…" : `${formatNumber(hass, kwh, kwh < 10 ? 2 : 1)} kWh`;
+      const name = entityName(hass, w.id);
+      const open = this._wireOpen === w.key;
+      return html`<button
+        class="fp3d-wire ${open ? "fp3d-wire-open" : ""}"
+        data-wire=${i}
+        hidden
+        aria-expanded=${open}
+        aria-label=${`${name}: ${translate(hass, "wire_today")} ${value}`}
+        @click=${(e: Event) => {
+          e.stopPropagation();
+          this._wireOpen = open ? null : w.key;
+        }}
+      >
+        <span class="fp3d-wire-tip" aria-hidden="true">${name}<span>${translate(hass, "wire_today")} <b>${value}</b></span></span>
+      </button>`;
+    });
+  }
+
   /**
    * The pipes of every pool – drawn for everyone; what flows in them (blue, warm after a heating heat pump, brown to
    * the waste drain) a module says (Pool Pro), without one they rest.
@@ -1938,6 +2019,7 @@ export class Fp3dView3d extends LitElement {
   private holoSizes = new Map<number, { w: number; h: number; at: number }>();
 
   private placeHolo(index: number, x: number, y: number, on: boolean, scale: number, facing: boolean): void {
+    if (index >= this.holoCount) return this.placeWire(index - this.holoCount, x, y, on);
     // a new frame starts with the first anchor again
     if (!this.holoBoxes.length || index <= this.holoBoxes[this.holoBoxes.length - 1].i) this.holoBoxes = [];
     const el = this.renderRoot.querySelector<HTMLElement>(`.fp3d-holo[data-holo="${index}"]`);
@@ -2799,7 +2881,8 @@ export class Fp3dView3d extends LitElement {
         if (link.power && power !== null && isLoad(f.type) && !consumerSensors.has(link.power)) {
           consumerSensors.add(link.power);
           const circuit = f.circuit && f.circuit !== "none" ? f.circuit : undefined;
-          consumers.push({ id, powerEntity: link.power, floorId: floor.id, x: f.x, z: f.z, power: Math.max(0, power), wallbox: energyRole(f.type) === "wallbox" || undefined, circuit });
+          const energy = f.energy ?? undefined;
+          consumers.push({ id, powerEntity: link.power, floorId: floor.id, x: f.x, z: f.z, power: Math.max(0, power), wallbox: energyRole(f.type) === "wallbox" || undefined, circuit, ...(energy ? { energy } : {}) });
         }
         // an own threshold for appliances behind a smart plug that draw a few watts on standby (null: 10 W)
         const runW = typeof f.run_w === "number" && f.run_w > 0 ? f.run_w : 10;
@@ -5598,6 +5681,7 @@ export class Fp3dView3d extends LitElement {
     }
     if (e.tariff) items.push({ cls: "tariff", label: t("energy_tariff"), value: `${formatNumber(this.hass, e.tariff.value, 3)} ${e.tariff.unit}`.trim() });
     return html`<div class="fp3d-energy" aria-live="off">
+      ${this._cheap ? html`<div class="fp3d-energy-item fp3d-energy-cheap" role="status"><span>${t("cheap_rate")}</span><b>${t("cheap_rate_now")}</b></div>` : nothing}
       ${this._holoOn ? nothing : items.map((i) => html`<div class="fp3d-energy-item fp3d-energy-${i.cls}"><span>${i.label}</span><b>${i.value}</b></div>`)}
       ${this.flows !== null
         ? nothing
@@ -5688,7 +5772,7 @@ export class Fp3dView3d extends LitElement {
       class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this.controlsRight ? "fp3d-side-right" : ""} ${this._alerts.length ? "fp3d-has-alerts" : ""} ${this._through ? "fp3d-through-on" : ""} ${this._flash ? "fp3d-flash" : ""} ${this.replay ? "fp3d-replay" : ""}"
       style=${style}
     >
-      ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderLegend()}
+      ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderWires()} ${this.clean ? nothing : this.renderLegend()}
       ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderAsk()} ${this.renderSettings()} ${this.renderNote()}
       ${this.clean ? nothing : this.renderProHint()} ${this.renderMenu()} ${this.renderEye()}
       ${this.renderMic()}
@@ -7846,6 +7930,61 @@ export class Fp3dView3d extends LitElement {
       }
       .fp3d-energy-tariff {
         border-left-color: #b98cff;
+      }
+      .fp3d-energy-cheap {
+        border-left-color: #3ccf8e;
+        background: color-mix(in srgb, #3ccf8e 22%, var(--fp3d-chrome));
+      }
+      /* the energy cables' ends (#29): a small dot; hovered, focused or tapped it tells today's kWh */
+      .fp3d-wire {
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 3;
+        width: 14px;
+        height: 14px;
+        padding: 0;
+        border: 2px solid rgba(255, 255, 255, 0.85);
+        border-radius: 50%;
+        background: #7fe8ff;
+        box-shadow: 0 0 6px rgba(127, 232, 255, 0.8);
+        cursor: pointer;
+      }
+      .fp3d-wire[hidden] {
+        display: none;
+      }
+      .fp3d-wire::before {
+        /* a larger target for fingers */
+        content: "";
+        position: absolute;
+        inset: -10px;
+      }
+      .fp3d-wire-tip {
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% + 6px);
+        transform: translateX(-50%);
+        display: none;
+        padding: 5px 9px;
+        border-radius: 9px;
+        background: var(--fp3d-chrome);
+        box-shadow: var(--fp3d-shadow);
+        color: inherit;
+        font: inherit;
+        font-size: 12px;
+        line-height: 1.3;
+        white-space: nowrap;
+        text-align: left;
+        pointer-events: none;
+      }
+      .fp3d-wire-tip span {
+        display: block;
+        opacity: 0.85;
+      }
+      .fp3d-wire:hover .fp3d-wire-tip,
+      .fp3d-wire:focus-visible .fp3d-wire-tip,
+      .fp3d-wire-open .fp3d-wire-tip {
+        display: block;
       }
       /* narrow stages (portrait tablets, phones): the energy values scroll in one row */
       @container fp3d (max-width: 900px) {

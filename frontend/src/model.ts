@@ -290,6 +290,8 @@ export interface Furniture {
   holo?: boolean;
   /** The power sensor of the circuit it hangs on (a circuit monitor's channel): its watts are inside that one's (#43). */
   circuit?: EntityRef;
+  /** The energy sensor (kWh) its wire end shows today's use of (null = found on the device, "none" = none) – #29. */
+  energy?: EntityRef;
   /** Energie Pro, inverter: false hides the plant's card over its field. */
   plant_card?: boolean;
   /** Energie Pro, inverter: its plant card moved from its field's middle along the eave (m, + = right) and up the slope (#335). */
@@ -401,6 +403,8 @@ export interface Placement {
   holo?: boolean;
   /** The power sensor of the circuit it hangs on (a circuit monitor's channel): its watts are inside that one's (#43). */
   circuit?: string | null;
+  /** The energy sensor (kWh) its wire end shows today's use of (null = found on the device, "none" = none) – #29. */
+  energy?: string | null;
   /** Cameras: show the field-of-view wedge on the floor (null = yes). */
   cone?: boolean | null;
   /** Cameras: detection pins (person, car, animal) over the camera (null = yes); false leaves only the wedge turning red (#267). */
@@ -1187,6 +1191,11 @@ export interface EnergySettings {
   /** Energie Pro: gas and water meters (counters such as m³ or litres); the house card shows today's use. */
   gas?: string | null;
   water?: string | null;
+  /** An entity that is "on" while the cheap rate runs (a binary sensor, schedule or input boolean); wins over the window (#29). */
+  cheap_rate?: string | null;
+  /** The cheap rate as a daily window, "HH:MM" from the start up to the end (a start after the end runs over midnight). */
+  cheap_from?: string | null;
+  cheap_to?: string | null;
 }
 
 /** A person and the sensor whose state names the room they are in (ESPresense, Bermuda, …). */
