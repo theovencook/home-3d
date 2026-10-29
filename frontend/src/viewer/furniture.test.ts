@@ -192,6 +192,29 @@ test("a motorised curtain opens to both ends and a roll-down screen rolls up wit
   assert.ok(Math.abs(half[0].y + half[0].h - 0.92) < 1e-9 && Math.abs(half[0].h - 0.425) < 1e-9);
 });
 
+test("a roof window's blind follows its cover and slides up the slope towards its top edge (#24)", () => {
+  assert.equal(packMotion("pack:theovencook.core:roof_window_mk04_blind"), "blind");
+  assert.equal(packMotion("pack:theovencook.core:roof_window_mk04"), null);
+  // the window lies on the slope: low at the front (+z), high at the back; the blind is the fabric loft along it
+  const blind = { shape: "loft" as const, x: 0, z: 0.4, w: 0.9, d: 0.1, y: 0.05, h: 0.9, tx: 0, tz: -0.4, tw: 0.9, td: 0.1, color: "fabric" };
+  const frame = { ...blind, w: 1, color: "body" };
+  // the blind's roller box, in the blind's fabric colour, stays where it is
+  const roller = { shape: "cyl" as const, axis: "x" as const, x: 0, z: -0.45, w: 1, d: 0.1, y: 0.9, h: 0.1, color: "fabric" };
+  const item = { id: "roof_window_mk04_blind", name: { en: "Roof window" }, size: [0.78, 0.9, 0.6], parts: [frame, blind, roller] } as unknown as PackItem;
+  // closed: the blind covers the whole pane; the frame and the roller stay put
+  const shut = packMotionParts(item, "blind", 0);
+  assert.equal(shut.length, 1);
+  assert.deepEqual(shut[0], blind);
+  // half open: it reaches half way down the slope from its top edge, which stays where it is
+  const half = packMotionParts(item, "blind", 0.5)[0];
+  assert.ok(Math.abs(half.y + half.h - 0.95) < 1e-9 && Math.abs(half.h - 0.45) < 1e-9, `${half.y} ${half.h}`);
+  assert.ok(Math.abs(half.z) < 1e-9, `${half.z}`);
+  assert.equal(half.tz, -0.4);
+  // fully open: a sliver at the top edge
+  const open = packMotionParts(item, "blind", 1)[0];
+  assert.ok(open.h < 0.05 && open.z < -0.38, `${open.h} ${open.z}`);
+});
+
 test("pack parts in a colour of their own keep it down to the ground in the light looks (#609)", () => {
   const pumpkin: FurniturePack = {
     id: "t.fun",
