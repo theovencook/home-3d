@@ -91,6 +91,8 @@ export interface PackItem {
   /** Variants of one thing (a table in three lengths) share a family; the variant names the chip, by language. */
   family?: string;
   variant?: Record<string, string>;
+  /** The IKEA product name (such as "KALLAX"): the library finds the item by it as well as by its readable name. */
+  ikea?: string;
 }
 
 export interface FurniturePack {
