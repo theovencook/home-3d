@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Furniture } from "../model.ts";
 import { mountBase, setPacks, type FurniturePack } from "../packs.ts";
-import { newFloor } from "../model.ts";
-import { hasFixedColors, packGlowCentre, packMotionParts, pushFurniture, screenPictureSize, setLightLook } from "./furniture.ts";
+import { FURNITURE_SIZE, FURNITURE_TYPES, isLamp, newFloor } from "../model.ts";
+import { COLOUR_ROLES, itemColourRoles } from "../colour-roles.ts";
+import { hasFixedColors, hasOwnColours, packGlowCentre, packMotionParts, pushAwning, pushFridgeDoors, pushFurniture, pushPackLamp, pushPackMotion, screenPictureSize, setLightLook } from "./furniture.ts";
 import { packMotion, type PackItem } from "../packs.ts";
 import { GeoBuffer, LineBuffer } from "./geo.ts";
 
@@ -379,4 +380,86 @@ test("a loft ladder stands steeply under its hatch: its foot lands well inside t
   const run = foot - (-0.55 + 0.06);
   assert.ok(run > 0.7 && run < 0.9, `foot ${run.toFixed(2)} m out`);
   assert.ok(foot <= 0.55);
+});
+
+/** The vertex colours of an item as "r,g,b" strings, to compare two builds. */
+function vertexColours(f: Furniture): string[] {
+  const buf = new GeoBuffer();
+  pushFurniture(buf, new LineBuffer(), new GeoBuffer(), f);
+  const out: string[] = [];
+  for (let i = 0; i + 2 < buf.c.length; i += 3) out.push(`${buf.c[i].toFixed(4)},${buf.c[i + 1].toFixed(4)},${buf.c[i + 2].toFixed(4)}`);
+  return out;
+}
+
+test("a colour role override recolours only that role's parts, and clearing it goes back to the theme (#12)", () => {
+  const sofa: Furniture = { id: "s", type: "sofa", x: 0, z: 0, rotation: 0, w: 2, d: 0.9, h: 0.85, variant: null, entity: null, power: null };
+  const theme = vertexColours(sofa);
+  const red = vertexColours({ ...sofa, colors: { fabric: "#ff0000" } });
+  assert.equal(red.length, theme.length);
+  const changed = red.filter((c, i) => c !== theme[i]);
+  assert.ok(changed.length > 0, "the fabric turns red");
+  assert.ok(changed.every((c) => { const [r, g, b] = c.split(",").map(Number); return r > g * 2 && r > b * 2; }), "only red vertices changed");
+  // the cushions (another role) and the wooden feet keep the theme colour
+  assert.ok(red.some((c, i) => c === theme[i]), "other roles untouched");
+  assert.deepEqual(vertexColours({ ...sofa, colors: {} }), theme, "an empty override is the theme");
+  assert.deepEqual(vertexColours({ ...sofa, colors: null }), theme, "a cleared override is the theme");
+});
+
+test("pack items and the moving parts drawn apart (curtain, awning, fridge doors) take the item's role colours (#12)", () => {
+  setPacks([PACK]);
+  const wedge: Furniture = { id: "w", type: "pack:t.cars:wedge", x: 0, z: 0, rotation: 0, w: 2, d: 4, h: 1, variant: null, entity: null, power: null };
+  const theme = vertexColours(wedge);
+  const own = vertexColours({ ...wedge, colors: { body: "#00ff00" } });
+  assert.ok(own.some((c, i) => c !== theme[i]), "the pack's body part turns green");
+  assert.ok(own.some((c, i) => c === theme[i]), "its dark wheel keeps the theme");
+  const colours = (draw: (buf: GeoBuffer) => void) => {
+    const buf = new GeoBuffer();
+    draw(buf);
+    return buf.c.join(",");
+  };
+  const curtain = { id: "curtain", name: { en: "Curtain" }, size: [2.4, 0.15, 2.4], parts: [{ shape: "box", x: -0.25, z: 0, w: 0.5, d: 1, y: 0, h: 1, color: "fabric" }] } as unknown as PackItem;
+  const at = { x: 0, z: 0, rotation: 0, w: 2.4, d: 0.15, h: 2.4, variant: null };
+  assert.notEqual(colours((b) => pushPackMotion(b, curtain, "curtain", { ...at, colors: { fabric: "#ff0000" } }, 0, 0)), colours((b) => pushPackMotion(b, curtain, "curtain", at, 0, 0)));
+  const awning = { x: 0, z: 0, rotation: 0, w: 3, d: 2, h: 0.3, variant: null };
+  assert.notEqual(colours((b) => pushAwning(b, { ...awning, colors: { fabric: "#ff0000" } }, 2.5, 1)), colours((b) => pushAwning(b, awning, 2.5, 1)));
+  const lamp = { x: 0, z: 0, rotation: 0, w: 2, d: 4, h: 1 };
+  assert.notEqual(colours((b) => pushPackLamp(b, PACK.items[0], { ...lamp, colors: { body: "#00ff00" } }, 0, 0xffffff)), colours((b) => pushPackLamp(b, PACK.items[0], lamp, 0, 0xffffff)));
+  const fridge = { x: 0, z: 0, rotation: 0, w: 0.9, d: 0.7, h: 1.8 };
+  assert.notEqual(colours((b) => pushFridgeDoors(b, { ...fridge, colors: { body: "#00ff00" } }, 0, 0.5, 0.5)), colours((b) => pushFridgeDoors(b, fridge, 0, 0.5, 0.5)));
+});
+
+test("an item with its own role colours is drawn anew when the look changes; one without is not (#12)", () => {
+  const f: Furniture = { id: "s", type: "sofa", x: 0, z: 0, rotation: 0, w: 2, d: 0.9, h: 0.85, variant: null, entity: null, power: null };
+  assert.equal(hasOwnColours(f), false);
+  assert.equal(hasOwnColours({ ...f, colors: {} }), false);
+  assert.equal(hasOwnColours({ ...f, colors: { wood: "#8b5a2b" } }), true);
+  assert.equal(hasOwnColours({ ...f, type: "waste_bin" }), true);
+  // the light looks draw an own colour in full, the neon look toned down
+  const neon = vertexColours({ ...f, colors: { fabric: "#3060c0" } });
+  setLightLook(true);
+  const light = vertexColours({ ...f, colors: { fabric: "#3060c0" } });
+  setLightLook(false);
+  assert.notDeepEqual(neon, light);
+});
+
+test("every built-in item lists exactly the roles its model is drawn in, moving parts included (#12)", () => {
+  setPacks([]);
+  const wrong: string[] = [];
+  for (const type of FURNITURE_TYPES) {
+    if (isLamp(type)) continue;
+    const [w, d, h] = FURNITURE_SIZE[type];
+    const f: Furniture = { id: "f", type, x: 0, z: 0, rotation: 0, w, d, h, variant: null, entity: null, power: null };
+    const draw = (g: Furniture) => {
+      const buf = new GeoBuffer();
+      pushFurniture(buf, new LineBuffer(), new GeoBuffer(), g);
+      if (type === "awning") pushAwning(buf, g, 2.5, 1);
+      if (type === "fridge_smart") pushFridgeDoors(buf, g, 0, 0.5, 0.5);
+      return buf.c.join(",");
+    };
+    const theme = draw(f);
+    const used = COLOUR_ROLES.filter((role) => draw({ ...f, colors: { [role]: "#ff00ff" } }) !== theme);
+    const listed = itemColourRoles(type);
+    if (used.join() !== listed.join()) wrong.push(`${type}: [${used.map((r) => `"${r}"`).join(", ")}]`);
+  }
+  assert.deepEqual(wrong, [], "update BUILTIN_ROLES in colour-roles.ts");
 });

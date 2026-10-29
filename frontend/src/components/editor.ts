@@ -151,6 +151,7 @@ import { load3d } from "../load3d.ts";
 import "./library.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
+import { COLOUR_PRESETS, itemColourRoles, roleColour, setRoleColour, type ColourRole } from "../colour-roles.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, type FurniturePack } from "../packs.ts";
@@ -10972,6 +10973,7 @@ export class Fp3dEditor extends LitElement {
               ${f.mount_y != null ? html`<button class="fp3d-btn fp3d-field-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ mount_y: null })}>${this.t("height_auto")}</button>` : nothing}`
           : nothing}
       </div>
+      ${this.renderColourRoles(f)}
       ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
       ${f.type === "stairs_u" ? html`<p class="fp3d-sub">${this.t("stairs_u_hint")}</p>` : nothing}
       ${f.type === "stairwell"
@@ -11723,6 +11725,37 @@ export class Fp3dEditor extends LitElement {
                       : nothing}`
                 : nothing}
               <p class="fp3d-sub fp3d-wide">${this.t("furn_state_hint")}</p>`;
+  }
+
+  /**
+   * Colour per role (#12): each role the item is drawn in, with a colour picker and the named presets. A role without
+   * a colour of its own follows the look; "From the look" clears it. Only editors change it.
+   */
+  private renderColourRoles(f: Furniture) {
+    const roles = itemColourRoles(f.type);
+    if (!roles.length) return nothing;
+    const admin = this.isEditor;
+    const set = (role: ColourRole, hex: string | null) => this.updateFurniture({ colors: setRoleColour(f.colors, role, hex) });
+    return html`<div class="fp3d-form">
+      <h4 class="fp3d-lib-head fp3d-wide">${this.t("colours")}</h4>
+      ${roles.map((role) => {
+        const own = roleColour(f.colors, role);
+        const preset = own ? COLOUR_PRESETS.find((p) => p.hex === own) : undefined;
+        return html`<div class="fp3d-field fp3d-colour-role">
+          <span>${this.t(`colour_role_${role}` as I18nKey)}</span>
+          <span class="fp3d-colour-pick">
+            <input type="color" class=${own ? "" : "fp3d-colour-unset"} aria-label=${this.t(`colour_role_${role}` as I18nKey)} .value=${own ?? "#808080"} ?disabled=${!admin}
+              @change=${(e: Event) => set(role, (e.target as HTMLInputElement).value)} />
+            <select ?disabled=${!admin} @change=${(e: Event) => set(role, (e.target as HTMLSelectElement).value || null)}>
+              <option value="" ?selected=${!own}>${this.t("colour_theme")}</option>
+              ${own && !preset ? html`<option value=${own} selected>${this.t("colour_own")}</option>` : nothing}
+              ${COLOUR_PRESETS.map((p) => html`<option value=${p.hex} ?selected=${p === preset}>${this.t(`colour_preset_${p.id}` as I18nKey)}</option>`)}
+            </select>
+          </span>
+        </div>`;
+      })}
+      <p class="fp3d-sub fp3d-wide">${this.t("colours_hint")}</p>
+    </div>`;
   }
 
   /** Awning: its fall, the valance, a position sensor, its run time and the other direction (with the cover above). */

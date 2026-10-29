@@ -56,7 +56,8 @@ import { buildFloorGeometry, SLAB, stairHoleParts, type FloorGeometry } from "./
 import { OrbitControls, type OrbitView } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { CameraProjections, PROJECTION_LAYER, type ProjectionSurface, type ProjectorPose } from "./projection.ts";
-import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, setLightLook, hasFixedColors } from "./furniture.ts";
+import type { RoleColours } from "../colour-roles.ts";
+import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, setLightLook, hasOwnColours } from "./furniture.ts";
 import { pushPipeTube, type PipeTube } from "./pipes.ts";
 // the walk through the house at eye height (lives with the viewer it drives)
 export { FloorMap, WalkCamera, type WalkState } from "./walk.ts";
@@ -160,6 +161,8 @@ export interface DeviceMarker {
   /** Lamp: turn around y (degrees), size (w, d, h) and height of what it stands on. */
   /** A mirrored lamp furniture (its pack model is drawn mirrored). */
   mirror?: boolean;
+  /** A pack lamp's own role colours (#12). */
+  colors?: RoleColours | null;
   rotation?: number;
   size?: [number, number, number];
   base?: number;
@@ -1427,10 +1430,10 @@ export class FloorplanViewer {
     if (theme === this.theme) return;
     this.theme = theme;
     this.themeUniform.value = themeIndex(theme);
-    // waste bins and pack items in colours of their own keep them in the light looks: drawn anew in full colour (#609)
+    // waste bins, pack items and items in colours of their own (#12) keep them in the light looks: drawn anew in full colour (#609)
     const light = theme !== "neon";
     setLightLook(light);
-    if (this.building?.floors.some((f) => f.furniture.some((m) => m.type === "waste_bin" || hasFixedColors(m.type)))) this.rebuild();
+    if (this.building?.floors.some((f) => f.furniture.some(hasOwnColours))) this.rebuild();
     const blending = lineBlending(theme);
     const lineMats = [...this.floors.map((f) => f.materials.lines), ...(this.roof ? [this.roof.lines] : [])];
     for (const m of lineMats) {
@@ -3137,7 +3140,7 @@ export class FloorplanViewer {
     const shapeSig =
       this.wallMode +
       (this.lowQuality ? "L" : this.highQuality ? "H" : "M") +
-      lamps.map((d) => `${d.id},${d.lamp ?? d.model},${d.variant},${d.x},${d.z},${d.y},${d.rotation ?? 0},${d.roll ?? 0},${d.upright ? 1 : 0},${d.rise ?? 0},${d.size?.join("/")},${d.base ?? 0},${d.pack ?? ""},${d.mirror ? 1 : 0}`).join(";");
+      lamps.map((d) => `${d.id},${d.lamp ?? d.model},${d.variant},${d.x},${d.z},${d.y},${d.rotation ?? 0},${d.roll ?? 0},${d.upright ? 1 : 0},${d.rise ?? 0},${d.size?.join("/")},${d.base ?? 0},${d.pack ?? ""},${d.mirror ? 1 : 0}${d.colors ? JSON.stringify(d.colors) + this.theme : ""}`).join(";");
     const glows = lamps.map((d) => this.glowOf(d));
     const colorSig = lamps.map((d, i) => `${flash(d.id)},${glows[i] ? `${glows[i]!.level.toFixed(3)},${glows[i]!.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`).join(";");
     if (shapeSig !== fv.lampShapeSig || !fv.lampMesh.geometry.getAttribute("position")) {
@@ -3159,7 +3162,7 @@ export class FloorplanViewer {
         if (d.model) {
           if (!d.ownLook) pushCameraModel(buf, d.model, d.x, d.model === "camera_ceiling" ? H : d.y, d.z, d.rotation ?? 0);
         }
-        else if (packed) pushPackLamp(buf, packed, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w: pw, d: pd, h: ph, mirror: d.mirror }, d.base ?? 0, SHADE_SENTINEL);
+        else if (packed) pushPackLamp(buf, packed, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w: pw, d: pd, h: ph, mirror: d.mirror, colors: d.colors }, d.base ?? 0, SHADE_SENTINEL);
         // a ceiling fan's blades turn in a group of their own (syncFans)
         else pushLampModel(buf, { ...d, lamp: d.lamp! }, d.top ?? H, SHADE_SENTINEL, d.lamp !== "fan");
         // keyed by the furniture: two lamps may share one light (one switch for two strips)

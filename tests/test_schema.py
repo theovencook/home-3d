@@ -150,6 +150,18 @@ def test_household_fields_are_kept_and_checked() -> None:
             FURNITURE_SCHEMA({**base, **bad})
 
 
+def test_colour_role_overrides_are_kept_and_checked() -> None:
+    """An item keeps its own colour per role (#12); an unknown role or a colour that is not #rrggbb is refused."""
+    base = {"id": "s1", "type": "sofa", "x": 1, "z": 1, "rotation": 0, "w": 2, "d": 0.9, "h": 0.85, "variant": None}
+    out = FURNITURE_SCHEMA({**base, "colors": {"fabric": "#8a8c8f", "wood": "#5c4033"}})
+    assert out["colors"] == {"fabric": "#8a8c8f", "wood": "#5c4033"}
+    assert FURNITURE_SCHEMA({**base, "colors": None})["colors"] is None
+    assert "colors" not in FURNITURE_SCHEMA(base)
+    for bad in ({"chrome": "#ffffff"}, {"wood": "brown"}, {"wood": "#12345"}, "red"):
+        with pytest.raises(vol.Invalid):
+            FURNITURE_SCHEMA({**base, "colors": bad})
+
+
 def test_household_tag_settings_are_optional() -> None:
     """The bins' tag settings: missing in old plans, kept when set, a day count out of range is refused."""
     base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
