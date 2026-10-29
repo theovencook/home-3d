@@ -106,7 +106,7 @@ import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from 
 import { furnitureName } from "../furniture-names.ts";
 import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
-import { getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion } from "../packs.ts";
+import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
@@ -1200,7 +1200,7 @@ export class Fp3dView3d extends LitElement {
     }
     // the battery cable ends at the home battery in the plan (older plans: at the placed battery sensor)
     const batteryPlaced =
-      b.floors.flatMap((f) => f.furniture.filter((m) => m.type === "home_battery").map((m) => ({ floorId: f.id, x: m.x, z: m.z })))[0] ??
+      b.floors.flatMap((f) => f.furniture.filter((m) => energyRole(m.type) === "home_battery").map((m) => ({ floorId: f.id, x: m.x, z: m.z })))[0] ??
       (b.energy.battery ? b.floors.flatMap((f) => f.placements.filter((p) => p.entity_id === b.energy.battery).map((p) => ({ floorId: f.id, x: p.x, z: p.z })))[0] : null);
     const powers = pro ? fieldPowers(hass, b, summary.solar) : null;
     // the holograms: the main one hangs over the chosen (else the biggest) solar field, moved as set up, and
@@ -1290,7 +1290,7 @@ export class Fp3dView3d extends LitElement {
     if (pro && summary.solar !== null) {
       const seen = new Set<string>();
       for (const floor of b.floors) {
-        for (const inv of floor.furniture.filter((m) => m.type === "inverter")) {
+        for (const inv of floor.furniture.filter((m) => energyRole(m.type) === "inverter")) {
           // plant_card: false hides a plant's card (the editor's switch)
           if (inv.plant_card === false || seen.has(inv.id)) continue;
           seen.add(inv.id);
@@ -1301,7 +1301,7 @@ export class Fp3dView3d extends LitElement {
           const anchor = field ? anchorOn(field, inv.plant_right ?? 0, inv.plant_up ?? 0, holo.size * 0.85) : null;
           if (!anchor || !sensor) continue;
           // its battery: the nearest one on the same floor
-          const bat = floor.furniture.filter((m) => m.type === "home_battery").sort((p, q) => Math.hypot(p.x - inv.x, p.z - inv.z) - Math.hypot(q.x - inv.x, q.z - inv.z))[0];
+          const bat = floor.furniture.filter((m) => energyRole(m.type) === "home_battery").sort((p, q) => Math.hypot(p.x - inv.x, p.z - inv.z) - Math.hypot(q.x - inv.x, q.z - inv.z))[0];
           const socRaw = bat?.soc && bat.soc !== "none" ? Number(hass.states[bat.soc]?.state) : NaN;
           anchors.push(anchor);
           cards.push({
@@ -1565,7 +1565,7 @@ export class Fp3dView3d extends LitElement {
     const wallboxW = consumers.some((c) => c.wallbox) ? consumers.filter((c) => c.wallbox).reduce((s, c) => s + c.power, 0) : null;
     // several plants (a big roof plant and a balcony plant): each inverter's own power
     const plants = b.floors
-      .flatMap((f) => f.furniture.filter((m) => m.type === "inverter"))
+      .flatMap((f) => f.furniture.filter((m) => energyRole(m.type) === "inverter"))
       .map((m) => {
         const sensor = this.furnitureLinks?.get(m.id)?.power;
         const w = sensor ? readPower(hass.states[sensor]) : null;
@@ -1695,17 +1695,18 @@ export class Fp3dView3d extends LitElement {
     </div>`;
   }
 
-  /** The inverters' and batteries' own power (W, a battery positive = discharging) by furniture id. */
+  /** The inverters', batteries' and solar panels' own power (W, a battery positive = discharging) by furniture id. */
   private devicePowers(hass: HomeAssistant, b: Building): Map<string, number> {
     const out = new Map<string, number>();
     for (const floor of b.floors) {
       for (const f of floor.furniture) {
-        if (f.type !== "inverter" && f.type !== "home_battery") continue;
+        const role = energyRole(f.type);
+        if (role !== "inverter" && role !== "home_battery" && role !== "solar") continue;
         const sensor = this.furnitureLinks?.get(f.id)?.power;
         // a battery with a separate charging sensor: the power sensor is its discharging, the charging is taken
         // off and the signs do not matter; a single signed sensor is inverted on request
-        const charge = f.type === "home_battery" && f.charge && f.charge !== "none" ? readPower(hass.states[f.charge]) : null;
-        let p = sensor ? readPower(hass.states[sensor], f.type === "home_battery" && b.energy.battery_invert && charge === null) : null;
+        const charge = energyRole(f.type) === "home_battery" && f.charge && f.charge !== "none" ? readPower(hass.states[f.charge]) : null;
+        let p = sensor ? readPower(hass.states[sensor], energyRole(f.type) === "home_battery" && b.energy.battery_invert && charge === null) : null;
         if (p !== null && charge !== null) p = Math.max(0, p) - Math.max(0, charge);
         else if (p === null && charge !== null) p = -Math.max(0, charge);
         if (p !== null) out.set(f.id, p);
@@ -2761,7 +2762,7 @@ export class Fp3dView3d extends LitElement {
         const car = autoPro ? carState(hass, f) : null;
         // Haushalt Pro: a washer with only its time left still gets its pin
         const appliance = f.type === "washer" || f.type === "dryer" || f.type === "dishwasher";
-        const extraRef = f.type === "home_battery" ? f.soc : f.type === "wallbox" ? f.status : f.type === "parking" && car ? (f.car?.device ?? car.entities.soc) : household && appliance ? (f.remaining ?? null) : null;
+        const extraRef = energyRole(f.type) === "home_battery" ? f.soc : energyRole(f.type) === "wallbox" ? f.status : f.type === "parking" && car ? (f.car?.device ?? car.entities.soc) : household && appliance ? (f.remaining ?? null) : null;
         const extra = extraRef && extraRef !== "none" ? extraRef : null;
         // a sensor whose value stands at the symbol (a boiler's water temperature, D619): a pin even without a link
         const extraSensor = f.extra && f.extra !== "none" && hass.states[f.extra] ? f.extra : null;
@@ -2770,19 +2771,19 @@ export class Fp3dView3d extends LitElement {
         const link = linked ?? (extra || extraSensor ? { entity: null, power: null } : undefined);
         if (!link) continue;
         // a battery goes by its charge first: its power sensor is often placed on its own as well
-        const id = (f.type === "home_battery" ? (extra ?? link.entity ?? link.power) : (link.entity ?? link.power ?? extra ?? extraSensor))!;
+        const id = (energyRole(f.type) === "home_battery" ? (extra ?? link.entity ?? link.power) : (link.entity ?? link.power ?? extra ?? extraSensor))!;
         targets.set(f.id, id);
         const st = link.entity ? hass.states[link.entity] : undefined;
         // the meter's sensor is the grid (+ = import), the battery's can point the other way as well
-        const invert = f.type === "meter" ? b.energy.grid_invert && !f.export : f.type === "home_battery" ? b.energy.battery_invert && !f.charge : false;
+        const invert = energyRole(f.type) === "meter" ? b.energy.grid_invert && !f.export : energyRole(f.type) === "home_battery" ? b.energy.battery_invert && !f.charge : false;
         let power = link.power ? readPower(hass.states[link.power], invert) : null;
         // separate second sensors: a battery's charging, a meter's export (then the first one is unsigned)
-        const second = (f.type === "home_battery" && f.charge && f.charge !== "none" ? f.charge : f.type === "meter" && f.export && f.export !== "none" ? f.export : null) as string | null;
+        const second = (energyRole(f.type) === "home_battery" && f.charge && f.charge !== "none" ? f.charge : energyRole(f.type) === "meter" && f.export && f.export !== "none" ? f.export : null) as string | null;
         const secondW = second ? readPower(hass.states[second]) : null;
         if (secondW !== null) power = Math.max(0, power ?? 0) - Math.max(0, secondW);
         if (link.power && power !== null && !consumerSensors.has(link.power)) {
           consumerSensors.add(link.power);
-          consumers.push({ id, powerEntity: link.power, floorId: floor.id, x: f.x, z: f.z, power: Math.max(0, power), wallbox: f.type === "wallbox" || undefined });
+          consumers.push({ id, powerEntity: link.power, floorId: floor.id, x: f.x, z: f.z, power: Math.max(0, power), wallbox: energyRole(f.type) === "wallbox" || undefined });
         }
         // an own threshold for appliances behind a smart plug that draw a few watts on standby (null: 10 W)
         const runW = typeof f.run_w === "number" && f.run_w > 0 ? f.run_w : 10;
@@ -2903,11 +2904,11 @@ export class Fp3dView3d extends LitElement {
           text: withExtra(hhText ??
             (car
               ? this.carText(hass, car, !!st && !PRESENT_STATES.has(st.state.toLowerCase()))
-              : f.type === "home_battery"
+              : energyRole(f.type) === "home_battery"
               ? this.batteryText(hass, extra, power)
-              : f.type === "wallbox"
+              : energyRole(f.type) === "wallbox"
                 ? this.wallboxText(hass, extra, power)
-                : f.type === "meter"
+                : energyRole(f.type) === "meter"
                   ? this.meterText(hass, power)
                   : boiler
                     ? boiler.text
@@ -2924,7 +2925,7 @@ export class Fp3dView3d extends LitElement {
           // its pin grabs the item when furnishing
           furnitureId: f.id,
           // inverter, battery, wallbox: their own text (watts, charge, status) is always worth a pin
-          energyDevice: f.type === "inverter" || f.type === "home_battery" || f.type === "wallbox" || f.type === "meter" || !!car || !!extraSensor,
+          energyDevice: energyRole(f.type) === "inverter" || energyRole(f.type) === "home_battery" || energyRole(f.type) === "wallbox" || energyRole(f.type) === "meter" || !!car || !!extraSensor,
           ...(standby ? { standby } : {}),
           // Auto Pro: the car's charge and range are the point of the pin – shown in full by default
           show: f.marker ?? (car || hhText ? "always" : undefined),

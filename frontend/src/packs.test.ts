@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isLamp, newFloor, setTerrain, type Building, type Furniture } from "./model.ts";
-import { isCooktopZone, isPackCooktop, isPackSensor, furnitureSize, isElectric, mountBase, packAmbilight, packDisplay, packItem, packItemName, packName, packOrigin, packsVersion, packType, setPacks, withPackItem, DRAFT_TYPE, type FurniturePack } from "./packs.ts";
+import { isCooktopZone, isPackCooktop, isPackHeater, isPackSensor, furnitureSize, isElectric, mountBase, packAmbilight, packDisplay, packItem, packItemName, packName, packOrigin, packsVersion, packType, setPacks, withPackItem, DRAFT_TYPE, type FurniturePack } from "./packs.ts";
 
 const pack: FurniturePack = {
   id: "demo.pack",
@@ -169,4 +169,10 @@ test("a pack installed from GitHub shows where it came from (#25); an imported o
   assert.deepEqual(packOrigin({ ...pack, source: { origin: root } }), { label: "theovencook/one-pack", url: root.url });
   assert.equal(packOrigin(pack), null);
   assert.equal(packOrigin({ ...pack, source: { files: {} } }), null);
+});
+
+test("a core hot-water cylinder takes a water_heater entity like the utility pack's tank (#22)", () => {
+  assert.equal(isPackHeater("pack:theovencook.core:hot_water_cylinder_200"), true);
+  assert.equal(isPackHeater("pack:theovencook.core:hot_water_cylinder"), true);
+  assert.equal(isPackHeater("pack:theovencook.core:heat_pump_outdoor_unit"), false);
 });

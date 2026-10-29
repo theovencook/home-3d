@@ -1,9 +1,9 @@
 // Fun pack "pets": cats, dogs (five breeds, small to large) and rabbits that live in the 3D house. Each walks through
 // the doors from room to room (the walk's floor map finds the way) and rests at its own kind of places only: a cat in
-// its bed or cave, by the scratching tree, or – walking up from the front and jumping – on a real sofa, armchair or
-// bed; a dog in its bed or basket, or on the floor in front of the sofa; both visit the bowls. Nothing else (an
-// aquarium, a cage) is theirs. At night they sleep curled up. They are drawn only while they move; resting costs
-// nothing. three.js comes from the 3D bundle (passed in).
+// its bed or cave, up on its cat tree or in its bed on a wall shelf, or – walking up from the front and jumping – on a
+// real sofa, armchair or bed; a dog in its bed or basket, or on the floor in front of the sofa; both visit the bowls.
+// Nothing else (an aquarium, a cage) is theirs. At night they sleep curled up. They are drawn only while they move;
+// resting costs nothing. three.js comes from the 3D bundle (passed in).
 
 import type * as THREE from "three";
 import type { Building, Floor, Furniture, Pet, Vec2 } from "../model.ts";
@@ -298,9 +298,13 @@ interface Spot {
   visit?: boolean;
 }
 
-const CAT_HOME = /^(cat_bed|cat_cave|cat_tree)$/;
+// a pack's own sizes and versions count too: cat_bed_donut_large, cat_tree_tall, pet_bowls_raised (#23)
+const CAT_BED = /^cat_(bed|cave)(_|$)/;
+const CAT_TREE = /^cat_tree(_|$)/;
+/** A cat bed on a shelf on the wall: up there, jumped onto from the floor in front. */
+const CAT_SHELF = /^cat_shelf_bed(_|$)/;
 const DOG_HOME = /^(dog_bed|dog_basket|dog_house)$/;
-const BOWLS = /^(bowls|pet_feeder|water_fountain)$/;
+const BOWLS = /^(bowls|pet_bowls?|pet_feeder|water_fountain)(_|$)/;
 
 /** A rug on the floor: its rectangle (centre, half sizes, turn) and its top. */
 interface Rug {
@@ -358,7 +362,7 @@ function pointIn(p: Vec2, poly: readonly Vec2[]): boolean {
 }
 
 /** Favourite places on a floor, only the ones of its kind (an aquarium or a cage never is one). */
-function spotsFor(floor: Floor, kind: Pet["kind"], map: FloorMap): Spot[] {
+function spotsFor(floor: Floor, kind: Pet["kind"], map: FloorMap, base: (floor: Floor, f: Furniture) => number): Spot[] {
   const out: Spot[] = [];
   const along = (f: Furniture, k: number): Vec2 => {
     const a = (f.rotation * Math.PI) / 180;
@@ -371,11 +375,14 @@ function spotsFor(floor: Floor, kind: Pet["kind"], map: FloorMap): Spot[] {
   };
   for (const f of floor.furniture) {
     const t = itemOf(f.type);
-    const own = kind === "cat" ? CAT_HOME.test(t) : kind === "dog" ? DOG_HOME.test(t) : false;
-    if (own) {
-      // in its bed or cave; by the scratching tree; in front of the dog house
-      const p = t === "cat_tree" || t === "dog_house" ? along(f, f.d / 2 + 0.3) : ([f.x, f.z] as Vec2);
-      out.push({ p, y: t === "cat_tree" || t === "dog_house" ? 0 : 0.06, approach: null, face: facing(f), sleep: true });
+    if (kind === "cat" && (CAT_TREE.test(t) || CAT_SHELF.test(t))) {
+      // up on the top of the cat tree, or in the bed on its shelf: jumped onto from the floor in front
+      const y = base(floor, f) + (CAT_TREE.test(t) ? Math.max(0.06, f.h - 0.05) : f.h * 0.4);
+      out.push({ p: [f.x, f.z], y, approach: along(f, f.d / 2 + 0.3), face: facing(f), sleep: true });
+    } else if (kind === "cat" ? CAT_BED.test(t) : kind === "dog" ? DOG_HOME.test(t) : false) {
+      // in its bed or cave; in front of the dog house
+      const p = t === "dog_house" ? along(f, f.d / 2 + 0.3) : ([f.x, f.z] as Vec2);
+      out.push({ p, y: t === "dog_house" ? 0 : 0.06, approach: null, face: facing(f), sleep: true });
     } else if (BOWLS.test(t) && kind !== "rabbit") out.push({ p: along(f, f.d / 2 + 0.25), y: 0, approach: null, face: facing(f) + Math.PI, sleep: false, visit: true });
     else if ((SOFA.test(t) || BED.test(t)) && !t.includes("bunk") && !t.startsWith("dog") && !t.startsWith("cat")) {
       const bed = BED.test(t) || t === "sofa_bed";
@@ -596,7 +603,7 @@ export function startPets(ctx: PetsContext): PetsController {
     a.map = info.map;
     a.rooms = info.rooms;
     let spots = info.spots.get(a.pet.kind);
-    if (!spots) info.spots.set(a.pet.kind, (spots = spotsFor(info.floor, a.pet.kind, info.map)));
+    if (!spots) info.spots.set(a.pet.kind, (spots = spotsFor(info.floor, a.pet.kind, info.map, ctx.base)));
     a.spots = spots;
     viewer.floorMap.get(id)?.group.add(a.model.root);
   };
