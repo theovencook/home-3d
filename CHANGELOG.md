@@ -12,6 +12,9 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - **Editors list:** ⚙ Settings → 👥 Editors (admins only) picks who may change the plan; by default every admin.
   A non-admin on the list gets the Editor and Extensions tabs; everyone else views and controls devices only, and
   Home Assistant refuses their saves. The list always keeps at least one admin.
+- **Static pets:** in Extensions → Fun a pet can be switched from roaming to staying at its spot, sitting, lying
+  or curled up, facing a chosen way. Put on a sofa, bed or desk it lies on top. Drag its paw in the plan editor to
+  move it; roaming pets behave as before.
 
 ## 2.0.7
 

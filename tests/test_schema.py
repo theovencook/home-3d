@@ -339,6 +339,24 @@ def test_item_keeps_when_it_shows() -> None:
         FURNITURE_SCHEMA({**tree, "show_when": {"intervals": [{"from": "01-01", "to": "01-02"}] * 25}})
 
 
+def test_pets_roam_unless_set_static() -> None:
+    """Static pets (#17): a pet roams unless switched to static; a static one keeps its spot, turn and pose."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    roaming = SETTINGS_SCHEMA({**base, "pets": {"list": [{"id": "p1", "kind": "cat"}]}})["pets"]["list"][0]
+    assert roaming["static"] is False
+    assert roaming["pose"] is None
+    assert roaming["x"] is None and roaming["z"] is None and roaming["rotation"] is None
+    pet = {"id": "p2", "kind": "dog", "static": True, "pose": "curl", "x": 2.5, "z": -1, "rotation": 90}
+    still = SETTINGS_SCHEMA({**base, "pets": {"list": [pet]}})["pets"]["list"][0]
+    assert still["static"] is True
+    assert still["pose"] == "curl"
+    assert (still["x"], still["z"], still["rotation"]) == (2.5, -1.0, 90.0)
+    for pose in ("sit", "lie", "curl"):
+        SETTINGS_SCHEMA({**base, "pets": {"list": [{**pet, "pose": pose}]}})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "pets": {"list": [{**pet, "pose": "fly"}]}})
+
+
 def test_item_actions() -> None:
     """Own tap, hold and double-tap actions of a placed device or a furniture item (#6)."""
     from custom_components.home_3d.schema import PLACEMENT_SCHEMA
