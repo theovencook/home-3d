@@ -307,6 +307,8 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("export", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # Energie Pro: a hologram card over the device (power now, today's kWh, day curve)
         vol.Optional("holo", default=False): bool,
+        # the power sensor of the circuit it is inside (a circuit monitor's channel): not counted twice (#43)
+        vol.Optional("circuit"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # Energie Pro, inverter: False hides the plant's card over its field
         vol.Optional("plant_card"): bool,
         # Energie Pro, inverter: its plant card moved along the eave / up the slope (m)
@@ -450,6 +452,8 @@ PLACEMENT_SCHEMA = vol.Schema(
         ),
         # Energie Pro: a glass card over the placed device (a smart plug)
         vol.Optional("holo", default=False): bool,
+        # the power sensor of the circuit it is inside (a circuit monitor's channel): not counted twice (#43)
+        vol.Optional("circuit"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # cameras: show the field-of-view wedge on the floor (None = yes)
         vol.Optional("cone", default=None): vol.Any(None, bool),
         # detection pins over the camera (None = shown); off leaves only the wedge turning red

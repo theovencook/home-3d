@@ -39,7 +39,7 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
 import { alertColor, alertEntities, alertSources, alertText, findAlerts, isOutage, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg, mdiIcon } from "../icons.ts";
 import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
-import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, fieldLevels, fieldPowers, findConsumers, flowDots, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type FlowKind, type StatRow } from "../energy.ts";
+import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, fieldLevels, fieldPowers, findConsumers, flowDots, isLoad, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type FlowKind, type StatRow } from "../energy.ts";
 import { fieldFace, fieldSize, roofFaces, roofWindowRoom } from "../solar.ts";
 import { type CustomButton, type EntityRef, DEFAULT_HOLOGRAM, lockAlong, type PoolPipe, type RoofWindow, type SolarField, uid } from "../model.ts";
 
@@ -1116,12 +1116,14 @@ export class Fp3dView3d extends LitElement {
 
     // what the modules add to the stage (Pool Pro: the water, the water in the pipes, the glow of the technical room)
     this.scene = anyModule() ? moduleScene(this.sceneHost(hass, b)) : [];
-    const consumers = findConsumers(hass, b);
+    // the energy devices' own sensors: no consumers (#43)
+    const devices = deviceSensors(b, (f) => this.furnitureLinks?.get(f.id)?.power ?? null);
+    const consumers = findConsumers(hass, b, devices);
     const deviceMarkers = buildMarkers(hass, b);
     const furniture = this.furnitureMarkers(hass, b, new Set(deviceMarkers.map((m) => m.id)), new Set(consumers.map((c) => c.powerEntity)));
     consumers.push(...furniture.consumers);
     this.lastConsumers = consumers;
-    const summary = energySummary(hass, b, consumers, deviceSensors(b, (f) => this.furnitureLinks?.get(f.id)?.power ?? null));
+    const summary = energySummary(hass, b, consumers, devices);
     // a placed power sensor shows its value as state text already, so only devices get a watt badge
     const byDevice = new Map(consumers.filter((c) => c.id !== c.powerEntity).map((c) => [c.id, c.power]));
     this.confirmSet = confirmEntities(hass, b.floors);
@@ -2793,9 +2795,11 @@ export class Fp3dView3d extends LitElement {
         const second = (energyRole(f.type) === "home_battery" && f.charge && f.charge !== "none" ? f.charge : energyRole(f.type) === "meter" && f.export && f.export !== "none" ? f.export : null) as string | null;
         const secondW = second ? readPower(hass.states[second]) : null;
         if (secondW !== null) power = Math.max(0, power ?? 0) - Math.max(0, secondW);
-        if (link.power && power !== null && !consumerSensors.has(link.power)) {
+        // the meter, inverters, panels and batteries have cables of their own: their watts are no load (#43)
+        if (link.power && power !== null && isLoad(f.type) && !consumerSensors.has(link.power)) {
           consumerSensors.add(link.power);
-          consumers.push({ id, powerEntity: link.power, floorId: floor.id, x: f.x, z: f.z, power: Math.max(0, power), wallbox: energyRole(f.type) === "wallbox" || undefined });
+          const circuit = f.circuit && f.circuit !== "none" ? f.circuit : undefined;
+          consumers.push({ id, powerEntity: link.power, floorId: floor.id, x: f.x, z: f.z, power: Math.max(0, power), wallbox: energyRole(f.type) === "wallbox" || undefined, circuit });
         }
         // an own threshold for appliances behind a smart plug that draw a few watts on standby (null: 10 W)
         const runW = typeof f.run_w === "number" && f.run_w > 0 ? f.run_w : 10;
@@ -3050,7 +3054,7 @@ export class Fp3dView3d extends LitElement {
         watts = (watts ?? 0) + Math.max(0, w);
         if (!consumerSensors.has(pw)) {
           consumerSensors.add(pw);
-          consumers.push({ id: ent ?? pw, powerEntity: pw, floorId: floor.id, x: f.x, z: f.z, power: Math.max(0, w) });
+          consumers.push({ id: ent ?? pw, powerEntity: pw, floorId: floor.id, x: f.x, z: f.z, power: Math.max(0, w), circuit: f.circuit && f.circuit !== "none" ? f.circuit : undefined });
         }
       }
       if (st && !isUnavailable(st)) reachable = true;
