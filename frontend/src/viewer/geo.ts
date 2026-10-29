@@ -374,3 +374,71 @@ export function pushPrism(
   }
 }
 
+
+/** A ring of a turned or rounded solid: points (counter-clockwise in x, z, the same count in every ring) at height y. */
+export interface Ring {
+  pts: Vec2[];
+  y: number;
+}
+
+/**
+ * A closed solid stitched from rings (spheres, lathes, rounded boxes, #4): each ring is joined to the next by a band
+ * of quads; the first ring is closed with a flat cap facing down, the last with one facing up (a ring shrunk to a
+ * point needs none). Rings run counter-clockwise and, as a profile seen from the side, counter-clockwise from the
+ * bottom cap to the top cap: the faces then point outwards also where a profile turns back inwards (inside a bowl).
+ * Like the prisms, sides fade darker towards the floor and vary with the direction they face; faces that tilt upwards
+ * blend towards the top colour, faces that tilt downwards darken like an underside.
+ */
+export function pushRings(buf: GeoBuffer, rings: Ring[], side: number, top: number): void {
+  if (rings.length < 2) return;
+  const topC = new Color(top);
+  const k = (y: number) => 0.5 + 0.5 * Math.min(1, Math.max(0, y / 1.6));
+  const tri = (a: V3, b: V3, c: V3) => {
+    const ux = b[0] - a[0];
+    const uy = b[1] - a[1];
+    const uz = b[2] - a[2];
+    const vx = c[0] - a[0];
+    const vy = c[1] - a[1];
+    const vz = c[2] - a[2];
+    const nx = uy * vz - uz * vy;
+    const ny = uz * vx - ux * vz;
+    const nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz);
+    if (l < 1e-10) return;
+    const flat = Math.hypot(nx, nz);
+    const facing = flat > 1e-9 ? ((nx / flat) * LIGHT[0] + (nz / flat) * LIGHT[1] + 1) / 2 : 0.5;
+    const dir = 0.8 + 0.28 * facing;
+    const up = ny / l;
+    const col = (y: number) => {
+      const c = shade(side, k(y) * dir * (up < 0 ? 1 + 0.45 * up : 1));
+      return up > 0 ? c.lerp(topC, up) : c;
+    };
+    buf.tri(a, b, c, col(a[1]), col(b[1]), col(c[1]));
+  };
+  const P = (r: Ring, i: number): V3 => {
+    const p = r.pts[i % r.pts.length];
+    return [p[0], r.y, p[1]];
+  };
+  for (let j = 0; j + 1 < rings.length; j++) {
+    const lo = rings[j];
+    const hi = rings[j + 1];
+    for (let i = 0; i < lo.pts.length; i++) {
+      tri(P(lo, i), P(hi, i), P(hi, i + 1));
+      tri(P(lo, i), P(hi, i + 1), P(lo, i + 1));
+    }
+  }
+  // caps: a fan from the ring's centre; the first ring's faces down, the last ring's up
+  const cap = (r: Ring, facesUp: boolean) => {
+    const n = r.pts.length;
+    const cx = r.pts.reduce((s, p) => s + p[0], 0) / n;
+    const cz = r.pts.reduce((s, p) => s + p[1], 0) / n;
+    if (r.pts.every((p) => Math.hypot(p[0] - cx, p[1] - cz) < 1e-6)) return;
+    const c: V3 = [cx, r.y, cz];
+    for (let i = 0; i < n; i++) {
+      if (facesUp) tri(c, P(r, i + 1), P(r, i));
+      else tri(c, P(r, i), P(r, i + 1));
+    }
+  };
+  cap(rings[0], false);
+  cap(rings[rings.length - 1], true);
+}
