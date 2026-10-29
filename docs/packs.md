@@ -577,13 +577,14 @@ use, and the packs repository is a generated copy so other installs can add or u
 
 1. Check out the packs repository next to this one (`git clone https://github.com/theovencook/home-3d-packs`).
 2. Run `python tools/publish_packs.py path/to/home-3d-packs`. It checks every bundled pack with the same schema and
-   limits as `tools/fp3dpack.py` and refuses to publish anything if one fails. Otherwise it copies each pack folder
+   limits as `tools/fp3dpack.py` and refuses to publish anything if one fails, or if a pack changed since its copy
+   in the checkout without a higher `release`. Otherwise it copies each pack folder
    over its copy in the checkout (files removed from a pack are removed there too) and writes `README.md` (the
    packs, their install URLs, licence), `NOTICE` (with the IKEA trademark note while the IKEA UK pack is in) and
    `LICENSE`. Git data and folders of other packs in the checkout are not touched.
-3. Commit and push the checkout. Before pushing, raise `release` in the `pack.json` of every pack that changed (in
-   this repository, then run the script again): the update check compares each pack's own `release`, so a pack
-   whose release did not move shows no update.
+3. Commit and push the checkout. Every pack that changed needs a higher `release` in its `pack.json` (raise it in
+   this repository; the script names the packs that need one): the update check compares each pack's own
+   `release`, so a pack whose release did not move shows no update.
 4. Tag a release in the packs repository (`vYYYY.MM.DD`, for example `v2026.10.29`) so a version can be named in a URL:
    `https://github.com/theovencook/home-3d-packs/tree/v2026.10.29/theovencook.core`.
 

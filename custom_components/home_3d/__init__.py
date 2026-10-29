@@ -155,7 +155,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     updates = PackUpdates(hass, data)
     await updates.async_load()
     hass.data[DATA_PACK_UPDATES] = updates
-    updates.schedule()
+    updates.start()
     await updates.async_auto_update()
 
     # who may change the plan (#7)

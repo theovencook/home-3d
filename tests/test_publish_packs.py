@@ -104,6 +104,28 @@ def test_a_pack_that_fails_validation_stops_everything(tmp_path: Path) -> None:
     assert list(target.iterdir()) == []
 
 
+def test_a_changed_pack_needs_a_new_release(tmp_path: Path) -> None:
+    """The update check compares releases, so a change published under the same release would never be offered (#47).
+    Nothing is written then; the same content again, or a change with a higher release, publishes."""
+    source, target = tmp_path / "source", tmp_path / "packs"
+    target.mkdir()
+    folder = _pack(source, "test.one")
+    _pack(source, "test.two")
+    publish_packs.publish(target, source)
+    before = _tree(target)
+    assert publish_packs.publish(target, source) == ["test.one", "test.two"]
+
+    (folder / "seating" / "cube_chair.json").write_text(json.dumps({**CHAIR, "size": [1, 1, 1]}), encoding="utf-8")
+    with pytest.raises(publish_packs.PublishError, match=r"test.one.*release"):
+        publish_packs.publish(target, source)
+    assert _tree(target) == before
+
+    pack = json.loads((folder / "pack.json").read_text(encoding="utf-8"))
+    (folder / "pack.json").write_text(json.dumps({**pack, "release": 2}), encoding="utf-8")
+    publish_packs.publish(target, source)
+    assert json.loads((target / "test.one" / "pack.json").read_text(encoding="utf-8"))["release"] == 2
+
+
 def test_a_folder_name_that_is_not_the_pack_id_is_refused(tmp_path: Path) -> None:
     source, target = tmp_path / "source", tmp_path / "packs"
     _pack(source, "test.one").rename(source / "test.renamed")

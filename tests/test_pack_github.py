@@ -49,13 +49,16 @@ def _mock_repo(
     *,
     ref: str | None = None,
     default_branch: str = "main",
+    sizes: dict[str, object] | None = None,
 ) -> None:
-    """A public repo on GitHub: its default branch, the commit of `ref` and the files in it."""
+    """A public repo on GitHub: its default branch, the commit of `ref` and the files in it (`sizes`: what the file
+    list says instead of the real size)."""
     aioclient_mock.get(API, json={"full_name": f"{OWNER}/{REPO}", "default_branch": default_branch})
     aioclient_mock.get(
         f"{API}/commits/{ref or default_branch}", json={"sha": COMMIT, "commit": {"tree": {"sha": TREE}}}
     )
-    tree = [{"path": path, "type": "blob", "size": len(text.encode())} for path, text in files.items()]
+    sizes = sizes or {}
+    tree = [{"path": path, "type": "blob", "size": sizes.get(path, len(text.encode()))} for path, text in files.items()]
     folders = {path.rsplit("/", 1)[0] for path in files if "/" in path}
     tree += [{"path": folder, "type": "tree"} for folder in sorted(folders)]
     aioclient_mock.get(f"{API}/git/trees/{TREE}", json={"sha": TREE, "tree": tree, "truncated": False})
@@ -188,6 +191,9 @@ async def test_urls_that_are_not_a_github_repo_are_refused_without_a_fetch(
         "https://github.com/theovencook/home-3d-packs/tree/main/../secrets",
         "https://user:pw@github.com/theovencook/home-3d-packs",
         "ftp://github.com/theovencook/home-3d-packs",
+        # a port that is no port (#47)
+        "github.com:99999/theovencook/home-3d-packs",
+        "https://github.com:abc/theovencook/home-3d-packs",
         "not a url",
     ):
         result = await _install(client, url)
@@ -281,6 +287,21 @@ async def test_code_and_oversized_files_are_refused_before_anything_is_downloade
     result = await _install(client, f"https://github.com/{OWNER}/{REPO}")
     assert result["error"]["code"] == "too_many_items"
     assert not _raw_fetched(aioclient_mock)
+
+
+async def test_a_file_list_with_a_malformed_size_is_refused_clearly(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A size GitHub sends that is no number is refused as a bad answer, not an unknown error (#47)."""
+    client = await _client(hass, hass_ws_client)
+    for size in ("abc", -5, [1], 1.5):
+        aioclient_mock.clear_requests()
+        _mock_repo(aioclient_mock, _pack_files(), sizes={"cube_chair.json": size})
+        result = await _install(client, f"https://github.com/{OWNER}/{REPO}")
+        assert not result["success"], size
+        assert result["error"]["code"] == "fetch_failed", (size, result)
+        assert "cube_chair.json" in result["error"]["message"], size
+        assert not _raw_fetched(aioclient_mock)
 
 
 async def test_a_redirect_away_from_github_is_not_followed(

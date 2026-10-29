@@ -7,8 +7,10 @@ network.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 import json
+from unittest.mock import patch
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
@@ -17,7 +19,9 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
-from custom_components.home_3d.const import DOMAIN
+from custom_components.home_3d import pack_updates
+from custom_components.home_3d.const import DATA_PACK_UPDATES, DOMAIN, STORAGE_KEY_PACK_UPDATES
+from custom_components.home_3d.packs import source_of_folder, verify_folder
 
 PACK_JSON = {
     "format": "home3d-pack",
@@ -435,6 +439,73 @@ async def test_a_failed_check_is_reported_per_pack(
     assert hass.data[DOMAIN].packs[0]["release"] == 1
 
 
+class _HeldCheck:
+    """Holds a check at GitHub's first answer until released, so something else can try to run meanwhile."""
+
+    def __init__(self) -> None:
+        self.gate = asyncio.Event()
+        self.real = pack_updates.latest_release
+
+    async def latest_release(self, hass, origin):
+        await self.gate.wait()
+        return await self.real(hass, origin)
+
+
+async def test_an_install_waits_for_a_running_check(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A check that is under way finishes before an import lands, so it can't put its older release over it (#47)."""
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    updates = hass.data[DATA_PACK_UPDATES]
+    _github(aioclient_mock, 2, _files(2))
+    held = _HeldCheck()
+    with patch.object(pack_updates, "latest_release", held.latest_release):
+        check = hass.async_create_task(updates.async_check())
+        await asyncio.sleep(0.05)
+        install = hass.async_create_task(updates.async_install(verify_folder(_files(3)), source_of_folder(_files(3))))
+        await asyncio.sleep(0.05)
+        held.gate.set()
+        await asyncio.gather(check, install)
+    assert hass.data[DOMAIN].packs[0]["release"] == 3
+
+
+async def test_a_rollback_waits_for_a_running_check(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    _github(aioclient_mock, 2, _files(2))
+    await _call(client, type="home_3d/packs/check")
+    updates = hass.data[DATA_PACK_UPDATES]
+    _github(aioclient_mock, 3, _files(3))
+    held = _HeldCheck()
+    with patch.object(pack_updates, "latest_release", held.latest_release):
+        check = hass.async_create_task(updates.async_check())
+        await asyncio.sleep(0.05)
+        rollback = hass.async_create_task(updates.async_rollback("test.starter"))
+        await asyncio.sleep(0.05)
+        held.gate.set()
+        await asyncio.gather(check, rollback)
+    # the check brought release 3, the rollback then went back to 2 and pinned it
+    assert hass.data[DOMAIN].packs[0]["release"] == 2
+    assert "test.starter" in updates.pinned
+
+
+async def test_the_checks_of_removed_packs_are_dropped(
+    hass: HomeAssistant, hass_ws_client, hass_storage, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    _github(aioclient_mock, 1, _files())
+    await _call(client, type="home_3d/packs/check")
+    assert "test.starter" in hass_storage[STORAGE_KEY_PACK_UPDATES]["data"]["checks"]
+
+    await _call(client, type="home_3d/packs/remove", pack_id="test.starter")
+    await _call(client, type="home_3d/packs/check")
+    assert "test.starter" not in hass_storage[STORAGE_KEY_PACK_UPDATES]["data"]["checks"]
+
+
 # ---------------------------------------------------------------------------- the schedule
 
 
@@ -484,3 +555,29 @@ async def test_a_daily_check_and_switching_checks_off(
     await _call(client, type="home_3d/packs/updates/settings", frequency="daily", time="04:00")
     await _at(hass, freezer, start.replace(hour=4) + timedelta(days=1))
     assert hass.data[DOMAIN].packs[0]["release"] == 2
+
+
+async def test_a_check_missed_while_home_assistant_was_down_runs_once_after_start_up(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker, freezer: FrozenDateTimeFactory
+) -> None:
+    """The daily 04:00 check passes while Home Assistant is down: it runs once when Home 3D starts again (#47)."""
+    start = dt_util.now().replace(hour=3, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    client = await _client(hass, hass_ws_client)
+    freezer.move_to(start)
+    await _installed_from_github(client, aioclient_mock)
+    await _call(client, type="home_3d/packs/check")
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+
+    # down from 03:00 to 05:00: no time change reaches the 04:00 check
+    _github(aioclient_mock, 2, _files(2))
+    freezer.move_to(start.replace(hour=5))
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.data[DOMAIN].packs[0]["release"] == 2
+
+    # started again after a check that ran on time: nothing is overdue
+    aioclient_mock.clear_requests()
+    freezer.move_to(start.replace(hour=6))
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _fetched(aioclient_mock) == []

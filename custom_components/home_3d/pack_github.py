@@ -79,7 +79,12 @@ def parse_url(url: str) -> GitHubPackUrl:
     host = (parts.hostname or "").lower()
     if parts.scheme not in ("https", "http") or host not in ("github.com", "www.github.com"):
         raise PackError("bad_url", f"not a GitHub URL: {URL_HINT}")
-    if parts.username or parts.password or parts.port:
+    try:
+        port = parts.port
+    except ValueError:
+        # a port that is no port ("github.com:99999") (#47)
+        port = -1
+    if parts.username or parts.password or port:
         raise PackError("bad_url", f"not a plain GitHub URL: {URL_HINT}")
     segments = [s for s in parts.path.split("/") if s]
     if len(segments) < 2:
@@ -197,7 +202,10 @@ async def fetch_pack(hass: HomeAssistant, url: str) -> tuple[dict[str, str], dic
         relative = path[len(prefix) :]
         if _hidden(relative):
             continue
-        sizes[relative] = int(entry.get("size") or 0)
+        size = entry.get("size", 0)
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            raise PackError("fetch_failed", f"{name}: GitHub sent no valid size for {relative}")
+        sizes[relative] = size
     shown = f"{name}/{where.folder}" if where.folder else name
     if not folder_found:
         raise PackError("not_found", f'{name} has no folder "{where.folder}" at "{ref}"')

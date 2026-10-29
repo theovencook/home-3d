@@ -23,14 +23,16 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
 from .const import STORAGE_KEY_PACK_UPDATES, STORAGE_VERSION
@@ -103,6 +105,22 @@ def pending_items(building: dict[str, Any], packs: list[dict[str, Any]]) -> list
     return found
 
 
+def last_due(settings: dict[str, Any], now: datetime) -> datetime | None:
+    """The last time a scheduled check was due up to `now` (None when checks are off)."""
+    frequency = settings["frequency"]
+    if frequency == "off":
+        return None
+    hour, minute = (int(x) for x in settings["time"].split(":"))
+    due = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if due > now:
+        due -= timedelta(days=1)
+    if frequency == "weekly":
+        due -= timedelta(days=(due.weekday() - settings["weekday"]) % 7)
+    elif frequency == "monthly":
+        due -= timedelta(days=due.day - 1)
+    return due
+
+
 def with_updates(
     building: dict[str, Any], packs: list[dict[str, Any]], types: list[str] | None
 ) -> tuple[dict[str, Any], list[str]]:
@@ -133,6 +151,7 @@ class PackUpdates:
         self.checks: dict[str, dict[str, Any]] = {}
         self.last_check: float | None = None
         self._unsub: Callable[[], None] | None = None
+        self._unsub_started: Callable[[], None] | None = None
         self._lock = asyncio.Lock()
 
     async def async_load(self) -> None:
@@ -222,18 +241,20 @@ class PackUpdates:
         """Install a checked pack (an import, a URL install or a check). When the library would then offer an older
         release than now, or another release of a pinned pack, it asks first: PackError("older_release" / "pinned")
         unless `confirm`. (An older copy of a bundled pack changes nothing: the bundled release stays offered.)"""
-        current = self._installed(payload["id"])
-        after = self._offered_after(payload)
-        if current is not None and not confirm:
-            installed, new = current.get("release", 1), after.get("release", 1)
-            if new < installed:
-                raise PackError(
-                    "older_release",
-                    f"release {payload.get('release', 1)} is older than the installed release {installed}",
-                )
-            if payload["id"] in self.pinned and new != installed:
-                raise PackError("pinned", f"{payload['id']} is pinned to release {installed}")
-        await self._async_add(payload, source)
+        # never in the middle of a check, which could put its release over this one (#47)
+        async with self._lock:
+            current = self._installed(payload["id"])
+            after = self._offered_after(payload)
+            if current is not None and not confirm:
+                installed, new = current.get("release", 1), after.get("release", 1)
+                if new < installed:
+                    raise PackError(
+                        "older_release",
+                        f"release {payload.get('release', 1)} is older than the installed release {installed}",
+                    )
+                if payload["id"] in self.pinned and new != installed:
+                    raise PackError("pinned", f"{payload['id']} is pinned to release {installed}")
+            await self._async_add(payload, source)
         await self.async_auto_update()
 
     async def _async_add(self, payload: dict[str, Any], source: dict[str, Any]) -> None:
@@ -260,17 +281,42 @@ class PackUpdates:
 
     def schedule(self) -> None:
         """(Re)start the scheduled check from the settings."""
-        self.stop()
+        if self._unsub is not None:
+            self._unsub()
+            self._unsub = None
         if self.settings["frequency"] == "off":
             return
         hour, minute = (int(x) for x in self.settings["time"].split(":"))
         self._unsub = async_track_time_change(self.hass, self._scheduled, hour=hour, minute=minute, second=0)
+
+    def start(self) -> None:
+        """Start the scheduled check, and run a check missed while Home Assistant was down once it has started
+        (#47): one was due since the last check, or none has run yet for a pack installed from GitHub."""
+        self.schedule()
+
+        @callback
+        def catch_up(_hass: HomeAssistant) -> None:
+            self._unsub_started = None
+            due = last_due(self.settings, dt_util.now())
+            if due is None:
+                return
+            if self.last_check is None:
+                overdue = any(checked_origin((p.get("source") or {}).get("origin")) for p in self.data.packs)
+            else:
+                overdue = self.last_check < due.timestamp()
+            if overdue:
+                self.hass.async_create_background_task(self._async_scheduled_check(), "home_3d missed pack check")
+
+        self._unsub_started = async_at_started(self.hass, catch_up)
 
     def stop(self) -> None:
         """Stop the scheduled check (unloading)."""
         if self._unsub is not None:
             self._unsub()
             self._unsub = None
+        if self._unsub_started is not None:
+            self._unsub_started()
+            self._unsub_started = None
 
     @callback
     def _scheduled(self, now: datetime) -> None:
@@ -308,6 +354,8 @@ class PackUpdates:
                     _LOGGER.info("Update check of pack %s failed: %s", pack["id"], err)
                     result["error"] = f"{err.code}: {err.detail}" if err.detail else err.code
                 self.checks[pack["id"]] = result
+            # the checks of packs removed since are dropped (#47)
+            self.checks = {k: v for k, v in self.checks.items() if any(p["id"] == k for p in self.data.packs)}
             self.last_check = time.time()
             await self._async_save()
         updated = await self.async_auto_update()
@@ -348,37 +396,39 @@ class PackUpdates:
     async def async_rollback(self, pack_id: str) -> dict[str, Any]:
         """Put back the release a pack had before its last update, with the placed items that had taken that update,
         and pin the pack to it; raises PackError. The answer names the release now installed."""
-        current = self._installed(pack_id)
-        previous = self.previous.get(pack_id)
-        if current is None or previous is None:
-            raise PackError("no_previous", f"{pack_id} has no earlier release to go back to")
-        # the placed items that show the release being rolled back
-        took = {
-            type_
-            for type_, copy_ in (self.data.building.get("recipes") or {}).items()
-            if copy_["pack"] == pack_id
-            and any(
-                recipe_copy(current, i)["hash"] == copy_.get("hash")
-                for i in current["items"]
-                if i["id"] == copy_["item"]
-            )
-        }
-        if previous.get("bundled"):
-            # the bundled release comes back once the imported copy is gone
-            await self.data.async_remove_pack(pack_id)
-        else:
-            payload = {k: v for k, v in previous.items() if k not in ("imported_at", "source")}
-            await self.data.async_add_pack(payload, previous.get("source"))
-        del self.previous[pack_id]
-        self.pinned.add(pack_id)
-        await self._async_save()
-        restored = self._installed(pack_id)
-        release = restored.get("release", 1) if restored else previous.get("release", 1)
-        if restored is not None and took:
-            installed = installed_copies([restored])
-            recipes = dict(self.data.building.get("recipes") or {})
-            for type_ in took:
-                if type_ in installed:
-                    recipes[type_] = recipe_copy(*installed[type_])
-            await self.data.async_save_building({**self.data.building, "recipes": recipes})
+        # never in the middle of a check, which could install over the release put back (#47)
+        async with self._lock:
+            current = self._installed(pack_id)
+            previous = self.previous.get(pack_id)
+            if current is None or previous is None:
+                raise PackError("no_previous", f"{pack_id} has no earlier release to go back to")
+            # the placed items that show the release being rolled back
+            took = {
+                type_
+                for type_, copy_ in (self.data.building.get("recipes") or {}).items()
+                if copy_["pack"] == pack_id
+                and any(
+                    recipe_copy(current, i)["hash"] == copy_.get("hash")
+                    for i in current["items"]
+                    if i["id"] == copy_["item"]
+                )
+            }
+            if previous.get("bundled"):
+                # the bundled release comes back once the imported copy is gone
+                await self.data.async_remove_pack(pack_id)
+            else:
+                payload = {k: v for k, v in previous.items() if k not in ("imported_at", "source")}
+                await self.data.async_add_pack(payload, previous.get("source"))
+            del self.previous[pack_id]
+            self.pinned.add(pack_id)
+            await self._async_save()
+            restored = self._installed(pack_id)
+            release = restored.get("release", 1) if restored else previous.get("release", 1)
+            if restored is not None and took:
+                installed = installed_copies([restored])
+                recipes = dict(self.data.building.get("recipes") or {})
+                for type_ in took:
+                    if type_ in installed:
+                        recipes[type_] = recipe_copy(*installed[type_])
+                await self.data.async_save_building({**self.data.building, "recipes": recipes})
         return {"release": release}

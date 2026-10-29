@@ -293,6 +293,20 @@ def _folder(pack: dict | None = None, **items: dict) -> dict[str, str]:
     return files
 
 
+@pytest.mark.parametrize("depth", [1_500, 24_000])
+def test_deeply_nested_json_is_invalid_content(depth: int) -> None:
+    """JSON nested deeper than Python recurses (within the file size limit) is invalid content, not an unknown error
+    (#47)."""
+    deep = "[" * depth + "]" * depth
+    with pytest.raises(packs.PackError) as err:
+        packs.verify_folder({**_folder(**{"cube_chair.json": _item("cube_chair")}), "deep.json": deep})
+    assert err.value.code == "invalid_content"
+    assert "deep.json" in str(err.value)
+    # an old single-file pack: a PackError too, whichever check meets it first
+    with pytest.raises(packs.PackError):
+        packs.verify_pack(deep)
+
+
 def test_a_v2_pack_folder_loads_with_its_items() -> None:
     files = _folder(
         **{

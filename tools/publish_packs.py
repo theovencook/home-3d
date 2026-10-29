@@ -3,9 +3,10 @@
     python tools/publish_packs.py PACKS_CHECKOUT [--source BUNDLED_PACKS_FOLDER]
 
 Every pack folder in custom_components/home_3d/bundled_packs/ is checked first with the same schema and limits Home
-Assistant uses on import (tools/fp3dpack.py). If any pack fails, nothing is written. Otherwise each pack folder is
-copied into the checkout (files that are gone from the pack are removed from its copy), and README.md, NOTICE and
-LICENSE at the top of the checkout are written again. Git data and folders of other packs in the checkout are left
+Assistant uses on import (tools/fp3dpack.py), and a pack whose content differs from its copy in the checkout must have
+a higher `release` than that copy: the update check compares releases only. If any pack fails, nothing is written.
+Otherwise each pack folder is copied into the checkout (files that are gone from the pack are removed from its copy),
+and README.md, NOTICE and LICENSE at the top of the checkout are written again. Git data and folders of other packs in the checkout are left
 alone. Commit, push and tag the checkout yourself; see docs/packs.md ("Publishing the packs").
 """
 
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 from pathlib import Path
 import shutil
 import sys
@@ -66,6 +68,32 @@ def _checked(source: Path) -> list[tuple[Path, dict]]:
     if problems:
         raise PublishError("not published, these packs fail the check:\n  " + "\n  ".join(problems))
     return checked
+
+
+def _content(pack: dict) -> str:
+    """What a pack holds apart from its release."""
+    return json.dumps({k: v for k, v in pack.items() if k != "release"}, sort_keys=True)
+
+
+def _not_bumped(checked: list[tuple[Path, dict]], target: Path) -> list[str]:
+    """The packs that changed since their copy in the checkout without a higher release (#47): the update check
+    would never offer the change."""
+    problems: list[str] = []
+    for folder, pack in checked:
+        published = target / folder.name
+        if not (published / "pack.json").exists():
+            continue
+        try:
+            before = fp3dpack.check(published)
+        except fp3dpack.packs.PackError:
+            # a copy this version cannot read: compare by its release alone
+            release = json.loads((published / "pack.json").read_text(encoding="utf-8")).get("release", 1)
+            before = {"release": release, "content": None}
+        if _content(before) != _content(pack) and pack["release"] <= before.get("release", 1):
+            problems.append(
+                f"{folder.name}: the content changed, so its release must go above {before.get('release', 1)}"
+            )
+    return problems
 
 
 def _plural(count: int, word: str) -> str:
@@ -143,6 +171,8 @@ def publish(target: Path, source: Path = BUNDLED_DIR) -> list[str]:
     checked = _checked(source)
     if not target.is_dir():
         raise PublishError(f"{target} is not a folder")
+    if problems := _not_bumped(checked, target):
+        raise PublishError("not published, these packs need a new release:\n  " + "\n  ".join(problems))
     for folder, _ in checked:
         _copy_pack(folder, target / folder.name)
     packs = [pack for _, pack in checked]

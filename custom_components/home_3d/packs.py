@@ -299,6 +299,8 @@ def _parse(path: str, text: str) -> Any:
         return json.loads(text)
     except ValueError as err:
         raise PackError("invalid_content", f"{path}: not JSON") from err
+    except RecursionError as err:
+        raise PackError("invalid_content", f"{path}: nested too deeply") from err
 
 
 def _link_in(data: Any) -> str | None:
@@ -313,7 +315,12 @@ def _link_in(data: Any) -> str | None:
 
 
 def _no_links(path: str, data: Any) -> Any:
-    if (found := _link_in(data)) is not None:
+    try:
+        found = _link_in(data)
+    except RecursionError as err:
+        # no pack nests anywhere near this deep (#47)
+        raise PackError("invalid_content", f"{path}: nested too deeply") from err
+    if found is not None:
         raise PackError("not_data", f"{path}: links are not allowed ({found[:60]})")
     return data
 
@@ -517,6 +524,8 @@ def verify_pack(text: str) -> dict[str, Any]:
         data = json.loads(text)
     except ValueError as err:
         raise PackError("not_a_pack", "not JSON") from err
+    except RecursionError as err:
+        raise PackError("invalid_content", "nested too deeply") from err
     payload = _payload_of(data)
     if payload is None:
         if isinstance(data, dict) and data.get("format") == PACK_FORMAT_V2:
