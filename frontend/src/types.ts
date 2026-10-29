@@ -35,6 +35,9 @@ export interface HassDevice {
   area_id?: string | null;
   name?: string | null;
   name_by_user?: string | null;
+  /** The maker and the model the integration reports ("Ubiquiti", "G4 Pro"). */
+  manufacturer?: string | null;
+  model?: string | null;
 }
 
 export interface HassEntity {
