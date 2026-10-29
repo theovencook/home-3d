@@ -73,6 +73,42 @@ An item's full id is the pack id, a slash and the item id: `theovencook.core/bar
 within its pack (1 to 40 characters: lower-case letters, digits, `_`, `.`, `-`), so the full id is unique across
 packs. In a saved plan, an item from a pack is stored with the furniture type `pack:theovencook.core:bar_stool`.
 
+## Placed items keep their recipe
+
+The plan keeps a copy of the recipe of every pack item placed in it, in `recipes`, by furniture type. There is one
+copy per item, however often it is placed:
+
+```json
+{
+  "recipes": {
+    "pack:theovencook.core:bar_stool": {
+      "pack": "theovencook.core",
+      "item": "bar_stool",
+      "release": 1,
+      "hash": "sha256:<hash of the recipe>",
+      "commit": "<the commit its files came from, only for a pack installed from GitHub>",
+      "recipe": {
+        "id": "bar_stool",
+        "name": { "en": "Bar stool" },
+        "size": [0.42, 0.42, 0.75],
+        "parts": [{ "shape": "cyl", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "wood" }]
+      }
+    }
+  }
+}
+```
+
+The views draw a placed item from the plan's copy, so:
+
+- removing a pack leaves its placed items looking exactly as before;
+- a newer release of a pack does not change items already placed; an item placed again later takes the same copy.
+  Only updating the item replaces its copy.
+
+Home Assistant fills the copies in: when an item is placed (on save), and once for plans saved before copies
+existed, from the packs installed then. A save that sends no copies (an older frontend, a script) keeps the copies the
+plan has. Copies of items no longer in the plan are dropped. `hash` is the SHA-256 of the recipe's JSON with sorted
+keys, so it can be compared with the installed item.
+
 ## Item files
 
 ```json
@@ -321,7 +357,9 @@ The size limits keep a pack within one websocket message. A larger collection is
 3. Import it in Home Assistant: **Extensions** → **Import a pack folder …**, then pick the pack folder (or a
    repository folder that holds several packs).
 
-The plan keeps working when a pack is removed: its items stay in the plan as plain boxes.
+The plan keeps working when a pack is removed: its placed items keep their look from the plan's copies of their
+recipes (see [Placed items keep their recipe](#placed-items-keep-their-recipe)). Only items placed before copies
+existed, whose pack was already gone then, show as plain boxes.
 
 ## Installing from GitHub
 
