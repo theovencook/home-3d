@@ -1,5 +1,9 @@
 """Start views of the house, a floor and a room (#206, #282)."""
 
+import json
+from pathlib import Path
+import re
+
 import pytest
 import voluptuous as vol
 
@@ -7,6 +11,7 @@ from custom_components.home_3d.schema import (
     ENERGY_SCHEMA,
     FURNITURE_SCHEMA,
     HOLOGRAM_SCHEMA,
+    MATERIALS,
     OPENING_SCHEMA,
     OUTDOOR_SCHEMA,
     PLACEMENT_SCHEMA,
@@ -162,6 +167,28 @@ def test_colour_role_overrides_are_kept_and_checked() -> None:
     for bad in ({"chrome": "#ffffff"}, {"wood": "brown"}, {"wood": "#12345"}, "red"):
         with pytest.raises(vol.Invalid):
             FURNITURE_SCHEMA({**base, "colors": bad})
+
+
+def test_material_per_colour_role_is_kept_and_checked() -> None:
+    """An item keeps its own material per role (#40); an unknown role or material is refused."""
+    base = {"id": "s1", "type": "sofa", "x": 1, "z": 1, "rotation": 0, "w": 2, "d": 0.9, "h": 0.85, "variant": None}
+    out = FURNITURE_SCHEMA({**base, "materials": {"fabric": "rattan", "wood": "gloss"}})
+    assert out["materials"] == {"fabric": "rattan", "wood": "gloss"}
+    assert FURNITURE_SCHEMA({**base, "materials": None})["materials"] is None
+    assert "materials" not in FURNITURE_SCHEMA(base)
+    for m in ("matt", "gloss", "fabric", "glass", "metal", "rattan"):
+        assert FURNITURE_SCHEMA({**base, "materials": {"body": m}})["materials"] == {"body": m}
+    for bad in ({"chrome": "metal"}, {"wood": "velvet"}, {"wood": None}, "rattan"):
+        with pytest.raises(vol.Invalid):
+            FURNITURE_SCHEMA({**base, "materials": bad})
+
+
+def test_materials_match_the_frontend() -> None:
+    """The backend checks the same materials the item panel offers (frontend/src/role-materials.ts)."""
+    src = (Path(__file__).parents[1] / "frontend" / "src" / "role-materials.ts").read_text(encoding="utf-8")
+    found = re.search(r"export const MATERIALS = (\[[^\]]*\]) as const", src)
+    assert found
+    assert json.loads(found.group(1)) == MATERIALS
 
 
 def test_household_tag_settings_are_optional() -> None:

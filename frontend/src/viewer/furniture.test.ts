@@ -6,7 +6,7 @@ import { FURNITURE_SIZE, FURNITURE_TYPES, isLamp, newFloor } from "../model.ts";
 import { COLOUR_ROLES, itemColourRoles } from "../colour-roles.ts";
 import { hasFixedColors, hasOwnColours, packGlowCentre, packMotionParts, pushAwning, pushFridgeDoors, pushFurniture, pushPackLamp, pushPackMotion, screenPictureSize, setLightLook } from "./furniture.ts";
 import { packMotion, type PackItem } from "../packs.ts";
-import { GeoBuffer, LineBuffer } from "./geo.ts";
+import { GeoBuffer, LineBuffer, pushPrism } from "./geo.ts";
 
 const PACK: FurniturePack = {
   id: "t.cars",
@@ -584,4 +584,93 @@ test("every built-in item lists exactly the roles its model is drawn in, moving 
     if (used.join() !== listed.join()) wrong.push(`${type}: [${used.map((r) => `"${r}"`).join(", ")}]`);
   }
   assert.deepEqual(wrong, [], "update BUILTIN_ROLES in colour-roles.ts");
+});
+
+/** The materials (#40) an item's geometry carries per vertex: the shader numbers, counted. */
+function materialCounts(buf: GeoBuffer): Map<number, number> {
+  const attr = buf.geometry().getAttribute("fp3dMat");
+  const out = new Map<number, number>();
+  if (!attr) return out;
+  for (let i = 0; i < attr.count; i++) out.set(attr.getX(i), (out.get(attr.getX(i)) ?? 0) + 1);
+  return out;
+}
+
+const MATT = 0;
+const GLOSS = 1;
+const FABRIC = 2;
+const GLASS = 3;
+const METAL = 4;
+const RATTAN = 5;
+
+test("each vertex carries its role's material for the realistic look; the colours stay exactly as before (#40)", () => {
+  const sofa: Furniture = { id: "s", type: "sofa", x: 0, z: 0, rotation: 0, w: 2, d: 0.9, h: 0.85, variant: null, entity: null, power: null };
+  const usual = new GeoBuffer();
+  pushFurniture(usual, new LineBuffer(), new GeoBuffer(), sofa);
+  const plain = materialCounts(usual);
+  // fabric and cushions are fabric, the wooden feet matt
+  assert.ok(plain.get(FABRIC)! > 0, "fabric");
+  assert.ok(plain.get(MATT)! > 0, "matt feet");
+  assert.equal(plain.has(RATTAN), false);
+  assert.equal([...plain.values()].reduce((a, b) => a + b, 0), usual.p.length / 3, "one material per vertex");
+
+  const rattan = new GeoBuffer();
+  pushFurniture(rattan, new LineBuffer(), new GeoBuffer(), { ...sofa, materials: { fabric: "rattan" } });
+  const woven = materialCounts(rattan);
+  assert.ok(woven.get(RATTAN)! > 0, "the fabric role is rattan");
+  assert.ok(woven.get(FABRIC)! > 0, "the cushions stay fabric");
+  assert.ok(woven.get(FABRIC)! < plain.get(FABRIC)!);
+  assert.equal(woven.get(MATT), plain.get(MATT), "the feet stay matt");
+  // neon and the other looks never see materials: the same triangles in the same colours
+  assert.deepEqual(rattan.c, usual.c);
+  assert.deepEqual(rattan.p, usual.p);
+});
+
+test("a surface drawn without materials (walls, floors) carries none: matt, and its geometry is as before (#40)", () => {
+  const buf = new GeoBuffer();
+  pushPrism(buf, [[0, 0], [1, 0], [1, 1], [0, 1]], 0, 2.5, 0x223355, 0x334466);
+  assert.equal(buf.geometry().getAttribute("fp3dMat"), undefined);
+  // a matt item added to the buffer does not need one either
+  pushFurniture(buf, new LineBuffer(), new GeoBuffer(), { id: "t", type: "table", x: 0, z: 0, rotation: 0, w: 1.6, d: 0.9, h: 0.75, variant: null, entity: null, power: null });
+  assert.equal(buf.geometry().getAttribute("fp3dMat"), undefined);
+  // a metal one after the walls: the walls before it read matt
+  pushFurniture(buf, new LineBuffer(), new GeoBuffer(), { id: "r", type: "radiator", x: 0, z: 0, rotation: 0, w: 1, d: 0.1, h: 0.6, variant: null, entity: null, power: null });
+  const counts = materialCounts(buf);
+  assert.ok(counts.get(METAL)! > 0);
+  assert.ok(counts.get(MATT)! >= 36, "walls and table matt");
+});
+
+test("pack parts take their roles' materials, a part's top its own role's; moving parts and lamps take them too (#40)", () => {
+  const chair: PackItem = {
+    id: "chair",
+    name: { en: "Chair" },
+    size: [0.5, 0.5, 0.9],
+    parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0.5, h: 0.1, color: "wood", top: "cushion" }],
+  } as unknown as PackItem;
+  setPacks([{ ...PACK, items: [...PACK.items, chair] }]);
+  try {
+    const f: Furniture = { id: "c", type: "pack:t.cars:chair", x: 0, z: 0, rotation: 0, w: 0.5, d: 0.5, h: 0.9, variant: null, entity: null, power: null };
+    const buf = new GeoBuffer();
+    pushFurniture(buf, new LineBuffer(), new GeoBuffer(), { ...f, materials: { wood: "metal", cushion: "glass" } });
+    const counts = materialCounts(buf);
+    // a box: 2 top triangles in the cushion's glass, the sides (and the bottom, above the floor) in the wood's metal
+    assert.equal(counts.get(GLASS), 6);
+    assert.ok(counts.get(METAL)! >= 24);
+    const at = { x: 0, z: 0, rotation: 0, w: 2.4, d: 0.15, h: 2.4, variant: null };
+    const curtain = { id: "curtain", name: { en: "Curtain" }, size: [2.4, 0.15, 2.4], parts: [{ shape: "box", x: -0.25, z: 0, w: 0.5, d: 1, y: 0, h: 1, color: "fabric" }] } as unknown as PackItem;
+    const moving = new GeoBuffer();
+    pushPackMotion(moving, curtain, "curtain", { ...at, materials: { fabric: "gloss" } }, 0, 0);
+    assert.ok(materialCounts(moving).get(GLOSS)! > 0, "a curtain");
+    const lamp = new GeoBuffer();
+    pushPackLamp(lamp, PACK.items[0], { x: 0, z: 0, rotation: 0, w: 2, d: 4, h: 1, materials: { body: "metal" } }, 0, 0xffffff);
+    assert.ok(materialCounts(lamp).get(METAL)! > 0, "a pack lamp");
+    const doors = new GeoBuffer();
+    pushFridgeDoors(doors, { x: 0, z: 0, rotation: 0, w: 0.9, d: 0.7, h: 1.8, materials: { body: "metal" } }, 0, 0.5, 0.5);
+    assert.ok(materialCounts(doors).get(METAL)! > 0, "fridge doors");
+    const awning = new GeoBuffer();
+    pushAwning(awning, { x: 0, z: 0, rotation: 0, w: 3, d: 2, h: 0.3, variant: null, materials: { fabric: "rattan", body: "metal" } }, 2.5, 1);
+    const shade = materialCounts(awning);
+    assert.ok(shade.get(RATTAN)! > 0 && shade.get(METAL)! > 0, "an awning's cloth and cassette");
+  } finally {
+    setPacks([]);
+  }
 });

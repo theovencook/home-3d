@@ -51,6 +51,7 @@ export class Fp3dRoomPanel extends LitElement {
     confirmEntities: { attribute: false },
     sheets: { attribute: false },
     readOnly: { type: Boolean },
+    noLook: { type: Boolean },
     _showAll: { state: true },
     _tick: { state: true },
   };
@@ -65,6 +66,8 @@ export class Fp3dRoomPanel extends LitElement {
   declare confirmEntities: Set<string> | null;
   /** Time travel: the panel shows the past and switches nothing. */
   declare readOnly: boolean;
+  /** The 2D plan (#41) has no camera to look through: the button stays away. */
+  declare noLook: boolean;
   /** What modules offer in this room (📢 an announcement …): a button each, a tap fires "sheet-open" with its id. */
   declare sheets: { id: string; icon: string; title: string }[] | null;
   /** Show the other devices of the area as well (their main entities). */
@@ -518,7 +521,7 @@ export class Fp3dRoomPanel extends LitElement {
         ${src ? html`<img src=${src} alt=${this.name(st.entity_id)} loading="lazy" />` : html`<span class="fp3d-rp-note">${stateText(this.hass, st)}</span>`}
         <span class="fp3d-rp-camera-name">${this.name(st.entity_id)}</span>
       </button>
-      ${placed
+      ${placed && !this.noLook
         ? html`<button
             class="fp3d-rp-look"
             title=${this.t("through_camera")}
