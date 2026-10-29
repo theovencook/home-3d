@@ -333,6 +333,19 @@ status sensor; Home 3D finds the rest on the same device, whatever integration m
 
 `theovencook.core/3d_printer` is one; see its file for a model to start from.
 
+### Camera models
+
+An item tagged `security camera` is a camera model: the editor offers it under *Camera model* for every placed camera.
+It is only the camera's look; the camera keeps its live view, field-of-view wedge and actions. Make the lens look
+along +z, like any item's front. A `ceiling` item (a dome, a turret) moves the camera to the ceiling and a `wall`
+item to the wall, with the camera's pin in the middle of the item; the wedge keeps its angle, reach and tilt.
+
+A tag with a number in it names the model as Home Assistant's device registry reports it, such as `g4 pro` or
+`rlc-810a`. A camera whose device reports that model (with or without UniFi's `UVC` prefix, or a longer name that
+starts with it, like `G5 Turret Ultra` for `g5 turret`) shows it as the model *the device reports*, and a camera placed
+from now on gets that look straight away. Cameras already in the plan keep their look until one is chosen. The
+UniFi cameras in `theovencook.core/tech/` (`unifi_g3_flex`, `unifi_g4_pro`, `unifi_g4_dome`, …) are examples.
+
 ### Energy devices
 
 An `electric` item takes part in the energy flow by its `family`, like the built-in meter, inverter, home battery
