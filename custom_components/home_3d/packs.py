@@ -214,6 +214,8 @@ def _check(schema: vol.Schema, path: str, data: Any) -> dict[str, Any]:
 
 # ---------------------------------------------------------------------------- pack format v2: a folder
 
+# the pack the household's own items (#13) are offered as; no imported pack may take this id
+CUSTOM_PACK_ID = "household.custom"
 PACK_FORMAT_V2 = "home3d-pack"
 PACK_VERSION_V2 = 2
 PACK_FILE = "pack.json"
@@ -264,8 +266,11 @@ def recipe_hash(item: dict[str, Any]) -> str:
 # An item without what draws it: enough to browse, search, filter and size it. The recipe (its parts and plan symbol)
 # comes on demand with `packs/items`; placed items draw from the plan's recipe copies (#2).
 RECIPE_FIELDS = ("parts", "symbol")
-# values the check fills in for a missing field: left out of the index, the frontend reads a missing field the same way
-_DEFAULTS = {"electric": False, "mount": "floor", "wall_y": 1.0, "surface": False, "vehicle": False, "hole": False}
+# values the check fills in for a missing field (the schema's defaults): left out of the index, the frontend reads a
+# missing field the same way
+_DEFAULTS = {
+    str(key): key.default() for key in ITEM_SCHEMA.schema if isinstance(key, vol.Optional) and callable(key.default)
+}
 
 
 def item_index(item: dict[str, Any]) -> dict[str, Any]:
@@ -314,7 +319,8 @@ def _link_in(data: Any) -> str | None:
     return None
 
 
-def _no_links(path: str, data: Any) -> Any:
+def no_links(path: str, data: Any) -> Any:
+    """The parsed JSON itself, or PackError when any text in it holds a link (a pack is data, nothing is fetched)."""
     try:
         found = _link_in(data)
     except RecursionError as err:
@@ -325,9 +331,9 @@ def _no_links(path: str, data: Any) -> Any:
     return data
 
 
-def _pack_file(text: str) -> dict[str, Any]:
+def verify_pack_file(text: str) -> dict[str, Any]:
     """The checked pack.json of a folder."""
-    pack = _no_links(PACK_FILE, _parse(PACK_FILE, text))
+    pack = no_links(PACK_FILE, _parse(PACK_FILE, text))
     if not isinstance(pack, dict) or pack.get("format") != PACK_FORMAT_V2:
         raise PackError("not_a_pack", f'{PACK_FILE}: "format" must be "{PACK_FORMAT_V2}"')
     if "licence" not in pack and "license" in pack:
@@ -340,7 +346,7 @@ def _pack_file(text: str) -> dict[str, Any]:
 
 def _item_file(path: str, text: str) -> dict[str, Any]:
     """One checked item file; its name is the item's id ("seating/stool.json" holds "stool")."""
-    item = _check(ITEM_SCHEMA, path, _no_links(path, _parse(path, text)))
+    item = _check(ITEM_SCHEMA, path, no_links(path, _parse(path, text)))
     stem = path.rsplit("/", 1)[-1].removesuffix(".json")
     if item["id"] != stem:
         raise PackError("invalid_content", f'{path}: the item id "{item["id"]}" must match the file name')
@@ -351,7 +357,7 @@ def verify_item(data: Any) -> dict[str, Any]:
     """One item on its own, as an item file holds it (an item made in the item editor, #13): the same checks as an
     item in a pack folder; raises PackError."""
     path = f"{data['id']}.json" if isinstance(data, dict) and isinstance(data.get("id"), str) else "item"
-    return _check(ITEM_SCHEMA, path, _no_links(path, data))
+    return _check(ITEM_SCHEMA, path, no_links(path, data))
 
 
 def data_paths(paths: list[str]) -> list[str]:
@@ -389,7 +395,7 @@ def verify_folder(files: dict[str, str]) -> dict[str, Any]:
     The result has the same shape as an old single-file pack (see verify_pack), so everything after the import
     treats both alike."""
     files = _data_files(files)
-    pack = _pack_file(files[PACK_FILE])
+    pack = verify_pack_file(files[PACK_FILE])
     items = [_item_file(path, text) for path, text in sorted(files.items()) if path != PACK_FILE]
     if not items:
         raise PackError("invalid_content", "a pack needs at least one item file")

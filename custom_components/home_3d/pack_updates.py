@@ -22,6 +22,7 @@ Bundled packs come with Home 3D itself; their placed items follow the auto-updat
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from collections.abc import Callable
 from datetime import datetime, timedelta
 import logging
@@ -35,11 +36,11 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
-from .const import STORAGE_KEY_PACK_UPDATES, STORAGE_VERSION
-from .custom_items import CUSTOM_PACK_ID, not_reserved
+from .const import STORAGE_KEY_PACK_UPDATES, STORAGE_VERSION, TIME_PATTERN
+from .custom_items import not_reserved
 from .pack_github import checked_origin, fetch_pack, latest_release
-from .packs import PackError, source_of_folder, verify_folder, with_bundled
-from .recipes import installed_copies, recipe_copy
+from .packs import CUSTOM_PACK_ID, PackError, source_of_folder, verify_folder, with_bundled
+from .recipes import installed_copies, placed_types, recipe_copy
 
 if TYPE_CHECKING:
     from .storage import FloorplanData
@@ -57,10 +58,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # the day of a weekly check, 0 = Monday (a monthly check runs on the 1st)
     "weekday": 0,
 }
-SETTINGS_FIELDS = {
+SETTINGS_FIELDS: dict[Any, Any] = {
     vol.Optional("auto_update"): bool,
     vol.Optional("frequency"): vol.In(FREQUENCIES),
-    vol.Optional("time"): vol.All(str, vol.Match(r"^(?:[01]\d|2[0-3]):[0-5]\d$")),
+    vol.Optional("time"): vol.All(str, vol.Match(TIME_PATTERN)),
     vol.Optional("weekday"): vol.All(int, vol.Range(min=0, max=6)),
 }
 SETTINGS_SCHEMA = vol.Schema(SETTINGS_FIELDS)
@@ -68,14 +69,7 @@ SETTINGS_SCHEMA = vol.Schema(SETTINGS_FIELDS)
 
 def placed_counts(building: dict[str, Any]) -> dict[str, int]:
     """How often each furniture type is placed (a parking spot's vehicles count too)."""
-    counts: dict[str, int] = {}
-    for floor in building.get("floors", []):
-        for item in floor.get("furniture", []):
-            types = {item.get("type"), item.get("vehicle"), *(t.get("vehicle") for t in item.get("types") or [])}
-            for type_ in types:
-                if isinstance(type_, str):
-                    counts[type_] = counts.get(type_, 0) + 1
-    return counts
+    return dict(Counter(placed_types(building)))
 
 
 def pending_items(building: dict[str, Any], packs: list[dict[str, Any]]) -> list[dict[str, Any]]:

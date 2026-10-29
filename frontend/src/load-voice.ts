@@ -1,20 +1,12 @@
 // Voice (the microphone probe for now): its bundle loads only when it is asked for.
 
 import type * as VoiceBundle from "./voice/entry.ts";
+import { lazyBundle } from "./lazy-bundle.ts";
 
 /** Content hash of the voice bundle, set by the build (see build.mjs). */
 declare const __FP3D_VOICE_HASH__: string;
 
-let loading: Promise<typeof VoiceBundle> | undefined;
-
-export function loadVoice(): Promise<typeof VoiceBundle> {
-  const url = new URL(`./home-3d-voice.js?v=${__FP3D_VOICE_HASH__}`, new URL(import.meta.url)).href;
-  loading ??= (import(/* @vite-ignore */ url) as Promise<typeof VoiceBundle>).catch((err) => {
-    loading = undefined;
-    throw err;
-  });
-  return loading;
-}
+export const loadVoice = lazyBundle<typeof VoiceBundle>("home-3d-voice", __FP3D_VOICE_HASH__);
 
 /**
  * Whether the microphone probe was asked for in the address ("?fp3d_mic=1", also after "#"). Remembered for this tab:

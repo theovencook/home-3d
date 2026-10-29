@@ -5,6 +5,14 @@ import type { HassEntity } from "./types.ts";
 
 const two = (n: number) => String(n).padStart(2, "0");
 
+/** A time of day as plans store it: "HH:MM", 00:00 to 23:59 (the cheap rate window and the show-when times). */
+export const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** The "HH:MM" of a moment in the browser's local time. */
+export function hhmm(at: Date): string {
+  return `${two(at.getHours())}:${two(at.getMinutes())}`;
+}
+
 /** "MM-DD" days compare as text; a first day after the last runs over the new year. */
 function inDays(day: string, from: string, to: string): boolean {
   return from <= to ? day >= from && day <= to : day >= from || day <= to;
@@ -41,7 +49,7 @@ export function setIntervalPart(iv: ShowInterval, patch: ShowInterval): ShowInte
 /** Whether the moment lies in the interval (the parts left empty always fit; a half-open interval never does). */
 function inside(iv: ShowInterval, now: Date): boolean {
   if (!wholeInterval(iv)) return false;
-  const time = `${two(now.getHours())}:${two(now.getMinutes())}`;
+  const time = hhmm(now);
   // a time window over midnight belongs to the day it started (#46): after midnight the day is the one before
   const night = !!iv.start && !!iv.end && iv.start > iv.end && time < iv.end;
   const started = night ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) : now;

@@ -15,10 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .const import STORAGE_KEY_ITEMS, STORAGE_VERSION
-from .packs import MAX_ITEMS, PACK_FORMAT_V2, PACK_VERSION_V2, PackError, verify_item
-
-# the pack the custom items are offered as; no imported pack may take this id
-CUSTOM_PACK_ID = "household.custom"
+from .packs import CUSTOM_PACK_ID, MAX_ITEMS, PACK_FORMAT_V2, PACK_VERSION_V2, PackError, verify_item
 
 
 def not_reserved(pack: dict[str, Any]) -> dict[str, Any]:

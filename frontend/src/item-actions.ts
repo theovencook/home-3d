@@ -1,9 +1,9 @@
-import type { Floor, Furniture } from "./model.ts";
-
 /**
  * Own tap, hold and double-tap actions of a placed device or a furniture item (#6). Whatever talks to another
  * system goes through Home Assistant (a service call), never through the browser.
  */
+
+import type { Floor, Furniture } from "./model.ts";
 
 /** What an editor can make a gesture do; "default" (or nothing set) keeps what the item does by its kind. */
 export type ActionType = "default" | "none" | "toggle" | "more_info" | "camera" | "navigate" | "url" | "perform_action";

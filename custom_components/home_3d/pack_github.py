@@ -26,7 +26,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 from yarl import URL
 
-from .packs import MAX_FILE_SIZE, MAX_FOLDER_SIZE, MAX_ITEMS, PACK_FILE, PackError, _pack_file, data_paths
+from .packs import MAX_FILE_SIZE, MAX_FOLDER_SIZE, MAX_ITEMS, PACK_FILE, PackError, data_paths, verify_pack_file
 
 # the only hosts a pack is fetched from (a redirect elsewhere is refused)
 ALLOWED_HOSTS = frozenset({"github.com", "api.github.com", "raw.githubusercontent.com"})
@@ -276,7 +276,7 @@ async def latest_release(hass: HomeAssistant, origin: dict[str, Any]) -> tuple[s
         session, f"https://raw.githubusercontent.com/{name}/{sha}/{prefix}{PACK_FILE}", MAX_FILE_BYTES, PACK_FILE
     )
     try:
-        return sha, _pack_file(body.decode("utf-8"))
+        return sha, verify_pack_file(body.decode("utf-8"))
     except UnicodeDecodeError as err:
         raise PackError("invalid_content", f"{PACK_FILE}: not UTF-8 text") from err
 

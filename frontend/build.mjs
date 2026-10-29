@@ -52,23 +52,26 @@ const locateConfig = { ...common, entryPoints: ["src/locate/entry.ts"], outfile:
 // never taken from the browser cache (the integration version only changes after a restart).
 // the frontend knows its own version, to notice a backend that still runs an older one
 const version = JSON.parse(readFileSync("../custom_components/home_3d/manifest.json", "utf8")).version;
-const mainConfig = (viewerHash, editorHash, cardEditorHash, timeTravelHash, funHash, voiceHash, locateHash, plan2dHash) => ({
+// `hashes`: the content hash of each bundle it loads, by name (viewer, editor, cardEditor, timeTravel, fun, voice, locate, plan2d)
+const mainConfig = (hashes) => ({
   ...common,
   entryPoints: ["src/main.ts"],
   outfile: `${out}/home-3d.js`,
   define: {
-    __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash),
-    __FP3D_EDITOR_HASH__: JSON.stringify(editorHash),
-    __FP3D_CARD_EDITOR_HASH__: JSON.stringify(cardEditorHash),
-    __FP3D_TIMETRAVEL_HASH__: JSON.stringify(timeTravelHash),
-    __FP3D_FUN_HASH__: JSON.stringify(funHash),
-    __FP3D_VOICE_HASH__: JSON.stringify(voiceHash),
-    __FP3D_LOCATE_HASH__: JSON.stringify(locateHash),
-    __FP3D_PLAN2D_HASH__: JSON.stringify(plan2dHash),
+    __FP3D_VIEWER_HASH__: JSON.stringify(hashes.viewer),
+    __FP3D_EDITOR_HASH__: JSON.stringify(hashes.editor),
+    __FP3D_CARD_EDITOR_HASH__: JSON.stringify(hashes.cardEditor),
+    __FP3D_TIMETRAVEL_HASH__: JSON.stringify(hashes.timeTravel),
+    __FP3D_FUN_HASH__: JSON.stringify(hashes.fun),
+    __FP3D_VOICE_HASH__: JSON.stringify(hashes.voice),
+    __FP3D_LOCATE_HASH__: JSON.stringify(hashes.locate),
+    __FP3D_PLAN2D_HASH__: JSON.stringify(hashes.plan2d),
     __FP3D_VERSION__: JSON.stringify(version),
     __FP3D_LANG_HASH__: JSON.stringify(langHash),
   },
 });
+// the bundles the main bundle loads by hash (the keys of mainConfig's `hashes`)
+const HASHED = ["viewer", "editor", "cardEditor", "timeTravel", "fun", "voice", "locate", "plan2d"];
 const hashOf = (file) => createHash("sha256").update(readFileSync(file)).digest("hex").slice(0, 12);
 
 // Self-hosted fonts (SIL OFL): latin subset of the variable weight axis, shipped with their licences.
@@ -94,7 +97,7 @@ const BUDGET = { "home-3d.js": 780 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d
 copyFonts();
 if (watch) {
   // in watch mode the hash is not tracked; a dev reload fetches the bundle anyway
-  for (const c of [viewerConfig, itemsConfig("dev"), editorConfig("dev", "dev", "dev"), cardEditorConfig, timeTravelConfig, funConfig, voiceConfig, locateConfig, plan2dConfig, mainConfig("dev", "dev", "dev", "dev", "dev", "dev", "dev", "dev")]) await (await context(c)).watch();
+  for (const c of [viewerConfig, itemsConfig("dev"), editorConfig("dev", "dev", "dev"), cardEditorConfig, timeTravelConfig, funConfig, voiceConfig, locateConfig, plan2dConfig, mainConfig(Object.fromEntries(HASHED.map((name) => [name, "dev"])))]) await (await context(c)).watch();
 } else {
   await build(viewerConfig);
   await build(locateConfig);
@@ -107,7 +110,18 @@ if (watch) {
   await build(funConfig);
   await build(voiceConfig);
   await build(plan2dConfig);
-  await build(mainConfig(hashOf(viewerConfig.outfile), hashOf(editor.outfile), hashOf(cardEditorConfig.outfile), hashOf(timeTravelConfig.outfile), hashOf(funConfig.outfile), hashOf(voiceConfig.outfile), hashOf(locateConfig.outfile), hashOf(plan2dConfig.outfile)));
+  await build(
+    mainConfig({
+      viewer: hashOf(viewerConfig.outfile),
+      editor: hashOf(editor.outfile),
+      cardEditor: hashOf(cardEditorConfig.outfile),
+      timeTravel: hashOf(timeTravelConfig.outfile),
+      fun: hashOf(funConfig.outfile),
+      voice: hashOf(voiceConfig.outfile),
+      locate: hashOf(locateConfig.outfile),
+      plan2d: hashOf(plan2dConfig.outfile),
+    }),
+  );
   let over = false;
   // old Fire-tablet WebViews (Chrome before 91, e.g. Fully Kiosk on a Fire 7) throw on an optional call with spread
   // arguments, `a?.b(...x)` – the roof failed there; lowering the target for it would cost ~11 KB, so it is banned

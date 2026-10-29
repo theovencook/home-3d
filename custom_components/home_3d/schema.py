@@ -11,6 +11,8 @@ import re
 
 import voluptuous as vol
 
+from .const import TIME_PATTERN
+from .packs import COLOUR_ROLES
 from .recipes import recipes_validator
 
 MAX_FLOORS = 20
@@ -127,11 +129,9 @@ ROOM_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
-# door looks (room door, front doors with glass and sidelights, glass and sliding door) and window looks
-# the colour roles parts are drawn in (frontend colour-roles.ts)
-COLOUR_ROLES = ["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent"]
 # the materials a colour role can take (#40, frontend/src/role-materials.ts); the realistic look shows them
 MATERIALS = ["matt", "gloss", "fabric", "glass", "metal", "rattan"]
+# door looks (room door, front doors with glass and sidelights, glass and sliding door) and window looks
 _OPENING_STYLES = ["interior", "front", "front_glass", "sidelight", "sidelights", "glass", "sliding", "passage"]
 _OPENING_STYLES += ["standard", "bars", "glass_wall"]
 # garage doors: sectional (the default) or up-and-over (#24)
@@ -246,7 +246,7 @@ WASTE_KINDS = ["rest", "bio", "paper", "plastic", "glass", "garden", "recycling"
 # both included, over the new year when from > to) and/or times of day ("HH:MM", over midnight when start > end, the
 # night then belonging to the day it started); each pair is given whole or not at all (#46)
 _DAY = vol.Any(None, vol.Match(r"^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"))
-_TIME = vol.Any(None, vol.Match(r"^([01][0-9]|2[0-3]):[0-5][0-9]$"))
+_TIME = vol.Any(None, vol.Match(TIME_PATTERN))
 
 
 def _whole_interval(interval: dict) -> dict:

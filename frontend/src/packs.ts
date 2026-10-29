@@ -289,11 +289,6 @@ export function packType(packId: string, itemId: string): string {
   return `pack:${packId}:${itemId}`;
 }
 
-/** The full id of a pack item, as packs name it: "publisher.pack/item_id". */
-export function packItemRef(packId: string, itemId: string): string {
-  return `${packId}/${itemId}`;
-}
-
 export function isPackType(type: string): boolean {
   return type.startsWith("pack:");
 }

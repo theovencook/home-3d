@@ -41,3 +41,5 @@ STORAGE_KEY_ITEMS = f"{DOMAIN}.custom_items"
 # pack updates (#26): the settings, pins and previous releases, kept in .storage (see pack_updates.py)
 DATA_PACK_UPDATES = f"{DOMAIN}_pack_updates"
 STORAGE_KEY_PACK_UPDATES = f"{DOMAIN}.pack_updates"
+# a time of day as the plan and the update settings store it: "HH:MM", 00:00 to 23:59 (frontend show-when.ts HHMM)
+TIME_PATTERN = r"^([01][0-9]|2[0-3]):[0-5][0-9]$"

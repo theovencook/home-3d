@@ -13,18 +13,19 @@ This module only depends on voluptuous (through packs.py).
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 import logging
 from typing import Any
 
 import voluptuous as vol
 
-from .packs import ITEM_SCHEMA, PackError, _no_links, recipe_hash
+from .packs import CUSTOM_PACK_ID, ITEM_SCHEMA, PackError, no_links, recipe_hash
 
 _LOGGER = logging.getLogger(__name__)
 
 PACK_TYPE_PREFIX = "pack:"
-# the household's own items (#13, custom_items.CUSTOM_PACK_ID; not imported here, which needs Home Assistant)
-CUSTOM_TYPE_PREFIX = f"{PACK_TYPE_PREFIX}household.custom:"
+# the household's own items (#13)
+CUSTOM_TYPE_PREFIX = f"{PACK_TYPE_PREFIX}{CUSTOM_PACK_ID}:"
 # one copy per pack item type in use; a plan has at most 20 floors of 1000 items
 MAX_RECIPES = 2000
 
@@ -45,7 +46,7 @@ def _checked_copy(type_: str, entry: Any) -> dict[str, Any] | None:
     version cannot read is dropped rather than refusing the whole plan."""
     try:
         clean = RECIPE_COPY_SCHEMA(entry)
-        _no_links(type_, clean["recipe"])
+        no_links(type_, clean["recipe"])
     except (vol.Invalid, PackError) as err:
         _LOGGER.warning("Dropping the plan's copy of %s: %s", type_, err)
         return None
@@ -71,15 +72,18 @@ def recipes_validator(value: Any) -> dict[str, dict[str, Any]]:
     return kept
 
 
-def used_pack_types(building: dict[str, Any]) -> set[str]:
-    """The pack item types a building shows: its furniture and the vehicles of its parking spots."""
-    used: set[str] = set()
+def placed_types(building: dict[str, Any]) -> Iterator[str]:
+    """The furniture types a building shows, once per placed item: its own type and the vehicles of a parking spot
+    (frontend pack-recipes.ts packTypesIn walks the same way)."""
     for floor in building.get("floors", []):
         for item in floor.get("furniture", []):
-            for type_ in (item.get("type"), item.get("vehicle"), *(t.get("vehicle") for t in item.get("types") or [])):
-                if isinstance(type_, str) and type_.startswith(PACK_TYPE_PREFIX):
-                    used.add(type_)
-    return used
+            types = {item.get("type"), item.get("vehicle"), *(t.get("vehicle") for t in item.get("types") or [])}
+            yield from (type_ for type_ in types if isinstance(type_, str))
+
+
+def used_pack_types(building: dict[str, Any]) -> set[str]:
+    """The pack item types a building shows: its furniture and the vehicles of its parking spots."""
+    return {type_ for type_ in placed_types(building) if type_.startswith(PACK_TYPE_PREFIX)}
 
 
 def recipe_copy(pack: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
