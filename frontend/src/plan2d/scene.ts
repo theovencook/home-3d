@@ -205,6 +205,15 @@ export interface PlanView {
   ty: number;
 }
 
+/**
+ * Where the view's anchors sit on screen: a point on the plan (`plan`, the energy cables' ends, #29) on the floor
+ * shown is where the plan draws it; the floating cards belong to the 3D view and stay hidden.
+ */
+export function anchorSpots(anchors: readonly { p: readonly [number, number, number]; floorId: string; plan?: boolean }[], floorId: string | null, v: PlanView, below = 0): { on: boolean; x: number; y: number }[] {
+  // `below`: pixels under the point, so a device pin drawn on the very point keeps its taps
+  return anchors.map((a) => (a.plan && a.floorId === floorId ? { on: true, x: v.tx + a.p[0] * v.k, y: v.ty + a.p[2] * v.k + below } : { on: false, x: 0, y: 0 }));
+}
+
 const MIN_K = 2;
 const MAX_K = 2000;
 

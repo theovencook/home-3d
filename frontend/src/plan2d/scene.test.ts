@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Building, type Furniture, type Opening, type Room } from "../model.ts";
 import type { DeviceMarker, FlowPiece } from "../viewer/viewer3d.ts";
-import { fitView, floorPictures, flowLines, planItems, planMarkers, planOpenings, shownFloor, zoomView } from "./scene.ts";
+import { anchorSpots, fitView, floorPictures, flowLines, planItems, planMarkers, planOpenings, shownFloor, zoomView } from "./scene.ts";
 
 const rect = (id: string, x0: number, z0: number, x1: number, z1: number): Room => ({ id, name: id, area_id: null, points: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]] }) as Room;
 const item = (id: string, type: string, extra: Partial<Furniture> = {}): Furniture => ({ id, type, x: 1, z: 1, rotation: 0, w: 1, d: 0.5, h: 1, variant: null, ...extra }) as Furniture;
@@ -120,4 +120,16 @@ test("every floor with rooms gets a small picture of its rooms to switch floors 
   assert.match(svgText, /^<svg [^>]*viewBox="0 0 150 112"/);
   // the one room of the ground floor as an outline
   assert.equal((svgText.match(/<polygon /g) ?? []).length, 1);
+});
+
+test("points on the plan (the energy cables' ends, #29) sit where the plan shows them; floating cards stay hidden", () => {
+  const at = (x: number, z: number, floorId: string, plan?: boolean) => ({ p: [x, 0.03, z] as [number, number, number], floorId, ...(plan ? { plan } : {}) });
+  const spots = anchorSpots([at(2, 3, "g", true), at(2, 3, "t", true), at(1, 1, "g")], "g", { k: 40, tx: 10, ty: 20 });
+  assert.deepEqual(spots, [
+    { on: true, x: 90, y: 140 },
+    { on: false, x: 0, y: 0 },
+    { on: false, x: 0, y: 0 },
+  ]);
+  // a device's pin sits on the very point: the cable's end steps just below it, so the pin keeps its taps
+  assert.deepEqual(anchorSpots([at(2, 3, "g", true)], "g", { k: 40, tx: 10, ty: 20 }, 26)[0], { on: true, x: 90, y: 166 });
 });

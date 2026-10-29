@@ -1560,7 +1560,7 @@ export class Fp3dView3d extends LitElement {
     const wires = cables && !this._walk ? wireEnds(hass, consumers).filter((w) => b.floors.some((f) => f.id === w.floorId)) : [];
     if (JSON.stringify(wires) !== JSON.stringify(this._wires)) this._wires = wires;
     this.holoCount = shownCards.length;
-    const wireAnchors = wires.map((w) => ({ p: [w.x, b.floors.find((f) => f.id === w.floorId)!.elevation + 0.03, w.z] as [number, number, number], n: [0, 1, 0] as [number, number, number], floorId: w.floorId, size: 1, roof: false, views: "all" as const }));
+    const wireAnchors = wires.map((w) => ({ p: [w.x, b.floors.find((f) => f.id === w.floorId)!.elevation + 0.03, w.z] as [number, number, number], n: [0, 1, 0] as [number, number, number], floorId: w.floorId, size: 1, roof: false, views: "all" as const, plan: true }));
     v.setAnchors([...anchors.filter((_, i) => keep[i]), ...wireAnchors]);
     if (JSON.stringify(shownCards) !== JSON.stringify(this._holos)) this._holos = shownCards;
     // the modules live with their production (at night, and without Pro, they rest)
