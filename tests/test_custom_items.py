@@ -8,8 +8,10 @@ import json
 
 from homeassistant.core import HomeAssistant
 import pytest
+from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.home_3d import packs
+from tests import test_pack_github as github
 from tests.test_init import _setup
 
 CUSTOM = "household.custom"
@@ -200,3 +202,23 @@ async def test_a_backup_carries_the_custom_items(hass: HomeAssistant, hass_ws_cl
     await client.send_json_auto_id({"type": "home_3d/backup/import", "building": backup["building"]})
     assert (await client.receive_json())["success"]
     assert [i["id"] for i in _custom(await _packs(client))["items"]] == ["wall_shelf"]
+
+
+async def test_no_other_way_in_can_take_the_custom_items_id(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Installing from GitHub (#25) and restoring a backup refuse the reserved pack id as well."""
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    meta = {**github.PACK_JSON, "id": CUSTOM}
+    github._mock_repo(aioclient_mock, {"pack.json": json.dumps(meta), "cube_chair.json": json.dumps(github.CHAIR)})
+    result = await github._install(client, f"https://github.com/{github.OWNER}/{github.REPO}")
+    assert result["error"]["code"] == "reserved"
+
+    await client.send_json_auto_id({"type": "home_3d/backup/export"})
+    backup = (await client.receive_json())["result"]
+    pack = {"id": CUSTOM, "source": {"files": {"pack.json": json.dumps(meta), "wall_shelf.json": json.dumps(SHELF)}}}
+    await client.send_json_auto_id({"type": "home_3d/backup/import", "building": backup["building"], "packs": [pack]})
+    result = await client.receive_json()
+    assert result["result"]["skipped"] == [{"id": CUSTOM, "reason": "reserved"}]
+    assert _custom(await _packs(client)) is None

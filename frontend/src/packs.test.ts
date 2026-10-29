@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isLamp, newFloor, setTerrain, type Building, type Furniture } from "./model.ts";
-import { isCooktopZone, isPackCooktop, isPackSensor, furnitureSize, isElectric, mountBase, packDisplay, packItem, packItemName, packName, packsVersion, packType, setPacks, withPackItem, DRAFT_TYPE, type FurniturePack } from "./packs.ts";
+import { isCooktopZone, isPackCooktop, isPackSensor, furnitureSize, isElectric, mountBase, packDisplay, packItem, packItemName, packName, packOrigin, packsVersion, packType, setPacks, withPackItem, DRAFT_TYPE, type FurniturePack } from "./packs.ts";
 
 const pack: FurniturePack = {
   id: "demo.pack",
@@ -134,4 +134,13 @@ test("an item being edited is drawn as a pack item without changing the installe
     throw new Error("draw failed");
   }));
   assert.equal(packItem(DRAFT_TYPE), undefined, "gone after a failure too");
+});
+
+test("a pack installed from GitHub shows where it came from (#25); an imported one shows nothing", () => {
+  const origin = { type: "github" as const, url: "https://github.com/theovencook/home-3d-packs/tree/main/theovencook.core", owner: "theovencook", repo: "home-3d-packs", ref: "main", default_branch: false, folder: "theovencook.core", commit: "a".repeat(40) };
+  assert.deepEqual(packOrigin({ ...pack, source: { origin } }), { label: "theovencook/home-3d-packs/theovencook.core @ main", url: origin.url });
+  const root = { ...origin, url: "https://github.com/theovencook/one-pack", repo: "one-pack", ref: "trunk", default_branch: true, folder: "" };
+  assert.deepEqual(packOrigin({ ...pack, source: { origin: root } }), { label: "theovencook/one-pack", url: root.url });
+  assert.equal(packOrigin(pack), null);
+  assert.equal(packOrigin({ ...pack, source: { files: {} } }), null);
 });

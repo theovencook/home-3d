@@ -21,6 +21,13 @@ from .packs import MAX_ITEMS, PACK_FORMAT_V2, PACK_VERSION_V2, PackError, verify
 CUSTOM_PACK_ID = "household.custom"
 
 
+def not_reserved(pack: dict[str, Any]) -> dict[str, Any]:
+    """A pack being imported, installed or restored, unless it takes the custom items' pack id; raises PackError."""
+    if pack.get("id") == CUSTOM_PACK_ID:
+        raise PackError("reserved", f"{CUSTOM_PACK_ID} holds this home's own items: import them in the item editor")
+    return pack
+
+
 def custom_pack(items: list[dict[str, Any]]) -> dict[str, Any]:
     """The custom items as a pack, as the library takes packs (`custom` marks it for the extensions page)."""
     return {

@@ -55,3 +55,17 @@ test("the entity an item follows is watched, so it hides or comes back when that
   const ids = watchedEntities(hass, b, { openings, furniture, heat: false, warnings: [], weatherEntityId: null });
   assert.ok(ids.includes("switch.tree_lights"));
 });
+
+test("a 3D printer's progress, chamber light and camera are watched, found on its linked entity's device (#11)", () => {
+  const { hass, b, openings, furniture } = setup();
+  const reg = hass.entities as Record<string, unknown>;
+  const states = hass.states as Record<string, unknown>;
+  for (const [id, attributes] of [["sensor.p_status", { device_class: "enum" }], ["sensor.p_progress", { unit_of_measurement: "%" }], ["light.p_chamber", {}], ["camera.p_cam", {}]] as const) {
+    reg[id] = { entity_id: id, device_id: "printer" };
+    states[id] = { entity_id: id, state: "on", attributes };
+  }
+  b.floors[0].furniture = [{ id: "p", type: "pack:theovencook.core:3d_printer", x: 1, z: 1, rotation: 0, w: 0.4, d: 0.4, h: 0.5, variant: null }];
+  furniture.set("p", { entity: "sensor.p_status", power: null });
+  const ids = watchedEntities(hass, b, { openings, furniture, heat: false, warnings: [], weatherEntityId: null });
+  for (const id of ["sensor.p_status", "sensor.p_progress", "light.p_chamber", "camera.p_cam"]) assert.ok(ids.includes(id), id);
+});

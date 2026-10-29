@@ -156,6 +156,7 @@ import type { WallMode } from "../viewer/viewer3d.ts";
 import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, type FurniturePack } from "../packs.ts";
+import { isPrinter } from "../printer.ts";
 
 /** Items that can be fixed against moving. */
 type FixKind = "room" | "opening" | "furniture" | "device" | "wall" | "outdoor";
@@ -12101,7 +12102,8 @@ export class Fp3dEditor extends LitElement {
                 // a pack's heat pump indoor unit, boiler or buffer tank: its water_heater entity (#645)
                 (isPackHeater(f.type) && id.startsWith("water_heater.")) ||
                 // a pack's sensor model (motion, presence, contact, leak …): any sensor, with or without a class (#810)
-                (isPackSensor(f.type) && /^(binary_sensor|sensor)\./.test(id)) ||
+                // a 3D printer (#11): any of its sensors (OctoPrint reports printing as a binary sensor)
+                ((isPackSensor(f.type) || isPrinter(f.type)) && /^(binary_sensor|sensor)\./.test(id)) ||
                 isStatusSensor(hass.states[id]) ||
                 // alarms that report as binary sensors (binary_sensor.…_smoke, #490); a smoke detector takes any
                 (id.startsWith("binary_sensor.") && (f.type.endsWith("smoke_detector") || ALARM_CLASSES.has(String(hass.states[id]?.attributes.device_class ?? "")))),

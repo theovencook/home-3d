@@ -155,6 +155,8 @@ ITEM_SCHEMA = vol.Schema(
         vol.Optional("tags"): vol.All([vol.All(str, vol.Length(min=1, max=30))], vol.Length(max=12)),
         vol.Optional("family"): _ID,
         vol.Optional("variant"): vol.All({vol.All(str, vol.Length(min=2, max=5)): _TEXT}, vol.Length(min=1, max=10)),
+        # the IKEA product name ("KALLAX"): the library finds the item by it as well as by its readable name
+        vol.Optional("ikea"): vol.All(str, vol.Length(min=1, max=40)),
     }
 )
 
@@ -280,19 +282,26 @@ def verify_item(data: Any) -> dict[str, Any]:
     return _check(ITEM_SCHEMA, path, _no_links(path, data))
 
 
-def _data_files(files: dict[str, str]) -> dict[str, str]:
-    """The pack.json and item files of a folder, after the checks on names, count and size; raises PackError."""
-    if PACK_FILE not in files:
+def data_paths(paths: list[str]) -> list[str]:
+    """The paths of a folder's files that are read (pack.json and the items, not the readme or licence text), after
+    the checks on names and count; raises PackError. A fetch from GitHub runs it before downloading anything."""
+    if PACK_FILE not in paths:
         raise PackError("not_a_pack", f"no {PACK_FILE}")
-    kept: dict[str, str] = {}
-    for path, text in files.items():
+    kept: list[str] = []
+    for path in paths:
         if _DOC_PATH.match(path):
             continue
         if path != PACK_FILE and not _ITEM_PATH.match(path):
             raise PackError("not_data", f"{path}: a pack holds only {PACK_FILE} and item .json files")
-        kept[path] = text
+        kept.append(path)
     if len(kept) - 1 > MAX_ITEMS:
         raise PackError("too_many_items", f"{len(kept) - 1} items, at most {MAX_ITEMS}")
+    return kept
+
+
+def _data_files(files: dict[str, str]) -> dict[str, str]:
+    """The pack.json and item files of a folder, after the checks on names, count and size; raises PackError."""
+    kept = {path: files[path] for path in data_paths(list(files))}
     for path, text in kept.items():
         if len(text) > MAX_FILE_SIZE:
             raise PackError("too_large", f"{path}: {len(text)} characters, at most {MAX_FILE_SIZE}")
@@ -352,7 +361,8 @@ def load_bundled(root: Path = BUNDLED_DIR) -> list[dict[str, Any]]:
 
 def with_bundled(bundled: list[dict[str, Any]], imported: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """All packs to offer: the bundled ones, then the imported ones, one per pack id. When a pack is both bundled
-    and imported (a copy installed from the packs repository), the higher release wins; on a tie the imported one."""
+    and imported (a copy imported from files or installed from a GitHub URL), the higher release wins; on a tie the
+    imported one."""
     release = {p["id"]: p.get("release", 1) for p in imported}
     kept = [p for p in bundled if release.get(p["id"], 0) < p.get("release", 1)]
     shadowed = {p["id"] for p in kept}

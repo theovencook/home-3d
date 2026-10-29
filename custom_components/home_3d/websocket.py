@@ -15,10 +15,11 @@ from homeassistant.loader import async_get_integration
 import voluptuous as vol
 
 from .const import DATA_ASK, DATA_EDITORS, DATA_VOICE, DOMAIN, SIGNAL_ASK, SIGNAL_BUILDING_UPDATED
-from .custom_items import CUSTOM_PACK_ID
+from .custom_items import not_reserved
 from .editors import Editors, EditorsError, can_edit
 from .locate.recorder import ws_locate_rec
 from .locate.ws import COMMANDS as LOCATE_COMMANDS
+from .pack_github import checked_origin, fetch_pack
 from .packs import (
     MAX_PACK_SIZE,
     PackError,
@@ -53,6 +54,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_history_restore,
         ws_packs_list,
         ws_packs_import,
+        ws_packs_install_url,
         ws_packs_remove,
         ws_items_save,
         ws_items_remove,
@@ -262,8 +264,7 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
             source = parts_of(msg["pack"])
         else:
             raise PackError("not_a_pack", "send a pack file or a pack folder")
-        if payload["id"] == CUSTOM_PACK_ID:
-            raise PackError("reserved", f"{CUSTOM_PACK_ID} holds this home's own items: import them in the item editor")
+        not_reserved(payload)
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
         return
@@ -274,6 +275,37 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
         "publisher": payload["publisher"],
         "licence": payload["licence"],
         "items": len(payload["items"]),
+    }
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "home_3d/packs/install_url", vol.Required("url"): vol.All(str, vol.Length(min=1, max=500))}
+)
+@require_editor
+@websocket_api.async_response
+async def ws_packs_install_url(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Install a pack from a GitHub URL (#25): Home Assistant fetches it, checks it like a folder import and keeps
+    where it came from (`source.origin`) for update checks."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    try:
+        files, origin = await fetch_pack(hass, msg["url"])
+        payload = not_reserved(verify_folder(files))
+        source = {**source_of_folder(files), "origin": {**origin, "release": payload["release"]}}
+    except PackError as err:
+        connection.send_error(msg["id"], err.code, err.detail or err.code)
+        return
+    await data.async_add_pack(payload, source)
+    result = {
+        "id": payload["id"],
+        "name": payload["name"],
+        "publisher": payload["publisher"],
+        "licence": payload["licence"],
+        "items": len(payload["items"]),
+        "origin": source["origin"],
     }
     connection.send_result(msg["id"], result)
 
@@ -388,10 +420,15 @@ async def ws_backup_import(
             skipped.append({"id": name, "reason": "no_source"})
             continue
         try:
-            clean = verify_source(source)
+            clean = not_reserved(verify_source(source))
         except PackError as err:
             skipped.append({"id": name, "reason": err.code})
             continue
+        if "origin" in source:
+            # where a pack came from (#25): kept only when it names GitHub as this version writes it
+            source = {k: v for k, v in source.items() if k != "origin"}
+            if (origin := checked_origin(entry["source"]["origin"])) is not None:
+                source["origin"] = origin
         packs.append({**clean, "source": source, "imported_at": time.time()})
     items: list[dict[str, Any]] | None = None
     if "items" in msg:

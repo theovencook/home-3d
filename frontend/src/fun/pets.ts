@@ -93,7 +93,8 @@ function shapes(lib: FunLib) {
   };
 }
 
-const FURS: Record<string, [string, string]> = {
+/** A coat: its main colour, the chest and belly, and patches (if any) over its back and head. */
+const FURS: Record<string, [string, string, ...string[]]> = {
   orange: ["#e0954a", "#fbe6cf"],
   tabby: ["#a8865d", "#e8d6bb"],
   black: ["#2c2c33", "#5a5a66"],
@@ -103,6 +104,18 @@ const FURS: Record<string, [string, string]> = {
   calico: ["#f4f0e8", "#e09045"],
   golden: ["#e3b46b", "#f7e3bd"],
   cream: ["#efe0c4", "#fff6e6"],
+  // #42: white with grey and cream patches
+  dilute_calico: ["#f3efe8", "#f7f4ee", "#8e939c", "#e3c79a"],
+  // #42: solid blue-grey all over (British shorthair), no lighter chest
+  blue_grey: ["#7f8999", "#7f8999"],
+};
+
+/** Eye colours round a dark pupil (#42); "dark" eyes have no iris, as before. */
+const IRISES: Record<string, string> = {
+  copper: "#c8682a",
+  green: "#6fae3e",
+  yellow: "#e2c22e",
+  blue: "#4f8fd8",
 };
 
 /** The look of a kind (or a dog's breed): body length/width/height, legs, head, snout, ears, tail, speed (m/s). */
@@ -144,14 +157,17 @@ interface Model {
 export function buildModel(lib: FunLib, pet: Pet): Model {
   const S = shapes(lib);
   const L = lookOf(pet);
-  const [main, second] = FURS[pet.fur] ?? FURS.orange;
+  const [main, second, ...patchColours] = FURS[pet.fur] ?? FURS.orange;
   const m1 = new lib.MeshBasicMaterial({ color: main, vertexColors: true });
   const m2 = new lib.MeshBasicMaterial({ color: second, vertexColors: true });
   const earMat = new lib.MeshBasicMaterial({ color: new lib.Color(main).multiplyScalar(0.78), vertexColors: true });
   const paw = new lib.MeshBasicMaterial({ color: new lib.Color(main).lerp(new lib.Color(second), 0.6), vertexColors: true });
   const dark = new lib.MeshBasicMaterial({ color: "#16161c" });
   const shine = new lib.MeshBasicMaterial({ color: "#ffffff" });
+  const irisColour = pet.eyes ? IRISES[pet.eyes] : undefined;
+  const iris = irisColour ? new lib.MeshBasicMaterial({ color: irisColour }) : null;
   const nose = new lib.MeshBasicMaterial({ color: pet.kind === "dog" ? "#1d1d22" : "#f08aa0" });
+  const patches = patchColours.map((c) => new lib.MeshBasicMaterial({ color: c, vertexColors: true }));
   const ball = (mat: THREE.Material, sx: number, sy: number, sz: number, x = 0, y = 0, z = 0) => {
     const m = new lib.Mesh(S.ball, mat);
     m.scale.set(sx, sy, sz);
@@ -164,6 +180,9 @@ export function buildModel(lib: FunLib, pet: Pet): Model {
   const cy = L.leg + L.hi / 2;
   // the body: a soft ellipsoid, the chest and belly lighter
   body.add(ball(m1, L.wid, L.hi, L.len, 0, cy, 0), ball(m2, L.wid * 0.78, L.hi * 0.72, L.len * 0.55, 0, cy - L.hi * 0.12, L.len * 0.16));
+  // patches (a calico's): rounded shapes just breaking through the back, one towards the tail, one at the shoulder
+  if (patches[0]) body.add(ball(patches[0], L.wid * 0.72, L.hi * 0.7, L.len * 0.5, L.wid * 0.22, cy + L.hi * 0.18, -L.len * 0.17));
+  if (patches[1]) body.add(ball(patches[1], L.wid * 0.66, L.hi * 0.7, L.len * 0.42, -L.wid * 0.24, cy + L.hi * 0.16, L.len * 0.14));
   // stubby legs with light paws, pivot at the hip
   const legs: THREE.Group[] = [];
   const lr = Math.min(0.04, L.wid * 0.17);
@@ -187,16 +206,23 @@ export function buildModel(lib: FunLib, pet: Pet): Model {
   const h = L.head;
   head.position.set(0, L.leg + L.hi * 0.9 + h * 0.45, L.len / 2 + h * 0.45);
   head.add(ball(m1, h * 2.15, h * 1.95, h * 1.95));
+  // patches over one ear and the other side of the crown, clear of the eyes
+  if (patches[0]) head.add(ball(patches[0], h * 1.3, h * 1.1, h * 1.6, h * 0.45, h * 0.45, -h * 0.05));
+  if (patches[1]) head.add(ball(patches[1], h * 1.1, h * 1.0, h * 1.3, -h * 0.5, h * 0.35, -h * 0.25));
   // muzzle: a dog's snout forward, a cat's and rabbit's small cheeks, and the nose
   const sn = Math.max(0.025, L.snout);
   head.add(ball(m2, h * 1.05, h * 0.8, sn * 1.6 + h * 0.5, 0, -h * 0.32, h * 0.72 + sn * 0.45));
   head.add(ball(nose, h * 0.28, h * 0.2, h * 0.2, 0, -h * 0.12, h * 0.95 + sn * 1.1));
   const eyes: THREE.Group[] = [];
   for (const side of [-1, 1]) {
-    // the eyes: dark, round, with a shine (closed when sleeping)
+    // the eyes: dark, round, with a shine (closed when sleeping); coloured ones have an iris round the dark pupil
     const e = new lib.Group();
     e.position.set(side * h * 0.42, h * 0.12, h * 0.82);
-    e.add(ball(dark, h * 0.34, h * 0.38, h * 0.2), ball(shine, h * 0.11, h * 0.11, h * 0.08, side * -h * 0.05, h * 0.08, h * 0.08));
+    if (iris) {
+      const slit = L.ears === "cat";
+      e.add(ball(iris, h * 0.34, h * 0.38, h * 0.2), ball(dark, h * (slit ? 0.1 : 0.17), h * (slit ? 0.3 : 0.2), h * 0.12, 0, 0, h * 0.05));
+    } else e.add(ball(dark, h * 0.34, h * 0.38, h * 0.2));
+    e.add(ball(shine, h * 0.11, h * 0.11, h * 0.08, side * -h * 0.05, h * 0.08, h * 0.08));
     head.add(e);
     eyes.push(e);
     if (L.ears === "cat") {

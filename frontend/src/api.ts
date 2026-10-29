@@ -2,7 +2,7 @@
 
 import type { EditorUser } from "./editors.ts";
 import type { Building } from "./model.ts";
-import type { FurniturePack, PackItem } from "./packs.ts";
+import type { FurniturePack, PackItem, PackOrigin } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
 /** `can_edit`: the user is on the editors list (missing from backends before #7). */
@@ -100,6 +100,11 @@ export async function importPack(hass: HomeAssistant, text: string): Promise<Imp
 /** Import a v2 pack folder (path inside the folder -> file text); the backend checks every file. */
 export async function importPackFolder(hass: HomeAssistant, files: Record<string, string>): Promise<ImportedPack> {
   return hass.callWS<ImportedPack>({ type: "home_3d/packs/import", files });
+}
+
+/** Install a pack from a GitHub URL (a repo, or a pack folder in one); Home Assistant fetches and checks it (#25). */
+export async function installPackFromUrl(hass: HomeAssistant, url: string): Promise<ImportedPack & { origin: PackOrigin }> {
+  return hass.callWS<ImportedPack & { origin: PackOrigin }>({ type: "home_3d/packs/install_url", url });
 }
 
 export async function removePack(hass: HomeAssistant, packId: string): Promise<void> {

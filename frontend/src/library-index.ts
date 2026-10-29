@@ -6,39 +6,9 @@
 
 import { FURNITURE_GROUPS, LAMP_TYPES } from "./model.ts";
 import { isElectric, packItemName, packName, packType, type FurniturePack, type PackItem } from "./packs.ts";
+import { isVocabularyWord, KIND_WORDS, KINDS, ROOMS, synonymWords, type Kind, type Room } from "./vocabulary.ts";
 
-/** What an item is; the library's sections, in this order. */
-export const KINDS = [
-  "sofa",
-  "seating",
-  "table",
-  "storage",
-  "bed",
-  "kitchen",
-  "appliance",
-  "bath",
-  "lamp",
-  "media",
-  "office",
-  "tech",
-  "heating",
-  "energy",
-  "household",
-  "deco",
-  "plant",
-  "outdoor",
-  "kids",
-  "sport",
-  "pets",
-  "vehicle",
-  "stairs",
-  "architecture",
-] as const;
-export type Kind = (typeof KINDS)[number];
-
-/** Rooms an item is made for; "any" fits everywhere. */
-export const ROOMS = ["living", "dining", "kitchen", "bedroom", "kids", "bath", "office", "hall", "utility", "garage", "garden", "hobby"] as const;
-export type Room = (typeof ROOMS)[number];
+export { KINDS, ROOMS, type Kind, type Room };
 
 export interface LibraryEntry {
   /** The furniture type to place (a built-in kind or "pack:<pack>:<item>"). */
@@ -65,6 +35,8 @@ export interface LibraryEntry {
   /** Variants of one thing share a family within their pack; the variant names the chip. */
   family: string | null;
   variant: string | null;
+  /** The IKEA product name of a pack item ("KALLAX"), searchable beside the readable name; null for the rest. */
+  ikea: string | null;
 }
 
 /** One card of the library: an item, or a family with its variants (the first is the card's picture). */
@@ -85,30 +57,30 @@ const BASIC: Record<string, [Kind, Room[]]> = {
   lamp_panel: ["lamp", []],
   lamp_pendant: ["lamp", []],
   lamp_fan: ["lamp", []],
-  lamp_floor: ["lamp", ["living", "bedroom", "office"]],
+  lamp_floor: ["lamp", ["living", "bedroom", "office", "conservatory"]],
   lamp_uplight: ["lamp", ["living", "bedroom", "office"]],
-  lamp_table: ["lamp", ["living", "bedroom", "office"]],
+  lamp_table: ["lamp", ["living", "bedroom", "office", "conservatory"]],
   lamp_wall: ["lamp", []],
   led_strip: ["lamp", []],
   lamp_bollard: ["lamp", ["garden"]],
   lamp_garden: ["lamp", ["garden"]],
   radiator: ["heating", []],
   ac_unit: ["heating", []],
-  sofa: ["sofa", ["living"]],
+  sofa: ["sofa", ["living", "conservatory"]],
   sofa_l: ["sofa", ["living"]],
   sofa_u: ["sofa", ["living"]],
-  armchair: ["seating", ["living", "bedroom", "office"]],
+  armchair: ["seating", ["living", "bedroom", "office", "conservatory"]],
   stool: ["seating", ["living", "bath", "kids"]],
-  coffee_table: ["table", ["living"]],
+  coffee_table: ["table", ["living", "conservatory"]],
   tv_board: ["media", ["living", "bedroom"]],
   tv_wall: ["media", ["living", "bedroom"]],
   sideboard: ["storage", ["living", "dining", "hall"]],
-  shelf: ["storage", ["living", "office", "kids", "utility", "garage"]],
+  shelf: ["storage", ["living", "office", "kids", "utility", "garage", "loft"]],
   plant: ["plant", []],
-  rug: ["deco", ["living", "bedroom", "kids", "hall"]],
-  table: ["table", ["dining", "kitchen", "living"]],
-  table_round: ["table", ["dining", "kitchen", "living"]],
-  chair: ["seating", ["dining", "kitchen", "living"]],
+  rug: ["deco", ["living", "bedroom", "kids", "hall", "conservatory"]],
+  table: ["table", ["dining", "kitchen", "living", "conservatory"]],
+  table_round: ["table", ["dining", "kitchen", "living", "conservatory"]],
+  chair: ["seating", ["dining", "kitchen", "living", "conservatory"]],
   bench: ["seating", ["dining", "kitchen", "hall", "garden"]],
   corner_bench: ["seating", ["dining", "kitchen"]],
   bar_stool: ["seating", ["kitchen", "dining"]],
@@ -135,12 +107,12 @@ const BASIC: Record<string, [Kind, Room[]]> = {
   dryer: ["appliance", ["bath", "utility"]],
   desk: ["office", ["office", "kids", "bedroom"]],
   office_chair: ["office", ["office", "kids"]],
-  tall_cabinet: ["storage", ["office", "hall", "utility", "bath"]],
+  tall_cabinet: ["storage", ["office", "hall", "utility", "bath", "loft"]],
   coat_rack: ["household", ["hall"]],
   stairs: ["stairs", ["hall", "living"]],
   stairs_u: ["stairs", ["hall", "living"]],
   stairwell: ["stairs", ["hall", "living"]],
-  loft_ladder: ["stairs", ["garage", "hall"]],
+  loft_ladder: ["stairs", ["garage", "hall", "loft"]],
   robot_vacuum: ["appliance", []],
   inverter: ["energy", ["utility", "garage"]],
   home_battery: ["energy", ["utility", "garage"]],
@@ -158,8 +130,8 @@ const BASIC: Record<string, [Kind, Room[]]> = {
   mailbox: ["household", ["garden", "hall"]],
   wall_switch: ["tech", []],
   wall_socket: ["tech", []],
-  wifi_ap: ["tech", []],
-  water_heater: ["heating", ["utility", "bath", "garage"]],
+  wifi_ap: ["network", []],
+  water_heater: ["heating", ["utility", "bath", "garage", "loft"]],
 };
 
 /** The built-in kinds the library offers (the pool devices stand in Pool Pro's tools, energy devices in the energy tool). */
@@ -184,6 +156,8 @@ const PACK_ROOMS: Record<string, Room[]> = {
   utility: ["utility"],
   cinema: ["living", "hobby"],
   fitness: ["hobby"],
+  conservatory: ["conservatory"],
+  loft: ["loft"],
   stairs: ["hall"],
   vehicles: ["garage"],
   pets: [],
@@ -193,7 +167,8 @@ const PACK_ROOMS: Record<string, Room[]> = {
   fun_pets: [],
 };
 
-type Rule = [RegExp, Kind, Room[] | null];
+/** A rule: its words, the kind, the rooms (null: the pack's), and whether it reads the name's head only. */
+type Rule = [RegExp, Kind, Room[] | null, boolean?];
 /** Words that say what an item is; the first rule that matches wins, so the specific ones stand first. */
 const RULES: Rule[] = [
   // vehicles and pets before anything else: "cat tree" is no plant, "campervan" no kitchen
@@ -204,17 +179,27 @@ const RULES: Rule[] = [
   [/\b(kids|loft bed|teepee|tipi|play kitchen|play mat|play tower|toy|toys|rocking horse|cuddle|cosy corner|ball pit|house bed|baby|crib|cot|changing table|children)\b/, "kids", ["kids"]],
   // lamps: what lights the room (a mirror with light, a wardrobe with inside light and a monitor's light bar are not)
   [/\b(lamp|lamps|lantern|torch|lights|spotlight|downlight|pendant|light cove|led niche|light pillar|ceiling panel|wall light|workshop light|under-cabinet light|night light|star projector|star ceiling|garden spots|up and down|candelabra)\b/, "lamp", null],
+  // decor: the sub-kinds before the furniture they lie on ("sofa throw", "bed throw"), read in the name's head only
+  // ("bench with cushions" is a bench); a bed frame stays a bed
+  [/(?<!drip |ice |baking |oven )\btrays?\b/, "tray", null, true],
+  [/(?<!bed |door |window |climbing )\b(picture frames?|photo frames?|frames?|pictures?|paintings?|posters?|wall art|canvas|art print)\b/, "frame", null, true],
+  [/\b(vase|vases)\b/, "vase", null, true],
+  [/\b(cushion|cushions|pillow|pillows|bolster)\b/, "cushion", null, true],
+  [/\b(throw|throws|blanket|plaid)\b/, "throw", null, true],
+  [/\b(candle|candles|tealight|tea light|candlestick)\b/, "candle", null, true],
   [/\b(herb garden|tree|shrub|brush|plant|plants|monstera|flower|pots|pampas)\b/, "plant", null],
+  // network gear before the screens and the tech: a router, a switch with ports, a NAS, a server rack
+  [/\b(server|network|nas|router|modem|mesh|access point|wi-fi|wifi|patch panel|ethernet|poe)\b/, "network", null],
   // media: screens, speakers, players
   [/\b(tv|television|projector|projection screen|screen|speaker|subwoofer|soundbar|receiver|turntable|record shelf|game console|hi-fi|cinema seat|cinema|acoustic|bass trap|smart display|media wall|arcade|monitor|sim racing|piano)\b/, "media", null],
   // appliances (kitchen, laundry, cleaning)
-  [/\b(fridge|freezer|oven|hob|cooker|dishwasher|microwave|coffee|kettle|toaster|mixer|hood|washer|washing machine|dryer|vacuum|ironing|wine|range|popcorn)\b/, "appliance", null],
+  [/\b(fridge|freezer|oven|hob|cooktop|stovetop|hotplate|cooker|extractor|refrigerator|dishwasher|microwave|coffee|kettle|toaster|mixer|hood|washer|washing machine|dryer|vacuum|ironing|wine|range|popcorn)\b/, "appliance", null],
   // energy, heating and tech before the room words: a meter cabinet is energy, a heat pump outdoors is heating
   [/\b(wallbox|home battery|inverter|solar|balcony|fuse box|meter cabinet|grid)\b/, "energy", null],
   [/\b(heat pump|boiler|buffer tank|manifold|ventilation|radiator|fan|air purifier|humidifier|dehumidifier|thermostat|water softener|water pump|hot water|patio heater|fireplace|wood stove|chimney|stove)\b/, "heating", null],
-  [/\b(server|network|nas|router|access point|wi-fi|printer|filament|siren|smoke detector|camera|baby monitor|phone booth|smart home|sensor|leak|switch|socket|compressor|door opener|alarm clock|clock)\b/, "tech", null],
+  [/\b(printer|filament|siren|smoke detector|camera|baby monitor|phone booth|smart home|sensor|leak|switch|socket|compressor|door opener|alarm clock|clock)\b/, "tech", null],
   [/\b(hot tub|outdoor|garden|patio|pergola|parasol|grill|greenhouse|raised bed|shed|trampoline|sprinkler|irrigation|rain barrel|rotary|awning|mower|fire bowl|hammock|lounger)\b/, "outdoor", ["garden"]],
-  [/\b(base unit|drawer unit|sink unit|wall unit|corner base|corner wall|pantry|kitchen|island|breakfast bar|spice rack|trolley|worktop|sink)\b/, "kitchen", ["kitchen"]],
+  [/\b(base unit|drawer unit|sink unit|wall unit|corner base|corner wall|pantry|kitchen|island|breakfast bar|spice rack|trolley|worktop|countertop|work surface|splashback|larder|sink)\b/, "kitchen", ["kitchen"]],
   [/\b(bathtub|tub|shower|toilet|wc|bidet|bathroom|washbasin|basin|sauna|whirlpool)\b/, "bath", ["bath"]],
   [/\b(bed|beds|boxspring|box-spring|futon|canopy)\b/, "bed", ["bedroom"]],
   [/\b(wardrobe|closet|clothes|dresser|chest of|nightstand|bedside)\b/, "storage", ["bedroom"]],
@@ -225,7 +210,7 @@ const RULES: Rule[] = [
   [/\b(waste|bin|mailbox|drying rack|basket|coat|laundry|hooks)\b/, "household", null],
   [/\b(shelf|shelves|cabinet|sideboard|lowboard|highboard|vitrine|display cabinet|cube|rack|bookcase|tool wall|shoe|console table)\b/, "storage", null],
   [/\b(column|beam|beams|partition|sliding wall|divider|podium|platform|gallery|curtain|niche|built-in)\b/, "architecture", []],
-  [/\b(rug|vase|picture|painting|mirror|pumpkin|cobweb|garland|gravestone|grave|skeleton|cauldron|ghost|broom|candle|deco)\b/, "deco", null],
+  [/\b(rug|mirror|pumpkin|cobweb|garland|gravestone|grave|skeleton|cauldron|ghost|broom|deco|decor)\b/, "deco", null],
 ];
 
 /** The bath pack knows its own: a lit mirror, a towel rail or a laundry basket there is bathroom furniture. */
@@ -234,6 +219,12 @@ const BATH_OWN = /\b(mirror|towel|laundry|washer|cabinet|shelf|plant|fan|rain sh
 /** The id's words and the English name: what the rules read. */
 function wordsOf(item: PackItem): string {
   return `${item.id.replace(/_/g, " ")} ${item.name.en ?? ""}`.toLowerCase();
+}
+
+/** The English name (else the id) without what the item comes with: "Bench with cushions" -> "bench". */
+function headOf(item: PackItem): string {
+  const name = (item.name.en ?? item.id.replace(/_/g, " ")).toLowerCase();
+  return name.replace(/\s+(with|mit|and|und|plus|incl\.?|including)\b.*$/, "").replace(/\s*\(.*$/, "");
 }
 
 /** Where an item belongs: the pack's own fields, else its words, else its pack. */
@@ -245,9 +236,10 @@ export function classify(packId: string, item: PackItem): { kind: Kind; rooms: R
   const packRooms = PACK_ROOMS[key] ?? [];
   if (own) return { kind: own, rooms: ownRooms ?? packRooms };
   const text = wordsOf(item);
+  const head = headOf(item);
   if (key === "bath" && BATH_OWN.test(text) && !/\b(washing machine cabinet|fan)\b/.test(text)) return { kind: "bath", rooms: ownRooms ?? ["bath"] };
-  for (const [re, kind, rooms] of RULES) {
-    if (re.test(text)) return { kind, rooms: ownRooms ?? (rooms && rooms.length ? [...new Set([...rooms, ...packRooms])] : packRooms) };
+  for (const [re, kind, rooms, headOnly] of RULES) {
+    if (re.test(headOnly ? head : text)) return { kind, rooms: ownRooms ?? (rooms && rooms.length ? [...new Set([...rooms, ...packRooms])] : packRooms) };
   }
   return { kind: "deco", rooms: ownRooms ?? packRooms };
 }
@@ -264,6 +256,8 @@ export function roomKindOf(name: string): Room | null {
     [/\bbad\b|bath|baño|bagno|salle de bain|badkamer|łazienk|koupeln|baderom|badevær|kylpy|fürdő|baie|kopaln|wc|toilet|gäste|guest|浴室|dusch|shower/, "bath"],
     [/büro|buero|office|arbeit|studio|bureau|kantoor|biuro|pracovn|kontor|työhuone|iroda|birou|pisarn|gaming|办公/, "office"],
     [/flur|diele|hall|corridor|entrance|eingang|ingresso|gang|hal\b|przedpok|chodba|entré|eteinen|előszoba|hol\b|hodnik|treppe|stair|walk/, "hall"],
+    [/conservatory|orangery|sun ?room|wintergarten|v[ée]randa|jard[ií]n de invierno|giardino d.inverno|vinterhave|uterum|talvipuutarha|ogr[óo]d zimowy|zimn[íi] zahrada/, "conservatory"],
+    [/\bloft\b|attic|dachboden|spitzboden|speicher|grenier|zolder|soffitta|desv[áa]n|strych|p[ůu]da|loftet|ullakko|padl[áa]s|mansard|podstre[šs]|阁楼/, "loft"],
     [/hauswirtschaft|hwr|utility|technik|keller|wasch|laundry|lavander|buanderie|berging|bijkeuken|pralni|prádeln|vaskerom|kodinhoito|mosó|tehnic|pralnic|cellar|basement|abstell|storage|vorrat|pantry|heizung|boiler/, "utility"],
     [/garage|carport|werkstatt|workshop|garaje|garaż|garáž|verkstad|autotalli|garázs|garaj|garaž|车库/, "garage"],
     [/garten|garden|terrasse|terrace|balkon|balcony|jardin|giardino|tuin|ogród|zahrad|hage|have|puutarha|kert|grădin|vrt|pool|yard|patio|einfahrt|driveway|花园/, "garden"],
@@ -336,34 +330,6 @@ export interface IndexSource {
 
 const OUTDOOR_ROOMS = new Set<Room>(["garden"]);
 
-/** Everyday words (German and English) that find a kind: "Lampe" finds the lights, "Schrank" the cabinets. */
-const KIND_WORDS: Record<Kind, string> = {
-  sofa: "sofa couch",
-  seating: "stuhl sessel hocker bank sitz chair stool bench seat",
-  table: "tisch table",
-  storage: "schrank regal kommode vitrine cabinet shelf dresser wardrobe",
-  bed: "bett bed",
-  kitchen: "küche kitchen",
-  appliance: "gerät geräte appliance",
-  bath: "bad bath",
-  lamp: "lampe lampen leuchte licht lamp light",
-  media: "tv fernseher lautsprecher audio speaker",
-  office: "büro schreibtisch desk office",
-  tech: "technik smart home sensor",
-  heating: "heizung heizkörper klima heating climate",
-  energy: "energie strom solar energy power",
-  household: "haushalt household",
-  deco: "deko dekoration decoration",
-  plant: "pflanze pflanzen baum plant tree",
-  outdoor: "garten außen draußen garden outdoor",
-  kids: "kinder kids",
-  sport: "fitness sport",
-  pets: "haustier tier pet",
-  vehicle: "auto fahrzeug car vehicle",
-  stairs: "treppe geländer stairs railing",
-  architecture: "architektur architecture",
-};
-
 export function buildIndex(src: IndexSource): LibraryEntry[] {
   const out: LibraryEntry[] = [];
   for (const type of src.basics) {
@@ -371,11 +337,12 @@ export function buildIndex(src: IndexSource): LibraryEntry[] {
     if (!meta) continue;
     const [kind, rooms] = meta;
     const label = src.basicName(type);
+    const own = `${label} ${src.basicNameEn(type)} ${type.replace(/_/g, " ")}`;
     out.push({
       type,
       key: type,
       label,
-      search: `${label} ${src.basicNameEn(type)} ${type.replace(/_/g, " ")} ${src.kindName(kind)} ${KIND_WORDS[kind]}`,
+      search: `${own} ${synonymWords(own, kind)} ${src.kindName(kind)} ${KIND_WORDS[kind]}`,
       kind,
       rooms,
       electric: isElectric(type),
@@ -387,6 +354,7 @@ export function buildIndex(src: IndexSource): LibraryEntry[] {
       packRelease: 0,
       family: null,
       variant: null,
+      ikea: null,
     });
   }
   for (const pack of src.packs) {
@@ -396,11 +364,13 @@ export function buildIndex(src: IndexSource): LibraryEntry[] {
       const { kind, rooms } = classify(pack.id, it);
       const type = packType(pack.id, it.id);
       const label = packItemName(it, src.language);
+      // the item's own words (its names, id, tags and IKEA name) bring their synonyms; the kind's and the pack's words don't
+      const own = `${Object.values(it.name).join(" ")} ${it.id.replace(/_/g, " ")} ${(it.tags ?? []).join(" ")} ${it.ikea ?? ""}`;
       out.push({
         type,
         key: type,
         label,
-        search: `${Object.values(it.name).join(" ")} ${it.id.replace(/_/g, " ")} ${packLabel} ${packName(pack, "en")} ${src.kindName(kind)} ${KIND_WORDS[kind]} ${(it.tags ?? []).join(" ")}`,
+        search: `${own} ${synonymWords(own, kind)} ${packLabel} ${packName(pack, "en")} ${src.kindName(kind)} ${KIND_WORDS[kind]}`,
         kind,
         rooms,
         electric: !!it.electric || !!it.light,
@@ -411,6 +381,7 @@ export function buildIndex(src: IndexSource): LibraryEntry[] {
         packLabel,
         packRelease: pack.release ?? 1,
         family: familyOf(it),
+        ikea: it.ikea ?? null,
         variant: it.variant ? (it.variant[src.language.split("-")[0]] ?? it.variant.en ?? Object.values(it.variant)[0] ?? null) : variantLabel(label),
       });
     }
@@ -447,9 +418,21 @@ export interface LibraryFilter {
   outdoor: boolean;
 }
 
+/**
+ * How a query word matches: a longer one (4 letters and up) anywhere, so "kochfeld" still finds an
+ * "Induktionskochfeld"; a short one at the start of a word ("so" while typing "sofa"), and a short word of the
+ * vocabulary ("hob", "tap", "bin") only as a whole word, so "hob" does not find a hobby bench.
+ */
+function wordMatcher(w: string): (hay: string) => boolean {
+  if (w.length > 3) return (hay) => hay.includes(w);
+  const end = isVocabularyWord(w) ? "(?=$|[^\\p{L}\\p{N}])" : "";
+  const re = new RegExp(`(?:^|[^\\p{L}\\p{N}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${end}`, "u");
+  return (hay) => re.test(hay);
+}
+
 /** The entries a filter leaves: every word of the query somewhere, the room fitting (items for any room always fit). */
 export function filterEntries(entries: readonly LibraryEntry[], f: LibraryFilter): LibraryEntry[] {
-  const words = fold(f.query).split(/\s+/).filter(Boolean);
+  const words = fold(f.query).split(/\s+/).filter(Boolean).map(wordMatcher);
   return entries.filter((e) => {
     if (f.room && e.rooms.length && !e.rooms.includes(f.room)) return false;
     if (f.electric && !e.electric) return false;
@@ -457,7 +440,7 @@ export function filterEntries(entries: readonly LibraryEntry[], f: LibraryFilter
     if (f.outdoor && !e.outdoor) return false;
     if (!words.length) return true;
     const hay = fold(e.search);
-    return words.every((w) => hay.includes(w));
+    return words.every((match) => match(hay));
   });
 }
 
