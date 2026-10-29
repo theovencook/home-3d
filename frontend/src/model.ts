@@ -3,6 +3,7 @@
 
 import { packItem } from "./packs.ts";
 import type { LampModel } from "./viewer/viewer3d.ts";
+import type { ItemActions } from "./item-actions.ts";
 
 export type Vec2 = [number, number];
 
@@ -294,6 +295,8 @@ export interface Furniture {
   room_sensor?: EntityRef;
   /** Ask before switching the linked entity. */
   confirm?: boolean;
+  /** Own tap, hold and double-tap actions (#6); none set = what the item does by its type. */
+  actions?: ItemActions | null;
   /** Its marker in 3D: automatic (null), always shown, shown without watts, or hidden. */
   marker?: MarkerShow | null;
   /** Height of the bottom edge above the floor (null = default: the floor, a pack item's mount, a surface below). */
@@ -377,6 +380,8 @@ export interface Placement {
   tilt?: number | null;
   /** Ask before switching this device (3D tap, quick menu, room panel). */
   confirm?: boolean;
+  /** Own tap, hold and double-tap actions (#6); none set = what the device does by its kind. */
+  actions?: ItemActions | null;
   /** Its marker in 3D: automatic (null), always shown, shown without watts, or hidden. */
   marker?: MarkerShow | null;
   /** An own symbol for the marker: a Material Design icon name without "mdi:" (null = by kind). */
