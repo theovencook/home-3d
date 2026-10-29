@@ -671,7 +671,18 @@ export interface Pet {
   breed?: string | null;
   /** The floor it lives on (null: the ground floor). */
   floor_id?: string | null;
+  /** Static (#17): it stays at its spot (x, z on its floor) in its pose instead of roaming the house. */
+  static?: boolean;
+  /** A static pet's pose (null: sitting). */
+  pose?: PetPose | null;
+  x?: number | null;
+  z?: number | null;
+  /** Which way a static pet faces, degrees like furniture (null: the front of what it lies on, else 0). */
+  rotation?: number | null;
 }
+
+export const PET_POSES = ["sit", "lie", "curl"] as const;
+export type PetPose = (typeof PET_POSES)[number];
 
 export const PET_FURS = ["orange", "tabby", "black", "white", "grey", "brown", "calico", "golden", "cream"] as const;
 /** The furs each kind comes in (the first is the default). */

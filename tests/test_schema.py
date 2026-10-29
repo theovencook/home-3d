@@ -321,3 +321,21 @@ def test_door_keeps_its_opening_angle() -> None:
     assert OPENING_SCHEMA({**door, "open_angle": 15})["open_angle"] == 15
     with pytest.raises(vol.Invalid):
         OPENING_SCHEMA({**door, "open_angle": 200})
+
+
+def test_pets_roam_unless_set_static() -> None:
+    """Static pets (#17): a pet roams unless switched to static; a static one keeps its spot, turn and pose."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    roaming = SETTINGS_SCHEMA({**base, "pets": {"list": [{"id": "p1", "kind": "cat"}]}})["pets"]["list"][0]
+    assert roaming["static"] is False
+    assert roaming["pose"] is None
+    assert roaming["x"] is None and roaming["z"] is None and roaming["rotation"] is None
+    pet = {"id": "p2", "kind": "dog", "static": True, "pose": "curl", "x": 2.5, "z": -1, "rotation": 90}
+    still = SETTINGS_SCHEMA({**base, "pets": {"list": [pet]}})["pets"]["list"][0]
+    assert still["static"] is True
+    assert still["pose"] == "curl"
+    assert (still["x"], still["z"], still["rotation"]) == (2.5, -1.0, 90.0)
+    for pose in ("sit", "lie", "curl"):
+        SETTINGS_SCHEMA({**base, "pets": {"list": [{**pet, "pose": pose}]}})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "pets": {"list": [{**pet, "pose": "fly"}]}})

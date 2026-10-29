@@ -149,6 +149,7 @@ import "./library.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
+import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, type FurniturePack } from "../packs.ts";
 
@@ -158,12 +159,16 @@ type FixKind = "room" | "opening" | "furniture" | "device" | "wall" | "outdoor";
 /** Highest mount height the backend accepts (schema: 0–10 m); "40" meant as centimetres would refuse every save. */
 const MAX_MOUNT_Y = 10;
 
+/** A paw (24 × 24), the static pets' mark in the plan. */
+const PAW = "M8.3 3.5a2 1.6 0 1 1 0 3.2 2 1.6 0 0 1 0-3.2m7.4 0a2 1.6 0 1 1 0 3.2 2 1.6 0 0 1 0-3.2M4.5 8a1.8 1.5 0 1 1 0 3 1.8 1.5 0 0 1 0-3m15 0a1.8 1.5 0 1 1 0 3 1.8 1.5 0 0 1 0-3M12 10c2.5 0 4.6 1.9 5.3 4.3.6 2 .2 3.7-1.3 4.5-1.4.8-2.6-.2-4-.2s-2.6 1-4 .2c-1.5-.8-1.9-2.5-1.3-4.5C7.4 11.9 9.5 10 12 10";
+
 type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "hole" | "wall" | "roof" | "energy" | "pool";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
   | { kind: "vertex"; roomId: string; index: number; base: Building; moved: boolean }
   | { kind: "device"; entityId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
+  | { kind: "pet"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "opening"; id: string; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "furnset"; ids: string[]; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
@@ -201,7 +206,7 @@ interface Guides {
 }
 
 /** Drags that change the document live (restored when cancelled, recorded in the history when done). */
-const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", "furnset", "rotate", "resize", "outdoor", "roofmove", "roofcorner", "roofvertex", "outvertex", "outbox", "pipept", "poolport", "pooldev", "pooljoint", "solarmove", "solarturn", "cablept", "holopt", "bgmove", "bgscale", "bgrotate"]);
+const EDIT_DRAGS = new Set(["vertex", "room", "device", "pet", "opening", "furniture", "furnset", "rotate", "resize", "outdoor", "roofmove", "roofcorner", "roofvertex", "outvertex", "outbox", "pipept", "poolport", "pooldev", "pooljoint", "solarmove", "solarturn", "cablept", "holopt", "bgmove", "bgscale", "bgrotate"]);
 
 const HISTORY = 100;
 /** An angle turned on by `d` degrees, kept between -180 and 180. */
@@ -1704,6 +1709,12 @@ export class Fp3dEditor extends LitElement {
       } else this.drag = { kind: "marquee", start: world, end: world, add: true };
       return;
     }
+    const petEl = target.closest("[data-pet]");
+    if (petEl && this.isEditor) {
+      // a static pet (#17): dragged to its spot
+      this.drag = { kind: "pet", id: petEl.getAttribute("data-pet")!, start: world, startScreen: local, base: this._doc, moved: false };
+      return;
+    }
     const deviceEl = target.closest("[data-device]");
     if (deviceEl && this.isEditor) {
       this.drag = { kind: "device", entityId: deviceEl.getAttribute("data-device")!, start: world, startScreen: local, base: this._doc, moved: false };
@@ -2388,6 +2399,15 @@ export class Fp3dEditor extends LitElement {
         this.change((_, floor) => patchItem(floor.placements.find((q) => q.entity_id === drag.entityId), { x, z }), drag.base, false);
         break;
       }
+      case "pet": {
+        if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
+        drag.moved = true;
+        const pet = drag.base.settings.pets?.list.find((p) => p.id === drag.id);
+        if (pet?.x == null || pet.z == null) return;
+        const [px, pz] = [pet.x, pet.z];
+        this.change((doc) => movePet(doc, drag.id, px + world[0] - drag.start[0], pz + world[1] - drag.start[1], e.altKey ? 0.01 : this._doc.settings.grid), drag.base, false);
+        break;
+      }
     }
   }
 
@@ -2488,6 +2508,9 @@ export class Fp3dEditor extends LitElement {
         else if (this.poolArea) this.openCard(this.poolArea.id, `dev:${drag.id}`);
         break;
       }
+      case "pet":
+        if (drag.moved) this.pushHistory(drag.base);
+        break;
       case "device":
         if (drag.moved) this.pushHistory(drag.base);
         // a tap on a device selects it (and the room it stands in)
@@ -5636,6 +5659,7 @@ export class Fp3dEditor extends LitElement {
               ${floor ? this.renderFreeWalls(floor) : nothing}
               ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
+              ${floor && this._tool === "select" ? this.renderPets(floor) : nothing}
               ${this.room && this.isEditor && this._tool === "select" && !this._openingId && !this._furnitureId && !this.isFixedItem("room", this.room.id) ? this.renderHandles(this.room) : nothing}
               ${floor ? this.renderOutdoorHandles(floor) : nothing}
               ${this.room && this._tool === "select" ? this.renderSplitMarks(this.room) : nothing}
@@ -9897,6 +9921,19 @@ export class Fp3dEditor extends LitElement {
         <line class="fp3d-open-hit" x1=${h0[0]} y1=${h0[1]} x2=${h1[0]} y2=${h1[1]} />
         <polygon class="fp3d-open-gap" points=${gap.map((p) => p.join(",")).join(" ")} />
         ${symbol}
+      </g>`;
+    })}</g>`;
+  }
+
+  /** Fun pack "pets": the static pets of this floor (#17), a paw at each one's spot, dragged to move it. */
+  private renderPets(floor: Floor) {
+    if (!hasFeature("fun_pets") || this._doc.settings.pets?.on === false) return nothing;
+    return svg`<g>${staticPetsOn(this._doc, floor.id).map((pet) => {
+      const [x, y] = this.toScreen([pet.x!, pet.z!]);
+      return svg`<g data-pet=${pet.id} class="fp3d-device fp3d-pet" transform="translate(${x} ${y})">
+        <title>${pet.name || this.t(`pet_kind_${pet.kind}`)}</title>
+        <circle r="18" class="fp3d-hit" /><circle r="12" />
+        <path d=${PAW} transform="translate(-7.2 -7.2) scale(0.6)" />
       </g>`;
     })}</g>`;
   }

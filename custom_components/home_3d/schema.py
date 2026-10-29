@@ -899,6 +899,20 @@ SETTINGS_SCHEMA = vol.Schema(
                                     vol.Optional("floor_id", default=None): vol.Any(
                                         None, vol.All(str, vol.Length(max=64))
                                     ),
+                                    # static (#17): stays at its spot in a pose instead of roaming
+                                    vol.Optional("static", default=False): bool,
+                                    vol.Optional("pose", default=None): vol.Any(
+                                        None, vol.In(["sit", "lie", "curl"])
+                                    ),
+                                    vol.Optional("x", default=None): vol.Any(
+                                        None, vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000))
+                                    ),
+                                    vol.Optional("z", default=None): vol.Any(
+                                        None, vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000))
+                                    ),
+                                    vol.Optional("rotation", default=None): vol.Any(
+                                        None, vol.All(vol.Coerce(float), vol.Range(min=-360, max=360))
+                                    ),
                                 },
                                 extra=vol.ALLOW_EXTRA,
                             )

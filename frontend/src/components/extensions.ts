@@ -4,7 +4,8 @@
 import { css, html, LitElement, nothing } from "lit";
 import { importPack, removePack } from "../api.ts";
 import { FEATURES, FUN, knownFeature, released, unlockedFeatures } from "../features.ts";
-import { DOG_BREEDS, PET_FURS_OF, type Building, type Pet } from "../model.ts";
+import { DOG_BREEDS, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
+import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import { packName, type FurniturePack } from "../packs.ts";
 import { controls, tokens } from "../styles.ts";
@@ -172,6 +173,35 @@ export class Extensions extends LitElement {
                           ? html`<select title=${this.t("pet_floor")} aria-label=${this.t("pet_floor")} @change=${(e: Event) => change(pet.id, { floor_id: (e.target as HTMLSelectElement).value || null })}>
                               ${floors.map((fl, i) => html`<option value=${i === 0 ? "" : fl.id} ?selected=${(pet.floor_id ?? floors[0].id) === fl.id}>🏠 ${fl.name}</option>`)}
                             </select>`
+                          : nothing}
+                        <select
+                          title=${this.t("pet_mode")}
+                          aria-label=${this.t("pet_mode")}
+                          @change=${(e: Event) => {
+                            const still = (e.target as HTMLSelectElement).value === "static";
+                            const b = this.building!;
+                            set((p) => (p.list = p.list.map((x) => (x.id === pet.id ? setPetStatic(x, still, petFloor(b, x)) : x))));
+                          }}
+                        >
+                          <option value="roaming" ?selected=${!isStaticPet(pet)}>${this.t("pet_roaming")}</option>
+                          <option value="static" ?selected=${isStaticPet(pet)}>${this.t("pet_static")}</option>
+                        </select>
+                        ${isStaticPet(pet)
+                          ? html`<select title=${this.t("pet_pose")} aria-label=${this.t("pet_pose")} @change=${(e: Event) => change(pet.id, { pose: (e.target as HTMLSelectElement).value as Pet["pose"] })}>
+                                ${PET_POSES.map((k) => html`<option value=${k} ?selected=${(pet.pose ?? "sit") === k}>${this.t(`pet_pose_${k}`)}</option>`)}
+                              </select>
+                              <select
+                                title=${this.t("pet_turn")}
+                                aria-label=${this.t("pet_turn")}
+                                @change=${(e: Event) => {
+                                  const v = (e.target as HTMLSelectElement).value;
+                                  change(pet.id, { rotation: v === "" ? null : Number(v) });
+                                }}
+                              >
+                                <option value="" ?selected=${pet.rotation == null}>${this.t("pet_turn_auto")}</option>
+                                ${[0, 45, 90, 135, 180, 225, 270, 315].map((d) => html`<option value=${d} ?selected=${pet.rotation === d}>${d}°</option>`)}
+                              </select>
+                              <span class="fp3d-sub">${this.t("pet_static_hint")}</span>`
                           : nothing}
                         <button class="fp3d-btn" title=${this.t("delete")} @click=${() => set((p) => (p.list = p.list.filter((x) => x.id !== pet.id)))}>✕</button>
                       </div>`,
