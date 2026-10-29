@@ -125,7 +125,8 @@ keys, so it can be compared with the installed item.
 
 - `id`: the item id; it must match the file name.
 - `name`: the name by language code (`"en"`, `"de"`, …; 1 to 10 languages, 1 to 80 characters each). English, then
-  the first name, is the fallback for other languages.
+  the first name, is the fallback for other languages. Write the English name first, as a readable name in UK
+  words: "Wardrobe", "Hob", "Worktop", "Bedside table", "Cooker" (not a product name: that goes in `ikea`).
 - `size`: the default size in metres as `[width, depth, height]` (0.01 to 10 each). In the plan every item can be
   resized freely; all parts grow with it, except the measures a part keeps with `fix`.
 - `parts`: 1 to 60 parts (see below).
@@ -160,7 +161,8 @@ All measures of a part are **fractions of the item's size**:
   parts between them (seat, carcass) stretch. Per axis there is a fixed zone at each end and a middle that grows; a
   fixed part in the middle stays centred. When there is not enough room for the fixed parts (a very narrow item),
   everything scales as before.
-- `glow` (optional, lamps): the part shines in the colour and brightness of the linked light.
+- `glow` (optional, lamps): the part shines in the colour and brightness of the linked light. On a 3D printer it is
+  the chamber light (see [3D printers](#3d-printers)).
 - `screen` (optional): the part is a screen (TV, monitor). The item can then be linked to a media player and its
   front (+z) shows the colour and picture of the running app, like the built-in TVs.
 - `profile` (`lathe` only, required there): see [Round shapes](#round-shapes).
@@ -201,7 +203,7 @@ with rounded corners. An item whose largest part is a sphere or a lathe casts a 
   "id": "vase_tall",
   "name": { "en": "Tall vase" },
   "size": [0.22, 0.22, 0.45],
-  "group": "deco",
+  "group": "vase",
   "mount": "surface",
   "parts": [
     {
@@ -266,19 +268,61 @@ shapes needs a Home 3D version that knows them.
   room: `ceiling`, `downlight`, `spot`, `panel`, `pendant`, `floor`, `uplight`, `table`, `wall`, `strip`,
   `bollard` or `garden`.
 - Library fields:
-  - `group`: what the item is: `sofa`, `seating`, `table`, `storage`, `bed`, `kitchen`, `appliance`, `bath`,
-    `lamp`, `media`, `office`, `tech`, `heating`, `energy`, `household`, `deco`, `plant`, `outdoor`, `kids`,
+  - `group`: what the item is, which is its section in the library: `sofa`, `seating`, `table`, `storage`, `bed`,
+    `kitchen`, `appliance`, `bath`, `lamp`, `media`, `office`, `tech`, `network`, `heating`, `energy`,
+    `household`, `deco`, `tray`, `frame`, `vase`, `cushion`, `throw`, `candle`, `plant`, `outdoor`, `kids`,
     `sport`, `pets`, `vehicle`, `stairs` or `architecture`.
   - `room`: up to 12 rooms the item is meant for: `living`, `dining`, `kitchen`, `bedroom`, `kids`, `bath`,
-    `office`, `hall`, `utility`, `garage`, `garden`, `hobby`. Empty means any room.
+    `office`, `hall`, `utility`, `garage`, `garden`, `hobby`, `conservatory`, `loft`. Empty means any room.
   - `tags`: up to 12 more search words (1 to 30 characters each).
   - `family`: groups variants of one thing (a table in three lengths) into one library card; `variant` (text by
     language, like `name`) labels the variant's chip.
+  - `ikea`: the IKEA product name (1 to 40 characters, such as `"KALLAX"`). Searching for it finds the item as well
+    as its readable name does; the readable name stays the item's label.
 
   Without these fields Home 3D sorts the item by its words and its pack id; it finds variants by a size at the end of
   the id (`table_160`) and by the numbers in the name.
 
+  The groups and their library sections:
+
+  | Group | Section | Group | Section |
+  | --- | --- | --- | --- |
+  | `sofa` | Sofas | `household` | Household |
+  | `seating` | Seating (chairs, stools, benches) | `deco` | Decoration (rugs, mirrors, anything else) |
+  | `table` | Tables | `tray` | Trays |
+  | `storage` | Cabinets & shelves (wardrobes, chests of drawers) | `frame` | Frames & pictures |
+  | `bed` | Beds | `vase` | Vases |
+  | `kitchen` | Kitchen (units, worktops, sinks) | `cushion` | Cushions |
+  | `appliance` | Appliances (cooker, hob, fridge, washing machine) | `throw` | Throws |
+  | `bath` | Bathroom | `candle` | Candles |
+  | `lamp` | Lights | `plant` | Plants |
+  | `media` | TV & audio | `outdoor` | Garden & outdoors |
+  | `office` | Office | `kids` | Kids |
+  | `tech` | Tech & smart home (switches, sockets, sensors) | `sport` | Fitness |
+  | `network` | Network (router, switch, access point, NAS) | `pets` | Pets |
+  | `heating` | Heating & climate | `vehicle` | Vehicles |
+  | `energy` | Energy | `stairs` | Stairs & railings |
+  | | | `architecture` | Architecture |
+
+  **Other words for a thing.** The library knows the common other words for many things, UK word first: an item
+  named "Induction cooktop" is found by `hob`, a "Countertop" by `worktop`, a "Closet" by `wardrobe`, and the other
+  way round. A pack needs no `tags` for these; use `tags` for words the library does not know. The list lives in
+  `frontend/src/vocabulary.ts` (`SYNONYMS`), next to the group and room ids.
+
 No other fields are allowed, in an item or in a part.
+
+### 3D printers
+
+An item whose id names a 3D printer (`3d_printer`, `3d_printer_enclosed`, `resin_3d_printer`, …) and is `electric`
+shows the printer it is linked to. Link it to one entity of the printer's Home Assistant device, usually its print
+status sensor; Home 3D finds the rest on the same device, whatever integration made it:
+
+- while a print runs (or is paused), a ring on the item's top fills with the print's progress (a sensor in `%` whose
+  name says progress);
+- its `glow` parts shine while the printer's light (its chamber light) is on, in that light's colour;
+- a tap opens the printer's camera when its device has one (an own tap action set in the editor still wins).
+
+`theovencook.core/3d_printer` is one; see its file for a model to start from.
 
 ## What the loader checks
 

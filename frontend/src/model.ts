@@ -693,6 +693,8 @@ export interface Pet {
   name: string;
   /** Fur colour preset (see PET_FURS). */
   fur: string;
+  /** Eye colour (see PET_EYES; none: dark). */
+  eyes?: PetEyes | null;
   /** A dog's breed (see DOG_BREEDS; null: labrador). */
   breed?: string | null;
   /** The floor it lives on (null: the ground floor). */
@@ -710,13 +712,16 @@ export interface Pet {
 export const PET_POSES = ["sit", "lie", "curl"] as const;
 export type PetPose = (typeof PET_POSES)[number];
 
-export const PET_FURS = ["orange", "tabby", "black", "white", "grey", "brown", "calico", "golden", "cream"] as const;
+export const PET_FURS = ["orange", "tabby", "black", "white", "grey", "brown", "calico", "golden", "cream", "dilute_calico", "blue_grey"] as const;
 /** The furs each kind comes in (the first is the default). */
 export const PET_FURS_OF: Record<Pet["kind"], readonly string[]> = {
-  cat: ["orange", "tabby", "black", "white", "grey", "calico", "cream"],
+  cat: ["orange", "tabby", "black", "white", "grey", "calico", "cream", "dilute_calico", "blue_grey"],
   dog: ["golden", "cream", "brown", "black", "white", "grey"],
   rabbit: ["white", "grey", "brown", "black", "cream"],
 };
+/** Eye colours (#42), the first is the default. */
+export const PET_EYES = ["dark", "copper", "green", "yellow", "blue"] as const;
+export type PetEyes = (typeof PET_EYES)[number];
 /** Dog breeds, small to large. */
 export const DOG_BREEDS = ["dachshund", "pug", "terrier", "labrador", "shepherd"] as const;
 

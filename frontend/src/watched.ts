@@ -11,6 +11,7 @@ import { trailSources } from "./trail.ts";
 import type { HomeAssistant } from "./types.ts";
 import { weatherEntity } from "./weather.ts";
 import { householdEntities } from "./household.ts";
+import { isPrinter, printerEntities } from "./printer.ts";
 
 export interface WatchLinks {
   /** Entities of each door and window. */
@@ -48,6 +49,8 @@ export function watchedEntities(hass: HomeAssistant, b: Building, w: WatchLinks)
   // Haushalt Pro: the bins' calendars and sensors, the mailboxes' flaps and doors
   const household = hasFeature("household") ? [...b.floors.flatMap((f) => f.furniture.flatMap(householdEntities)), b.settings.household?.notes ?? null].filter((id): id is string => !!id && id !== "none") : [];
   const weather = weatherEntity(hass, w.weatherEntityId ?? b.settings.weather_entity);
-  const all = [...placed, ...cameraSensors, ...links, ...power, ...furniture, ...states, ...doors, ...robotRooms, ...roofWindowIds, ...solarIds, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.consumption, e.tariff, ...presence, ...lights, ...heat, ...w.warnings, ...parking, ...motion, ...household, weather, "sun.sun"];
+  // 3D printers (#11): progress, chamber light and camera on the linked entity's device
+  const printers = b.floors.flatMap((f) => f.furniture.filter((m) => isPrinter(m.type)).flatMap((m) => Object.values(printerEntities(hass, w.furniture.get(m.id)?.entity ?? null))));
+  const all = [...placed, ...printers, ...cameraSensors, ...links, ...power, ...furniture, ...states, ...doors, ...robotRooms, ...roofWindowIds, ...solarIds, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.consumption, e.tariff, ...presence, ...lights, ...heat, ...w.warnings, ...parking, ...motion, ...household, weather, "sun.sun"];
   return [...new Set(all.filter((id): id is string => !!id))];
 }

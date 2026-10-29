@@ -4,7 +4,7 @@
 import { css, html, LitElement, nothing } from "lit";
 import { importPack, importPackFolder, installPackFromUrl, removePack } from "../api.ts";
 import { FEATURES, FUN, knownFeature, released, unlockedFeatures } from "../features.ts";
-import { DOG_BREEDS, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
+import { DOG_BREEDS, PET_EYES, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
 import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import { planPackFolders } from "../pack-folder.ts";
@@ -176,6 +176,9 @@ export class Extensions extends LitElement {
                         <input type="text" maxlength="30" .value=${pet.name} placeholder=${this.t("pet_name")} aria-label=${this.t("pet_name")} @change=${(e: Event) => change(pet.id, { name: (e.target as HTMLInputElement).value.trim() })} />
                         <select aria-label=${this.t("pet_fur")} @change=${(e: Event) => change(pet.id, { fur: (e.target as HTMLSelectElement).value })}>
                           ${PET_FURS_OF[pet.kind].map((c) => html`<option value=${c} ?selected=${pet.fur === c}>${this.t(`pet_fur_${c}` as I18nKey)}</option>`)}
+                        </select>
+                        <select title=${this.t("pet_eyes")} aria-label=${this.t("pet_eyes")} @change=${(e: Event) => change(pet.id, { eyes: (e.target as HTMLSelectElement).value as Pet["eyes"] })}>
+                          ${PET_EYES.map((c) => html`<option value=${c} ?selected=${(pet.eyes ?? "dark") === c}>${this.t(`pet_eyes_${c}`)}</option>`)}
                         </select>
                         ${floors.length > 1
                           ? html`<select title=${this.t("pet_floor")} aria-label=${this.t("pet_floor")} @change=${(e: Event) => change(pet.id, { floor_id: (e.target as HTMLSelectElement).value || null })}>
