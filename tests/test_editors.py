@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+
 from homeassistant.core import HomeAssistant
 
 from tests.test_init import BUILDING, IMAGE, _setup
@@ -132,3 +134,28 @@ async def test_the_list_survives_a_restart(
     editor = await hass_ws_client(hass, hass_read_only_access_token)
     await editor.send_json_auto_id({"type": "home_3d/building/save", "building": BUILDING})
     assert (await editor.receive_json())["success"]
+
+
+async def test_item_actions_follow_the_editors_list(
+    hass: HomeAssistant, hass_ws_client, hass_admin_user, hass_read_only_user, hass_read_only_access_token
+) -> None:
+    """Own tap/hold/double-tap actions (#6) are part of the plan: an editor changes them, a viewer cannot."""
+    await _setup(hass)
+    building = copy.deepcopy(BUILDING)
+    building["floors"][0]["placements"] = [
+        {"entity_id": "switch.gate", "x": 1, "z": 1, "y": None, "actions": {"tap": {"action": "more_info"}}}
+    ]
+    viewer = await hass_ws_client(hass, hass_read_only_access_token)
+    await viewer.send_json_auto_id({"type": "home_3d/building/save", "building": building})
+    assert (await viewer.receive_json())["error"]["code"] == "unauthorized"
+
+    admin = await hass_ws_client(hass)
+    await admin.send_json_auto_id(
+        {"type": "home_3d/editors/set", "editors": [hass_admin_user.id, hass_read_only_user.id]}
+    )
+    assert (await admin.receive_json())["success"]
+    await viewer.send_json_auto_id({"type": "home_3d/building/save", "building": building})
+    assert (await viewer.receive_json())["success"]
+    await viewer.send_json_auto_id({"type": "home_3d/building/get"})
+    got = (await viewer.receive_json())["result"]["building"]["floors"][0]["placements"][0]
+    assert got["actions"]["tap"]["action"] == "more_info"

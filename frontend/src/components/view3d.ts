@@ -2,6 +2,7 @@
 
 import { css, html, LitElement, nothing, svg, type PropertyValues } from "lit";
 import { linesField } from "./lines-field.ts";
+import { actionIndex, gestureAction, runItemAction, TapSequencer, type ActionOwner, type ItemAction } from "../item-actions.ts";
 import { carState, type CarState, heatSensorOn, roomClimateValue,
   appColor,
   areaEntities,
@@ -258,6 +259,7 @@ export class Fp3dView3d extends LitElement {
     ghostOn: { attribute: false },
     _central: { state: true },
     _sheet: { state: true },
+    _ask: { state: true },
     _settingsOpen: { state: true },
     _note: { state: true },
     _thumbsCompact: { state: true },
@@ -527,6 +529,12 @@ export class Fp3dView3d extends LitElement {
   private declare _sheet: { id: string; floorId: string | null; roomId: string | null } | null;
   /** The ⚙ settings over the view are open. */
   private declare _settingsOpen: boolean;
+  /** An own action asking first (#6): its question, and the answer to give. */
+  private declare _ask: { text: string; answer: (yes: boolean) => void } | null;
+  /** Items with own tap, hold or double-tap actions, by the id a tap on them reports (#6). */
+  private actionOwners = new Map<string, ActionOwner>();
+  /** Tells a tap from a double tap on items that have a double-tap action. */
+  private readonly taps = new TapSequencer();
   /** A short note at the bottom (a module's "sent"), with its timer. */
   private declare _note: string | null;
   private noteTimer: ReturnType<typeof setTimeout> | undefined;
@@ -771,6 +779,8 @@ export class Fp3dView3d extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     document.removeEventListener("visibilitychange", this.onVisible);
+    this.taps.cancel();
+    this._ask?.answer(false);
     this.stopWalk();
     this.pets?.dispose();
     this.pets = null;
@@ -871,6 +881,7 @@ export class Fp3dView3d extends LitElement {
         onBack: () => this.fire("back", {}),
         onDeviceTap: (id, x, y) => this.onDeviceTap(id, x, y),
         onDeviceHold: (id, x, y) => this.onDeviceHold(id, x, y),
+        onDeviceDoubleTap: (id) => !this.ro && this.taps.doubleTap(id),
         onRoomDoubleTap: (floorId, roomId) => this.onRoomDoubleTap(floorId, roomId),
         onDeviceSwipe: (id, phase, dy, x, y) => this.onDeviceSwipe(id, phase, dy, x, y),
         onFurnitureSelect: (id) => this.fire("furniture-select", { id }),
@@ -1132,6 +1143,12 @@ export class Fp3dView3d extends LitElement {
     // a tap on the item itself does what a tap on its module marker does
     for (const m of this.scene) if (m.kind === "marker" && m.card && m.furnitureId && !furniture.targets.has(m.furnitureId)) furniture.targets.set(m.furnitureId, `module:${m.id}`);
     v.setTrail(trail, this.replay ? this.robotPaths(hass, b) : []);
+    // own actions (#6): an item without an entity becomes tappable as "item:<id>"
+    this.actionOwners = actionIndex(b.floors, (id) => furniture.targets.get(id), (f) => {
+      const e = this.furnitureLinks?.get(f.id)?.entity;
+      return e && e !== "none" ? e : null;
+    });
+    for (const floor of b.floors) for (const f of floor.furniture) if (!furniture.targets.has(f.id) && this.actionOwners.has(`item:${f.id}`)) furniture.targets.set(f.id, `item:${f.id}`);
     v.setPickTargets(furniture.targets, this.openingTargets());
     v.setScreens(furniture.screens);
     v.setFridgeDoors(fridgeDoors(hass, b.floors));
@@ -3644,6 +3661,9 @@ export class Fp3dView3d extends LitElement {
 
   /** Long press: the quick menu at the device, or the details for devices without one. */
   private onDeviceHold(entityId: string, x: number, y: number): void {
+    const own = this.ro ? null : gestureAction(this.actionOwners.get(entityId), "hold");
+    if (own) return this.runOwnAction(own, this.actionOwners.get(entityId)!, x, y);
+    if (entityId.startsWith("item:")) return;
     if (entityId.startsWith("opening:")) return this.onOpeningTap(entityId.slice(8), x, y, true);
     // a wall switch or socket: the quick menu of its one entity, else the frame's menu
     if (entityId.startsWith("gangs:")) {
@@ -5279,7 +5299,72 @@ export class Fp3dView3d extends LitElement {
     if (floor && f) this.viewer?.focus(floor.id, f.x, f.z, mountBase(floor, f) + f.h * 0.6, `module:${m.id}`);
   }
 
+  /** A tap on a device or item: its own tap / double-tap action (#6), else what it does by its kind. */
   private onDeviceTap(entityId: string, x = 0, y = 0): void {
+    const owner = this.ro ? undefined : this.actionOwners.get(entityId);
+    if (!owner) return this.defaultTap(entityId, x, y);
+    const double = gestureAction(owner, "double_tap");
+    this.taps.tap(
+      entityId,
+      !!double,
+      () => {
+        const own = gestureAction(owner, "tap");
+        if (own) this.runOwnAction(own, owner, x, y);
+        else this.defaultTap(entityId, x, y);
+      },
+      () => double && this.runOwnAction(double, owner, x, y),
+    );
+  }
+
+  /** Run an own action; one that asks first asks in the app's own dialog. */
+  private runOwnAction(action: ItemAction, owner: ActionOwner, x: number, y: number): void {
+    const hass = this.hass;
+    if (!hass) return;
+    void runItemAction(action, owner.entity, {
+      callService: (domain, service, data) => hass.callService(domain, service, data),
+      moreInfo: (id) => openMoreInfo(this, id),
+      camera: (id) => (this._menu = { entity: id, x, y }),
+      navigate: (path) => {
+        history.pushState(null, "", path);
+        window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+      },
+      openUrl: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
+      confirm: (text) => this.ask(text ?? translate(hass, "action_confirm_default", { name: owner.entity ? entityName(hass, owner.entity) : translate(hass, "action_this_item") })),
+    }).catch((err: unknown) => this.showNote(translate(hass, "action_failed", { error: err instanceof Error ? err.message : String(err) })));
+  }
+
+  /** Ask a question in the app's own dialog; true for yes. A question still open is answered no. */
+  private ask(text: string): Promise<boolean> {
+    this._ask?.answer(false);
+    return new Promise((resolve) => {
+      this._ask = {
+        text,
+        answer: (yes) => {
+          this._ask = null;
+          resolve(yes);
+        },
+      };
+    });
+  }
+
+  private renderAsk() {
+    const a = this._ask;
+    if (!a) return nothing;
+    const t = (k: I18nKey) => translate(this.hass, k);
+    return html`<div class="fp3d-sheet-backdrop" @click=${() => a.answer(false)}></div>
+      <div class="fp3d-sheet fp3d-ask" role="alertdialog" aria-modal="true" aria-label=${t("action_confirm_title")} @keydown=${(e: KeyboardEvent) => e.key === "Escape" && a.answer(false)}>
+        <p class="fp3d-ask-text">${a.text}</p>
+        <div class="fp3d-ask-buttons">
+          <button class="fp3d-btn" @click=${() => a.answer(false)}>${t("cancel")}</button>
+          <button class="fp3d-btn fp3d-primary" autofocus @click=${() => a.answer(true)}>${t("action_confirm_ok")}</button>
+        </div>
+      </div>`;
+  }
+
+  /** What a tap does by the device's kind (no own action). */
+  private defaultTap(entityId: string, x = 0, y = 0): void {
+    // an item that is only tappable for its own actions (no tap action of its own)
+    if (entityId.startsWith("item:")) return;
     // trail pins and lamps without a light are drawn, but nothing of Home Assistant stands behind them
     if (entityId.startsWith("trail:") || entityId.startsWith("lamp:")) return;
     if (entityId.startsWith("module:")) return this.openModuleCard(entityId.slice(7));
@@ -5533,7 +5618,7 @@ export class Fp3dView3d extends LitElement {
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderLegend()}
-      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderSettings()} ${this.renderNote()}
+      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderAsk()} ${this.renderSettings()} ${this.renderNote()}
       ${this.clean ? nothing : this.renderProHint()} ${this.renderMenu()} ${this.renderEye()}
       ${this.renderMic()}
       ${this.pivotMark && !this._walk ? html`<span class="fp3d-pivot" aria-hidden="true"></span>` : nothing}
@@ -6681,6 +6766,21 @@ export class Fp3dView3d extends LitElement {
         font-size: 12px;
       }
       /* a module's sheet and the ⚙ settings: a glass box in the middle, over a dim backdrop */
+      .fp3d-ask {
+        z-index: 9;
+        width: min(360px, calc(100% - 24px));
+      }
+      .fp3d-ask-text {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.4;
+        white-space: pre-line;
+      }
+      .fp3d-ask-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
       .fp3d-sheet-backdrop {
         position: absolute;
         inset: 0;

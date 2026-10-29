@@ -339,3 +339,23 @@ def test_pets_roam_unless_set_static() -> None:
         SETTINGS_SCHEMA({**base, "pets": {"list": [{**pet, "pose": pose}]}})
     with pytest.raises(vol.Invalid):
         SETTINGS_SCHEMA({**base, "pets": {"list": [{**pet, "pose": "fly"}]}})
+
+
+def test_item_actions() -> None:
+    """Own tap, hold and double-tap actions of a placed device or a furniture item (#6)."""
+    from custom_components.home_3d.schema import PLACEMENT_SCHEMA
+
+    dev = {"entity_id": "switch.gate", "x": 0, "z": 0, "y": None}
+    assert "actions" not in PLACEMENT_SCHEMA(dev)
+    actions = {
+        "tap": {"action": "perform_action", "target": "rest_command.gate", "data": {"seconds": 5}, "confirm": True, "confirm_text": "Open the gate?"},
+        "hold": {"action": "more_info"},
+        "double_tap": None,
+    }
+    assert PLACEMENT_SCHEMA({**dev, "actions": actions})["actions"]["tap"]["data"] == {"seconds": 5}
+    sofa = {"id": "f1", "type": "sofa", "x": 0, "z": 0, "rotation": 0, "w": 2, "d": 1, "h": 0.8, "variant": None}
+    assert FURNITURE_SCHEMA({**sofa, "actions": {"tap": {"action": "navigate", "target": "/lovelace/0"}}})["actions"]["tap"]["target"] == "/lovelace/0"
+    with pytest.raises(vol.Invalid):
+        PLACEMENT_SCHEMA({**dev, "actions": {"tap": {"action": "javascript"}}})
+    with pytest.raises(vol.Invalid):
+        FURNITURE_SCHEMA({**sofa, "actions": {"tap": {"action": "toggle", "confirm_text": "x" * 301}}})

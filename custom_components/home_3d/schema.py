@@ -225,6 +225,27 @@ _VEHICLE_TYPE_SCHEMA = vol.Schema(
 # the kinds of waste a bin can take (household.ts WASTE_KINDS)
 WASTE_KINDS = ["rest", "bio", "paper", "plastic", "glass", "garden", "recycling", "other"]
 
+# own tap, hold and double-tap actions of a placed device or furniture item (#6); a gesture left out (or
+# "default") keeps what the item does by its kind
+_ITEM_ACTION = vol.Any(
+    None,
+    vol.Schema(
+        {
+            vol.Required("action"): vol.In(
+                ["default", "none", "toggle", "more_info", "camera", "navigate", "url", "perform_action"]
+            ),
+            vol.Optional("target"): vol.Any(None, vol.All(str, vol.Length(max=2000))),
+            vol.Optional("data"): vol.Any(None, dict),
+            vol.Optional("confirm"): bool,
+            vol.Optional("confirm_text"): vol.Any(None, vol.All(str, vol.Length(max=300))),
+        }
+    ),
+)
+_ITEM_ACTIONS = vol.Any(
+    None,
+    {vol.Optional("tap"): _ITEM_ACTION, vol.Optional("hold"): _ITEM_ACTION, vol.Optional("double_tap"): _ITEM_ACTION},
+)
+
 FURNITURE_SCHEMA = vol.Schema(
     {
         vol.Required("id"): _ID,
@@ -269,6 +290,7 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("room_sensor", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # ask before switching the linked entity
         vol.Optional("confirm", default=False): bool,
+        vol.Optional("actions"): _ITEM_ACTIONS,
         # its marker in 3D: None = automatic, always, without watts, or hidden
         vol.Optional("marker", default=None): vol.Any(None, vol.In(["always", "no_power", "never"])),
         # an own symbol for the marker: a Material Design icon name without "mdi:"
@@ -380,6 +402,7 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Optional("tilt", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=90))),
         # ask before switching this device from the 3D view, the quick menu or the room panel
         vol.Optional("confirm", default=False): bool,
+        vol.Optional("actions"): _ITEM_ACTIONS,
         # its marker in 3D: None = automatic, always, without watts, or hidden
         vol.Optional("marker", default=None): vol.Any(None, vol.In(["always", "no_power", "never"])),
         # an own symbol for the marker: a Material Design icon name without "mdi:"
