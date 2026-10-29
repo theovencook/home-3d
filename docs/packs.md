@@ -1,7 +1,8 @@
 # Furniture packs
 
-A furniture pack adds items to the Home 3D library. Items are built from boxes, cylinders and lofts, like the
-built-in furniture, so they run just as smoothly on slow wall tablets.
+A furniture pack adds items to the Home 3D library. Items are built from a few simple shapes (boxes, cylinders,
+lofts, spheres, lathes and rounded boxes), like the built-in furniture, so they run just as smoothly on slow wall
+tablets.
 
 Packs are **data only**: JSON that Home Assistant checks against a schema before it keeps anything. A pack carries no
 code, no pictures and no links. The schema and the limits live in `custom_components/home_3d/packs.py`; the same code
@@ -115,6 +116,10 @@ All measures of a part are **fractions of the item's size**:
   - `loft`: a box whose top face is another rectangle: `tx`/`tz` for its centre and `tw`/`td` for its size (default:
     the same as the bottom). Use it for sloped surfaces such as bonnets, windscreens and lamp shades; a thin loft
     with an offset top makes a slanted bar (a handrail).
+  - `sphere`: a ball that fills the part's box, squashed when `w`, `d` and `h` differ (a pouffe, a globe lamp, a
+    knob). See [Round shapes](#round-shapes).
+  - `lathe`: a `profile` turned around the part's upright axis (vases, lamp bases, bowls, planters).
+  - `rbox`: a box with rounded edges (cushions, mattresses, appliances, soft seats); `round` sets how round.
 - `color`: `#rrggbb` or a role of the built-in palette (`body`, `fabric`, `cushion`, `wood`, `white`, `metal`,
   `dark`, `glass`, `plant`, `pot`, `accent`). Roles follow the look of the plan, so prefer them.
 - `top` (optional): another colour for the top face.
@@ -129,6 +134,91 @@ All measures of a part are **fractions of the item's size**:
 - `glow` (optional, lamps): the part shines in the colour and brightness of the linked light.
 - `screen` (optional): the part is a screen (TV, monitor). The item can then be linked to a media player and its
   front (+z) shows the colour and picture of the running app, like the built-in TVs.
+- `profile` (`lathe` only, required there): see [Round shapes](#round-shapes).
+- `round` (`rbox` only, optional): see [Round shapes](#round-shapes).
+
+### Round shapes
+
+A sphere, a lathe and a rounded box fill the part's box like the other shapes: they take `x`, `z`, `w`, `d`, `y`,
+`h`, the colour roles, `top`, `edges`, `rot` and `fix`, and grow with the item. When `w` and `d` differ they are oval
+seen from above. They are low-poly (12 points around, 8 on parts under 10 cm), so a room full of them stays smooth on
+a wall tablet. In the plan a sphere and a lathe show as an ellipse as wide as they reach, a rounded box as a rectangle
+with rounded corners. An item whose largest part is a sphere or a lathe casts a round shadow.
+
+**Sphere.** Nothing more to set. A flat `h` gives a squashed ball; for a dome or half a ball, use a lathe.
+
+```json
+{
+  "id": "pouffe_round",
+  "name": { "en": "Round pouffe" },
+  "size": [0.5, 0.5, 0.4],
+  "group": "seating",
+  "parts": [
+    { "shape": "sphere", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "fabric" }
+  ]
+}
+```
+
+**Lathe.** `profile` is a list of 2 to 12 points `[radius, height]`, turned around the part's upright axis:
+
+- `radius` is a fraction of the part's half width and half depth: `1` touches the part's box, `0` is the axis.
+- `height` is a fraction of the part's height: `0` its bottom, `1` its top.
+- Write the points from the bottom up the outside, like drawing the right half of the object's silhouette. A
+  profile that starts or ends away from the axis is closed with a flat disc there, so the solid has no holes. A
+  profile can come back down on the inside (a bowl): go up the outside, over the rim and down the inside.
+
+```json
+{
+  "id": "vase_tall",
+  "name": { "en": "Tall vase" },
+  "size": [0.22, 0.22, 0.45],
+  "group": "deco",
+  "mount": "surface",
+  "parts": [
+    {
+      "shape": "lathe", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "pot",
+      "profile": [[0, 0], [0.55, 0], [1, 0.35], [0.4, 0.85], [0.5, 1], [0, 1]]
+    }
+  ]
+}
+```
+
+A bowl, its hollow 15 % above the bottom:
+
+```json
+{
+  "id": "bowl",
+  "name": { "en": "Bowl" },
+  "size": [0.3, 0.3, 0.12],
+  "group": "deco",
+  "mount": "surface",
+  "parts": [
+    {
+      "shape": "lathe", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "white",
+      "profile": [[0, 0], [0.6, 0], [1, 1], [0.9, 1], [0.55, 0.15], [0, 0.15]]
+    }
+  ]
+}
+```
+
+**Rounded box.** `round` is the radius of the rounded edges as a fraction of the part's shortest side, from `0.01`
+to `0.5` (default `0.2`). At `0.5` the shortest side is fully round, like a bolster.
+
+```json
+{
+  "id": "floor_cushion",
+  "name": { "en": "Floor cushion" },
+  "size": [0.6, 0.6, 0.15],
+  "group": "seating",
+  "room": ["living", "kids"],
+  "parts": [
+    { "shape": "rbox", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "cushion", "round": 0.4 }
+  ]
+}
+```
+
+A newer Home 3D shape in an older Home 3D is refused with `needs_update` (see below), so a pack that uses these
+shapes needs a Home 3D version that knows them.
 
 ### Optional item fields
 

@@ -1,4 +1,5 @@
-"""Furniture packs: data-only JSON, furniture models built from boxes, cylinders and lofts.
+"""Furniture packs: data-only JSON, furniture models built from boxes, cylinders, lofts, spheres, lathes and
+rounded boxes.
 
 A pack (format v2, see docs/packs.md) is a folder: a pack.json naming the pack, its publisher and its licence, and
 one JSON file per item, in subfolders if wanted. The pack id is "publisher.pack", an item's full id
@@ -30,11 +31,33 @@ _SPAN = vol.All(vol.Coerce(float), vol.Range(min=0.001, max=1))
 _LEVEL = vol.All(vol.Coerce(float), vol.Range(min=0, max=1))
 _METRES = vol.All(vol.Coerce(float), vol.Range(min=0.01, max=10))
 
+# A lathe's profile: [radius, height] points turned around the part's upright axis (#4). The radius is a fraction of
+# the part's half width and half depth (1 touches the part's box), the height a fraction of the part's height.
+# At most 12 points keeps a turned part low-poly on wall tablets.
+MAX_PROFILE_POINTS = 12
+_PROFILE = vol.All(
+    [vol.All([_LEVEL], vol.Length(min=2, max=2))],
+    vol.Length(min=2, max=MAX_PROFILE_POINTS),
+)
+# A rounded box: the radius of its rounded edges as a fraction of the part's shortest side (0.5: fully round)
+_ROUND = vol.All(vol.Coerce(float), vol.Range(min=0.01, max=0.5))
+
+
+def _shape_fields(part: dict[str, Any]) -> dict[str, Any]:
+    """A lathe has a profile and only a lathe; only a rounded box has a rounding."""
+    if (part["shape"] == "lathe") != ("profile" in part):
+        raise vol.Invalid("a lathe part needs a profile, and only a lathe part has one", path=["profile"])
+    if "round" in part and part["shape"] != "rbox":
+        raise vol.Invalid("only a rounded box (rbox) part has a rounding", path=["round"])
+    return part
+
+
 # Parts in fractions of the item's size: x/z centre (-0.5..0.5, front at +z), w/d extent, y/h bottom
-# and height of the item height. A cylinder's diameter is the smaller of w and d.
-PART_SCHEMA = vol.Schema(
+# and height of the item height. A cylinder's diameter is the smaller of w and d; a sphere, a lathe and a rounded
+# box fill their part box (squashed when w, d and h differ).
+_PART_FIELDS = vol.Schema(
     {
-        vol.Required("shape"): vol.In(["box", "cyl", "loft"]),
+        vol.Required("shape"): vol.In(["box", "cyl", "loft", "sphere", "lathe", "rbox"]),
         vol.Required("x"): _FRACTION,
         vol.Required("z"): _FRACTION,
         vol.Required("w"): _SPAN,
@@ -61,8 +84,13 @@ PART_SCHEMA = vol.Schema(
         # free sizes (1.23): the measures that stay when the item is resized ("w", "d", "h" or several): legs,
         # arms and plates keep their size and their distance from the edge, the parts between them stretch
         vol.Optional("fix"): vol.All(str, vol.Match(r"^[wdh]{1,3}$")),
+        # lathe: the profile turned around the upright axis (vases, lamp bases, bowls)
+        vol.Optional("profile"): _PROFILE,
+        # rounded box: the radius of its edges (default 0.2 of the shortest side)
+        vol.Optional("round"): _ROUND,
     }
 )
+PART_SCHEMA = vol.All(_PART_FIELDS, _shape_fields)
 
 # Plan symbol in the same fractions (optional: without it the parts are drawn from above).
 SYMBOL_SCHEMA = vol.Any(
