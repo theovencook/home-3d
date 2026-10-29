@@ -11,6 +11,8 @@ export interface CardConfig {
   floor?: string;
   /** Start in this room (its id from the editor): a display for one room, e.g. for the kids. */
   room?: string;
+  /** Start as the read-only 2D plan (#41) instead of the 3D view (default "3d"). */
+  view?: "3d" | "2d";
   /** A start view of this card's own (theta, phi, radius and target as the editor shows them); default: the plan's. */
   start_view?: StartView;
   height?: number;
@@ -118,5 +120,10 @@ export interface CardConfig {
   idle_orbit?: boolean;
 }
 
-export const CARD_CONTROLS = ["walls", "floors", "temperature", "humidity", "co2"] as const;
+export const CARD_CONTROLS = ["view", "walls", "floors", "temperature", "humidity", "co2"] as const;
 export type CardControl = (typeof CARD_CONTROLS)[number];
+
+/** Whether the card shows the 2D plan (#41): the card's own 2D/3D switch (`chosen`, null: not used) wins over its view option. */
+export function showsPlan2d(config: CardConfig | undefined, chosen: boolean | null): boolean {
+  return chosen ?? config?.view === "2d";
+}

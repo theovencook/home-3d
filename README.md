@@ -5,6 +5,9 @@ sidebar panel with a plan editor and a live 3D view, plus a dashboard card (`cus
 
 - Plan editor inside Home Assistant: floors, rooms, walls, doors, windows, stairs, roofs, outdoor areas and solar fields.
 - Live 3D view: lights, covers, doors, cameras, sensors and warnings shown in the room they belong to.
+- Read-only 2D plan of the same building, for dashboards and wall tablets: device states, the same tap, hold and
+  double-tap actions as in 3D, camera pictures from the plan. Switch with the 2D/3D buttons in the panel (or open it
+  with `?view=2d`) and on the card.
 - Furniture library with built-in models and furniture packs you can import yourself.
 - Built-in extras: camera cockpit and motion trail, weather outside, live screens, energy view, sound, car,
   household, time travel and the fun extras.
@@ -40,6 +43,14 @@ The card is registered automatically. All options can be set in the card's visua
 ```yaml
 type: custom:home-3d-card
 height: 420
+```
+
+To start the card as the 2D plan, with a button to switch to 3D (a wall tablet, say):
+
+```yaml
+type: custom:home-3d-card
+view: 2d
+controls: [view]
 ```
 
 ## Privacy

@@ -121,6 +121,9 @@ import { signedArea } from "../model.ts";
 import { coverPositionable, lightAbilities } from "./quick-menu.ts";
 import "./quick-menu.ts";
 import { load3d } from "../load3d.ts";
+import { load2d } from "../load2d.ts";
+import { pinIn2d } from "../plan2d/pins.ts";
+import type { ViewerSurface } from "../viewer-surface.ts";
 import { loadFun } from "../load-fun.ts";
 import { detectionKind, scaleGlow, buildMarkers, cameraMotionSensors, openMoreInfo, setCameraSensors, stateText, toggleEntity } from "../markers.ts";
 import { activeSections, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
@@ -237,6 +240,7 @@ export class Fp3dView3d extends LitElement {
     _sky: { state: true },
     quality: { attribute: false },
     showStats: { type: Boolean },
+    plan2d: { attribute: false },
     _stats: { state: true },
     _error: { state: true },
     _energy: { state: true },
@@ -450,6 +454,8 @@ export class Fp3dView3d extends LitElement {
   private declare _blend: number;
   /** Floor switcher with small pictures of the floors (panel and card; off with a fixed floor). */
   declare floorThumbs: boolean;
+  /** The read-only 2D plan (#41) instead of the 3D view: the same building, devices and actions, drawn flat. */
+  declare plan2d: boolean;
   /** Clean view: only the stage – no energy values, thumbnails, legend, scene chips or search (the host hides its own bars). */
   declare clean: boolean;
   /** Show the eye button that toggles the clean view (the host listens for "clean-toggle"). */
@@ -579,7 +585,7 @@ export class Fp3dView3d extends LitElement {
   /** Energy cables from the meter to the consumers (off unless switched on; kept per browser). */
   private declare _flows: boolean;
 
-  private viewer: FloorplanViewer | null = null;
+  private viewer: ViewerSurface | null = null;
   private starting = false;
   /** States of the placed entities as last sent to the viewer. */
   private shownStates = new Map<string, HassEntity | undefined>();
@@ -700,6 +706,7 @@ export class Fp3dView3d extends LitElement {
     this.buttons = null;
     this._thumbs = [];
     this.floorThumbs = true;
+    this.plan2d = false;
     this.clean = false;
     this.cleanButton = false;
     this.roomLabels = true;
@@ -872,9 +879,11 @@ export class Fp3dView3d extends LitElement {
   private async start(): Promise<void> {
     if (this.starting || this.viewer) return;
     this.starting = true;
+    const flat = this.plan2d;
     try {
-      const mod = await load3d();
-      if (!this.isConnected) return;
+      const mod = flat ? await load2d() : await load3d();
+      // switched between 2D and 3D while loading: the other one starts instead
+      if (!this.isConnected || flat !== this.plan2d) return;
       const host = this.renderRoot.querySelector(".fp3d-stage") as HTMLElement;
       // a tap into the 3D view closes the star menu, like any menu (#220)
       host.addEventListener("pointerdown", (e) => {
@@ -936,7 +945,27 @@ export class Fp3dView3d extends LitElement {
       this._error = String(err);
     } finally {
       this.starting = false;
+      if (this.isConnected && !this.viewer && flat !== this.plan2d) void this.start();
     }
+  }
+
+  /** Between the 2D plan and the 3D view (#41): the one shown goes, the other starts with everything it shows. */
+  private switchViewer(): void {
+    this.stopWalk();
+    this.pets?.dispose();
+    this.pets = null;
+    this.petsFor = null;
+    this.ghost?.dispose();
+    this.ghost = null;
+    this._through = null;
+    this._menu = null;
+    this.viewer?.dispose();
+    this.viewer = null;
+    this.shownPacks = -1;
+    this._thumbs = [];
+    this.thumbsAt = 0;
+    this._error = null;
+    void this.start();
   }
 
   protected willUpdate(changed: PropertyValues): void {
@@ -950,6 +979,7 @@ export class Fp3dView3d extends LitElement {
   }
 
   protected updated(changed: PropertyValues): void {
+    if (changed.has("plan2d") && changed.get("plan2d") !== undefined) this.switchViewer();
     if (changed.has("hass") && this.live?.el) this.live.el.hass = this.hass;
     if (changed.has("hass")) this.watchAsk();
     // the star menu closes when a room or another floor is chosen (#220)
@@ -1138,7 +1168,7 @@ export class Fp3dView3d extends LitElement {
         // Klang & Kino: while a card floats over the speaker, its pin steps aside (it comes back when the music stops)
         const carded = (hasFeature("sound") && this.mediaCardUp(hass, m.id)) || (hasFeature("auto_pro") && !!m.furnitureId && carSpots.has(m.furnitureId));
         // a lock at its door asks for its text itself (full): the symbol mode does not take that away
-        return { ...marker, pin: this.showPin(marker) && !carded, full: m.show === "always" || m.full === true, caption };
+        return { ...marker, pin: (this.plan2d ? pinIn2d(marker, this.markerMode, this.showPin(marker)) : this.showPin(marker)) && !carded, full: m.show === "always" || m.full === true, caption };
       }),
       // Energie Pro: the street end of the grid cable carries a pin with what comes in or goes out
       ...(pro && (this.flows ?? this._flows) && !this.dimmed && summary.grid !== null ? [this.gridPin(hass, b, summary.grid)] : []).filter((m): m is NonNullable<typeof m> => !!m),
@@ -3909,7 +3939,7 @@ export class Fp3dView3d extends LitElement {
     const list = on ? (b?.settings.pets?.list ?? []) : [];
     // the fun pack also brings fish to the pets pack's aquariums
     const fish = on && !!b?.floors.some((f) => f.furniture.some((m) => /:aquarium(_large)?$/.test(m.type)));
-    if (!v || !b || !hasFeature("fun_pets") || (!list.length && !fish)) {
+    if (!v || !b || this.plan2d || !hasFeature("fun_pets") || (!list.length && !fish)) {
       this.pets?.dispose();
       this.pets = null;
       this.petsFor = null;
@@ -3926,7 +3956,7 @@ export class Fp3dView3d extends LitElement {
     this.petsLoading = true;
     try {
       const [fun, mod] = await Promise.all([loadFun(), load3d()]);
-      if (!this.viewer || this.pets) return;
+      if (!this.viewer || this.plan2d || this.pets) return;
       this.petsFor = this.building;
       this.pets = fun.startPets({
         lib: mod.funLib,
@@ -3955,7 +3985,7 @@ export class Fp3dView3d extends LitElement {
   private async syncGhost(): Promise<void> {
     const b = this.building;
     const on = !!b && hasFeature("fun_halloween") && b.settings.halloween?.ghost !== false && this.ghostOn !== false;
-    if (!this.viewer || !on) {
+    if (!this.viewer || this.plan2d || !on) {
       this.ghost?.dispose();
       this.ghost = null;
       return;
@@ -3968,7 +3998,7 @@ export class Fp3dView3d extends LitElement {
     this.ghostLoading = true;
     try {
       const [fun, mod] = await Promise.all([loadFun(), load3d()]);
-      if (!this.viewer || this.ghost || !this.building) return;
+      if (!this.viewer || this.plan2d || this.ghost || !this.building) return;
       this.ghost = fun.startGhost({
         lib: mod.funLib,
         viewer: this.viewer as never,
@@ -3990,7 +4020,7 @@ export class Fp3dView3d extends LitElement {
   private async startWalk(): Promise<void> {
     const b = this.building;
     const v = this.viewer;
-    if (!b || !v || this._walk) return;
+    if (!b || !v || this._walk || this.plan2d) return;
     const withRooms = b.floors.filter((f) => f.rooms.some((r) => r.points.length >= 3));
     const byRoom = this.roomId ? withRooms.find((f) => f.rooms.some((r) => r.id === this.roomId)) : undefined;
     const floor = byRoom ?? withRooms.find((f) => f.id === this.floorId) ?? [...withRooms].sort((x, y) => Math.abs(x.elevation) - Math.abs(y.elevation))[0];
@@ -4045,7 +4075,7 @@ export class Fp3dView3d extends LitElement {
   }
 
   private renderWalk() {
-    if (!this.walkable || this.ro || !this.building || !this.hass) return nothing;
+    if (!this.walkable || this.ro || this.plan2d || !this.building || !this.hass) return nothing;
     const t = (k: I18nKey) => translate(this.hass, k);
     if (!this._walk)
       return html`<button class="fp3d-walk-btn" title=${t("walk_start")} aria-label=${t("walk_start")} @click=${() => void this.startWalk()}>
@@ -5074,7 +5104,8 @@ export class Fp3dView3d extends LitElement {
   lookThrough(entityId: string): void {
     const v = this.viewer;
     const b = this.building;
-    if (!v || !b || this.ro) return;
+    // the 2D plan has no camera to look through (its camera pictures open from the menu)
+    if (!v || !b || this.ro || this.plan2d) return;
     if (!hasFeature("camera_cockpit")) {
       this._menu = null;
       this._proHint = "camera_cockpit";
@@ -5284,6 +5315,7 @@ export class Fp3dView3d extends LitElement {
         .presets=${hasFeature("sound") ? (this.building?.settings.media_presets ?? []) : []}
         ?confirmSwitch=${this.confirmSet.has(m.entity)}
         ?pro=${hasFeature("camera_cockpit")}
+        ?noLook=${this.plan2d}
         @close=${() => (this._menu = null)}
         @camera-look=${(e: CustomEvent<{ entity: string }>) => this.lookThrough(e.detail.entity)}
       ></fp3d-quick-menu>`;
