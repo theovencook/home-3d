@@ -11,7 +11,7 @@ function inDays(day: string, from: string, to: string): boolean {
 }
 
 /** "HH:MM" times compare as text: from the start up to (not including) the end; a start after the end runs over midnight. */
-function inTimes(time: string, start: string, end: string): boolean {
+export function inTimes(time: string, start: string, end: string): boolean {
   return start <= end ? time >= start && time < end : time >= start || time < end;
 }
 

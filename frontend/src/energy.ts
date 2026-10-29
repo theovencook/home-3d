@@ -54,6 +54,8 @@ export interface Consumer {
   wallbox?: boolean;
   /** The power sensor of the circuit it hangs on (a circuit monitor's channel): its watts are inside that circuit's (#43). */
   circuit?: string;
+  /** The energy sensor linked on the item for today's kWh at its wire end ("none" = none; left out = found, #29). */
+  energy?: string;
 }
 
 /**
@@ -261,7 +263,7 @@ export function findConsumers(hass: HomeAssistant, building: Building, devices: 
       if (!sensor || sources.has(sensor) || seen.has(sensor)) continue;
       seen.add(sensor);
       const circuit = ref(pl.circuit);
-      out.push({ id: pl.entity_id, powerEntity: sensor, floorId: floor.id, x: pl.x, z: pl.z, power: Math.max(0, readPower(hass.states[sensor]) ?? 0), ...(circuit ? { circuit } : {}) });
+      out.push({ id: pl.entity_id, powerEntity: sensor, floorId: floor.id, x: pl.x, z: pl.z, power: Math.max(0, readPower(hass.states[sensor]) ?? 0), ...(circuit ? { circuit } : {}), ...(pl.energy ? { energy: pl.energy } : {}) });
     }
   }
   return out;

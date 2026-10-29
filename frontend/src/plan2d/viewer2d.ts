@@ -14,7 +14,7 @@ import { lowEndDevice } from "../viewer/pace.ts";
 import type { DeviceMarker, FlowPiece, Theme, ViewerOptions } from "../viewer/viewer3d.ts";
 import type { ViewerSurface } from "../viewer-surface.ts";
 import { Gestures } from "./gestures.ts";
-import { fitView, floorPictures, flowLines, planBounds, planItems, planMarkers, planOpenings, shownFloor, zoomView, type PlanOpening, type PlanView } from "./scene.ts";
+import { anchorSpots, fitView, floorPictures, flowLines, planBounds, planItems, planMarkers, planOpenings, shownFloor, zoomView, type PlanOpening, type PlanView } from "./scene.ts";
 
 type View = ReturnType<ViewerSurface["getView"]>;
 type Anchors = Parameters<ViewerSurface["setAnchors"]>[0];
@@ -45,6 +45,7 @@ export class Plan2dViewer implements ViewerSurface {
   private roomInfo = new Map<string, string>();
   private startView: StartView | null = null;
   private anchorCb: AnchorCallback = null;
+  private anchors: Anchors = [];
   private view: PlanView = { k: 40, tx: 0, ty: 0 };
   private inset = 0;
   private size = { w: 0, h: 0 };
@@ -230,9 +231,16 @@ export class Plan2dViewer implements ViewerSurface {
     this.anchorCb = cb;
   }
 
-  /** Floating cards belong to the 3D view: in the plan they stay hidden. */
+  /** Floating cards belong to the 3D view: in the plan they stay hidden; points on the plan (cable ends, #29) show. */
   setAnchors(anchors: Anchors): void {
-    anchors.forEach((_, i) => this.anchorCb?.(i, 0, 0, false, 1, false));
+    this.anchors = anchors;
+    this.placeAnchors();
+  }
+
+  private placeAnchors(): void {
+    if (!this.anchorCb) return;
+    // a cable's end steps just below the device's pin (34 px) on the same point
+    anchorSpots(this.anchors, this.floor()?.id ?? null, this.view, 26).forEach((s, i) => this.anchorCb?.(i, s.x, s.y, s.on, 1, true));
   }
 
   // what only the 3D view shows (or what edits): the plan leaves it out
@@ -315,6 +323,7 @@ export class Plan2dViewer implements ViewerSurface {
     s.setProperty("--k", String(v.k));
     s.setProperty("--tx", `${v.tx}px`);
     s.setProperty("--ty", `${v.ty}px`);
+    this.placeAnchors();
   }
 
   private floor(): Floor | null {
