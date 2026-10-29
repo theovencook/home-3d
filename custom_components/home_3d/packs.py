@@ -13,6 +13,7 @@ This module only depends on voluptuous, so tools/fp3dpack.py (which checks packs
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -226,6 +227,13 @@ PACK_SCHEMA_V2 = vol.Schema(
 def item_ref(pack: dict[str, Any], item: dict[str, Any]) -> str:
     """The full id of a pack item: "publisher.pack/item_id"."""
     return f"{pack['id']}/{item['id']}"
+
+
+def recipe_hash(item: dict[str, Any]) -> str:
+    """A fingerprint of a checked item's recipe: "sha256:" and the hash of its JSON with sorted keys. A plan's copy
+    of a recipe (#2) and the installed item have the same hash while the recipe is the same."""
+    text = json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return "sha256:" + hashlib.sha256(text.encode()).hexdigest()
 
 
 def _parse(path: str, text: str) -> Any:

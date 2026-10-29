@@ -10,6 +10,8 @@ import math
 
 import voluptuous as vol
 
+from .recipes import recipes_validator
+
 MAX_FLOORS = 20
 MAX_ROOMS = 200
 MAX_POINTS = 200
@@ -1037,6 +1039,8 @@ BUILDING_SCHEMA = vol.Schema(
         vol.Required("settings"): SETTINGS_SCHEMA,
         vol.Optional("energy", default=lambda: dict(ENERGY_DEFAULTS)): ENERGY_SCHEMA,
         vol.Optional("presence", default=list): vol.All([PRESENCE_SCHEMA], vol.Length(max=50)),
+        # a copy of the recipe of every pack item type the plan uses (#2, see recipes.py)
+        vol.Optional("recipes", default=dict): recipes_validator,
     },
     extra=vol.ALLOW_EXTRA,
 )

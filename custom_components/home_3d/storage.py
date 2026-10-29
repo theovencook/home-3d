@@ -29,6 +29,7 @@ from .const import (
     STORAGE_VERSION,
 )
 from .packs import load_bundled, with_bundled
+from .recipes import with_recipes
 from .schema import BUILDING_SCHEMA, empty_building, image_ids
 
 _LOGGER = logging.getLogger(__name__)
@@ -96,13 +97,19 @@ class FloorplanData:
 
     async def async_load(self) -> None:
         """Load both stores and drop images no floor refers to any more."""
+        packs = await self._pack_store.async_load()
+        self.packs = list((packs or {}).get("packs", []))
+        self.bundled = await self.hass.async_add_executor_job(load_bundled)
         stored = await self._building_store.async_load()
         if stored:
             self.building = complete(stored.get("building") or empty_building())
             self.revision = int(stored.get("revision", 0))
-        packs = await self._pack_store.async_load()
-        self.packs = list((packs or {}).get("packs", []))
-        self.bundled = await self.hass.async_add_executor_job(load_bundled)
+            # a plan saved before #2 (or placed while a client did not send recipes) picks up the recipes of its
+            # pack items from the installed packs, and keeps them from now on
+            building = with_recipes(self.building, self.building.get("recipes"), self.offered_packs)
+            if building.get("recipes") != self.building.get("recipes"):
+                self.building = building
+                await self._building_store.async_save({"revision": self.revision, "building": building})
         history = await self._history_store.async_load()
         self._history = list((history or {}).get("snapshots", []))
         images = await self._image_store.async_load()
@@ -123,6 +130,9 @@ class FloorplanData:
         last = self._history[-1]["saved_at"] if self._history else 0
         if self.building.get("floors") and time.time() - last > HISTORY_INTERVAL:
             await self.async_snapshot()
+        # every pack item type in the plan keeps its recipe copy (#2): the one sent, else the one kept so far, else
+        # a copy of the installed item
+        building = with_recipes(building, self.building.get("recipes"), self.offered_packs)
         self.building = building
         self.revision += 1
         await self._building_store.async_save({"revision": self.revision, "building": building})

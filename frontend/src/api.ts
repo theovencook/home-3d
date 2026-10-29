@@ -2,7 +2,7 @@
 
 import type { EditorUser } from "./editors.ts";
 import type { Building } from "./model.ts";
-import type { FurniturePack, PackOrigin } from "./packs.ts";
+import type { FurniturePack, PackOrigin, PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
 /** `can_edit`: the user is on the editors list (missing from backends before #7). */
@@ -10,9 +10,9 @@ export async function fetchBuilding(hass: HomeAssistant): Promise<{ building: Bu
   return hass.callWS({ type: "home_3d/building/get" });
 }
 
-export async function saveBuilding(hass: HomeAssistant, building: Building): Promise<number> {
-  const res = await hass.callWS<{ revision: number }>({ type: "home_3d/building/save", building });
-  return res.revision;
+/** Save the plan; the backend answers with its revision and the plan's recipe copies as stored (#2). */
+export async function saveBuilding(hass: HomeAssistant, building: Building): Promise<{ revision: number; recipes?: Record<string, PlanRecipe> }> {
+  return hass.callWS<{ revision: number; recipes?: Record<string, PlanRecipe> }>({ type: "home_3d/building/save", building });
 }
 
 export function subscribeBuilding(hass: HomeAssistant, callback: (revision: number) => void): Promise<() => Promise<void>> {
