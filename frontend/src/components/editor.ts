@@ -150,6 +150,7 @@ import { load3d } from "../load3d.ts";
 import "./library.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
+import { detectCameraModel, isCameraModel, setCameraLook } from "../camera-models.ts";
 import { COLOUR_PRESETS, itemColourRoles, roleColour, setRoleColour, type ColourRole } from "../colour-roles.ts";
 import { MATERIALS, ownMaterial, setRoleMaterial, usualMaterial, type Material } from "../role-materials.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
@@ -4756,10 +4757,13 @@ export class Fp3dEditor extends LitElement {
   /** Replace a placed device by a furniture item linked to it, where the pin stood (one undo step). */
   private deviceToFurniture(pl: Placement, type: string): void {
     if (!this.isEditor) return;
-    const [w, d, h] = furnitureSize(type);
     // a camera keeps its pin with everything set there (field of view, wedge, Kamera-Cockpit): the model is only its
-    // look – one item that replaces the last one and moves with the camera (#779)
-    const camera = pl.entity_id.startsWith("camera.");
+    // look – one item that replaces the last one and moves with the camera (#779); a camera model sets its mount (#9)
+    if (pl.entity_id.startsWith("camera.")) {
+      this.change((_, f) => setCameraLook(f, pl.entity_id, type));
+      return;
+    }
+    const [w, d, h] = furnitureSize(type);
     const item: Furniture = {
       id: uid("furniture"),
       type,
@@ -4770,18 +4774,16 @@ export class Fp3dEditor extends LitElement {
       d,
       h,
       variant: null,
-      ...(camera ? { entity: "none", look_of: pl.entity_id } : { entity: pl.entity_id }),
+      entity: pl.entity_id,
       name: pl.name ?? null,
       ...(pl.locked ? { locked: true } : {}),
       // own tap / hold / double-tap actions go along (#6)
-      ...(!camera && pl.actions ? { actions: pl.actions } : {}),
+      ...(pl.actions ? { actions: pl.actions } : {}),
     };
     this.change((_, f) => {
-      if (camera) f.furniture = f.furniture.filter((m) => m.look_of !== pl.entity_id);
-      else f.placements = f.placements.filter((p) => p.entity_id !== pl.entity_id);
+      f.placements = f.placements.filter((p) => p.entity_id !== pl.entity_id);
       f.furniture.push(item);
     });
-    if (camera) return;
     this._deviceId = null;
     this.selectItem("furniture", item.id);
   }
@@ -4797,6 +4799,35 @@ export class Fp3dEditor extends LitElement {
     });
     this._furnitureId = null;
     this.selectItem("device", id);
+  }
+
+  /**
+   * A camera's real shape (#9): the camera models of the packs (the core pack's UniFi cameras), the one its device
+   * reports marked. Only its look: the pin keeps the live view, the wedge and the actions.
+   */
+  private renderCameraModel(pl: Placement) {
+    const lang = this.hass?.language ?? "en";
+    const packs = this.packs ?? [];
+    const models = packs
+      .flatMap((p) => p.items.filter(isCameraModel).map((it) => ({ type: packType(p.id, it.id), label: packItemName(it, lang) })))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    if (!models.length) return nothing;
+    const look = this.floor?.furniture.find((m) => m.look_of === pl.entity_id)?.type ?? "";
+    const found = this.hass ? detectCameraModel(this.hass, pl.entity_id, packs) : null;
+    return html`<label class="fp3d-field fp3d-wide" title=${this.t("camera_model_hint")}
+      >${this.t("camera_model")}
+      <select
+        ?disabled=${!this.isEditor}
+        @change=${(e: Event) => {
+          const v = (e.target as HTMLSelectElement).value;
+          this.change((_, f) => setCameraLook(f, pl.entity_id, v || null));
+        }}
+      >
+        <option value="" ?selected=${!look}>${this.t("camera_look_builtin")}</option>
+        ${look && !models.some((m) => m.type === look) ? html`<option value=${look} selected>${furnitureName(this.hass, look)}</option>` : nothing}
+        ${models.map((m) => html`<option value=${m.type} ?selected=${m.type === look}>${m.type === found ? this.t("camera_model_found", { name: m.label }) : m.label}</option>`)}
+      </select></label
+    >`;
   }
 
   private renderAsFurniture(pl: Placement) {
@@ -5021,6 +5052,9 @@ export class Fp3dEditor extends LitElement {
         // outside (an outdoor area acting as a room) a light stays a pin: no ceiling lamp over the lawn
         if (!pl.entity_id.startsWith("light.") || room.outdoor) {
           floor.placements.push(pl);
+          // a camera whose device names a known model gets that shape right away (#9); changed by hand any time
+          const model = pl.entity_id.startsWith("camera.") && this.hass ? detectCameraModel(this.hass, pl.entity_id, this.packs ?? []) : null;
+          if (model) setCameraLook(floor, pl.entity_id, model);
           continue;
         }
         // a light becomes a ceiling lamp that is tapped directly in 3D
@@ -12680,7 +12714,7 @@ export class Fp3dEditor extends LitElement {
                   <option value="wall" ?selected=${(pl.mount ?? "wall") === "wall"}>${this.t("camera_mount_wall")}</option>
                   <option value="ceiling" ?selected=${pl.mount === "ceiling"}>${this.t("camera_mount_ceiling")}</option>
                 </select></label
-              >`
+              >${this.renderCameraModel(pl)}`
             : nothing}
         ${this.len(this.t("x"), pl.x, (v) => this.updateDevice({ x: v }))} ${this.len(this.t("z"), pl.z, (v) => this.updateDevice({ z: v }))}
         ${this.len(this.t("marker_height"), pl.y ?? auto, (v) => this.updateDevice({ y: Math.max(0, v) }), 0.05, 0)}
