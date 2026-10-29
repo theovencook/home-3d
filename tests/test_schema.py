@@ -300,7 +300,9 @@ def test_stairs_keep_their_options_and_check_them() -> None:
     assert out["mount_y"] == 0.54
     # a plain stair stays plain, and the editor may send nulls to clear an option
     assert not any(k.startswith("stair_") for k in FURNITURE_SCHEMA(stairs))
-    cleared = FURNITURE_SCHEMA({**stairs, "stair_open": None, "stair_turn": None, "stair_landing": None, "stair_top": None})
+    cleared = FURNITURE_SCHEMA(
+        {**stairs, "stair_open": None, "stair_turn": None, "stair_landing": None, "stair_top": None}
+    )
     assert cleared["stair_turn"] is None and cleared["stair_landing"] is None
     for bad in (
         {"stair_open": "yes"},
