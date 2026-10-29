@@ -294,11 +294,38 @@ export function packRobotCentre(item: PackItem | undefined): number {
 }
 
 /**
- * A pack's heater with hot water (a heat pump's indoor unit, a gas boiler, a buffer tank, a hot water tank): besides a
+ * A pack's heater with hot water (a heat pump's indoor unit, a gas boiler, a buffer tank, a hot water tank or cylinder): besides a
  * climate entity it takes a water_heater entity like the built-in water heater (#645).
  */
 export function isPackHeater(type: string): boolean {
-  return isPackType(type) && /:(heat_pump_indoor|gas_boiler|buffer_tank|water_heater)$/.test(type);
+  return isPackType(type) && /:(heat_pump_indoor|gas_boiler|buffer_tank|water_heater|hot_water_cylinder(?:_[a-z0-9_]+)?)$/.test(type);
+}
+
+/** What an item is in the energy flow: where the cables meet (meter), a source (solar, inverter, battery) or a wallbox. */
+export type EnergyRole = "meter" | "inverter" | "home_battery" | "wallbox" | "solar";
+
+const ENERGY_FAMILIES: Record<string, EnergyRole> = {
+  meter: "meter",
+  consumer_unit: "meter",
+  energy_monitor: "meter",
+  inverter: "inverter",
+  home_battery: "home_battery",
+  power_station: "home_battery",
+  ev_charger: "wallbox",
+  solar_panel: "solar",
+};
+
+/**
+ * The energy role of a furniture type (#22): the built-in meter, inverter, home battery and wallbox, and pack items
+ * by their family: a consumer unit or CT clamp box (`energy_monitor`) is the meter, a portable power station a battery,
+ * an EV charger a wallbox and a solar panel a source of its own. A pack's gas or water meter is no power meter.
+ */
+export function energyRole(type: string): EnergyRole | null {
+  if (type === "meter" || type === "inverter" || type === "home_battery" || type === "wallbox") return type;
+  const item = packItem(type);
+  const role = item?.family ? (ENERGY_FAMILIES[item.family] ?? null) : null;
+  if (role === "meter" && (item!.tags ?? []).some((t) => /^(gas|water|wasser)$/i.test(t))) return null;
+  return role;
 }
 
 /** The screen part of a pack item (a TV or monitor), if it has one. */

@@ -75,3 +75,18 @@ test("every bundled lamp is linked as a light and has parts that glow with it", 
     }
   }
 });
+
+test("theovencook.core has an item for every part of the energy flow, and each is electric (#22)", async () => {
+  const { energyRole, setPacks, packType } = await import("./packs.ts");
+  const core = packs.find((p) => p.pack.id === "theovencook.core")!;
+  setPacks([core.pack]);
+  const roles = new Map<string, string[]>();
+  for (const item of core.pack.items) {
+    const role = energyRole(packType(core.pack.id, item.id));
+    if (!role) continue;
+    assert.ok(item.electric, `${item.id} links a power sensor`);
+    roles.set(role, [...(roles.get(role) ?? []), item.id]);
+  }
+  for (const role of ["meter", "inverter", "home_battery", "wallbox", "solar"]) assert.ok(roles.get(role)?.length, `no core item is a ${role}`);
+  setPacks([]);
+});

@@ -333,6 +333,23 @@ status sensor; Home 3D finds the rest on the same device, whatever integration m
 
 `theovencook.core/3d_printer` is one; see its file for a model to start from.
 
+### Energy devices
+
+An `electric` item takes part in the energy flow by its `family`, like the built-in meter, inverter, home battery
+and wallbox. The editor then offers the same links as for the built-in one, and the cables run to and from it:
+
+| `family` | Plays the part of | Links |
+| --- | --- | --- |
+| `consumer_unit`, `energy_monitor` (a CT clamp box), `meter` | the meter: where the cables meet, the grid comes in | power (the grid, + = import), export |
+| `inverter` | an inverter: the solar fields' and panels' cables end here, it feeds the meter | power (its solar output) |
+| `home_battery`, `power_station` | a battery: on the nearest inverter of its floor, else on the meter | power, charge, state of charge |
+| `ev_charger` | a wallbox: its cable has its own colour | power, status |
+| `solar_panel` | a solar panel placed as an item (a garden array, a balcony panel): a cable to the nearest inverter of its floor, else to a battery there, else to the meter | power (its own output, optional) |
+
+A `meter` tagged `gas` or `water` is a gas or water meter and plays no part. Every other electric item (a smart plug,
+a heat pump) is a consumer once it has a power sensor. A hot-water cylinder whose id starts with `hot_water_cylinder`
+also takes a `water_heater` entity. `theovencook.core` has one of each in `energy/` and `heating/`.
+
 ### Roof window blinds
 
 An item whose id starts with `roof_window` and ends with `_blind` (`roof_window_mk04_blind`) and is `electric` has a

@@ -11,6 +11,7 @@ import type { Building, CableRoute, EnergySettings, Floor, Furniture, Room, Sola
 import { fieldCenter, fieldFace, fieldSize, roofFaces, topFloor, wallFaces } from "./solar.ts";
 import { entityAreaId, isHubDevice, powerSensorsOf } from "./devices.ts";
 import { pointInPolygon, signedArea } from "./model.ts";
+import { energyRole, type EnergyRole } from "./packs.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 
 export type FlowKind = "consumer" | "grid" | "export" | "solar" | "battery" | "inverter" | "wallbox";
@@ -56,7 +57,7 @@ export interface Consumer {
 const CABLE_Y = 0.03;
 type V3 = [number, number, number];
 
-/** Power sensors the placed energy devices bring along (meter = grid, inverters = solar, battery). */
+/** Power sensors the placed energy devices bring along (meter = grid, inverters and solar panels = solar, battery). */
 export interface DeviceSensors {
   grid: string | null;
   /** The meter's separate export sensor (its power sensor then reports import only). */
@@ -81,12 +82,13 @@ export function deviceSensors(building: Building, power: (f: Furniture) => strin
   for (const floor of building.floors) {
     for (const f of floor.furniture) {
       const p = power(f);
-      if (f.type === "meter") {
+      const role = energyRole(f.type);
+      if (role === "meter") {
         out.grid ??= p;
         out.gridExport ??= ref(f.export);
       }
-      else if (f.type === "inverter" && p && !out.solar.includes(p)) out.solar.push(p);
-      else if (f.type === "home_battery") {
+      else if ((role === "inverter" || role === "solar") && p && !out.solar.includes(p)) out.solar.push(p);
+      else if (role === "home_battery") {
         if (p && !out.battery.includes(p)) out.battery.push(p);
         const charge = ref(f.charge);
         if (charge && !out.charge.includes(charge)) out.charge.push(charge);
@@ -102,7 +104,7 @@ export function deviceSensors(building: Building, power: (f: Furniture) => strin
 /** Where the cables meet: the meter cabinet in the plan, else the meter spot set in older plans. */
 export function meterPosition(building: Building): { floor_id: string; x: number; z: number } | null {
   for (const floor of building.floors) {
-    const m = floor.furniture.find((f) => f.type === "meter");
+    const m = floor.furniture.find((f) => energyRole(f.type) === "meter");
     if (m) return { floor_id: floor.id, x: m.x, z: m.z };
   }
   return building.energy.meter;
@@ -623,6 +625,8 @@ export function flowSegments({ building, consumers, summary, battery, fieldPower
     }
     return best;
   };
+  const closest = <T extends { x: number; z: number }>(list: T[], p: { x: number; z: number }): T | null =>
+    list.reduce((best: T | null, x) => (!best || Math.hypot(x.x - p.x, x.z - p.z) < Math.hypot(best.x - p.x, best.z - p.z) ? x : best), null);
   // every battery hangs on the nearest inverter of its floor (a hybrid inverter), else on the meter
   const batteryPower = (bat: DevicePos) => own(bat.id) ?? (batteries.length === 1 ? (summary.battery ?? 0) : 0);
   const onInverter = new Map<string, DevicePos>();
@@ -717,7 +721,24 @@ export function flowSegments({ building, consumers, summary, battery, fieldPower
         out.push(...tag(absolutePolyline(building, manualPoints(building, hand, start, [target.x, floor.elevation + targetY, target.z]), power, "solar", floor), `solar:${f.id}`));
       } else out.push(...tag(solarRoute(building, f, power, target, targetY), `solar:${f.id}`));
     }
-  } else if (summary.solar !== null && !inverters.length) {
+  }
+  // solar panels placed as items (a garden array, a panel on the shed, #22): each to the nearest inverter of its floor,
+  // else to a battery there (a power station with its own solar input), else to the meter
+  const panels = devicesOf(building, "solar");
+  for (const panel of panels) {
+    const power = Math.max(0, own(panel.id) ?? (fields.length ? 0 : (summary.solar ?? 0) / panels.length));
+    const inv = nearest(panel);
+    const station = inv ? null : closest(batteries.filter((x) => x.floorId === panel.floorId), panel);
+    if (inv) fieldsOf.set(inv.id, (fieldsOf.get(inv.id) ?? 0) + power);
+    else if (station && onInverter.get(station.id)) {
+      const via = onInverter.get(station.id)!;
+      fieldsOf.set(via.id, (fieldsOf.get(via.id) ?? 0) + power);
+    }
+    const target = inv ?? station ?? { floorId: meter.floor_id, x: meter.x, z: meter.z, h: 0, variant: null };
+    const targetY = inv ? 1.1 + inv.h : station ? (station.variant === "wall" ? 0.5 + station.h : 0.9) : 1.5;
+    out.push(...tag(deviceRoute(building, panel, Math.min(0.3, panel.h), target, targetY, power, "solar", 0), `solar:${panel.id}`));
+  }
+  if (!(fieldPower && fields.length) && summary.solar !== null && !inverters.length && !panels.length) {
     // older plans without fields or an inverter: the sun comes down from above the ceiling to the meter
     out.push({ floorId: meterFloor.id, a: [meter.x + 0.08, meterFloor.height + 0.6, meter.z + 0.08], b: [meter.x + 0.08, CABLE_Y, meter.z + 0.08], dist: 0, power: summary.solar, kind: "solar" });
   }
@@ -836,10 +857,10 @@ export function gridPoint(building: Building): { floorId: string; wall: Vec2; en
   return { floorId: floor.id, wall: [q[0] + out[0] * (ext / 2 + 0.05), q[1] + out[1] * (ext / 2 + 0.05)], end: [q[0] + out[0] * t, q[1] + out[1] * t], height: 0 };
 }
 
-/** All energy devices of a type in the plan (where cables start or end). */
-export function devicesOf(building: Building, type: Furniture["type"]): DevicePos[] {
+/** All energy devices of a role in the plan (where cables start or end): built-in ones and pack items (#22). */
+export function devicesOf(building: Building, role: EnergyRole | "grid_point"): DevicePos[] {
   const out: DevicePos[] = [];
-  for (const floor of building.floors) for (const m of floor.furniture) if (m.type === type) out.push({ id: m.id, type: m.type, floorId: floor.id, x: m.x, z: m.z, h: m.h, variant: m.variant ?? null });
+  for (const floor of building.floors) for (const m of floor.furniture) if ((energyRole(m.type) ?? m.type) === role) out.push({ id: m.id, type: m.type, floorId: floor.id, x: m.x, z: m.z, h: m.h, variant: m.variant ?? null });
   return out;
 }
 
