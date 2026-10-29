@@ -444,6 +444,23 @@ in the folder of its `group`; `frontend/src/core-pack.test.ts` checks that each 
 section. Adding an item does not touch `pack.json`; its `release` goes up once per Home 3D release that changes the
 pack, so installs holding an older imported copy pick up the bundled one.
 
+## Your own items
+
+Editors can build items in Home 3D itself: **Extensions** → **Your own items** → **Open the item editor**. The editor
+adds parts from the shapes above on a live 3D picture, sets their colour roles and fixed measures, and gives the item
+a name, a library section (`group`), rooms, search words (`tags`) and an optional IKEA name.
+
+- A saved item is an item file like the ones in a pack folder, checked against the same schema.
+- The items are kept in Home Assistant (`.storage/home_3d.custom_items`) and shared by everyone who uses it. The
+  library shows them as the pack `household.custom` ("Your own items"), so a placed one is the furniture type
+  `pack:household.custom:<item id>`. No imported pack may use that pack id.
+- The item id comes from the name while the item is new and stays the same once it is saved, so placed copies follow
+  later changes. Removing an item leaves placed copies in the plan as plain boxes.
+- **Export** downloads the item as `<item id>.json`. **Import item files …** takes one or more such files (exported
+  on another install, or written by hand); an item whose id is already used either replaces that item or is kept
+  beside it under a free id.
+- Home 3D's own backup file carries the custom items as well.
+
 ## Old single-file packs (v1)
 
 Packs made for earlier versions are one JSON file: `{"payload": {…}}` or the payload itself, with
