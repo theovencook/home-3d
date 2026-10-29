@@ -44,6 +44,18 @@ async def test_a_fresh_install_has_the_core_pack(hass: HomeAssistant, hass_ws_cl
     assert "source" not in core
 
 
+async def test_a_fresh_install_has_the_ikea_uk_pack_beside_the_core(hass: HomeAssistant, hass_ws_client) -> None:
+    """The second bundled pack (#30) loads from the disk like the core: offline, MIT, every item with its IKEA name."""
+    client = await _client(hass, hass_ws_client)
+    listed = await _listed(client)
+    ikea = next(p for p in listed if p["id"] == "theovencook.ikea-uk")
+    assert ikea["bundled"] is True
+    assert ikea["licence"] == "MIT"
+    assert len(ikea["items"]) >= 40
+    assert [i["id"] for i in ikea["items"] if not i.get("ikea")] == []
+    assert "theovencook.core" in [p["id"] for p in listed]
+
+
 def _bundled_folders() -> list[Path]:
     return sorted(p for p in BUNDLED.iterdir() if (p / packs.PACK_FILE).is_file())
 
