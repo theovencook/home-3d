@@ -241,19 +241,26 @@ def _item_file(path: str, text: str) -> dict[str, Any]:
     return item
 
 
-def _data_files(files: dict[str, str]) -> dict[str, str]:
-    """The pack.json and item files of a folder, after the checks on names, count and size; raises PackError."""
-    if PACK_FILE not in files:
+def data_paths(paths: list[str]) -> list[str]:
+    """The paths of a folder's files that are read (pack.json and the items, not the readme or licence text), after
+    the checks on names and count; raises PackError. A fetch from GitHub runs it before downloading anything."""
+    if PACK_FILE not in paths:
         raise PackError("not_a_pack", f"no {PACK_FILE}")
-    kept: dict[str, str] = {}
-    for path, text in files.items():
+    kept: list[str] = []
+    for path in paths:
         if _DOC_PATH.match(path):
             continue
         if path != PACK_FILE and not _ITEM_PATH.match(path):
             raise PackError("not_data", f"{path}: a pack holds only {PACK_FILE} and item .json files")
-        kept[path] = text
+        kept.append(path)
     if len(kept) - 1 > MAX_ITEMS:
         raise PackError("too_many_items", f"{len(kept) - 1} items, at most {MAX_ITEMS}")
+    return kept
+
+
+def _data_files(files: dict[str, str]) -> dict[str, str]:
+    """The pack.json and item files of a folder, after the checks on names, count and size; raises PackError."""
+    kept = {path: files[path] for path in data_paths(list(files))}
     for path, text in kept.items():
         if len(text) > MAX_FILE_SIZE:
             raise PackError("too_large", f"{path}: {len(text)} characters, at most {MAX_FILE_SIZE}")

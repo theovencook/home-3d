@@ -2,13 +2,13 @@
 // It lives in the editor bundle (loaded with it) and is shown to admins only.
 
 import { css, html, LitElement, nothing } from "lit";
-import { importPack, importPackFolder, removePack } from "../api.ts";
+import { importPack, importPackFolder, installPackFromUrl, removePack } from "../api.ts";
 import { FEATURES, FUN, knownFeature, released, unlockedFeatures } from "../features.ts";
 import { DOG_BREEDS, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
 import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import { planPackFolders } from "../pack-folder.ts";
-import { packName, type FurniturePack } from "../packs.ts";
+import { packName, packOrigin, type FurniturePack } from "../packs.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
 
@@ -23,6 +23,8 @@ export class Extensions extends LitElement {
     building: { attribute: false },
     _packMsg: { state: true },
     _open: { state: true },
+    _packUrl: { state: true },
+    _installing: { state: true },
   };
 
   declare hass: HomeAssistant | undefined;
@@ -32,12 +34,17 @@ export class Extensions extends LitElement {
   /** The plan (the fun extras keep their settings in it, e.g. the pets). */
   declare building: Building | null | undefined;
   private declare _packMsg: { ok: boolean; text: string } | null;
+  /** The GitHub URL typed into the install field, and whether Home Assistant is fetching it (#25). */
+  private declare _packUrl: string;
+  private declare _installing: boolean;
   /** Long lists opened by the viewer (the installed packs); closed, a bar sums them up. */
   private declare _open: Set<string>;
 
   constructor() {
     super();
     this._packMsg = null;
+    this._packUrl = "";
+    this._installing = false;
     let open: string[] = [];
     try {
       open = JSON.parse(localStorage.getItem("home3d.ext.open") ?? "[]") as string[];
@@ -251,6 +258,7 @@ export class Extensions extends LitElement {
             <b>${packName(p, this.hass?.language ?? "de")}</b>
             <span class="fp3d-sub">${p.features?.length ? this.t("pack_features", { publisher: p.publisher, n: p.features.length }) : this.t("pack_by", { publisher: p.publisher, n: p.items.length })}</span>
             ${p.licence || (p.release && p.release > 1) ? html`<span class="fp3d-sub">${[p.licence ? this.t("pack_licence", { licence: p.licence }) : "", p.release && p.release > 1 ? `v${p.release}` : ""].filter(Boolean).join(" · ")}</span>` : nothing}
+            ${this.renderOrigin(p)}
             ${(p.features ?? []).some((f) => !knownFeature(f)) ? html`<span class="fp3d-sub fp3d-pack-error">${this.t("pack_needs_update")}</span>` : nothing}
           </div>
           <button class="fp3d-btn fp3d-danger" @click=${() => this.deletePack(p)}>${this.t("pack_remove")}</button>
@@ -265,9 +273,50 @@ export class Extensions extends LitElement {
         ${this.t("pack_import_folder")}
         <input type="file" webkitdirectory multiple hidden @change=${(e: Event) => this.importPackFolder(e)} />
       </label>
+      ${this.isEditor
+        ? html`<form class="fp3d-pack-url" @submit=${(e: Event) => this.installFromUrl(e)}>
+            <input
+              type="url"
+              inputmode="url"
+              .value=${this._packUrl}
+              placeholder="https://github.com/owner/repo/tree/main/publisher.pack"
+              aria-label=${this.t("pack_install_url")}
+              ?disabled=${this._installing}
+              @input=${(e: Event) => (this._packUrl = (e.target as HTMLInputElement).value)}
+            />
+            <button class="fp3d-btn" type="submit" ?disabled=${this._installing || !this._packUrl.trim()}>
+              ${this._installing ? this.t("pack_installing") : this.t("pack_install_url")}
+            </button>
+          </form>`
+        : nothing}
       ${this._packMsg ? html`<p class="fp3d-sub ${this._packMsg.ok ? "fp3d-notice" : "fp3d-pack-error"}">${this._packMsg.text}</p>` : nothing}
       <p class="fp3d-sub">${this.t("packs_hint")}</p>
     </section>`;
+  }
+
+  /** Where a pack installed from GitHub came from, as a link (#25). */
+  private renderOrigin(pack: FurniturePack) {
+    const origin = packOrigin(pack);
+    if (!origin) return nothing;
+    return html`<span class="fp3d-sub">${this.t("pack_from")} <a href=${origin.url} target="_blank" rel="noreferrer noopener">${origin.label}</a></span>`;
+  }
+
+  /** Installs the pack at a GitHub URL: Home Assistant fetches and checks it, the browser only sends the URL (#25). */
+  private async installFromUrl(e: Event): Promise<void> {
+    e.preventDefault();
+    const url = this._packUrl.trim();
+    if (!url || !this.hass || this._installing) return;
+    this._installing = true;
+    try {
+      const res = await installPackFromUrl(this.hass, url);
+      this._packUrl = "";
+      this._packMsg = { ok: true, text: this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }) };
+      this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
+    } catch (err) {
+      this._packMsg = { ok: false, text: this.packError(err) };
+    } finally {
+      this._installing = false;
+    }
   }
 
   /** Imports one or several pack files at once. */
@@ -504,6 +553,15 @@ export class Extensions extends LitElement {
       .fp3d-pack div {
         display: grid;
         gap: 2px;
+      }
+      .fp3d-pack-url {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .fp3d-pack-url input {
+        flex: 1;
+        min-width: 0;
       }
       .fp3d-pack-import {
         display: block;

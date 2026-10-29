@@ -189,6 +189,49 @@ The size limits keep a pack within one websocket message. A larger collection is
 
 The plan keeps working when a pack is removed: its items stay in the plan as plain boxes.
 
+## Installing from GitHub
+
+An editor can also paste a GitHub URL into **Extensions** → **Install from GitHub**:
+
+- a repository with the pack at its root: `https://github.com/<owner>/<repo>` (the default branch);
+- a pack folder inside a repository: `https://github.com/<owner>/<repo>/tree/<branch or tag>/<folder>`, for example
+  `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.core`;
+- a release: `https://github.com/<owner>/<repo>/releases/tag/<tag>`.
+
+Home Assistant fetches the pack, not the browser, and only from `api.github.com` (the repository, the commit and its
+file list) and `raw.githubusercontent.com` (the files, at that commit). The repository must be public. Before
+anything is downloaded the file list is checked: the names (as above), at most 510 files in the folder and the size
+of each file; hidden files and folders and the readme and licence texts are not fetched. The files then go through
+the same checks as a folder import. A repository root that holds several packs is refused with the URLs of its pack
+folders. Branch names that contain a `/` cannot be told from the folder and are not supported.
+
+| Problem | Error code |
+| --- | --- |
+| Not a URL of a GitHub repository, folder or release | `bad_url` |
+| The repository (or branch, tag, folder) does not exist or is private | `not_found` |
+| GitHub cannot be reached, refuses (rate limit) or redirects elsewhere | `fetch_failed` |
+
+The installed pack keeps where it came from in `source.origin`, so an update check can compare commits:
+
+```json
+{
+  "type": "github",
+  "url": "https://github.com/theovencook/home-3d-packs/tree/main/theovencook.core",
+  "owner": "theovencook",
+  "repo": "home-3d-packs",
+  "ref": "main",
+  "default_branch": false,
+  "folder": "theovencook.core",
+  "commit": "<the 40-character commit id the files came from>",
+  "release": 1,
+  "fetched_at": 1793232000.0
+}
+```
+
+`ref` is the branch, tag or commit the URL named, or the default branch's name when it named none
+(`default_branch: true`); `folder` is `""` for a pack at the repository root; `release` is the pack's release number
+when it was fetched. A backup carries the origin; on restore it is kept only when it still names GitHub.
+
 ## Old single-file packs (v1)
 
 Packs made for earlier versions are one JSON file: `{"payload": {…}}` or the payload itself, with
