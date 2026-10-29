@@ -288,6 +288,20 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
         // an unlocked smart lock: a soft accent strip along the leaf's free edge, on both faces (#682)
         if (st.unlocked && atStart === info.hingeAtStart) splitBox(frames, leafTf, lw - 0.022, lw + 0.004, -thick - 0.006, 0.006, S + 0.03, T - 0.03, shade(UNLOCKED, 0.85), shade(UNLOCKED, 1), cut, leafBucket);
       }
+    } else if (info.opening.type === "garage" && openingStyle(info.opening, info.exterior) === "up_and_over") {
+      // up-and-over door (#24): one leaf on side arms a third of its height up; opening, the bottom swings out and up
+      // while the top runs into the garage, and open it lies under the head with a third outside as a canopy
+      const closed = Math.min(1, Math.max(0, st.cover ?? 1));
+      const plane = info.faceRoom - 0.03;
+      const H = T - S;
+      const k = H / 3;
+      const a = (1 - closed) * (Math.PI / 2);
+      const py = S + k + (T - 0.03 - S - k) * (1 - closed);
+      // leaf coordinates: x along the opening, n across the leaf, u along the leaf from the pivot (up when shut)
+      const leafTf: Tf = (x, n, u) => tf(x, plane + u * Math.sin(a) + n * Math.cos(a), py + u * Math.cos(a) - n * Math.sin(a));
+      // the wall's cut height in leaf coordinates: the part above it folds away with the wall
+      const cutU = Math.cos(a) > 0.01 ? (cut - py) / Math.cos(a) : py > cut ? -Infinity : Infinity;
+      panel(blinds, leafTf, 0.02, W - 0.02, 0, -k, H - k, new Color(0xd4e0ff), cutU, bucket, 0.5);
     } else if (info.opening.type === "garage") {
       // sectional door: the closed part hangs in the opening, the open part lies under the ceiling
       const closed = Math.min(1, Math.max(0, st.cover ?? 1));
@@ -380,8 +394,9 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
         }
       }
     }
-    // blind on the outside: box above the opening, slats down to the closed fraction
-    if (st.cover !== null) {
+    // blind on the outside: box above the opening, slats down to the closed fraction (an up-and-over door's cover is
+    // the door itself)
+    if (st.cover !== null && !(info.opening.type === "garage" && openingStyle(info.opening, info.exterior) === "up_and_over")) {
       const out = -info.faceOut;
       const boxTop = T + 0.2;
       splitBox(frames, tf, -0.05, W + 0.05, out - 0.15, out, T, boxTop, new Color(BLIND_BOX), frameTop, cut, bucket);

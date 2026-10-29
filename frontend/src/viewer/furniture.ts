@@ -2176,6 +2176,16 @@ export function packMotionParts(item: PackItem, kind: PackMotion, open: number, 
       const edge = side === "left" ? -0.5 : side === "right" ? 0.5 : Math.sign(p.x || 1) * 0.5;
       return { ...p, x: edge - (edge - p.x) * (1 - 0.8 * t) };
     });
+  } else if (kind === "blind") {
+    // a roof window's blind lies on the slope (a loft from the low edge up to the high one): it keeps its top edge
+    // and reaches as far down the slope as it is closed
+    const down = Math.max(0.02, 1 - t);
+    const up = 1 - down;
+    parts = moving.map((p) => {
+      // the bottom rectangle moves this far towards the top one
+      const along = (bottom: number, upper: number | undefined) => bottom + ((upper ?? bottom) - bottom) * up;
+      return { ...p, y: p.y + p.h * up, h: p.h * down, x: along(p.x, p.tx), z: along(p.z, p.tz), w: along(p.w, p.tw), d: along(p.d, p.td) };
+    });
   } else {
     // the cloth hangs from its top edge (under the roller) and is as long as the screen is down
     const top = Math.max(...moving.map((p) => p.y + p.h));
