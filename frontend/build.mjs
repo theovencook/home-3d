@@ -42,6 +42,8 @@ const itemsConfig = (viewerHash) => ({ ...common, entryPoints: ["src/items/entry
 const timeTravelConfig = { ...common, entryPoints: ["src/timetravel/entry.ts"], outfile: `${out}/home-3d-timetravel.js` };
 // the fun packs (pets …) only load when one is unlocked and switched on; three.js is lent by the 3D bundle
 const funConfig = { ...common, entryPoints: ["src/fun/entry.ts"], outfile: `${out}/home-3d-fun.js` };
+// the read-only 2D plan (#41) loads instead of the 3D bundle when a view shows the plan flat
+const plan2dConfig = { ...common, entryPoints: ["src/plan2d/entry.ts"], outfile: `${out}/home-3d-2d.js` };
 // voice (the microphone probe for now) only loads when it is asked for
 const voiceConfig = { ...common, entryPoints: ["src/voice/entry.ts"], outfile: `${out}/home-3d-voice.js` };
 // the locating setup assistant only loads when an admin opens it
@@ -50,7 +52,7 @@ const locateConfig = { ...common, entryPoints: ["src/locate/entry.ts"], outfile:
 // never taken from the browser cache (the integration version only changes after a restart).
 // the frontend knows its own version, to notice a backend that still runs an older one
 const version = JSON.parse(readFileSync("../custom_components/home_3d/manifest.json", "utf8")).version;
-const mainConfig = (viewerHash, editorHash, cardEditorHash, timeTravelHash, funHash, voiceHash, locateHash) => ({
+const mainConfig = (viewerHash, editorHash, cardEditorHash, timeTravelHash, funHash, voiceHash, locateHash, plan2dHash) => ({
   ...common,
   entryPoints: ["src/main.ts"],
   outfile: `${out}/home-3d.js`,
@@ -62,6 +64,7 @@ const mainConfig = (viewerHash, editorHash, cardEditorHash, timeTravelHash, funH
     __FP3D_FUN_HASH__: JSON.stringify(funHash),
     __FP3D_VOICE_HASH__: JSON.stringify(voiceHash),
     __FP3D_LOCATE_HASH__: JSON.stringify(locateHash),
+    __FP3D_PLAN2D_HASH__: JSON.stringify(plan2dHash),
     __FP3D_VERSION__: JSON.stringify(version),
     __FP3D_LANG_HASH__: JSON.stringify(langHash),
   },
@@ -86,12 +89,12 @@ function copyFonts() {
 }
 
 // size budgets of the bundles (kept small for old wall tablets)
-const BUDGET = { "home-3d.js": 722 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 944 * 1024, "home-3d-card-editor.js": 273 * 1024, "home-3d-items.js": 64 * 1024 };
+const BUDGET = { "home-3d.js": 722 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 944 * 1024, "home-3d-card-editor.js": 273 * 1024, "home-3d-items.js": 64 * 1024, "home-3d-2d.js": 72 * 1024 };
 
 copyFonts();
 if (watch) {
   // in watch mode the hash is not tracked; a dev reload fetches the bundle anyway
-  for (const c of [viewerConfig, itemsConfig("dev"), editorConfig("dev", "dev", "dev"), cardEditorConfig, timeTravelConfig, funConfig, voiceConfig, locateConfig, mainConfig("dev", "dev", "dev", "dev", "dev", "dev", "dev")]) await (await context(c)).watch();
+  for (const c of [viewerConfig, itemsConfig("dev"), editorConfig("dev", "dev", "dev"), cardEditorConfig, timeTravelConfig, funConfig, voiceConfig, locateConfig, plan2dConfig, mainConfig("dev", "dev", "dev", "dev", "dev", "dev", "dev", "dev")]) await (await context(c)).watch();
 } else {
   await build(viewerConfig);
   await build(locateConfig);
@@ -103,7 +106,8 @@ if (watch) {
   await build(timeTravelConfig);
   await build(funConfig);
   await build(voiceConfig);
-  await build(mainConfig(hashOf(viewerConfig.outfile), hashOf(editor.outfile), hashOf(cardEditorConfig.outfile), hashOf(timeTravelConfig.outfile), hashOf(funConfig.outfile), hashOf(voiceConfig.outfile), hashOf(locateConfig.outfile)));
+  await build(plan2dConfig);
+  await build(mainConfig(hashOf(viewerConfig.outfile), hashOf(editor.outfile), hashOf(cardEditorConfig.outfile), hashOf(timeTravelConfig.outfile), hashOf(funConfig.outfile), hashOf(voiceConfig.outfile), hashOf(locateConfig.outfile), hashOf(plan2dConfig.outfile)));
   let over = false;
   // old Fire-tablet WebViews (Chrome before 91, e.g. Fully Kiosk on a Fire 7) throw on an optional call with spread
   // arguments, `a?.b(...x)` – the roof failed there; lowering the target for it would cost ~11 KB, so it is banned
