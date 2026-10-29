@@ -12,6 +12,7 @@ import type { HomeAssistant } from "./types.ts";
 import type { CardConfig, CardControl } from "./card-config.ts";
 import { nightActive } from "./kiosk.ts";
 import { lookOf } from "./themes.ts";
+import { shownAccent, textOn } from "./ha-theme.ts";
 import { loadCardEditor } from "./load-card-editor.ts";
 import type { WallMode } from "./viewer/viewer3d.ts";
 import { hasFeature, type Feature } from "./features.ts";
@@ -344,8 +345,9 @@ clearTimeout(this.cleanTimer);
     const tt = this.tt.active;
     const eye = c?.controls_hidden !== undefined || (c?.controls_hide_after ?? 0) > 0;
     const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
-    const accent = /^#[0-9a-f]{6}$/i.test(c?.accent ?? "") ? c!.accent : null;
-    return html`<ha-card class="${this._night ? "fp3d-night" : ""} ${this._pseudoFull ? "fp3d-pseudo-full" : ""}" style=${accent ? `--fp3d-accent:${accent}` : ""} @pointerdown=${this.touch} @keydown=${this.onKey} @wheel=${this.touch}>
+    // the card's own accent, else (while the look follows the HA theme) the theme's primary colour (#38)
+    const accent = shownAccent(lookOf(c?.theme), c?.accent, this.hass, (n) => getComputedStyle(this).getPropertyValue(n));
+    return html`<ha-card class="${this._night ? "fp3d-night" : ""} ${this._pseudoFull ? "fp3d-pseudo-full" : ""}" style=${accent ? `--fp3d-accent:${accent};--fp3d-accent-text:${textOn(accent)}` : ""} @pointerdown=${this.touch} @keydown=${this.onKey} @wheel=${this.touch}>
       <div class="fp3d-card-body ${tt ? "fp3d-tt" : ""}" style="height:${size}">
         ${b && b.floors.some((f) => f.rooms.length)
           ? html`<fp3d-view3d
@@ -373,7 +375,7 @@ clearTimeout(this.cleanTimer);
               .heatMode=${heat}
               .theme=${lookOf(this._config?.theme)}
               .clock=${this._config?.clock ?? null}
-              .accent=${this._config?.accent ?? null}
+              .accent=${accent}
               .showEnergy=${this._config?.energy ?? true}
               .flows=${this._config?.flows ?? null}
               .holograms=${this._config?.holograms ?? null}
