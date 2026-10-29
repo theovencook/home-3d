@@ -570,6 +570,10 @@ use, and the packs repository is a generated copy so other installs can add or u
 4. Tag a release in the packs repository (`vYYYY.MM.DD`, for example `v2026.10.29`) so a version can be named in a URL:
    `https://github.com/theovencook/home-3d-packs/tree/v2026.10.29/theovencook.core`.
 
+After pushing, `python tools/check_pack_urls.py` fetches every pack by its folder URL from real GitHub with the
+code Home Assistant uses and runs the update check against an older commit (needs the network and Home
+Assistant's packages, so run it in the test virtualenv).
+
 Each pack installs by its folder URL, for example
 `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.ikea-uk`. The repository URL alone is refused
 with the list of folders to pick from.
