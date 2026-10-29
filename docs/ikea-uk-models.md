@@ -161,46 +161,50 @@ Best-seller rank: its place on the IKEA UK best-seller list on 29 October 2026; 
 
 | # | Model | IKEA name | Group | Best-seller rank | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Kitchen | KNOXHULT | `kitchen` | - | to do |
-| 2 | Base cabinet with doors | METOD | `kitchen` | - | to do |
-| 3 | Wall cabinet | METOD | `kitchen` | - | to do |
-| 4 | Base cabinet | ENHET | `kitchen` | - | to do |
-| 5 | Mini-kitchen | SUNNERSTA | `kitchen` | 144 | to do |
-| 6 | Kitchen island | TORNVIKEN | `kitchen` | 189 | to do |
-| 7 | Kitchen trolley | FÖRHÖJA | `kitchen` | 190 | to do |
-| 8 | Step stool | BEKVÄM | `household` | 104 | to do |
-| 9 | Spice rack | BEKVÄM | `kitchen` | 62 | to do |
-| 10 | Worktop | SÄLJAN | `kitchen` | 124 | to do |
-| 11 | Worktop | KARLBY | `kitchen` | - | to do |
-| 12 | Induction hob | MATMÄSSIG | `appliance` | 248 | to do |
-| 13 | Gas hob | SKÅLAN | `appliance` | 254 | to do |
-| 14 | Microwave oven | TILLREDA | `appliance` | 249 | to do |
-| 15 | Integrated dishwasher | RENGÖRA | `appliance` | 268 | to do |
-| 16 | Washing machine | UDDARP | `appliance` | 255 | to do |
-| 17 | Integrated washer-dryer | TVÄTTAD | `appliance` | 263 | to do |
-| 18 | Kitchen mixer tap | ÄLMAREN | `kitchen` | 259 | to do |
-| 19 | Inset sink | HAVSEN | `kitchen` | - | to do |
-| 20 | Rail system | KUNGSFORS | `kitchen` | - | to do |
-| 21 | Extendable table | EKEDALEN | `table` | - | to do |
-| 22 | Table | MÖRBYLÅNGA | `table` | - | to do |
-| 23 | Dining table | LISABO | `table` | - | to do |
-| 24 | Extendable table | INGATORP | `table` | - | to do |
-| 25 | Table | MELLTORP | `table` | - | to do |
-| 26 | Gateleg table | NORDEN | `table` | - | to do |
-| 27 | Wall-mounted drop-leaf table | NORBERG | `table` | 160 | to do |
-| 28 | Table | SANDSBERG | `table` | 112 | to do |
-| 29 | Stool | KYRRE | `seating` | 191 | to do |
-| 30 | Chair | INGOLF | `seating` | - | to do |
-| 31 | Chair | TEODORES | `seating` | - | to do |
-| 32 | Chair | ADDE | `seating` | - | to do |
-| 33 | Chair | SKOGSTA | `seating` | - | to do |
-| 34 | Bench with storage | SKOGSTA | `seating` | - | to do |
-| 35 | Bar stool | FRANKLIN | `seating` | - | to do |
-| 36 | Outdoor table and reclining chairs | NÄMMARÖ | `outdoor` | 230 | to do |
-| 37 | Outdoor modular easy chair | NÄMMARÖ | `outdoor` | 206 | to do |
-| 38 | Outdoor table | ASKHOLMEN | `outdoor` | 240 | to do |
-| 39 | Outdoor kitchen | GRILLSKÄR | `outdoor` | 176 | to do |
-| 40 | Gas barbecue | GRILLSKÄR | `outdoor` | 264 | to do |
+| 1 | Kitchen | KNOXHULT | `kitchen` | - | done, 3 items |
+| 2 | Base cabinet with doors | METOD | `kitchen` | - | done, 3 items |
+| 3 | Wall cabinet | METOD | `kitchen` | - | done, 4 items |
+| 4 | Base cabinet | ENHET | `kitchen` | - | done, 2 items |
+| 5 | Mini-kitchen | SUNNERSTA | `kitchen` | 144 | done, 1 item |
+| 6 | Kitchen island | TORNVIKEN | `kitchen` | 189 | done, 1 item |
+| 7 | Kitchen trolley | FÖRHÖJA | `kitchen` | 190 | done, 1 item |
+| 8 | Step stool | BEKVÄM | `household` | 104 | done, 1 item |
+| 9 | Spice rack | BEKVÄM | `kitchen` | 62 | done, 1 item |
+| 10 | Worktop | SÄLJAN | `kitchen` | 124 | done, 1 item |
+| 11 | Worktop | KARLBY | `kitchen` | - | done, 2 items |
+| 12 | Induction hob | MATMÄSSIG | `appliance` | 248 | done, 1 item |
+| 13 | Gas hob | SKÅLAN | `appliance` | 254 | done, 2 items |
+| 14 | Microwave oven | TILLREDA | `appliance` | 249 | done, 1 item |
+| 15 | Integrated dishwasher | RENGÖRA | `appliance` | 268 | done, 1 item |
+| 16 | Washing machine | UDDARP | `appliance` | 255 | done, 2 items |
+| 17 | Integrated washer-dryer | TVÄTTAD | `appliance` | 263 | done, 1 item |
+| 18 | Kitchen mixer tap | ÄLMAREN | `kitchen` | 259 | done, 1 item |
+| 19 | Inset sink | HAVSEN | `kitchen` | - | done, 3 items |
+| 20 | Rail system | KUNGSFORS | `kitchen` | - | done, 3 items |
+| 21 | Extendable table | EKEDALEN | `table` | - | dropped (IKEA UK no longer sells it), replaced by 41 |
+| 22 | Table | MÖRBYLÅNGA | `table` | - | done, 2 items |
+| 23 | Dining table | LISABO | `table` | - | done, 2 items |
+| 24 | Extendable table | INGATORP | `table` | - | dropped (IKEA UK no longer sells it), replaced by 42 |
+| 25 | Table | MELLTORP | `table` | - | dropped (IKEA UK no longer sells it), replaced by 43 |
+| 26 | Gateleg table | NORDEN | `table` | - | done, 1 item |
+| 27 | Wall-mounted drop-leaf table | NORBERG | `table` | 160 | done, 1 item |
+| 28 | Table | SANDSBERG | `table` | 112 | done, 1 item |
+| 29 | Stool | KYRRE | `seating` | 191 | done, 1 item |
+| 30 | Chair | INGOLF | `seating` | - | done, 1 item (only the junior chair is sold now) |
+| 31 | Chair | TEODORES | `seating` | - | done, 1 item |
+| 32 | Chair | ADDE | `seating` | - | dropped (IKEA UK no longer sells it), replaced by 44 |
+| 33 | Chair | SKOGSTA | `seating` | - | done, 1 item |
+| 34 | Bench with storage | SKOGSTA | `seating` | - | done, 1 item |
+| 35 | Bar stool | FRANKLIN | `seating` | - | done, 1 item |
+| 36 | Outdoor table and reclining chairs | NÄMMARÖ | `outdoor` | 230 | done, 2 items |
+| 37 | Outdoor modular easy chair | NÄMMARÖ | `outdoor` | 206 | done, 1 item |
+| 38 | Outdoor table | ASKHOLMEN | `outdoor` | 240 | done, 2 items |
+| 39 | Outdoor kitchen | GRILLSKÄR | `outdoor` | 176 | done, 2 items |
+| 40 | Gas barbecue | GRILLSKÄR | `outdoor` | 264 | done, 1 item |
+| 41 | Extendable table | TONSTAD | `table` | - | done, 2 items |
+| 42 | Extendable table | ROSENTORP | `table` | - | done, 2 items |
+| 43 | Table | VIHALS | `table` | - | done, 2 items |
+| 44 | Chair | TOBIAS | `seating` | - | done, 1 item |
 
 ## Batch 5: office, storage, bathroom and kids (#34)
 
