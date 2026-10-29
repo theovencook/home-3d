@@ -74,6 +74,16 @@ export async function askingFirst<T>(
   }
 }
 
+/** The furniture types of placed items with an update, for the library's cards (#48); a pinned pack's are left out. */
+export function libraryUpdates(status: PackUpdateStatus | null): Set<string> {
+  return new Set((status?.items ?? []).filter((i) => !i.pinned).map((i) => i.type));
+}
+
+/** The updates a library card offers: of its items (all variants of a family), to editors only. */
+export function updatesOnCard(types: readonly string[], updates: ReadonlySet<string>, editor: boolean): string[] {
+  return editor ? types.filter((t) => updates.has(t)) : [];
+}
+
 /** The placed items with an update (not counting pinned packs), the pinned ones, and how many placements wait. */
 export function updateSummary(status: PackUpdateStatus): { updates: number; pinned: number; placed: number } {
   const open = status.items.filter((i) => !i.pinned);

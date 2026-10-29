@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { askingFirst, nextCheck, updateSummary, type PackUpdateStatus } from "./pack-updates.ts";
+import { askingFirst, libraryUpdates, nextCheck, updatesOnCard, updateSummary, type PackUpdateStatus } from "./pack-updates.ts";
 
 const status: PackUpdateStatus = {
   settings: { auto_update: false, frequency: "daily", time: "04:00", weekday: 0 },
@@ -55,6 +55,16 @@ test("an import that would install an older release, or change a pinned pack, is
 test("the summary counts placed items with an update, apart from the pinned ones", () => {
   assert.deepEqual(updateSummary(status), { updates: 1, pinned: 1, placed: 3 });
   assert.deepEqual(updateSummary({ ...status, items: [] }), { updates: 0, pinned: 0, placed: 0 });
+});
+
+test("library cards of placed items with an update offer it, to editors only, never for a pinned pack (#48)", () => {
+  const updates = libraryUpdates(status);
+  assert.deepEqual([...updates], ["pack:a.one:chair"]);
+  assert.deepEqual([...libraryUpdates(null)], []);
+  // a card (a family of variants too) offers the updates of its items
+  assert.deepEqual(updatesOnCard(["pack:a.one:stool", "pack:a.one:chair"], updates, true), ["pack:a.one:chair"]);
+  assert.deepEqual(updatesOnCard(["pack:a.one:chair"], updates, false), []);
+  assert.deepEqual(updatesOnCard(["pack:a.two:bed", "sofa"], updates, true), []);
 });
 
 test("the next check follows the frequency, time and weekday", () => {

@@ -1,13 +1,39 @@
 // The recipes of library items, fetched on demand (#44): `packs/list` brings only an index of the items. Whatever
 // draws a library item that is not placed yet (a card's picture, the preview, an item just added) asks for its
 // recipe here first. Requests made within a moment of each other go out as one per pack; a recipe is fetched once and
-// kept in the listed item while its pack's hash stays (packs.ts). Placed items draw from the plan's copies (#2), so
+// kept in the listed item while its pack's hash stays (packs.ts), and in the browser by pack and hash (#48,
+// recipe-cache.ts), so a reload asks only for what is not kept. Placed items draw from the plan's copies (#2), so
 // views that only show the plan never come here.
 
 import { fetchPackRecipes } from "./api.ts";
 import type { Building } from "./model.ts";
-import { addRecipes, isPackType, missingRecipes } from "./packs.ts";
+import { addRecipes, getPacks, isPackType, missingRecipes } from "./packs.ts";
+import { browserRecipeStore, type RecipeStore } from "./recipe-cache.ts";
 import type { HomeAssistant } from "./types.ts";
+
+export type { RecipeStore } from "./recipe-cache.ts";
+
+let store: RecipeStore = browserRecipeStore;
+
+/** Keep recipes in another store (a test's); null: the browser's again. */
+export function setRecipeStore(next: RecipeStore | null): void {
+  store = next ?? browserRecipeStore;
+}
+
+/** Hand the recipes of `ids` kept in the browser for the pack as listed now to the library; the ids still missing
+ * (all of them when nothing is kept or storage fails). */
+async function keptRecipes(packId: string, ids: string[]): Promise<string[]> {
+  const hash = getPacks().find((p) => p.id === packId)?.hash;
+  if (!hash) return ids;
+  try {
+    const kept = await store.read(packId, hash);
+    const found = ids.filter((id) => kept[id]).map((id) => kept[id]);
+    if (found.length) addRecipes(packId, hash, found);
+    return ids.filter((id) => !kept[id]);
+  } catch {
+    return ids;
+  }
+}
 
 /** How long requests gather before they go out (ms): the library asks for its cards one by one. */
 const GATHER = 15;
@@ -58,8 +84,11 @@ async function send(sent: Batch): Promise<void> {
   await Promise.all(
     [...sent.wanted].map(async ([packId, ids]) => {
       try {
-        const res = await fetchPackRecipes(sent.hass, packId, [...ids]);
+        const missing = await keptRecipes(packId, [...ids]);
+        if (!missing.length) return;
+        const res = await fetchPackRecipes(sent.hass, packId, missing);
         addRecipes(packId, res.hash, res.items);
+        if (res.hash) await store.write(packId, res.hash, res.items).catch(() => undefined);
       } catch {
         // offline, an older backend or a pack removed meanwhile: the item stays without its recipe
       }

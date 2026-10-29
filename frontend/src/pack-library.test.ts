@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ensureRecipes, packTypesIn } from "./pack-recipes.ts";
+import { ensureRecipes, packTypesIn, setRecipeStore, type RecipeStore } from "./pack-recipes.ts";
 import type { Building } from "./model.ts";
-import { furnitureSize, isElectric, packInfo, packItem, setPacks, type FurniturePack } from "./packs.ts";
+import { furnitureSize, isElectric, packInfo, packItem, setPacks, type FurniturePack, type PackItem } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
 // The library in a light form (#44): `packs/list` brings an index of the items, `packs/items` their recipes on demand.
@@ -131,4 +131,72 @@ test("the pack items a plan shows: its furniture and the vehicles of its parking
     ],
   } as unknown as Building;
   assert.deepEqual(packTypesIn(building).sort(), ["pack:cars.uk:leaf", "pack:cars.uk:van", SOFA]);
+});
+
+// Recipes are kept in the browser (#48): a reload draws the library without asking again while the pack is the same
+
+/** A browser store in memory: by pack id, the hash and the recipes kept. */
+function memoryStore() {
+  const kept = new Map<string, { hash: string; items: Record<string, PackItem> }>();
+  const store: RecipeStore = {
+    async read(packId, hash) {
+      const entry = kept.get(packId);
+      return entry && entry.hash === hash ? { ...entry.items } : {};
+    },
+    async write(packId, hash, items) {
+      const entry = kept.get(packId);
+      const before = entry && entry.hash === hash ? entry.items : {};
+      kept.set(packId, { hash, items: { ...before, ...Object.fromEntries(items.map((i) => [i.id, i])) } });
+    },
+  };
+  return { store, kept };
+}
+
+/** A page load: the library arrives afresh, nothing fetched before is in memory. */
+function reload(hash = "sha256:one"): void {
+  setPacks([]);
+  setPacks(listed(hash));
+}
+
+test("fetched recipes are kept in the browser by pack and hash and survive a reload", async () => {
+  const { store, kept } = memoryStore();
+  setRecipeStore(store);
+  try {
+    reload();
+    const first = backend();
+    await ensureRecipes(first.hass, [SOFA]);
+    assert.equal(first.calls.length, 1);
+    assert.deepEqual(Object.keys(kept.get("demo.pack")?.items ?? {}), ["sofa"]);
+
+    reload();
+    const again = backend();
+    await ensureRecipes(again.hass, [SOFA, TV]);
+    assert.deepEqual(again.calls, [{ pack_id: "demo.pack", items: ["tv"] }], "only the recipe not kept is fetched");
+    assert.equal(packItem(SOFA)?.parts.length, 1);
+    assert.equal(packItem(TV)?.parts.length, 1);
+
+    // a new release of the pack (another hash): the kept recipes are dropped and fetched again
+    reload("sha256:two");
+    const changed = backend("sha256:two");
+    await ensureRecipes(changed.hass, [SOFA]);
+    assert.equal(changed.calls.length, 1);
+    assert.equal(kept.get("demo.pack")?.hash, "sha256:two");
+    assert.deepEqual(Object.keys(kept.get("demo.pack")?.items ?? {}), ["sofa"]);
+  } finally {
+    setRecipeStore(null);
+  }
+});
+
+test("a browser store that fails falls back to fetching", async () => {
+  const fail = async () => Promise.reject(new Error("quota"));
+  setRecipeStore({ read: fail, write: fail });
+  try {
+    reload();
+    const { hass, calls } = backend();
+    await ensureRecipes(hass, [SOFA]);
+    assert.equal(calls.length, 1);
+    assert.equal(packItem(SOFA)?.parts.length, 1);
+  } finally {
+    setRecipeStore(null);
+  }
 });

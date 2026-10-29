@@ -147,7 +147,8 @@ import { windowGetsWell } from "../geometry/wells.ts";
 import { controls, tokens } from "../styles.ts";
 import "./entity-picker.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
-import { fetchBackup, getEditors, restoreBackup, setEditors, type BackupFile } from "../api.ts";
+import { fetchBackup, fetchPackUpdates, getEditors, restoreBackup, setEditors, updatePlacedItems, type BackupFile } from "../api.ts";
+import { libraryUpdates } from "../pack-updates.ts";
 import { lastAdmin, pickEditor, type EditorUser } from "../editors.ts";
 import { load3d } from "../load3d.ts";
 import { ensureRecipes, packTypesIn } from "../pack-recipes.ts";
@@ -382,6 +383,7 @@ export class Fp3dEditor extends LitElement {
     narrow: { type: Boolean },
     packs: { attribute: false },
     _preview: { state: true },
+    _libUpdates: { state: true },
     _doc: { state: true },
     _doc3d: { state: true },
     _split: { state: true },
@@ -478,6 +480,8 @@ export class Fp3dEditor extends LitElement {
   /** Result of the last pack import. */
   /** Picture of the furniture under the pointer in the library. */
   private declare _preview: { type: string; url: string | null; left: number; top: number } | null;
+  /** The furniture types of placed items with an update (#48), shown on the library's cards. */
+  private declare _libUpdates: ReadonlySet<string>;
   private declare _doc: Building;
   /** The draft as the 3D pane shows it (follows _doc with a short delay, so drags stay smooth). */
   private declare _doc3d: Building;
@@ -808,6 +812,7 @@ export class Fp3dEditor extends LitElement {
     }
     this._sideMin = min;
     this._preview = null;
+    this._libUpdates = new Set();
     this._measureLen = 3;
     this._packages = false;
     this._rectSize = [4, 3];
@@ -883,6 +888,8 @@ export class Fp3dEditor extends LitElement {
     // the plan's recipe copies (#2): placed items keep their look whatever the installed packs say
     setPlanRecipes(this._doc?.recipes);
     if (changed.has("_doc") || changed.has("packs")) this.fetchPlacedRecipes();
+    // a plan or library from the backend: which placed items have an update now (#48)
+    if ((changed.has("building") || changed.has("packs")) && this.isEditor) this.refreshLibUpdates();
   }
 
   private recipesAsked = new Set<string>();
@@ -12725,6 +12732,41 @@ export class Fp3dEditor extends LitElement {
     return mod.furniturePreview({ type: entry.type, w, d, h, variant: null, lamp: LAMP_MODEL[entry.type] ?? null }, 96, this.packs ?? []);
   };
 
+  private libUpdatesAsked = false;
+
+  /** Ask which placed items have an update (#48); a request already under way is asked again once it is back. */
+  private refreshLibUpdates(): void {
+    if (!this.hass) return;
+    if (this.libUpdatesAsking) {
+      this.libUpdatesAsked = true;
+      return;
+    }
+    this.libUpdatesAsking = true;
+    void fetchPackUpdates(this.hass)
+      .then((status) => (this._libUpdates = libraryUpdates(status)))
+      .catch(() => (this._libUpdates = new Set()))
+      .finally(() => {
+        this.libUpdatesAsking = false;
+        if (this.libUpdatesAsked) {
+          this.libUpdatesAsked = false;
+          this.refreshLibUpdates();
+        }
+      });
+  }
+
+  private libUpdatesAsking = false;
+
+  /** Update the placed items of a library card to the installed release (#48); the plan comes back with a new revision. */
+  private async updateFromLibrary(types: string[]): Promise<void> {
+    if (!this.hass) return;
+    try {
+      await updatePlacedItems(this.hass, types);
+    } catch (err) {
+      this._notice = String((err as { message?: string })?.message ?? err);
+    }
+    this.refreshLibUpdates();
+  }
+
   private renderFurnitureLibrary() {
     const room = this.room;
     const lang = this.hass?.language ?? "en";
@@ -12738,6 +12780,8 @@ export class Fp3dEditor extends LitElement {
         .admin=${this.isEditor}
         .t=${(k: string, v?: Record<string, string | number>) => this.t(k as I18nKey, v)}
         .thumb=${this.libraryThumb}
+        .updates=${this._libUpdates}
+        @library-update=${(e: CustomEvent<{ types: string[] }>) => void this.updateFromLibrary(e.detail.types)}
         @library-add=${(e: CustomEvent<{ type: string; mirror?: boolean }>) => this.addFurniture(e.detail.type, !!e.detail.mirror)}
         @library-preview=${(e: CustomEvent<{ type: string | null; element: HTMLElement | null }>) => {
           if (e.detail.type && e.detail.element) void this.showPreview(e.detail.type, e.detail.element);

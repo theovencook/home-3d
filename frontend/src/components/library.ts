@@ -2,11 +2,13 @@
 // room it is for, with a picture, the size and a star on every card; variants of one thing (a bed in five widths,
 // a corner sofa for the left and the right) fold into one card with chips. The logic (index, classification, families, search) lives in library-index.ts;
 // this element only shows it. Pictures are drawn by the 3D bundle through the `thumb` callback and kept in the
-// browser (thumbs.ts). Fires "library-add" {type, mirror} and "library-preview" {type, element} (type null = gone; only without card pictures).
+// browser (thumbs.ts). Fires "library-add" {type, mirror} and "library-preview" {type, element} (type null = gone; only without card pictures),
+// and "library-update" {types} from the badge of a card whose placed items have an update (#48, editors only).
 
 import { css, html, LitElement, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import { KINDS, cardsOf, filterEntries, sizeText, type LibraryCard, type LibraryEntry, type Room, ROOMS } from "../library-index.ts";
+import { updatesOnCard } from "../pack-updates.ts";
 import { tokens } from "../styles.ts";
 import { thumbFor } from "../thumbs.ts";
 
@@ -45,6 +47,7 @@ export class FurnitureLibrary extends LitElement {
     lite: { type: Boolean },
     t: { attribute: false },
     thumb: { attribute: false },
+    updates: { attribute: false },
     _query: { state: true },
     _room: { state: true },
     _electric: { state: true },
@@ -69,6 +72,8 @@ export class FurnitureLibrary extends LitElement {
   declare t: Translate;
   /** Draws an item's picture (a data URL) or gives null; the library asks once per item and release. */
   declare thumb: ((entry: LibraryEntry) => Promise<string | null>) | null;
+  /** The furniture types of placed items with an update (#48): their cards offer it to editors. */
+  declare updates: ReadonlySet<string>;
   private declare _query: string;
   private declare _room: Room | null;
   private declare _electric: boolean;
@@ -97,6 +102,7 @@ export class FurnitureLibrary extends LitElement {
     this.lite = ((navigator as { hardwareConcurrency?: number }).hardwareConcurrency ?? 4) <= 2 || ((navigator as { deviceMemory?: number }).deviceMemory ?? 4) <= 2;
     this.t = (k) => k;
     this.thumb = null;
+    this.updates = new Set();
     this._query = "";
     this._room = null;
     this._electric = false;
@@ -305,6 +311,7 @@ export class FurnitureLibrary extends LitElement {
     const shown = (shownKey && c.entries.find((e) => e.key === shownKey)) || first;
     const pic = this._thumbs.get(shown.type) ?? this._thumbs.get(first.type);
     const badge = first.light ? "💡" : first.electric ? "⚡" : "";
+    const updates = updatesOnCard(c.entries.map((e) => e.type), this.updates, this.admin);
     return html`<div class="fp3d-lc ${family ? "fp3d-lc-family" : ""}" title=${shown.ikea ? `${shown.label} (IKEA ${shown.ikea})` : shown.label} @mouseleave=${() => family && this.showVariant(first.key, null, null)}>
       <button
         class="fp3d-lc-main"
@@ -334,6 +341,15 @@ export class FurnitureLibrary extends LitElement {
               >${e.variant ?? e.label}</button>`,
             )}
           </div>`
+        : nothing}
+      ${updates.length
+        ? html`<button
+            class="fp3d-lc-update"
+            title=${t("lib_update_title")}
+            @click=${() => this.dispatchEvent(new CustomEvent("library-update", { detail: { types: updates }, bubbles: true, composed: true }))}
+          >
+            ⟳ ${t("upd_update")}
+          </button>`
         : nothing}
       <button class="fp3d-lc-fav ${fav ? "on" : ""}" title=${fav ? t("lib_fav_remove") : t("lib_fav_add")} aria-label=${fav ? t("lib_fav_remove") : t("lib_fav_add")} @click=${() => this.toggleFav(first.key)}>${fav ? "★" : "☆"}</button>
     </div>`;
@@ -533,6 +549,20 @@ export class FurnitureLibrary extends LitElement {
       .fp3d-lc-fav.on,
       .fp3d-lc-fav:hover {
         color: #ffd166;
+      }
+      .fp3d-lc-update {
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        padding: 2px 7px;
+        font: inherit;
+        font-size: 10.5px;
+        font-weight: 600;
+        color: #04101a;
+        background: #ffd166;
+        border: 0;
+        border-radius: 999px;
+        cursor: pointer;
       }
       .fp3d-lib-more {
         display: block;
