@@ -114,6 +114,8 @@ export interface FurniturePack {
   imported_at?: number;
   /** Ships with Home 3D (custom_components/home_3d/bundled_packs): there offline, cannot be removed. */
   bundled?: boolean;
+  /** The household's own items, made in the item editor (#13; see custom-items.ts). */
+  custom?: boolean;
   /** What was imported: the files of a v2 folder (or an old pack's payload), and where it came from (#25). */
   source?: { files?: Record<string, string>; origin?: PackOrigin };
 }
@@ -146,8 +148,29 @@ export function packOrigin(pack: FurniturePack): { label: string; url: string } 
   return { label: origin.default_branch ? path : `${path} @ ${origin.ref}`, url: origin.url };
 }
 
+/**
+ * The plan's copy of a placed pack item's recipe (#2), in `Building.recipes` by furniture type. One copy per type,
+ * however often it is placed; the views draw the copy, so removing a pack or installing a newer release never changes
+ * a placed item. The backend fills it in (custom_components/home_3d/recipes.py); an update replaces it (#26).
+ */
+export interface PlanRecipe {
+  /** Pack id and item id the copy was taken from. */
+  pack: string;
+  item: string;
+  /** The pack's release then. */
+  release: number;
+  /** "sha256:…" of the recipe, to compare with the installed item. */
+  hash: string;
+  /** The commit its files came from, for a pack installed from GitHub. */
+  commit?: string | null;
+  recipe: PackItem;
+}
+
 let registry: FurniturePack[] = [];
 let items = new Map<string, PackItem>();
+let planItems = new Map<string, PackItem>();
+let planRecipes: Record<string, PlanRecipe> | undefined;
+let planKey = "";
 let version = 0;
 
 export function setPacks(packs: FurniturePack[]): void {
@@ -160,9 +183,47 @@ export function getPacks(): readonly FurniturePack[] {
   return registry;
 }
 
-/** Changes with every setPacks(), to notice new packs. */
+/**
+ * The plan's recipe copies (#2): a placed item is drawn from its copy before the installed packs. Hand over the plan's
+ * `recipes` whenever the plan arrives; the same copies again change nothing.
+ */
+export function setPlanRecipes(recipes: Record<string, PlanRecipe> | undefined): void {
+  if (recipes === planRecipes) return;
+  planRecipes = recipes;
+  const entries = Object.entries(recipes ?? {});
+  const key = entries.map(([type, r]) => `${type}=${r.hash}`).sort().join("|");
+  if (key === planKey) return;
+  planKey = key;
+  planItems = new Map(entries.map(([type, r]) => [type, r.recipe] as const));
+  version++;
+}
+
+/** The plan recipes last handed over (for another bundle's registry). */
+export function getPlanRecipes(): Record<string, PlanRecipe> | undefined {
+  return planRecipes;
+}
+
+/** Changes with every setPacks() and every new set of plan recipes, to notice new packs. */
 export function packsVersion(): number {
   return version;
+}
+
+/** The furniture type the item editor (#13) draws the item being edited as; no plan holds it. */
+export const DRAFT_TYPE = "pack:household.draft:item";
+
+/**
+ * Run `fn` while `type` stands for `item` (the item editor's live picture): the installed packs and their version
+ * stay as they are, so no view rebuilds for it.
+ */
+export function withPackItem<T>(type: string, item: PackItem, fn: () => T): T {
+  const before = items.get(type);
+  items.set(type, item);
+  try {
+    return fn();
+  } finally {
+    if (before) items.set(type, before);
+    else items.delete(type);
+  }
 }
 
 export function packType(packId: string, itemId: string): string {
@@ -233,8 +294,6 @@ export function isPackHeater(type: string): boolean {
   return isPackType(type) && /:(heat_pump_indoor|gas_boiler|buffer_tank|water_heater)$/.test(type);
 }
 
-/** The pack item of a furniture type (undefined for built-in types and removed packs). */
-
 /** The screen part of a pack item (a TV or monitor), if it has one. */
 export function packScreen(type: string): PackPart | undefined {
   return packItem(type)?.parts.find((p) => p.screen);
@@ -255,9 +314,10 @@ export function packDisplay(type: string): boolean {
   });
 }
 
+/** The pack item of a furniture type: the plan's copy of its recipe, else the installed item (#2). */
 export function packItem(type: string): PackItem | undefined {
   if (!isPackType(type)) return undefined;
-  return items.get(type);
+  return planItems.get(type) ?? items.get(type);
 }
 
 /** Default size of any furniture type. */

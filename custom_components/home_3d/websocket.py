@@ -15,6 +15,7 @@ from homeassistant.loader import async_get_integration
 import voluptuous as vol
 
 from .const import DATA_ASK, DATA_EDITORS, DATA_VOICE, DOMAIN, SIGNAL_ASK, SIGNAL_BUILDING_UPDATED
+from .custom_items import not_reserved
 from .editors import Editors, EditorsError, can_edit
 from .locate.recorder import ws_locate_rec
 from .locate.ws import COMMANDS as LOCATE_COMMANDS
@@ -26,6 +27,7 @@ from .packs import (
     parts_of,
     source_of_folder,
     verify_folder,
+    verify_item,
     verify_pack,
     verify_source,
 )
@@ -54,6 +56,8 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_packs_import,
         ws_packs_install_url,
         ws_packs_remove,
+        ws_items_save,
+        ws_items_remove,
         ws_backup_export,
         ws_backup_import,
         ws_timetravel_history,
@@ -127,7 +131,8 @@ async def ws_save_building(
     if (data := _data(hass, connection, msg)) is None:
         return
     revision = await data.async_save_building(msg["building"])
-    connection.send_result(msg["id"], {"revision": revision})
+    # the plan's recipe copies as stored (#2): an open editor keeps them with its plan
+    connection.send_result(msg["id"], {"revision": revision, "recipes": data.building.get("recipes", {})})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/building/subscribe"})
@@ -260,6 +265,7 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
             source = parts_of(msg["pack"])
         else:
             raise PackError("not_a_pack", "send a pack file or a pack folder")
+        not_reserved(payload)
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
         return
@@ -288,7 +294,7 @@ async def ws_packs_install_url(
         return
     try:
         files, origin = await fetch_pack(hass, msg["url"])
-        payload = verify_folder(files)
+        payload = not_reserved(verify_folder(files))
         source = {**source_of_folder(files), "origin": {**origin, "release": payload["release"]}}
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
@@ -324,6 +330,40 @@ async def ws_packs_remove(hass: HomeAssistant, connection: websocket_api.ActiveC
     connection.send_result(msg["id"])
 
 
+# ---------------------------------------------------------------------------- custom items (#13)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/items/save", vol.Required("item"): dict})
+@require_editor
+@websocket_api.async_response
+async def ws_items_save(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Keep an item made in the item editor (or imported from an item file); it is checked like a pack's item and
+    replaces a custom item with the same id."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    try:
+        item = await data.custom.async_save(msg["item"])
+    except PackError as err:
+        connection.send_error(msg["id"], err.code, err.detail or err.code)
+        return
+    connection.send_result(msg["id"], {"item": item})
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "home_3d/items/remove", vol.Required("item_id"): vol.All(str, vol.Length(max=64))}
+)
+@require_editor
+@websocket_api.async_response
+async def ws_items_remove(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Remove a custom item (placed copies stay in the plan as plain boxes)."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    if not await data.custom.async_remove(msg["item_id"]):
+        connection.send_error(msg["id"], "not_found", "Item not found")
+        return
+    connection.send_result(msg["id"])
+
+
 # ---------------------------------------------------------------------------- backup
 
 BACKUP_FORMAT = "home3d-backup"
@@ -337,7 +377,15 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
     if (data := _data(hass, connection, msg)) is None:
         return
     connection.send_result(
-        msg["id"], {"format": BACKUP_FORMAT, "version": 1, "building": data.building, "packs": data.packs}
+        msg["id"],
+        {
+            "format": BACKUP_FORMAT,
+            "version": 1,
+            "building": data.building,
+            "packs": data.packs,
+            # the household's own items (#13)
+            "items": data.custom.items,
+        },
     )
 
 
@@ -346,6 +394,8 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         vol.Required("type"): "home_3d/backup/import",
         vol.Required("building"): dict,
         vol.Optional("packs", default=[]): [dict],
+        # the custom items (#13); a backup from before them leaves the current ones as they are
+        vol.Optional("items"): [dict],
     }
 )
 @require_editor
@@ -371,7 +421,7 @@ async def ws_backup_import(
             skipped.append({"id": name, "reason": "no_source"})
             continue
         try:
-            clean = verify_source(source)
+            clean = not_reserved(verify_source(source))
         except PackError as err:
             skipped.append({"id": name, "reason": err.code})
             continue
@@ -381,16 +431,21 @@ async def ws_backup_import(
             if (origin := checked_origin(entry["source"]["origin"])) is not None:
                 source["origin"] = origin
         packs.append({**clean, "source": source, "imported_at": time.time()})
+    items: list[dict[str, Any]] | None = None
+    if "items" in msg:
+        items = []
+        for item in msg["items"]:
+            try:
+                items.append(verify_item(item))
+            except PackError as err:
+                skipped.append({"id": str(item.get("id") or "?"), "reason": err.code})
     revision = await data.async_restore(complete(building), packs)
-    connection.send_result(
-        msg["id"],
-        {
-            "revision": revision,
-            "building": data.building,
-            "packs": len(packs),
-            "skipped": skipped,
-        },
-    )
+    if items is not None:
+        await data.custom.async_replace(items)
+    result: dict[str, Any] = {"revision": revision, "building": data.building, "packs": len(packs), "skipped": skipped}
+    if items is not None:
+        result["items"] = len(items)
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/voice/subscribe"})

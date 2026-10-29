@@ -13,6 +13,7 @@ This module only depends on voluptuous, so tools/fp3dpack.py (which checks packs
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -228,6 +229,13 @@ def item_ref(pack: dict[str, Any], item: dict[str, Any]) -> str:
     return f"{pack['id']}/{item['id']}"
 
 
+def recipe_hash(item: dict[str, Any]) -> str:
+    """A fingerprint of a checked item's recipe: "sha256:" and the hash of its JSON with sorted keys. A plan's copy
+    of a recipe (#2) and the installed item have the same hash while the recipe is the same."""
+    text = json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return "sha256:" + hashlib.sha256(text.encode()).hexdigest()
+
+
 def _parse(path: str, text: str) -> Any:
     """One file of a pack folder as JSON; raises PackError naming the file."""
     try:
@@ -273,6 +281,13 @@ def _item_file(path: str, text: str) -> dict[str, Any]:
     if item["id"] != stem:
         raise PackError("invalid_content", f'{path}: the item id "{item["id"]}" must match the file name')
     return item
+
+
+def verify_item(data: Any) -> dict[str, Any]:
+    """One item on its own, as an item file holds it (an item made in the item editor, #13): the same checks as an
+    item in a pack folder; raises PackError."""
+    path = f"{data['id']}.json" if isinstance(data, dict) and isinstance(data.get("id"), str) else "item"
+    return _check(ITEM_SCHEMA, path, _no_links(path, data))
 
 
 def data_paths(paths: list[str]) -> list[str]:

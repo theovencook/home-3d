@@ -155,7 +155,7 @@ import { COLOUR_PRESETS, itemColourRoles, roleColour, setRoleColour, type Colour
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
-import { furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, type FurniturePack } from "../packs.ts";
+import { furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
 import { isPrinter } from "../printer.ts";
 
 /** Items that can be fixed against moving. */
@@ -867,6 +867,8 @@ export class Fp3dEditor extends LitElement {
       if (!this._doc.floors.some((f) => f.id === this._floorId)) this._floorId = this._doc.floors[0]?.id ?? null;
       if (!this.floor?.rooms.some((r) => r.id === this._roomId)) this._roomId = null;
     }
+    // the plan's recipe copies (#2): placed items keep their look whatever the installed packs say
+    setPlanRecipes(this._doc?.recipes);
   }
 
   protected firstUpdated(): void {
@@ -13063,7 +13065,7 @@ export class Fp3dEditor extends LitElement {
     if (!confirm(this.t("backup_full_confirm"))) return;
     this._backupBusy = true;
     try {
-      const res = await restoreBackup(this.hass, data.building, data.packs ?? []);
+      const res = await restoreBackup(this.hass, data.building, data.packs ?? [], data.items);
       let pictures = 0;
       for (const [id, picture] of Object.entries(data.images ?? {})) {
         try {

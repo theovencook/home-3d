@@ -3,7 +3,7 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { fetchBuilding, listPacks, saveBuilding, subscribeBuilding } from "./api.ts";
 import { normalizeBuilding, type Building } from "./model.ts";
-import { setPacks, type FurniturePack } from "./packs.ts";
+import { setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
@@ -101,6 +101,7 @@ export class BuildingController implements ReactiveController {
   /** Local edit: shown immediately, saved after a short pause. */
   edit(building: Building): void {
     this.building = building;
+    setPlanRecipes(building.recipes);
     this.pending = building;
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => void this.flush(), SAVE_DELAY);
@@ -155,7 +156,13 @@ export class BuildingController implements ReactiveController {
     this.host.requestUpdate();
     this.saving = (async () => {
       try {
-        const revision = await saveBuilding(this.hass!, building);
+        const { revision, recipes } = await saveBuilding(this.hass!, building);
+        // the copies the backend made for items placed now: the plan keeps them, also when their pack goes (#2)
+        if (recipes) {
+          adoptRecipes(building, recipes);
+          if (this.building && this.building !== building) adoptRecipes(this.building, recipes);
+          if (this.building) setPlanRecipes(this.building.recipes);
+        }
         this.ownRevisions.add(revision);
         this.revision = revision;
         this.saveState = this.pending ? "saving" : "saved";
@@ -208,6 +215,7 @@ export class BuildingController implements ReactiveController {
     try {
       const res = await fetchBuilding(this.hass);
       this.building = normalizeBuilding(res.building);
+      setPlanRecipes(this.building.recipes);
       this.backendVersion = res.version ?? null;
       this.canEdit = res.can_edit ?? !!this.hass.user?.is_admin;
       if (this.draft === null && !this.pending) this.draft = readDraft();
@@ -218,6 +226,11 @@ export class BuildingController implements ReactiveController {
     }
     this.host.requestUpdate();
   }
+}
+
+/** Add the recipe copies a plan lacks (the plan's own copies stay: they may be newer than the stored ones). */
+function adoptRecipes(building: Building, recipes: Record<string, PlanRecipe>): void {
+  building.recipes = { ...recipes, ...(building.recipes ?? {}) };
 }
 
 function errorText(err: unknown): string {

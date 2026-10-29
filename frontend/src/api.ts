@@ -2,7 +2,7 @@
 
 import type { EditorUser } from "./editors.ts";
 import type { Building } from "./model.ts";
-import type { FurniturePack, PackOrigin } from "./packs.ts";
+import type { FurniturePack, PackItem, PackOrigin, PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
 /** `can_edit`: the user is on the editors list (missing from backends before #7). */
@@ -10,9 +10,9 @@ export async function fetchBuilding(hass: HomeAssistant): Promise<{ building: Bu
   return hass.callWS({ type: "home_3d/building/get" });
 }
 
-export async function saveBuilding(hass: HomeAssistant, building: Building): Promise<number> {
-  const res = await hass.callWS<{ revision: number }>({ type: "home_3d/building/save", building });
-  return res.revision;
+/** Save the plan; the backend answers with its revision and the plan's recipe copies as stored (#2). */
+export async function saveBuilding(hass: HomeAssistant, building: Building): Promise<{ revision: number; recipes?: Record<string, PlanRecipe> }> {
+  return hass.callWS<{ revision: number; recipes?: Record<string, PlanRecipe> }>({ type: "home_3d/building/save", building });
 }
 
 export function subscribeBuilding(hass: HomeAssistant, callback: (revision: number) => void): Promise<() => Promise<void>> {
@@ -118,20 +118,24 @@ export interface BackupFile {
   exported_at?: string;
   building: Building;
   packs?: FurniturePack[];
+  /** The household's own items (#13); missing in backups from before them. */
+  items?: PackItem[];
   images?: Record<string, string>;
 }
 
-export function fetchBackup(hass: HomeAssistant): Promise<Pick<BackupFile, "format" | "version" | "building" | "packs">> {
+export function fetchBackup(hass: HomeAssistant): Promise<Pick<BackupFile, "format" | "version" | "building" | "packs" | "items">> {
   return hass.callWS({ type: "home_3d/backup/export" });
 }
 
-/** Replace plan and packs from a backup (pictures follow one by one); packs that fail their check are skipped. */
+/** Replace plan and packs (and the custom items, when the backup has them) from a backup (pictures follow one by
+ * one); packs and items that fail their check are skipped. */
 export function restoreBackup(
   hass: HomeAssistant,
   building: Building,
   packs: FurniturePack[],
-): Promise<{ revision: number; building: Building; packs: number; skipped: { id: string; reason: string }[] }> {
-  return hass.callWS({ type: "home_3d/backup/import", building, packs });
+  items?: PackItem[],
+): Promise<{ revision: number; building: Building; packs: number; items?: number; skipped: { id: string; reason: string }[] }> {
+  return hass.callWS({ type: "home_3d/backup/import", building, packs, ...(items ? { items } : {}) });
 }
 
 export type SentenceMode = "distinct" | "all" | "off";
@@ -154,4 +158,16 @@ export function getEditors(hass: HomeAssistant): Promise<{ users: EditorUser[]; 
 /** Pick the editors (null: every admin again). A list without an admin is refused ("no_admin"). */
 export function setEditors(hass: HomeAssistant, editors: string[] | null): Promise<{ users: EditorUser[]; custom: boolean }> {
   return hass.callWS({ type: "home_3d/editors/set", editors });
+}
+
+/** Keep an item made in the item editor (#13); the backend checks it like a pack's item and returns it checked.
+ * An item with the same id is replaced. Editors only. */
+export async function saveCustomItem(hass: HomeAssistant, item: PackItem): Promise<PackItem> {
+  const res = await hass.callWS<{ item: PackItem }>({ type: "home_3d/items/save", item });
+  return res.item;
+}
+
+/** Remove a custom item (placed copies stay in the plan as plain boxes). */
+export async function removeCustomItem(hass: HomeAssistant, itemId: string): Promise<void> {
+  await hass.callWS({ type: "home_3d/items/remove", item_id: itemId });
 }
