@@ -79,14 +79,21 @@ The plan keeps a copy of the recipe of every pack item placed in it, in `recipes
 copy per item, however often it is placed:
 
 ```json
-"recipes": {
-  "pack:theovencook.core:bar_stool": {
-    "pack": "theovencook.core",
-    "item": "bar_stool",
-    "release": 1,
-    "hash": "sha256:<hash of the recipe>",
-    "commit": "<the commit its files came from, for a pack installed from GitHub>",
-    "recipe": { "id": "bar_stool", "name": { "en": "Bar stool" }, "size": [0.42, 0.42, 0.75], "parts": [] }
+{
+  "recipes": {
+    "pack:theovencook.core:bar_stool": {
+      "pack": "theovencook.core",
+      "item": "bar_stool",
+      "release": 1,
+      "hash": "sha256:<hash of the recipe>",
+      "commit": "<the commit its files came from, only for a pack installed from GitHub>",
+      "recipe": {
+        "id": "bar_stool",
+        "name": { "en": "Bar stool" },
+        "size": [0.42, 0.42, 0.75],
+        "parts": [{ "shape": "cyl", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "wood" }]
+      }
+    }
   }
 }
 ```
