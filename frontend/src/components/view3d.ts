@@ -138,6 +138,7 @@ import type { HassEntity, HomeAssistant } from "../types.ts";
 import type { DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SoundSource, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 import { wallLayout } from "../camera-wall.ts";
 import { watchedEntities } from "../watched.ts";
+import { isPrinter, printerFaces, printerState } from "../printer.ts";
 import { hasTimedRules, hiddenItems, shownBuilding } from "../show-when.ts";
 import { backdropCss } from "../backdrop.ts";
 import { loadVoice, micProbeAsked, micProbeDone, voicePipeline } from "../load-voice.ts";
@@ -594,6 +595,8 @@ export class Fp3dView3d extends LitElement {
   private householdTimer: ReturnType<typeof setInterval> | undefined;
   /** Haushalt Pro: small holograms – bins that go out today or tomorrow, post, a thirsty plant (set by the furniture pass). */
   private binHolos: HouseholdTag[] = [];
+  /** 3D printers with a camera (#11): the camera a tap on the printer opens, by the id the tap reports. */
+  private printerCams = new Map<string, string>();
   /** Haushalt Pro: appliances that ended their program while the page is open ("finished" until the door opens). */
   private finished = new FinishedMemory();
   /** Washers, dryers and dishwashers as last read: whether they run (the live director notices a program ending). */
@@ -2665,6 +2668,7 @@ export class Fp3dView3d extends LitElement {
     const household = hasFeature("household");
     const today: HouseholdItem[] = [];
     this.binHolos = [];
+    this.printerCams.clear();
     // a module lights furniture of its own (Pool Pro: the pump while it runs, the heat pump while it heats)
     const glows = new Map(this.scene.filter((p): p is Extract<ScenePiece, { kind: "glow" }> => p.kind === "glow").map((p) => [p.furnitureId, p]));
     for (const floor of b.floors) {
@@ -2870,6 +2874,14 @@ export class Fp3dView3d extends LitElement {
           const picture = live && kindOf(st.entity_id) === "media" ? ((st.attributes.entity_picture as string | undefined) ?? null) : null;
           if (color) screens.set(f.id, { color, level: st.state === "playing" ? 1 : 0.6, picture, ring: ringed && hasFeature("sound") && st.state === "playing" });
         }
+        // a 3D printer (#11): its progress ring and chamber light; a tap shows its camera, its pin the per cents
+        const printer = isPrinter(f.type) ? printerState(hass, link.entity) : null;
+        if (printer) {
+          const pf = printerFaces(printer);
+          if (pf.length) screens.set(f.id, { color: pf[0].color, level: pf[0].level, faces: pf });
+          if (printer.camera) this.printerCams.set(id, printer.camera);
+        }
+        const printText = printer?.progress != null ? ` · ${Math.round(printer.progress * 100)} %` : "";
         if (placed.has(id)) continue;
         taken.add(id);
         const kind = link.entity ? kindOf(link.entity) : null;
@@ -2899,7 +2911,7 @@ export class Fp3dView3d extends LitElement {
                   : boiler
                     ? boiler.text
                     : st
-                    ? stateText(hass, st)
+                    ? stateText(hass, st) + printText
                     : standby
                       ? translate(hass, "pin_standby")
                       : power !== null
@@ -5448,6 +5460,12 @@ export class Fp3dView3d extends LitElement {
     // a detection pin opens its sensor
     if (entityId.startsWith("detect:")) {
       openMoreInfo(this, entityId.slice(7));
+      return;
+    }
+    // a 3D printer with a camera shows its picture (#11)
+    const printerCam = this.printerCams.get(entityId);
+    if (printerCam) {
+      this._menu = { entity: printerCam, x, y };
       return;
     }
     const kind = kindOf(entityId);

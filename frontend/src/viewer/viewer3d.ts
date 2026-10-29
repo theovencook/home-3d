@@ -293,7 +293,8 @@ export interface ScreenState {
   /** Furniture with a state: glowing faces on top of the item instead of a screen – the whole top, or a half of it. */
   // (see also SoundSource below)
   // "gang": one rocker or socket of a wall switch or socket (`index` of `of`)
-  faces?: { part: "all" | "left" | "right" | "top" | "bottom" | "band" | "cabin" | "lights" | "burners" | "lid" | "beacon" | "gang" | "drum" | "apring" | "strata"; color: [number, number, number]; level: number; index?: number; of?: number; accent?: boolean; top?: [number, number, number] }[];
+  // "progress": a ring on the top filled to `fill` (a 3D printer's print, #11); "chamber": the pack's glow parts
+  faces?: { part: "all" | "left" | "right" | "top" | "bottom" | "band" | "cabin" | "lights" | "burners" | "lid" | "beacon" | "gang" | "drum" | "apring" | "strata" | "progress" | "chamber"; color: [number, number, number]; level: number; index?: number; of?: number; accent?: boolean; top?: [number, number, number]; fill?: number }[];
 }
 
 /** Position of the sun (from sun.sun): degrees above the horizon and clockwise from north. */
@@ -3605,6 +3606,31 @@ export class FloorplanViewer {
               const q1 = [Math.cos(a1) * rx, Math.sin(a1) * rz];
               buf.tri(P(q0[0], y0, q0[1]), P(q1[0], y0, q1[1]), P(q1[0], y1, q1[1]), lo, lo, hi);
               buf.tri(P(q0[0], y0, q0[1]), P(q1[0], y1, q1[1]), P(q0[0], y1, q0[1]), lo, hi, hi);
+            }
+            continue;
+          }
+          if (face.part === "chamber") {
+            // a 3D printer's chamber light (#11): its glowing parts shine in the light's colour
+            const model = packItem(f.type);
+            const col = new Color(...face.color.map((v) => Math.min(1, v * (0.4 + 0.6 * face.level))) as [number, number, number]);
+            if (model) pushPackGlow(buf, model, f, base, col.getHex());
+            continue;
+          }
+          if (face.part === "progress") {
+            // a 3D printer's print (#11): a ring lying on its top, lit clockwise from the back as far as the print got
+            const r = Math.min(Math.abs(w), d) * 0.42;
+            const y = base + h + 0.008;
+            const lit = new Color(...face.color.map((v) => Math.min(1, v * (0.4 + 0.6 * face.level))) as [number, number, number]);
+            const dim = lit.clone().multiplyScalar(0.15);
+            const n = 40;
+            const done = Math.round(Math.min(1, Math.max(0, face.fill ?? 0)) * n);
+            const at = (a: number, rr: number) => P(Math.sin(a) * rr, y, -Math.cos(a) * rr);
+            for (let i = 0; i < n; i++) {
+              const a0 = (i / n) * Math.PI * 2;
+              const a1 = ((i + 1) / n) * Math.PI * 2;
+              const col = i < done ? lit : dim;
+              buf.tri(at(a0, r * 0.8), at(a0, r), at(a1, r), col);
+              buf.tri(at(a0, r * 0.8), at(a1, r), at(a1, r * 0.8), col);
             }
             continue;
           }

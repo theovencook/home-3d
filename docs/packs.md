@@ -131,7 +131,8 @@ All measures of a part are **fractions of the item's size**:
   parts between them (seat, carcass) stretch. Per axis there is a fixed zone at each end and a middle that grows; a
   fixed part in the middle stays centred. When there is not enough room for the fixed parts (a very narrow item),
   everything scales as before.
-- `glow` (optional, lamps): the part shines in the colour and brightness of the linked light.
+- `glow` (optional, lamps): the part shines in the colour and brightness of the linked light. On a 3D printer it is
+  the chamber light (see [3D printers](#3d-printers)).
 - `screen` (optional): the part is a screen (TV, monitor). The item can then be linked to a media player and its
   front (+z) shows the colour and picture of the running app, like the built-in TVs.
 - `profile` (`lathe` only, required there): see [Round shapes](#round-shapes).
@@ -250,6 +251,19 @@ shapes needs a Home 3D version that knows them.
   the id (`table_160`) and by the numbers in the name.
 
 No other fields are allowed, in an item or in a part.
+
+### 3D printers
+
+An item whose id names a 3D printer (`3d_printer`, `3d_printer_enclosed`, `resin_3d_printer`, …) and is `electric`
+shows the printer it is linked to. Link it to one entity of the printer's Home Assistant device, usually its print
+status sensor; Home 3D finds the rest on the same device, whatever integration made it:
+
+- while a print runs (or is paused), a ring on the item's top fills with the print's progress (a sensor in `%` whose
+  name says progress);
+- its `glow` parts shine while the printer's light (its chamber light) is on, in that light's colour;
+- a tap opens the printer's camera when its device has one (an own tap action set in the editor still wins).
+
+`theovencook.core/3d_printer` is one; see its file for a model to start from.
 
 ## What the loader checks
 
