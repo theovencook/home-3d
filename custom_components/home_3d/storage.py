@@ -222,7 +222,7 @@ class FloorplanData:
         return await self.async_save_building(building)
 
     async def async_remove_pack(self, pack_id: str) -> bool:
-        """Remove a pack (furniture using it stays in the plan as plain boxes)."""
+        """Remove a pack (furniture using it stays in the plan and keeps its recipe copy)."""
         kept = [p for p in self.packs if p["id"] != pack_id]
         if len(kept) == len(self.packs):
             return False

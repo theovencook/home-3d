@@ -882,7 +882,7 @@
  "holo_media_playing": "toistaa",
  "holo_media_paused": "tauolla",
  "pack_remove": "Poista",
- "pack_remove_confirm": "Poistetaanko paketti ”{name}”? Sen huonekalut jäävät suunnitelmaan pelkkinä laatikoina.",
+ "pack_remove_confirm": "Poistetaanko paketti ”{name}”? Sen huonekalut jäävät suunnitelmaan ja säilyttävät ulkonäkönsä.",
  "pack_missing_item": "Poistetun paketin huonekalu",
  "pack_error_not_a_pack": "Tämä ei ole huonekalupakettitiedosto.",
  "pack_error_invalid_content": "Paketissa on virheellisiä huonekaluja: {detail}",

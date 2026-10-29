@@ -24,6 +24,19 @@ export interface ItemAction {
   confirm_text?: string | null;
 }
 
+/**
+ * A perform_action runs any Home Assistant action in the session of whoever taps, so the server only lets an admin
+ * add or change one (#51). Whether the editor may choose this type for a gesture whose action is `current`.
+ */
+export function actionTypeChoosable(type: ActionType, current: ItemAction | null | undefined, isAdmin: boolean): boolean {
+  return type !== "perform_action" || isAdmin || current?.action === "perform_action";
+}
+
+/** An existing perform_action a non-admin editor can only replace or keep, not change (its fields are read only). */
+export function performActionLocked(action: ItemAction | null | undefined, isAdmin: boolean): boolean {
+  return action?.action === "perform_action" && !isAdmin;
+}
+
 /** What the app lets an action do. */
 export interface ActionEnv {
   callService(domain: string, service: string, data: Record<string, unknown>): Promise<unknown>;

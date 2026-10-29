@@ -882,7 +882,7 @@
  "holo_media_playing": "a reproduzir",
  "holo_media_paused": "em pausa",
  "pack_remove": "Remover",
- "pack_remove_confirm": "Remover o pacote “{name}”? O seu mobiliário fica na planta como caixas simples.",
+ "pack_remove_confirm": "Remover o pacote “{name}”? O seu mobiliário fica na planta e mantém o aspeto.",
  "pack_missing_item": "Mobiliário de um pacote removido",
  "pack_error_not_a_pack": "Este não é um ficheiro de pacote de mobiliário.",
  "pack_error_invalid_content": "O pacote contém mobiliário inválido: {detail}",

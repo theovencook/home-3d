@@ -80,7 +80,7 @@ class CustomItems:
         await self._store.async_save({"items": self.items})
 
     async def async_remove(self, item_id: str) -> bool:
-        """Remove an item (placed copies stay in the plan as plain boxes)."""
+        """Remove an item (placed copies stay in the plan and keep their recipe copy)."""
         kept = [i for i in self.items if i["id"] != item_id]
         if len(kept) == len(self.items):
             return False

@@ -151,8 +151,7 @@ export function alertColor(a: Pick<Alert, "kind" | "color">): [number, number, n
   if (a.color) return a.color;
   switch (a.kind) {
     case "water":
-      // a leak turns the floor red (#10)
-      return LEAK_COLOR;
+      return [0.2, 0.6, 1];
     case "window_rain":
       return [0.35, 0.72, 1];
     case "alarm_pending":
@@ -166,6 +165,11 @@ export function alertColor(a: Pick<Alert, "kind" | "color">): [number, number, n
     default:
       return [1, 0.2, 0.25];
   }
+}
+
+/** The colour a warning tints its room's floor in: a leak turns the floor red (#10), the others use their own colour. */
+export function alertTint(a: Pick<Alert, "kind" | "color">): [number, number, number] {
+  return a.kind === "water" && !a.color ? LEAK_COLOR : alertColor(a);
 }
 
 /** Short text for the banner: "Küche · Rauch: Rauchmelder". */

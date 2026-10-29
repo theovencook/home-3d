@@ -882,7 +882,7 @@
  "holo_media_playing": "播放中",
  "holo_media_paused": "已暂停",
  "pack_remove": "移除",
- "pack_remove_confirm": "移除包“{name}”？其家具会以普通方块形式保留在平面图中。",
+ "pack_remove_confirm": "移除包“{name}”？其家具会保留在平面图中，并保持原有外观。",
  "pack_missing_item": "已移除包中的家具",
  "pack_error_not_a_pack": "这不是家具包文件。",
  "pack_error_invalid_content": "此包包含无效家具：{detail}",

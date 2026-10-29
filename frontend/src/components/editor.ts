@@ -28,7 +28,7 @@ import { doorbellCamera, doorbellEntities, directorOnHere, HOLD_DEFAULT, HOLD_MA
 import { deviceSensors, energySummary, flowSegments, gridPoint, powerSensorFor, proposeEnergySensors, type EnergyPrefs, type FlowSegment, proposeMeters } from "../energy.ts";
 import { energySensorFor } from "../wire-ends.ts";
 import { CLIMATE_ATTRS, isPulseDrive, isStatusSensor, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
-import { ACTION_TYPES, GESTURES, parseActionData, withGesture, type ActionType, type Gesture, type ItemAction, type ItemActions } from "../item-actions.ts";
+import { ACTION_TYPES, GESTURES, actionTypeChoosable, parseActionData, performActionLocked, withGesture, type ActionType, type Gesture, type ItemAction, type ItemActions } from "../item-actions.ts";
 import { activeSections, sectionFloor, dormerParent, effectiveDormer, proposeDormer, sectionGeometry, floorOutline, polygonBox, headroomLines, ridgeHeight, sectionAbove, sectionCutsBelow, roofSectionsFromRooms, sectionFrame, sectionTurn, turnSectionAbout, wallTopUnder } from "../roof-sections.ts";
 import { bestFace, clampField, faceAt, faceCompass, fieldFace, fieldModules, GROUND, moveField, pointOnFace, proposeField, proposeGroundField, proposeWindow, proposeWallField, roofFaces, rowCounts, turnGroundField, fieldCenter, wallFaces, windowAsField, windowCorners, onFace, onField, rayOnFace, type RoofFace } from "../solar.ts";
 import type { SurfaceGrab, SurfaceRay } from "../viewer/viewer3d.ts";
@@ -10759,7 +10759,8 @@ export class Fp3dEditor extends LitElement {
   private circuitSelect(value: string | null, own: string | null, onChange: (v: string | null) => void) {
     const options = this.entityOptions((id) => this.isPowerSensor(id)).filter((o) => o.id !== own);
     return html`${this.entitySelect(this.t("energy_circuit"), value ?? "none", undefined, options, (v) => onChange(v && v !== "none" ? v : null))}
-      <p class="fp3d-sub fp3d-wide">${this.t("energy_circuit_hint")}</p>`;
+      <p class="fp3d-sub fp3d-wide">${this.t("energy_circuit_hint")}</p>
+      ${value ? nothing : html`<p class="fp3d-sub fp3d-wide fp3d-warn">${this.t("energy_circuit_unset")}</p>`}`;
   }
 
   /** The energy sensor whose today's kWh its cable end shows (#29): found on the device unless chosen here. */
@@ -11418,10 +11419,13 @@ export class Fp3dEditor extends LitElement {
       type === "navigate" ? "/lovelace/garden" : type === "url" ? "https://" : type === "perform_action" ? "script.turn_on" : (ownEntity ?? "light.kitchen");
     return html`<h4>${this.t("item_actions")}</h4>
       <p class="fp3d-sub">${this.t("item_actions_hint")}</p>
+      ${admin && !this.isHaAdmin ? html`<p class="fp3d-sub">${this.t("item_action_perform_admin")}</p>` : nothing}
       ${GESTURES.map((g) => {
         const a = actions?.[g] ?? null;
         const type: ActionType = a?.action ?? "default";
         const runs = type !== "default" && type !== "none";
+        // a perform_action only an admin changes (#51): an editor may replace it, not edit it
+        const locked = !admin || performActionLocked(a, this.isHaAdmin);
         return html`<div class="fp3d-form fp3d-item-action" data-gesture=${g}>
           <label class="fp3d-field fp3d-wide"
             >${this.t(`item_gesture_${g}` as I18nKey)}
@@ -11429,13 +11433,13 @@ export class Fp3dEditor extends LitElement {
               const v = (e.target as HTMLSelectElement).value as ActionType;
               set(g, v === "default" ? null : { action: v, target: null, data: null });
             }}>
-              ${ACTION_TYPES.map((t) => html`<option value=${t} ?selected=${t === type}>${this.t(`item_action_${t}` as I18nKey)}</option>`)}
+              ${ACTION_TYPES.map((t) => html`<option value=${t} ?selected=${t === type} ?disabled=${!actionTypeChoosable(t, a, this.isHaAdmin)}>${this.t(`item_action_${t}` as I18nKey)}</option>`)}
             </select></label
           >
           ${runs
             ? html`<label class="fp3d-field fp3d-wide"
                 >${this.t(`item_target_${type}` as I18nKey)}
-                <input type="text" maxlength="2000" .value=${a?.target ?? ""} ?disabled=${!admin} placeholder=${placeholder(type)} @change=${(e: Event) => set(g, { target: (e.target as HTMLInputElement).value.trim() || null })}
+                <input type="text" maxlength="2000" .value=${a?.target ?? ""} ?disabled=${locked} placeholder=${placeholder(type)} @change=${(e: Event) => set(g, { target: (e.target as HTMLInputElement).value.trim() || null })}
               /></label>`
             : nothing}
           ${type === "perform_action"
@@ -11444,7 +11448,7 @@ export class Fp3dEditor extends LitElement {
                 <textarea
                   rows="3"
                   spellcheck="false"
-                  ?disabled=${!admin}
+                  ?disabled=${locked}
                   placeholder='{"entity_id": "script.movie_night"}'
                   .value=${a?.data ? JSON.stringify(a.data, null, 1) : ""}
                   @change=${(e: Event) => {
@@ -11462,13 +11466,13 @@ export class Fp3dEditor extends LitElement {
             : nothing}
           ${runs
             ? html`<label class="fp3d-check fp3d-wide"
-                  ><input type="checkbox" .checked=${!!a?.confirm} ?disabled=${!admin} @change=${(ev: Event) => set(g, { confirm: (ev.target as HTMLInputElement).checked || undefined })} />
+                  ><input type="checkbox" .checked=${!!a?.confirm} ?disabled=${locked} @change=${(ev: Event) => set(g, { confirm: (ev.target as HTMLInputElement).checked || undefined })} />
                   ${this.t("item_action_confirm")}</label
                 >
                 ${a?.confirm
                   ? html`<label class="fp3d-field fp3d-wide"
                       >${this.t("item_action_confirm_text")}
-                      <input type="text" maxlength="300" .value=${a.confirm_text ?? ""} ?disabled=${!admin} placeholder=${this.t("item_action_confirm_placeholder")} @change=${(e: Event) => set(g, { confirm_text: (e.target as HTMLInputElement).value.trim() || null })}
+                      <input type="text" maxlength="300" .value=${a.confirm_text ?? ""} ?disabled=${locked} placeholder=${this.t("item_action_confirm_placeholder")} @change=${(e: Event) => set(g, { confirm_text: (e.target as HTMLInputElement).value.trim() || null })}
                     /></label>`
                   : nothing}`
             : nothing}
@@ -13368,7 +13372,7 @@ export class Fp3dEditor extends LitElement {
               ${this._history.map(
                 (h) => html`<div class="fp3d-row fp3d-dev-row">
                   <span>${this.snapshotTime(h)} <span class="fp3d-muted">· ${this.t("backup_summary", { rooms: h.rooms, furniture: h.furniture })}</span></span>
-                  <button class="fp3d-link" @click=${() => this.restoreFromHistory(h)}>${this.t("backup_restore")}</button>
+                  <button class="fp3d-link" ?disabled=${!this.isHaAdmin} title=${this.isHaAdmin ? "" : this.t("backup_admin_only")} @click=${() => this.restoreFromHistory(h)}>${this.t("backup_restore")}</button>
                 </div>`,
               )}
             </div>`
@@ -13385,11 +13389,14 @@ export class Fp3dEditor extends LitElement {
       <h4 class="fp3d-lib-head">${this.t("backup_full")}</h4>
       <div class="fp3d-actions">
         <button class="fp3d-btn" ?disabled=${this._backupBusy} @click=${() => this.exportBackup()}>${this._backupBusy ? "…" : this.t("backup_full_export")}</button>
-        <label class="fp3d-btn fp3d-upload"
-          >${this.t("backup_full_import")}<input type="file" accept="application/json,.json" @change=${this.importBackup}
-        /></label>
+        ${this.isHaAdmin
+          ? html`<label class="fp3d-btn fp3d-upload"
+              >${this.t("backup_full_import")}<input type="file" accept="application/json,.json" @change=${this.importBackup}
+            /></label>`
+          : html`<button class="fp3d-btn" disabled title=${this.t("backup_admin_only")}>${this.t("backup_full_import")}</button>`}
       </div>
       <p class="fp3d-sub">${this.t("backup_full_hint")}</p>
+      ${this.isHaAdmin ? nothing : html`<p class="fp3d-sub">${this.t("backup_admin_only")}</p>`}
     </details>`;
   }
 

@@ -882,7 +882,7 @@
  "holo_media_playing": "en lecture",
  "holo_media_paused": "pause",
  "pack_remove": "Retirer",
- "pack_remove_confirm": "Retirer le pack « {name} » ? Ses meubles restent dans le plan comme simples boîtes.",
+ "pack_remove_confirm": "Retirer le pack « {name} » ? Ses meubles restent dans le plan et gardent leur apparence.",
  "pack_missing_item": "Meuble d'un pack retiré",
  "pack_error_not_a_pack": "Ce n'est pas un fichier de pack de meubles.",
  "pack_error_invalid_content": "Le pack contient des meubles invalides : {detail}",

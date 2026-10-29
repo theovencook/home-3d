@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { alertColor, alertEntities, alertSources, alertText, findAlerts, isOutage } from "./alerts.ts";
+import { alertColor, alertEntities, alertSources, alertText, alertTint, findAlerts, isOutage } from "./alerts.ts";
 import type { OpeningEntities } from "./devices.ts";
 import { emptyBuilding, newFloor, type Opening } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -172,8 +172,13 @@ test("a wet leak sensor turns its room red until it is dry, wherever it is place
   hass.states["binary_sensor.wasser"].state = "on";
   let alerts = findAlerts(hass, b, alertSources(hass, b), links);
   assert.deepEqual(alerts.map((a) => [a.kind, a.roomId]), [["water", "k"]]);
-  const [r, g, bl] = alertColor(alerts[0]);
+  // the room's floor turns red; the water alert's own colour stays blue
+  const [r, g, bl] = alertTint(alerts[0]);
   assert.ok(r > 0.8 && g < 0.3 && bl < 0.3, "red");
+  const [wr, , wb] = alertColor(alerts[0]);
+  assert.ok(wb > 0.8 && wr < 0.4, "blue");
+  // every other warning tints its room in its own colour
+  assert.deepEqual(alertTint({ kind: "window_rain" }), alertColor({ kind: "window_rain" }));
   // the room may name its leak sensor, or have none
   b.floors[0].placements = [];
   k.live = { leak: "binary_sensor.wasser" };

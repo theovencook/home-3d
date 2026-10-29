@@ -60,19 +60,21 @@ test("today's kWh: the energy sensor's change since midnight from the recorder's
   assert.deepEqual(asked, [{ type: "recorder/statistics_during_period", start_time: midnight, statistic_ids: ["sensor.plug_total"], period: "5minute", types: ["change"], units: { energy: "kWh" } }]);
 });
 
-test("today's kWh without an energy sensor: worked out from the power sensor's five-minute means", async () => {
+test("today's kWh without an energy sensor: nothing, the power sensor's statistics are not a stand-in (#29)", async () => {
   const now = new Date(2026, 9, 29, 10, 0);
   const asked: string[][] = [];
   const hass = hassWith([], {}, (async (msg: { types: string[]; statistic_ids: string[] }) => {
-    asked.push(msg.types);
-    if (msg.types[0] === "mean") return { "sensor.heater_power": [{ start: 0, mean: 600 }, { start: 1, mean: 1200 }, { start: 2, mean: null }] };
+    asked.push(msg.statistic_ids);
     return { "sensor.plug_total": [{ start: 0, change: 1 }] };
   }) as unknown as HomeAssistant["callWS"]);
   const got = await fetchTodayKwh(hass, [{ key: "h", energy: null, power: "sensor.heater_power" }, { key: "p", energy: "sensor.plug_total", power: "sensor.plug_power" }], now);
-  // 600 W and 1200 W for five minutes each: 0.05 + 0.1 kWh
-  assert.ok(Math.abs((got?.get("h") ?? 0) - 0.15) < 1e-9);
+  assert.equal(got?.has("h"), false);
   assert.equal(got?.get("p"), 1);
-  assert.deepEqual(asked.sort(), [["change"], ["mean"]]);
+  assert.deepEqual(asked, [["sensor.plug_total"]]);
+  // only ends without an energy sensor: nothing is asked at all
+  asked.length = 0;
+  assert.deepEqual(await fetchTodayKwh(hass, [{ key: "h", energy: null, power: "sensor.heater_power" }], now), new Map());
+  assert.deepEqual(asked, []);
 });
 
 test("no wire ends: nothing is asked", async () => {
@@ -85,7 +87,7 @@ test("no wire ends: nothing is asked", async () => {
   assert.equal(calls, 0);
 });
 
-test("every consumer's cable end is a wire end, with the energy sensor it shows today's kWh of", () => {
+test("a consumer with an energy sensor has a wire end with its today's kWh; one without (or set to none) has none (#29)", () => {
   const hass = hassWith([power("sensor.plug_power"), energy("sensor.plug_energy"), power("sensor.tv_power")]);
   const consumers: Consumer[] = [
     { id: "switch.plug", powerEntity: "sensor.plug_power", floorId: "f", x: 1, z: 2, power: 50 },
@@ -95,7 +97,6 @@ test("every consumer's cable end is a wire end, with the energy sensor it shows 
   assert.deepEqual(wireEnds(hass, consumers), [
     { key: "sensor.plug_power", id: "switch.plug", floorId: "f", x: 1, z: 2, energy: "sensor.plug_energy", power: "sensor.plug_power" },
     { key: "sensor.tv_power", id: "media_player.tv", floorId: "f", x: 3, z: 4, energy: "sensor.tv_kwh", power: "sensor.tv_power" },
-    { key: "sensor.spot_power", id: "light.spot", floorId: "g", x: 5, z: 6, energy: null, power: "sensor.spot_power" },
   ]);
 });
 

@@ -882,7 +882,7 @@
  "holo_media_playing": "szól",
  "holo_media_paused": "szünet",
  "pack_remove": "Eltávolítás",
- "pack_remove_confirm": "Eltávolítod a „{name}” csomagot? A bútorai egyszerű dobozokként a tervben maradnak.",
+ "pack_remove_confirm": "Eltávolítod a „{name}” csomagot? A bútorai a tervben maradnak, és megtartják a kinézetüket.",
  "pack_missing_item": "Eltávolított csomag bútora",
  "pack_error_not_a_pack": "Ez nem bútorcsomag-fájl.",
  "pack_error_invalid_content": "A csomag érvénytelen bútort tartalmaz: {detail}",

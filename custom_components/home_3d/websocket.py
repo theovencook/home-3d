@@ -514,7 +514,7 @@ async def ws_items_save(hass: HomeAssistant, connection: websocket_api.ActiveCon
 @require_editor
 @websocket_api.async_response
 async def ws_items_remove(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Remove a custom item (placed copies stay in the plan as plain boxes)."""
+    """Remove a custom item (placed copies stay in the plan and keep their recipe copy)."""
     if (data := _data(hass, connection, msg)) is None:
         return
     if not await data.custom.async_remove(msg["item_id"]):

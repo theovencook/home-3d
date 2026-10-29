@@ -38,7 +38,7 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
 } from "../devices.ts";
 import { effectFields } from "./effect-fields.ts";
 import { effectSettings, itemShade, motionRooms, tempShade } from "../room-effects.ts";
-import { alertColor, alertEntities, alertSources, alertText, findAlerts, isOutage, type Alert, type AlertSources } from "../alerts.ts";
+import { alertEntities, alertSources, alertText, alertTint, findAlerts, isOutage, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg, mdiIcon } from "../icons.ts";
 import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
 import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, fieldLevels, fieldPowers, findConsumers, flowDots, isLoad, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type FlowKind, type StatRow } from "../energy.ts";
@@ -2785,7 +2785,7 @@ export class Fp3dView3d extends LitElement {
         if (a.quiet) continue;
         // a leak's floor stays red until it is dry; the others pulse (#10)
         const k = a.kind === "water" ? 1 : pulse;
-        const c = alertColor(a).map((x) => x * k) as [number, number, number];
+        const c = alertTint(a).map((x) => x * k) as [number, number, number];
         if (a.roomId) tint.set(a.roomId, c);
         // a warning of one floor lights that floor's rooms; the house (alarm, power outage) all of them
         else for (const f of b.floors) if (!a.floorId || f.id === a.floorId) for (const r of f.rooms) tint.set(r.id, c);

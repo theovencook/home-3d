@@ -39,40 +39,43 @@ export interface WireEnd extends WireEndSensors {
   z: number;
 }
 
-/** The wire ends of the consumers, one per power sensor (the key), each with its energy sensor. */
+/**
+ * The wire ends of the consumers, one per power sensor (the key), each with its energy sensor. A consumer without one
+ * (none linked or found, or set to none) has no wire end: nothing is configured, so nothing shows (#29).
+ */
 export function wireEnds(hass: HomeAssistant, consumers: readonly Consumer[]): WireEnd[] {
-  return consumers.map((c) => ({ key: c.powerEntity, id: c.id, floorId: c.floorId, x: c.x, z: c.z, energy: energySensorFor(hass, c.powerEntity, c.energy), power: c.powerEntity }));
+  const ends: WireEnd[] = [];
+  for (const c of consumers) {
+    const energy = energySensorFor(hass, c.powerEntity, c.energy);
+    if (energy) ends.push({ key: c.powerEntity, id: c.id, floorId: c.floorId, x: c.x, z: c.z, energy, power: c.powerEntity });
+  }
+  return ends;
 }
 
-type Row = { start: string | number; change?: number | null; mean?: number | null };
+type Row = { start: string | number; change?: number | null };
 
 /**
- * Today's kWh of every wire end, from the recorder's five-minute statistics since midnight: an energy sensor's change,
- * else its power sensor's means added up (null when the recorder has none).
+ * Today's kWh of every wire end, from the recorder's five-minute statistics since midnight: its energy sensor's change.
+ * An end without an energy sensor gets none (null when the recorder cannot be asked).
  */
 export async function fetchTodayKwh(hass: HomeAssistant, ends: readonly WireEndSensors[], now = new Date()): Promise<Map<string, number> | null> {
   const out = new Map<string, number>();
-  if (!ends.length) return out;
+  const ids = [...new Set(ends.map((e) => e.energy).filter((id): id is string => !!id))];
+  if (!ids.length) return out;
   const midnight = new Date(now);
   midnight.setHours(0, 0, 0, 0);
-  const ask = (ids: string[], kind: "change" | "mean") =>
-    ids.length
-      ? hass.callWS<Record<string, Row[]>>({
-          type: "recorder/statistics_during_period",
-          start_time: midnight.toISOString(),
-          statistic_ids: ids,
-          period: "5minute",
-          types: [kind],
-          units: kind === "change" ? { energy: "kWh" } : { power: "W" },
-        })
-      : Promise.resolve({} as Record<string, Row[]>);
-  const unique = (list: (string | null)[]) => [...new Set(list.filter((id): id is string => !!id))];
   try {
-    const [counted, means] = await Promise.all([ask(unique(ends.map((e) => e.energy)), "change"), ask(unique(ends.map((e) => (e.energy ? null : e.power))), "mean")]);
-    const sum = (rows: Row[] | undefined, value: (r: Row) => number | null | undefined) => rows?.reduce((s, r) => s + (value(r) ?? 0), 0);
+    const counted = await hass.callWS<Record<string, Row[]>>({
+      type: "recorder/statistics_during_period",
+      start_time: midnight.toISOString(),
+      statistic_ids: ids,
+      period: "5minute",
+      types: ["change"],
+      units: { energy: "kWh" },
+    });
     for (const e of ends) {
-      // a five-minute mean in W is W × 5/60 h of energy
-      const kwh = e.energy ? sum(counted?.[e.energy], (r) => r.change) : sum(means?.[e.power], (r) => (typeof r.mean === "number" ? Math.max(0, r.mean) * (5 / 60 / 1000) : 0));
+      if (!e.energy) continue;
+      const kwh = counted?.[e.energy]?.reduce((s, r) => s + (r.change ?? 0), 0);
       if (kwh !== undefined) out.set(e.key, kwh);
     }
     return out;

@@ -384,7 +384,9 @@ a heat pump) is a consumer once it has a power sensor. The meter, inverter, batt
 consumers, even when their power sensor is placed on its own as well: a discharging battery is a source (the green
 share of the cables' colour), a charging one draws through its own cable. A consumer inside a circuit that has its
 own meter (a circuit monitor's channel placed in the plan) names that circuit's power sensor under *Inside circuit*:
-it keeps its own watts and its own branch, but the circuit's cable and the house total count those watts only once. A hot-water cylinder whose id starts with `hot_water_cylinder`
+it keeps its own watts and its own branch, but the circuit's cable and the house total count those watts only once. Plans made before this
+existed keep counting such a plug twice until its circuit is set on the item, and the editor says so under every device that has a power
+sensor but no circuit. A hot-water cylinder whose id starts with `hot_water_cylinder`
 also takes a `water_heater` entity. `theovencook.core` has one of each in `energy/` and `heating/`.
 
 ### Roof window blinds

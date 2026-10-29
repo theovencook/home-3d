@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ActionEnv } from "./item-actions.ts";
-import { runItemAction } from "./item-actions.ts";
+import { actionTypeChoosable, performActionLocked, runItemAction } from "./item-actions.ts";
 
 /** An environment that records what an action asked Home Assistant and the app to do. */
 function recorder(answer = true) {
@@ -169,4 +169,19 @@ test("service data is written as JSON; empty is none, anything but an object is 
   assert.equal(parseActionData("   "), null);
   assert.throws(() => parseActionData("[1, 2]"));
   assert.throws(() => parseActionData("{oops"));
+});
+
+test("only an admin adds or changes a perform_action; an editor may still replace one with another action (#51)", () => {
+  const perform = { action: "perform_action" as const, target: "lock.unlock", data: { entity_id: "lock.front" } };
+  // an admin picks and edits anything
+  assert.equal(actionTypeChoosable("perform_action", null, true), true);
+  assert.equal(performActionLocked(perform, true), false);
+  // an editor who is no admin: not a new perform_action, and an existing one is read only
+  assert.equal(actionTypeChoosable("perform_action", null, false), false);
+  assert.equal(actionTypeChoosable("perform_action", { action: "toggle" }, false), false);
+  assert.equal(actionTypeChoosable("perform_action", perform, false), true, "the one that is there stays selectable");
+  assert.equal(actionTypeChoosable("toggle", perform, false), true, "replacing it is allowed");
+  assert.equal(performActionLocked(perform, false), true);
+  assert.equal(performActionLocked({ action: "navigate", target: "/x" }, false), false);
+  assert.equal(performActionLocked(null, false), false);
 });

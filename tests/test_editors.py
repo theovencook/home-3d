@@ -6,7 +6,9 @@ import copy
 
 from homeassistant.core import HomeAssistant
 
+from custom_components.home_3d.const import DOMAIN
 from tests.test_init import BUILDING, IMAGE, _setup
+from tests.test_pack_updates import _files
 
 
 def _by_id(users: list[dict]) -> dict[str, dict]:
@@ -83,6 +85,37 @@ async def test_someone_not_on_the_list_is_refused_but_can_still_view(
     ):
         await viewer.send_json_auto_id(command)
         assert (await viewer.receive_json())["success"], command
+
+
+async def test_someone_not_on_the_list_cannot_install_or_change_packs(
+    hass: HomeAssistant, hass_ws_client, hass_admin_user, hass_read_only_access_token
+) -> None:
+    """Installing a pack (a folder, a GitHub URL), its updates and its items are editor commands (#7)."""
+    await _setup(hass)
+    viewer = await hass_ws_client(hass, hass_read_only_access_token)
+    for command in (
+        {"type": "home_3d/packs/import", "files": _files()},
+        {"type": "home_3d/packs/import", "pack": "{}"},
+        {"type": "home_3d/packs/install_url", "url": "https://github.com/someone/their-pack"},
+        {"type": "home_3d/packs/updates/settings", "auto_update": True},
+        {"type": "home_3d/packs/update_items"},
+        {"type": "home_3d/packs/check"},
+        {"type": "home_3d/packs/pin", "pack_id": "test.starter", "pinned": True},
+        {"type": "home_3d/packs/rollback", "pack_id": "test.starter"},
+        {"type": "home_3d/items/save", "item": {"id": "x"}},
+        {"type": "home_3d/items/remove", "item_id": "x"},
+    ):
+        await viewer.send_json_auto_id(command)
+        result = await viewer.receive_json()
+        assert not result["success"], command
+        assert result["error"]["code"] == "unauthorized", command
+    # nothing was installed
+    assert [p["id"] for p in hass.data[DOMAIN].packs] == []
+    # the same import by an editor works
+    admin = await hass_ws_client(hass)
+    await admin.send_json_auto_id({"type": "home_3d/packs/import", "files": _files()})
+    assert (await admin.receive_json())["success"]
+    assert [p["id"] for p in hass.data[DOMAIN].packs] == ["test.starter"]
 
 
 async def test_an_admin_left_off_the_list_is_refused(
