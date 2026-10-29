@@ -5,6 +5,10 @@ sidebar panel with a plan editor and a live 3D view, plus a dashboard card (`cus
 
 - Plan editor inside Home Assistant: floors, rooms, walls, doors, windows, stairs, roofs, outdoor areas and solar fields.
 - Live 3D view: lights, covers, doors, cameras, sensors and warnings shown in the room they belong to.
+- Live room effects in 3D and 2D: a wet leak sensor turns its room's floor red until it is dry, motion lights the room
+  for a short time (30 s by default), radiators and hot-water cylinders shade from cold blue to warm red with their
+  temperature. Sensors are found from each room's area and placed devices; a room or item can name its own. Times
+  and temperature ranges are in the ⚙ settings.
 - Read-only 2D plan of the same building, for dashboards and wall tablets: device states, the same tap, hold and
   double-tap actions as in 3D, camera pictures from the plan. Switch with the 2D/3D buttons in the panel (or open it
   with `?view=2d`) and on the card.

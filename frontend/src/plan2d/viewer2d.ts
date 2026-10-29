@@ -11,7 +11,7 @@ import { centroid, type Building, type Floor, type StartView, type Vec2 } from "
 import { setPacks, setPlanRecipes } from "../packs.ts";
 import type { OpeningState } from "../viewer/openings.ts";
 import { lowEndDevice } from "../viewer/pace.ts";
-import type { DeviceMarker, FlowPiece, Theme, ViewerOptions } from "../viewer/viewer3d.ts";
+import type { DeviceMarker, FlowPiece, ScreenState, Theme, ViewerOptions } from "../viewer/viewer3d.ts";
 import type { ViewerSurface } from "../viewer-surface.ts";
 import { Gestures } from "./gestures.ts";
 import { anchorSpots, fitView, floorPictures, flowLines, planBounds, planItems, planMarkers, planOpenings, shownFloor, zoomView, type PlanOpening, type PlanView } from "./scene.ts";
@@ -43,6 +43,9 @@ export class Plan2dViewer implements ViewerSurface {
   private flows: FlowPiece[] = [];
   private roomTint: Map<string, [number, number, number]> | null = null;
   private roomInfo = new Map<string, string>();
+  /** Rooms motion lights, and the temperature colours of radiators and cylinders (#10). */
+  private roomGlow: ReadonlySet<string> = new Set();
+  private shades = new Map<string, [number, number, number]>();
   private startView: StartView | null = null;
   private anchorCb: AnchorCallback = null;
   private anchors: Anchors = [];
@@ -157,6 +160,20 @@ export class Plan2dViewer implements ViewerSurface {
     this.draw();
   }
 
+  setRoomGlow(rooms: ReadonlySet<string>): void {
+    if (rooms.size === this.roomGlow.size && [...rooms].every((id) => this.roomGlow.has(id))) return;
+    this.roomGlow = new Set(rooms);
+    this.draw();
+  }
+
+  /** Of the lit screens the plan shows only the temperature colours (#10). */
+  setScreens(screens: Map<string, ScreenState>): void {
+    const shades = new Map([...screens].filter(([, st]) => st.shade).map(([id, st]) => [id, st.faces?.[0]?.top ?? st.color] as const));
+    if (shades.size === this.shades.size && [...shades].every(([id, c]) => this.shades.get(id)?.join() === c.join())) return;
+    this.shades = shades;
+    this.draw();
+  }
+
   setRoomInfo(info: Map<string, string>): void {
     this.roomInfo = info;
     this.draw();
@@ -266,7 +283,6 @@ export class Plan2dViewer implements ViewerSurface {
   setQuality(): void {}
   setRobots(): void {}
   setRoofWindows(): void {}
-  setScreens(): void {}
   setSelectedDevice(): void {}
   setSolarLevels(): void {}
   setSound(): void {}
@@ -355,14 +371,16 @@ export class Plan2dViewer implements ViewerSurface {
       return;
     }
     const walls = this.wallsOf(b, floor);
-    const items = planItems(floor, this.furnitureTargets, this.devices);
+    const items = planItems(floor, this.furnitureTargets, this.devices, this.shades);
     const openings = planOpenings(floor, { exterior: b.settings.wall_exterior, interior: b.settings.wall_interior }, this.openingTargets, this.openingStates, walls);
     const flows = flowLines(this.flows, floor.id);
     const markers = planMarkers(this.devices, floor.id);
     const now = performance.now();
     const tint = (id: string) => {
       const c = this.roomTint?.get(id);
-      return c ? `fill:rgba(${c.map((v) => Math.round(v * 255)).join(",")},0.45)` : "";
+      if (c) return `fill:rgba(${c.map((v) => Math.round(v * 255)).join(",")},0.45)`;
+      // motion lights the room (#10)
+      return this.roomGlow.has(id) ? "fill:rgba(255,230,173,0.35)" : "";
     };
     render(
       svg`
@@ -372,7 +390,7 @@ export class Plan2dViewer implements ViewerSurface {
         )}</g>
         <g class="fp3d-p2d-walls">${walls.map((w) => svg`<polygon class=${w.exterior ? "fp3d-p2d-wall fp3d-p2d-wall-ext" : "fp3d-p2d-wall"} points=${pts(w.footprint)} />`)}</g>
         <g>${items.map(
-          (it) => svg`<g data-pick=${it.pick ?? nothing} class=${`fp3d-p2d-item${it.pick ? " fp3d-p2d-tap" : ""}${it.on ? " fp3d-p2d-on" : ""}${it.unavailable ? " fp3d-p2d-na" : ""}`}
+          (it) => svg`<g data-pick=${it.pick ?? nothing} class=${`fp3d-p2d-item${it.pick ? " fp3d-p2d-tap" : ""}${it.on || it.shade ? " fp3d-p2d-on" : ""}${it.unavailable ? " fp3d-p2d-na" : ""}`}
             transform="translate(${it.f.x} ${it.f.z}) rotate(${it.f.rotation}) scale(${it.f.mirror ? -1 : 1} 1)"
             style=${it.glow ? `--fp3d-glow:${it.glow}` : it.tint ? `--fp3d-tint:${it.tint}` : ""}>
             <rect class="fp3d-p2d-body" x=${-it.f.w / 2} y=${-it.f.d / 2} width=${it.f.w} height=${it.f.d} />

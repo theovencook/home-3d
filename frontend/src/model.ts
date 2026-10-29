@@ -19,11 +19,19 @@ export interface RoomClimate {
 /** A wall height on a room edge, or one per part of a split edge. */
 export type WallHeight = number | null | (number | null)[];
 
+/** A room's leak and motion sensors for the live effects (#10): null = all of the room's, "none" = none. */
+export interface RoomLive {
+  leak?: EntityRef;
+  motion?: EntityRef;
+}
+
 export interface Room {
   /** An outdoor area acting as a room (made by outdoorZones, never stored among the rooms). */
   outdoor?: boolean;
   /** Room temperature, humidity and CO2: chosen sensors instead of the automatic pick. */
   climate?: RoomClimate | null;
+  /** Leak and motion sensors chosen instead of the automatic pick (#10). */
+  live?: RoomLive | null;
   id: string;
   name: string;
   /** Further names the voice answers to ("Stube", "Lounge"). */
@@ -320,6 +328,8 @@ export interface Furniture {
   color_entity?: EntityRef;
   /** Any electric item: a sensor whose value stands at its symbol – a boiler's water temperature, a humidity (D619). */
   extra?: EntityRef;
+  /** Radiator or hot-water cylinder: the temperature it shades with (#10); null = automatic, "none" = no shading. */
+  temp_sensor?: EntityRef;
   /** Mirrored (left-right) – an L-sofa the other way round, a cabinet with its door on the other side. */
   mirror?: boolean;
   /** LED strip: tilt about its length (°; 0 = lying flat, 90 = its face points sideways, e.g. along a roof slope). */
@@ -736,6 +746,18 @@ export type PetEyes = (typeof PET_EYES)[number];
 /** Dog breeds, small to large. */
 export const DOG_BREEDS = ["dachshund", "pug", "terrier", "labrador", "shepherd"] as const;
 
+/** Live room effects (#10); a missing value takes its default (EFFECT_DEFAULTS in room-effects.ts). */
+export interface EffectSettings {
+  /** Seconds a room stays lit after motion starts (0 = motion lights nothing). */
+  motion_seconds?: number | null;
+  /** Radiator: the temperature (°C) it is fully blue at and fully red at. */
+  radiator_cold?: number | null;
+  radiator_hot?: number | null;
+  /** Hot-water cylinder: the tank temperature (°C) it is fully blue at and fully red at. */
+  tank_cold?: number | null;
+  tank_hot?: number | null;
+}
+
 export interface BuildingSettings {
   /** The background behind the 3D house (null: the look's own sky): a colour, a gradient or a picture. */
   backdrop?: { kind?: "color" | "gradient" | "image" | null; color?: string | null; color2?: string | null; image?: string | null; dim?: number | null } | null;
@@ -793,6 +815,8 @@ export interface BuildingSettings {
    * the window would look shut although nobody knows. Off by default.
    */
   alert_unavailable?: boolean;
+  /** Live room effects (#10): how long motion lights a room, the temperatures radiators and cylinders shade between. */
+  effects?: EffectSettings | null;
   /** An entity that reports a power outage (a grid or UPS sensor); null = no outage warning (#214). */
   outage_entity?: string | null;
   /** Sunlight falls through the windows as patches on the floor (default on, #266). */
