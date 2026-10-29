@@ -547,6 +547,9 @@ in the repository's `NOTICE`.
   (white gloss, black-brown, white stained oak, oak, walnut, birch, pine, acacia, anthracite, …). The colourways IKEA
   sells are listed in the item's `tags`, so "kallax black-brown" finds it. This keeps the pack under the 500-item
   limit for its 200 models.
+- Kitchen cabinets (METOD, ENHET) come without a worktop, as in the shop, and carry items on top: put a worktop
+  (SÄLJAN, KARLBY) on a run of them and a hob or an inset sink on that. Wall cabinets hang with their top at 2.20 m;
+  integrated appliances (RENGÖRA, TVÄTTAD) show the kitchen front they hide behind. KNOXHULT kitchens are whole.
 - The models and their batches are tracked in `docs/ikea-uk-models.md`.
 
 ## Your own items
