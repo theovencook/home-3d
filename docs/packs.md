@@ -477,7 +477,13 @@ a name, a library section (`group`), rooms, search words (`tags`) and an optiona
   later changes. Removing an item leaves placed copies in the plan as plain boxes.
 - **Export** downloads the item as `<item id>.json`. **Import item files …** takes one or more such files (exported
   on another install, or written by hand); an item whose id is already used either replaces that item or is kept
-  beside it under a free id.
+  beside it under a free id. **Paste an item** takes the same JSON pasted in; an LLM's answer can be pasted as it
+  came, inside a code fence or a line of chat.
+- **Copy instructions for an LLM** copies a short brief on this format (shapes, sizes, colour roles, fixed measures,
+  the library's sections and rooms, the limits, and two core items as examples). Paste it into ChatGPT, Claude or
+  Gemini, say what item you want, and paste the answer under **Paste an item**. The brief is written from the same
+  lists and limits the backend checks (`frontend/src/item-format.ts`, held equal to `packs.py` by a test), so it
+  follows this page as the format changes.
 - Home 3D's own backup file carries the custom items as well.
 
 ## Old single-file packs (v1)
