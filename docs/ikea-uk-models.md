@@ -69,46 +69,46 @@ Best-seller rank: its place on the IKEA UK best-seller list on 29 October 2026; 
 
 | # | Model | IKEA name | Group | Best-seller rank | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Coffee table | LACK | `table` | - | to do |
-| 2 | Wall shelf unit | LACK | `storage` | 169 | to do |
-| 3 | TV bench | LACK | `media` | - | to do |
-| 4 | TV storage combination | BESTÅ | `media` | - | to do |
-| 5 | TV bench | HEMNES | `media` | - | to do |
-| 6 | Corner sofa-bed with storage | FRIHETEN | `sofa` | 262 | to do |
-| 7 | Sofa | EKTORP | `sofa` | - | to do |
-| 8 | Sofa | KIVIK | `sofa` | - | to do |
-| 9 | 2-seat sofa | GLOSTAD | `sofa` | - | to do |
-| 10 | 2-seat sofa | KLIPPAN | `sofa` | - | to do |
-| 11 | Sofa | SÖDERHAMN | `sofa` | - | to do |
-| 12 | 3-seat sofa | STOCKHOLM 2025 | `sofa` | - | to do |
-| 13 | Armchair | POÄNG | `seating` | - | to do |
-| 14 | Wing chair | STRANDMON | `seating` | - | to do |
-| 15 | Armchair | VIMLE | `seating` | - | to do |
-| 16 | Footstool with storage | VIMLE | `seating` | 157 | to do |
-| 17 | Storage table | HOL | `table` | 161 | to do |
-| 18 | Coffee table | LISABO | `table` | - | to do |
-| 19 | Coffee table | BORGEBY | `table` | - | to do |
-| 20 | Side table on castors | TINGBY | `table` | - | to do |
-| 21 | Coffee table | HEMNES | `table` | - | to do |
-| 22 | Shelving unit | STOCKHOLM 2025 | `storage` | - | to do |
-| 23 | Glass-door cabinet | HEMNES | `storage` | 246 | to do |
-| 24 | Floor lamp | LAUTERS | `lamp` | 150 | to do |
-| 25 | Floor lamp | ÖKENSAND | `lamp` | 186 | to do |
-| 26 | Table lamp | ÅRSTID | `lamp` | 66 | to do |
-| 27 | Pendant lamp | VINDKAST | `lamp` | 146 | to do |
-| 28 | Pendant lamp shade | KAPPELAND | `lamp` | 173 | to do |
-| 29 | Ceiling lamp | SOLKLINT | `lamp` | 201 | to do |
-| 30 | LED table/wall lamp | VARMBLIXT | `lamp` | 108 | to do |
-| 31 | Floor lamp | STOCKHOLM 2025 | `lamp` | - | to do |
-| 32 | Rug, low pile | STOENSE | `deco` | 194 | to do |
-| 33 | Mirror | LINDBYN | `deco` | 183 | to do |
-| 34 | Picture set | PJÄTTERYD | `frame` | 204 | to do |
-| 35 | Picture ledge | MOSSLANDA | `deco` | 180 | to do |
-| 36 | Artificial potted plant | FEJKA | `plant` | 70 | to do |
-| 37 | Areca palm | DYPSIS LUTESCENS | `plant` | 121 | to do |
-| 38 | Plant stand | OLIVBLAD | `plant` | 107 | to do |
-| 39 | Lantern for block candle | BORRBY | `candle` | 80 | to do |
-| 40 | Throw | HUMLEMOTT | `throw` | 200 | to do |
+| 1 | Coffee table | LACK | `table` | - | done, 2 items |
+| 2 | Wall shelf unit | LACK | `storage` | 169 | done, 1 item |
+| 3 | TV bench | LACK | `media` | - | done, 3 items |
+| 4 | TV storage combination | BESTÅ | `media` | - | done, 3 items |
+| 5 | TV bench | HEMNES | `media` | - | done, 2 items |
+| 6 | Corner sofa-bed with storage | FRIHETEN | `sofa` | 262 | done, 3 items |
+| 7 | Sofa | EKTORP | `sofa` | - | done, 6 items |
+| 8 | Sofa | KIVIK | `sofa` | - | done, 5 items |
+| 9 | 2-seat sofa | GLOSTAD | `sofa` | - | done, 2 items |
+| 10 | 2-seat sofa | KLIPPAN | `sofa` | - | done, 1 item |
+| 11 | Sofa | SÖDERHAMN | `sofa` | - | done, 4 items |
+| 12 | 3-seat sofa | STOCKHOLM 2025 | `sofa` | - | done, 1 item |
+| 13 | Armchair | POÄNG | `seating` | - | done, 3 items |
+| 14 | Wing chair | STRANDMON | `seating` | - | done, 1 item |
+| 15 | Armchair | VIMLE | `seating` | - | done, 1 item |
+| 16 | Footstool with storage | VIMLE | `seating` | 157 | done, 1 item |
+| 17 | Storage table | HOL | `table` | 161 | done, 2 items |
+| 18 | Coffee table | LISABO | `table` | - | done, 1 item |
+| 19 | Coffee table | BORGEBY | `table` | - | done, 2 items |
+| 20 | Side table on castors | TINGBY | `table` | - | done, 1 item |
+| 21 | Round coffee table | VITTSJÖ | `table` | - | done, 2 items (replaces the HEMNES coffee table, which IKEA UK no longer sold on 29 October 2026) |
+| 22 | Shelving unit | STOCKHOLM 2025 | `storage` | - | done, 2 items |
+| 23 | Glass-door cabinet | HEMNES | `storage` | 246 | done, 1 item |
+| 24 | Floor lamp | LAUTERS | `lamp` | 150 | done, 1 item |
+| 25 | Floor lamp | ÖKENSAND | `lamp` | 186 | done, 1 item |
+| 26 | Table lamp | ÅRSTID | `lamp` | 66 | done, 2 items |
+| 27 | Pendant lamp | VINDKAST | `lamp` | 146 | done, 2 items |
+| 28 | Pendant lamp shade | KAPPELAND | `lamp` | 173 | done, 1 item |
+| 29 | Ceiling lamp | SOLKLINT | `lamp` | 201 | done, 2 items |
+| 30 | LED table/wall lamp | VARMBLIXT | `lamp` | 108 | done, 2 items |
+| 31 | Floor lamp | STOCKHOLM 2025 | `lamp` | - | done, 1 item |
+| 32 | Rug, low pile | STOENSE | `deco` | 194 | done, 3 items |
+| 33 | Mirror | LINDBYN | `deco` | 183 | done, 4 items |
+| 34 | Picture set | PJÄTTERYD | `frame` | 204 | done, 3 items |
+| 35 | Picture ledge | MOSSLANDA | `deco` | 180 | done, 2 items |
+| 36 | Artificial potted plant | FEJKA | `plant` | 70 | done, 3 items |
+| 37 | Areca palm | DYPSIS LUTESCENS | `plant` | 121 | done, 2 items |
+| 38 | Plant stand | OLIVBLAD | `plant` | 107 | done, 3 items |
+| 39 | Lantern for block candle | BORRBY | `candle` | 80 | done, 2 items |
+| 40 | Throw | HUMLEMOTT | `throw` | 200 | done, 1 item |
 
 ## Batch 3: bedroom (#32)
 
