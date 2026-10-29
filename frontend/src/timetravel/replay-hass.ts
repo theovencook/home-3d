@@ -25,7 +25,6 @@ export const WS_ALLOWED: ReadonlySet<string> = new Set([
   "home_3d/building/get",
   "home_3d/image/get",
   "home_3d/packs/list",
-  "home_3d/packs/items",
   "home_3d/timetravel/history",
   "history/history_during_period",
   "recorder/statistics_during_period",
