@@ -71,6 +71,13 @@ def test_every_bundled_item_checks_and_sits_in_its_category_folder(path: Path) -
     assert item["name"].get("en"), "every item has an English name"
 
 
+def test_core_appliances_can_be_linked_to_a_switch_and_a_power_sensor() -> None:
+    """Every appliance in the core pack draws power, so each one is marked electric."""
+    appliances = [json.loads(f.read_text(encoding="utf-8")) for f in sorted((CORE / "appliance").glob("*.json"))]
+    assert appliances, "the core pack has appliances"
+    assert [a["id"] for a in appliances if not a.get("electric")] == []
+
+
 def _core_files(release: int) -> dict[str, str]:
     files = packs.read_folder(CORE)
     meta = json.loads(files["pack.json"])
