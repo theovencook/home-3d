@@ -523,6 +523,17 @@ const CSS = `
   --p2d-label: #1d2533;
   --p2d-out: rgba(70, 140, 80, 0.12);
 }
+.fp3d-p2d[data-theme="realistic"] {
+  --p2d-wall: #6b625a;
+  --p2d-wall-ext: #4f4842;
+  --p2d-room: rgba(236, 226, 210, 0.92);
+  --p2d-room-line: rgba(79, 72, 66, 0.25);
+  --p2d-item: rgba(70, 60, 50, 0.6);
+  --p2d-item-fill: rgba(120, 100, 80, 0.12);
+  --p2d-gap: #ece2d2;
+  --p2d-label: #2e2924;
+  --p2d-out: rgba(90, 150, 80, 0.35);
+}
 .fp3d-p2d-svg {
   position: absolute;
   inset: 0;
@@ -623,7 +634,8 @@ const CSS = `
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   pointer-events: none;
 }
-.fp3d-p2d[data-theme="day"] .fp3d-p2d-label { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8); }
+.fp3d-p2d[data-theme="day"] .fp3d-p2d-label,
+.fp3d-p2d[data-theme="realistic"] .fp3d-p2d-label { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8); }
 .fp3d-p2d-label small {
   font: 500 11px var(--fp3d-font, sans-serif);
   opacity: 0.85;
