@@ -19,6 +19,8 @@ export const FRONTEND_VERSION = typeof __FP3D_VERSION__ === "string" ? __FP3D_VE
 export interface Draft {
   building: Building;
   savedAt: number;
+  /** The home the edits belong to (#53); offered only while that home is shown. */
+  home?: string;
 }
 
 /** Unsaved edits of the earlier name (the browser may still hold them). */
@@ -63,6 +65,12 @@ export class BuildingController implements ReactiveController {
   canEdit = false;
   /** The packs were fetched once (what is installed is known). */
   packsLoaded = false;
+  /** The home to show (#53: a card's `home`); unset: the active home, followed when another one becomes active. */
+  home: string | undefined = undefined;
+  /** The home loaded (null before, or from a backend before #53): edits are saved back to it. */
+  homeId: string | null = null;
+  /** Its name, for the panel's home switcher. */
+  homeName: string | null = null;
   private libraryLoading: Promise<void> | null = null;
 
   private readonly host: ReactiveControllerHost;
@@ -80,6 +88,18 @@ export class BuildingController implements ReactiveController {
   constructor(host: ReactiveControllerHost) {
     this.host = host;
     host.addController(this);
+  }
+
+  /** Show another home (#53: a card's `home` changed); unset: the active home. */
+  setHome(home: string | undefined): void {
+    if (home === this.home) return;
+    this.home = home;
+    if (!this.hass || !this.connected) return;
+    void this.flush().then(async () => {
+      await this.unsubscribe?.();
+      this.unsubscribe = null;
+      await this.start();
+    });
   }
 
   /** Call whenever the host receives a new hass object. */
@@ -160,7 +180,7 @@ export class BuildingController implements ReactiveController {
     this.saving = (async () => {
       try {
         const bases = this.recipeBases;
-        const { revision, recipes } = await saveBuilding(this.hass!, building, bases);
+        const { revision, recipes } = await saveBuilding(this.hass!, building, bases, this.homeId ?? this.home);
         // the copies the backend made for items placed now: the plan keeps them, also when their pack goes (#2);
         // and the ones it changed meanwhile (an update, a rollback, #45) replace the copies this plan started from
         if (recipes) {
@@ -178,7 +198,7 @@ export class BuildingController implements ReactiveController {
         this.saveState = "error";
         this.saveError = errorText(err);
         // keep the edit: after a restart it can be restored and saved
-        writeDraft({ building, savedAt: Date.now() });
+        writeDraft({ building, savedAt: Date.now(), ...(this.homeId ? { home: this.homeId } : {}) });
       }
       this.host.requestUpdate();
     })();
@@ -193,11 +213,20 @@ export class BuildingController implements ReactiveController {
     await this.reload();
     if (!this.unsubscribe && this.connected) {
       try {
-        this.unsubscribe = await subscribeBuilding(this.hass, (revision) => {
-          if (this.ownRevisions.has(revision) || revision === this.revision) return;
-          if (this.pending || this.saving) return; // our own edits win; they are saved next
-          void this.reload();
-        });
+        this.unsubscribe = await subscribeBuilding(
+          this.hass,
+          (revision, home) => {
+            // another home became active (#53): shown once this view's own edits are saved to the home they belong to
+            if (home && this.homeId && home !== this.homeId) {
+              void this.flush().then(() => this.reload());
+              return;
+            }
+            if (this.ownRevisions.has(revision) || revision === this.revision) return;
+            if (this.pending || this.saving) return; // our own edits win; they are saved next
+            void this.reload();
+          },
+          this.home,
+        );
       } catch {
         // older backend or connection loss: changes from elsewhere show after a reload
       }
@@ -228,13 +257,19 @@ export class BuildingController implements ReactiveController {
   private async reload(): Promise<void> {
     if (!this.hass) return;
     try {
-      const res = await fetchBuilding(this.hass);
+      const res = await fetchBuilding(this.hass, this.home);
+      if ((res.home_id ?? null) !== this.homeId) this.ownRevisions.clear();
+      this.homeId = res.home_id ?? null;
+      this.homeName = res.home_name ?? null;
       this.building = normalizeBuilding(res.building);
       setPlanRecipes(this.building.recipes);
       this.recipeBases = recipeHashes(this.building.recipes);
       this.backendVersion = res.version ?? null;
       this.canEdit = res.can_edit ?? !!this.hass.user?.is_admin;
-      if (this.draft === null && !this.pending) this.draft = readDraft();
+      if (this.draft === null && !this.pending) {
+        const draft = readDraft();
+        this.draft = draft && (!draft.home || draft.home === this.homeId) ? draft : null;
+      }
       this.revision = res.revision;
       this.error = null;
     } catch (err) {

@@ -2,7 +2,7 @@
 // write YAML. It follows Home Assistant's colours (the dialog is light or dark with the user's theme).
 
 import { css, html, LitElement, nothing } from "lit";
-import { fetchBuilding } from "./api.ts";
+import { fetchBuilding, listHomes, type HomeInfo } from "./api.ts";
 import { labOn, UNRELEASED } from "./features.ts";
 import { CARD_CONTROLS, type CardConfig, type CardControl } from "./card-config.ts";
 import { languageReady, loadLanguage, translate, type I18nKey } from "./i18n.ts";
@@ -61,12 +61,17 @@ export class Floorplan3dCardEditor extends LitElement {
   declare hass: HomeAssistant | undefined;
   private declare _config: CardConfig;
   private declare _floors: { id: string; name: string }[];
-  private loading = false;
+  /** The homes to choose from (#53; editors only, empty for anyone else or a backend before #53). */
+  private declare _homes: HomeInfo[];
+  /** The home whose floors are loaded (or loading): undefined for none yet, "" for the active one. */
+  private floorsOf: string | undefined = undefined;
+  private homesAsked = false;
 
   constructor() {
     super();
     this._config = { type: "custom:home-3d-card" };
     this._floors = [];
+    this._homes = [];
   }
 
   setConfig(config: CardConfig): void {
@@ -76,11 +81,21 @@ export class Floorplan3dCardEditor extends LitElement {
   protected willUpdate(): void {
     // a language beyond German and English: its texts are fetched first, then everything renders
     if (this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language).then(() => this.requestUpdate());
-    // the floors of the plan, for the floor choice
-    if (this.hass && !this.loading && !this._floors.length) {
-      this.loading = true;
-      fetchBuilding(this.hass).then(
-        (res) => (this._floors = res.building.floors.map((f) => ({ id: f.id, name: f.name }))),
+    // the floors of the card's home, for the floor choice
+    const home = this._config.home ?? "";
+    if (this.hass && this.floorsOf !== home) {
+      this.floorsOf = home;
+      fetchBuilding(this.hass, home || undefined).then(
+        (res) => {
+          if (this.floorsOf === home) this._floors = res.building.floors.map((f) => ({ id: f.id, name: f.name }));
+        },
+        () => undefined,
+      );
+    }
+    if (this.hass && !this.homesAsked) {
+      this.homesAsked = true;
+      listHomes(this.hass).then(
+        (res) => (this._homes = res.homes),
         () => undefined,
       );
     }
@@ -291,6 +306,23 @@ export class Floorplan3dCardEditor extends LitElement {
     return html`
       <h3>${this.t("card_section_view")}</h3>
       <div class="grid">
+        ${this._homes.length > 1 || this._config.home
+          ? html`<label class="field wide"
+              >${this.t("card_home")}
+              <select
+                @change=${(e: Event) => {
+                  // another home has other floors and rooms
+                  this.set("floor", undefined);
+                  this.set("room", undefined);
+                  this.set("home", (e.target as HTMLSelectElement).value || undefined);
+                }}
+              >
+                <option value="" ?selected=${!v.home}>${this.t("card_home_active")}</option>
+                ${this._homes.map((h) => html`<option value=${h.id} ?selected=${h.id === v.home}>${h.name}</option>`)}
+                ${v.home && !this._homes.some((h) => h.id === v.home) ? html`<option value=${v.home} selected>${v.home}</option>` : nothing}
+              </select>
+            </label>`
+          : nothing}
         <label class="field wide"
           >${this.t("card_floor")}
           <select @change=${(e: Event) => this.set("floor", (e.target as HTMLSelectElement).value || undefined)}>

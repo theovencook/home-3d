@@ -46,6 +46,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 ### Editors and safety
 
 - **Editors list** (see 0.1.0) also decides who may install packs and edit items. Importing a backup and restoring an earlier version replace the whole plan, actions included, so they need a Home Assistant administrator; the editor disables them for everyone else. A web address action is limited to http(s) or a path on the same Home Assistant.
+- **Several homes per install:** editors add, rename, duplicate, delete and switch homes from the panel header; each home keeps its own plan, history and pictures, a card can show a named home, and a backup carries every home. An existing plan becomes the first home unchanged.
 
 ### Developer
 

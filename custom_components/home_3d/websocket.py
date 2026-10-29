@@ -22,6 +22,7 @@ from .const import (
     DOMAIN,
     SIGNAL_ASK,
     SIGNAL_BUILDING_UPDATED,
+    SIGNAL_HOMES_UPDATED,
 )
 from .custom_items import not_reserved
 from .editors import Editors, EditorsError, can_edit, performed_actions
@@ -42,11 +43,15 @@ from .packs import (
     verify_source,
 )
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
-from .storage import FloorplanData, complete
+from .storage import FloorplanData, Home, HomesError, complete
 from .timetravel import ws_timetravel_history
 from .voice import SENTENCE_MODES, AskBroker, VoiceSettings
 
 _IMAGE_ID = vol.All(str, vol.Length(min=1, max=64), vol.Match(r"^[A-Za-z0-9_\-.]+$"))
+# a home (#53): commands about one plan take it optionally; without it they work on the active home
+_HOME_ID = vol.All(str, vol.Length(min=1, max=32), vol.Match(r"^[A-Za-z0-9_]+$"))
+_HOME = {vol.Optional("home_id"): _HOME_ID}
+_HOME_NAME = vol.All(str, vol.Strip, vol.Length(min=1, max=60))
 
 
 @callback
@@ -85,6 +90,12 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_locate_rec,
         ws_editors_get,
         ws_editors_set,
+        ws_homes_list,
+        ws_homes_create,
+        ws_homes_rename,
+        ws_homes_duplicate,
+        ws_homes_delete,
+        ws_homes_set_active,
     ):
         websocket_api.async_register_command(hass, command)
     for command in LOCATE_COMMANDS:
@@ -110,7 +121,17 @@ def _data(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: 
     return data
 
 
-@websocket_api.websocket_command({vol.Required("type"): "home_3d/building/get"})
+def _home(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> Home | None:
+    """The home a command names (`home_id`), else the active one; an unknown id is answered with an error."""
+    if (data := _data(hass, connection, msg)) is None:
+        return None
+    home = data.home(msg.get("home_id"))
+    if home is None:
+        connection.send_error(msg["id"], "home_not_found", "There is no such home")
+    return home
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/building/get", **_HOME})
 @websocket_api.async_response
 async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Return the building, its revision, the running integration version and whether the user may edit.
@@ -118,14 +139,17 @@ async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveC
     The frontend compares the version with its own: after an update the new frontend files are served
     at once, but the backend (and its validation) only changes with a restart.
     """
-    if (data := _data(hass, connection, msg)) is None:
+    if (home := _home(hass, connection, msg)) is None:
         return
     integration = await async_get_integration(hass, DOMAIN)
     connection.send_result(
         msg["id"],
         {
-            "building": data.building,
-            "revision": data.revision,
+            "building": home.building,
+            "revision": home.revision,
+            # which home this is (#53): a client saves back to it, whichever home is active by then
+            "home_id": home.id,
+            "home_name": home.name,
             "version": str(integration.version),
             # whether this user is on the editors list (#7); the backend checks every change again
             "can_edit": can_edit(hass, connection.user),
@@ -136,6 +160,7 @@ async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveC
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "home_3d/building/save",
+        **_HOME,
         vol.Required("building"): BUILDING_SCHEMA,
         # the hashes of the recipe copies the client started from (#45), by pack item type
         vol.Optional("recipe_bases"): vol.All({str: vol.All(str, vol.Length(max=100))}, vol.Length(max=2000)),
@@ -147,36 +172,66 @@ async def ws_save_building(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Replace the building. A new or changed `perform_action` item action needs an admin (#51)."""
-    if (data := _data(hass, connection, msg)) is None:
+    if (home := _home(hass, connection, msg)) is None:
         return
-    if not connection.user.is_admin and performed_actions(msg["building"]) - performed_actions(data.building):
+    if not connection.user.is_admin and performed_actions(msg["building"]) - performed_actions(home.building):
         connection.send_error(msg["id"], "unauthorized", "Only an admin adds or changes an item's perform action")
         return
-    revision = await data.async_save_building(msg["building"], msg.get("recipe_bases"))
+    revision = await home.async_save_building(msg["building"], msg.get("recipe_bases"))
     # the plan's recipe copies as stored (#2): an open editor keeps them with its plan
-    connection.send_result(msg["id"], {"revision": revision, "recipes": data.building.get("recipes", {})})
+    connection.send_result(
+        msg["id"], {"revision": revision, "home_id": home.id, "recipes": home.building.get("recipes", {})}
+    )
 
 
-@websocket_api.websocket_command({vol.Required("type"): "home_3d/building/subscribe"})
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/building/subscribe", **_HOME})
 @callback
 def ws_subscribe_building(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Send the new revision whenever the building changes."""
+    """Send the new revision (and the home's id) whenever the building changes. Without a home this follows the
+    active home: when another home becomes active, its revision is sent at once."""
+    if (home := _home(hass, connection, msg)) is None:
+        return
+    data: FloorplanData = hass.data[DOMAIN]
+    named = msg.get("home_id")
+    followed = [home.id]
+
+    def send(home_id: str, revision: int) -> None:
+        connection.send_message(websocket_api.event_message(msg["id"], {"revision": revision, "home_id": home_id}))
 
     @callback
-    def forward(revision: int) -> None:
-        connection.send_message(websocket_api.event_message(msg["id"], {"revision": revision}))
+    def forward(home_id: str, revision: int) -> None:
+        if home_id == followed[0]:
+            send(home_id, revision)
 
-    connection.subscriptions[msg["id"]] = async_dispatcher_connect(hass, SIGNAL_BUILDING_UPDATED, forward)
+    @callback
+    def homes_changed() -> None:
+        if named is None and data.active_id != followed[0] and data.active_id in data.homes:
+            followed[0] = data.active_id
+            send(data.active_id, data.active.revision)
+
+    unsubs = [
+        async_dispatcher_connect(hass, SIGNAL_BUILDING_UPDATED, forward),
+        async_dispatcher_connect(hass, SIGNAL_HOMES_UPDATED, homes_changed),
+    ]
+
+    @callback
+    def unsubscribe() -> None:
+        for unsub in unsubs:
+            unsub()
+
+    connection.subscriptions[msg["id"]] = unsubscribe
     connection.send_result(msg["id"])
 
 
-@websocket_api.websocket_command({vol.Required("type"): "home_3d/image/get", vol.Required("image_id"): _IMAGE_ID})
+@websocket_api.websocket_command(
+    {vol.Required("type"): "home_3d/image/get", **_HOME, vol.Required("image_id"): _IMAGE_ID}
+)
 @callback
 def ws_get_image(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Return a background image as data URL."""
-    if (data := _data(hass, connection, msg)) is None:
+    if (home := _home(hass, connection, msg)) is None:
         return
-    image = data.get_image(msg["image_id"])
+    image = home.get_image(msg["image_id"])
     if image is None:
         connection.send_error(msg["id"], "not_found", "Image not found")
         return
@@ -186,6 +241,7 @@ def ws_get_image(hass: HomeAssistant, connection: websocket_api.ActiveConnection
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "home_3d/image/set",
+        **_HOME,
         vol.Required("image_id"): _IMAGE_ID,
         vol.Required("data"): IMAGE_DATA,
     }
@@ -194,48 +250,50 @@ def ws_get_image(hass: HomeAssistant, connection: websocket_api.ActiveConnection
 @websocket_api.async_response
 async def ws_set_image(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Store a background image."""
-    if (data := _data(hass, connection, msg)) is None:
+    if (home := _home(hass, connection, msg)) is None:
         return
-    await data.async_set_image(msg["image_id"], msg["data"])
+    await home.async_set_image(msg["image_id"], msg["data"])
     connection.send_result(msg["id"])
 
 
-@websocket_api.websocket_command({vol.Required("type"): "home_3d/image/delete", vol.Required("image_id"): _IMAGE_ID})
+@websocket_api.websocket_command(
+    {vol.Required("type"): "home_3d/image/delete", **_HOME, vol.Required("image_id"): _IMAGE_ID}
+)
 @require_editor
 @websocket_api.async_response
 async def ws_delete_image(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Remove a background image."""
-    if (data := _data(hass, connection, msg)) is None:
+    if (home := _home(hass, connection, msg)) is None:
         return
-    await data.async_delete_image(msg["image_id"])
+    await home.async_delete_image(msg["image_id"])
     connection.send_result(msg["id"])
 
 
-@websocket_api.websocket_command({vol.Required("type"): "home_3d/history/list"})
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/history/list", **_HOME})
 @require_editor
 @callback
 def ws_history_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """List the restore points (newest first)."""
-    if (data := _data(hass, connection, msg)) is None:
+    if (home := _home(hass, connection, msg)) is None:
         return
-    connection.send_result(msg["id"], {"snapshots": data.history()})
+    connection.send_result(msg["id"], {"snapshots": home.history()})
 
 
-@websocket_api.websocket_command({vol.Required("type"): "home_3d/history/snapshot"})
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/history/snapshot", **_HOME})
 @require_editor
 @websocket_api.async_response
 async def ws_history_snapshot(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Keep the current building as a restore point (e.g. before an import)."""
-    if (data := _data(hass, connection, msg)) is None:
+    if (home := _home(hass, connection, msg)) is None:
         return
-    await data.async_snapshot()
+    await home.async_snapshot()
     connection.send_result(msg["id"])
 
 
 @websocket_api.websocket_command(
-    {vol.Required("type"): "home_3d/history/restore", vol.Required("snapshot_id"): _IMAGE_ID}
+    {vol.Required("type"): "home_3d/history/restore", **_HOME, vol.Required("snapshot_id"): _IMAGE_ID}
 )
 @websocket_api.require_admin
 @require_editor
@@ -244,14 +302,13 @@ async def ws_history_restore(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Go back to a restore point; the current state becomes a restore point itself."""
-    if (data := _data(hass, connection, msg)) is None:
+    if (home := _home(hass, connection, msg)) is None:
         return
-    building = data.snapshot(msg["snapshot_id"])
+    building = home.snapshot(msg["snapshot_id"])
     if building is None:
         connection.send_error(msg["id"], "not_found", "Restore point not found")
         return
-    await data.async_snapshot()
-    revision = await data.async_save_building(complete(building))
+    revision = await home.async_restore(complete(building))
     connection.send_result(msg["id"], {"revision": revision})
 
 
@@ -532,7 +589,8 @@ BACKUP_FORMAT = "home3d-backup"
 @require_editor
 @callback
 def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """The plan and the packs for a backup file (the frontend adds the images one by one)."""
+    """Every home's plan and the packs for a backup file (the frontend adds the images one by one). The active
+    home's plan is also `building`, so a version from before several homes (#53) can still restore the file."""
     if (data := _data(hass, connection, msg)) is None:
         return
     connection.send_result(
@@ -541,6 +599,8 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
             "format": BACKUP_FORMAT,
             "version": 1,
             "building": data.building,
+            "homes": [{"id": h.id, "name": h.name, "building": h.building} for h in data.homes.values()],
+            "active": data.active_id,
             "packs": data.packs,
             # the household's own items (#13)
             "items": data.custom.items,
@@ -551,10 +611,20 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "home_3d/backup/import",
-        vol.Required("building"): dict,
+        vol.Optional("building"): dict,
         vol.Optional("packs", default=[]): [dict],
         # the custom items (#13); a backup from before them leaves the current ones as they are
         vol.Optional("items"): [dict],
+        # every home (#53): restored onto the home with the same id, or added; homes not in the backup stay.
+        # Without them (a backup from before #53) `building` replaces the plan of `home_id` (default: the active one)
+        vol.Optional("homes"): [
+            vol.Schema(
+                {vol.Required("id"): _HOME_ID, vol.Required("name"): _HOME_NAME, vol.Required("building"): dict},
+                extra=vol.ALLOW_EXTRA,
+            )
+        ],
+        vol.Optional("active"): _HOME_ID,
+        **_HOME,
     }
 )
 @websocket_api.require_admin
@@ -563,14 +633,21 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
 async def ws_backup_import(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Replace the plan and the packs from a backup. Packs are checked again: only ones whose content
+    """Replace the plans and the packs from a backup. Packs are checked again: only ones whose content
     validates come back; the rest are reported as skipped. The state before becomes a restore point."""
     if (data := _data(hass, connection, msg)) is None:
         return
     try:
-        building = BUILDING_SCHEMA(msg["building"])
+        homes = [{**h, "building": BUILDING_SCHEMA(h["building"])} for h in msg.get("homes", [])]
+        if not homes and "building" not in msg:
+            raise vol.Invalid("a backup has a building or homes")
+        # with homes the building at the top is the active home's again (for older versions): not needed
+        building = BUILDING_SCHEMA(msg["building"]) if not homes else None
     except vol.Invalid as err:
         connection.send_error(msg["id"], "invalid_format", str(err))
+        return
+    target = None
+    if not homes and (target := _home(hass, connection, msg)) is None:
         return
     packs: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
@@ -599,10 +676,30 @@ async def ws_backup_import(
                 items.append(verify_item(item))
             except PackError as err:
                 skipped.append({"id": str(item.get("id") or "?"), "reason": err.code})
-    revision = await data.async_restore(complete(building), packs)
+    await data.async_set_packs(packs)
+    if target is not None and building is not None:
+        await target.async_restore(complete(building))
+    for entry in homes:
+        if (home := data.homes.get(entry["id"])) is not None:
+            if home.name != entry["name"]:
+                await data.async_rename_home(home.id, entry["name"])
+            await home.async_restore(complete(entry["building"]))
+        else:
+            await data.async_create_home(entry["name"], complete(entry["building"]), home_id=entry["id"])
+    if msg.get("active") in data.homes:
+        await data.async_set_active(msg["active"])
     if items is not None:
         await data.custom.async_replace(items)
-    result: dict[str, Any] = {"revision": revision, "building": data.building, "packs": len(packs), "skipped": skipped}
+    shown = target or data.active
+    result: dict[str, Any] = {
+        "revision": shown.revision,
+        "building": shown.building,
+        "home_id": shown.id,
+        "homes": data.homes_list(),
+        "active": data.active_id,
+        "packs": len(packs),
+        "skipped": skipped,
+    }
     if items is not None:
         result["items"] = len(items)
     connection.send_result(msg["id"], result)
@@ -707,3 +804,102 @@ async def ws_editors_set(hass: HomeAssistant, connection: websocket_api.ActiveCo
         connection.send_error(msg["id"], err.code, err.detail)
         return
     await _send_editors(editors, connection, msg)
+
+
+# ---------------------------------------------------------------------------- homes (#53)
+
+
+def _send_homes(data: FloorplanData, connection: websocket_api.ActiveConnection, msg: dict, **extra: Any) -> None:
+    connection.send_result(msg["id"], {"homes": data.homes_list(), "active": data.active_id, **extra})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/homes/list"})
+@require_editor
+@callback
+def ws_homes_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Every home with its revision and size, and which one is active (editors: viewers see the active home)."""
+    if (data := _data(hass, connection, msg)) is not None:
+        _send_homes(data, connection, msg)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/homes/create", vol.Required("name"): _HOME_NAME})
+@require_editor
+@websocket_api.async_response
+async def ws_homes_create(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Add an empty home (it does not become active)."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    home = await data.async_create_home(msg["name"])
+    _send_homes(data, connection, msg, home=home.info())
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "home_3d/homes/rename", vol.Required("home_id"): _HOME_ID, vol.Required("name"): _HOME_NAME}
+)
+@require_editor
+@websocket_api.async_response
+async def ws_homes_rename(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Give a home another name."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    try:
+        await data.async_rename_home(msg["home_id"], msg["name"])
+    except HomesError as err:
+        connection.send_error(msg["id"], err.code, err.detail)
+        return
+    _send_homes(data, connection, msg)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_3d/homes/duplicate",
+        vol.Required("home_id"): _HOME_ID,
+        vol.Required("name"): _HOME_NAME,
+    }
+)
+@require_editor
+@websocket_api.async_response
+async def ws_homes_duplicate(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Add a home with a copy of another's plan and pictures."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    try:
+        home = await data.async_duplicate_home(msg["home_id"], msg["name"])
+    except HomesError as err:
+        connection.send_error(msg["id"], err.code, err.detail)
+        return
+    _send_homes(data, connection, msg, home=home.info())
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/homes/delete", vol.Required("home_id"): _HOME_ID})
+@require_editor
+@websocket_api.async_response
+async def ws_homes_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Remove a home with its plan, restore points and pictures; the last home is never removed."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    try:
+        await data.async_delete_home(msg["home_id"])
+    except HomesError as err:
+        connection.send_error(msg["id"], err.code, err.detail)
+        return
+    _send_homes(data, connection, msg)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/homes/set_active", vol.Required("home_id"): _HOME_ID})
+@require_editor
+@websocket_api.async_response
+async def ws_homes_set_active(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Make a home the active one: the panel, the cards without a home, voice, locating and time travel follow."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    try:
+        await data.async_set_active(msg["home_id"])
+    except HomesError as err:
+        connection.send_error(msg["id"], err.code, err.detail)
+        return
+    _send_homes(data, connection, msg)

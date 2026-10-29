@@ -8,6 +8,8 @@ export type ClockPos = "off" | "tl" | "tr" | "bl" | "br";
 
 export interface CardConfig {
   type: string;
+  /** Show this home (#53: its id) instead of the active one. */
+  home?: string;
   floor?: string;
   /** Start in this room (its id from the editor): a display for one room, e.g. for the kids. */
   room?: string;

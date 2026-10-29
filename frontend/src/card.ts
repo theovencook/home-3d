@@ -262,6 +262,8 @@ clearTimeout(this.cleanTimer);
   setConfig(config: CardConfig): void {
     if (config.height !== undefined && !(config.height > 100)) throw new Error("height must be a number of pixels above 100");
     this._config = config;
+    // a home of its own (#53), else the active home
+    this.data.setHome(config.home || undefined);
     this._floorId = undefined;
     this._walls = savedWalls();
     this._heat = null;
@@ -360,6 +362,7 @@ clearTimeout(this.cleanTimer);
           ? html`<fp3d-view3d
               .hass=${this.tt.hass(this.hass)}
               .canEdit=${this.data.canEdit}
+              .home=${this.data.homeId}
               .replay=${this.tt.session?.replay ?? null}
               .building=${b}
               .packs=${this.data.packs}

@@ -6,6 +6,7 @@ import { BuildingController } from "./building-controller.ts";
 import { loadEditor } from "./load-editor.ts";
 import "./components/room-panel.ts";
 import "./components/view3d.ts";
+import "./components/home-switcher.ts";
 import { languageReady, loadLanguage, translate, type I18nKey } from "./i18n.ts";
 import type { Building, StartView } from "./model.ts";
 import { controls, tokens } from "./styles.ts";
@@ -549,6 +550,7 @@ export class Floorplan3dPanel extends LitElement {
         ${this._clean && this._mode === "view" ? nothing : html`<header class="fp3d-header">
           <ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>
           <h1>Home 3D</h1>
+          ${this.canEdit && this.hass ? html`<fp3d-home-switcher .hass=${this.hass} .home=${this.data.homeId}></fp3d-home-switcher>` : nothing}
           ${this.canEdit
             ? html`<div class="fp3d-seg" role="tablist">
                 <button role="tab" aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
@@ -819,6 +821,7 @@ export class Floorplan3dPanel extends LitElement {
       class="fp3d-body"
       .hass=${this.hass}
       .canEdit=${this.data.canEdit}
+      .home=${this.data.homeId}
       .building=${b}
       .narrow=${this.narrow}
       .packs=${this.data.packs}
@@ -917,6 +920,7 @@ export class Floorplan3dPanel extends LitElement {
         <fp3d-view3d
           class="fp3d-body"
           .canEdit=${this.data.canEdit}
+          .home=${this.data.homeId}
           .pivotMark=${this._pinHover}
           .hass=${this.tt.hass(this.hass)}
           .replay=${this.tt.session?.replay ?? null}

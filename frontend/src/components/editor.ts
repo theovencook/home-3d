@@ -147,7 +147,7 @@ import { windowGetsWell } from "../geometry/wells.ts";
 import { controls, tokens } from "../styles.ts";
 import "./entity-picker.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
-import { fetchBackup, fetchPackUpdates, getEditors, restoreBackup, setEditors, updatePlacedItems, type BackupFile } from "../api.ts";
+import { fetchBackup, fetchPackUpdates, getEditors, restoreBackup, setEditors, updatePlacedItems, type BackupFile, type BackupHome } from "../api.ts";
 import { libraryUpdates } from "../pack-updates.ts";
 import { lastAdmin, pickEditor, type EditorUser } from "../editors.ts";
 import { load3d } from "../load3d.ts";
@@ -468,12 +468,15 @@ export class Fp3dEditor extends LitElement {
     _canUndo: { state: true },
     _canRedo: { state: true },
     canEdit: { attribute: false },
+    home: { attribute: false },
   };
 
   declare hass: HomeAssistant;
   declare building: Building;
   /** On the editors list (#7), from the panel's controller; unset: admins are. */
   declare canEdit: boolean | undefined;
+  /** The home being edited (#53): pictures, restore points and backups go there; unset: the active home. */
+  declare home: string | null | undefined;
   declare narrow: boolean;
   /** Imported furniture packs (from the panel's controller). */
   declare packs: FurniturePack[] | undefined;
@@ -1179,6 +1182,7 @@ export class Fp3dEditor extends LitElement {
               .walkable=${false}
         .pivotMark=${true}
         .hass=${this.hass}
+        .home=${this.home}
         .building=${this._doc3d}
         .floorId=${this.houseTool ? null : this._floorId}
         .roomId=${null}
@@ -5368,7 +5372,7 @@ export class Fp3dEditor extends LitElement {
   private async loadImage(imageId: string): Promise<void> {
     this.loadingImages.add(imageId);
     try {
-      const url = await fetchImage(this.hass, imageId);
+      const url = await fetchImage(this.hass, imageId, this.home);
       const img = new Image();
       img.src = url;
       await img.decode();
@@ -5391,7 +5395,7 @@ export class Fp3dEditor extends LitElement {
     canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     const data = canvas.toDataURL("image/jpeg", 0.85);
     const imageId = uid("img");
-    await storeImage(this.hass, imageId, data);
+    await storeImage(this.hass, imageId, data, this.home);
     this._images = { ...this._images, [imageId]: { url: data, aspect: canvas.height / canvas.width } };
     const b = this.floor?.rooms.length ? bounds(this.floor.rooms.flatMap((r) => r.points)) : null;
     this.updateFloor({ background: { image_id: imageId, x: b ? b.x0 : 0, z: b ? b.z0 : 0, width: b ? Math.max(4, round(b.x1 - b.x0)) : 12, opacity: 0.5 } });
@@ -7184,6 +7188,7 @@ export class Fp3dEditor extends LitElement {
               class="fp3d-wv-3d"
               ${ref((el) => el && this.setupWall3d(el as HTMLElement, room, v.edge))}
               .hass=${this.hass}
+              .home=${this.home}
               .building=${this._techMode ? this.techDoc3d() : this._doc3d}
               .floorId=${this._floorId}
               .roomId=${null}
@@ -12700,7 +12705,7 @@ export class Fp3dEditor extends LitElement {
     canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     const data = canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.85);
     const imageId = uid("pic");
-    await storeImage(this.hass, imageId, data);
+    await storeImage(this.hass, imageId, data, this.home);
     this._images = { ...this._images, [imageId]: { url: data, aspect: canvas.height / canvas.width } };
     const rules = this.furnitureItem?.id === f.id ? (this.furnitureItem.pictures ?? []) : (f.pictures ?? []);
     this.updateFurniture({ pictures: rules.map((x, j) => (j === index ? { ...x, image: imageId } : x)) });
@@ -13242,7 +13247,7 @@ export class Fp3dEditor extends LitElement {
   private async loadHistory(): Promise<void> {
     if (!this.hass) return;
     try {
-      this._history = await listHistory(this.hass);
+      this._history = await listHistory(this.hass, this.home);
     } catch {
       this._history = [];
     }
@@ -13250,27 +13255,39 @@ export class Fp3dEditor extends LitElement {
 
   private async restoreFromHistory(snap: Snapshot): Promise<void> {
     if (!this.hass || !confirm(this.t("backup_restore_confirm", { time: this.snapshotTime(snap) }))) return;
-    await restoreSnapshot(this.hass, snap.id);
+    await restoreSnapshot(this.hass, snap.id, this.home);
     this._notice = this.t("backup_restored");
     await this.loadHistory();
   }
 
-  /** Everything in one file: the plan, every stored picture and the packs (with their sources). */
+  /** The stored pictures a plan uses, fetched one by one (a missing one is left out). */
+  private async storedImages(building: Building, home?: string): Promise<Record<string, string>> {
+    const images: Record<string, string> = {};
+    for (const id of storedImageIds(building)) {
+      try {
+        images[id] = await fetchImage(this.hass, id, home);
+      } catch {
+        /* a missing picture is left out */
+      }
+    }
+    return images;
+  }
+
+  /** Everything in one file: every home's plan and pictures (#53) and the packs (with their sources). The active
+   * home's pictures sit at the top (`images`), as before several homes; every other home carries its own. */
   private async exportBackup(): Promise<void> {
     if (!this.hass) return;
     this._backupBusy = true;
     try {
       const base = await fetchBackup(this.hass);
-      const images: Record<string, string> = {};
-      for (const id of storedImageIds(base.building)) {
-        try {
-          images[id] = await fetchImage(this.hass, id);
-        } catch {
-          /* a missing picture is left out */
-        }
+      const images = await this.storedImages(base.building, base.active);
+      const homes = [];
+      for (const home of base.homes ?? []) {
+        homes.push(home.id === base.active ? home : { ...home, images: await this.storedImages(home.building, home.id) });
       }
       const day = new Date().toISOString().slice(0, 10);
-      download(`home-3d-${this.t("export_name_full")}-${day}.json`, JSON.stringify({ ...base, exported_at: new Date().toISOString(), images }));
+      const file = { ...base, ...(base.homes ? { homes } : {}), exported_at: new Date().toISOString(), images };
+      download(`home-3d-${this.t("export_name_full")}-${day}.json`, JSON.stringify(file));
     } catch (err) {
       alert(this.t("backup_import_error", { error: String((err as { message?: string })?.message ?? err) }));
     } finally {
@@ -13297,20 +13314,34 @@ export class Fp3dEditor extends LitElement {
     if (!confirm(this.t("backup_full_confirm"))) return;
     this._backupBusy = true;
     try {
-      const res = await restoreBackup(this.hass, data.building, data.packs ?? [], data.items);
+      // several homes (#53): one restore per home keeps each message small (a plan can be megabytes); a file from
+      // before them restores its one plan onto the home being edited
+      const homes = data.homes?.length ? data.homes : null;
+      const parts: { images: Record<string, string>; home?: BackupHome }[] = homes
+        ? homes.map((h) => ({ home: h, images: h.images ?? (h.id === data.active ? (data.images ?? {}) : {}) }))
+        : [{ images: data.images ?? {} }];
+      let res: Awaited<ReturnType<typeof restoreBackup>> | null = null;
       let pictures = 0;
-      for (const [id, picture] of Object.entries(data.images ?? {})) {
-        try {
-          await storeImage(this.hass, id, picture);
-          pictures++;
-        } catch {
-          /* an unreadable picture is skipped */
+      for (const [i, part] of parts.entries()) {
+        const one = part.home ? { homes: [{ id: part.home.id, name: part.home.name, building: part.home.building }], ...(i === parts.length - 1 && data.active ? { active: data.active } : {}) } : undefined;
+        res = await restoreBackup(this.hass, part.home ? null : data.building, data.packs ?? [], data.items, one, part.home ? undefined : this.home);
+        for (const [id, picture] of Object.entries(part.images)) {
+          try {
+            await storeImage(this.hass, id, picture, part.home?.id ?? res.home_id ?? this.home);
+            pictures++;
+          } catch {
+            /* an unreadable picture is skipped */
+          }
         }
       }
-      this.setDoc(normalizeBuilding(res.building));
-      this._floorId = res.building.floors[0]?.id ?? null;
-      this.selectItem("room", null);
-      this.fit();
+      if (!res) return;
+      // the editor shows its own home again; another one made active by the backup comes with the panel's reload
+      if (!res.home_id || !this.home || res.home_id === this.home) {
+        this.setDoc(normalizeBuilding(res.building));
+        this._floorId = res.building.floors[0]?.id ?? null;
+        this.selectItem("room", null);
+        this.fit();
+      }
       this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
       const skipped = res.skipped.length ? ` ${this.t("backup_full_skipped", { packs: res.skipped.map((s) => s.id).join(", ") })}` : "";
       this._notice = this.t("backup_full_restored", { packs: res.packs, pictures }) + skipped;
@@ -13344,7 +13375,7 @@ export class Fp3dEditor extends LitElement {
     }
     if (!confirm(this.t("backup_import_confirm"))) return;
     // the current plan stays available as a restore point
-    await takeSnapshot(this.hass).catch(() => undefined);
+    await takeSnapshot(this.hass, this.home).catch(() => undefined);
     this.setDoc(building);
     this._floorId = building.floors[0]?.id ?? null;
     this.selectItem("room", null);

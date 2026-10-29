@@ -214,6 +214,7 @@ export class Fp3dView3d extends LitElement {
     hass: { attribute: false },
     building: { attribute: false },
     canEdit: { attribute: false },
+    home: { attribute: false },
     floorId: { attribute: false },
     roomId: { attribute: false },
     wallMode: { attribute: false },
@@ -323,6 +324,8 @@ export class Fp3dView3d extends LitElement {
   declare building: Building | null;
   /** On the editors list (#7): may change the plan's settings from the view. Unset: admins may (a backend before #7). */
   declare canEdit: boolean | undefined;
+  /** The home shown (#53): its pictures are fetched and its settings saved there; unset: the active home. */
+  declare home: string | null | undefined;
   /** Time travel: the replayed moment (hass is then the past, read-only); null = live. */
   declare replay: ReplayInfo | null;
   /** Time travel: a tapped device's state at the replayed moment, next to the finger. */
@@ -3544,7 +3547,7 @@ export class Fp3dView3d extends LitElement {
     }
     if (this.pictureUrls.has(image)) return this.pictureUrls.get(image) ?? null;
     this.pictureUrls.set(image, null);
-    fetchImage(this.hass, image).then(
+    fetchImage(this.hass, image, this.home).then(
       (url) => {
         this.pictureUrls.set(image, url);
         this.syncDevices(true);
@@ -4895,7 +4898,7 @@ export class Fp3dView3d extends LitElement {
         const next = structuredClone(cur);
         mutate(next);
         this.building = next;
-        saveBuilding(this.hass, next, recipeHashes(next.recipes)).catch((err) => this.serviceFailed("home_3d/building/save", err));
+        saveBuilding(this.hass, next, recipeHashes(next.recipes), this.home).catch((err) => this.serviceFailed("home_3d/building/save", err));
       },
       callService: (domain, service, data) => (this.hass ? this.hass.callService(domain, service, data) : Promise.resolve()),
       newId: (prefix) => uid(prefix),
@@ -5110,7 +5113,7 @@ export class Fp3dView3d extends LitElement {
     const next = structuredClone(cur);
     Object.assign(next.settings, patch);
     this.building = next;
-    saveBuilding(this.hass, next, recipeHashes(next.recipes)).catch((err) => this.serviceFailed("home_3d/building/save", err));
+    saveBuilding(this.hass, next, recipeHashes(next.recipes), this.home).catch((err) => this.serviceFailed("home_3d/building/save", err));
   }
 
   /**

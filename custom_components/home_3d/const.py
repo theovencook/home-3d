@@ -11,6 +11,11 @@ STORAGE_KEY_BUILDING = f"{DOMAIN}.building"
 STORAGE_KEY_IMAGES = f"{DOMAIN}.images"
 STORAGE_KEY_HISTORY = f"{DOMAIN}.history"
 STORAGE_KEY_PACKS = f"{DOMAIN}.packs"
+# several homes (#53): the list of homes and which one is active; the first home (FIRST_HOME_ID) keeps the stores
+# above, so an install from before #53 needs no data moved; every other home has its own three stores
+STORAGE_KEY_HOMES = f"{DOMAIN}.homes"
+FIRST_HOME_ID = "home"
+DEFAULT_HOME_NAME = "Home"
 
 # restore points: at most this many, and a new one only after this pause since the last one
 HISTORY_MAX = 20
@@ -26,7 +31,10 @@ PANEL_TITLE = "Home 3D"
 CONF_SHOW_IN_SIDEBAR = "show_in_sidebar"
 DEFAULT_SHOW_IN_SIDEBAR = True
 
+# a home's plan changed: (home id, revision)
 SIGNAL_BUILDING_UPDATED = f"{DOMAIN}_building_updated"
+# the homes changed (one added, renamed, removed, or another one made active)
+SIGNAL_HOMES_UPDATED = f"{DOMAIN}_homes_updated"
 # a sentence for the open views (see voice.py) and the hass.data key of its broker
 SIGNAL_ASK = f"{DOMAIN}_ask"
 DATA_ASK = f"{DOMAIN}_ask"
