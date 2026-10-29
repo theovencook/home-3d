@@ -14,7 +14,6 @@ function setup() {
       id: "t.cars",
       name: "Cars",
       publisher: "t",
-      licensee: null,
       items: [
         { id: "van", name: { en: "Van" }, size: [2, 4.8, 1.8], vehicle: true, parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "body" }] },
         { id: "suv", name: { en: "SUV" }, size: [1.9, 4.6, 1.7], vehicle: true, parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "body" }] },

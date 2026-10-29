@@ -881,7 +881,6 @@
  "car_no_controls": "Ingen styrbare entiteter fundet på bilen (lås, klima, ladekontakt).",
  "holo_media_playing": "afspiller",
  "holo_media_paused": "på pause",
- "pack_licensed": "Licenseret til {name}",
  "pack_remove": "Fjern",
  "pack_remove_confirm": "Fjern pakken “{name}”? Dens møbler bliver i planen som simple kasser.",
  "pack_missing_item": "Møbel fra en fjernet pakke",

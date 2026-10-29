@@ -12774,7 +12774,7 @@ export class Fp3dEditor extends LitElement {
     await this.loadHistory();
   }
 
-  /** Everything in one file: the plan, every stored picture and the packs (with their signatures). */
+  /** Everything in one file: the plan, every stored picture and the packs (with their sources). */
   private async exportBackup(): Promise<void> {
     if (!this.hass) return;
     this._backupBusy = true;

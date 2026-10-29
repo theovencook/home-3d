@@ -7,7 +7,6 @@ const pack: FurniturePack = {
   id: "demo.pack",
   name: "Demo",
   publisher: "Demo",
-  licensee: null,
   items: [{ id: "tv", name: { de: "Fernseher groß", en: "Big TV" }, size: [2, 0.3, 1.2], electric: true, parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "dark" }] }],
 };
 
@@ -34,7 +33,6 @@ test("pack items stand on the floor, on furniture, on a wall or hang from the ce
       id: "p",
       name: "P",
       publisher: "P",
-      licensee: null,
       items: [
         { id: "island", name: { en: "Island" }, size: [2, 1, 0.9], surface: true, parts: [part] },
         { id: "coffee", name: { en: "Coffee" }, size: [0.3, 0.4, 0.4], mount: "surface", electric: true, parts: [part] },
@@ -86,7 +84,6 @@ test("a pack cooktop is found by its zones: thin discs on its top (they glow whi
     id: "test.kitchen",
     name: "Küche",
     publisher: "t",
-    licensee: null,
     items: [
       { id: "hob_80", name: "Kochfeld", size: [0.8, 0.62, 0.92], electric: true, parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 0.95, color: "white" }, zone, { ...zone, x: 0.2 }] },
       { id: "sideboard", name: "Sideboard", size: [1.6, 0.45, 0.8], parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "wood" }, zone, { ...zone, x: 0.2 }] },

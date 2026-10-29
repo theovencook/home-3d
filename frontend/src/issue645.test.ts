@@ -11,7 +11,6 @@ const PACK: FurniturePack = {
   id: "t.home",
   name: "Home",
   publisher: "t",
-  licensee: null,
   items: [
     {
       id: "robot_vacuum",

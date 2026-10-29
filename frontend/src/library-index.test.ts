@@ -66,7 +66,6 @@ test("the index lists built-in kinds and pack items, folds families into cards a
     id: "home3d.living",
     name: "Wohnzimmer",
     publisher: "Home 3D",
-    licensee: null,
     release: 4,
     items: [
       item("sofa_2", "2-seater sofa", "Sofa 2-Sitzer"),
@@ -118,7 +117,6 @@ test("an item for one side gets a mirrored twin for the other, explicit pairs be
     id: "home3d.living",
     name: "Wohnzimmer",
     publisher: "Home 3D",
-    licensee: null,
     items: [item("sofa_chaise", "Sofa with chaise (left)", "Sofa mit Récamiere links"), item("corner_left", "Corner sofa (left)", "Ecksofa links"), item("corner_right", "Corner sofa (right)", "Ecksofa rechts")],
   };
   const entries = buildIndex({ packs: [pack], basics: [], language: "de", basicName: (t) => t, basicNameEn: (t) => t, kindName: (k) => k, size: () => [1, 1, 1] });
@@ -140,4 +138,25 @@ test("sizes read as centimetres, big things as metres", () => {
   assert.equal(sizeText([2.1, 0.92, 0.85], "de"), "210 × 92 cm");
   assert.equal(sizeText([12, 3.5, 2], "de"), "12 × 3,5 m");
   assert.equal(sizeText([12, 3.5, 2], "en"), "12 × 3.5 m");
+});
+
+test("the items of a v2 pack (a folder with a licence) show in the library under their pack", () => {
+  const pack: FurniturePack = {
+    format: "home3d-pack",
+    version: 2,
+    id: "theovencook.core",
+    name: "Home 3D core",
+    publisher: "theovencook",
+    licence: "MIT",
+    release: 2,
+    items: [item("stool", "Bar stool", "Barhocker", { group: "seating" }), item("side_table", "Side table", "Beistelltisch", { group: "table" })],
+  };
+  const entries = buildIndex({ packs: [pack], basics: [], language: "en", basicName: (t) => t, basicNameEn: (t) => t, kindName: (k) => k, size: () => [1, 1, 1] });
+  assert.deepEqual(
+    entries.map((e) => [e.type, e.label, e.kind, e.packLabel]),
+    [
+      ["pack:theovencook.core:stool", "Bar stool", "seating", "Home 3D core"],
+      ["pack:theovencook.core:side_table", "Side table", "table", "Home 3D core"],
+    ],
+  );
 });

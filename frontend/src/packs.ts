@@ -1,5 +1,6 @@
-// Furniture from imported packs (see custom_components/home_3d/packs.py for the format). Pack
-// furniture has the type "pack:<pack id>:<item id>". Every bundle (main, editor, 3D) keeps its own
+// Furniture from imported packs (format: docs/packs.md, checked by custom_components/home_3d/packs.py). A pack id
+// is "publisher.pack", an item's full id "publisher.pack/item_id"; in a plan, pack furniture has the type
+// "pack:<pack id>:<item id>". Every bundle (main, editor, 3D) keeps its own
 // registry, filled with setPacks() from the packs the backend returns.
 
 import { builtinBase, techBase, ELECTRIC_FURNITURE, FURNITURE_SIZE, LIFT_SPOTS, outdoorGround, pointInPolygon, spotDepth, surfaceHeight, WALL_LAMP_Y, type Floor, type Furniture } from "./model.ts";
@@ -86,11 +87,15 @@ export interface PackItem {
 }
 
 export interface FurniturePack {
+  /** "home3d-pack" (v2, a folder) or "fp3dpack" (an old single file). */
+  format?: string;
+  version?: number;
+  /** "publisher.pack". */
   id: string;
   name: string;
   publisher: string;
-  /** Older pack files may name a licensee (shown on the extensions page). */
-  licensee: string | null;
+  /** The licence the pack declares (an SPDX id such as "MIT"); null or missing for old single-file packs. */
+  licence?: string | null;
   description?: string;
   /** Release number; a newer release of the same id replaces the installed one. */
   release?: number;
@@ -121,6 +126,11 @@ export function packsVersion(): number {
 
 export function packType(packId: string, itemId: string): string {
   return `pack:${packId}:${itemId}`;
+}
+
+/** The full id of a pack item, as packs name it: "publisher.pack/item_id". */
+export function packItemRef(packId: string, itemId: string): string {
+  return `${packId}/${itemId}`;
 }
 
 export function isPackType(type: string): boolean {

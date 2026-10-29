@@ -85,13 +85,19 @@ export interface ImportedPack {
   id: string;
   name: string;
   publisher: string;
-  licensee: string | null;
+  /** The licence the pack declares; null for an old single-file pack. */
+  licence: string | null;
   items: number;
 }
 
-/** Import a pack file; the backend checks its content (errors carry a code, e.g. "invalid_content"). */
+/** Import an old single-file pack; the backend checks its content (errors carry a code, e.g. "invalid_content"). */
 export async function importPack(hass: HomeAssistant, text: string): Promise<ImportedPack> {
   return hass.callWS<ImportedPack>({ type: "home_3d/packs/import", pack: text });
+}
+
+/** Import a v2 pack folder (path inside the folder -> file text); the backend checks every file. */
+export async function importPackFolder(hass: HomeAssistant, files: Record<string, string>): Promise<ImportedPack> {
+  return hass.callWS<ImportedPack>({ type: "home_3d/packs/import", files });
 }
 
 export async function removePack(hass: HomeAssistant, packId: string): Promise<void> {
