@@ -48,3 +48,10 @@ test("the room sensors are only watched for the heatmap or the room values; a ch
   assert.ok(ids.includes("weather.b"));
   assert.ok(!ids.includes("weather.a"));
 });
+
+test("the entity an item follows is watched, so it hides or comes back when that entity does (#15)", () => {
+  const { hass, b, openings, furniture } = setup();
+  b.floors[0].furniture = [{ id: "tree", type: "plant", x: 1, z: 1, rotation: 0, w: 1, d: 1, h: 2, variant: null, show_when: { entity: "switch.tree_lights" } }];
+  const ids = watchedEntities(hass, b, { openings, furniture, heat: false, warnings: [], weatherEntityId: null });
+  assert.ok(ids.includes("switch.tree_lights"));
+});

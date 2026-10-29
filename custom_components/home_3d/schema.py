@@ -225,6 +225,29 @@ _VEHICLE_TYPE_SCHEMA = vol.Schema(
 # the kinds of waste a bin can take (household.ts WASTE_KINDS)
 WASTE_KINDS = ["rest", "bio", "paper", "plastic", "glass", "garden", "recycling", "other"]
 
+# seasonal and conditional items (#15): while an entity is available and/or inside an interval of days ("MM-DD",
+# both included, over the new year when from > to) and/or times of day ("HH:MM", over midnight when start > end)
+_DAY = vol.Any(None, vol.Match(r"^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"))
+_TIME = vol.Any(None, vol.Match(r"^([01][0-9]|2[0-3]):[0-5][0-9]$"))
+SHOW_WHEN_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("intervals", default=[]): vol.All(
+            [
+                vol.Schema(
+                    {
+                        vol.Optional("from", default=None): _DAY,
+                        vol.Optional("to", default=None): _DAY,
+                        vol.Optional("start", default=None): _TIME,
+                        vol.Optional("end", default=None): _TIME,
+                    }
+                )
+            ],
+            vol.Length(max=12),
+        ),
+    }
+)
+
 FURNITURE_SCHEMA = vol.Schema(
     {
         vol.Required("id"): _ID,
@@ -358,6 +381,8 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("locked", default=None): vol.Any(None, bool),
         # a module's own data for this item
         vol.Optional("mods"): _MODULE_DATA,
+        # when it shows in 3D (None = always)
+        vol.Optional("show_when"): vol.Any(None, SHOW_WHEN_SCHEMA),
     },
     extra=vol.ALLOW_EXTRA,
 )

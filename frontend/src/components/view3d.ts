@@ -136,6 +136,7 @@ import type { HassEntity, HomeAssistant } from "../types.ts";
 import type { DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SoundSource, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 import { wallLayout } from "../camera-wall.ts";
 import { watchedEntities } from "../watched.ts";
+import { hasTimedRules, hiddenItems, shownBuilding } from "../show-when.ts";
 import { backdropCss } from "../backdrop.ts";
 import { loadVoice, micProbeAsked, micProbeDone, voicePipeline } from "../load-voice.ts";
 import { answerAsk, subscribeAsk, type Ask } from "../api.ts";
@@ -340,6 +341,9 @@ export class Fp3dView3d extends LitElement {
   declare clock: ClockPos | null;
   private declare _clockTick: number;
   private clockTimer: ReturnType<typeof setInterval> | undefined;
+  /** Seasonal and conditional items (#15): the plan the viewer shows (hidden items left out), what it was made of, and the minute tick. */
+  private shownPlan: { from: Building; hidden: string; plan: Building } | null = null;
+  private showTimer: ReturnType<typeof setTimeout> | undefined;
   /** Accent colour for the neon look ("#rrggbb"), null for the stock cyan. */
   declare accent: string | null;
   /** Show the energy values at the top (cards can switch them off). */
@@ -782,6 +786,8 @@ export class Fp3dView3d extends LitElement {
     this.unwatchAsk();
     clearInterval(this.clockTimer);
     this.clockTimer = undefined;
+    clearTimeout(this.showTimer);
+    this.showTimer = undefined;
     this.resizeObs?.disconnect();
     this.resizeObs = null;
     clearInterval(this.alertTimer);
@@ -903,7 +909,7 @@ export class Fp3dView3d extends LitElement {
       if (this.building) {
         this.shownStartView = JSON.stringify(this.startViewOf());
         this.viewer.setStartView(this.startViewOf());
-        this.viewer.setBuilding(this.building);
+        this.viewer.setBuilding(this.viewPlan(this.building));
       }
       this.scheduleThumbs();
       this.syncDevices(true);
@@ -956,7 +962,7 @@ export class Fp3dView3d extends LitElement {
       const startChanged = this.shownStartView !== undefined && this.shownStartView !== start;
       this.shownStartView = start;
       v.setStartView(this.startViewOf());
-      v.setBuilding(this.building);
+      v.setBuilding(this.viewPlan(this.building));
       if (startChanged && this.floorId === null) v.resetView();
     }
     if (changed.has("building") || changed.has("packs") || changed.has("petsOn")) void this.syncPets();
@@ -1019,9 +1025,20 @@ export class Fp3dView3d extends LitElement {
    */
   private syncDevices(force: boolean, timed = false): void {
     const v = this.viewer;
-    const b = this.building;
-    if (!v || !b || !this.hass) return;
+    const full = this.building;
+    if (!v || !full || !this.hass) return;
     const hass = this.hass;
+    // seasonal and conditional items (#15): one came or went – the viewer gets the plan without the hidden ones
+    const before = this.shownPlan?.plan;
+    const b = this.viewPlan(full);
+    if (b !== before) {
+      v.setBuilding(b);
+      force = true;
+    }
+    if (hasTimedRules(full) && !this.replay) this.showTimer ??= setTimeout(() => {
+      this.showTimer = undefined;
+      this.syncDevices(false);
+    }, 60050 - (Date.now() % 60000));
     if (force || !this.openingLinks || this.linkedRegistry !== hass.entities) {
       this.openingLinks = openingEntities(hass, b.floors);
       this.furnitureLinks = furnitureEntities(hass, b.floors);
@@ -4860,6 +4877,14 @@ export class Fp3dView3d extends LitElement {
             }}>⚙ ${t("view_settings")}</button>`
           : nothing}
       </div>`;
+  }
+
+  /** The plan as the 3D view shows it (#15): the same object while the same items are hidden, so the viewer does not rebuild. */
+  private viewPlan(b: Building): Building {
+    const now = new Date(this.replay?.t ?? Date.now());
+    const hidden = this.hass ? hiddenItems(b, this.hass.states, now).join("|") : "";
+    if (this.shownPlan?.from !== b || this.shownPlan.hidden !== hidden) this.shownPlan = { from: b, hidden, plan: hidden && this.hass ? shownBuilding(b, this.hass.states, now) : b };
+    return this.shownPlan.plan;
   }
 
   /** Whether this user may change the plan here (editors only, never while replaying). */

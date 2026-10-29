@@ -106,6 +106,8 @@ import {
   type Building,
   type Floor,
   type Furniture,
+  type ShowInterval,
+  type ShowWhen,
   type FurnitureType,
   type LampMount,
   type RoofSection,
@@ -11001,6 +11003,7 @@ export class Fp3dEditor extends LitElement {
         : nothing}
       ${isElectric(f.type) ? this.renderFurnitureLinks(f) : !NO_STATE_TYPES.has(f.type) ? html`<div class="fp3d-form fp3d-links">${this.renderStateLinks(f)}</div>` : nothing} ${GANG_TYPES.has(f.type) ? this.renderGangsForm(f) : nothing} ${TECH_TYPES.has(f.type) ? this.renderTechForm(f) : nothing} ${f.type === "parking" ? this.renderParkingForm(f) : nothing} ${f.type === "waste_bin" || f.type === "mailbox" ? this.renderHouseholdForm(f) : this.renderHouseholdExtras(f)}
       ${this.renderModuleFurnitureFields(f)}
+      ${this.renderShowWhen(f)}
       ${/^pack:[^:]+\.vehicles:/.test(f.type) && this.isEditor
         ? html`<section>
             <p class="fp3d-sub">${this.t("vehicle_to_spot_hint")}</p>
@@ -11591,6 +11594,40 @@ export class Fp3dEditor extends LitElement {
           : html`<p class="fp3d-sub fp3d-wide">${this.t("no_persons")}</p>`}
       </div>
       <p class="fp3d-sub">${this.t("presence_hint")}</p>
+    </details>`;
+  }
+
+  /** When the item shows (#15): while an entity is available and/or inside intervals of days and times of day (editors only). */
+  private renderShowWhen(f: Furniture) {
+    const rule: ShowWhen = f.show_when ?? {};
+    const list = rule.intervals ?? [];
+    const off = !this.isEditor;
+    const set = (patch: ShowWhen) => {
+      const next = { ...rule, ...patch };
+      this.updateFurniture({ show_when: (next.entity && next.entity !== "none") || next.intervals?.length ? next : null });
+    };
+    const setAt = (i: number, patch: ShowInterval) => set({ intervals: list.map((iv, j) => (j === i ? { ...iv, ...patch } : iv)) });
+    // days are kept without a year ("MM-DD"); the picker shows a leap year so 29 February can be picked
+    const field = (label: string, kind: "date" | "time", v: string | null | undefined, on: (v: string | null) => void) =>
+      html`<label class="fp3d-field"
+        >${label}
+        <input type=${kind} ?disabled=${off} .value=${v ? (kind === "date" ? `2028-${v}` : v) : ""} @change=${(e: Event) => {
+          const raw = (e.target as HTMLInputElement).value;
+          on(raw ? (kind === "date" ? raw.slice(5) : raw) : null);
+        }}
+      /></label>`;
+    return html`<details class="fp3d-section" ?open=${!!f.show_when}>
+      <summary>${this.t("show_when")}</summary>
+      <div class="fp3d-form">
+        ${this.entitySelect(this.t("show_when_entity"), rule.entity ?? null, undefined, this.entityOptions(() => true), (v) => set({ entity: v === "none" ? null : v }))}
+        ${list.map(
+          (iv, i) => html`${field(this.t("show_from"), "date", iv.from, (v) => setAt(i, { from: v }))} ${field(this.t("show_to"), "date", iv.to, (v) => setAt(i, { to: v }))}
+            ${field(this.t("show_start"), "time", iv.start, (v) => setAt(i, { start: v }))} ${field(this.t("show_end"), "time", iv.end, (v) => setAt(i, { end: v }))}
+            <button class="fp3d-pin" title=${this.t("delete")} ?disabled=${off} @click=${() => set({ intervals: list.filter((_, j) => j !== i) })}>✕</button>`,
+        )}
+      </div>
+      ${off || list.length >= 12 ? nothing : html`<div class="fp3d-actions"><button class="fp3d-btn" @click=${() => set({ intervals: [...list, {}] })}>+ ${this.t("show_add_interval")}</button></div>`}
+      <p class="fp3d-sub">${this.t("show_when_hint")}</p>
     </details>`;
   }
 

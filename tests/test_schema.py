@@ -321,3 +321,19 @@ def test_door_keeps_its_opening_angle() -> None:
     assert OPENING_SCHEMA({**door, "open_angle": 15})["open_angle"] == 15
     with pytest.raises(vol.Invalid):
         OPENING_SCHEMA({**door, "open_angle": 200})
+
+
+def test_item_keeps_when_it_shows() -> None:
+    """An item keeps its entity and intervals (#15); malformed days or times are refused."""
+    tree = {"id": "t1", "type": "plant", "x": 2, "z": 2, "rotation": 0, "w": 1, "d": 1, "h": 2, "variant": None}
+    rule = {"entity": "switch.tree", "intervals": [{"from": "12-01", "to": "01-06"}, {"start": "18:00", "end": "23:30"}]}
+    out = FURNITURE_SCHEMA({**tree, "show_when": rule})["show_when"]
+    assert out["entity"] == "switch.tree"
+    assert out["intervals"][0]["from"] == "12-01"
+    assert out["intervals"][1]["end"] == "23:30"
+    assert FURNITURE_SCHEMA({**tree, "show_when": None})["show_when"] is None
+    for bad in ({"from": "13-01", "to": "12-31"}, {"from": "12-32", "to": "12-31"}, {"start": "24:00", "end": "06:00"}, {"start": "7:00"}):
+        with pytest.raises(vol.Invalid):
+            FURNITURE_SCHEMA({**tree, "show_when": {"intervals": [bad]}})
+    with pytest.raises(vol.Invalid):
+        FURNITURE_SCHEMA({**tree, "show_when": {"intervals": [{"from": "01-01", "to": "01-02"}] * 25}})
