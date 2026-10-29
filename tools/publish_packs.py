@@ -6,8 +6,8 @@ Every pack folder in custom_components/home_3d/bundled_packs/ is checked first w
 Assistant uses on import (tools/fp3dpack.py), and a pack whose content differs from its copy in the checkout must have
 a higher `release` than that copy: the update check compares releases only. If any pack fails, nothing is written.
 Otherwise each pack folder is copied into the checkout (files that are gone from the pack are removed from its copy),
-and README.md, NOTICE and LICENSE at the top of the checkout are written again. Git data and folders of other packs in the checkout are left
-alone. Commit, push and tag the checkout yourself; see docs/packs.md ("Publishing the packs").
+and README.md, NOTICE and LICENSE at the top of the checkout are written again. Git data and folders of other packs
+in the checkout are left alone. Commit, push and tag the checkout yourself; see docs/packs.md ("Publishing the packs").
 """
 
 from __future__ import annotations

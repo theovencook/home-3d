@@ -882,7 +882,7 @@
  "holo_media_playing": "speelt",
  "holo_media_paused": "pauze",
  "pack_remove": "Verwijderen",
- "pack_remove_confirm": "Het pack “{name}” verwijderen? De meubels blijven als simpele blokken in het plan staan.",
+ "pack_remove_confirm": "Het pack “{name}” verwijderen? De meubels blijven in het plan staan en behouden hun uiterlijk.",
  "pack_missing_item": "Meubel van een verwijderd pack",
  "pack_error_not_a_pack": "Dit is geen meubelpackbestand.",
  "pack_error_invalid_content": "Het pack bevat ongeldige meubels: {detail}",

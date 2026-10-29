@@ -882,7 +882,7 @@
  "holo_media_playing": "hraje",
  "holo_media_paused": "pozastaveno",
  "pack_remove": "Odebrat",
- "pack_remove_confirm": "Odebrat balíček „{name}“? Jeho nábytek zůstane v plánu jako obyčejné kvádry.",
+ "pack_remove_confirm": "Odebrat balíček „{name}“? Jeho nábytek zůstane v plánu a zachová si vzhled.",
  "pack_missing_item": "Nábytek z odebraného balíčku",
  "pack_error_not_a_pack": "Toto není soubor balíčku nábytku.",
  "pack_error_invalid_content": "Balíček obsahuje neplatný nábytek: {detail}",

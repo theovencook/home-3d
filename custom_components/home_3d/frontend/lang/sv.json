@@ -882,7 +882,7 @@
  "holo_media_playing": "spelar",
  "holo_media_paused": "pausad",
  "pack_remove": "Ta bort",
- "pack_remove_confirm": "Ta bort paketet ”{name}”? Dess möbler blir kvar i planen som enkla lådor.",
+ "pack_remove_confirm": "Ta bort paketet ”{name}”? Dess möbler blir kvar i planen och behåller sitt utseende.",
  "pack_missing_item": "Möbel från ett borttaget paket",
  "pack_error_not_a_pack": "Det här är ingen möbelpaketfil.",
  "pack_error_invalid_content": "Paketet innehåller ogiltiga möbler: {detail}",

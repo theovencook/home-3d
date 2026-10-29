@@ -882,7 +882,7 @@
  "holo_media_playing": "sonando",
  "holo_media_paused": "pausa",
  "pack_remove": "Quitar",
- "pack_remove_confirm": "¿Quitar el pack «{name}»? Sus muebles se quedan en el plano como cajas simples.",
+ "pack_remove_confirm": "¿Quitar el pack «{name}»? Sus muebles se quedan en el plano y conservan su aspecto.",
  "pack_missing_item": "Mueble de un pack retirado",
  "pack_error_not_a_pack": "Esto no es un archivo de pack de muebles.",
  "pack_error_invalid_content": "El pack contiene muebles no válidos: {detail}",

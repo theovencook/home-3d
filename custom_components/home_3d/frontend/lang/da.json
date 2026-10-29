@@ -882,7 +882,7 @@
  "holo_media_playing": "afspiller",
  "holo_media_paused": "på pause",
  "pack_remove": "Fjern",
- "pack_remove_confirm": "Fjern pakken “{name}”? Dens møbler bliver i planen som simple kasser.",
+ "pack_remove_confirm": "Fjern pakken “{name}”? Dens møbler bliver i planen og beholder deres udseende.",
  "pack_missing_item": "Møbel fra en fjernet pakke",
  "pack_error_not_a_pack": "Dette er ikke en møbelpakkefil.",
  "pack_error_invalid_content": "Pakken indeholder ugyldige møbler: {detail}",
