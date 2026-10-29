@@ -5,7 +5,7 @@
 // classified here by their ids and names. Pure logic, no DOM: see library-index.test.ts.
 
 import { FURNITURE_GROUPS, LAMP_TYPES } from "./model.ts";
-import { isElectric, packItemName, packName, packType, type FurniturePack, type PackItem } from "./packs.ts";
+import { isElectric, packItemName, packName, packType, type FurniturePack, type PackItemInfo } from "./packs.ts";
 import { isVocabularyWord, KIND_WORDS, KINDS, ROOMS, synonymWords, type Kind, type Room } from "./vocabulary.ts";
 
 export { KINDS, ROOMS, type Kind, type Room };
@@ -217,18 +217,18 @@ const RULES: Rule[] = [
 const BATH_OWN = /\b(mirror|towel|laundry|washer|cabinet|shelf|plant|fan|rain shower)\b/;
 
 /** The id's words and the English name: what the rules read. */
-function wordsOf(item: PackItem): string {
+function wordsOf(item: PackItemInfo): string {
   return `${item.id.replace(/_/g, " ")} ${item.name.en ?? ""}`.toLowerCase();
 }
 
 /** The English name (else the id) without what the item comes with: "Bench with cushions" -> "bench". */
-function headOf(item: PackItem): string {
+function headOf(item: PackItemInfo): string {
   const name = (item.name.en ?? item.id.replace(/_/g, " ")).toLowerCase();
   return name.replace(/\s+(with|mit|and|und|plus|incl\.?|including)\b.*$/, "").replace(/\s*\(.*$/, "");
 }
 
 /** Where an item belongs: the pack's own fields, else its words, else its pack. */
-export function classify(packId: string, item: PackItem): { kind: Kind; rooms: Room[] } {
+export function classify(packId: string, item: PackItemInfo): { kind: Kind; rooms: Room[] } {
   const own = (item.group && (KINDS as readonly string[]).includes(item.group) ? item.group : null) as Kind | null;
   const ownRooms = item.room?.filter((r) => (ROOMS as readonly string[]).includes(r)) as Room[] | undefined;
   // the pack's own name after its publisher's prefix ("home3d.living" -> "living")
@@ -308,7 +308,7 @@ export function otherSideName(name: string): string {
 }
 
 /** An item's family key: its own field, else its id without the size suffix (sofa_3 → sofa, base_60 → base, cube_4x2 → cube). */
-export function familyOf(item: PackItem): string | null {
+export function familyOf(item: PackItemInfo): string | null {
   if (item.family) return item.family;
   const m = item.id.match(/^(.*?)_(\d+(?:x\d+)?|left|right|links|rechts)$/);
   return m ? m[1] : null;

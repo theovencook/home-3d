@@ -19,7 +19,7 @@ function filesIn(dir: string): string[] {
 }
 
 /** A bundled pack as the backend sends it, with the category folder of each item. */
-function readPack(folder: string): { pack: FurniturePack; folders: Map<string, string> } {
+function readPack(folder: string): { pack: Omit<FurniturePack, "items"> & { items: PackItem[] }; folders: Map<string, string> } {
   const meta = JSON.parse(readFileSync(join(folder, "pack.json"), "utf8"));
   const folders = new Map<string, string>();
   const items: PackItem[] = [];

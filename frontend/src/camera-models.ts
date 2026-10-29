@@ -3,14 +3,14 @@
 // reports. The shape is only its look (#779): the pin keeps the live view, the wedge and the actions.
 
 import { uid, type Floor, type Furniture } from "./model.ts";
-import { furnitureSize, packItem, packType, type FurniturePack, type PackItem } from "./packs.ts";
+import { furnitureSize, packInfo, packType, type FurniturePack, type PackItemInfo } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
 /** The tag that makes a pack item a camera model. */
 export const CAMERA_TAG = "security camera";
 
 /** Whether a pack item is the shape of a camera. */
-export function isCameraModel(item: Pick<PackItem, "tags">): boolean {
+export function isCameraModel(item: Pick<PackItemInfo, "tags">): boolean {
   return !!item.tags?.includes(CAMERA_TAG);
 }
 
@@ -59,7 +59,7 @@ export function setCameraLook(floor: Floor, entityId: string, type: string | nul
   floor.furniture = floor.furniture.filter((m) => m.look_of !== entityId);
   if (!pl || !type) return;
   const [w, d, h] = furnitureSize(type);
-  const item = packItem(type);
+  const item = packInfo(type);
   const look: Furniture = {
     id: uid("furniture"),
     type,

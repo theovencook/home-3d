@@ -3,7 +3,7 @@
 
 import { Box3, Color, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, OrthographicCamera, Scene, Vector3, WebGLRenderer } from "three";
 import type { Furniture } from "../model.ts";
-import { DRAFT_TYPE, packItem, setPacks, withPackItem, type FurniturePack, type PackItem } from "../packs.ts";
+import { DRAFT_TYPE, isPackType, packItem, setPacks, withPackItem, type FurniturePack, type PackItem } from "../packs.ts";
 import { pushFurniture, pushPackLamp } from "./furniture.ts";
 import { GeoBuffer, LineBuffer } from "./geo.ts";
 import { pushLampModel, type LampModel } from "./viewer3d.ts";
@@ -45,7 +45,8 @@ export function furniturePreview(item: PreviewItem, size = 180, packs?: Furnitur
   if (hit) return hit;
   if (packs) setPacks(packs);
   const url = picture(buildModel(item), size, new Vector3(0.9, 0.75, 1.3), brightness);
-  cache.set(key, url);
+  // a library item drawn before its recipe came (#44) is a plain box: not kept, the next call draws it properly
+  if (!isPackType(item.type) || packItem(item.type)) cache.set(key, url);
   return url;
 }
 
@@ -154,7 +155,7 @@ export function furnitureFront(item: PreviewItem, rotation: number, pxPerM = 160
   edges.geometry.dispose();
   (edges.material as LineBasicMaterial).dispose();
   const out = { url, x0, x1, y0, y1 };
-  frontCache.set(key, out);
+  if (!isPackType(item.type) || packItem(item.type)) frontCache.set(key, out);
   return out;
 }
 

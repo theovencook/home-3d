@@ -55,7 +55,7 @@ export class BuildingController implements ReactiveController {
   backendVersion: string | null = null;
   /** Unsaved edits from an earlier session, offered for restoring. */
   draft: Draft | null = null;
-  /** Imported furniture packs. */
+  /** The library (#44): the offered packs with an index of their items, loaded when an editor first needs it. */
   packs: FurniturePack[] = [];
   /** This user is on the editors list (#7): sees the Editor and Extensions and may change the plan. The backend
    * says so with the building; an older one that does not falls back to "admins edit". The backend refuses
@@ -63,6 +63,7 @@ export class BuildingController implements ReactiveController {
   canEdit = false;
   /** The packs were fetched once (what is installed is known). */
   packsLoaded = false;
+  private libraryLoading: Promise<void> | null = null;
 
   private readonly host: ReactiveControllerHost;
   private hass: HomeAssistant | null = null;
@@ -182,7 +183,9 @@ export class BuildingController implements ReactiveController {
 
   private async start(): Promise<void> {
     if (!this.hass) return;
-    await Promise.all([this.reloadPacks(), this.reload()]);
+    // the library is not loaded here: placed items draw from the plan's recipe copies (#2), so a view that only
+    // shows the plan (a wall tablet) never fetches it; the editor and the extensions page ask for it (#44)
+    await this.reload();
     if (!this.unsubscribe && this.connected) {
       try {
         this.unsubscribe = await subscribeBuilding(this.hass, (revision) => {
@@ -194,6 +197,13 @@ export class BuildingController implements ReactiveController {
         // older backend or connection loss: changes from elsewhere show after a reload
       }
     }
+  }
+
+  /** Load the library unless it is loaded or loading (the editor and the extensions page call it when they open). */
+  loadLibrary(): Promise<void> {
+    if (this.packsLoaded) return Promise.resolve();
+    this.libraryLoading ??= this.reloadPacks().finally(() => (this.libraryLoading = null));
+    return this.libraryLoading;
   }
 
   /** Load the furniture packs again (after an import or removal). */

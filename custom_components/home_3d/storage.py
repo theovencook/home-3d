@@ -29,7 +29,7 @@ from .const import (
     STORAGE_VERSION,
 )
 from .custom_items import CustomItems
-from .packs import load_bundled, with_bundled
+from .packs import library_pack, load_bundled, with_bundled
 from .recipes import with_recipes
 from .schema import BUILDING_SCHEMA, empty_building, image_ids
 
@@ -97,6 +97,8 @@ class FloorplanData:
         self.bundled: list[dict[str, Any]] = []
         # the household's own items (#13), offered as one more pack
         self.custom = CustomItems(hass)
+        # the light form of each offered pack (#44), kept while the pack (the same object) stays
+        self._library: dict[str, tuple[Any, dict[str, Any]]] = {}
 
     async def async_load(self) -> None:
         """Load both stores and drop images no floor refers to any more."""
@@ -179,6 +181,23 @@ class FloorplanData:
         """The bundled packs, the imported ones and the custom items, as the library offers them."""
         custom = self.custom.pack()
         return with_bundled(self.bundled, self.packs) + ([custom] if custom else [])
+
+    @property
+    def library(self) -> list[dict[str, Any]]:
+        """The offered packs as the library lists them (#44): an index of their items without the recipes. The
+        household's own items come whole: they are few, and the item editor works on them."""
+        listed: list[dict[str, Any]] = []
+        kept: dict[str, tuple[Any, dict[str, Any]]] = {}
+        for pack in self.offered_packs:
+            custom = bool(pack.get("custom"))
+            # the custom items' pack is made anew on every call: it stays the same while its item list does
+            key = pack["items"] if custom else pack
+            cached = self._library.get(pack["id"])
+            light = cached[1] if cached is not None and cached[0] is key else library_pack(pack, whole=custom)
+            kept[pack["id"]] = (key, light)
+            listed.append(light)
+        self._library = kept
+        return listed
 
     async def async_add_pack(self, payload: dict[str, Any], source: dict[str, Any] | None = None) -> None:
         """Keep an imported pack; a newer release of the same pack replaces the old one. Its source (the files of a

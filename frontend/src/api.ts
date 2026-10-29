@@ -79,9 +79,23 @@ export async function restoreSnapshot(hass: HomeAssistant, snapshotId: string): 
   return res.revision;
 }
 
+/** The library: every offered pack with an index of its items, without their recipes (#44). */
 export async function listPacks(hass: HomeAssistant): Promise<FurniturePack[]> {
   const res = await hass.callWS<{ packs: FurniturePack[] }>({ type: "home_3d/packs/list" });
   return res.packs;
+}
+
+export interface PackRecipes {
+  pack_id: string;
+  release: number;
+  /** The pack's hash, as the list gave it while these recipes are current. */
+  hash: string;
+  items: PackItem[];
+}
+
+/** The recipes of some items of a pack (#44); ids it does not have are left out. */
+export async function fetchPackRecipes(hass: HomeAssistant, packId: string, itemIds: string[]): Promise<PackRecipes> {
+  return hass.callWS<PackRecipes>({ type: "home_3d/packs/items", pack_id: packId, items: itemIds });
 }
 
 export interface ImportedPack {

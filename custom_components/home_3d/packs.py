@@ -259,6 +259,40 @@ def recipe_hash(item: dict[str, Any]) -> str:
     return "sha256:" + hashlib.sha256(text.encode()).hexdigest()
 
 
+# ---------------------------------------------------------------------------- the library's light form (#44)
+
+# An item without what draws it: enough to browse, search, filter and size it. The recipe (its parts and plan symbol)
+# comes on demand with `packs/items`; placed items draw from the plan's recipe copies (#2).
+RECIPE_FIELDS = ("parts", "symbol")
+# values the check fills in for a missing field: left out of the index, the frontend reads a missing field the same way
+_DEFAULTS = {"electric": False, "mount": "floor", "wall_y": 1.0, "surface": False, "vehicle": False, "hole": False}
+
+
+def item_index(item: dict[str, Any]) -> dict[str, Any]:
+    """An item as the library lists it: every field but its recipe, without the filled-in defaults."""
+    return {k: v for k, v in item.items() if k not in RECIPE_FIELDS and not (k in _DEFAULTS and _DEFAULTS[k] == v)}
+
+
+def pack_hash(pack: dict[str, Any]) -> str:
+    """A fingerprint of a pack's items: it changes whenever any recipe does (a browser keeps recipes by it)."""
+    digest = hashlib.sha256()
+    for item in pack.get("items", []):
+        digest.update(f"{item['id']}={recipe_hash(item)}\n".encode())
+    return "sha256:" + digest.hexdigest()
+
+
+def library_pack(pack: dict[str, Any], *, whole: bool = False) -> dict[str, Any]:
+    """A pack as `packs/list` sends it: its fields, its hash and the index of its items (`whole`: the items with
+    their recipes). The files it was imported from stay on the server (a backup carries them); where it came from
+    (#25) is kept."""
+    light = {k: v for k, v in pack.items() if k not in ("items", "source")}
+    origin = (pack.get("source") or {}).get("origin")
+    if origin is not None:
+        light["source"] = {"origin": origin}
+    items = pack.get("items", [])
+    return {**light, "hash": pack_hash(pack), "items": items if whole else [item_index(item) for item in items]}
+
+
 def _parse(path: str, text: str) -> Any:
     """One file of a pack folder as JSON; raises PackError naming the file."""
     try:

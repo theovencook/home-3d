@@ -2,12 +2,12 @@
 // bundle uses without the UI strings).
 
 import { translate } from "./i18n.ts";
-import { isPackType, packItem, packItemName } from "./packs.ts";
+import { isPackType, packInfo, packItemName } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
 /** Display name of any furniture type; furniture of a removed pack says so. */
 export function furnitureName(hass: HomeAssistant | undefined, type: string): string {
   if (!isPackType(type)) return translate(hass, `furn_${type}` as Parameters<typeof translate>[1]);
-  const item = packItem(type);
+  const item = packInfo(type);
   return item ? packItemName(item, hass?.language ?? navigator.language) : translate(hass, "pack_missing_item");
 }

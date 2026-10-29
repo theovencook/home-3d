@@ -150,6 +150,7 @@ import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
 import { fetchBackup, getEditors, restoreBackup, setEditors, type BackupFile } from "../api.ts";
 import { lastAdmin, pickEditor, type EditorUser } from "../editors.ts";
 import { load3d } from "../load3d.ts";
+import { ensureRecipes, packTypesIn } from "../pack-recipes.ts";
 import "./library.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
@@ -161,7 +162,7 @@ import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { effectFields } from "./effect-fields.ts";
 import { itemTempSource, roomLiveSensors, shadeKind, type LiveKind } from "../room-effects.ts";
-import { energyRole, furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
+import { energyRole, furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
 import { isPrinter } from "../printer.ts";
 
 /** Items that can be fixed against moving. */
@@ -361,7 +362,7 @@ function isEnergyDevice(type: string): boolean {
 
 /** A gas or water meter from a pack (its reading in m³ or litres, no power): family "meter" tagged gas or water. */
 function volumeMeter(type: string): boolean {
-  const item = packItem(type);
+  const item = packInfo(type);
   return item?.family === "meter" && (item.tags ?? []).some((t) => /^(gas|water|wasser)$/i.test(t));
 }
 
@@ -880,6 +881,26 @@ export class Fp3dEditor extends LitElement {
     }
     // the plan's recipe copies (#2): placed items keep their look whatever the installed packs say
     setPlanRecipes(this._doc?.recipes);
+    if (changed.has("_doc") || changed.has("packs")) this.fetchPlacedRecipes();
+  }
+
+  private recipesAsked = new Set<string>();
+
+  /**
+   * Library items in the plan that neither the plan's copies nor the fetched recipes draw yet (#44: a camera look, a
+   * parking spot's vehicle, an item placed a moment ago): fetch their recipes once, then draw them again. The next
+   * save brings the plan's copies of them anyway.
+   */
+  private fetchPlacedRecipes(): void {
+    if (!this.hass || !this._doc || !this.packs?.length) return;
+    const types = packTypesIn(this._doc).filter((t) => !packItem(t) && !this.recipesAsked.has(t));
+    if (!types.length) return;
+    for (const t of types) this.recipesAsked.add(t);
+    void ensureRecipes(this.hass, types).then(() => {
+      if (!types.some((t) => packItem(t))) return;
+      if (this._split || this._wallView) this._doc3d = { ...this.docWithDraft() };
+      this.requestUpdate();
+    });
   }
 
   protected firstUpdated(): void {
@@ -4107,7 +4128,7 @@ export class Fp3dEditor extends LitElement {
 
   /** The name of a furniture type: a pack item's own name, else the built-in type's. */
   private typeName(type: string): string {
-    const item = packItem(type);
+    const item = packInfo(type);
     return item ? packItemName(item, this.hass?.language ?? "en") : this.t(`furn_${type}` as I18nKey);
   }
 
@@ -4857,7 +4878,13 @@ export class Fp3dEditor extends LitElement {
     >`;
   }
 
+  /** Add a library item: its recipe first (#44), so it shows as itself at once. */
   private addFurniture(type: string, mirror = false): void {
+    if (!this.hass) return;
+    void ensureRecipes(this.hass, [type]).then(() => this.placeFurniture(type, mirror));
+  }
+
+  private placeFurniture(type: string, mirror: boolean): void {
     const floor = this.floor;
     if (!floor || !this.isEditor) return;
     const [w, d, h0] = furnitureSize(type);
@@ -6785,7 +6812,7 @@ export class Fp3dEditor extends LitElement {
     if (!missing.length) return;
     for (const f of missing) this.wallPicsAsked.add(this.wallPicKey(frame, f));
     try {
-      const mod = await load3d();
+      const [mod] = await Promise.all([load3d(), this.hass ? ensureRecipes(this.hass, missing.map((f) => f.type)) : undefined]);
       for (const f of missing) {
         const pic = mod.furnitureFront({ type: f.type, w: f.w, d: f.d, h: f.h, variant: f.variant, lamp: LAMP_MODEL[f.type] ?? null }, this.wallTurn(frame, f), 180, this.packs ?? [], 3.2);
         this.wallPics.set(this.wallPicKey(frame, f), pic);
@@ -7574,7 +7601,7 @@ export class Fp3dEditor extends LitElement {
   private wallRecent(): string[] {
     try {
       const list = JSON.parse(localStorage.getItem("home3d.wallRecent") ?? "[]");
-      return Array.isArray(list) ? list.filter((t): t is string => typeof t === "string" && (FURNITURE_TYPES.includes(t as never) || !!packItem(t))) : [];
+      return Array.isArray(list) ? list.filter((t): t is string => typeof t === "string" && (FURNITURE_TYPES.includes(t as never) || !!packInfo(t))) : [];
     } catch {
       return [];
     }
@@ -7650,7 +7677,7 @@ export class Fp3dEditor extends LitElement {
           ? html`<p class="fp3d-sub">${this.t("wv_gap_hint")}</p>`
           : nothing}
       ${cat ? html`<h4>${this.t(`wv_cat_${cat}` as I18nKey)}</h4>` : nothing}
-      ${recent.length ? html`<h4>${this.t("wv_recent")}</h4><div class="fp3d-wv-tiles">${recent.map((t) => item(t, packItem(t) ? packItemName(packItem(t)!, lang) : label(t)))}</div>` : nothing}
+      ${recent.length ? html`<h4>${this.t("wv_recent")}</h4><div class="fp3d-wv-tiles">${recent.map((t) => item(t, packInfo(t) ? packItemName(packInfo(t)!, lang) : label(t)))}</div>` : nothing}
       ${(cat || q || gap) && !hits.length ? html`<p class="fp3d-sub">${this.t(gap ? "wv_none_fits" : "furniture_search_none")}</p>` : nothing}
       <div class="fp3d-wv-tiles">${hits.slice(0, 40).map((it) => item(it.type, it.label))}</div>
     </aside>`;
@@ -7662,7 +7689,7 @@ export class Fp3dEditor extends LitElement {
     if (!missing.length) return;
     for (const t of missing) this.kitPicsAsked.add(t);
     try {
-      const mod = await load3d();
+      const [mod] = await Promise.all([load3d(), this.hass ? ensureRecipes(this.hass, missing) : undefined]);
       for (const t of missing) {
         const [w, d, h] = furnitureSize(t);
         this.kitPics.set(t, mod.furniturePreview({ type: t, w, d, h, variant: null, lamp: LAMP_MODEL[t] ?? null }, 120, this.packs ?? []));
@@ -12419,7 +12446,7 @@ export class Fp3dEditor extends LitElement {
     // the room's height against the vehicle's: a hint when it would not fit
     const floor = this.floor;
     const room = floor?.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
-    const item = f.vehicle ? packItem(f.vehicle) : undefined;
+    const item = f.vehicle ? packInfo(f.vehicle) : undefined;
     const carH = item ? item.size[2] * (f.scale ?? 1) : 0;
     const tooTall = !!room && !!floor && carH > floor.height + 1e-6;
     return html`<div class="fp3d-form fp3d-links">
@@ -12689,7 +12716,9 @@ export class Fp3dEditor extends LitElement {
 
   /** A card's picture: drawn by the 3D bundle like the hover preview, smaller. */
   private libraryThumb = async (entry: LibraryEntry): Promise<string | null> => {
-    const mod = await load3d();
+    const [mod] = await Promise.all([load3d(), this.hass ? ensureRecipes(this.hass, [entry.type]) : undefined]);
+    // no recipe (offline, the pack just went): no picture, so none is kept that shows a plain box
+    if (isPackType(entry.type) && !packItem(entry.type)) return null;
     const [w, d, h] = entry.size;
     return mod.furniturePreview({ type: entry.type, w, d, h, variant: null, lamp: LAMP_MODEL[entry.type] ?? null }, 96, this.packs ?? []);
   };
@@ -12727,7 +12756,7 @@ export class Fp3dEditor extends LitElement {
     const place = { left: Math.max(8, r.left - 196), top: Math.max(8, Math.min(window.innerHeight - 200, r.top + r.height / 2 - 95)) };
     this._preview = { type, url: null, ...place };
     try {
-      const mod = await load3d();
+      const [mod] = await Promise.all([load3d(), this.hass ? ensureRecipes(this.hass, [type]) : undefined]);
       const [w, d, h] = furnitureSize(type);
       const url = mod.furniturePreview({ type, w, d, h, variant: null, lamp: LAMP_MODEL[type] ?? null }, 180, this.packs ?? []);
       if (this._preview?.type === type) this._preview = { type, url, ...place };
