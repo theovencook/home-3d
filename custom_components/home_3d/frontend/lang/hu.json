@@ -881,7 +881,6 @@
  "car_no_controls": "Nincs kapcsolható entitás az autón (zár, klíma, töltéskapcsoló).",
  "holo_media_playing": "szól",
  "holo_media_paused": "szünet",
- "pack_licensed": "Licenc tulajdonosa: {name}",
  "pack_remove": "Eltávolítás",
  "pack_remove_confirm": "Eltávolítod a „{name}” csomagot? A bútorai egyszerű dobozokként a tervben maradnak.",
  "pack_missing_item": "Eltávolított csomag bútora",

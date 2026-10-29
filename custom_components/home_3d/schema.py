@@ -949,9 +949,7 @@ SETTINGS_SCHEMA = vol.Schema(
                                     ),
                                     # static (#17): stays at its spot in a pose instead of roaming
                                     vol.Optional("static", default=False): bool,
-                                    vol.Optional("pose", default=None): vol.Any(
-                                        None, vol.In(["sit", "lie", "curl"])
-                                    ),
+                                    vol.Optional("pose", default=None): vol.Any(None, vol.In(["sit", "lie", "curl"])),
                                     vol.Optional("x", default=None): vol.Any(
                                         None, vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000))
                                     ),

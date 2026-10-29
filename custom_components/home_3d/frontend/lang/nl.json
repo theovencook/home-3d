@@ -881,7 +881,6 @@
  "car_no_controls": "Geen schakelbare entiteiten op de auto gevonden (slot, klimaat, laadschakelaar).",
  "holo_media_playing": "speelt",
  "holo_media_paused": "pauze",
- "pack_licensed": "Licentie voor {name}",
  "pack_remove": "Verwijderen",
  "pack_remove_confirm": "Het pack “{name}” verwijderen? De meubels blijven als simpele blokken in het plan staan.",
  "pack_missing_item": "Meubel van een verwijderd pack",
