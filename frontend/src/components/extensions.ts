@@ -2,7 +2,18 @@
 // It lives in the editor bundle (loaded with it) and is shown to admins only.
 
 import { css, html, LitElement, nothing } from "lit";
-import { importPack, importPackFolder, installPackFromUrl, removePack } from "../api.ts";
+import {
+  checkPacks,
+  fetchPackUpdates,
+  importPack,
+  importPackFolder,
+  installPackFromUrl,
+  pinPack,
+  removePack,
+  rollbackPack,
+  setPackUpdateSettings,
+  updatePlacedItems,
+} from "../api.ts";
 import { COLOUR_ROLES } from "../colour-roles.ts";
 import { customItems } from "../custom-items.ts";
 import { KINDS, ROOMS } from "../library-index.ts";
@@ -12,6 +23,7 @@ import { DOG_BREEDS, PET_EYES, PET_FURS_OF, PET_POSES, type Building, type Pet }
 import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import { planPackFolders } from "../pack-folder.ts";
+import { askingFirst, nextCheck, updateSummary, type CheckFrequency, type ConfirmCode, type PackUpdateSettings, type PackUpdateStatus } from "../pack-updates.ts";
 import { packName, packOrigin, type FurniturePack } from "../packs.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -30,6 +42,9 @@ export class Extensions extends LitElement {
     _open: { state: true },
     _packUrl: { state: true },
     _installing: { state: true },
+    _updates: { state: true },
+    _checking: { state: true },
+    _updatesMsg: { state: true },
   };
 
   declare hass: HomeAssistant | undefined;
@@ -44,6 +59,10 @@ export class Extensions extends LitElement {
   /** The GitHub URL typed into the install field, and whether Home Assistant is fetching it (#25). */
   private declare _packUrl: string;
   private declare _installing: boolean;
+  /** Pack updates (#26): settings, pins, previous releases and the placed items with an update. */
+  private declare _updates: PackUpdateStatus | null;
+  private declare _checking: boolean;
+  private declare _updatesMsg: { ok: boolean; text: string } | null;
   /** Long lists opened by the viewer (the installed packs); closed, a bar sums them up. */
   private declare _open: Set<string>;
 
@@ -53,6 +72,9 @@ export class Extensions extends LitElement {
     this._itemsError = null;
     this._packUrl = "";
     this._installing = false;
+    this._updates = null;
+    this._checking = false;
+    this._updatesMsg = null;
     let open: string[] = [];
     try {
       open = JSON.parse(localStorage.getItem("home3d.ext.open") ?? "[]") as string[];
@@ -93,6 +115,180 @@ export class Extensions extends LitElement {
     </button>`;
   }
 
+  /** The update status is fetched when the page opens and again whenever the packs or the plan change. */
+  protected updated(changed: Map<string, unknown>): void {
+    const first = changed.has("hass") && !this._updates && !this.updatesLoading;
+    if (this.hass && (first || changed.has("packs") || changed.has("building"))) void this.loadUpdates();
+  }
+
+  private updatesLoading = false;
+
+  private async loadUpdates(): Promise<void> {
+    if (!this.hass) return;
+    this.updatesLoading = true;
+    try {
+      this._updates = await fetchPackUpdates(this.hass);
+    } catch {
+      // a backend before #26: no updates section
+      this._updates = null;
+    } finally {
+      this.updatesLoading = false;
+    }
+  }
+
+  /** Runs a change of the update state; its answer is the new status, a failure is shown in the section. */
+  private async updatesCall(fn: (hass: HomeAssistant) => Promise<PackUpdateStatus | void>, packsChanged = false): Promise<void> {
+    if (!this.hass) return;
+    try {
+      const status = await fn(this.hass);
+      if (status) this._updates = status;
+      if (packsChanged) this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
+    } catch (err) {
+      this._updatesMsg = { ok: false, text: this.packError(err) };
+    }
+  }
+
+  private setUpdateSettings(changes: Partial<PackUpdateSettings>): void {
+    void this.updatesCall((hass) => setPackUpdateSettings(hass, changes));
+  }
+
+  private async checkNow(): Promise<void> {
+    if (!this.hass || this._checking) return;
+    this._checking = true;
+    this._updatesMsg = null;
+    try {
+      const res = await checkPacks(this.hass);
+      this._updates = res;
+      this._updatesMsg = { ok: true, text: this.t("upd_checked", { n: res.installed.length }) };
+      if (res.installed.length) this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
+    } catch (err) {
+      this._updatesMsg = { ok: false, text: this.packError(err) };
+    } finally {
+      this._checking = false;
+    }
+  }
+
+  private updateItems(types?: string[]): void {
+    void this.updatesCall(async (hass) => {
+      await updatePlacedItems(hass, types);
+      // the plan changed in Home Assistant: the open views hear of the new revision and load it
+      return fetchPackUpdates(hass);
+    });
+  }
+
+  private time(seconds: number | Date | null | undefined): string {
+    if (seconds == null) return "–";
+    const date = seconds instanceof Date ? seconds : new Date(seconds * 1000);
+    return date.toLocaleString(this.hass?.language, { dateStyle: "medium", timeStyle: "short" });
+  }
+
+  /** Pack updates (#26): how often packs are checked, auto-update, and the placed items with an update. */
+  private renderUpdates() {
+    const status = this._updates;
+    if (!status) return nothing;
+    const editor = this.isEditor;
+    const settings = status.settings;
+    const sum = updateSummary(status);
+    const lang = this.hass?.language ?? "en";
+    const open = status.items.filter((i) => !i.pinned);
+    const next = nextCheck(settings);
+    return html`<section class="fp3d-ext-card fp3d-updates">
+      <h3>${this.t("upd_title")}</h3>
+      <p class="fp3d-sub">${this.t("upd_intro")}</p>
+      ${this.summaryBar("updates", [
+        { n: sum.updates, label: this.t("upd_sum_updates"), tone: "update" },
+        { n: sum.pinned, label: this.t("upd_sum_pinned"), tone: "missing" },
+      ])}
+      ${this._open.has("updates")
+        ? html`${status.items.length
+            ? status.items.map(
+                (i) => html`<div class="fp3d-pack">
+                  <div>
+                    <b>${i.name[lang.split("-")[0]] ?? i.name.en ?? Object.values(i.name)[0] ?? i.item}</b>
+                    <span class="fp3d-sub">${this.t("upd_item", { from: i.release, to: i.new_release, n: i.placed })}${i.pinned ? ` · ${this.t("upd_pinned")}` : ""}</span>
+                  </div>
+                  ${editor ? html`<button class="fp3d-btn" @click=${() => this.updateItems([i.type])}>${this.t("upd_update")}</button>` : nothing}
+                </div>`,
+              )
+            : html`<p class="fp3d-sub">${this.t("upd_none")}</p>`}
+          ${editor && open.length > 1 ? html`<button class="fp3d-btn fp3d-primary fp3d-pack-import" @click=${() => this.updateItems(open.map((i) => i.type))}>${this.t("upd_update_all", { n: open.length })}</button>` : nothing}`
+        : nothing}
+      <label class="fp3d-check">
+        <input type="checkbox" .checked=${settings.auto_update} ?disabled=${!editor} @change=${(e: Event) => this.setUpdateSettings({ auto_update: (e.target as HTMLInputElement).checked })} />
+        ${this.t("upd_auto")}
+      </label>
+      <div class="fp3d-upd-when">
+        <label>
+          ${this.t("upd_frequency")}
+          <select ?disabled=${!editor} @change=${(e: Event) => this.setUpdateSettings({ frequency: (e.target as HTMLSelectElement).value as CheckFrequency })}>
+            ${(["off", "daily", "weekly", "monthly"] as const).map((f) => html`<option value=${f} ?selected=${settings.frequency === f}>${this.t(`upd_freq_${f}`)}</option>`)}
+          </select>
+        </label>
+        ${settings.frequency === "weekly"
+          ? html`<label>
+              ${this.t("upd_weekday")}
+              <select ?disabled=${!editor} @change=${(e: Event) => this.setUpdateSettings({ weekday: Number((e.target as HTMLSelectElement).value) })}>
+                ${[0, 1, 2, 3, 4, 5, 6].map((d) => html`<option value=${d} ?selected=${settings.weekday === d}>${this.t(`upd_day_${d}` as I18nKey)}</option>`)}
+              </select>
+            </label>`
+          : nothing}
+        ${settings.frequency !== "off"
+          ? html`<label>
+              ${this.t("upd_time")}
+              <input type="time" .value=${settings.time} ?disabled=${!editor} @change=${(e: Event) => {
+                const value = (e.target as HTMLInputElement).value;
+                if (/^\d{2}:\d{2}$/.test(value)) this.setUpdateSettings({ time: value });
+              }} />
+            </label>`
+          : nothing}
+        ${editor
+          ? html`<button class="fp3d-btn" ?disabled=${this._checking} @click=${() => this.checkNow()}>${this._checking ? this.t("upd_checking") : this.t("upd_check_now")}</button>`
+          : nothing}
+      </div>
+      <p class="fp3d-sub">
+        ${this.t("upd_last_check", { time: this.time(status.last_check) })}${next ? html` · ${this.t("upd_next_check", { time: this.time(next) })}` : nothing}
+      </p>
+      ${this._updatesMsg ? html`<p class="fp3d-sub ${this._updatesMsg.ok ? "fp3d-notice" : "fp3d-pack-error"}">${this._updatesMsg.text}</p>` : nothing}
+    </section>`;
+  }
+
+  /** A pack's update state in the pack list: the last check, pin and roll back (#26). */
+  private renderPackUpdate(pack: FurniturePack) {
+    const state = this._updates?.packs.find((p) => p.id === pack.id);
+    if (!state || pack.custom) return nothing;
+    const name = packName(pack, this.hass?.language ?? "de");
+    return html`${state.error
+        ? html`<span class="fp3d-sub fp3d-pack-error">${this.t("pack_check_error", { detail: state.error })}</span>`
+        : state.latest_release != null
+          ? html`<span class="fp3d-sub">${this.t("pack_latest", { release: state.latest_release })}</span>`
+          : nothing}
+      ${this.isEditor
+        ? html`<span class="fp3d-pack-tools">
+            <label class="fp3d-check">
+              <input type="checkbox" .checked=${state.pinned} @change=${(e: Event) => {
+                const pinned = (e.target as HTMLInputElement).checked;
+                void this.updatesCall((hass) => pinPack(hass, pack.id, pinned));
+              }} />
+              ${this.t("pack_pin")}
+            </label>
+            ${state.previous_release != null
+              ? html`<button
+                  class="fp3d-btn"
+                  @click=${() => {
+                    if (!confirm(this.t("pack_rollback_confirm", { name, release: state.previous_release! }))) return;
+                    void this.updatesCall((hass) => rollbackPack(hass, pack.id), true);
+                  }}
+                >
+                  ${this.t("pack_rollback", { release: state.previous_release })}
+                </button>`
+              : nothing}
+          </span>`
+        : nothing}`;
+  }
+
+  /** The question for an import the backend asks about first (an older release, a pinned pack). */
+  private askConfirm = (code: ConfirmCode, message: string): boolean => confirm(this.t(`pack_confirm_${code}`, { detail: message }));
+
   private get isEditor(): boolean {
     return this.canEdit ?? this.hass?.user?.is_admin ?? false;
   }
@@ -123,7 +319,7 @@ export class Extensions extends LitElement {
           )}
         </div>
       </section>
-      ${this.renderFun(unlocked)} ${this.renderItems()} ${this.renderPacks()}
+      ${this.renderFun(unlocked)} ${this.renderItems()} ${this.renderUpdates()} ${this.renderPacks()}
     </div>`;
   }
 
@@ -302,7 +498,7 @@ export class Extensions extends LitElement {
             <b>${packName(p, this.hass?.language ?? "de")}</b>
             <span class="fp3d-sub">${p.features?.length ? this.t("pack_features", { publisher: p.publisher, n: p.features.length }) : this.t("pack_by", { publisher: p.publisher, n: p.items.length })}</span>
             ${p.licence || (p.release && p.release > 1) ? html`<span class="fp3d-sub">${[p.licence ? this.t("pack_licence", { licence: p.licence }) : "", p.release && p.release > 1 ? `v${p.release}` : ""].filter(Boolean).join(" · ")}</span>` : nothing}
-            ${this.renderOrigin(p)}
+            ${this.renderOrigin(p)} ${this.renderPackUpdate(p)}
             ${(p.features ?? []).some((f) => !knownFeature(f)) ? html`<span class="fp3d-sub fp3d-pack-error">${this.t("pack_needs_update")}</span>` : nothing}
           </div>
           ${p.bundled
@@ -354,7 +550,9 @@ export class Extensions extends LitElement {
     if (!url || !this.hass || this._installing) return;
     this._installing = true;
     try {
-      const res = await installPackFromUrl(this.hass, url);
+      const hass = this.hass;
+      const res = await askingFirst((confirm) => installPackFromUrl(hass, url, confirm), this.askConfirm);
+      if (!res) return;
       this._packUrl = "";
       this._packMsg = { ok: true, text: this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }) };
       this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
@@ -375,7 +573,10 @@ export class Extensions extends LitElement {
     const failed: string[] = [];
     for (const file of files) {
       try {
-        const res = await importPack(this.hass, await file.text());
+        const hass = this.hass;
+        const text = await file.text();
+        const res = await askingFirst((confirm) => importPack(hass, text, confirm), this.askConfirm);
+        if (!res) continue;
         done.push(this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }));
       } catch (err) {
         failed.push(`${file.name}: ${this.packError(err)}`);
@@ -409,7 +610,9 @@ export class Extensions extends LitElement {
       try {
         const files: Record<string, string> = {};
         for (const [rel, path] of plan.files) files[rel] = await byPath.get(path)!.text();
-        const res = await importPackFolder(this.hass, files);
+        const hass = this.hass;
+        const res = await askingFirst((confirm) => importPackFolder(hass, files, confirm), this.askConfirm);
+        if (!res) continue;
         done.push(this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }));
       } catch (err) {
         failed.push(`${label}: ${this.packError(err)}`);
@@ -599,6 +802,30 @@ export class Extensions extends LitElement {
       .fp3d-pack div {
         display: grid;
         gap: 2px;
+      }
+      .fp3d-pack-tools,
+      .fp3d-upd-when {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        align-items: center;
+      }
+      .fp3d-upd-when {
+        margin: 8px 0;
+      }
+      .fp3d-upd-when label {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .fp3d-upd-when select,
+      .fp3d-upd-when input {
+        padding: 6px 10px;
+        border-radius: 10px;
+        border: 1px solid var(--fp3d-line, rgba(120, 190, 255, 0.25));
+        background: rgba(4, 8, 18, 0.6);
+        color: inherit;
+        font: inherit;
       }
       .fp3d-pack-url {
         display: flex;

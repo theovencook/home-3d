@@ -102,7 +102,7 @@ The views draw a placed item from the plan's copy, so:
 
 - removing a pack leaves its placed items looking exactly as before;
 - a newer release of a pack does not change items already placed; an item placed again later takes the same copy.
-  Only updating the item replaces its copy.
+  Only updating the item replaces its copy (see [Updates](#updates)).
 
 Home Assistant fills the copies in: when an item is placed (on save), and once for plans saved before copies
 existed, from the packs installed then. A save that sends no copies (an older frontend, a script) keeps the copies the
@@ -385,7 +385,7 @@ folders. Branch names that contain a `/` cannot be told from the folder and are 
 | The repository (or branch, tag, folder) does not exist or is private | `not_found` |
 | GitHub cannot be reached, refuses (rate limit) or redirects elsewhere | `fetch_failed` |
 
-The installed pack keeps where it came from in `source.origin`, so an update check can compare commits:
+The installed pack keeps where it came from in `source.origin`, so an update check knows where to look:
 
 ```json
 {
@@ -407,6 +407,34 @@ The installed pack keeps where it came from in `source.origin`, so an update che
 when it was fetched. A backup carries the origin; on restore it is kept only when it still names GitHub.
 A pack installed this way whose id is one of the packs that ship with Home 3D follows the same rule as an imported
 copy (see below).
+
+## Updates
+
+Packs installed from GitHub are checked for new releases on a schedule set under **Extensions** → **Pack updates**:
+daily, weekly (on a chosen day) or monthly (on the 1st), at a chosen time, or never (default: daily at 04:00). An
+editor can also press **Check now**.
+
+- A check reads the commit the pack's `ref` points at. When it is the installed commit, nothing more is fetched.
+  Otherwise it reads only the pack's own `pack.json` there and compares its `release` with the installed one. A
+  repository with a folder per pack (like `theovencook/home-3d-packs`) changes when any pack in it changes, so the
+  release of the pack's folder decides, not the commit: **publishers raise `release` with every change to a pack**.
+- A higher release is installed into the library. Placed items keep their recipe copies: the **Pack updates**
+  section lists every placed item whose installed item differs from its copy, with the release it has and the one
+  it would get, and **Update** replaces its copy (**Update all** does every listed item).
+- With **Update placed items automatically** on (off by default), new releases are applied to placed items without
+  asking: after a check, an import or an install, when the setting is switched on, and when a Home 3D update brings
+  a newer bundled pack.
+- A check never installs an older release. Importing or installing an older release than the one the library offers
+  asks first (the backend refuses with `older_release`; the page asks and sends it again with `confirm: true`).
+- **Pin release** keeps a pack where it is: checks skip it, auto-update leaves its placed items alone (they can still
+  be updated one by one), and importing another release of it asks first (`pinned`).
+- **Roll back to v…** puts back the release the pack had before its last update, together with the placed items that
+  had taken that update, and pins the pack so the next check does not bring the update back. Unpin it to take
+  updates again. One step back is kept per pack.
+- The household's own items (`household.custom`) are never listed: placed copies follow every edit at once. Bundled
+  packs update with Home 3D itself; their placed items follow the auto-update setting like any other pack's.
+
+The settings, pins, previous releases and last check results are kept in `.storage/home_3d.pack_updates`.
 
 ## Packs that ship with Home 3D
 
@@ -457,7 +485,8 @@ a name, a library section (`group`), rooms, search words (`tags`) and an optiona
   library shows them as the pack `household.custom` ("Your own items"), so a placed one is the furniture type
   `pack:household.custom:<item id>`. No imported pack may use that pack id.
 - The item id comes from the name while the item is new and stays the same once it is saved, so placed copies follow
-  later changes. Removing an item leaves placed copies in the plan as plain boxes.
+  later changes: placed copies of an item change with it when it is saved, with no update to accept. Removing an
+  item leaves placed copies as they were last saved.
 - **Export** downloads the item as `<item id>.json`. **Import item files …** takes one or more such files (exported
   on another install, or written by hand); an item whose id is already used either replaces that item or is kept
   beside it under a free id. **Paste an item** takes the same JSON pasted in; an LLM's answer can be pasted as it

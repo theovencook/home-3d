@@ -2,6 +2,7 @@
 
 import type { EditorUser } from "./editors.ts";
 import type { Building } from "./model.ts";
+import type { PackUpdateSettings, PackUpdateStatus } from "./pack-updates.ts";
 import type { FurniturePack, PackItem, PackOrigin, PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
@@ -92,19 +93,53 @@ export interface ImportedPack {
   items: number;
 }
 
-/** Import an old single-file pack; the backend checks its content (errors carry a code, e.g. "invalid_content"). */
-export async function importPack(hass: HomeAssistant, text: string): Promise<ImportedPack> {
-  return hass.callWS<ImportedPack>({ type: "home_3d/packs/import", pack: text });
+/**
+ * Import an old single-file pack; the backend checks its content (errors carry a code, e.g. "invalid_content"). An
+ * older release than the installed one, or another release of a pinned pack, is refused ("older_release", "pinned")
+ * unless `confirm` (#26; see askingFirst in pack-updates.ts).
+ */
+export async function importPack(hass: HomeAssistant, text: string, confirm = false): Promise<ImportedPack> {
+  return hass.callWS<ImportedPack>({ type: "home_3d/packs/import", pack: text, ...(confirm ? { confirm } : {}) });
 }
 
 /** Import a v2 pack folder (path inside the folder -> file text); the backend checks every file. */
-export async function importPackFolder(hass: HomeAssistant, files: Record<string, string>): Promise<ImportedPack> {
-  return hass.callWS<ImportedPack>({ type: "home_3d/packs/import", files });
+export async function importPackFolder(hass: HomeAssistant, files: Record<string, string>, confirm = false): Promise<ImportedPack> {
+  return hass.callWS<ImportedPack>({ type: "home_3d/packs/import", files, ...(confirm ? { confirm } : {}) });
 }
 
 /** Install a pack from a GitHub URL (a repo, or a pack folder in one); Home Assistant fetches and checks it (#25). */
-export async function installPackFromUrl(hass: HomeAssistant, url: string): Promise<ImportedPack & { origin: PackOrigin }> {
-  return hass.callWS<ImportedPack & { origin: PackOrigin }>({ type: "home_3d/packs/install_url", url });
+export async function installPackFromUrl(hass: HomeAssistant, url: string, confirm = false): Promise<ImportedPack & { origin: PackOrigin }> {
+  return hass.callWS<ImportedPack & { origin: PackOrigin }>({ type: "home_3d/packs/install_url", url, ...(confirm ? { confirm } : {}) });
+}
+
+/** Pack updates (#26): the settings, the installed packs and the placed items with an update. */
+export function fetchPackUpdates(hass: HomeAssistant): Promise<PackUpdateStatus> {
+  return hass.callWS<PackUpdateStatus>({ type: "home_3d/packs/updates" });
+}
+
+/** Change the update settings (editors); switching auto-update on applies the waiting updates. */
+export function setPackUpdateSettings(hass: HomeAssistant, changes: Partial<PackUpdateSettings>): Promise<PackUpdateStatus> {
+  return hass.callWS<PackUpdateStatus>({ type: "home_3d/packs/updates/settings", ...changes });
+}
+
+/** Update placed items to the installed release of their pack (all with an update when no types are named). */
+export function updatePlacedItems(hass: HomeAssistant, types?: string[]): Promise<{ updated: string[]; revision: number }> {
+  return hass.callWS({ type: "home_3d/packs/update_items", ...(types ? { types } : {}) });
+}
+
+/** Check the packs installed from GitHub now; names the packs that got a new release. */
+export function checkPacks(hass: HomeAssistant): Promise<PackUpdateStatus & { installed: string[]; updated: string[] }> {
+  return hass.callWS({ type: "home_3d/packs/check" });
+}
+
+/** Pin a pack to its installed release, or unpin it. */
+export function pinPack(hass: HomeAssistant, packId: string, pinned: boolean): Promise<PackUpdateStatus> {
+  return hass.callWS<PackUpdateStatus>({ type: "home_3d/packs/pin", pack_id: packId, pinned });
+}
+
+/** Put back the release a pack had before its last update (the pack is pinned to it). */
+export function rollbackPack(hass: HomeAssistant, packId: string): Promise<PackUpdateStatus & { release: number }> {
+  return hass.callWS({ type: "home_3d/packs/rollback", pack_id: packId });
 }
 
 export async function removePack(hass: HomeAssistant, packId: string): Promise<void> {
