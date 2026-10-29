@@ -7,7 +7,6 @@ const pack: FurniturePack = {
   id: "demo.pack",
   name: "Demo",
   publisher: "Demo",
-  licensee: null,
   items: [
     {
       id: "chair",
