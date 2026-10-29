@@ -337,7 +337,8 @@ def test_door_keeps_its_opening_angle() -> None:
 
 def test_garage_door_keeps_its_style() -> None:
     """A garage door is sectional (the default) or up-and-over (#24)."""
-    garage = {"id": "o1", "room_id": "r1", "edge": 0, "offset": 1, "type": "garage", "width": 2.3, "sill": 0, "height": 2.1}
+    garage = {"id": "o1", "room_id": "r1", "edge": 0, "offset": 1, "type": "garage", "width": 2.3}
+    garage |= {"sill": 0, "height": 2.1}
     assert OPENING_SCHEMA({**garage, "style": "up_and_over"})["style"] == "up_and_over"
     assert OPENING_SCHEMA({**garage, "style": "sectional"})["style"] == "sectional"
     with pytest.raises(vol.Invalid):
