@@ -283,6 +283,13 @@ def _item_file(path: str, text: str) -> dict[str, Any]:
     return item
 
 
+def verify_item(data: Any) -> dict[str, Any]:
+    """One item on its own, as an item file holds it (an item made in the item editor, #13): the same checks as an
+    item in a pack folder; raises PackError."""
+    path = f"{data['id']}.json" if isinstance(data, dict) and isinstance(data.get("id"), str) else "item"
+    return _check(ITEM_SCHEMA, path, _no_links(path, data))
+
+
 def data_paths(paths: list[str]) -> list[str]:
     """The paths of a folder's files that are read (pack.json and the items, not the readme or licence text), after
     the checks on names and count; raises PackError. A fetch from GitHub runs it before downloading anything."""

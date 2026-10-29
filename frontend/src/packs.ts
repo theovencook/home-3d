@@ -114,6 +114,8 @@ export interface FurniturePack {
   imported_at?: number;
   /** Ships with Home 3D (custom_components/home_3d/bundled_packs): there offline, cannot be removed. */
   bundled?: boolean;
+  /** The household's own items, made in the item editor (#13; see custom-items.ts). */
+  custom?: boolean;
   /** What was imported: the files of a v2 folder (or an old pack's payload), and where it came from (#25). */
   source?: { files?: Record<string, string>; origin?: PackOrigin };
 }
@@ -204,6 +206,24 @@ export function getPlanRecipes(): Record<string, PlanRecipe> | undefined {
 /** Changes with every setPacks() and every new set of plan recipes, to notice new packs. */
 export function packsVersion(): number {
   return version;
+}
+
+/** The furniture type the item editor (#13) draws the item being edited as; no plan holds it. */
+export const DRAFT_TYPE = "pack:household.draft:item";
+
+/**
+ * Run `fn` while `type` stands for `item` (the item editor's live picture): the installed packs and their version
+ * stay as they are, so no view rebuilds for it.
+ */
+export function withPackItem<T>(type: string, item: PackItem, fn: () => T): T {
+  const before = items.get(type);
+  items.set(type, item);
+  try {
+    return fn();
+  } finally {
+    if (before) items.set(type, before);
+    else items.delete(type);
+  }
 }
 
 export function packType(packId: string, itemId: string): string {
