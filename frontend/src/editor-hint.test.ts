@@ -41,3 +41,8 @@ test("temporary states win over the tool hint (#96)", () => {
   assert.equal(hintKey({ ...base, tool: "pool", pipeMode: true, poolArea: true, pipeDraft: true }), "hint_pipe_next");
   assert.equal(hintKey({ ...base, tool: "pool", poolTech: true }), "hint_pool_tech");
 });
+
+test("an armed library card says what the next click places (#76)", () => {
+  assert.equal(hintKey({ ...base, placing: true, wallPick: true, selected: "furniture" }), "hint_place");
+  assert.equal(hintKey({ ...base, hasFloor: false, placing: true }), "hint_empty");
+});
