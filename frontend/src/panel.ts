@@ -550,7 +550,11 @@ export class Floorplan3dPanel extends LitElement {
         ${this._clean && this._mode === "view" ? nothing : html`<header class="fp3d-header">
           <ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>
           <h1>Home 3D</h1>
-          ${this.canEdit && this.hass ? html`<fp3d-home-switcher .hass=${this.hass} .home=${this.data.homeId}></fp3d-home-switcher>` : nothing}
+          ${this.canEdit && this.hass ? html`<fp3d-home-switcher
+                .hass=${this.hass}
+                .home=${this.data.homeId}
+                @home-reload=${() => void this.data.reopen()}
+              ></fp3d-home-switcher>` : nothing}
           ${this.canEdit
             ? html`<div class="fp3d-seg" role="tablist">
                 <button role="tab" aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
