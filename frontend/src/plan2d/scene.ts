@@ -229,6 +229,15 @@ export function fitView(box: { x0: number; z0: number; x1: number; z1: number },
   return { k, tx: (w - bw * k) / 2 - box.x0 * k, ty: (h - bh * k) / 2 - box.z0 * k };
 }
 
+/**
+ * Fit `box` into a view of `size` less what covers its edges: the floor pictures on the left, the stat chips at the
+ * top and the bottom bar (with time travel) below, so no part of the plan starts hidden (#91).
+ */
+export function fitInside(box: { x0: number; z0: number; x1: number; z1: number }, size: { w: number; h: number }, inset: { left: number; top: number; bottom: number }, pad = 28): PlanView {
+  const v = fitView(box, Math.max(1, size.w - inset.left), Math.max(1, size.h - inset.top - inset.bottom), pad);
+  return { k: v.k, tx: v.tx + inset.left, ty: v.ty + inset.top };
+}
+
 /** Zoom by `factor` around the screen point (px, py), which stays where it is. */
 export function zoomView(v: PlanView, factor: number, px: number, py: number): PlanView {
   const k = Math.min(MAX_K, Math.max(MIN_K, v.k * factor));

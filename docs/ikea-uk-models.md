@@ -1,6 +1,6 @@
 # IKEA UK models
 
-Models: 200. Done: 200 (408 items).
+Models: 310 (200 furniture, 110 accessories: A1 42, A2 22, A3 46). Done: 310 (547 items).
 
 The 200 IKEA UK models the `theovencook.ikea-uk` pack is built towards (tickets #30 to #34), so each batch picks
 from this list without overlap. Most come from the IKEA UK best-seller list as it stood on 29 October 2026
@@ -257,6 +257,8 @@ Best-seller rank: its place on the IKEA UK best-seller list on 29 October 2026; 
 
 ## Accessories
 
+Accessories (#106 to #108) are listed by batch below, so batches do not overlap. Skip anything already in the pack.
+
 ### Batch A1 - Lamps (#106)
 
 IKEA UK lamps beyond the furniture batches: table, desk and work lamps, floor lamps and uplighters, pendants, ceiling lamps and
@@ -310,6 +312,41 @@ IKEA PS 2014 shade heights, the STOCKHOLM 2025 shade heights, the BÄVE track he
 | 40 | LED lighting strip, 4 m | ORMANÄS | `lamp` | - | done, 1 item |
 | 41 | LED lighting strip with USB, 3 m | KABBLEKA | `lamp` | - | done, 1 item |
 | 42 | LED worktop/wardrobe lighting strip with sensor | SKYDRAG | `lamp` | - | done, 1 item |
+
+### Batch A2 - Mirrors and frames (#107)
+
+35 items for 21 models. Where a model already had items from batches 1 to 3 (LINDBYN, STOCKHOLM), only the missing sizes
+are new and they join the same `family`. RIBBA, MOSSEBO and a "MÅLA" picture ledge are not in the IKEA UK range any more,
+so the UK range stands in: RÖDALM, LOMVIKEN and SANNAHED frames, NORDHÄGG, MÅLERÅS, DAGGKAPRIFOL and MELLÖSA ledges.
+Depths marked "est." were not on any page we could read.
+
+| # | Model | IKEA name | Group | Items | Status |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Mirror, thin frame (more sizes) | LINDBYN | `deco` | 80x80, 40x130, round 50 | done, 3 items |
+| 2 | Frameless mirror | LETTAN | `deco` | 60x95, 80x95, 100x95 | done, 3 items |
+| 3 | Standing mirror, ash frame | IKORNNES | `deco` | 52x167 (depth est.) | done, 1 item |
+| 4 | Full-length mirror, framed | TOFTBYN | `deco` | 75x165 (depth est.) | done, 1 item |
+| 5 | Slim framed mirror | LILJETRÄD | `deco` | 30x115 | done, 1 item |
+| 6 | Small adhesive mirror | LÖNSÅS | `deco` | 21x30 | done, 1 item |
+| 7 | Plain mirror | LÄRBRO | `deco` | 48x120, 20x120, 48x60 (depth est.) | done, 3 items |
+| 8 | Wooden-frame mirror | DVÄRGSYREN | `deco` | 28x37, 40x50 | done, 2 items |
+| 9 | Round mirror, aluminium frame | EDSGARN | `deco` | 80 | done, 1 item |
+| 10 | Round mirror (more sizes) | STOCKHOLM | `deco` | 60 | done, 1 item |
+| 11 | Mirror tiles, set of 4 | BLODLÖNN | `deco` | 4 x 30x30 | done, 1 item |
+| 12 | Double-sided vanity mirror | TRENSUM | `deco` | 17x33 | done, 1 item |
+| 13 | Picture frame, slim | FISKBO | `frame` | 21x30, 30x40, 50x70 | done, 3 items |
+| 14 | Picture frame with mount | KNOPPÄNG | `frame` | 30x40, 50x70 | done, 2 items |
+| 15 | Aluminium picture frame | LOMVIKEN | `frame` | 50x70, 61x91 | done, 2 items |
+| 16 | Wood-effect picture frame | RÖDALM | `frame` | 30x40, 50x70 | done, 2 items |
+| 17 | Collage frame | RÖDALM | `frame` | 3 pictures (55x28), 9 pictures (46x61) | done, 2 items |
+| 18 | Deep box frame | SANNAHED | `frame` | 50x50 | done, 1 item |
+| 19 | Pine picture ledge | NORDHÄGG | `deco` | 100 (depth est.) | done, 1 item |
+| 20 | Bamboo picture ledge | MÅLERÅS | `deco` | 75 (depth est.) | done, 1 item |
+| 21 | Narrow picture ledge | DAGGKAPRIFOL | `deco` | 49 (depth est.) | done, 1 item |
+| 22 | Clear acrylic picture ledge | MELLÖSA | `deco` | 60 (depth est.) | done, 1 item |
+
+MOSSLANDA ledges (batch 2) and the PJÄTTERYD picture sets are already in. Photo frames carry a placeholder print (a mount
+board and a muted colour block), as the shop shows them.
 
 ### Batch A3 - Decor, textiles and storage (#108)
 

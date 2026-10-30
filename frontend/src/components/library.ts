@@ -18,6 +18,7 @@ const THUMB_PX = 96;
 const STORE_OPEN = "home3d.lib.open";
 const STORE_FAV = "home3d.lib.fav";
 const STORE_RECENT = "home3d.lib.recent";
+const STORE_RECENT_SHUT = "home3d.lib.recent.shut";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -57,6 +58,7 @@ export class FurnitureLibrary extends LitElement {
     _open: { state: true },
     _fav: { state: true },
     _recent: { state: true },
+    _recentShut: { state: true },
     _thumbs: { state: true },
     _shown: { state: true },
     _limits: { state: true },
@@ -85,6 +87,8 @@ export class FurnitureLibrary extends LitElement {
   private declare _open: Set<string>;
   private declare _fav: string[];
   private declare _recent: string[];
+  /** The Recently used block is folded away (#78). */
+  private declare _recentShut: boolean;
   private declare _thumbs: Map<string, string>;
   /** The variant whose picture a family card shows (its first key -> the variant's key), set by hovering a chip. */
   private declare _shown: Map<string, string>;
@@ -115,6 +119,7 @@ export class FurnitureLibrary extends LitElement {
     this._open = new Set(load<string[]>(STORE_OPEN, ["sofa", "lamp"]));
     this._fav = load<string[]>(STORE_FAV, []);
     this._recent = load<string[]>(STORE_RECENT, []);
+    this._recentShut = load<boolean>(STORE_RECENT_SHUT, false) === true;
     this._thumbs = new Map();
     this._shown = new Map();
     this._limits = new Map();
@@ -233,6 +238,11 @@ export class FurnitureLibrary extends LitElement {
     save(STORE_FAV, this._fav);
   }
 
+  private toggleRecent(): void {
+    this._recentShut = !this._recentShut;
+    save(STORE_RECENT_SHUT, this._recentShut);
+  }
+
   private toggleOpen(key: string): void {
     const next = new Set(this._open);
     if (next.has(key)) next.delete(key);
@@ -336,15 +346,17 @@ export class FurnitureLibrary extends LitElement {
   }
 
   private section(key: string, title: string, cards: LibraryCard[], searching: boolean, special: boolean) {
-    const open = searching || special || this._open.has(key);
+    // Recently used folds away on its own switch (and stays folded while searching); the other special blocks stay open
+    const recent = key === "recent";
+    const open = recent ? !this._recentShut : searching || special || this._open.has(key);
     const limit = this._limits.get(key) ?? PAGE;
     const shown = cards.slice(0, limit);
     const count = cards.reduce((n, c) => n + c.entries.length, 0);
-    return html`<button class="fp3d-lib-head fp3d-lib-toggle" aria-expanded=${open} @click=${() => (special ? undefined : this.toggleOpen(key))}>
-        <span class="fp3d-lib-caret">${special ? "" : open ? "▾" : "▸"}</span>${title} <span class="fp3d-lib-count">${count}</span>
+    return html`<button class="fp3d-lib-head fp3d-lib-toggle ${recent ? "fp3d-lib-recent" : ""}" aria-expanded=${open} @click=${() => (recent ? this.toggleRecent() : special ? undefined : this.toggleOpen(key))}>
+        <span class="fp3d-lib-caret">${special && !recent ? "" : open ? "▾" : "▸"}</span>${title} <span class="fp3d-lib-count">${count}</span>
       </button>
       ${open
-        ? html`<div class="fp3d-lib-grid">${repeat(shown, (c) => c.key, (c) => this.card(c))}</div>
+        ? html`<div class="fp3d-lib-grid ${recent ? "fp3d-lib-recent-grid" : ""}">${repeat(shown, (c) => c.key, (c) => this.card(c))}</div>
             ${cards.length > limit
               ? html`<button class="fp3d-lib-more" @click=${() => {
                   const next = new Map(this._limits);
@@ -506,6 +518,16 @@ export class FurnitureLibrary extends LitElement {
         border-bottom: 1px solid var(--fp3d-line);
         text-align: left;
         cursor: pointer;
+      }
+      .fp3d-lib-recent {
+        padding-left: 8px;
+        border-left: 3px solid var(--fp3d-accent);
+        background: color-mix(in srgb, var(--fp3d-accent) 10%, transparent);
+      }
+      .fp3d-lib-recent-grid {
+        padding: 6px 0 6px 8px;
+        border-left: 3px solid var(--fp3d-accent);
+        background: color-mix(in srgb, var(--fp3d-accent) 5%, transparent);
       }
       .fp3d-lib-caret {
         width: 10px;

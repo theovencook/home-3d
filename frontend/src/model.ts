@@ -844,6 +844,10 @@ export interface BuildingSettings {
   area_import?: boolean;
   /** Entities left out of the editor's "Unplaced entities" list on purpose (#83); unhidden from its Hidden view. */
   unplaced_hidden?: string[];
+  /** Home Assistant user ids whose panel opens in locked tablet mode (#92, wall displays). */
+  tablet_users?: string[];
+  /** Seconds without a touch before a tablet goes back to the whole house (unset: 120, 0: never; "?idle=" wins). */
+  tablet_idle?: number | null;
   /** The camera the house view opens with (3D view, card, kiosk); null = fitted from the front left. */
   start_view?: StartView | null;
   /** What a module keeps for the whole house (its settings), by the module's id. */

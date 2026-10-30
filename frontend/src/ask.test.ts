@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AskQueue, askConfirm, askText, setAskHost, tell, type AskRequest } from "./ask.ts";
+import { AskQueue, askConfirm, askText, setAskHost, showText, tell, type AskRequest } from "./ask.ts";
 
 const confirmQ = (text: string): AskRequest => ({ text, ok: "Delete", cancel: "Cancel", danger: true });
 
@@ -66,4 +66,20 @@ test("without a page to show the dialog on, a question is answered no and nothin
   assert.equal(await askConfirm("Delete?", { ok: "Delete", cancel: "Cancel" }), false);
   assert.equal(await askText("Name", "x", { ok: "OK", cancel: "Cancel" }), null);
   await tell("note", { ok: "OK" });
+});
+
+test("a long text is shown in the dialog to read and select, with an action and a close button (#84)", async () => {
+  const asked: AskRequest[] = [];
+  const answers = [
+    { ok: true, value: "" },
+    { ok: false, value: "" },
+  ];
+  setAskHost({ ask: async (req) => (asked.push(req), answers.shift()!) });
+  try {
+    assert.equal(await showText("Paste this into the chat", "Line 1\nLine 2", { ok: "Copy", cancel: "Close" }), true);
+    assert.equal(await showText("Paste this into the chat", "Line 1\nLine 2", { ok: "Copy", cancel: "Close" }), false);
+    assert.deepEqual(asked[0], { text: "Paste this into the chat", detail: "Line 1\nLine 2", ok: "Copy", cancel: "Close" });
+  } finally {
+    setAskHost(null);
+  }
 });
