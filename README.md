@@ -43,11 +43,9 @@ To keep Home 3D out of the sidebar for everyone, open the integration's **Config
 
 ![The same home in the Day look](docs/images/home3d-3d-day.png)
 
-![Energy flows running through the house](docs/images/home3d-3d-energy.png)
+![The house with energy flows on](docs/images/home3d-3d-energy.png)
 
 ![The 2D plan of the ground floor](docs/images/home3d-2d-plan.png)
-
-![Tablet mode, opened with ?tablet](docs/images/home3d-tablet.png)
 
 ### Your first 10 minutes
 
