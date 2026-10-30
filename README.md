@@ -37,9 +37,19 @@ Without HACS, copy `custom_components/home_3d` into your `config/custom_componen
 
 To keep Home 3D out of the sidebar for everyone, open the integration's **Configure** and turn off **Show in sidebar**. This takes effect at once, and the panel link (`/home_3d`) and the dashboard card keep working. Each user can also hide the entry in Home Assistant's own sidebar settings.
 
+### What it looks like
+
+![The sample home in 3D, neon look, floors pulled apart](docs/images/home3d-3d-neon.png)
+
+![The same home in the Day look](docs/images/home3d-3d-day.png)
+
+![The house with energy flows on](docs/images/home3d-3d-energy.png)
+
+![The 2D plan of the ground floor](docs/images/home3d-2d-plan.png)
+
 ### Your first 10 minutes
 
-A one-click sample home to explore is coming soon; until then you start from an empty plan.
+Want to look around before you build? Open the home menu at the top and choose **Load the sample home**. It adds a small demo house with placeholder devices, and your own plan is left alone.
 
 1. **Draw one floor (about 3 minutes).** Switch to **Editor**, then draw the outer walls and split them into rooms. Doors and windows go on the walls. Name each room. Press **?** to see the keyboard shortcuts and what the plan symbols mean.
 2. **Add furniture (2 minutes).** Open the library, search for a sofa, a lamp or a radiator, and drop it in a room. The search understands UK and US words. Select an item to move, turn or resize it.
