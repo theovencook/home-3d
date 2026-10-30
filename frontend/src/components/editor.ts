@@ -178,6 +178,7 @@ import "./library.ts";
 import "./rack-sheet.ts";
 import { rackLayout, readRackFrame } from "../rack-frame.ts";
 import { packGearOf, readRackGear, type RackSlot, type RackSpace } from "../rack.ts";
+import { rackElevation, type RackElevation } from "../rack-elevation.ts";
 import type { RackGearChoice } from "./rack-sheet.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
@@ -6460,6 +6461,40 @@ export class Fp3dEditor extends LitElement {
     return frame ? { frame, at: rackLayout(frame, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h)) } : null;
   }
 
+  /** The last front view drawn, by what it was drawn from: the item panel re-renders often, the drawing changes rarely (#115). */
+  private elevationMemo: { key: string; el: RackElevation | null } | null = null;
+
+  /** A placed rack's front view with its gear (#115); null for any other item. */
+  private rackElevationOf(f: Furniture): RackElevation | null {
+    const frame = readRackFrame(packItem(f.type) ?? packInfo(f.type));
+    if (!frame) return null;
+    const lang = this.hass?.language ?? "en";
+    const slots = f.rack?.slots ?? [];
+    const key = JSON.stringify([f.type, f.w, f.d, f.h, f.name ?? "", lang, slots, slots.map((s) => !!packItem(s.type))]);
+    if (this.elevationMemo?.key === key) return this.elevationMemo.el;
+    const el = rackElevation({
+      frame,
+      size: [f.w, f.d, f.h],
+      slots,
+      itemOf: packItem,
+      nameOf: (s, item) => s.name || packItemName(item, lang),
+      title: f.name || furnitureName(this.hass, f.type),
+    });
+    this.elevationMemo = { key, el };
+    return el;
+  }
+
+  /** The front view in the item panel, when the rack has gear (#115). */
+  private renderRackElevation(f: Furniture) {
+    const el = this.rackElevationOf(f);
+    if (!el || !el.pieces) return nothing;
+    const frame = readRackFrame(packItem(f.type) ?? packInfo(f.type));
+    return html`<details class="fp3d-rack-elev" open>
+      <summary>${this.t("rack_front_view")} · ${this.t("rack_used", { used: el.used, u: frame?.u ?? 0 })}</summary>
+      <div class="fp3d-rack-elev-box">${unsafeHTML(el.svg)}</div>
+    </details>`;
+  }
+
   /** Open the chosen rack's sheet. */
   private openRackSheet(): void {
     const f = this.furnitureItem;
@@ -12126,6 +12161,7 @@ export class Fp3dEditor extends LitElement {
             <div class="fp3d-actions"><button class="fp3d-btn fp3d-primary" @click=${() => this.vehicleToSpot(f)}>🅿 ${this.t("vehicle_to_spot")}</button></div>
           </section>`
         : nothing}
+      ${this.renderRackElevation(f)}
       ${!admin && this.rackOf(f) ? html`<div class="fp3d-actions"><button class="fp3d-btn" @click=${() => this.openRackSheet()}>▤ ${this.t("rack_edit")}</button></div>` : nothing}
       ${admin
         ? html`<div class="fp3d-actions">
@@ -15397,6 +15433,27 @@ export class Fp3dEditor extends LitElement {
       .fp3d-furn-sym .fp3d-sym-strong {
         stroke: var(--fp3d-accent);
         stroke-width: 2;
+      }
+      .fp3d-rack-elev summary {
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--fp3d-muted, #9aa6ba);
+        margin: 6px 0;
+      }
+      .fp3d-rack-elev-box {
+        max-height: 60vh;
+        overflow: auto;
+        border-radius: 8px;
+      }
+      .fp3d-rack-elev-box svg {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 0 auto;
+      }
+      .fp3d-furn-sym .fp3d-sym-swing {
+        stroke-dasharray: 4 3;
+        opacity: 0.8;
       }
       .fp3d-out polygon {
         fill: rgba(91, 124, 255, 0.06);

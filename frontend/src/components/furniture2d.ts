@@ -4,6 +4,8 @@
 import { nothing, svg, type SVGTemplateResult } from "lit";
 import { packItem, type PackItem } from "../packs.ts";
 import { stairsULayout } from "../model.ts";
+import { readRackFrame } from "../rack-frame.ts";
+import { rackDoorSwing } from "../rack-elevation.ts";
 
 type Part = SVGTemplateResult;
 
@@ -251,8 +253,17 @@ export function furnitureSymbol(type: string, w: number, d: number): Part[] | ty
   }
 }
 
-/** Plan symbol of a pack item: its own symbol, or its parts seen from above (except the full-size base). */
+/** Plan symbol of a pack item: its own symbol, or its parts seen from above (except the full-size base); a rack cabinet adds its door's swing (#115). */
 function packSymbol(item: PackItem, w: number, d: number): Part[] {
+  const own = ownSymbol(item, w, d);
+  const frame = item.rack_frame ? readRackFrame(item) : null;
+  const swing = frame && rackDoorSwing(frame, w, d);
+  if (!swing) return own;
+  const [[x0, z0], [x1, z1]] = swing.leaf;
+  return [...own, line(x0, z0, x1, z1, "fp3d-sym-swing"), svg`<path class="fp3d-sym-swing" d=${swing.arc} />`];
+}
+
+function ownSymbol(item: PackItem, w: number, d: number): Part[] {
   if (item.symbol?.length) {
     return item.symbol.map((s) =>
       s.shape === "rect"

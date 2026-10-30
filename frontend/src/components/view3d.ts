@@ -1,6 +1,7 @@
 // Lit wrapper around the lazily loaded 3D viewer.
 
 import { css, html, LitElement, nothing, svg, unsafeCSS, type PropertyValues } from "lit";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { linesField } from "./lines-field.ts";
 import { actionIndex, gestureAction, runItemAction, TapSequencer, type ActionOwner, type ItemAction } from "../item-actions.ts";
 import { carState, type CarState, heatSensorOn, roomClimateValue,
@@ -108,10 +109,14 @@ import { shownLook } from "../ha-theme.ts";
 import { lightChrome } from "../scheme.ts";
 import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
 import { furnitureName } from "../furniture-names.ts";
+import type { RackDraw, RackElevation } from "../rack-elevation.ts";
+
+/** A rack's front view as the sheet shows it: the drawing and the rack's name (#115). */
+type RackView = RackElevation & { name: string };
 import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { holdTarget } from "../hold.ts";
-import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion, recipeHashes } from "../packs.ts";
+import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packName, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
@@ -286,6 +291,7 @@ export class Fp3dView3d extends LitElement {
     _central: { state: true },
     _sheet: { state: true },
     _settingsOpen: { state: true },
+    _rackView: { state: true },
     _note: { state: true },
     _thumbsCompact: { state: true },
     _armed: { state: true },
@@ -574,6 +580,10 @@ export class Fp3dView3d extends LitElement {
   private declare _sheet: { id: string; floorId: string | null; roomId: string | null } | null;
   /** The ⚙ settings over the view are open. */
   private declare _settingsOpen: boolean;
+  /** The rack whose front view is open (#115; its furniture id and its drawing, from a tap in the 2D plan). */
+  private declare _rackView: { id: string; draw: RackDraw } | null;
+  /** That front view, by what it was drawn from: built on the tap, not per render (#115). */
+  private rackViewMemo: { key: string; draw: RackDraw; view: RackView } | null = null;
   /** An own action asking first (#6): its question, and the answer to give. */
   /** Items with own tap, hold or double-tap actions, by the id a tap on them reports (#6). */
   private actionOwners = new Map<string, ActionOwner>();
@@ -724,6 +734,7 @@ export class Fp3dView3d extends LitElement {
     this._central = false;
     this._sheet = null;
     this._settingsOpen = false;
+    this._rackView = null;
     this._note = null;
     try {
       this.thumbsSaved = localStorage.getItem("home3d.thumbs_compact");
@@ -945,6 +956,7 @@ export class Fp3dView3d extends LitElement {
           floor.rooms.length === 1 ? translate(this.hass, "floor_rooms_one") : translate(this.hass, "floor_rooms", { n: floor.rooms.length }),
         onBack: () => this.fire("back", {}),
         onDeviceTap: (id, x, y) => this.onDeviceTap(id, x, y),
+        onRackTap: (id, draw) => this.showRackView(id, draw),
         onDeviceHold: (id, x, y) => this.onDeviceHold(id, x, y),
         onDeviceDoubleTap: (id) => !this.ro && this.taps.doubleTap(id),
         onRoomDoubleTap: (floorId, roomId) => this.onRoomDoubleTap(floorId, roomId),
@@ -5164,6 +5176,49 @@ export class Fp3dView3d extends LitElement {
     this._settingsOpen = true;
   }
 
+  // ------------------------------------------------------------------------------------------ racks (#115)
+
+  /** Show a rack's front view (a tap on it in the 2D plan; the 2D bundle draws it, so the main bundle stays small). */
+  private showRackView(furnitureId: string, draw: RackDraw): void {
+    this._rackView = { id: furnitureId, draw };
+  }
+
+  private closeRackView(): void {
+    this._rackView = null;
+  }
+
+  /** The open rack's front view; null when none is open or the rack is gone. Drawn once per rack, name and language. */
+  private rackViewOf(): RackView | null {
+    const open = this._rackView;
+    const f = open ? this.building?.floors.flatMap((fl) => fl.furniture).find((o) => o.id === open.id) : undefined;
+    if (!open || !f) return null;
+    const lang = this.hass?.language ?? "en";
+    const name = f.name || furnitureName(this.hass, f.type);
+    const key = JSON.stringify([open.id, name, lang]);
+    if (this.rackViewMemo?.key !== key || this.rackViewMemo.draw !== open.draw) {
+      const el = open.draw((s, item) => s.name || packItemName(item, lang), name);
+      this.rackViewMemo = { key, draw: open.draw, view: { ...el, name } };
+    }
+    return this.rackViewMemo.view;
+  }
+
+  /** The rack's front view over the plan: readable on a wall tablet, scrolls when the rack is tall. */
+  private renderRackView() {
+    const hass = this.hass;
+    const view = hass ? this.rackViewOf() : null;
+    if (!hass || !view) return nothing;
+    const close = () => this.closeRackView();
+    return html`<div class="fp3d-sheet-backdrop" @click=${close}></div>
+      <div class="fp3d-sheet fp3d-rack-view" role="dialog" aria-label=${view.name}>
+        <header>
+          <b>▤ ${view.name}</b>
+          <button class="fp3d-sheet-x" aria-label=${translate(hass, "close")} @click=${close}>✕</button>
+        </header>
+        <p class="fp3d-rack-view-used">${translate(hass, "rack_front_view")} · ${translate(hass, "rack_used", { used: view.used, u: view.u })}</p>
+        <div class="fp3d-rack-view-box">${unsafeHTML(view.svg)}</div>
+      </div>`;
+  }
+
   private renderSettings() {
     const hass = this.hass;
     const b = this.building;
@@ -5885,7 +5940,7 @@ export class Fp3dView3d extends LitElement {
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderWires()} ${this.clean ? nothing : this.renderLegend()}
-      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderSettings()} ${this.renderNote()}
+      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderSettings()} ${this.renderRackView()} ${this.renderNote()}
       ${this.clean ? nothing : this.renderProHint()} ${this.renderMenu()} ${this.renderEye()}
       ${this.renderMic()}
       ${this.pivotMark && !this._walk ? html`<span class="fp3d-pivot" aria-hidden="true"></span>` : nothing}
@@ -7059,6 +7114,25 @@ export class Fp3dView3d extends LitElement {
         box-shadow: var(--fp3d-shadow);
         backdrop-filter: blur(12px);
         z-index: 8;
+      }
+      .fp3d-sheet.fp3d-rack-view {
+        width: auto;
+        max-width: calc(100% - 24px);
+        min-width: min(320px, calc(100% - 24px));
+      }
+      .fp3d-rack-view-used {
+        margin: 0;
+        font-size: 14px;
+        opacity: 0.8;
+      }
+      .fp3d-rack-view-box {
+        overflow: auto;
+        min-height: 0;
+      }
+      .fp3d-rack-view-box svg {
+        display: block;
+        margin: 0 auto;
+        max-width: none;
       }
       .fp3d-sheet header {
         display: flex;
