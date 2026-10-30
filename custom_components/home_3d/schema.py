@@ -865,6 +865,10 @@ SETTINGS_SCHEMA = vol.Schema(
         vol.Optional("unplaced_hidden", default=list): vol.All(
             [vol.All(str, vol.Length(max=255))], vol.Length(max=2000)
         ),
+        # Home Assistant users whose panel opens in locked tablet mode (#92, wall displays) and the seconds without a
+        # touch before it goes back to the whole house (None = the frontend default, 0 = never)
+        vol.Optional("tablet_users", default=list): vol.All([vol.All(str, vol.Length(max=64))], vol.Length(max=200)),
+        vol.Optional("tablet_idle", default=None): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=0, max=86400))),
         # stations and playlists for the speakers' quick menu (media_player.play_media type + content id)
         vol.Optional("media_presets", default=list): vol.All(
             [

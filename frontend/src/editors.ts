@@ -19,3 +19,9 @@ export function lastAdmin(users: EditorUser[], id: string): boolean {
   const admins = users.filter((u) => u.is_admin && u.editor);
   return admins.length === 1 && admins[0].id === id;
 }
+
+/** The users whose panel opens in locked tablet mode (#92, `settings.tablet_users`) after ticking or unticking one. */
+export function pickTabletUser(list: readonly string[] | undefined, id: string, on: boolean): string[] {
+  const rest = (list ?? []).filter((u) => u !== id);
+  return on ? [...rest, id] : rest;
+}

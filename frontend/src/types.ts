@@ -54,7 +54,7 @@ export interface HassConnection {
 
 export interface HomeAssistant {
   language: string;
-  user?: { is_admin: boolean; name: string };
+  user?: { id?: string; is_admin: boolean; name: string };
   areas?: Record<string, HassArea>;
   floors?: Record<string, HassFloor>;
   entities?: Record<string, HassEntityEntry>;

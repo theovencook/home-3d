@@ -569,3 +569,20 @@ def test_unplaced_hidden_entities_are_kept_and_checked() -> None:
         SETTINGS_SCHEMA({**base, "unplaced_hidden": "switch.sample_plug"})
     with pytest.raises(vol.Invalid):
         SETTINGS_SCHEMA({**base, "unplaced_hidden": ["x" * 300]})
+
+
+def test_tablet_users_and_idle_return_are_kept_and_checked() -> None:
+    """Users whose panel opens in locked tablet mode, and its idle return (#92)."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    out = SETTINGS_SCHEMA(base)
+    assert out["tablet_users"] == []
+    assert out["tablet_idle"] is None
+    out = SETTINGS_SCHEMA({**base, "tablet_users": ["abc123"], "tablet_idle": "90"})
+    assert out["tablet_users"] == ["abc123"]
+    assert out["tablet_idle"] == 90
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "tablet_users": "abc123"})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "tablet_idle": -1})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "tablet_idle": 100000})
