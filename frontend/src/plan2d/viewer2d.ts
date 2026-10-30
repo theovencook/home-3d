@@ -14,7 +14,7 @@ import { lowEndDevice } from "../viewer/pace.ts";
 import type { DeviceMarker, FlowPiece, ScreenState, Theme, ViewerOptions } from "../viewer/viewer3d.ts";
 import type { ViewerSurface } from "../viewer-surface.ts";
 import { Gestures } from "./gestures.ts";
-import { anchorSpots, fitInside, floorPictures, flowLines, planBounds, planItems, planMarkers, planOpenings, shownFloor, zoomView, type PlanOpening, type PlanView } from "./scene.ts";
+import { anchorSpots, rackOfPick, fitInside, floorPictures, flowLines, planBounds, planItems, planMarkers, planOpenings, shownFloor, zoomView, type PlanOpening, type PlanView } from "./scene.ts";
 
 type View = ReturnType<ViewerSurface["getView"]>;
 type Anchors = Parameters<ViewerSurface["setAnchors"]>[0];
@@ -80,7 +80,9 @@ export class Plan2dViewer implements ViewerSurface {
       tap: (x, y, target) => this.onTap(x, y, target),
       doubleTap: (x, y, target) => this.onDoubleTap(x, y, target),
       hold: (x, y, target) => {
-        if (target) this.options.onDeviceHold?.(target, x, y);
+        // a rack has no device: a hold shows its front view like a tap
+        if (rackOfPick(target)) this.onTap(x, y, target);
+        else if (target) this.options.onDeviceHold?.(target, x, y);
       },
       pan: (dx, dy) => this.moveView({ ...this.view, tx: this.view.tx + dx, ty: this.view.ty + dy }),
       zoom: (k, x, y) => this.moveView(zoomView(this.view, k, x, y)),
@@ -485,6 +487,13 @@ export class Plan2dViewer implements ViewerSurface {
     if (!pin || !id) return;
     const r = pin.getBoundingClientRect();
     const [x, y] = this.local({ clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
+    if (rackOfPick(id)) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        this.onTap(x, y, id);
+      }
+      return;
+    }
     if ((e.key === "Enter" && e.shiftKey) || e.key === "ContextMenu") {
       e.preventDefault();
       this.options.onDeviceHold?.(id, x, y);
@@ -495,6 +504,11 @@ export class Plan2dViewer implements ViewerSurface {
   };
 
   private onTap(x: number, y: number, target: string | null): void {
+    const rack = rackOfPick(target);
+    if (rack) {
+      this.options.onRackTap?.(rack);
+      return;
+    }
     if (target) {
       this.options.onDeviceTap?.(target, x, y);
       return;
@@ -623,6 +637,7 @@ const CSS = `
 }
 .fp3d-p2d-sym .fp3d-sym-fill { fill: var(--p2d-item-fill); }
 .fp3d-p2d-sym .fp3d-sym-strong { stroke: var(--fp3d-accent); stroke-width: 2; }
+.fp3d-p2d-sym .fp3d-sym-swing { stroke-dasharray: 4 3; opacity: 0.8; }
 .fp3d-p2d-tap { cursor: pointer; }
 .fp3d-p2d-item.fp3d-p2d-on .fp3d-p2d-body {
   fill: var(--fp3d-glow, var(--fp3d-warm, #ffb547));

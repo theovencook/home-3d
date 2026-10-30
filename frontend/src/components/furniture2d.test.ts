@@ -33,3 +33,21 @@ test("in the plan a sphere and a lathe show as an ellipse as wide as they reach,
   assert.equal(soft.tag, "rect");
   assert.ok(Math.abs(soft.attrs.width - 0.6) < 1e-9 && Math.abs(soft.attrs.height - 0.4) < 1e-9 && Math.abs(soft.attrs.rx - 0.08) < 1e-9, JSON.stringify(soft));
 });
+
+test("a rack cabinet's plan symbol shows its footprint, front rail and the swing of its door; an open frame has no swing (#115)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const net = new URL("../../../custom_components/home_3d/bundled_packs/theovencook.it/network/", import.meta.url);
+  const read = (id: string) => JSON.parse(readFileSync(new URL(`${id}.json`, net), "utf8"));
+  setPacks([{ id: "t.it", name: "IT", publisher: "t", items: [read("rack_wall_cabinet_9u"), read("rack_open_frame_22u")] }]);
+  const tags = (type: string, w: number, d: number) => {
+    const out = furnitureSymbol(type, w, d);
+    assert.ok(Array.isArray(out));
+    return out.map((t) => ({ tag: /<(\w+)/.exec(t.strings[0])![1], cls: t.strings[0].includes("fp3d-sym-swing") || t.values.some((v) => v === "fp3d-sym-swing"), values: t.values }));
+  };
+  const cab = tags("pack:t.it:rack_wall_cabinet_9u", 0.6, 0.45);
+  assert.deepEqual(cab.map((t) => t.tag).slice(0, 2), ["rect", "line"]);
+  const swing = cab.filter((t) => t.cls);
+  assert.deepEqual(swing.map((t) => t.tag), ["line", "path"]);
+  assert.ok(swing[1].values.includes("M-0.3 0.825A0.6 0.6 0 0 0 0.3 0.225"));
+  assert.equal(tags("pack:t.it:rack_open_frame_22u", 0.6, 0.6).filter((t) => t.cls).length, 0);
+});

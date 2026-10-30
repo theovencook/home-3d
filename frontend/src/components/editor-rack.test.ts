@@ -69,3 +69,23 @@ test("someone who can't edit opens the sheet read-only and its changes are ignor
   ed.onRackChange(new CustomEvent("rack-change", { detail: { slots: [{ id: "s1", type: SWITCH, u: 3 }] } }));
   assert.equal(ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "rack").rack, undefined);
 });
+
+test("a rack's item panel shows its front view with the gear in it; other items and empty racks show none (#115)", async () => {
+  const ed = await editor();
+  ed.selectItem("furniture", "router");
+  assert.equal(ed.rackElevationOf(ed.furnitureItem), null);
+  assert.doesNotMatch(flat(ed.renderFurnitureForm(ed.furnitureItem)), /fp3d-rack-elev/);
+  ed.selectItem("furniture", "rack");
+  // an empty rack draws its rails and numbers only
+  assert.equal(ed.rackElevationOf(ed.furnitureItem).pieces, 0);
+  assert.doesNotMatch(flat(ed.renderFurnitureForm(ed.furnitureItem)), /fp3d-rack-elev/);
+  ed.openRackSheet();
+  ed.onRackChange(new CustomEvent("rack-change", { detail: { slots: [{ id: "s1", type: SWITCH, u: 3, name: "Core switch" }] } }));
+  ed._rackSheet = null;
+  const el = ed.rackElevationOf(ed.furnitureItem);
+  assert.equal(el.pieces, 1);
+  assert.match(el.svg, /Core switch/);
+  assert.match(flat(ed.renderFurnitureForm(ed.furnitureItem)), /fp3d-rack-elev/);
+  // built once per rack state, not on every render
+  assert.equal(ed.rackElevationOf(ed.furnitureItem), el);
+});

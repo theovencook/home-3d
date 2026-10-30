@@ -160,3 +160,16 @@ test("without insets the plan is fitted to the whole view (#91)", () => {
   const box = { x0: -2, z0: 1, x1: 6, z1: 5 };
   assert.deepEqual(fitInside(box, { w: 800, h: 600 }, { left: 0, top: 0, bottom: 0 }), fitView(box, 800, 600, 28));
 });
+
+test("a rack with gear is tappable in the plan to show its front view; an empty one is not, and its own device link wins (#115)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { setPacks } = await import("../packs.ts");
+  const net = new URL("../../../custom_components/home_3d/bundled_packs/theovencook.it/network/", import.meta.url);
+  setPacks([{ id: "t.it", name: "IT", publisher: "t", items: [JSON.parse(readFileSync(new URL("rack_wall_cabinet_9u.json", net), "utf8"))] }]);
+  const rack = (id: string, slots: number) => item(id, "pack:t.it:rack_wall_cabinet_9u", { w: 0.6, d: 0.45, h: 0.5, rack: { slots: Array.from({ length: slots }, (_, i) => ({ id: `s${i}`, type: "pack:t.it:x", u: i + 1 })) } });
+  const floor = { ...newFloor("g", "Ground", 0), furniture: [rack("full", 2), rack("empty", 0), rack("linked", 1)] };
+  const [full, empty, linked] = planItems(floor, new Map([["linked", "switch.rack_fan"]]), []);
+  assert.equal(full.pick, "rack:full");
+  assert.equal(empty.pick, null);
+  assert.equal(linked.pick, "switch.rack_fan");
+});
