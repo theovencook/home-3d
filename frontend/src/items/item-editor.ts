@@ -16,7 +16,7 @@ import {
   newItem,
   PART_SHAPES,
   profileText,
-  readItemFile,
+  readItemFiles,
   readProfile,
   removePart,
   setDetails,
@@ -27,7 +27,7 @@ import {
 import { LIGHTS, MOUNTS } from "../item-format.ts";
 import { load3d } from "../load3d.ts";
 import type { PackPart } from "../packs.ts";
-import { askConfirm } from "../ask.ts";
+import { askConfirm, showText } from "../ask.ts";
 import "../components/ask-dialog.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -80,6 +80,16 @@ async function copyText(text: string): Promise<void> {
   }
 }
 
+const LIGHT_KEY = "home3d.items.light";
+
+function readLight(): boolean {
+  try {
+    return localStorage.getItem(LIGHT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function download(name: string, text: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
   const a = document.createElement("a");
@@ -104,6 +114,7 @@ export class ItemEditor extends LitElement {
     _addShape: { state: true },
     _paste: { state: true },
     _note: { state: true },
+    _light: { state: true },
   };
 
   declare options: ItemEditorOptions;
@@ -123,6 +134,10 @@ export class ItemEditor extends LitElement {
   private declare _paste: string | null;
   /** What happened to the brief for an LLM (or an import with no item open), shown in the list. */
   private declare _note: { ok: boolean; text: string } | null;
+  /** The picture in the light look (white parts white) instead of the dark neon one (#84); kept per browser. */
+  private declare _light: boolean;
+  /** Draws the picture (the 3D bundle's itemPicture); a test hands in its own. */
+  private picture = async (item: CustomItem, size: number, yaw: number, pitch: number, light: boolean): Promise<string> => (await load3d()).itemPicture(item, size, yaw, pitch, light);
   private drawn = "";
   private drawing = false;
   private drag: { x: number; y: number; yaw: number; pitch: number } | null = null;
@@ -141,6 +156,16 @@ export class ItemEditor extends LitElement {
     this._addShape = "box";
     this._paste = null;
     this._note = null;
+    this._light = readLight();
+  }
+
+  private setLight(on: boolean): void {
+    this._light = on;
+    try {
+      localStorage.setItem(LIGHT_KEY, on ? "1" : "0");
+    } catch {
+      // no storage: the choice lasts while the editor is open
+    }
   }
 
   connectedCallback(): void {
@@ -203,7 +228,7 @@ export class ItemEditor extends LitElement {
   // ------------------------------------------------------------------ the live picture
 
   protected updated(): void {
-    const key = JSON.stringify([this._draft, Math.round(this._yaw), Math.round(this._pitch)]);
+    const key = JSON.stringify([this._draft, Math.round(this._yaw), Math.round(this._pitch), this._light]);
     if (!this._draft || key === this.drawn || this.drawing) return;
     this.drawing = true;
     requestAnimationFrame(() => void this.draw(key));
@@ -211,9 +236,8 @@ export class ItemEditor extends LitElement {
 
   private async draw(key: string): Promise<void> {
     try {
-      const mod = await load3d();
       const draft = this._draft;
-      if (draft) this._picture = mod.itemPicture(draft, 420, this._yaw, this._pitch);
+      if (draft) this._picture = await this.picture(draft, 420, this._yaw, this._pitch, this._light);
       this.drawn = key;
     } catch (err) {
       this._msg = { ok: false, text: String((err as Error)?.message ?? err) };
@@ -283,10 +307,12 @@ export class ItemEditor extends LitElement {
     }
   }
 
-  /** The brief for an LLM (#14) onto the clipboard. */
-  private async copyBrief(): Promise<void> {
+  /** The brief for an LLM (#14) in a dialog to read or select (#84); its Copy button puts it on the clipboard. */
+  private async showBrief(): Promise<void> {
+    const brief = llmBrief({ kinds: this.options.kinds, rooms: this.options.rooms });
+    if (!(await showText(this.t("ie_brief_hint"), brief, { ok: this.t("ie_brief_copy"), cancel: this.t("ie_close") }))) return;
     try {
-      await copyText(llmBrief({ kinds: this.options.kinds, rooms: this.options.rooms }));
+      await copyText(brief);
       this._note = { ok: true, text: this.t("ie_brief_copied") };
     } catch (err) {
       this._note = { ok: false, text: this.t("ie_brief_failed", { why: String((err as Error)?.message ?? err) }) };
@@ -302,13 +328,14 @@ export class ItemEditor extends LitElement {
     await this.importTexts(await Promise.all(files.map(async (f) => ({ name: f.name, text: await f.text() }))));
   }
 
-  /** An item pasted in (an LLM's answer as it came); the box closes once it is imported. */
+  /** Items pasted in (an LLM's answer as it came); once they are imported the box is emptied but stays open for the
+   * next one (#84), and a failed paste keeps its text to be fixed. */
   private async importPasted(): Promise<void> {
     const text = this._paste?.trim();
     if (!text || this._busy || !(await this.leave())) return;
     this._busy = true;
     try {
-      if (await this.importTexts([{ name: this.t("ie_paste"), text }])) this._paste = null;
+      if (await this.importTexts([{ name: this.t("ie_paste"), text }])) this._paste = "";
     } finally {
       this._busy = false;
     }
@@ -318,14 +345,13 @@ export class ItemEditor extends LitElement {
   private async importTexts(files: { name: string; text: string }[]): Promise<boolean> {
     const done: CustomItem[] = [];
     const failed: string[] = [];
-    for (const file of files) {
-      const text = file.text;
-      const first = readItemFile(text, []);
-      if ("error" in first) {
-        failed.push(this.t("ie_import_failed", { file: file.name, why: this.t(`ie_err_${first.error}`) }));
+    // a file or paste may hold a list of items (#84): each is imported on its own
+    for (const [file, read] of files.flatMap((f) => readItemFiles(f.text, []).map((r) => [f, r] as const))) {
+      if ("error" in read) {
+        failed.push(this.t("ie_import_failed", { file: file.name, why: this.t(`ie_err_${read.error}`) }));
         continue;
       }
-      let item = first.item;
+      let item = read.item;
       const clash = this._items.find((i) => i.id === item.id);
       // the same id: replace it (an updated copy of the same item) or keep both under a free id
       if (clash && !(await this.ask(this.t("ie_import_replace", { name: this.itemName(clash) }), this.t("ie_replace"), true, this.t("ie_keep_both")))) {
@@ -383,7 +409,7 @@ export class ItemEditor extends LitElement {
             ></label>
             <button class="fp3d-btn fp3d-primary ie-paste-import" ?disabled=${!this._paste.trim() || this._busy} @click=${() => this.importPasted()}>${this.t("ie_paste_import")}</button>`
         : nothing}
-      <button class="fp3d-btn ie-brief" title=${this.t("ie_brief_hint")} @click=${() => this.copyBrief()}>${this.t("ie_brief")}</button>
+      <button class="fp3d-btn ie-brief" title=${this.t("ie_brief_hint")} @click=${() => this.showBrief()}>${this.t("ie_brief")}</button>
       ${this._note ? html`<p class="ie-msg ${this._note.ok ? "ok" : "bad"}" role="status">${this._note.text}</p>` : nothing}
       ${this._items.length ? nothing : html`<p class="ie-sub">${this.t("ie_none")}</p>`}
       <ul>
@@ -400,7 +426,7 @@ export class ItemEditor extends LitElement {
 
   private renderDraft(draft: CustomItem) {
     return html`<section class="ie-stage">
-        <div class="ie-picture" @pointerdown=${(e: PointerEvent) => this.pointerDown(e)} @pointermove=${(e: PointerEvent) => this.pointerMove(e)} @pointerup=${() => (this.drag = null)} @pointercancel=${() => (this.drag = null)}>
+        <div class="ie-picture ${this._light ? "light" : ""}" @pointerdown=${(e: PointerEvent) => this.pointerDown(e)} @pointermove=${(e: PointerEvent) => this.pointerMove(e)} @pointerup=${() => (this.drag = null)} @pointercancel=${() => (this.drag = null)}>
           ${this._picture ? html`<img src=${this._picture} alt=${this.itemName(draft)} draggable="false" />` : nothing}
         </div>
         <div class="ie-views">
@@ -415,6 +441,7 @@ export class ItemEditor extends LitElement {
               ${this.t(key)}
             </button>`,
           )}
+          <button class="fp3d-btn ie-look" aria-pressed=${this._light} title=${this.t("ie_light_hint")} @click=${() => this.setLight(!this._light)}>${this.t("ie_light")}</button>
         </div>
         <p class="ie-sub">${this.t("ie_turn_hint")}</p>
         <div class="ie-actions">
@@ -681,6 +708,16 @@ export class ItemEditor extends LitElement {
         cursor: grab;
         touch-action: none;
         user-select: none;
+      }
+      .ie-picture.light {
+        background: radial-gradient(circle at 50% 60%, #ffffff, #dfe5ec 75%);
+        border-color: rgba(0, 0, 0, 0.12);
+      }
+      .ie-look {
+        margin-left: auto;
+      }
+      .ie-look[aria-pressed="true"] {
+        border-color: var(--fp3d-accent);
       }
       .ie-picture img {
         width: 100%;

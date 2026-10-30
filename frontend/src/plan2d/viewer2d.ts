@@ -14,7 +14,7 @@ import { lowEndDevice } from "../viewer/pace.ts";
 import type { DeviceMarker, FlowPiece, ScreenState, Theme, ViewerOptions } from "../viewer/viewer3d.ts";
 import type { ViewerSurface } from "../viewer-surface.ts";
 import { Gestures } from "./gestures.ts";
-import { anchorSpots, fitView, floorPictures, flowLines, planBounds, planItems, planMarkers, planOpenings, shownFloor, zoomView, type PlanOpening, type PlanView } from "./scene.ts";
+import { anchorSpots, fitInside, floorPictures, flowLines, planBounds, planItems, planMarkers, planOpenings, shownFloor, zoomView, type PlanOpening, type PlanView } from "./scene.ts";
 
 type View = ReturnType<ViewerSurface["getView"]>;
 type Anchors = Parameters<ViewerSurface["setAnchors"]>[0];
@@ -52,6 +52,9 @@ export class Plan2dViewer implements ViewerSurface {
   private view: PlanView = { k: 40, tx: 0, ty: 0 };
   private inset = 0;
   private size = { w: 0, h: 0 };
+  /** What covers the plan's lower edge (the bottom bar, time travel), measured by an empty probe element (#91). */
+  private probe: HTMLElement;
+  private bottom = 0;
   /** The walls of the floor shown, by the building and floor they were made for. */
   private walls: { b: Building; floor: Floor; list: Wall[] } | null = null;
   private flashing = new Map<string, number>();
@@ -67,10 +70,11 @@ export class Plan2dViewer implements ViewerSurface {
     this.low = options.quality === "low" || (options.quality !== "high" && lowEndDevice(navigator.userAgent, nav.deviceMemory, navigator.hardwareConcurrency));
     this.root = document.createElement("div");
     this.root.className = "fp3d-p2d";
-    this.root.innerHTML = `<style>${CSS}</style><svg class="fp3d-p2d-svg"><g class="fp3d-p2d-plan"><g></g></g></svg><div class="fp3d-p2d-layer"></div>`;
+    this.root.innerHTML = `<style>${CSS}</style><svg class="fp3d-p2d-svg"><g class="fp3d-p2d-plan"><g></g></g></svg><div class="fp3d-p2d-layer"></div><div class="fp3d-p2d-probe" aria-hidden="true"></div>`;
     this.plan = this.root.querySelector(".fp3d-p2d-plan")!;
     this.content = this.plan.firstElementChild as SVGGElement;
     this.layer = this.root.querySelector(".fp3d-p2d-layer")!;
+    this.probe = this.root.querySelector(".fp3d-p2d-probe")!;
     host.prepend(this.root);
     this.gestures = new Gestures({
       tap: (x, y, target) => this.onTap(x, y, target),
@@ -94,6 +98,8 @@ export class Plan2dViewer implements ViewerSurface {
     r.addEventListener("keydown", this.onKey);
     this.resizer = typeof ResizeObserver === "function" ? new ResizeObserver(() => this.resize()) : null;
     this.resizer?.observe(host);
+    // the bottom bar's height changes on its own (time travel opens): the probe's size follows it
+    this.resizer?.observe(this.probe);
     this.resize();
   }
 
@@ -194,6 +200,9 @@ export class Plan2dViewer implements ViewerSurface {
     setPlanRecipes(recipes);
     this.draw();
   }
+
+  /** The flat plan keeps its own margins (fit() leaves room for the labels); the 3D camera's phone margins don't apply. */
+  setFitMargin(..._margin: Parameters<ViewerSurface["setFitMargin"]>): void {}
 
   setLabelInset(px: number): void {
     if (px === this.inset) return;
@@ -301,24 +310,24 @@ export class Plan2dViewer implements ViewerSurface {
   private resize(): void {
     const w = this.host.clientWidth;
     const h = this.host.clientHeight;
-    if (!w || !h || (w === this.size.w && h === this.size.h)) return;
+    const bottom = this.probe.offsetHeight;
+    if (!w || !h || (w === this.size.w && h === this.size.h && bottom === this.bottom)) return;
     this.size = { w, h };
+    this.bottom = bottom;
     this.fit();
     this.draw();
   }
 
-  /** Fit the floor shown into the view, beside the floor pictures and below the top bar. */
+  /** Fit the floor shown into the view: beside the floor pictures, below the stat chips, above the bottom bar (#91). */
   private fit(): void {
     const floor = this.floor();
     if (!floor || !this.size.w) return;
     const box = planBounds(floor);
     if (!box) return;
-    // room for the floor pictures on the left and the energy bar at the top; on a phone the plan takes the width
+    // room for the floor pictures on the left and the energy chips at the top; on a phone the plan takes the width
     // (the pictures fold away)
     const left = this.size.w < 600 ? 0 : Math.min(this.inset, this.size.w * 0.3);
-    const top = 44;
-    const v = fitView(box, this.size.w - left, this.size.h - top, 28);
-    this.applyView({ k: v.k, tx: v.tx + left, ty: v.ty + top });
+    this.applyView(fitInside(box, this.size, { left, top: 60, bottom: this.bottom ? Math.min(this.bottom + 8, this.size.h * 0.6) : 0 }));
   }
 
   /** A pan or zoom: the plan follows in the next frame. */
@@ -575,8 +584,17 @@ const CSS = `
   fill: var(--p2d-out);
   stroke: none;
 }
-.fp3d-p2d-out-lawn { fill: rgba(70, 170, 90, 0.12); }
-.fp3d-p2d-out-hedge { fill: rgba(70, 170, 90, 0.3); }
+.fp3d-p2d-probe {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 0;
+  height: var(--fp3d-bottom-inset, 0px);
+  visibility: hidden;
+  pointer-events: none;
+}
+.fp3d-p2d-out-lawn { fill: rgba(70, 170, 90, 0.2); }
+.fp3d-p2d-out-hedge { fill: rgba(70, 170, 90, 0.36); }
 .fp3d-p2d-room {
   fill: var(--p2d-room);
   stroke: var(--p2d-room-line);

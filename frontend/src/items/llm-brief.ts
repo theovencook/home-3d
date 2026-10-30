@@ -67,7 +67,7 @@ export function llmBrief({ kinds, rooms }: BriefLibrary): string {
   return `You design one item (a piece of furniture or another thing in a home) for Home 3D, a 3D floor plan for Home Assistant. Ask me what the item is if I have not said, then answer with the item.
 
 ANSWER
-Answer with ONE JSON object and nothing else: no explanation, no comments, no trailing commas. I paste it into Home 3D's item editor (${ITEMS_EN.ie_paste} → ${ITEMS_EN.ie_paste_import}), or save it as <id>.json for "${ITEMS_EN.ie_import}"; the editor checks it against the rules below, and it must import as it is.
+Answer with ONE JSON object and nothing else: no explanation, no comments, no trailing commas. If I ask for several items, answer with one JSON list of those objects instead ([{...}, {...}]). I paste it into Home 3D's item editor (${ITEMS_EN.ie_paste} → ${ITEMS_EN.ie_paste_import}), or save it as <id>.json for "${ITEMS_EN.ie_import}"; the editor checks it against the rules below, and it must import as it is.
 
 THE ITEM
 - "id" (required): 1 to 40 characters: lower-case letters, digits, "_", "." and "-", starting with a letter or a digit. Make it from the name ("Oak wall shelf" → "oak_wall_shelf").
