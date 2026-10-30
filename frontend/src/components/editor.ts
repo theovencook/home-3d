@@ -14,7 +14,7 @@ import { clipConvex, netRoomArea } from "../geometry/area.ts";
 import { areaText, formatImperial, lengthText, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 import { closeGaps, straightenEdges, suggestedThickness } from "../geometry/gaps.ts";
 import { clampIntoRoom, keepInRoom, sharedEdge, snapToWall } from "../geometry/snap.ts";
-import { altPick, itemsAt, minHitPx, nextPick } from "../geometry/pick.ts";
+import { altPick, firmHit, itemsAt, minHitPx, nextPick } from "../geometry/pick.ts";
 import { itemsByRoom } from "../item-list.ts";
 import "./item-list-view.ts";
 import type { ItemRow } from "./item-list-view.ts";
@@ -1986,7 +1986,9 @@ export class Fp3dEditor extends LitElement {
       return;
     }
     const openingEl = target.closest("[data-opening]");
-    if (openingEl) {
+    // a door's or window's wide invisible tap band gives way to an item pressed on its shape: a radiator under the
+    // window, 2 px deep on screen, was out of reach (#132); the opening's drawn gap still wins
+    if (openingEl && !(target.getAttribute("class") === "fp3d-open-hit" && this.firmItemAt(world, e.pointerType))) {
       this.pressOpening(openingEl.getAttribute("data-opening")!, local);
       return;
     }
@@ -4873,6 +4875,12 @@ export class Fp3dEditor extends LitElement {
     if (!this.floor || target.closest("[data-vertex], [data-mid], [data-wall-end], [data-out-box], [data-out-vertex]")) return [];
     const hidden = this._hiddenItems;
     return itemsAt(this.floor.furniture, world, this._view.scale, minHitPx(pointerType), hidden.length ? (f) => hidden.includes(f.id) : undefined);
+  }
+
+  /** Whether a shown item is pressed on its shape (a thin one's grown depth included, #132). */
+  private firmItemAt(world: Vec2, pointerType: string): boolean {
+    const hidden = this._hiddenItems;
+    return (this.floor?.furniture ?? []).some((f) => !hidden.includes(f.id) && firmHit(f, world, this._view.scale, minHitPx(pointerType)));
   }
 
   /** Hide an item in this editor's plan, or show it again (#75); a hidden selected item is let go. */

@@ -62,3 +62,18 @@ test("Alt+click picks through stacked items, one deeper per click (#75)", async 
   ed.release(200, 200, { altKey: true });
   assert.equal(ed._furnitureId, "t", "and round again");
 });
+
+test("a thin radiator under a window is pressed through the window's wide tap band; the window's own gap still selects it (#132)", async () => {
+  const radiator: Furniture = { id: "trv", type: "box", x: 2, z: 0.05, rotation: 0, w: 1.12, d: 0.1, h: 0.6, variant: null };
+  const ed = await makeEditor([square("r", 0, 0, 4, 4)], [radiator]);
+  ed._doc.floors[0].openings = [{ id: "win", room_id: "r", edge: 0, offset: 2, width: 1.2, type: "window", sill: 0.9, height: 1.2, hinge: "left", leaves: 1, swing: "in", contact: null, contact2: null, cover: null }];
+  // 20 px/m: the radiator is 2 px deep; the window's invisible band (26 px) covers it
+  ed._view = { scale: 20, ox: 0, oy: 0 };
+  ed.press(42, 3, { target: planEl({ "data-opening": "win", class: "fp3d-open-hit" }) });
+  ed.release(42, 3);
+  assert.equal(ed._furnitureId, "trv");
+  assert.equal(ed._openingId, null);
+  ed.press(42, -2, { target: planEl({ "data-opening": "win", class: "fp3d-open-gap" }) });
+  ed.release(42, -2);
+  assert.equal(ed._openingId, "win");
+});
