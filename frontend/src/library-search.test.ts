@@ -163,3 +163,13 @@ test("catalogue: everyday words each find something, and misspellings of them to
     assert.ok(searchLibrary(catalogue, { ...none, query: typo }).hits.some((e) => label.test(e.label)), typo);
   }
 });
+
+test("catalogue: 'smoke' puts the smoke and smoke/CO alarms (#79) before the smoked-glass lamps (#78)", () => {
+  const hits = searchLibrary(catalogue, { ...none, query: "smoke" }).hits;
+  const at = (re: RegExp) => hits.findIndex((e) => re.test(e.label));
+  const alarm = at(/^smoke alarm$/i);
+  const co = at(/^smoke and co alarm$/i);
+  const lamp = at(/smoked glass/i);
+  assert.ok(alarm >= 0 && co >= 0, top(hits, 8));
+  assert.ok(lamp < 0 || (alarm < lamp && co < lamp), top(hits, 8));
+});
