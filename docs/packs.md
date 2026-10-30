@@ -524,6 +524,8 @@ watts of a rack's gear, shelves' loose gear included; when electric gear has no 
 The bundled `theovencook.it` pack has six starters: `rack_switch_24_1u`, `rack_patch_panel_24_1u`, `rack_blank_1u`,
 `rack_switch_8_half_1u` (half width), `rack_pdu_vertical_0u` (0U, 980 mm: for floor cabinets) and `rack_shelf_2u`.
 
+The rest of the bundled gear (about 50 more: switches 5-48 ports standard and PoE, the UniFi switch range, UDM Pro / SE / Pro Max, UNVRs, firewalls, patch panels, blanks, brush and cable panels, shelves, UPS, PDUs, servers and rack NAS) is written by `python tools/rack_gear.py`; its sizes, power figures and sources are in [rack-gear.md](rack-gear.md).
+
 The gear is saved on the placed rack (`rack.slots`). Each slot has:
 
 | Field | Value |
