@@ -143,3 +143,19 @@ test("the library can be narrowed to one pack (#109)", () => {
   // the query still applies inside the pack
   assert.ok(filterEntries(entries, { ...none, pack: "theovencook.makers", query: "sofa" }).length === 0);
 });
+
+test("every device on the IT checklist is in theovencook.it at the size the checklist gives (#118)", () => {
+  const it = packs.find((p) => p.pack.id === "theovencook.it")!;
+  const doc = readFileSync(fileURLToPath(new URL("../../docs/it-devices.md", import.meta.url)), "utf8");
+  const rows = doc.split("\n").filter((l) => /^\| `[a-z0-9_]+` \|/.test(l));
+  assert.ok(rows.length >= 30, `${rows.length} rows in the checklist`);
+  for (const row of rows) {
+    const id = /^\| `([a-z0-9_]+)`/.exec(row)![1];
+    const item = it.pack.items.find((i) => i.id === id);
+    assert.ok(item, `${id} is in theovencook.it`);
+    assert.ok(/\b(maker|retailer|unverified)\b/.test(row), `${id} says where its size comes from`);
+    const mm = item.size.map((n) => String(Math.round(n * 10000) / 10)).join(" x ");
+    assert.ok(row.includes(`| ${mm} |`), `${id}: the checklist size matches the item (${mm})`);
+  }
+  for (const id of ["esp32_devkitc", "raspberry_pi_board", "ha_green", "zbt2_connect", "hue_bridge", "sure_petcare_hub", "nas_5_bay", "unifi_cloud_gateway_ultra"]) assert.ok(rows.some((r) => r.startsWith(`| \`${id}\``)), `${id} is on the checklist`);
+});
