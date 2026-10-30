@@ -49,3 +49,15 @@ export function nextPick(hits: readonly string[], current: string | null, step =
   if (i < 0) return step < 0 ? hits[hits.length - 1] : hits[0];
   return hits[(i + step + hits.length) % hits.length];
 }
+
+/**
+ * A press with Alt held on a stack of items (#125). Alt also means "move freely" while dragging, so a press that
+ * lands on the selected item `grab`s it (a drag moves it, unsnapped); only a click without moving goes on to `next`,
+ * the item under it (#75). With nothing of the stack selected the top item is grabbed, as without Alt.
+ */
+export function altPick(hits: readonly string[], selected: readonly string[], current: string | null): { grab: string | null; next: string | null } {
+  const held = current && hits.includes(current) ? current : hits.find((id) => selected.includes(id));
+  if (!held) return { grab: hits[0] ?? null, next: null };
+  const next = nextPick(hits, held);
+  return { grab: held, next: next !== held ? next : null };
+}

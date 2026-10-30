@@ -13,7 +13,7 @@ import { clipConvex, netRoomArea } from "../geometry/area.ts";
 import { areaText, formatImperial, lengthText, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 import { closeGaps, straightenEdges, suggestedThickness } from "../geometry/gaps.ts";
 import { clampIntoRoom, keepInRoom, sharedEdge, snapToWall } from "../geometry/snap.ts";
-import { itemsAt, minHitPx, nextPick } from "../geometry/pick.ts";
+import { altPick, itemsAt, minHitPx, nextPick } from "../geometry/pick.ts";
 import { itemsByRoom } from "../item-list.ts";
 import "./item-list-view.ts";
 import type { ItemRow } from "./item-list-view.ts";
@@ -219,8 +219,9 @@ type Drag =
   | { kind: "device"; entityId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "pet"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "opening"; id: string; startScreen: [number, number]; base: Building; moved: boolean }
-  | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
-  | { kind: "furnset"; ids: string[]; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
+  // `pick`: an Alt+click without moving selects this item instead (#75, #125)
+  | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; pick?: string | null }
+  | { kind: "furnset"; ids: string[]; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; pick?: string | null }
   | { kind: "marquee"; start: Vec2; end: Vec2; add: boolean }
   | { kind: "rotate"; id: string; base: Building; moved: boolean }
   | { kind: "aim"; entityId: string; base: Building; moved: boolean }
@@ -1931,8 +1932,10 @@ export class Fp3dEditor extends LitElement {
       this.drag = { kind: "aim", entityId: aimEl.getAttribute("data-aim")!, base: this._doc, moved: false };
       return;
     }
-    // an item under the press, its drawn shape grown to a minimum target (#72): it wins over the room under it
-    const pickedId = this.pickItem(target, world, e.pointerType, e.altKey);
+    // an item under the press, its drawn shape grown to a minimum target (#72): it wins over the room under it. With
+    // Alt held a press on the selected item grabs it (Alt-drag = move freely) and a click goes through the stack (#125)
+    const alt = e.altKey ? altPick(this.itemHits(target, world, e.pointerType), this.selection(), this._furnitureId) : null;
+    const pickedId = alt ? (alt.grab ?? this.pickItem(target, world, e.pointerType)) : this.pickItem(target, world, e.pointerType);
     if (pickedId) {
       const id = pickedId;
       const now = Date.now();
@@ -1950,8 +1953,8 @@ export class Fp3dEditor extends LitElement {
       this.drag = !this.isEditor
         ? { kind: "pan", last: local }
         : set.length > 1
-          ? { kind: "furnset", ids: set, start: world, startScreen: local, base: this._doc, moved: false }
-          : { kind: "furniture", id, start: world, startScreen: local, base: this._doc, moved: false };
+          ? { kind: "furnset", ids: set, start: world, startScreen: local, base: this._doc, moved: false, pick: alt?.next }
+          : { kind: "furniture", id, start: world, startScreen: local, base: this._doc, moved: false, pick: alt?.next };
       return;
     }
     const vertexEl = target.closest("[data-vertex]");
@@ -2685,6 +2688,8 @@ export class Fp3dEditor extends LitElement {
       case "poolport":
       case "pooljoint":
         if (drag.moved) this.pushHistory(drag.base);
+        // Alt+click without moving: the next item in the stack (#75, #125)
+        else if ((drag.kind === "furniture" || drag.kind === "furnset") && drag.pick) this.selectItem("furniture", drag.pick);
         // a tap on a port or a joint opens its card
         else if (drag.kind === "poolport" || drag.kind === "pooljoint") this.openCard(drag.pool, `${drag.kind === "poolport" ? "port" : "joint"}:${drag.id}`);
         break;
@@ -4776,13 +4781,16 @@ export class Fp3dEditor extends LitElement {
    * The item a plan press lands on (#72): its drawn shape grown to a 24 px target (44 px on touch), smallest item
    * first. A press on a room corner or wall-end handle is never an item.
    */
-  private pickItem(target: Element, world: Vec2, pointerType: string, through = false): string | null {
+  private pickItem(target: Element, world: Vec2, pointerType: string): string | null {
     if (!this.floor || target.closest("[data-vertex], [data-mid], [data-wall-end], [data-out-box], [data-out-vertex]")) return null;
+    return this.itemHits(target, world, pointerType)[0] ?? target.closest("[data-furniture]")?.getAttribute("data-furniture") ?? null;
+  }
+
+  /** The shown items under a plan press, best first (#72); none on a room corner or wall-end handle. */
+  private itemHits(target: Element, world: Vec2, pointerType: string): string[] {
+    if (!this.floor || target.closest("[data-vertex], [data-mid], [data-wall-end], [data-out-box], [data-out-vertex]")) return [];
     const hidden = this._hiddenItems;
-    const hits = itemsAt(this.floor.furniture, world, this._view.scale, minHitPx(pointerType), hidden.length ? (f) => hidden.includes(f.id) : undefined);
-    // Alt+click picks through a stack (#75): the item under the selected one
-    if (through) return nextPick(hits, this._furnitureId);
-    return hits[0] ?? target.closest("[data-furniture]")?.getAttribute("data-furniture") ?? null;
+    return itemsAt(this.floor.furniture, world, this._view.scale, minHitPx(pointerType), hidden.length ? (f) => hidden.includes(f.id) : undefined);
   }
 
   /** Hide an item in this editor's plan, or show it again (#75); a hidden selected item is let go. */

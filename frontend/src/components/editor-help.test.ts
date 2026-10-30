@@ -117,3 +117,12 @@ test("a door's dashed swing is drawn only while that door is selected, with a to
   assert.equal(swings(), 1, "only the selected door shows its swing");
   assert.match(text(el.renderOpenings(el._doc.floors[0], [])), /<title>[^<]*swing/i);
 });
+
+test("the help tells Alt+click (through a stack) apart from Alt-drag (free move) (#125)", () => {
+  const pick = SHORTCUTS.find((s) => s.keys.includes("Alt+click"));
+  assert.ok(pick, "Alt+click is listed");
+  const en = translate({ ...hass, language: "en" } as HomeAssistant, pick.text);
+  assert.match(en, /without moving/);
+  assert.match(en, /stack/);
+  assert.match(translate(hass, "help_key_snap"), /Alt drags without snapping/);
+});

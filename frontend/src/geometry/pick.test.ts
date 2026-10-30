@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Furniture } from "../model.ts";
-import { itemsAt, minHitPx } from "./pick.ts";
+import { altPick, itemsAt, minHitPx } from "./pick.ts";
 
 const item = (id: string, x: number, z: number, w: number, d: number, rotation = 0): Furniture => ({ id, type: "box", x, z, rotation, w, d, h: 0.5, variant: null });
 
@@ -38,4 +38,18 @@ test("stacked items: the smallest drawn shape under the point comes first, padde
 test("items can be left out of the hit test, e.g. hidden in the editor (#72)", () => {
   const a = item("a", 0, 0, 1, 1);
   assert.deepEqual(itemsAt([a], [0, 0], 50, 24, (f) => f.id === "a"), []);
+});
+
+test("Alt on a stack grabs the selected item and keeps the next one for a click without moving (#125)", () => {
+  const hits = ["lamp", "sb", "rug"];
+  // the selected item is under the press: drag it; a plain click goes on to the next
+  assert.deepEqual(altPick(hits, ["sb"], "sb"), { grab: "sb", next: "rug" });
+  assert.deepEqual(altPick(hits, ["rug"], "rug"), { grab: "rug", next: "lamp" });
+  // a block: the selected part under the press is grabbed
+  assert.deepEqual(altPick(hits, ["sb", "tv"], "tv"), { grab: "sb", next: "rug" });
+  // nothing of the stack selected: the top item, as a plain press
+  assert.deepEqual(altPick(hits, ["chair"], "chair"), { grab: "lamp", next: null });
+  assert.deepEqual(altPick([], ["sb"], "sb"), { grab: null, next: null });
+  // a single item: nothing to cycle to
+  assert.deepEqual(altPick(["sb"], ["sb"], "sb"), { grab: "sb", next: null });
 });
