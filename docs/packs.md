@@ -474,6 +474,9 @@ a wall frame's and at the front of an open frame; a 2-post rack holds gear on it
 3D view draws a tick on both front rails at every U (a longer one every fifth). A rack resized in the editor keeps its
 number of U and its U height; squeezed below its U space, the units shrink to fit.
 
+In the plan, a cabinet with a door shows the door's swing as a dashed quarter circle in front of it (hinged on the
+left, as wide as the cabinet), so the room it needs to open stays clear.
+
 The bundled racks in `theovencook.it` (`network/rack_*.json`) are written by `node tools/rack-frames.ts` from the list
 in `frontend/src/rack-catalogue.ts`, which draws each frame from its spec (`rackFrameParts` in
 `frontend/src/rack-frame.ts`); a test fails while a file differs. To add a bundled rack, add it to that list and run
@@ -486,6 +489,11 @@ its own like any item, and it can go into a rack: in the editor, choose a placed
 sheet shows the rack's U positions numbered down both sides; pick gear from the list and tap the lowest U it should
 take. Tap gear in the rack to move it a U up or down, move it to another U, rename or delete it. Gear that would
 overlap other gear, stick out of the rack or not fit is refused, with the U and the gear in the way in red.
+
+A rack with gear shows a **front view** in its item panel: the rack with every U numbered on both sides and each piece
+of gear drawn from its own parts at its U, with its name across it. In the 2D view, tap a rack with gear to see the
+same drawing (sized for a wall tablet: 1U is at least 24 px tall). A rack that is linked to a device keeps its tap
+for that device.
 
 ```json
 {
