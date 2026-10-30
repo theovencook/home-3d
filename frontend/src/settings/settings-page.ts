@@ -31,6 +31,7 @@ import {
   type TextKey,
   type Viewer,
   type WriteResult,
+  deviceKeys,
 } from "./registry.ts";
 import { settingsTexts } from "./texts.ts";
 
@@ -240,6 +241,13 @@ export class SettingsPage extends LitElement {
       if (this.lastView) this.write(s, this.lastView as never);
       return;
     }
+    if (action === "reset_device") {
+      for (const key of deviceKeys()) localPrefs.set(key, null);
+      this._note = this.tr("st_reset_done");
+      this.dispatchEvent(new CustomEvent("device-change", { detail: { id: s.id }, bubbles: true, composed: true }));
+      this.requestUpdate();
+      return;
+    }
     this.dispatchEvent(new CustomEvent("settings-action", { detail: { action, id: s.id }, bubbles: true, composed: true }));
   }
 
@@ -339,7 +347,7 @@ export class SettingsPage extends LitElement {
     return html`<div class="st-row st-k-${s.control.kind} ${s.hint ? "" : "st-nohint"} ${wide ? "st-row-wide" : ""} ${hit || this._flash === s.id ? "st-hit" : ""}" data-id=${s.id}>
       <div class="st-lbl">
         <span class="st-name">${this.tr(s.label)}</span>
-        <span class="st-scope st-scope-${s.scope}" title=${this.tr(s.scope === "house" ? "st_scope_house_hint" : "st_scope_device_hint")}>${this.tr(s.scope === "house" ? "st_scope_house" : "st_scope_device")}</span>
+        ${s.control.kind === "note" ? nothing : html`<span class="st-scope st-scope-${s.scope}" title=${this.tr(s.scope === "house" ? "st_scope_house_hint" : "st_scope_device_hint")}>${this.tr(s.scope === "house" ? "st_scope_house" : "st_scope_device")}</span>`}
         ${s.permission === "ha_admin" ? html`<span class="st-scope st-scope-admin" title=${this.tr("st_admin_hint")}>${this.tr("st_admin")}</span>` : nothing}
       </div>
       ${s.hint ? html`<p class="st-hint">${this.tr(s.hint)}</p>` : nothing}
@@ -457,6 +465,8 @@ export class SettingsPage extends LitElement {
         return this.renderIgnored(s, disabled);
       case "embed":
         return this.renderEmbed(s, c.topic);
+      case "note":
+        return nothing;
     }
   }
 

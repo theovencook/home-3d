@@ -90,3 +90,37 @@ test("a deep link opens its section and marks the row", () => {
   assert.equal(p._flash, "effects.camera_seconds");
   clearTimeout(p.flashTimer);
 });
+
+test("every registered setting renders its own row, hidden ones included (their visible-when only hides them)", async () => {
+  const { SETTINGS } = await import("./registry.ts");
+  const p = page();
+  for (const s of SETTINGS) {
+    const text = flat(p.renderRow(s, false));
+    assert.ok(text.includes(`data-id=${s.id}`) || text.includes(`data-id="${s.id}"`), `${s.id} row`);
+    assert.ok(text.includes(tr(s.label)), `${s.id} label`);
+    if (s.control.kind === "note") assert.doesNotMatch(text, /st-scope-/, `${s.id}: a note has no scope badge`);
+    else assert.match(text, new RegExp(`st-scope-${s.scope}`), `${s.id} scope badge`);
+    if (s.permission === "ha_admin") assert.match(text, /st-scope-admin/, `${s.id} admin badge`);
+  }
+});
+
+test("resetting this device's preferences removes every key a device row keeps, and only those", async () => {
+  const { deviceKeys } = await import("./registry.ts");
+  const store = new Map<string, string>([["home3d.quality", "low"], ["home3d.theme", "day"], ["home3d.director", "1"], ["home3d.clean", "1"], ["home3d.lab", "1"]]);
+  (globalThis as Record<string, unknown>).localStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => store.set(k, v),
+    removeItem: (k: string) => store.delete(k),
+  };
+  try {
+    const p = page();
+    const events: string[] = [];
+    p.dispatchEvent = (e: Event) => (events.push(e.type), true);
+    p.act({ id: "reset_device" }, "reset_device");
+    assert.deepEqual([...store.keys()], ["home3d.lab"]);
+    assert.deepEqual(events, ["device-change"]);
+    assert.ok(deviceKeys().includes("quality") && deviceKeys().includes("voicePipeline"));
+  } finally {
+    delete (globalThis as Record<string, unknown>).localStorage;
+  }
+});

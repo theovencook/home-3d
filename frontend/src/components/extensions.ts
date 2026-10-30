@@ -11,7 +11,6 @@ import {
   pinPack,
   removePack,
   rollbackPack,
-  setPackUpdateSettings,
   updatePlacedItems,
 } from "../api.ts";
 import { COLOUR_ROLES } from "../colour-roles.ts";
@@ -25,7 +24,7 @@ import { translate, type I18nKey } from "../i18n.ts";
 import { askConfirm } from "../ask.ts";
 import "./ask-dialog.ts";
 import { planPackFolders } from "../pack-folder.ts";
-import { askingFirst, nextCheck, updateSummary, type CheckFrequency, type ConfirmCode, type PackUpdateSettings, type PackUpdateStatus } from "../pack-updates.ts";
+import { askingFirst, nextCheck, updateSummary, type ConfirmCode, type PackUpdateStatus } from "../pack-updates.ts";
 import { packName, packOrigin, type FurniturePack } from "../packs.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -150,10 +149,6 @@ export class Extensions extends LitElement {
     }
   }
 
-  private setUpdateSettings(changes: Partial<PackUpdateSettings>): void {
-    void this.updatesCall((hass) => setPackUpdateSettings(hass, changes));
-  }
-
   private async checkNow(): Promise<void> {
     if (!this.hass || this._checking) return;
     this._checking = true;
@@ -215,34 +210,13 @@ export class Extensions extends LitElement {
             : html`<p class="fp3d-sub">${this.t("upd_none")}</p>`}
           ${editor && open.length > 1 ? html`<button class="fp3d-btn fp3d-primary fp3d-pack-import" @click=${() => this.updateItems(open.map((i) => i.type))}>${this.t("upd_update_all", { n: open.length })}</button>` : nothing}`
         : nothing}
-      <label class="fp3d-check">
-        <input type="checkbox" .checked=${settings.auto_update} ?disabled=${!editor} @change=${(e: Event) => this.setUpdateSettings({ auto_update: (e.target as HTMLInputElement).checked })} />
-        ${this.t("upd_auto")}
-      </label>
       <div class="fp3d-upd-when">
-        <label>
-          ${this.t("upd_frequency")}
-          <select ?disabled=${!editor} @change=${(e: Event) => this.setUpdateSettings({ frequency: (e.target as HTMLSelectElement).value as CheckFrequency })}>
-            ${(["off", "daily", "weekly", "monthly"] as const).map((f) => html`<option value=${f} ?selected=${settings.frequency === f}>${this.t(`upd_freq_${f}`)}</option>`)}
-          </select>
-        </label>
-        ${settings.frequency === "weekly"
-          ? html`<label>
-              ${this.t("upd_weekday")}
-              <select ?disabled=${!editor} @change=${(e: Event) => this.setUpdateSettings({ weekday: Number((e.target as HTMLSelectElement).value) })}>
-                ${[0, 1, 2, 3, 4, 5, 6].map((d) => html`<option value=${d} ?selected=${settings.weekday === d}>${this.t(`upd_day_${d}` as I18nKey)}</option>`)}
-              </select>
-            </label>`
-          : nothing}
-        ${settings.frequency !== "off"
-          ? html`<label>
-              ${this.t("upd_time")}
-              <input type="time" .value=${settings.time} ?disabled=${!editor} @change=${(e: Event) => {
-                const value = (e.target as HTMLInputElement).value;
-                if (/^\d{2}:\d{2}$/.test(value)) this.setUpdateSettings({ time: value });
-              }} />
-            </label>`
-          : nothing}
+        <button
+          class="fp3d-link fp3d-ext-setting"
+          @click=${() => this.dispatchEvent(new CustomEvent("open-settings", { detail: { section: "packs", id: "pack_updates.frequency" }, bubbles: true, composed: true }))}
+        >
+          ${this.t("upd_frequency")}: ${this.t(`upd_freq_${settings.frequency}`)}${settings.auto_update ? ` · ${this.t("upd_auto")}` : ""} · ⚙ ${this.t("settings")} ›
+        </button>
         ${editor
           ? html`<button class="fp3d-btn" ?disabled=${this._checking} @click=${() => this.checkNow()}>${this._checking ? this.t("upd_checking") : this.t("upd_check_now")}</button>`
           : nothing}

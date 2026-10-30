@@ -6995,6 +6995,7 @@ export class Fp3dEditor extends LitElement {
     } else if (topic === "backup") body = this.renderBackup();
     else if (topic === "energy_balance") body = this.renderEnergyBalance();
     else if (topic === "hologram") body = this.renderHologramSettings();
+    else if (topic === "presence") body = this.renderPresenceSettings();
     return html`<div class="fp3d-embed">${body}</div>`;
   }
 

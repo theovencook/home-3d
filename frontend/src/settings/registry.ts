@@ -12,7 +12,9 @@ import { doorbellCamera, doorbellEntities, HOLD_DEFAULT, HOLD_MAX, HOLD_MIN } fr
 import { isRainSource, weatherEntity } from "../weather.ts";
 import { backdropImage } from "../backdrop.ts";
 import { TABLET_IDLE_DEFAULT } from "../kiosk.ts";
-import { getVoiceSettings, setVoiceSentences, type SentenceMode } from "../api.ts";
+import { fetchPackUpdates, getVoiceSettings, setPackUpdateSettings, setVoiceSentences, type SentenceMode } from "../api.ts";
+import type { PackUpdateSettings, PackUpdateStatus } from "../pack-updates.ts";
+import { SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, released } from "../features.ts";
 import { EFFECT_DEFAULTS } from "../room-effects.ts";
 
@@ -109,7 +111,9 @@ export type Control =
   /** A list the page draws itself (the warnings dismissed for good). */
   | { kind: "list"; list: "alert_ignored" }
   /** A block the editor bundle draws (lists with their own logic: favourites, own buttons, backup …). */
-  | { kind: "embed"; topic: EmbedTopic };
+  | { kind: "embed"; topic: EmbedTopic }
+  /** Only words: where something is set instead (the card options, the modules' settings). */
+  | { kind: "note" };
 
 /** The editor parts the page shows as they are (`<fp3d-editor topic=…>`, see editor.ts renderTopic). */
 export type EmbedTopic =
@@ -262,6 +266,7 @@ export const SECTIONS: Section[] = [
       { id: "look", title: "st_card_look" },
       { id: "markers", title: "st_card_markers" },
       { id: "show", title: "st_card_show" },
+      { id: "cards", title: "st_cards_title" },
     ],
   },
   { id: "voice", group: "device", icon: "◖", title: "st_sec_voice", hint: "st_sec_voice_hint", cards: [{ id: "voice", title: "st_card_voice" }] },
@@ -1046,7 +1051,69 @@ const VOICE: Setting[] = [
 export const LOADERS: Record<string, (hass: HomeAssistant) => Promise<unknown>> = {
   voice_sentences: (hass) => getVoiceSettings(hass),
   voice_pipelines: (hass) => hass.callWS<Pipelines>({ type: "assist_pipeline/pipeline/list" }),
+  pack_updates: (hass) => fetchPackUpdates(hass),
 };
+
+/** The pack update schedule (#26) as the backend last sent it (its defaults until then). */
+const UPDATE_DEFAULTS: PackUpdateSettings = { auto_update: false, frequency: "daily", time: "04:00", weekday: 0 };
+const updatesOf = (env: SettingsEnv): PackUpdateSettings => ({ ...UPDATE_DEFAULTS, ...((env.remote?.pack_updates as PackUpdateStatus | undefined)?.settings ?? {}) });
+/** One value of the schedule; kept by Home Assistant (.storage), not in the plan. */
+const updateSetting = <K extends keyof PackUpdateSettings>(key: K, extra: Omit<Setting<PackUpdateSettings[K]>, "id" | "section" | "card" | "scope" | "permission" | "default" | "read" | "write" | "loader">): Setting<PackUpdateSettings[K]> => ({
+  id: `pack_updates.${key}`,
+  section: "packs",
+  card: "updates",
+  scope: "house",
+  permission: "editor",
+  default: UPDATE_DEFAULTS[key],
+  loader: "pack_updates",
+  read: (env) => updatesOf(env)[key],
+  write: (env, v) => (env.hass ? setPackUpdateSettings(env.hass, { [key]: v }) : undefined),
+  ...extra,
+});
+
+const PACKS: Setting[] = [
+  updateSetting("frequency", {
+    label: "upd_frequency",
+    keywords: ["packs", "updates", "github", "release", "schedule"],
+    control: { kind: "segment", options: (["off", "daily", "weekly", "monthly"] as const).map((f) => ({ value: f, label: `upd_freq_${f}` })) },
+  }) as Setting,
+  {
+    id: "pack_updates.weekday",
+    section: "packs",
+    card: "updates",
+    scope: "house",
+    permission: "editor",
+    label: "upd_weekday",
+    hint: "st_upd_weekday_hint",
+    keywords: ["packs", "updates", "day"],
+    loader: "pack_updates",
+    control: { kind: "select", options: () => [0, 1, 2, 3, 4, 5, 6].map((d) => ({ value: String(d), label: `upd_day_${d}` })) },
+    default: "0",
+    visible: (env) => updatesOf(env).frequency === "weekly",
+    read: (env) => String(updatesOf(env).weekday),
+    write: (env, v) => (env.hass ? setPackUpdateSettings(env.hass, { weekday: Number(v) }) : undefined),
+  } as Setting<string>,
+  updateSetting("time", {
+    label: "upd_time",
+    keywords: ["packs", "updates", "time", "night"],
+    control: { kind: "time" },
+    visible: (env) => updatesOf(env).frequency !== "off",
+  }) as Setting,
+  updateSetting("auto_update", { label: "upd_auto", keywords: ["packs", "updates", "automatic", "placed items"], control: { kind: "switch" } }) as Setting,
+  {
+    id: "pack_updates.open",
+    section: "packs",
+    card: "updates",
+    scope: "house",
+    permission: "editor",
+    label: "upd_title",
+    hint: "st_upd_open",
+    keywords: ["packs", "install", "github", "pin", "roll back"],
+    control: { kind: "action", button: "st_upd_open_btn", action: "extensions" },
+    default: null,
+    read: () => null,
+  },
+];
 
 const ACCESS: Setting[] = [
   embedded("editors", "access", "editors", "editors", "editors_title", undefined, ["edit", "permission", "users", "admin"], "ha_admin"),
@@ -1118,12 +1185,102 @@ const LOOK: Setting[] = [
   deviceSwitch("weather", "look", "show", "weather", true, "st_weather", "weather_hint", ["rain", "snow", "weather"]),
 ];
 
-const ADVANCED: Setting[] = [houseSwitch("demo", "advanced", "advanced", "demo", false, "demo_states", "st_demo_hint", ["sample", "screenshot", "fake"])];
+const ADVANCED: Setting[] = [
+  deviceSwitch("stats", "advanced", "advanced", "stats", false, "st_fps", "fps_title", ["fps", "performance", "frames", "speed"]),
+  {
+    id: "reset_device",
+    section: "advanced",
+    card: "advanced",
+    scope: "device",
+    permission: "everyone",
+    label: "st_reset_device",
+    hint: "st_reset_device_hint",
+    keywords: ["reset", "defaults", "preferences", "browser"],
+    control: { kind: "action", button: "st_reset", action: "reset_device" },
+    default: null,
+    read: () => null,
+  },
+  houseSwitch("demo", "advanced", "advanced", "demo", false, "demo_states", "st_demo_hint", ["sample", "screenshot", "fake"]),
+  {
+    id: "modules",
+    section: "advanced",
+    card: "advanced",
+    scope: "house",
+    permission: "editor",
+    label: "st_modules",
+    hint: "st_modules_note",
+    keywords: ["module", "pack", "plugin", "sentences", "speakers"],
+    control: { kind: "note" },
+    default: null,
+    read: () => null,
+  },
+  {
+    id: "locate",
+    section: "advanced",
+    card: "people",
+    scope: "house",
+    permission: "ha_admin",
+    label: "st_locate",
+    hint: "st_locate_hint",
+    keywords: ["locating", "people", "presence", "bluetooth", "position"],
+    control: { kind: "action", button: "st_open", action: "locate" },
+    default: null,
+    visible: () => released("locate"),
+    read: () => null,
+  },
+  {
+    id: "person_look",
+    section: "advanced",
+    card: "people",
+    scope: "house",
+    permission: "editor",
+    label: "st_person_look",
+    keywords: ["people", "person", "figure", "pin", "located"],
+    control: {
+      kind: "segment",
+      options: [
+        { value: "figure", label: "st_person_figure" },
+        { value: "pin", label: "st_person_pin" },
+        { value: "off", label: "st_person_off" },
+      ],
+    },
+    default: "figure",
+    read: (env) => settingsOf(env).person_look ?? "figure",
+    write: (env, v) => withSettings(env.building!, { person_look: v === "pin" || v === "off" ? v : null }),
+  } as Setting<string>,
+  // presence sensors per person: built, not released yet (flags.ts SHOW_PRESENCE)
+  { ...embedded("presence", "advanced", "people", "presence", "presence", "presence_hint", ["presence", "espresense", "bermuda", "room sensor"]), visible: () => SHOW_PRESENCE },
+];
+
+/** Where the dashboard cards' options are (they stay in each card's editor, Toby's decision on #139). */
+const CARDS: Setting[] = [
+  {
+    id: "dashboard_cards",
+    section: "look",
+    card: "cards",
+    scope: "device",
+    permission: "everyone",
+    label: "st_cards_title",
+    hint: "st_cards_note",
+    keywords: ["card", "dashboard", "lovelace", "options"],
+    control: { kind: "note" },
+    default: null,
+    read: () => null,
+  },
+];
 
 /** Every setting, in the order the page shows them. */
-export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...ENERGY, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...VOICE, ...ACCESS, ...BACKUP, ...ADVANCED] as Setting[];
+export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...ENERGY, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...CARDS, ...VOICE, ...ACCESS, ...PACKS, ...BACKUP, ...ADVANCED] as Setting[];
 
 // ---------------------------------------------------------------------------------------------------- queries
+
+/**
+ * Every preference this device keeps (`home3d.<key>`): the device rows' keys, and the view's own toggles that have no
+ * row (the eye's clean view). "Reset this device's preferences" removes them.
+ */
+export function deviceKeys(): string[] {
+  return [...new Set([...SETTINGS.flatMap((s) => s.prefKeys ?? []), "clean"])];
+}
 
 export function settingById(id: string): Setting | undefined {
   return SETTINGS.find((s) => s.id === id);
