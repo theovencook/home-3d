@@ -66,6 +66,20 @@ export function daySurface(c: [number, number, number]): [number, number, number
   return c.map((v) => g * (1 - DAY.hue) + g * (v / Math.max(mx, 0.001)) * DAY.hue) as [number, number, number];
 }
 
+/** Neon's contrast lift (#88): surfaces brighter than the floors (walls, then items) are lifted a notch, floors and
+ * slabs stay as built, signal colours and lines are left alone. `neonSurface` is the shader's mapping, for tests. */
+const NEON_LIFT = { from: 0.105, gain: 54, max: 0.4 };
+
+export function neonSurface(c: [number, number, number]): [number, number, number] {
+  const mx = Math.max(...c);
+  const mn = Math.min(...c);
+  const sat = mx > 0 ? (mx - mn) / mx : 0;
+  if (mx > 0.45 && sat > 0.45) return c;
+  const l = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+  const k = 1 + Math.min(NEON_LIFT.max, Math.max(0, (l - NEON_LIFT.from) * NEON_LIFT.gain));
+  return c.map((v) => v * k) as [number, number, number];
+}
+
 const DAY_FLOOR_GLSL = `vec3 fp3dDayFloor(vec3 c) {
 ${Object.keys(FLOOR_REAL)
   .map((k) => `  if (distance(c, ${vec3(FLOOR_LOOK[k].color)}) < 0.0002) return ${vec3(dayFloor(FLOOR_LOOK[k].color)!)};`)
@@ -88,7 +102,10 @@ vec3 fp3dThemed(vec3 c, bool line) {
   if (uTheme == 0) {
     // an own accent: every line and every cyan surface takes it, as bright as it was
     if (uAccentOn == 1 && (line || (sat > 0.35 && c.r < c.g * 0.8 && c.b > c.g * 0.85 && c.g > c.b * 0.6))) return uAccent * mx;
-    return c;
+    // a notch more light on walls and items than on the floors (#88); signal colours and lines as built
+    if (line || (mx > 0.45 && sat > 0.45)) return c;
+    float lift = dot(c, vec3(0.299, 0.587, 0.114));
+    return c * (1.0 + clamp((lift - ${NEON_LIFT.from}) * ${NEON_LIFT.gain.toFixed(1)}, 0.0, ${NEON_LIFT.max}));
   }
   // signal colours keep their colour
   if (!line && mx > 0.45 && sat > 0.45) return c;

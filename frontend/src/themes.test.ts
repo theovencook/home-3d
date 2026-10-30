@@ -21,3 +21,8 @@ test("the HA-theme choice says which looks it switches between, not a light/dark
   assert.match(en, /Neon/);
   assert.doesNotMatch(en, /light\/dark/);
 });
+
+test("the Blueprint look is offered as 'High contrast' (#88)", async () => {
+  const { translate } = await import("./i18n.ts");
+  assert.equal(translate({ language: "en" } as never, "theme_blueprint"), "High contrast");
+});

@@ -8167,7 +8167,8 @@ export class Fp3dView3d extends LitElement {
         font-weight: 600;
         line-height: 1.35;
         color: var(--fp3d-text);
-        background: rgba(10, 16, 32, 0.72);
+        /* a notch more solid so names read over bright neon edges (#88) */
+        background: rgba(10, 16, 32, 0.88);
         pointer-events: none;
       }
       .fp3d-dev-sel {
