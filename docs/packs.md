@@ -477,7 +477,7 @@ number of U and its U height; squeezed below its U space, the units shrink to fi
 The bundled racks in `theovencook.it` (`network/rack_*.json`) are written by `node tools/rack-frames.ts` from the list
 in `frontend/src/rack-catalogue.ts`, which draws each frame from its spec (`rackFrameParts` in
 `frontend/src/rack-frame.ts`); a test fails while a file differs. To add a bundled rack, add it to that list and run
-the tool. Other packs may draw their racks any way they like.
+the tool. The catalogue (30 racks) and where each size comes from are in [rack-frames.md](rack-frames.md). Other packs may draw their racks any way they like.
 
 ## What the loader checks
 
