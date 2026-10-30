@@ -210,7 +210,7 @@ test("a pet set to other eyes or another coat in settings is redrawn with them",
 
 // Pet homes from the core library (#23): roaming pets rest in the cat beds and trees and visit the bowls
 
-const core = (item: string, x: number, z: number, w: number, d: number, h: number, rotation = 0): Furniture => ({ id: item, type: `pack:theovencook.core:${item}`, x, z, w, d, h, rotation }) as Furniture;
+const core = (item: string, x: number, z: number, w: number, d: number, h: number, rotation = 0): Furniture => ({ id: item, type: `pack:theovencook.household:${item}`, x, z, w, d, h, rotation }) as Furniture;
 
 /** One room (6 × 5 m) holding just these items, by day or by night; `lift` raises an item (a shelf on the wall). */
 function homeWith(items: Furniture[], night: boolean, lift: Record<string, number> = {}): { group: THREE.Group; run: PetsController } {

@@ -97,16 +97,16 @@ test("going back to the built-in model drops the look and leaves the pin as it i
   assert.equal(floor.placements[0].mount, "ceiling");
 });
 
-/** The core pack's camera models, as the backend sends them (one file per item in its group's folder). */
+/** The office pack's camera models, as the backend sends them (one file per item in its group's folder). */
 function coreCameras(): FurniturePack {
-  const dir = fileURLToPath(new URL("../../custom_components/home_3d/bundled_packs/theovencook.core", import.meta.url));
+  const dir = fileURLToPath(new URL("../../custom_components/home_3d/bundled_packs/theovencook.office", import.meta.url));
   const items = readdirSync(dir, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .flatMap((e) => readdirSync(join(dir, e.name)).map((f) => JSON.parse(readFileSync(join(dir, e.name, f), "utf8")) as PackItem));
-  return { id: "theovencook.core", name: "Core", publisher: "theovencook", items: items.filter(isCameraModel) };
+  return { id: "theovencook.office", name: "Office & tech", publisher: "theovencook", items: items.filter(isCameraModel) };
 }
 
-test("the core pack has every UniFi camera of the ticket, found by its name; domes and turrets hang from the ceiling", () => {
+test("the office pack has every UniFi camera of the ticket, found by its name; domes and turrets hang from the ceiling", () => {
   const core = coreCameras();
   const ceiling = ["G4 Dome", "G5 Turret", "AI 360"];
   for (const model of ["G3 Flex", "G4 Instant", "G4 Pro", "G4 Dome", "AI 360", "G5 Turret", "G5 PTZ", "G6 Entry"]) {

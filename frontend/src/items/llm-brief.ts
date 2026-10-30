@@ -3,12 +3,12 @@
 // written from the lists and limits in item-format.ts (a test holds them equal to the backend's schema in packs.py)
 // and the library's sections and rooms (vocabulary.ts), so it says what the import checks. Pure text, no DOM.
 
-import roundSideTable from "../../../custom_components/home_3d/bundled_packs/theovencook.core/table/round_side_table_40.json" with { type: "json" };
-import vase from "../../../custom_components/home_3d/bundled_packs/theovencook.core/vase/vase.json" with { type: "json" };
+import roundSideTable from "../../../custom_components/home_3d/bundled_packs/theovencook.living/table/round_side_table_40.json" with { type: "json" };
+import vase from "../../../custom_components/home_3d/bundled_packs/theovencook.decor/vase/vase.json" with { type: "json" };
 import { ITEM_FORMAT, type COLOUR_ROLES, type PART_SHAPES } from "../item-format.ts";
 import { ITEMS_EN } from "./texts.ts";
 
-/** Two items of the core pack to learn from: lofted legs with fixed measures on a table, and a lathe. */
+/** Two bundled items to learn from: lofted legs with fixed measures on a table, and a lathe. */
 const EXAMPLES: [string, Record<string, unknown>][] = [
   ["A round side table (cylinders for the top and shelf, splayed lofts for the legs, fixed measures)", roundSideTable],
   ["A vase (one lathe)", vase],

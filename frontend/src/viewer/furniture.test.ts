@@ -193,8 +193,8 @@ test("a motorised curtain opens to both ends and a roll-down screen rolls up wit
 });
 
 test("a roof window's blind follows its cover and slides up the slope towards its top edge (#24)", () => {
-  assert.equal(packMotion("pack:theovencook.core:roof_window_mk04_blind"), "blind");
-  assert.equal(packMotion("pack:theovencook.core:roof_window_mk04"), null);
+  assert.equal(packMotion("pack:theovencook.household:roof_window_mk04_blind"), "blind");
+  assert.equal(packMotion("pack:theovencook.household:roof_window_mk04"), null);
   // the window lies on the slope: low at the front (+z), high at the back; the blind is the fabric loft along it
   const blind = { shape: "loft" as const, x: 0, z: 0.4, w: 0.9, d: 0.1, y: 0.05, h: 0.9, tx: 0, tz: -0.4, tw: 0.9, td: 0.1, color: "fabric" };
   const frame = { ...blind, w: 1, color: "body" };

@@ -2,7 +2,7 @@
 
     python tools/check_pack_urls.py [REPO_URL] [PACK_ID ...]
 
-Defaults to https://github.com/theovencook/home-3d-packs and the packs theovencook.core and theovencook.ikea-uk.
+Defaults to https://github.com/theovencook/home-3d-packs and the packs theovencook.living and theovencook.ikea-uk.
 For each pack it fetches the folder URL (<repo>/tree/main/<pack id>) with custom_components/home_3d/pack_github.py,
 checks the files with the pack schema, and runs the update check against an older commit. It also checks that the
 repository URL alone is refused with the folder URLs. Exits with an error when anything fails. Run it where
@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from custom_components.home_3d import pack_github, packs
 
 DEFAULT_REPO = "https://github.com/theovencook/home-3d-packs"
-DEFAULT_PACKS = ["theovencook.core", "theovencook.ikea-uk"]
+DEFAULT_PACKS = ["theovencook.living", "theovencook.ikea-uk"]
 
 
 async def check(repo: str, pack_ids: list[str]) -> bool:

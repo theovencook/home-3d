@@ -191,7 +191,7 @@ async def test_an_open_editors_save_keeps_an_update_made_on_the_server_meanwhile
 async def test_the_plan_keeps_only_the_recipes_it_uses(hass: HomeAssistant, hass_ws_client) -> None:
     client = await _client(hass, hass_ws_client)
     await _call(client, type="home_3d/packs/import", files=_files())
-    bed = "pack:theovencook.core:single_bed_simple"
+    bed = "pack:theovencook.bedroom:single_bed_simple"
     await _call(
         client, type="home_3d/building/save", building=_building(_furniture("a", CHAIR_TYPE), _furniture("b", bed))
     )
@@ -223,7 +223,7 @@ async def test_a_copy_that_does_not_check_is_left_out(hass: HomeAssistant, hass_
 
 async def test_a_plan_saved_before_recipes_picks_them_up_on_load(hass: HomeAssistant, hass_storage) -> None:
     pack = {**packs.verify_folder(_files()), "imported_at": 1.0}
-    bed = "pack:theovencook.core:single_bed_simple"
+    bed = "pack:theovencook.bedroom:single_bed_simple"
     old_plan = _building(_furniture("a", CHAIR_TYPE), _furniture("b", bed), _furniture("c", "pack:gone.pack:lamp"))
     hass_storage[STORAGE_KEY_PACKS] = {"version": 1, "key": STORAGE_KEY_PACKS, "data": {"packs": [pack]}}
     hass_storage[STORAGE_KEY_BUILDING] = {

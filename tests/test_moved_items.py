@@ -421,4 +421,4 @@ async def test_the_library_lists_the_old_ids_of_moved_items(hass: HomeAssistant,
     listed = {p["id"]: p for p in (await _call(client, type="home_3d/packs/list"))["packs"]}
     assert listed["test.new"]["aliases"] == {OLD_CHAIR: "cube_chair", OLD_LAMP: "reading_lamp"}
     # a pack nothing moved into lists none
-    assert "aliases" not in listed["theovencook.core"]
+    assert "aliases" not in listed["theovencook.ikea-uk"]

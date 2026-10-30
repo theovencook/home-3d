@@ -35,7 +35,7 @@ test("a static pet on a sofa or bed lies on its top, facing the furniture's fron
   const onSofa = staticPlace(floorWith(sofa), { ...cat, static: true, x: 0.3, z: 0.1, pose: "curl" })!;
   assert.ok(Math.abs(onSofa.y - 0.85 * 0.58) < 1e-9);
   assert.ok(Math.abs(Math.cos(onSofa.heading) - Math.cos(-Math.PI)) < 1e-9);
-  const bed = item("pack:theovencook.core:bed_double", 5, 5, 1.6, 2, 0.6);
+  const bed = item("pack:theovencook.bedroom:bed_double", 5, 5, 1.6, 2, 0.6);
   assert.ok(Math.abs(staticPlace(floorWith(bed), { ...cat, static: true, x: 5, z: 5 })!.y - 0.6 * 0.64) < 1e-9);
   // a pet beside the sofa stays on the floor
   assert.equal(staticPlace(floorWith(sofa), { ...cat, static: true, x: 3, z: 0 })!.y, 0);
