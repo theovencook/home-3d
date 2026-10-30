@@ -820,6 +820,13 @@ export interface BuildingSettings {
    * the window would look shut although nobody knows. Off by default.
    */
   alert_unavailable?: boolean;
+  /**
+   * Warnings dismissed "for now" from the banner (#138): hidden until the warning clears, then removed so it fires again.
+   * `at`: when it was dismissed (ms).
+   */
+  alert_snoozed?: { kind: string; entity: string; at: number }[];
+  /** Warnings ignored "for good" (#138): this entity never raises this kind of warning; never a safety kind (smoke, CO, gas, water, alarm). */
+  alert_ignored?: { kind: string; entity: string }[];
   /** Live room effects (#10): how long motion lights a room, the temperatures radiators and cylinders shade between. */
   effects?: EffectSettings | null;
   /** An entity that reports a power outage (a grid or UPS sensor); null = no outage warning (#214). */

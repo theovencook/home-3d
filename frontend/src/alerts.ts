@@ -4,7 +4,7 @@
 
 import { areaEntities, entityName, openingState, type OpeningEntities } from "./devices.ts";
 import { translate } from "./i18n.ts";
-import type { Building } from "./model.ts";
+import type { Building, BuildingSettings } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
 import { stationRain, weatherEntity } from "./weather.ts";
 import { hasFeature } from "./features.ts";
@@ -183,4 +183,75 @@ export function alertText(hass: HomeAssistant | undefined, building: Building, a
   // without the device name: "Gäste-WC · Fenster offen bei Regen" (the room already says where, #374)
   if (building.settings.alert_names === false) return `${room.name} · ${translate(hass, `alert_short_${a.kind}` as Parameters<typeof translate>[1])}`;
   return `${room.name} · ${text}`;
+}
+
+// ---------------------------------------------------------------- dismissed warnings (#138)
+
+/** A warning by its kind and entity, as the plan keeps a dismissed one. */
+export interface AlertRef {
+  kind: string;
+  entity: string;
+}
+
+/** A warning dismissed "for now": `at` (ms) tells one dismissal from a later one of the same warning. */
+export interface AlertSnooze extends AlertRef {
+  at: number;
+}
+
+/** Warnings about life and property: they may be dismissed "for now" only, never ignored for good. */
+export const SAFETY_ALERTS: ReadonlySet<string> = new Set(["smoke", "co", "gas", "water", "alarm", "alarm_pending"]);
+
+/** The house's own kinds of warning (the rest come from modules). */
+export const HOUSE_ALERTS: ReadonlySet<string> = new Set<AlertKind>(["smoke", "gas", "co", "water", "alarm", "alarm_pending", "window_rain", "power_outage", "fridge_door", "contact_unavailable"]);
+
+/** Whether a warning of this kind may be ignored for good (all but the safety ones). */
+export function mayIgnoreAlert(kind: string): boolean {
+  return !SAFETY_ALERTS.has(kind);
+}
+
+export const alertKey = (a: AlertRef): string => `${a.kind}:${a.entity}`;
+
+/** One "for now" dismissal: its warning plus the moment, so a viewer that saw it clear knows which dismissal is spent. */
+export const snoozeKey = (s: AlertSnooze): string => `${alertKey(s)}@${s.at}`;
+
+/**
+ * The warnings the banner and the rooms show: without the ones dismissed for now (unless this viewer saw that warning
+ * clear since, `spent`: snooze keys) and without the ones ignored for good – never a safety warning, whatever the plan says.
+ */
+export function shownAlerts<A extends AlertRef>(alerts: A[], settings: Pick<BuildingSettings, "alert_snoozed" | "alert_ignored">, spent?: ReadonlySet<string>): A[] {
+  const snoozed = settings.alert_snoozed ?? [];
+  const ignored = settings.alert_ignored ?? [];
+  if (!snoozed.length && !ignored.length) return alerts;
+  const live = new Set(snoozed.filter((s) => !spent?.has(snoozeKey(s))).map(alertKey));
+  const gone = new Set(ignored.filter((r) => mayIgnoreAlert(r.kind)).map(alertKey));
+  return alerts.filter((a) => !live.has(alertKey(a)) && !gone.has(alertKey(a)));
+}
+
+/**
+ * The "for now" dismissals whose warning has cleared: it fires again next time. A warning whose entity Home Assistant
+ * does not know right now (missing, unavailable, unknown: a restart) has not cleared – except the contact that is
+ * unavailable, whose warning waits 10 minutes after a restart before it shows again.
+ */
+export function clearedSnoozes(snoozed: readonly AlertSnooze[] | undefined, active: readonly AlertRef[], hass: HomeAssistant): AlertSnooze[] {
+  if (!snoozed?.length) return [];
+  const on = new Set(active.map(alertKey));
+  return snoozed.filter((s) => {
+    const state = hass.states[s.entity]?.state;
+    return !on.has(alertKey(s)) && state !== undefined && state !== "unavailable" && state !== "unknown";
+  });
+}
+
+/** The plan's dismissal lists after "dismiss for now" or "for good" on a warning (a safety warning: for now only). */
+export function dismissAlert(settings: Pick<BuildingSettings, "alert_snoozed" | "alert_ignored">, a: AlertRef, forGood: boolean, now: number): Pick<BuildingSettings, "alert_snoozed" | "alert_ignored"> {
+  const ref = { kind: a.kind, entity: a.entity };
+  const key = alertKey(ref);
+  const snoozed = (settings.alert_snoozed ?? []).filter((s) => alertKey(s) !== key);
+  const ignored = (settings.alert_ignored ?? []).filter((r) => alertKey(r) !== key);
+  if (forGood && mayIgnoreAlert(a.kind)) return { alert_snoozed: snoozed, alert_ignored: [...ignored, ref] };
+  return { alert_snoozed: [...snoozed, { ...ref, at: now }], alert_ignored: ignored };
+}
+
+/** The ignored list without one warning (undo of "for good"). */
+export function restoreAlert(ignored: readonly AlertRef[] | undefined, a: AlertRef): AlertRef[] {
+  return (ignored ?? []).filter((r) => alertKey(r) !== alertKey(a));
 }

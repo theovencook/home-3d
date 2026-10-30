@@ -39,7 +39,8 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
 } from "../devices.ts";
 import { effectFields } from "./effect-fields.ts";
 import { effectSettings, itemShade, motionRooms, tempShade } from "../room-effects.ts";
-import { alertEntities, alertSources, alertText, alertTint, findAlerts, isOutage, type Alert, type AlertSources } from "../alerts.ts";
+import { alertEntities, alertKey, alertSources, alertText, alertTint, clearedSnoozes, dismissAlert, findAlerts, HOUSE_ALERTS, isOutage, mayIgnoreAlert, restoreAlert, shownAlerts, snoozeKey, type Alert, type AlertSources } from "../alerts.ts";
+import { ignoredAlerts } from "./ignored-alerts.ts";
 import { iconPath, iconSvg, mdiIcon } from "../icons.ts";
 import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
 import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, fieldLevels, fieldPowers, findConsumers, flowDots, isLoad, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type FlowKind, type StatRow } from "../energy.ts";
@@ -331,6 +332,7 @@ export class Fp3dView3d extends LitElement {
     _narrowStage: { state: true },
     _phoneStage: { state: true },
     _alerts: { state: true },
+    _dismissing: { state: true },
     _household: { state: true },
     _hhFolded: { state: true },
     _binInfo: { state: true },
@@ -541,6 +543,8 @@ export class Fp3dView3d extends LitElement {
   private unsubAsk: Promise<() => Promise<void>> | null = null;
   private voiceTimer: ReturnType<typeof setTimeout> | undefined;
   private declare _alerts: Alert[];
+  /** The banner warning whose dismiss choices are open (its key), #138. */
+  private declare _dismissing: string | null;
   /** Haushalt Pro: what is due in the household now (the glass card "Today in the household"). */
   private declare _household: HouseholdItem[];
   private declare _hhFolded: boolean;
@@ -566,6 +570,8 @@ export class Fp3dView3d extends LitElement {
   /** When the next camera that saw motion turns back from red. */
   private redTimer: ReturnType<typeof setTimeout> | undefined;
   private seenAlerts = new Set<string>();
+  /** "For now" dismissals (snooze keys) this view saw their warning clear for: spent here even before an editor's view removes them (#138). */
+  private spentSnoozes = new Set<string>();
   /** A room briefly lit up after a double tap switched its lights. */
   private roomFlash: { roomId: string; until: number } | null = null;
   /** Scene and script chips of the selected room. */
@@ -794,6 +800,7 @@ export class Fp3dView3d extends LitElement {
     this._voice = null;
     this._micProbe = micProbeAsked();
     this._alerts = [];
+    this._dismissing = null;
     this._household = [];
     this._hhFolded = readFlag("home3d.hhFolded");
     this._binInfo = null;
@@ -1332,8 +1339,12 @@ export class Fp3dView3d extends LitElement {
     const openingStates = new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e, types.get(id))]));
     v.setOpeningStates(openingStates, jump);
     const own = this.alertSrc ? findAlerts(hass, b, this.alertSrc, this.openingLinks!) : [];
-    const fromModules = this.alerts && anyModule() ? moduleAlerts(this.sceneHost(hass, b)).map((a) => ({ kind: a.kind, entity: a.entity, roomId: a.roomId, floorId: a.floorId, text: a.text, color: a.color, quiet: !a.roomId })) : [];
-    this.setAlerts([...own, ...fromModules]);
+    const modulesOn = this.alerts && anyModule();
+    const fromModules = modulesOn ? moduleAlerts(this.sceneHost(hass, b)).map((a) => ({ kind: a.kind, entity: a.entity, roomId: a.roomId, floorId: a.floorId, text: a.text, color: a.color, quiet: !a.roomId })) : [];
+    const active = [...own, ...fromModules];
+    if (this.alertSrc) this.tidySnoozes(hass, b, active, modulesOn);
+    // dismissed warnings stay out of the banner, the rooms' pulse, the director and the voice answers (#138)
+    this.setAlerts(shownAlerts(active, b.settings, this.ro ? undefined : this.spentSnoozes));
     // Haushalt Pro: an open fridge door warns once it stood open too long – look again at that moment
     clearTimeout(this.fridgeTimer);
     const fridgeWait = hasFeature("household") && !this.replay ? nextFridgeCheck(b.floors.flatMap((f) => f.furniture), hass) : null;
@@ -2792,6 +2803,31 @@ export class Fp3dView3d extends LitElement {
       }
     }
     if (this.alertJump) this.jumpTo(fresh[0]);
+  }
+
+  /**
+   * "For now" dismissals end when their warning clears (#138): this view stops honouring them at once, and an editor's
+   * live view also takes them out of the plan, so every screen (a wall tablet without edit rights too) shows the warning
+   * again the next time it fires. Never while replaying; a module's warning only while the modules report.
+   */
+  private tidySnoozes(hass: HomeAssistant, b: Building, active: Alert[], modulesOn: boolean): void {
+    if (this.ro) return;
+    const done = clearedSnoozes(b.settings.alert_snoozed, active, hass).filter((s) => modulesOn || HOUSE_ALERTS.has(s.kind));
+    if (!done.length) return;
+    for (const s of done) this.spentSnoozes.add(snoozeKey(s));
+    if (!this.mayEdit) return;
+    const gone = new Set(done.map(snoozeKey));
+    this.setPlanSettings({ alert_snoozed: (b.settings.alert_snoozed ?? []).filter((s) => !gone.has(snoozeKey(s))) });
+  }
+
+  /** Dismiss a banner warning for now or for good (a safety warning: for now only); editors only (#138). */
+  private dismiss(a: Alert, forGood: boolean): void {
+    const b = this.building;
+    this._dismissing = null;
+    if (!b || !this.mayEdit) return;
+    this.setPlanSettings(dismissAlert(b.settings, a, forGood, Date.now()));
+    this.setAlerts(this._alerts.filter((x) => alertKey(x) !== alertKey(a)));
+    this.applyTint();
   }
 
   /** The live director's settings while it works on this screen (switched on here, Kamera-Cockpit, live, an event on). */
@@ -4297,8 +4333,28 @@ export class Fp3dView3d extends LitElement {
     const b = this.building;
     if (!this._alerts.length || !b) return nothing;
     const shown = this._alerts.slice(0, 3);
+    // editors dismiss a warning for now or for good (#138); not while replaying, not on a locked tablet
+    const may = this.mayEdit;
+    const t = (k: I18nKey) => translate(this.hass, k);
     return html`<div class="fp3d-alert-banner" role="alert">
-      ${shown.map((a) => html`<button class="fp3d-alert fp3d-alert-${a.kind}" title=${alertText(this.hass, b, a)} @click=${() => this.jumpTo(a)}>${alertText(this.hass, b, a)}</button>`)}
+      ${shown.map((a) => {
+        const key = alertKey(a);
+        const open = may && this._dismissing === key;
+        return html`<span class="fp3d-alert-item ${may ? "fp3d-alert-dismissable" : ""}">
+          <button class="fp3d-alert fp3d-alert-${a.kind}" title=${alertText(this.hass, b, a)} @click=${() => this.jumpTo(a)}>${alertText(this.hass, b, a)}</button>
+          ${may
+            ? html`<button class="fp3d-alert-x" title=${t("alert_dismiss")} aria-label=${t("alert_dismiss")} aria-expanded=${open ? "true" : "false"} @click=${() => (this._dismissing = open ? null : key)}>✕</button>`
+            : nothing}
+          ${open
+            ? html`<div class="fp3d-alert-menu" role="menu">
+                <button role="menuitem" title=${t("alert_dismiss_now_hint")} @click=${() => this.dismiss(a, false)}>${t("alert_dismiss_now")}</button>
+                ${mayIgnoreAlert(a.kind)
+                  ? html`<button role="menuitem" title=${t("alert_dismiss_good_hint")} @click=${() => this.dismiss(a, true)}>${t("alert_dismiss_good")}</button>`
+                  : html`<small>${t("alert_dismiss_safety")}</small>`}
+              </div>`
+            : nothing}
+        </span>`;
+      })}
       ${this._alerts.length > 3 ? html`<span class="fp3d-alert-more">+${this._alerts.length - 3}</span>` : nothing}
     </div>`;
   }
@@ -5506,6 +5562,7 @@ export class Fp3dView3d extends LitElement {
         ${check("rain_warning", st.rain_warning !== false, (v) => ({ rain_warning: v }))}
         ${check("alert_unavailable", !!st.alert_unavailable, (v) => ({ alert_unavailable: v }))}
         ${check("alert_names", st.alert_names !== false, (v) => ({ alert_names: v }))}
+        ${ignoredAlerts(hass, st.alert_ignored, !admin, (a) => this.setPlanSettings({ alert_ignored: restoreAlert(st.alert_ignored, a) }))}
         <h4 title=${t("effects_hint")}>${t("effects")}</h4>
         ${effectFields(hass, st.effects, !admin, (effects) => this.setPlanSettings({ effects }))}
         ${modules.map((fields) => html`<div class="fp3d-set-module">${fields.map((f) => this.renderViewField(hass, f, admin))}</div>`)}
@@ -6498,6 +6555,66 @@ export class Fp3dView3d extends LitElement {
       .fp3d-alert-alarm_pending {
         border-left-color: #ffb547;
         box-shadow: 0 0 18px rgba(255, 181, 71, 0.35);
+      }
+      /* a warning with its dismiss button and choices (#138) */
+      .fp3d-alert-item {
+        position: relative;
+        display: flex;
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+      .fp3d-alert-dismissable .fp3d-alert {
+        border-radius: 12px 0 0 12px;
+        padding-right: 10px;
+      }
+      .fp3d-alert-x {
+        flex: none;
+        min-width: 36px;
+        min-height: 34px;
+        padding: 0 10px;
+        border: 0;
+        border-left: 1px solid rgba(127, 127, 127, 0.25);
+        border-radius: 0 12px 12px 0;
+        background: var(--fp3d-chrome-solid);
+        color: var(--fp3d-muted);
+        font: 600 13px var(--fp3d-font);
+        cursor: pointer;
+      }
+      .fp3d-alert-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 150px;
+        padding: 6px;
+        border-radius: 12px;
+        background: var(--fp3d-chrome-solid);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+        z-index: 5;
+      }
+      .fp3d-alert-menu button {
+        min-height: 40px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--fp3d-text);
+        font: 600 13.5px var(--fp3d-font);
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-alert-menu button:hover,
+      .fp3d-alert-menu button:focus-visible {
+        background: rgba(127, 127, 127, 0.18);
+      }
+      .fp3d-alert-menu small {
+        padding: 2px 14px 6px;
+        max-width: 200px;
+        color: var(--fp3d-muted);
+        font-size: 12px;
+        white-space: normal;
       }
       .fp3d-alert-more {
         align-self: center;
