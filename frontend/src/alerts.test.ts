@@ -4,6 +4,11 @@ import { alertColor, alertEntities, alertSources, alertText, alertTint, findAler
 import type { OpeningEntities } from "./devices.ts";
 import { emptyBuilding, newFloor, type Opening } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
+import { de } from "./i18n-de.ts";
+import { useLanguage } from "./i18n.ts";
+
+// these tests read the German texts, which a page fetches (lang/de.json, #134)
+useLanguage("de", de);
 
 function setup() {
   const st = (entity_id: string, state: string, attributes: Record<string, unknown> = {}) => ({ entity_id, state, attributes });
