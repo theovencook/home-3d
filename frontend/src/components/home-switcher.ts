@@ -4,9 +4,11 @@
 // active home again); only "Show on displays" changes the active home, so an experiment never blanks a wall tablet.
 
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
+import { askConfirm, askText, tell } from "../ask.ts";
 import { createHome, deleteHome, duplicateHome, listHomes, renameHome, setActiveHome, type HomeInfo, type HomesList } from "../api.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import type { HomeAssistant } from "../types.ts";
+import "./ask-dialog.ts";
 
 const ACTIONS = ["show", "new", "rename", "duplicate", "delete"] as const;
 type Action = (typeof ACTIONS)[number];
@@ -83,7 +85,7 @@ export class Fp3dHomeSwitcher extends LitElement {
       this.listed(res);
       return res;
     } catch (err) {
-      alert(this.t("home_failed", { error: String((err as { message?: string })?.message ?? err) }));
+      await tell(this.t("home_failed", { error: String((err as { message?: string })?.message ?? err) }), { ok: this.t("ask_ok") });
       return null;
     }
   }
@@ -95,8 +97,9 @@ export class Fp3dHomeSwitcher extends LitElement {
 
   private async act(action: Action): Promise<void> {
     const current = this._homes?.find((h) => h.id === this.home);
+    const named = (value: string) => askText(this.t("home_name_prompt"), value, { ok: this.t("ask_ok"), cancel: this.t("cancel") });
     if (action === "new") {
-      const name = prompt(this.t("home_name_prompt"), this.t("home_new_name"))?.trim();
+      const name = await named(this.t("home_new_name"));
       const res = name ? await this.run(() => createHome(this.hass, name)) : null;
       if (res) this.open(res.home.id);
     } else if (!current) {
@@ -105,13 +108,13 @@ export class Fp3dHomeSwitcher extends LitElement {
       // no confirmation (#58): the action says what it does and is undone the same way
       if (await this.run(() => setActiveHome(this.hass, current.id))) this.open(null);
     } else if (action === "rename") {
-      const name = prompt(this.t("home_name_prompt"), current.name)?.trim();
+      const name = await named(current.name);
       if (name && name !== current.name) await this.run(() => renameHome(this.hass, current.id, name));
     } else if (action === "duplicate") {
-      const name = prompt(this.t("home_name_prompt"), this.t("home_copy_name", { name: current.name }))?.trim();
+      const name = await named(this.t("home_copy_name", { name: current.name }));
       const res = name ? await this.run(() => duplicateHome(this.hass, current.id, name)) : null;
       if (res) this.open(res.home.id);
-    } else if (confirm(this.t("home_delete_confirm", { name: current.name }))) {
+    } else if (await askConfirm(this.t("home_delete_confirm", { name: current.name }), { ok: this.t("delete"), cancel: this.t("cancel"), danger: true })) {
       // the open home is gone: show the active one (the backend picks another if it was the active one)
       if (await this.run(() => deleteHome(this.hass, current.id))) this.open(null);
     }

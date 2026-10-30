@@ -130,3 +130,30 @@ async def test_an_older_imported_copy_does_not_hide_the_bundled_one(hass: HomeAs
     assert (await client.receive_json())["success"]
     cores = [p for p in await _listed(client) if p["id"] == "theovencook.core"]
     assert [p.get("bundled", False) for p in cores] == [True]
+
+
+async def test_a_fresh_install_has_the_makers_and_devices_packs(hass: HomeAssistant, hass_ws_client) -> None:
+    """The themed packs (#109) load from the disk like the core: offline, MIT, with items, under the item limit."""
+    client = await _client(hass, hass_ws_client)
+    listed = await _listed(client)
+    for pack_id, name in (("theovencook.makers", "Makers"), ("theovencook.devices", "Smart-home devices")):
+        found = next(p for p in listed if p["id"] == pack_id)
+        assert found["bundled"] is True
+        assert found["name"] == name
+        assert found["licence"] == "MIT"
+        assert 1 <= len(found["items"]) <= packs.MAX_ITEMS
+    assert "theovencook.core" in [p["id"] for p in listed]
+
+
+def test_every_printer_in_the_makers_pack_gets_the_live_printer_state() -> None:
+    """The progress ring, chamber light and camera (#11) are found by the item id and `electric`; a makers printer
+    needs both and a glowing chamber light part."""
+    printers = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted((BUNDLED / "theovencook.makers").glob("*/*.json"))
+        if "3d_printer" in path.stem
+    ]
+    assert printers, "the makers pack has a printer"
+    for item in printers:
+        assert item["electric"] is True, item["id"]
+        assert any(part.get("glow") for part in item["parts"]), item["id"]

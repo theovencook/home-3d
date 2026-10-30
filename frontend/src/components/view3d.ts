@@ -109,7 +109,8 @@ import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from 
 import { furnitureName } from "../furniture-names.ts";
 import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
-import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion, recipeHashes } from "../packs.ts";
+import { holdTarget } from "../hold.ts";
+import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
@@ -156,6 +157,8 @@ import { Director, HOLD_DEFAULT, directorAny, doorbellCamera, doorbellEntities, 
 import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
 import { sunPath, type SunPath } from "../sun-path.ts";
 import { cheapRate } from "../cheap-rate.ts";
+import { askConfirm } from "../ask.ts";
+import "./ask-dialog.ts";
 import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
@@ -278,7 +281,6 @@ export class Fp3dView3d extends LitElement {
     ghostOn: { attribute: false },
     _central: { state: true },
     _sheet: { state: true },
-    _ask: { state: true },
     _settingsOpen: { state: true },
     _note: { state: true },
     _thumbsCompact: { state: true },
@@ -560,7 +562,6 @@ export class Fp3dView3d extends LitElement {
   /** The ⚙ settings over the view are open. */
   private declare _settingsOpen: boolean;
   /** An own action asking first (#6): its question, and the answer to give. */
-  private declare _ask: { text: string; answer: (yes: boolean) => void } | null;
   /** Items with own tap, hold or double-tap actions, by the id a tap on them reports (#6). */
   private actionOwners = new Map<string, ActionOwner>();
   /** Tells a tap from a double tap on items that have a double-tap action. */
@@ -816,7 +817,6 @@ export class Fp3dView3d extends LitElement {
     this.wireKey = "";
     document.removeEventListener("visibilitychange", this.onVisible);
     this.taps.cancel();
-    this._ask?.answer(false);
     this.stopWalk();
     this.pets?.dispose();
     this.pets = null;
@@ -2204,11 +2204,11 @@ export class Fp3dView3d extends LitElement {
     };
     const svc = (domain: string, service: string, id: string) => void hass.callService(domain, service, { entity_id: id });
     const onOff = (id: string, on: boolean) => (id.startsWith("climate.") ? svc("climate", on ? "turn_on" : "turn_off", id) : svc("homeassistant", on ? "turn_on" : "turn_off", id));
-    const lockTap = () => {
+    const lockTap = async () => {
       if (!c.lock) return;
       const isLock = c.lock.startsWith("lock.");
       if (c.locked) {
-        if (!confirm(t("car_unlock_confirm"))) return;
+        if (!(await this.ask(t("car_unlock_confirm")))) return;
         if (isLock) svc("lock", "unlock", c.lock);
         else svc("homeassistant", "turn_off", c.lock);
       } else if (isLock) svc("lock", "lock", c.lock);
@@ -3002,18 +3002,18 @@ export class Fp3dView3d extends LitElement {
         if (shade?.kind === "radiator") {
           // brighter while it heats
           const a = st && kindOf(st.entity_id) === "climate" ? st.attributes : null;
-          const heating = heatSensorOn(hass, f.heat_sensor) ?? a?.hvac_action === "heating";
+          const heating = heatSensorOn(hass, f.heat_sensor) ?? (!!a && isActive(st) && a.hvac_action !== "cooling"); // a TRV without hvac_action: below its target (#81)
           screens.set(f.id, { color: shade.color, level: heating ? 0.9 : 0.55, shade: true });
         } else if (shade?.kind === "tank") {
           // warm above, cooler below, like the water in it
           const s = effectSettings(b);
           const below = tempShade(shade.celsius - 0.3 * (s.tank_hot - s.tank_cold), s.tank_cold, s.tank_hot);
           screens.set(f.id, { color: below, level: 0.8, shade: true, faces: [{ part: "strata", color: below, top: shade.color, level: 0.8 }] });
-        } else if (f.type === "radiator" && ((st && kindOf(st.entity_id) === "climate") || f.heat_sensor)) {
+        } else if (isThermostatItem(f.type) && ((st && kindOf(st.entity_id) === "climate") || f.heat_sensor)) {
           // glows while it heats; brighter the further the room is below its target. A thermostat that does not tell
           // (Tuya's valves report a "work state" sensor instead) is asked through the radiator's own sensor (D637)
           const a = st && kindOf(st.entity_id) === "climate" ? st.attributes : null;
-          const heating = heatSensorOn(hass, f.heat_sensor) ?? a?.hvac_action === "heating";
+          const heating = heatSensorOn(hass, f.heat_sensor) ?? (!!a && isActive(st) && a.hvac_action !== "cooling"); // a TRV without hvac_action: below its target (#81)
           if (heating) {
             const gap = a && typeof a.temperature === "number" && typeof a.current_temperature === "number" ? a.temperature - a.current_temperature : 1;
             screens.set(f.id, { color: [1, 0.42, 0.1], level: Math.min(1, 0.45 + 0.25 * Math.max(0, gap)) });
@@ -3367,9 +3367,8 @@ export class Fp3dView3d extends LitElement {
           const w = g.power && g.power !== "none" ? readPower(hass.states[g.power]) : null;
           const label = `${socket ? "🔌" : "▭"} ${i + 1} · ${id ? entityName(hass, id) : "–"}`;
           return html`<button class="fp3d-chip ${st && isActive(st) ? "fp3d-gang-on" : ""}" ?disabled=${!id || (st ? isUnavailable(st) : true)}
-            @click=${() => {
-              if (!id) return;
-              if (this.confirmSet.has(id) && !confirm(translate(hass, "confirm_switch", { name: entityName(hass, id) }))) return;
+            @click=${async () => {
+              if (!id || !(await this.confirmFor(id))) return;
               void toggleEntity(hass, id);
             }}>${label}${st ? html` <small>${stateText(hass, st)}${w !== null ? ` · ${formatPower(hass, Math.max(0, w))}` : ""}</small>` : nothing}</button>`;
         })}
@@ -3869,7 +3868,7 @@ export class Fp3dView3d extends LitElement {
     </nav>`;
   }
 
-  /** Long press: the quick menu at the device, or the details for devices without one. */
+  /** Long press: Home Assistant's more-info of the device, like other HA cards (#82); an own hold action wins. */
   private onDeviceHold(entityId: string, x: number, y: number): void {
     const own = this.ro ? null : gestureAction(this.actionOwners.get(entityId), "hold");
     if (own) return this.runOwnAction(own, this.actionOwners.get(entityId)!, x, y);
@@ -3900,9 +3899,11 @@ export class Fp3dView3d extends LitElement {
           }
         }
     }
-    const kind = kindOf(entityId);
-    if (kind === "light" || kind === "cover" || kind === "switch" || kind === "fan" || kind === "lock" || kind === "camera") this._menu = { entity: entityId, x, y };
-    else openMoreInfo(this, entityId);
+    // every device opens its more-info (a light, a switch, a lock and a camera too: their quick menu stays on the
+    // tap where a tap opens it, a cover's and a camera's); pins without one entity behind them do what a tap does
+    const target = holdTarget(entityId);
+    if (target) openMoreInfo(this, target);
+    else this.onDeviceTap(entityId, x, y);
   }
 
   /** Swipe up or down on a lamp (brightness) or a blind (position). */
@@ -5555,32 +5556,14 @@ export class Fp3dView3d extends LitElement {
     }).catch((err: unknown) => this.showNote(translate(hass, "action_failed", { error: err instanceof Error ? err.message : String(err) })));
   }
 
-  /** Ask a question in the app's own dialog; true for yes. A question still open is answered no. */
+  /** A yes / no question in the app's own dialog (#59); true for yes. */
   private ask(text: string): Promise<boolean> {
-    this._ask?.answer(false);
-    return new Promise((resolve) => {
-      this._ask = {
-        text,
-        answer: (yes) => {
-          this._ask = null;
-          resolve(yes);
-        },
-      };
-    });
+    return askConfirm(text, { ok: translate(this.hass, "action_confirm_ok"), cancel: translate(this.hass, "cancel") });
   }
 
-  private renderAsk() {
-    const a = this._ask;
-    if (!a) return nothing;
-    const t = (k: I18nKey) => translate(this.hass, k);
-    return html`<div class="fp3d-sheet-backdrop" @click=${() => a.answer(false)}></div>
-      <div class="fp3d-sheet fp3d-ask" role="alertdialog" aria-modal="true" aria-label=${t("action_confirm_title")} @keydown=${(e: KeyboardEvent) => e.key === "Escape" && a.answer(false)}>
-        <p class="fp3d-ask-text">${a.text}</p>
-        <div class="fp3d-ask-buttons">
-          <button class="fp3d-btn" @click=${() => a.answer(false)}>${t("cancel")}</button>
-          <button class="fp3d-btn fp3d-primary" autofocus @click=${() => a.answer(true)}>${t("action_confirm_ok")}</button>
-        </div>
-      </div>`;
+  /** Asks first for devices marked so ("ask before switching"). */
+  private async confirmFor(id: string): Promise<boolean> {
+    return !this.confirmSet.has(id) || (await this.ask(translate(this.hass, "confirm_switch", { name: entityName(this.hass, id) })));
   }
 
   /** What a tap does by the device's kind (no own action). */
@@ -5654,8 +5637,7 @@ export class Fp3dView3d extends LitElement {
       return;
     }
     if (kind && TOGGLE_KINDS.has(kind)) {
-      if (this.confirmSet.has(entityId) && !confirm(translate(this.hass, "confirm_switch", { name: entityName(this.hass, entityId) }))) return;
-      void toggleEntity(this.hass, entityId);
+      void this.confirmFor(entityId).then((yes) => yes && toggleEntity(this.hass, entityId));
     } else openMoreInfo(this, entityId);
   }
 
@@ -5687,10 +5669,9 @@ export class Fp3dView3d extends LitElement {
       openMoreInfo(this, drive);
       return;
     }
-    if (this.confirmSet.has(drive) && !confirm(translate(this.hass, "confirm_switch", { name: entityName(this.hass, drive) }))) return;
     // a pulse switch turns itself off again: it is only ever switched on; buttons are pressed
     const [domain] = drive.split(".");
-    void this.hass.callService(domain, domain === "switch" ? "turn_on" : "press", { entity_id: drive });
+    void this.confirmFor(drive).then((yes) => yes && this.hass.callService(domain, domain === "switch" ? "turn_on" : "press", { entity_id: drive }));
   }
 
   /** The look shown: the chosen one, by the sun for "auto" (Day above the horizon, Neon below), by the HA theme for "theme". */
@@ -5850,7 +5831,7 @@ export class Fp3dView3d extends LitElement {
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderWires()} ${this.clean ? nothing : this.renderLegend()}
-      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderAsk()} ${this.renderSettings()} ${this.renderNote()}
+      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderSettings()} ${this.renderNote()}
       ${this.clean ? nothing : this.renderProHint()} ${this.renderMenu()} ${this.renderEye()}
       ${this.renderMic()}
       ${this.pivotMark && !this._walk ? html`<span class="fp3d-pivot" aria-hidden="true"></span>` : nothing}
@@ -6998,21 +6979,6 @@ export class Fp3dView3d extends LitElement {
         font-size: 12px;
       }
       /* a module's sheet and the ⚙ settings: a glass box in the middle, over a dim backdrop */
-      .fp3d-ask {
-        z-index: 9;
-        width: min(360px, calc(100% - 24px));
-      }
-      .fp3d-ask-text {
-        margin: 0;
-        font-size: 1rem;
-        line-height: 1.4;
-        white-space: pre-line;
-      }
-      .fp3d-ask-buttons {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-      }
       .fp3d-sheet-backdrop {
         position: absolute;
         inset: 0;

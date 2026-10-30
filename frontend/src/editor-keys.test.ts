@@ -27,3 +27,8 @@ test("nothing chosen in another tool: Escape returns to Select; in Select it let
   assert.equal(escapeStep({ ...calm, tool: "furniture" }), "select_tool");
   assert.equal(escapeStep({ ...calm, room: true }), "deselect");
 });
+
+test("an armed library card is cancelled after the menu and before a pipe, outline or selection (#76)", () => {
+  assert.equal(escapeStep({ ...calm, menu: true, placing: true }), "close_menu");
+  assert.equal(escapeStep({ ...calm, placing: true, pipeDraft: true, item: true, tool: "furniture" }), "cancel_place");
+});

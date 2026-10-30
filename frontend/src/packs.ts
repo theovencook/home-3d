@@ -491,9 +491,30 @@ export function furnitureSize(type: string): [number, number, number] {
 
 /** Whether a type can be linked with entities (power sensor, switch …). */
 export function isElectric(type: string): boolean {
-  // a pack item that only lights (a mirror with light, an aquarium) links a light like any lamp
+  // a pack item that only lights (a mirror with light, an aquarium) links a light like any lamp;
+  // a radiator with a TRV or a smart valve links its thermostat like the built-in radiator (#81)
   const item = packInfo(type);
-  return ELECTRIC_FURNITURE.has(type) || !!item?.electric || !!item?.light;
+  return ELECTRIC_FURNITURE.has(type) || !!item?.electric || !!item?.light || isThermostatItem(type);
+}
+
+const PACK_THERMOSTAT_FAMILIES = new Set(["radiator_trv", "radiator_valve", "thermostat"]);
+
+/**
+ * A radiator run by a thermostat (#81): the built-in radiator, or a pack's radiator with a TRV, a smart radiator
+ * valve or a wall thermostat (by family, or tagged "trv" / "thermostat"). Its main link is a climate entity.
+ */
+export function isThermostatItem(type: string): boolean {
+  if (type === "radiator") return true;
+  const item = isPackType(type) ? packInfo(type) : undefined;
+  if (!item) return false;
+  return PACK_THERMOSTAT_FAMILIES.has(item.family ?? "") || (item.tags ?? []).some((t) => /^(trv|smart trv|thermostat)$/i.test(t));
+}
+
+/** A pack's camera (a security camera, a doorbell camera): by family or tag. It links a camera entity (#81). */
+export function isCameraItem(type: string): boolean {
+  const item = isPackType(type) ? packInfo(type) : undefined;
+  if (!item) return false;
+  return /camera$/.test(item.family ?? "") || (item.tags ?? []).some((t) => /^(camera|security camera|cctv|doorbell|video doorbell|doorbell camera)$/i.test(t));
 }
 
 /** Name of a pack item in a language (English, then the first name as fallback). */
