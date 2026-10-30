@@ -822,14 +822,21 @@ def ws_homes_list(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
         _send_homes(data, connection, msg)
 
 
-@websocket_api.websocket_command({vol.Required("type"): "home_3d/homes/create", vol.Required("name"): _HOME_NAME})
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_3d/homes/create",
+        vol.Required("name"): _HOME_NAME,
+        # False for a sample or template home (#61): no import of this install's areas offered
+        vol.Optional("area_import", default=True): bool,
+    }
+)
 @require_editor
 @websocket_api.async_response
 async def ws_homes_create(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Add an empty home (it does not become active)."""
     if (data := _data(hass, connection, msg)) is None:
         return
-    home = await data.async_create_home(msg["name"])
+    home = await data.async_create_home(msg["name"], area_import=msg["area_import"])
     _send_homes(data, connection, msg, home=home.info())
 
 

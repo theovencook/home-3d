@@ -840,6 +840,10 @@ export interface BuildingSettings {
   halloween?: { ghost?: boolean } | null;
   /** Plan lock: rooms, walls, doors, windows and outdoor areas cannot be moved by accident. */
   lock_plan?: boolean;
+  /** False for a sample or template home (#61): the editor never offers to add rooms from this install's areas. */
+  area_import?: boolean;
+  /** Entities left out of the editor's "Unplaced entities" list on purpose (#83); unhidden from its Hidden view. */
+  unplaced_hidden?: string[];
   /** The camera the house view opens with (3D view, card, kiosk); null = fitted from the front left. */
   start_view?: StartView | null;
   /** What a module keeps for the whole house (its settings), by the module's id. */
@@ -1289,6 +1293,23 @@ export function floorElevation(floors: Floor[], level: number | null | undefined
   if (level != null && Number.isFinite(level)) return Math.round(level * LEVEL_HEIGHT * 100) / 100;
   const top = floors.reduce<Floor | null>((t, f) => (!t || f.elevation > t.elevation ? f : t), null);
   return top ? Math.round((top.elevation + top.height + 0.25) * 100) / 100 : 0;
+}
+
+/**
+ * The Home Assistant areas of a floor's HA floor that have no room in the plan yet: what "Add rooms from HA areas"
+ * would add. None for a sample or template home (#61) or a floor without an HA floor. An area that an outdoor area
+ * stands for (the garden) counts as placed.
+ */
+export function unplacedAreas<A extends { area_id: string; name: string; floor_id?: string | null }>(
+  building: Pick<Building, "floors" | "settings">,
+  floor: Floor,
+  areas: Record<string, A> | undefined,
+): A[] {
+  if (building.settings.area_import === false || !floor.ha_floor) return [];
+  const used = new Set(building.floors.flatMap((f) => [...f.rooms.map((r) => r.area_id), ...(f.outdoor ?? []).map((a) => a.area_id ?? null)]));
+  return Object.values(areas ?? {})
+    .filter((a) => a.floor_id === floor.ha_floor && !used.has(a.area_id))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**

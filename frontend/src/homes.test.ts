@@ -100,3 +100,38 @@ test("a view following the active home loads the new one when it is switched", a
   c.hostDisconnected();
   setPlanRecipes(undefined);
 });
+
+test("reopening the shown home loads it afresh from the backend (#57)", async () => {
+  const { hass, state, homes } = backend();
+  const c = await open(hass, "flat");
+  homes.flat = { building: empty("Flat elsewhere"), revision: 2 };
+  const gets = () => state.sent.filter((m) => m.type === "home_3d/building/get").length;
+  const before = gets();
+  await c.reopen();
+  assert.equal(gets(), before + 1);
+  assert.equal(c.homeId, "flat");
+  assert.equal(c.building?.floors[0].name, "Flat elsewhere");
+  c.hostDisconnected();
+  setPlanRecipes(undefined);
+});
+
+test("a view opens another home for itself only and then follows the active home again (#58)", async () => {
+  const { hass, state, homes } = backend();
+  const c = await open(hass);
+  c.setHome("flat");
+  await tick();
+  await tick();
+  assert.equal(c.homeId, "flat");
+  assert.equal(state.active, "home");
+  c.edit(empty("Flat changed") as unknown as Building);
+  await c.flush();
+  assert.equal(homes.flat.revision, 3);
+  assert.equal(homes.home.revision, 7);
+  c.setHome(undefined);
+  await tick();
+  await tick();
+  assert.equal(c.homeId, "home");
+  assert.equal(c.building?.floors[0].name, "Own");
+  c.hostDisconnected();
+  setPlanRecipes(undefined);
+});

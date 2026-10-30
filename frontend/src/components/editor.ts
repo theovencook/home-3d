@@ -27,7 +27,7 @@ import { screenName, setScreenName, setVoiceHere, setVoicePipeline, voiceOnHere,
 import { doorbellCamera, doorbellEntities, directorOnHere, HOLD_DEFAULT, HOLD_MAX, HOLD_MIN, setDirectorHere, type DirectorSettings } from "../director.ts";
 import { deviceSensors, energySummary, flowSegments, gridPoint, powerSensorFor, proposeEnergySensors, type EnergyPrefs, type FlowSegment, proposeMeters } from "../energy.ts";
 import { energySensorFor } from "../wire-ends.ts";
-import { CLIMATE_ATTRS, isPulseDrive, isStatusSensor, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
+import { CLIMATE_ATTRS, isPulseDrive, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
 import { ACTION_TYPES, GESTURES, actionTypeChoosable, parseActionData, performActionLocked, withGesture, type ActionType, type Gesture, type ItemAction, type ItemActions } from "../item-actions.ts";
 import { activeSections, sectionFloor, dormerParent, effectiveDormer, proposeDormer, sectionGeometry, floorOutline, polygonBox, headroomLines, ridgeHeight, sectionAbove, sectionCutsBelow, roofSectionsFromRooms, sectionFrame, sectionTurn, turnSectionAbout, wallTopUnder } from "../roof-sections.ts";
 import { bestFace, clampField, faceAt, faceCompass, fieldFace, fieldModules, GROUND, moveField, pointOnFace, proposeField, proposeGroundField, proposeWindow, proposeWallField, roofFaces, rowCounts, turnGroundField, fieldCenter, wallFaces, windowAsField, windowCorners, onFace, onField, rayOnFace, type RoofFace } from "../solar.ts";
@@ -111,6 +111,7 @@ import {
   floorElevation,
   resizeFurniture,
   roomTiles,
+  unplacedAreas,
   pointInPolygon,
   polygonArea,
   uid,
@@ -172,8 +173,12 @@ import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { effectFields } from "./effect-fields.ts";
 import { itemTempSource, roomLiveSensors, shadeKind, type LiveKind } from "../room-effects.ts";
-import { energyRole, furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
-import { isPrinter } from "../printer.ts";
+import { energyRole, furnitureSize, isElectric, isPackType, isRobotVacuum, migratePlanTypes, mountBase, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
+import { isCameraItem, isThermostatItem, isTvLike, linkFilter } from "../furniture-links.ts";
+import { hiddenUnplaced, setUnplacedHidden, suggestLinks, unplacedByArea, type LinkSuggestion } from "../unplaced.ts";
+
+/** Drag-and-drop type of an entity dragged from the unplaced list onto the plan (#83). */
+const ENTITY_DRAG = "application/x-home3d-entity";
 import { setIntervalPart } from "../show-when.ts";
 
 /** Items that can be fixed against moving. */
@@ -414,6 +419,8 @@ export class Fp3dEditor extends LitElement {
     _deviceId: { state: true },
     _deviceQuery: { state: true },
     _devSource: { state: true },
+    _unplacedOpen: { state: true },
+    _unplacedHiddenView: { state: true },
     _roofId: { state: true },
     _solarId: { state: true },
     _solarPick: { state: true },
@@ -539,6 +546,9 @@ export class Fp3dEditor extends LitElement {
   private declare _deviceQuery: string;
   /** Which devices the room form lists: its own area, other areas, or entities without an area. */
   private declare _devSource: "area" | "other" | "none";
+  /** The floor overview's "Unplaced entities" list is open (#83; computed only then), and shows the hidden ones. */
+  private declare _unplacedOpen: boolean;
+  private declare _unplacedHiddenView: boolean;
   /** Selected roof section (tool "roof"). */
   private declare _roofId: string | null;
   /** Selected solar field (roof tool). */
@@ -747,6 +757,8 @@ export class Fp3dEditor extends LitElement {
     this._deviceId = null;
     this._deviceQuery = "";
     this._devSource = "area";
+    this._unplacedOpen = false;
+    this._unplacedHiddenView = false;
     this._roofId = null;
     this._solarId = null;
     this._solarPick = false;
@@ -3156,14 +3168,9 @@ export class Fp3dEditor extends LitElement {
       .sort((a, b) => (a.level ?? 99) - (b.level ?? 99) || a.name.localeCompare(b.name));
   }
 
-  /** Areas of a floor's Home Assistant floor that have no room in the plan yet. */
+  /** Areas of a floor's Home Assistant floor that have no room in the plan yet (none for a sample home, #61). */
   private unplacedAreas(floor: Floor): HassArea[] {
-    if (!floor.ha_floor) return [];
-    // an area that an outdoor area stands for (the garden) is placed too
-    const used = this.usedAreas();
-    return Object.values(this.hass?.areas ?? {})
-      .filter((a) => a.floor_id === floor.ha_floor && !used.has(a.area_id))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return unplacedAreas(this._doc, floor, this.hass?.areas);
   }
 
   private addFloor(ha: HassFloor | null = null): void {
@@ -5271,11 +5278,13 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Place entities in the selected room; an entity already placed elsewhere moves here. */
-  private placeDevices(entityIds: string[], zone?: Room): void {
+  private placeDevices(entityIds: string[], zone?: Room, floorId?: string): void {
     const room = zone ?? this.room;
     if (!room || !entityIds.length || !this.isEditor) return;
     const ids = new Set(entityIds);
-    this.change((doc, floor) => {
+    this.change((doc, current) => {
+      // the room's own floor (the unplaced list places into any floor's room, #83)
+      const floor = (floorId && doc.floors.find((f) => f.id === floorId)) || current;
       for (const f of doc.floors) {
         f.placements = f.placements.filter((pl) => !ids.has(pl.entity_id));
         f.furniture = f.furniture.filter((m) => !(isLamp(m.type) && m.entity && ids.has(m.entity)));
@@ -5295,6 +5304,137 @@ export class Fp3dEditor extends LitElement {
         floor.furniture.push({ id: uid("furniture"), type: "lamp_ceiling", x: pl.x, z: pl.z, rotation: 0, w, d, h, variant: null, entity: pl.entity_id, power: null });
       }
     });
+  }
+
+  /** Drag an unplaced entity from the side bar onto the plan (#83). */
+  private onPlanDragOver = (e: DragEvent): void => {
+    if (this.isEditor && this.floor && e.dataTransfer?.types.includes(ENTITY_DRAG)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  };
+
+  /** Dropped on the plan: the entity is placed at that point (a light in a room as a ceiling lamp, like Place). */
+  private onPlanDrop = (e: DragEvent): void => {
+    const id = e.dataTransfer?.getData(ENTITY_DRAG);
+    const svg = this.renderRoot.querySelector("svg.fp3d-plan");
+    if (!id || !svg || !this.isEditor || !this.floor) return;
+    e.preventDefault();
+    const rect = svg.getBoundingClientRect();
+    const [x, z] = this.toWorld(e.clientX - rect.left, e.clientY - rect.top);
+    const roomId = this.roomAt([x, z]);
+    const room = this.floor.rooms.find((r) => r.id === roomId);
+    this.change((doc, floor) => {
+      for (const f of doc.floors) {
+        f.placements = f.placements.filter((pl) => pl.entity_id !== id);
+        f.furniture = f.furniture.filter((m) => !(isLamp(m.type) && m.entity === id));
+      }
+      const at = { x: round(x), z: round(z) };
+      if (id.startsWith("light.") && room && !room.outdoor) {
+        const [w, d, h] = FURNITURE_SIZE.lamp_ceiling;
+        floor.furniture.push({ id: uid("furniture"), type: "lamp_ceiling", ...at, rotation: 0, w, d, h, variant: null, entity: id, power: null });
+        return;
+      }
+      floor.placements.push({ entity_id: id, ...at, y: null, mount: null });
+      const model = id.startsWith("camera.") && this.hass ? detectCameraModel(this.hass, id, this.packs ?? []) : null;
+      if (model) setCameraLook(floor, id, model);
+    });
+  };
+
+  /** Link a suggested item to an unplaced entity in one tap (#83). */
+  private acceptLink(entityId: string, s: LinkSuggestion): void {
+    this.change((doc) => {
+      const f = doc.floors.find((fl) => fl.id === s.floorId)?.furniture.find((m) => m.id === s.furnitureId);
+      if (f) f.entity = entityId;
+    });
+  }
+
+  private setUnplacedHidden(entityId: string, on: boolean): void {
+    this.change((doc) => {
+      doc.settings.unplaced_hidden = setUnplacedHidden(doc.settings, entityId, on);
+    });
+  }
+
+  /**
+   * "Unplaced entities" (#83): the devices of each HA area the plan does not show yet. Place puts one into the
+   * area's room (or drag it onto the plan), a suggested item is linked in one tap, Hide moves it to the Hidden view.
+   * Computed only while open: it walks every area.
+   */
+  private renderUnplaced() {
+    const hass = this.hass;
+    if (!hass || !this.isEditor || !hass.areas) return nothing;
+    const b = this._doc;
+    const open = this._unplacedOpen;
+    const hiddenN = (b.settings.unplaced_hidden ?? []).length;
+    const icon = (id: string) =>
+      html`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${iconPath(kindOf(id) ?? "sensor")} /></svg>`;
+    const body = () => {
+      if (this._unplacedHiddenView) {
+        const hidden = hiddenUnplaced(hass, b);
+        return html`<button class="fp3d-link" @click=${() => (this._unplacedHiddenView = false)}>← ${this.t("unplaced_back")}</button>
+          ${hidden.length
+            ? html`<div class="fp3d-room-list">
+                ${hidden.map(
+                  (h) => html`<div class="fp3d-row fp3d-dev-row">
+                    <span class="fp3d-dev-name">${icon(h.id)}<span>${entityName(hass, h.id)}${h.area ? html`<small class="fp3d-muted"> · ${h.area}</small>` : nothing}</span></span>
+                    <button class="fp3d-link" @click=${() => this.setUnplacedHidden(h.id, false)}>${this.t("unplaced_unhide")}</button>
+                  </div>`,
+                )}
+              </div>`
+            : html`<p class="fp3d-sub">${this.t("unplaced_hidden_none")}</p>`}`;
+      }
+      const links = furnitureEntities(hass, b.floors);
+      const linked = [...links.values()].flatMap((l) => [l.entity, l.power]).filter((v): v is string => !!v);
+      const here = this._floorId;
+      // the areas of this floor's rooms first
+      const areas = unplacedByArea(hass, b, { linked }).sort((x, y) => Number(y.floorId === here) - Number(x.floorId === here));
+      const suggested = suggestLinks(hass, b, areas, links);
+      const itemName = (s: LinkSuggestion) => {
+        const f = b.floors.find((fl) => fl.id === s.floorId)?.furniture.find((m) => m.id === s.furnitureId);
+        return f ? f.name || furnitureName(hass, f.type) : "";
+      };
+      const LIMIT = 80;
+      let shown = 0;
+      const total = areas.reduce((n, a) => n + a.ids.length, 0);
+      return html`<p class="fp3d-sub">${this.t("unplaced_hint")}</p>
+        ${areas.length
+          ? html`<div class="fp3d-room-list">
+                ${areas.map((a) => {
+                  const take = a.ids.slice(0, Math.max(0, LIMIT - shown));
+                  shown += take.length;
+                  if (!take.length) return nothing;
+                  const floor = b.floors.find((f) => f.id === a.floorId);
+                  const room = floor?.rooms.find((r) => r.id === a.roomId);
+                  return html`<div class="fp3d-dev-area">${a.name}${room ? nothing : html`<small class="fp3d-muted"> · ${this.t("unplaced_no_room")}</small>`}</div>
+                    ${take.map((id) => {
+                      const s = suggested.get(id);
+                      return html`<div
+                        class="fp3d-row fp3d-dev-row fp3d-unplaced-row"
+                        draggable="true"
+                        title=${this.t("unplaced_drag")}
+                        @dragstart=${(e: DragEvent) => {
+                          e.dataTransfer?.setData(ENTITY_DRAG, id);
+                          if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy";
+                        }}
+                      >
+                        <span class="fp3d-dev-name">${icon(id)}<span>${entityName(hass, id, a.name)}</span></span>
+                        ${s ? html`<button class="fp3d-link fp3d-suggest" @click=${() => this.acceptLink(id, s)}>${this.t("unplaced_link", { name: itemName(s) })}</button>` : nothing}
+                        ${room && floor ? html`<button class="fp3d-link" @click=${() => this.placeDevices([id], room, floor.id)}>${this.t("devices_place")}</button>` : nothing}
+                        <button class="fp3d-pin" title=${this.t("unplaced_hide")} aria-label=${this.t("unplaced_hide")} @click=${() => this.setUnplacedHidden(id, true)}>🙈</button>
+                      </div>`;
+                    })}`;
+                })}
+              </div>
+              ${total > shown ? html`<p class="fp3d-sub">${this.t("devices_narrow", { n: total - shown })}</p>` : nothing}`
+          : html`<p class="fp3d-sub">${this.t("unplaced_none")}</p>`}
+        ${hiddenN ? html`<button class="fp3d-link" @click=${() => (this._unplacedHiddenView = true)}>${this.t("unplaced_hidden", { n: hiddenN })}</button>` : nothing}`;
+    };
+    return html`<section>
+      <details class="fp3d-points fp3d-unplaced" ?open=${open} @toggle=${(e: Event) => (this._unplacedOpen = (e.target as HTMLDetailsElement).open)}>
+        <summary>${this.t("unplaced")}</summary>
+        ${open ? body() : nothing}
+      </details>
+    </section>`;
   }
 
   private get device(): Placement | undefined {
@@ -6017,6 +6157,8 @@ export class Fp3dEditor extends LitElement {
               }}
               @wheel=${this.onWheel}
               @contextmenu=${this.onContextMenu}
+              @dragover=${this.onPlanDragOver}
+              @drop=${this.onPlanDrop}
             >
               ${this.renderBackground(floor)} ${this.renderGrid()} ${this.renderGhost()} ${walls ? this.renderWalls(walls.walls) : nothing}
               ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing}
@@ -10723,7 +10865,10 @@ export class Fp3dEditor extends LitElement {
       ${nextKind} ${admin ? nothing : html`<p class="fp3d-note">${this.t("read_only")}</p>`}
       <section>
         <h3>${floor ? this.t("floor_settings_of", { floor: floor.name }) : this.t("floors")}</h3>
-        ${floors.length ? nothing : html`<p class="fp3d-sub">${this.t("floor_none_hint")}</p>`}
+        ${floors.length
+          ? nothing
+          : html`${admin ? html`<button class="fp3d-btn fp3d-primary" @click=${() => this.addFloor()}>${this.t("first_floor_add")}</button>` : nothing}
+              <p class="fp3d-sub">${this.t("floor_none_hint")}</p>`}
         ${admin && floor
           ? html`<button class="fp3d-btn" aria-pressed=${!!this._doc.settings.lock_plan} title=${this.t("lock_plan_hint")} @click=${() => this.toggleLockPlan()}>
               ${this.t(this._doc.settings.lock_plan ? "plan_unlock" : "plan_lock")}
@@ -10764,11 +10909,12 @@ export class Fp3dEditor extends LitElement {
                   >`
                 : nothing}
               ${admin && this.unplacedAreas(floor).length
-                ? html`<div class="fp3d-actions fp3d-wide">
-                    <button class="fp3d-btn fp3d-primary" title=${this.t("area_rooms_hint")} @click=${() => this.addAreaRooms(floor)}>
+                ? html`<p class="fp3d-sub fp3d-wide fp3d-area-import">
+                    ${this.t("area_rooms_label")}
+                    <button class="fp3d-link" title=${this.t("area_rooms_hint")} @click=${() => this.addAreaRooms(floor)}>
                       ${this.t("area_rooms", { n: this.unplacedAreas(floor).length })}
                     </button>
-                  </div>`
+                  </p>`
                 : nothing}
               ${admin
                 ? html`<div class="fp3d-actions fp3d-wide">
@@ -10804,7 +10950,7 @@ export class Fp3dEditor extends LitElement {
           : room
             ? html`${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}`
             : floor
-              ? this.renderRoomList(floor)
+              ? html`${this.renderRoomList(floor)} ${this.renderUnplaced()}`
               : nothing}
       ${this.renderHelpLinks()}
       ${admin && SHOW_PRESENCE ? this.renderPresenceSettings() : nothing}
@@ -12584,7 +12730,6 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderFurnitureLinks(f: Furniture) {
-    const ALARM_CLASSES = new Set(["smoke", "gas", "carbon_monoxide", "heat", "moisture", "safety", "sound", "problem"]);
     if (!this.hass) return nothing;
     const hass = this.hass;
     // what "automatic" would choose: resolve with this item's own links cleared
@@ -12596,50 +12741,23 @@ export class Fp3dEditor extends LitElement {
     const media = isMediaFurniture(f.type);
     // a pack item with only a status light (a 3D printer's panel, a wallbox's LED) links like any device:
     // "Device", with media players, switches and status sensors to choose from
-    const tvLike = media && (!isPackType(f.type) || packDisplay(f.type));
+    const tvLike = isTvLike(f.type);
     const lamp = isLamp(f.type);
-    const entities = this.entityOptions((id) =>
-      lamp
-        ? // a lamp can follow a light or a plain switch (e.g. a relay that switches the ceiling light)
-          /^(light|switch|input_boolean)\./.test(id)
-        : tvLike
-          ? // a media player, or the smart plug an older TV is switched with; a roll-down screen also its motor's cover (#511)
-            /^(media_player|switch|input_boolean|light)\./.test(id) || (packMotion(f.type) === "screen" && id.startsWith("cover."))
-          : f.type === "awning"
-            ? id.startsWith("cover.")
-            : packMotion(f.type) === "curtain" || packMotion(f.type) === "blind"
-            ? // a motorised curtain or a roof window's blind: its motor's cover (or a switch that drives it, #511, #24)
-              /^(cover|switch|input_boolean)\./.test(id)
-            : f.type === "radiator" || f.type === "ac_unit"
-            ? id.startsWith("climate.")
-            : isRobotVacuum(f.type)
-              ? id.startsWith("vacuum.")
-              : // or a status sensor (a 3D printer's print status: running, idle, finish …)
-                // (a robot vacuum from a pack, e.g. the one with its dock, follows its vacuum entity; a motorised
-                // curtain its cover, #286)
-                /^(switch|media_player|fan|input_boolean|climate|vacuum|cover)\./.test(id) ||
-                // a pack's heat pump indoor unit, boiler or buffer tank: its water_heater entity (#645)
-                (isPackHeater(f.type) && id.startsWith("water_heater.")) ||
-                // a pack's sensor model (motion, presence, contact, leak …): any sensor, with or without a class (#810)
-                // a 3D printer (#11): any of its sensors (OctoPrint reports printing as a binary sensor)
-                ((isPackSensor(f.type) || isPrinter(f.type)) && /^(binary_sensor|sensor)\./.test(id)) ||
-                isStatusSensor(hass.states[id]) ||
-                // alarms that report as binary sensors (binary_sensor.…_smoke, #490); a smoke detector takes any
-                (id.startsWith("binary_sensor.") && (f.type.endsWith("smoke_detector") || ALARM_CLASSES.has(String(hass.states[id]?.attributes.device_class ?? "")))),
-    );
+    const heating = isThermostatItem(f.type);
+    const entities = this.entityOptions(linkFilter(hass, f.type));
     const power = this.entityOptions((id) => this.isPowerSensor(id));
     const doorSensors = f.type === "fridge_smart" ? this.entityOptions((id) => id.startsWith("binary_sensor.")) : [];
     return html`<div class="fp3d-form fp3d-links">
         ${f.type === "grid_point"
           ? html`<p class="fp3d-sub fp3d-wide">${this.t("grid_point_hint")}</p>`
-          : this.entitySelect(this.t(lamp ? "furn_entity_light" : packMotion(f.type) ? "motor_cover" : tvLike ? "furn_entity_tv" : f.type === "awning" ? "awning_cover" : f.type === "radiator" || f.type === "ac_unit" ? "furn_entity_climate" : isRobotVacuum(f.type) ? "furn_entity_vacuum" : "furn_entity"), f.entity ?? null, autoPick("entity"), entities, (v) =>
+          : this.entitySelect(this.t(lamp ? "furn_entity_light" : packMotion(f.type) ? "motor_cover" : tvLike ? "furn_entity_tv" : f.type === "awning" ? "awning_cover" : heating || f.type === "ac_unit" ? "furn_entity_climate" : isRobotVacuum(f.type) ? "furn_entity_vacuum" : isCameraItem(f.type) ? "furn_entity_camera" : "furn_entity"), f.entity ?? null, autoPick("entity"), entities, (v) =>
               this.updateFurniture({ entity: v }),
             )}
         ${f.type === "lamp_fan"
           ? html`${this.entitySelect(this.t("fan_entity"), f.fan ?? null, undefined, this.entityOptions((id) => id.startsWith("fan.")), (v) => this.updateFurniture({ fan: v && v !== "none" ? v : null }))}
               <p class="fp3d-sub fp3d-wide">${this.t("fan_hint")}</p>`
           : nothing}
-        ${f.type === "radiator"
+        ${heating
           ? html`${this.entitySelect(this.t("heat_sensor"), f.heat_sensor ?? null, undefined, this.entityOptions((id) => /^(binary_sensor|sensor|switch|input_boolean|number)\./.test(id)), (v) => this.updateFurniture({ heat_sensor: v && v !== "none" ? v : null }))}
               <p class="fp3d-sub fp3d-wide">${this.t("heat_sensor_hint")}</p>`
           : nothing}
@@ -13726,7 +13844,8 @@ export class Fp3dEditor extends LitElement {
     if (!file || !this.hass) return;
     let building: Building;
     try {
-      building = parseExport(await file.text());
+      // a plan exported before items moved between packs takes their new ids (#110)
+      building = migratePlanTypes(parseExport(await file.text()));
     } catch (err) {
       const code = (err as Error).message;
       alert(code === "not_json" ? this.t("import_error_not_json") : code === "not_plan" ? this.t("import_error_not_plan") : this.t("backup_import_error", { error: code }));
@@ -16786,6 +16905,14 @@ export class Fp3dEditor extends LitElement {
       .fp3d-dev-row {
         align-items: center;
         cursor: default;
+      }
+      /* an unplaced entity is dragged onto the plan (#83) */
+      .fp3d-unplaced-row {
+        cursor: grab;
+      }
+      .fp3d-unplaced-row .fp3d-dev-name {
+        flex: 1;
+        min-width: 0;
       }
       .fp3d-room-btn {
         flex: 1;

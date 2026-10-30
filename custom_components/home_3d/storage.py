@@ -37,6 +37,7 @@ from .const import (
     STORAGE_VERSION,
 )
 from .custom_items import CustomItems
+from .moves import Moves, load_moves, migrate_bases, migrate_building, moved_into
 from .packs import library_pack, load_bundled, with_bundled
 from .recipes import with_recipes
 from .schema import BUILDING_SCHEMA, empty_building, image_ids
@@ -100,12 +101,21 @@ def _summary(building: dict[str, Any]) -> dict[str, int]:
 class Home:
     """One home (#53): its building, revision, restore points and background images, each in its own store."""
 
-    def __init__(self, hass: HomeAssistant, home_id: str, name: str, packs: Callable[[], list[dict[str, Any]]]) -> None:
-        """Make the stores; `packs` gives the packs on offer (for the plan's recipe copies)."""
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        home_id: str,
+        name: str,
+        packs: Callable[[], list[dict[str, Any]]],
+        moves: Callable[[], Moves] = dict,
+    ) -> None:
+        """Make the stores; `packs` gives the packs on offer (for the plan's recipe copies), `moves` the items that
+        moved between packs (#110)."""
         self.hass = hass
         self.id = home_id
         self.name = name
         self._packs = packs
+        self._moves = moves
         building_key, image_key, history_key = _home_keys(home_id)
         self._building_store = _BuildingStore(hass, STORAGE_VERSION, building_key, minor_version=STORAGE_MINOR_VERSION)
         self._image_store = Store(hass, STORAGE_VERSION, image_key, **_OFF_LOOP)
@@ -125,10 +135,12 @@ class Home:
         if stored:
             self.building = complete(stored.get("building") or empty_building())
             self.revision = int(stored.get("revision", 0))
-            # a plan saved before #2 (or placed while a client did not send recipes) picks up the recipes of its
-            # pack items from the installed packs, and keeps them from now on
-            building = with_recipes(self.building, self.building.get("recipes"), self._packs())
-            if building.get("recipes") != self.building.get("recipes"):
+            # items that moved to another pack take their new ids (#110), and a plan saved before #2 (or placed
+            # while a client did not send recipes) picks up the recipes of its pack items from the installed packs;
+            # both are written back once
+            moved = migrate_building(self.building, self._moves())
+            building = with_recipes(moved, moved.get("recipes"), self._packs())
+            if moved is not self.building or building.get("recipes") != self.building.get("recipes"):
                 self.building = building
                 await self._save_building()
         history = await self._history_store.async_load()
@@ -148,6 +160,7 @@ class Home:
             self._images = dict(images)
             await self._save_images()
         if building is not None:
+            building = migrate_building(building, self._moves())
             self.building = with_recipes(building, building.get("recipes"), self._packs())
             self.revision = 1
         await self._save_building()
@@ -161,6 +174,10 @@ class Home:
         last = self._history[-1]["saved_at"] if self._history else 0
         if self.building.get("floors") and time.time() - last > HISTORY_INTERVAL:
             await self.async_snapshot()
+        # items that moved to another pack take their new ids (#110): an imported plan, a backup, a restore point
+        moves = self._moves()
+        sent, building = building, migrate_building(building, moves)
+        recipe_bases = migrate_bases(recipe_bases, sent, building, moves)
         # every pack item type in the plan keeps its recipe copy (#2): the one sent, else the one kept so far, else
         # a copy of the installed item; one the client sends as it started from it gives way to a newer kept one (#45)
         building = with_recipes(building, self.building.get("recipes"), self._packs(), recipe_bases)
@@ -257,6 +274,8 @@ class FloorplanData:
         self.bundled: list[dict[str, Any]] = []
         # the household's own items (#13), offered as one more pack
         self.custom = CustomItems(hass)
+        # bundled items that moved to another pack: old type -> new type (#110, moved_items.json)
+        self.moves: Moves = {}
         # the light form of each offered pack (#44), kept while the pack (the same object) stays
         self._library: dict[str, tuple[Any, dict[str, Any]]] = {}
 
@@ -266,6 +285,7 @@ class FloorplanData:
         packs = await self._pack_store.async_load()
         self.packs = list((packs or {}).get("packs", []))
         self.bundled = await self.hass.async_add_executor_job(load_bundled)
+        self.moves = await self.hass.async_add_executor_job(load_moves)
         await self.custom.async_load()
         stored = await self._homes_store.async_load()
         listed = list((stored or {}).get("homes") or [{"id": FIRST_HOME_ID, "name": DEFAULT_HOME_NAME}])
@@ -280,7 +300,7 @@ class FloorplanData:
             await self._save_homes()
 
     def _new_home(self, home_id: str, name: str) -> Home:
-        return Home(self.hass, home_id, name, lambda: self.offered_packs)
+        return Home(self.hass, home_id, name, lambda: self.offered_packs, lambda: self.moves)
 
     async def _save_homes(self) -> None:
         homes = [{"id": h.id, "name": h.name} for h in self.homes.values()]
@@ -312,9 +332,15 @@ class FloorplanData:
         building: dict[str, Any] | None = None,
         images: dict[str, str] | None = None,
         home_id: str | None = None,
+        *,
+        area_import: bool = True,
     ) -> Home:
         """Add a home: empty, or with a given (checked, completed) building and its pictures. The new home is not
-        made active. #54 loads a sample home with this."""
+        made active. #54 loads a sample home with this; a sample or template passes `area_import=False` (#61) so the
+        editor never offers to fill it with this install's own Home Assistant areas."""
+        if not area_import:
+            building = copy.deepcopy(building) if building is not None else empty_building()
+            building["settings"] = {**building.get("settings", {}), "area_import": False}
         if home_id is None:
             home_id = uuid.uuid4().hex[:8]
         if home_id in self.homes:
@@ -421,12 +447,19 @@ class FloorplanData:
         household's own items come whole: they are few, and the item editor works on them."""
         listed: list[dict[str, Any]] = []
         kept: dict[str, tuple[Any, dict[str, Any]]] = {}
+        aliases = moved_into(self.moves) if self.moves else {}
         for pack in self.offered_packs:
             custom = bool(pack.get("custom"))
             # the custom items' pack is made anew on every call: it stays the same while its item list does
             key = pack["items"] if custom else pack
             cached = self._library.get(pack["id"])
-            light = cached[1] if cached is not None and cached[0] is key else library_pack(pack, whole=custom)
+            if cached is not None and cached[0] is key:
+                light = cached[1]
+            else:
+                light = library_pack(pack, whole=custom)
+                # the old ids of items that moved into the pack (#110)
+                if moved := aliases.get(pack["id"]):
+                    light["aliases"] = moved
             kept[pack["id"]] = (key, light)
             listed.append(light)
         self._library = kept

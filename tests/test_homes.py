@@ -267,3 +267,28 @@ async def test_a_backup_carries_every_home(hass: HomeAssistant, hass_ws_client) 
     assert _room(await _ok(client, {"type": "home_3d/building/get", "home_id": second})) == "Flat living"
     empty = await _call(client, {"type": "home_3d/backup/import", "packs": []})
     assert empty["error"]["code"] == "invalid_format"
+
+
+def settings(got: dict) -> dict:
+    return got["building"]["settings"]
+
+
+async def test_a_sample_home_can_be_made_without_the_area_import(hass: HomeAssistant, hass_ws_client) -> None:
+    """#61: a sample or template must not offer to import this install's own Home Assistant areas."""
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    real = (await _ok(client, {"type": "home_3d/homes/create", "name": "Flat"}))["home"]["id"]
+    sample = (await _ok(client, {"type": "home_3d/homes/create", "name": "Trial", "area_import": False}))["home"]["id"]
+    # a plan without the setting (every plan from before #61) offers the import
+    got = await _ok(client, {"type": "home_3d/building/get", "home_id": real})
+    assert settings(got).get("area_import", True) is True
+    assert settings(await _ok(client, {"type": "home_3d/building/get", "home_id": sample}))["area_import"] is False
+    # a copy of the sample is a sample too
+    copy_ = (await _ok(client, {"type": "home_3d/homes/duplicate", "home_id": sample, "name": "Trial 2"}))["home"]["id"]
+    assert settings(await _ok(client, {"type": "home_3d/building/get", "home_id": copy_}))["area_import"] is False
+
+    # the internal step a sample loader (#54) creates its home with
+    data = hass.data[DOMAIN]
+    loaded = await data.async_create_home("Sample", _named("Sample living"), area_import=False)
+    assert loaded.building["settings"]["area_import"] is False
+    assert loaded.building["floors"][0]["rooms"][0]["name"] == "Sample living"
