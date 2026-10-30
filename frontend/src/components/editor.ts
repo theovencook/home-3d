@@ -53,6 +53,7 @@ import { type CarLinks, type Background, OUTDOOR_TOP, sidelightLayout, DEFAULT_W
 } from "../model.ts";
 import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { edgeReach, generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
+import { openingTap } from "../geometry/openings.ts";
 import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } from "../i18n.ts";
 import { ISSUES_URL } from "./extensions.ts";
 import { iconPath } from "../icons.ts";
@@ -440,6 +441,8 @@ export class Fp3dEditor extends LitElement {
     _wallView3d: { state: true },
     _ctx: { state: true },
     _fixedHint: { state: true },
+    _openingNote: { state: true },
+    _openingHover: { state: true },
     _phoneHint: { state: true },
     _floorMenu: { state: true },
     _openingPreset: { state: true },
@@ -643,6 +646,10 @@ export class Fp3dEditor extends LitElement {
   private declare _ctx: { x: number; y: number; kind: FixKind; id: string } | null;
   /** A drag on a fixed item was turned into panning: the hint line says why. */
   private declare _fixedHint: boolean;
+  /** Doors & windows mode: why the last tap added nothing (it would overlap another opening), shown in the hint bar (#62). */
+  private declare _openingNote: string | null;
+  /** Doors & windows mode: what a tap where the mouse rests would do (#62). */
+  private declare _openingHover: string | null;
   /** The one-time "draw on a PC or tablet" hint on phones (shown by CSS on narrow screens only). */
   private declare _phoneHint: boolean;
   /** A one-time invitation for admins to switch on the usage reports (while they are off and it was not closed). */
@@ -728,6 +735,8 @@ export class Fp3dEditor extends LitElement {
     this._cableId = null;
     this._expanded = new Set();
     this._notice = null;
+    this._openingNote = null;
+    this._openingHover = null;
     this._history = null;
     this._spots = null;
     this._outdoorId = null;
@@ -1748,7 +1757,11 @@ export class Fp3dEditor extends LitElement {
       return;
     }
     if (this._tool === "opening") {
-      if (!this.placeOpening(this._openingPreset, local)) this.drag = { kind: "pan", last: local };
+      this._openingNote = null;
+      // a press on an existing opening selects it (and drags it along its wall) before anything is added (#62)
+      const openingEl = target.closest("[data-opening]");
+      if (openingEl) this.pressOpening(openingEl.getAttribute("data-opening")!, local);
+      else if (!this.placeOpening(this._openingPreset, local)) this.drag = { kind: "pan", last: local };
       return;
     }
     if (this.isEditor && (this._tool === "select" || this._tool === "furniture") && (e.shiftKey || this._multiMode)) {
@@ -1773,9 +1786,7 @@ export class Fp3dEditor extends LitElement {
     }
     const openingEl = target.closest("[data-opening]");
     if (openingEl) {
-      const id = openingEl.getAttribute("data-opening")!;
-      this.selectItem("opening", id);
-      this.drag = this.isEditor ? { kind: "opening", id, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+      this.pressOpening(openingEl.getAttribute("data-opening")!, local);
       return;
     }
     const resizeEl = target.closest("[data-resize]");
@@ -1938,6 +1949,7 @@ export class Fp3dEditor extends LitElement {
     const drag = this.drag;
     if (!drag) {
       if (this._tool !== "select" && this._tool !== "furniture" && this.floor) this._cursor = this.snap(world, undefined, e.altKey);
+      if (this._tool === "opening" && e.pointerType !== "touch") this.hoverOpening(e.target as Element, local);
       return;
     }
     switch (drag.kind) {
@@ -4649,10 +4661,23 @@ export class Fp3dEditor extends LitElement {
     return round(Math.min(len, len + after - half, Math.max(0, half - before, offset)));
   }
 
-  /** Add a door or window on the room edge nearest to a screen point. */
-  private placeOpening(preset: OpeningPreset, screen: [number, number]): boolean {
+  /** A press on an opening: select it, and (for editors) start dragging it along its wall. */
+  private pressOpening(id: string, local: [number, number]): void {
+    this.selectItem("opening", id);
+    this.drag = this.isEditor ? { kind: "opening", id, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+  }
+
+  /**
+   * What a tap at a screen point does in Doors & windows mode (#62): add a new opening of `preset` on the nearest
+   * wall, select the existing one it lands on, or nothing because the new one would overlap another (`blocked`).
+   * Null: no wall near enough. Nothing is changed here.
+   */
+  private planOpening(
+    preset: OpeningPreset,
+    screen: [number, number],
+  ): { add: Opening } | { select: Opening } | { blocked: Opening } | null {
     const floor = this.floor;
-    if (!floor || !this.isEditor) return false;
+    if (!floor || !this.isEditor) return null;
     let best: { room: Room; edge: number; d: number; wall?: string; roomId?: string } | null = null;
     for (const w of floor.walls ?? []) {
       const host = openingHost({ room_id: "", edge: 0, wall: w.id }, floor.rooms, floor.walls ?? []);
@@ -4679,7 +4704,7 @@ export class Fp3dEditor extends LitElement {
         if (d < SNAP_PX * 2.2 && (!best || score < best.d)) best = { room, edge: i, d: score };
       }
     }
-    if (!best) return false;
+    if (!best) return null;
     const { room, edge, wall } = best;
     const a = room.points[edge];
     const b = room.points[(edge + 1) % room.points.length];
@@ -4687,12 +4712,18 @@ export class Fp3dEditor extends LitElement {
     const defaults = OPENING_PRESETS[preset];
     const type: OpeningType = defaults.type;
     const width = round(Math.min(defaults.width, Math.max(0.3, len - 0.1)));
+    const tap = this.toWorld(...screen);
+    const offset = this.offsetOnEdge(room, edge, tap, width, false);
+    // never on top of another door or window (#62): a tap inside one selects it, a tap beside it says why not
+    const span: [Vec2, Vec2] = [pointOnRoomEdge(room, edge, offset - width / 2), pointOnRoomEdge(room, edge, offset + width / 2)];
+    const clash = openingTap(tap, span, floor.openings, floor.rooms, floor.walls ?? []);
+    if (clash) return clash;
     const opening: Opening = {
       id: uid("opening"),
       room_id: best.roomId ?? room.id,
       edge,
       ...(wall ? { wall } : {}),
-      offset: this.offsetOnEdge(room, edge, this.toWorld(...screen), width, false),
+      offset,
       width,
       type,
       sill: defaults.sill,
@@ -4705,11 +4736,55 @@ export class Fp3dEditor extends LitElement {
       contact2: null,
       tilt: null,
     };
-    this.change((_, f) => f.openings.push(opening));
-    // the tool stays: six doors and windows in a row without going back to the menu (Esc or "Select" ends it)
-    this.selectItem("opening", opening.id);
+    return { add: opening };
+  }
+
+  /** Doors & windows mode with a mouse: keep the hint bar saying what a tap at the pointer would do (#62). */
+  private hoverOpening(target: Element, local: [number, number]): void {
+    const id = target?.closest?.("[data-opening]")?.getAttribute("data-opening");
+    const on = id ? this.floor?.openings.find((o) => o.id === id) : undefined;
+    const plan = on ? { select: on } : this.planOpening(this._openingPreset, local);
+    const text = plan ? this.openingHint(plan) : null;
+    if (text !== this._openingHover) this._openingHover = text;
+  }
+
+  /** A tap in Doors & windows mode: add a door or window on the nearest wall, or select the one tapped (#62). */
+  private placeOpening(preset: OpeningPreset, screen: [number, number]): boolean {
+    const plan = this.planOpening(preset, screen);
+    if (!plan) return false;
+    if ("select" in plan) this.pressOpening(plan.select.id, screen);
+    else if ("blocked" in plan) this._openingNote = this.openingHint(plan);
+    else {
+      const opening = plan.add;
+      this.change((_, f) => f.openings.push(opening));
+      // the tool stays: six doors and windows in a row without going back to the menu (Esc or "Select" ends it)
+      this.selectItem("opening", opening.id);
+    }
     return true;
   }
+
+  /** The hint bar under the plan: what the current tool does, or what a tap will do right now. */
+  private hintText(): string {
+    const floor = this.floor;
+    if (!floor) return this.t("hint_empty");
+    if (this._wallPick) return this.t("hint_wall_pick");
+    if (this._fixedHint) return this.t("fixed_drag_hint");
+    if (this._tool === "outdoor" && this._outdoorFree) return this.t("hint_outdoor_free");
+    if (this._tool === "pool" && this._jointPlace) return this.t("hint_joint_place");
+    if (this._tool === "pool" && this._pipeMode) return this.t(!this.poolArea ? "hint_pipe_pool" : this._pipeDraft ? "hint_pipe_next" : "hint_pipe_start");
+    if (this._tool === "pool" && released("pool")) return this.t("hint_pool_tech");
+    if (this._tool === "opening") return this._openingNote ?? this._openingHover ?? this.t("hint_opening");
+    return this.t(`hint_${this._tool}` as I18nKey);
+  }
+
+  /** The hint bar's sentence for what a tap does in Doors & windows mode (#62). */
+  private openingHint(plan: { add: Opening } | { select: Opening } | { blocked: Opening }): string {
+    const kind = (o: Opening) => this.t(`preset_${openingPreset(o)}` as I18nKey);
+    if ("add" in plan) return this.t("hint_opening_add", { kind: kind(plan.add) });
+    if ("select" in plan) return this.t("hint_opening_select", { kind: kind(plan.select) });
+    return this.t("opening_overlap", { kind: kind(plan.blocked) });
+  }
+
 
   /** Turns an opening into another kind (door, double door, window, terrace door, garage door). */
   private setOpeningPreset(o: Opening, preset: OpeningPreset): void {
@@ -5481,6 +5556,8 @@ export class Fp3dEditor extends LitElement {
     this._tool = tool;
     this._draft = [];
     this._cursor = null;
+    this._openingNote = null;
+    this._openingHover = null;
     this._pipeMode = false;
     this._pipeDraft = null;
     // the pool tool works on a pool: the selected one, else the first of the floor
@@ -5772,6 +5849,7 @@ export class Fp3dEditor extends LitElement {
               @pointercancel=${this.onPointerUp}
               @pointerleave=${() => {
                 if (!this.drag) this._cursor = null;
+                this._openingHover = null;
               }}
               @wheel=${this.onWheel}
               @contextmenu=${this.onContextMenu}
@@ -5789,7 +5867,7 @@ export class Fp3dEditor extends LitElement {
               ${this._tool === "roof" ? svg`${this.renderRoofSections()}${this.renderRoofWindows()}` : this._tool === "energy" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}${this.renderCables()}${this.renderEnergyMarkers()}` : this._tool === "pool" && floor && this.pipeRules ? this.renderPoolPlan(floor) : nothing} ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             ${this.renderContext()}
-            <p class="fp3d-hint ${this._fixedHint ? "fp3d-hint-fixed" : ""}">${!floor ? this.t("hint_empty") : this._wallPick ? this.t("hint_wall_pick") : this._fixedHint ? this.t("fixed_drag_hint") : this._tool === "outdoor" && this._outdoorFree ? this.t("hint_outdoor_free") : this._tool === "pool" && this._jointPlace ? this.t("hint_joint_place") : this._tool === "pool" && this._pipeMode ? this.t(!this.poolArea ? "hint_pipe_pool" : this._pipeDraft ? "hint_pipe_next" : "hint_pipe_start") : this._tool === "pool" && released("pool") ? this.t("hint_pool_tech") : this.t(`hint_${this._tool}` as I18nKey)}</p>
+            <p class="fp3d-hint ${this._fixedHint || (this._tool === "opening" && this._openingNote) ? "fp3d-hint-fixed" : ""}">${this.hintText()}</p>
           </div>
           ${this._split && !this.narrow
             ? html`<div class="fp3d-split-handle" title=${this.t("split_handle_hint")} @pointerdown=${this.onSplitDown}></div>`
