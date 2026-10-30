@@ -7,7 +7,7 @@ import { test } from "node:test";
 import type { Furniture } from "../model.ts";
 import { setPacks, setPlanRecipes, type PackItem, type PlanRecipe } from "../packs.ts";
 import { rackLayout, readRackFrame } from "../rack-frame.ts";
-import { pushFurniture, pushRackLeds } from "./furniture.ts";
+import { pushFurniture, pushRackGear, pushRackLeds } from "./furniture.ts";
 import { GeoBuffer, LineBuffer } from "./geo.ts";
 
 const NETWORK = new URL("../../../custom_components/home_3d/bundled_packs/theovencook.it/network/", import.meta.url);
@@ -74,5 +74,52 @@ test("status LEDs (#119): one small box per linked slot, in front of its gear, p
   for (let i = 2; i < turned.p.length; i += 3) assert.ok(turned.p[i] < 3 - at.front);
   // nothing linked, or no rack: nothing drawn
   assert.equal(pushRackLeds(new GeoBuffer(), f, 0, []).size, 0);
+  setPlanRecipes(undefined);
+});
+
+// #121: the gear is drawn on its own (one geometry per rack), in detail or as one slab per piece
+function bounds(p: number[]): number[] {
+  const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < p.length; i += 3) for (let k = 0; k < 3; k++) {
+    b[k] = Math.min(b[k], p[i + k]);
+    b[k + 3] = Math.max(b[k + 3], p[i + k]);
+  }
+  return b;
+}
+
+test("a rack's gear on its own is exactly what the rack drew inside it; the rack can leave it out (#121)", () => {
+  setPacks([]);
+  setPlanRecipes({ [T_RACK]: copy(T_RACK, RACK), [T_SWITCH]: copy(T_SWITCH, SWITCH) });
+  const f = { ...rack([{ id: "a", type: T_SWITCH, u: 2 }, { id: "b", type: T_SWITCH, u: 6, face: "rear" }] as never), x: 1.5, z: -2, rotation: 30 };
+  const whole = new GeoBuffer();
+  pushFurniture(whole, new LineBuffer(), new GeoBuffer(), f, 0.4);
+  const frame = new GeoBuffer();
+  pushFurniture(frame, new LineBuffer(), new GeoBuffer(), f, 0.4, false, false);
+  const gear = new GeoBuffer();
+  const gearLines = new LineBuffer();
+  pushRackGear(gear, gearLines, f, 0.4, true);
+  assert.equal(frame.count + gear.count, whole.count, "the frame without gear plus the gear alone = the whole rack");
+  assert.deepEqual(gear.p, whole.p.slice(frame.p.length), "same triangles, same place");
+  assert.ok(gearLines.p.length > 0, "with the gear's edges");
+  setPlanRecipes(undefined);
+});
+
+test("far away each piece of gear is one plain box over the same space (#121)", () => {
+  setPacks([]);
+  setPlanRecipes({ [T_RACK]: copy(T_RACK, RACK), [T_SWITCH]: copy(T_SWITCH, SWITCH) });
+  const f = { ...rack([{ id: "a", type: T_SWITCH, u: 2 }, { id: "b", type: T_SWITCH, u: 4 }, { id: "c", type: T_SWITCH, u: 6 }]), x: 1.5, z: -2, rotation: 90 };
+  const detail = new GeoBuffer();
+  pushRackGear(detail, new LineBuffer(), f, 1.1, true);
+  const slab = new GeoBuffer();
+  pushRackGear(slab, new LineBuffer(), f, 1.1, false);
+  assert.ok(slab.count <= 3 * 12, "at most a box (12 triangles) per piece");
+  assert.ok(slab.count < detail.count / 2, "far fewer triangles than the detail");
+  const a = bounds(detail.p);
+  const b = bounds(slab.p);
+  for (let k = 0; k < 6; k++) assert.ok(Math.abs(a[k] - b[k]) < 1e-6, `bounds match (${k}: ${a[k]} vs ${b[k]})`);
+  // nothing in the rack: nothing drawn
+  const none = new GeoBuffer();
+  pushRackGear(none, new LineBuffer(), rack([]), 0, false);
+  assert.equal(none.count, 0);
   setPlanRecipes(undefined);
 });

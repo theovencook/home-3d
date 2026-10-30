@@ -11,19 +11,19 @@
 //   fold = 48 + b    top face of the lower part at the cut height: visible while bucket b is cut
 
 import { Color, type BufferGeometry } from "three";
-import type { Floor, Opening, Room, SolarField, Vec2 } from "../model.ts";
+import type { Floor, Furniture, Opening, Room, SolarField, Vec2 } from "../model.ts";
 import { furnitureFootprint, GANG_TYPES, isLamp, pointInPolygon, polygonArea, STAIR_TYPES } from "../model.ts";
 import { freeWallRoomLeft, generateWalls, locateOpening, openingHost, placeWallPlate, slopeTop, wallContinuation, type Wall } from "../geometry/walls.ts";
 import { clipConvex, isConvex } from "../geometry/area.ts";
 import { holeInRoom, insetHole, mergeHoles } from "../geometry/holes.ts";
-import { pushFurniture } from "./furniture.ts";
+import { pushFurniture, pushRackGear } from "./furniture.ts";
 import { mountBase, packItem } from "../packs.ts";
 import { pushOutdoor } from "./outdoor.ts";
 import { pushModules } from "./roof.ts";
 import type { RoofFace } from "../solar.ts";
 import { cutAbove, cutLinesAbove, FURN_OFFSET, ALWAYS, CAP_OFFSET, CUT_OFFSET, EDGE_BASE, EDGE_CUT, EDGE_SOFT, EDGE_TOP, GeoBuffer, LineBuffer, LOWER_OFFSET, pushPrism, triangulate } from "./geo.ts";
 
-export { ALWAYS, CUT_OFFSET, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
+export { ALWAYS, CUT_OFFSET, FURN_OFFSET, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
 
 export const NEON = {
   floor: 0x0e1629,
@@ -98,6 +98,11 @@ export interface FloorGeometry {
   wallBuckets: number[];
   /** Triangle ranges of furniture in `walls`, for tapping furniture in 3D. */
   furnitureTris: { id: string; start: number; end: number }[];
+  /**
+   * Racks with gear (#121): their gear is not in `walls`; the viewer draws it on its own (buildRackGear), in detail
+   * near the camera and as slabs further away.
+   */
+  racks: RackGearAt[];
   /** Under roof slopes: the roof's underside above a plan point, in floor coordinates (null = no roof there). */
   roofUnder?: (x: number, z: number) => number | null;
 }
@@ -471,6 +476,7 @@ export function buildFloorGeometry(
 
   // lamps are drawn live by the viewer (they glow with their light)
   const furnitureTris: FloorGeometry["furnitureTris"] = [];
+  const racks: RackGearAt[] = [];
   for (const item of floor.furniture) {
     if (isLamp(item.type)) continue;
     const start = wallBuf.count;
@@ -483,7 +489,10 @@ export function buildFloorGeometry(
       f = { ...f, x: at.x, z: at.z };
       base = at.y;
     }
-    pushFurniture(wallBuf, lines, shadow, f, base);
+    // a rack's gear is drawn on its own by the viewer (#121)
+    const gear = !!f.rack?.slots?.length && !!packItem(f.type)?.rack_frame;
+    pushFurniture(wallBuf, lines, shadow, f, base, false, !gear);
+    if (gear) racks.push({ f, base });
     // a wardrobe or a stair reaching above the cut height is cut with the walls, so it hides nothing behind it
     if (base + f.h > cut + 0.05) {
       cutAbove(wallBuf, start, cut, FURN_OFFSET);
@@ -506,8 +515,31 @@ export function buildFloorGeometry(
     openRooms,
     wallBuckets: walls.map((w) => wallBucket.get(w)!),
     furnitureTris,
+    racks,
     roofUnder,
   };
+}
+
+/** A rack whose gear the viewer draws on its own (#121): the item as drawn and its mount height. */
+export interface RackGearAt {
+  f: Furniture;
+  base: number;
+}
+
+/**
+ * The gear of a rack listed in FloorGeometry.racks (#121): `detail` every part, else one slab per piece. Like the
+ * rack around it, what reaches above the floor's cut height folds away with the walls.
+ */
+export function buildRackGear(floor: Floor, at: RackGearAt, detail: boolean): { mesh: BufferGeometry; lines: BufferGeometry } {
+  const buf = new GeoBuffer();
+  const lines = new LineBuffer();
+  pushRackGear(buf, lines, at.f, at.base, detail);
+  const cut = Math.min(floor.cut_height, floor.height);
+  if (at.base + at.f.h > cut + 0.05) {
+    cutAbove(buf, 0, cut, FURN_OFFSET);
+    cutLinesAbove(lines, 0, cut, FURN_OFFSET);
+  }
+  return { mesh: buf.geometry(), lines: lines.geometry() };
 }
 
 /** Jambs, sill and lintel edges of an opening on both wall faces, split at the cut height. */
