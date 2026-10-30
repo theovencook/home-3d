@@ -1,7 +1,8 @@
 // Sidebar page: 3D view and editor.
 
 import { formatImperial, lengthUnit, parseLength } from "./units.ts";
-import { css, html, LitElement, nothing, type PropertyValues } from "lit";
+import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues } from "lit";
+import { PHONE_MEDIA } from "./phone.ts";
 import { BuildingController } from "./building-controller.ts";
 import { loadEditor } from "./load-editor.ts";
 import "./components/room-panel.ts";
@@ -244,6 +245,7 @@ export class Floorplan3dPanel extends LitElement {
     if (mode === this._mode) return;
     this.tt.stop();
     this._editorError = null;
+    this._optsOpen = false;
     if (mode === "view") void this.data.flush();
     this._mode = mode;
   }
@@ -576,6 +578,7 @@ export class Floorplan3dPanel extends LitElement {
                 >
                   ⚙
                 </button>
+                ${this._optsOpen ? html`<div class="fp3d-opts-veil" @click=${() => (this._optsOpen = false)}></div>` : nothing}
                 <div class="fp3d-view-opts ${this._optsOpen ? "fp3d-opts-open" : ""}">
                 <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("quality")}>
                 ${(["auto", "low", "high"] as Quality[]).map(
@@ -1096,8 +1099,8 @@ export class Floorplan3dPanel extends LitElement {
                   </div>`
               : nothing}
           </div>
-          <button class="fp3d-chip fp3d-tt-chip" aria-pressed=${tt} title=${this.t("tt_hint")} @click=${() => this.toggleTimeTravel()}>
-            ${hasFeature("time_travel") ? "⏪" : "🔒"} ${this.t("tt_chip")}
+          <button class="fp3d-chip fp3d-tt-chip" aria-pressed=${tt} title=${this.t("tt_hint")} aria-label=${this.t("tt_chip")} @click=${() => this.toggleTimeTravel()}>
+            ${hasFeature("time_travel") ? "⏪" : "🔒"} <span class="fp3d-tt-label">${this.t("tt_chip")}</span>
           </button>
           ${this._roomId || (this._floorId && b.floors.length > 1)
             ? html`<button class="fp3d-chip" @click=${() => this.back()}>${this.t("back")}</button>`
@@ -1581,6 +1584,65 @@ export class Floorplan3dPanel extends LitElement {
         justify-items: center;
         gap: 12px;
         margin: auto;
+      }
+      .fp3d-opts-veil {
+        display: none;
+      }
+      /* phones (#93): the opened view settings float over the view instead of pushing it down, a tap beside them
+         folds them; the bottom bar keeps one row (time travel as its symbol); touch targets 44 px */
+      @media ${unsafeCSS(PHONE_MEDIA)} {
+        .fp3d-header {
+          position: relative;
+        }
+        .fp3d-view-opts.fp3d-opts-open {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          z-index: 40;
+          max-height: 60vh;
+          overflow-x: hidden;
+          overflow-y: auto;
+          box-sizing: border-box;
+          padding: 10px 12px 14px;
+          background: var(--fp3d-chrome-solid);
+          border-bottom: 1px solid var(--fp3d-line);
+          box-shadow: var(--fp3d-shadow);
+        }
+        .fp3d-view-opts .fp3d-seg {
+          flex-wrap: wrap;
+        }
+        .fp3d-opts-veil {
+          display: block;
+          position: fixed;
+          inset: 0;
+          z-index: 39;
+        }
+        .fp3d-opts-btn {
+          min-width: 44px;
+          height: 44px;
+        }
+        .fp3d-tt-label {
+          display: none;
+        }
+        .fp3d-quality button {
+          min-width: 44px;
+        }
+        .fp3d-nav .fp3d-nav-toggle {
+          min-width: 44px;
+        }
+        .fp3d-header .fp3d-seg button,
+        .fp3d-quality button,
+        .fp3d-overlay .fp3d-chip,
+        .fp3d-overlay .fp3d-seg button,
+        .fp3d-show-panel button,
+        .fp3d-nav .fp3d-chip {
+          min-height: 44px;
+        }
+        .fp3d-overlay .fp3d-tt-chip {
+          min-width: 44px;
+          justify-content: center;
+        }
       }
     `,
   ];

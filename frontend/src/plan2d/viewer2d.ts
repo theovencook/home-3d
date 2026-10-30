@@ -195,6 +195,9 @@ export class Plan2dViewer implements ViewerSurface {
     this.draw();
   }
 
+  /** The flat plan keeps its own margins (fit() leaves room for the labels); the 3D camera's phone margins don't apply. */
+  setFitMargin(..._margin: Parameters<ViewerSurface["setFitMargin"]>): void {}
+
   setLabelInset(px: number): void {
     if (px === this.inset) return;
     this.inset = px;
