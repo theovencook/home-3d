@@ -159,6 +159,10 @@ import { libraryUpdates } from "../pack-updates.ts";
 import { lastAdmin, pickEditor, type EditorUser } from "../editors.ts";
 import { load3d } from "../load3d.ts";
 import { ensureRecipes, packTypesIn } from "../pack-recipes.ts";
+import "./ask-dialog.ts";
+import { isHelpKey, LEGEND, SHORTCUTS } from "../help.ts";
+import { hintKey, type Tool } from "../editor-hint.ts";
+import { askConfirm, tell } from "../ask.ts";
 import "./library.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
@@ -187,7 +191,6 @@ const MAX_MOUNT_Y = 10;
 /** A paw (24 × 24), the static pets' mark in the plan. */
 const PAW = "M8.3 3.5a2 1.6 0 1 1 0 3.2 2 1.6 0 0 1 0-3.2m7.4 0a2 1.6 0 1 1 0 3.2 2 1.6 0 0 1 0-3.2M4.5 8a1.8 1.5 0 1 1 0 3 1.8 1.5 0 0 1 0-3m15 0a1.8 1.5 0 1 1 0 3 1.8 1.5 0 0 1 0-3M12 10c2.5 0 4.6 1.9 5.3 4.3.6 2 .2 3.7-1.3 4.5-1.4.8-2.6-.2-4-.2s-2.6 1-4 .2c-1.5-.8-1.9-2.5-1.3-4.5C7.4 11.9 9.5 10 12 10";
 
-type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "hole" | "wall" | "roof" | "energy" | "pool";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
@@ -455,6 +458,7 @@ export class Fp3dEditor extends LitElement {
     _fixedHint: { state: true },
     _openingNote: { state: true },
     _openingHover: { state: true },
+    _help: { state: true },
     _phoneHint: { state: true },
     _floorMenu: { state: true },
     _openingPreset: { state: true },
@@ -667,6 +671,8 @@ export class Fp3dEditor extends LitElement {
   private declare _openingHover: string | null;
   /** The opening panel's height before its kind was changed, kept as its minimum so nothing jumps (#63). */
   private openingFormMin: { id: string; h: number } | null = null;
+  /** The '?' help overlay (#95) is open. */
+  private declare _help: boolean;
   /** The one-time "draw on a PC or tablet" hint on phones (shown by CSS on narrow screens only). */
   private declare _phoneHint: boolean;
   /** A one-time invitation for admins to switch on the usage reports (while they are off and it was not closed). */
@@ -870,6 +876,7 @@ export class Fp3dEditor extends LitElement {
     this._cursor = null;
     this._guides = {};
     this._view = { scale: 50, ox: 40, oy: 40 };
+    this._help = false;
     this._size = { w: 800, h: 600 };
     this._images = {};
     this._canUndo = false;
@@ -2814,9 +2821,9 @@ export class Fp3dEditor extends LitElement {
     this.change((_, floor) => Object.assign((floor.walls ?? []).find((w) => w.id === id)!, patch));
   }
 
-  private deleteFreeWall(): void {
+  private async deleteFreeWall(): Promise<void> {
     const id = this._wallId;
-    if (!id || !this.isEditor || !this.confirmFixedDelete("wall", id)) return;
+    if (!id || !this.isEditor || !(await this.confirmFixedDelete("wall", id))) return;
     this.change((_, floor) => {
       floor.walls = (floor.walls ?? []).filter((w) => w.id !== id);
       floor.openings = floor.openings.filter((o) => o.wall !== id);
@@ -2919,13 +2926,13 @@ export class Fp3dEditor extends LitElement {
     this.change((_, floor) => patchItem(floor.outdoor.find((o) => o.id === id), patch));
   }
 
-  private deleteOutdoor(): void {
+  private async deleteOutdoor(): Promise<void> {
     const id = this._outdoorId;
-    if (!id || !this.isEditor || !this.confirmFixedDelete("outdoor", id)) return;
+    if (!id || !this.isEditor || !(await this.confirmFixedDelete("outdoor", id))) return;
     // a pool with its pipes is a lot of work: ask first
     const a = this.floor?.outdoor.find((o) => o.id === id);
     const pipes = a?.pool?.pipes?.length ?? 0;
-    if (a?.type === "pool" && pipes && !confirm(this.t("pool_delete_confirm", { n: pipes }))) return;
+    if (a?.type === "pool" && pipes && !(await this.ask(this.t("pool_delete_confirm", { n: pipes })))) return;
     this.change((_, floor) => (floor.outdoor = floor.outdoor.filter((o) => o.id !== id)));
     this._outdoorId = null;
   }
@@ -2961,6 +2968,16 @@ export class Fp3dEditor extends LitElement {
       return;
     }
     if (!this.isConnected || !this.offsetParent) return;
+    // '?' shows the help (#95); while it is open no key edits the plan behind it, and Esc closes it first
+    if (isHelpKey(e)) {
+      e.preventDefault();
+      this._help = !this._help;
+      return;
+    }
+    if (this._help) {
+      if (e.key === "Escape") this._help = false;
+      return;
+    }
     const mod = e.ctrlKey || e.metaKey;
     // the wall view has its own keys: Delete there must never reach what is chosen in the plan behind it
     // (it took the whole pool with every pipe); only undo and redo still work from here
@@ -3156,9 +3173,9 @@ export class Fp3dEditor extends LitElement {
     this.setDoc(next);
   }
 
-  private deleteFloor(): void {
+  private async deleteFloor(): Promise<void> {
     const floor = this.floor;
-    if (!floor || !confirm(this.t("delete_floor_confirm", { name: floor.name }))) return;
+    if (!floor || !(await this.ask(this.t("delete_floor_confirm", { name: floor.name })))) return;
     const next = structuredClone(this._doc);
     next.floors = next.floors.filter((f) => f.id !== floor.id);
     this.setDoc(next);
@@ -3166,9 +3183,9 @@ export class Fp3dEditor extends LitElement {
     this._roomId = null;
   }
 
-  private deleteRoom(): void {
+  private async deleteRoom(): Promise<void> {
     const id = this._roomId;
-    if (!id || !this.isEditor || !this.confirmFixedDelete("room", id)) return;
+    if (!id || !this.isEditor || !(await this.confirmFixedDelete("room", id))) return;
     this.change((_, floor) => {
       const room = floor.rooms.find((r) => r.id === id);
       floor.rooms = floor.rooms.filter((r) => r.id !== id);
@@ -3210,10 +3227,10 @@ export class Fp3dEditor extends LitElement {
 
 
   /** Switch to a roof of sections; without sections yet, propose them from the rooms. */
-  private useRoofSections(regenerate = false): void {
+  private async useRoofSections(regenerate = false): Promise<void> {
     if (!this.isEditor) return;
     const has = (this._doc.settings.roof.sections ?? []).length > 0;
-    if (regenerate && has && !confirm(this.t("roof_regen_confirm"))) return;
+    if (regenerate && has && !(await this.ask(this.t("roof_regen_confirm"), this.t("ask_ok")))) return;
     this.change((doc) => {
       doc.settings.roof.type = "custom";
       if (regenerate || !has) doc.settings.roof.sections = roofSectionsFromRooms(doc, () => uid("roof"));
@@ -4543,8 +4560,18 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** A fixed item is only deleted after asking. */
-  private confirmFixedDelete(kind: FixKind, id: string): boolean {
-    return !this.isFixedItem(kind, id) || confirm(this.t("fixed_delete_confirm"));
+  private async confirmFixedDelete(kind: FixKind, id: string): Promise<boolean> {
+    return !this.isFixedItem(kind, id) || (await this.ask(this.t("fixed_delete_confirm")));
+  }
+
+  /** A yes / no question in the app's own dialog (#59); `ok` names what yes does, a warning unless `danger` is false. */
+  private ask(text: string, ok: string = this.t("delete"), danger = true): Promise<boolean> {
+    return askConfirm(text, { ok, cancel: this.t("cancel"), danger });
+  }
+
+  /** A message in the app's own dialog (#59). */
+  private tell(text: string): Promise<void> {
+    return tell(text, { ok: this.t("ask_ok") });
   }
 
   private onContextMenu(e: MouseEvent): void {
@@ -4584,9 +4611,9 @@ export class Fp3dEditor extends LitElement {
     this._ctx = { x: local[0], y: local[1], kind, id };
   }
 
-  private deleteItem(kind: FixKind, id: string): void {
+  private async deleteItem(kind: FixKind, id: string): Promise<void> {
     if (kind === "device") {
-      if (!this.confirmFixedDelete(kind, id)) return;
+      if (!(await this.confirmFixedDelete(kind, id))) return;
       this.removeDevice(id);
       this._deviceId = null;
       return;
@@ -4806,19 +4833,32 @@ export class Fp3dEditor extends LitElement {
     return true;
   }
 
-  /** The hint bar under the plan: what the current tool does, or what a tap will do right now. */
+  /** The hint bar under the plan (#96, #62): what the current tool does, what can be done with the selection, on a new
+   *  plan the next step, and in Doors & windows mode what a tap will do right now. */
   private hintText(): string {
-    const floor = this.floor;
-    if (!floor) return this.t("hint_empty");
-    if (this._wallPick) return this.t("hint_wall_pick");
-    if (this._fixedHint) return this.t("fixed_drag_hint");
-    if (this._tool === "outdoor" && this._outdoorFree) return this.t("hint_outdoor_free");
-    if (this._tool === "pool" && this._jointPlace) return this.t("hint_joint_place");
-    if (this._tool === "pool" && this._pipeMode) return this.t(!this.poolArea ? "hint_pipe_pool" : this._pipeDraft ? "hint_pipe_next" : "hint_pipe_start");
-    if (this._tool === "pool" && released("pool")) return this.t("hint_pool_tech");
+    const key = this.hintKeyNow();
     // the kind the next tap adds is always named: it is never inherited silently (#63)
-    if (this._tool === "opening") return this._openingNote ?? this._openingHover ?? this.t("hint_opening", { kind: this.t(`preset_${this._openingPreset}` as I18nKey) });
-    return this.t(`hint_${this._tool}` as I18nKey);
+    if (key === "hint_opening") return this._openingNote ?? this._openingHover ?? this.t("hint_opening", { kind: this.t(`preset_${this._openingPreset}` as I18nKey) });
+    return this.t(key);
+  }
+
+  /** Which hint string shows now (editor-hint.ts hintKey, #96). */
+  private hintKeyNow(): I18nKey {
+    const floor = this.floor;
+    return hintKey({
+      tool: this._tool,
+      hasFloor: !!floor,
+      rooms: floor?.rooms.length ?? 0,
+      selected: this._deviceId ? "device" : this._furnitureId ? "furniture" : this._openingId ? "opening" : this._roomId ? "room" : null,
+      wallPick: this._wallPick,
+      fixedHint: this._fixedHint,
+      outdoorFree: !!this._outdoorFree,
+      jointPlace: !!this._jointPlace,
+      pipeMode: !!this._pipeMode,
+      poolArea: !!this.poolArea,
+      pipeDraft: !!this._pipeDraft,
+      poolTech: released("pool"),
+    });
   }
 
   /** The hint bar's sentence for what a tap does in Doors & windows mode (#62). */
@@ -4844,9 +4884,9 @@ export class Fp3dEditor extends LitElement {
     this.change((_, floor) => patchItem(floor.openings.find((o) => o.id === id), patch));
   }
 
-  private deleteOpening(): void {
+  private async deleteOpening(): Promise<void> {
     const id = this._openingId;
-    if (!id || !this.isEditor || !this.confirmFixedDelete("opening", id)) return;
+    if (!id || !this.isEditor || !(await this.confirmFixedDelete("opening", id))) return;
     this.change((_, floor) => (floor.openings = floor.openings.filter((o) => o.id !== id)));
     this._openingId = null;
   }
@@ -5094,19 +5134,19 @@ export class Fp3dEditor extends LitElement {
     this.updateFurniture({ rotation: (((f.rotation + delta) % 360) + 360) % 360 });
   }
 
-  private deleteFurniture(): void {
+  private async deleteFurniture(): Promise<void> {
     const id = this._furnitureId;
     if (!id || !this.isEditor) return;
     const set = this.selection();
     if (set.length > 1) {
       const fixed = set.some((x) => this.isFixedItem("furniture", x));
-      if (!confirm(this.t(fixed ? "block_delete_fixed" : "block_delete", { n: set.length }))) return;
+      if (!(await this.ask(this.t(fixed ? "block_delete_fixed" : "block_delete", { n: set.length })))) return;
       const ids = new Set(set);
       this.change((_, floor) => (floor.furniture = floor.furniture.filter((f) => !ids.has(f.id))));
       this.selectItem("room", this._roomId);
       return;
     }
-    if (!this.confirmFixedDelete("furniture", id)) return;
+    if (!(await this.confirmFixedDelete("furniture", id))) return;
     this.change((_, floor) => (floor.furniture = floor.furniture.filter((f) => f.id !== id)));
     this._furnitureId = null;
   }
@@ -5876,6 +5916,7 @@ export class Fp3dEditor extends LitElement {
         <button aria-pressed=${this._split} title=${this.t("split_3d_hint")} @click=${() => (close(), this.toggleSplit())}>${this.t("split_3d")}</button>
         <button aria-pressed=${this._wallPick} title=${this.t("wall_view_open")} @click=${(e: Event) => (close(), this.toggleWallPick(e.currentTarget as HTMLElement))}>${this.t("wall_view")}</button>
         <button title=${this.t("fit_hint")} @click=${() => (close(), this.fit())}>${this.t("fit")}</button>
+        <button class="fp3d-help-btn" aria-pressed=${this._help} aria-label=${this.t("help_open")} title=${this.t("help_open")} @click=${() => (close(), (this._help = !this._help))}>?</button>
       </div>
       ${this.renderSettingsMenu(close)}`;
   }
@@ -5984,11 +6025,61 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+  /** The hint bar under the plan (#96): the current tool, the selection, or on a new plan the next step. */
+  private renderHint() {
+    const key = this.hintKeyNow();
+    const first = key === "hint_empty" || key === "hint_first_room";
+    const warn = this._fixedHint || (this._tool === "opening" && !!this._openingNote);
+    return html`<div class="fp3d-hint ${warn ? "fp3d-hint-fixed" : ""} ${first ? "fp3d-hint-first" : ""}" role="status" aria-live="polite">
+      <span>${this.hintText()}</span>
+      <button class="fp3d-hint-help" title=${this.t("help_open")} @click=${() => (this._help = true)}>? ${this.t("hint_help")}</button>
+    </div>`;
+  }
+
+  /** The '?' help (#95): the shortcuts and the plan's marks, both from the tables in help.ts. */
+  private renderHelp() {
+    if (!this._help) return nothing;
+    const close = () => (this._help = false);
+    const mark = (m: (typeof LEGEND)[number]["mark"]) => {
+      const shape =
+        m === "swing"
+          ? svg`<path class="fp3d-help-swing" d="M4 22L4 4A18 18 0 0 1 22 22" />`
+          : m === "track"
+            ? svg`<path class="fp3d-help-track" d="M4 20L4 4M22 20L22 4" />`
+            : m === "guide"
+              ? svg`<line class="fp3d-guide" x1="2" y1="13" x2="24" y2="13" />`
+              : m === "snap"
+                ? svg`<circle class="fp3d-snap" cx="13" cy="13" r="8" />`
+                : m === "ghost"
+                  ? svg`<rect class="fp3d-ghost" x="3" y="5" width="20" height="16" />`
+                  : svg`<rect class="fp3d-help-sel" x="3" y="5" width="20" height="16" rx="2" />`;
+      return html`<svg class="fp3d-help-mark" viewBox="0 0 26 26" aria-hidden="true">${shape}</svg>`;
+    };
+    return html`<div class="fp3d-dialog-veil" @click=${(e: Event) => e.target === e.currentTarget && close()}>
+      <div class="fp3d-dialog fp3d-help-overlay" role="dialog" aria-label=${this.t("help_overlay_title")} tabindex="-1">
+        <div class="fp3d-dialog-head">
+          <h3>${this.t("help_overlay_title")}</h3>
+          <button class="fp3d-btn" aria-label=${this.t("close")} @click=${close}>✕</button>
+        </div>
+        <div class="fp3d-dialog-body">
+          <h4>${this.t("help_shortcuts")}</h4>
+          <dl class="fp3d-help-keys">
+            ${SHORTCUTS.map((k) => html`<dt>${k.keys.map((key, i) => html`${i ? " / " : ""}<kbd>${key}</kbd>`)}</dt><dd>${this.t(k.text)}</dd>`)}
+          </dl>
+          <h4>${this.t("help_legend")}</h4>
+          <ul class="fp3d-help-legend">
+            ${LEGEND.map((l) => html`<li>${mark(l.mark)}<span>${this.t(l.text)}</span></li>`)}
+          </ul>
+        </div>
+      </div>
+    </div>`;
+  }
+
   protected render(): TemplateResult {
     const floor = this.floor;
     const walls = floor ? generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }, floor.walls ?? []) : null;
     return html`
-      ${this.renderPreview()} ${this.renderWallView()} ${this.renderPartCard()} ${this.renderSettingsDialog()}
+      ${this.renderPreview()} ${this.renderWallView()} ${this.renderPartCard()} ${this.renderSettingsDialog()} ${this.renderHelp()}
       <div class="fp3d-editor ${this.narrow ? "fp3d-narrow" : ""}" style=${`--fp3d-side-w:${this._sideWidth}px`}>
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
@@ -6046,7 +6137,7 @@ export class Fp3dEditor extends LitElement {
               ${this._tool === "roof" ? svg`${this.renderRoofSections()}${this.renderRoofWindows()}` : this._tool === "energy" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}${this.renderCables()}${this.renderEnergyMarkers()}` : this._tool === "pool" && floor && this.pipeRules ? this.renderPoolPlan(floor) : nothing} ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             ${this.renderContext()}
-            <p class="fp3d-hint ${this._fixedHint || (this._tool === "opening" && this._openingNote) ? "fp3d-hint-fixed" : ""}">${this.hintText()}</p>
+            ${this.renderHint()}
           </div>
           ${this._split && !this.narrow
             ? html`<div class="fp3d-split-handle" title=${this.t("split_handle_hint")} @pointerdown=${this.onSplitDown}></div>`
@@ -7779,11 +7870,11 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Deletes the chosen pieces of the wall view (several or a fixed one only after asking). */
-  private deleteOnWall(ids: string[]): void {
+  private async deleteOnWall(ids: string[]): Promise<void> {
     if (!ids.length || !this.isEditor) return;
     if (ids.length > 1) {
-      if (!confirm(this.t(ids.some((id) => this.isFixedItem("furniture", id)) ? "block_delete_fixed" : "block_delete", { n: ids.length }))) return;
-    } else if (!this.confirmFixedDelete("furniture", ids[0])) return;
+      if (!(await this.ask(this.t(ids.some((id) => this.isFixedItem("furniture", id)) ? "block_delete_fixed" : "block_delete", { n: ids.length })))) return;
+    } else if (!(await this.confirmFixedDelete("furniture", ids[0]))) return;
     const set = new Set(ids);
     this.change((_, floor) => (floor.furniture = floor.furniture.filter((m) => !set.has(m.id))));
     this._wallSel = null;
@@ -10233,8 +10324,9 @@ export class Fp3dEditor extends LitElement {
         const a1 = q(p1, across[0] - 0.04);
         const b0 = q(p0, across[0] + Math.min(2, o.height));
         const b1 = q(p1, across[0] + Math.min(2, o.height));
+        // the tracks only while selected (#95): unexplained dashes looked like stray guides
         symbol = svg`<line x1=${a0[0]} y1=${a0[1]} x2=${a1[0]} y2=${a1[1]} />
-          <path class="fp3d-open-track" d="M${a0[0]} ${a0[1]}L${b0[0]} ${b0[1]}M${a1[0]} ${a1[1]}L${b1[0]} ${b1[1]}" />`;
+          ${sel ? svg`<path class="fp3d-open-track" d="M${a0[0]} ${a0[1]}L${b0[0]} ${b0[1]}M${a1[0]} ${a1[1]}L${b1[0]} ${b1[1]}"><title>${this.t("help_legend_track")}</title></path>` : nothing}`;
       } else if (o.type === "door") {
         // leaves swinging into the room (or out of it) from the hinge side; "left" is seen from the
         // room, so it depends on which way round the outline runs
@@ -10269,7 +10361,10 @@ export class Fp3dEditor extends LitElement {
           const leaf = q(hinge, face + (out ? -leafW : leafW));
           const r = leafW * this._view.scale;
           const cross = (leaf[0] - hx) * (fy - hy) - (leaf[1] - hy) * (fx - hx);
-          return svg`<path d="M${hx} ${hy}L${leaf[0]} ${leaf[1]}A${r} ${r} 0 0 ${cross > 0 ? 1 : 0} ${fx} ${fy}" />`;
+          // the leaf always; its dashed swing only while the door is selected (#95), explained by a tooltip
+          return svg`<line class="fp3d-open-leaf" x1=${hx} y1=${hy} x2=${leaf[0]} y2=${leaf[1]} />${
+            sel ? svg`<path class="fp3d-open-swing" d="M${leaf[0]} ${leaf[1]}A${r} ${r} 0 0 ${cross > 0 ? 1 : 0} ${fx} ${fy}"><title>${this.t("help_legend_swing")}</title></path>` : nothing
+          }`;
         };
         symbol = svg`${paneLines}${
           style === "passage"
@@ -11922,7 +12017,7 @@ export class Fp3dEditor extends LitElement {
   private rememberFloorView(): void {
     const v = this.paneView();
     if (!v) {
-      alert(this.t("floor_start_view_need_pane"));
+      void this.tell(this.t("floor_start_view_need_pane"));
       return;
     }
     this.updateFloor({ start_view: v });
@@ -11932,7 +12027,7 @@ export class Fp3dEditor extends LitElement {
   private rememberRoomView(): void {
     const v = this.paneView();
     if (!v) {
-      alert(this.t("room_start_view_need_pane"));
+      void this.tell(this.t("room_start_view_need_pane"));
       return;
     }
     this.updateRoom({ start_view: v });
@@ -13354,8 +13449,8 @@ export class Fp3dEditor extends LitElement {
       .value=${this._deviceQuery}
       @input=${(e: Event) => (this._deviceQuery = (e.target as HTMLInputElement).value)}
     />`;
-    const placeAll = () => {
-      if (confirm(this.t("devices_place_all_confirm", { n: unplacedMain.length }))) this.placeDevices(unplacedMain);
+    const placeAll = async () => {
+      if (await this.ask(this.t("devices_place_all_confirm", { n: unplacedMain.length }), this.t("ask_ok"), false)) this.placeDevices(unplacedMain);
     };
     return html`<section>
       <h3>${this.t("devices")}</h3>
@@ -13587,7 +13682,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private async restoreFromHistory(snap: Snapshot): Promise<void> {
-    if (!this.hass || !confirm(this.t("backup_restore_confirm", { time: this.snapshotTime(snap) }))) return;
+    if (!this.hass || !(await this.ask(this.t("backup_restore_confirm", { time: this.snapshotTime(snap) }), this.t("backup_restore")))) return;
     await restoreSnapshot(this.hass, snap.id, this.home);
     this._notice = this.t("backup_restored");
     await this.loadHistory();
@@ -13622,7 +13717,7 @@ export class Fp3dEditor extends LitElement {
       const file = { ...base, ...(base.homes ? { homes } : {}), exported_at: new Date().toISOString(), images };
       download(`home-3d-${this.t("export_name_full")}-${day}.json`, JSON.stringify(file));
     } catch (err) {
-      alert(this.t("backup_import_error", { error: String((err as { message?: string })?.message ?? err) }));
+      await this.tell(this.t("backup_import_error", { error: String((err as { message?: string })?.message ?? err) }));
     } finally {
       this._backupBusy = false;
     }
@@ -13637,14 +13732,14 @@ export class Fp3dEditor extends LitElement {
     try {
       data = JSON.parse(await file.text()) as BackupFile;
     } catch {
-      alert(this.t("import_error_not_json"));
+      await this.tell(this.t("import_error_not_json"));
       return;
     }
     if (data?.format !== "home3d-backup" || !data.building) {
-      alert(this.t("backup_full_not_backup"));
+      await this.tell(this.t("backup_full_not_backup"));
       return;
     }
-    if (!confirm(this.t("backup_full_confirm"))) return;
+    if (!(await this.ask(this.t("backup_full_confirm"), this.t("backup_restore")))) return;
     this._backupBusy = true;
     try {
       // several homes (#53): one restore per home keeps each message small (a plan can be megabytes); a file from
@@ -13682,7 +13777,7 @@ export class Fp3dEditor extends LitElement {
       // a lost connection comes as the whole result message ({ error: { code, message } }), e.g. when the backup is
       // larger than Home Assistant takes in one message
       const e = (err ?? {}) as { code?: string | number; message?: string; error?: { code?: string | number; message?: string } };
-      alert(this.t("backup_import_error", { error: String(e.message ?? e.error?.message ?? e.code ?? e.error?.code ?? err) }));
+      await this.tell(this.t("backup_import_error", { error: String(e.message ?? e.error?.message ?? e.code ?? e.error?.code ?? err) }));
     } finally {
       this._backupBusy = false;
     }
@@ -13704,10 +13799,10 @@ export class Fp3dEditor extends LitElement {
       building = migratePlanTypes(parseExport(await file.text()));
     } catch (err) {
       const code = (err as Error).message;
-      alert(code === "not_json" ? this.t("import_error_not_json") : code === "not_plan" ? this.t("import_error_not_plan") : this.t("backup_import_error", { error: code }));
+      await this.tell(code === "not_json" ? this.t("import_error_not_json") : code === "not_plan" ? this.t("import_error_not_plan") : this.t("backup_import_error", { error: code }));
       return;
     }
-    if (!confirm(this.t("backup_import_confirm"))) return;
+    if (!(await this.ask(this.t("backup_import_confirm"), this.t("ask_ok")))) return;
     // the current plan stays available as a restore point
     await takeSnapshot(this.hass, this.home).catch(() => undefined);
     this.setDoc(building);
@@ -14409,15 +14504,46 @@ export class Fp3dEditor extends LitElement {
         stroke: #ff5fd2;
         stroke-width: 2;
       }
+      /* the hint bar (#96): a readable strip on its own background, not a faint line on the grid */
       .fp3d-hint {
         position: absolute;
         left: 12px;
-        right: 12px;
-        bottom: 8px;
-        margin: 0;
-        font-size: 12px;
-        color: var(--fp3d-muted);
+        bottom: 10px;
+        max-width: calc(100% - 24px);
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 8px 7px 14px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 12px;
+        background: var(--fp3d-chrome-solid);
+        box-shadow: var(--fp3d-shadow);
+        font-size: 14px;
+        line-height: 1.35;
+        color: var(--fp3d-text);
         pointer-events: none;
+      }
+      .fp3d-hint-first {
+        border-color: var(--fp3d-accent);
+        font-weight: 600;
+      }
+      .fp3d-hint-help {
+        flex: none;
+        pointer-events: auto;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--fp3d-muted);
+        background: none;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 999px;
+        padding: 3px 10px;
+        cursor: pointer;
+      }
+      .fp3d-hint-help:hover {
+        color: var(--fp3d-text);
+        border-color: var(--fp3d-accent);
       }
       .fp3d-side-grip {
         position: absolute;
@@ -15551,6 +15677,70 @@ export class Fp3dEditor extends LitElement {
       .fp3d-narrow .fp3d-settings-word {
         display: none;
       }
+      .fp3d-help-btn {
+        min-width: 34px;
+        font-weight: 700;
+      }
+      .fp3d-help-overlay h4 {
+        margin: 14px 0 6px;
+        font-size: 13px;
+        color: var(--fp3d-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .fp3d-help-keys {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 6px 14px;
+        margin: 0;
+        align-items: baseline;
+      }
+      .fp3d-help-keys dt {
+        white-space: nowrap;
+        color: var(--fp3d-muted);
+      }
+      .fp3d-help-keys dd {
+        margin: 0;
+      }
+      .fp3d-help-overlay kbd {
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--fp3d-text);
+        padding: 1px 6px;
+        border: 1px solid var(--fp3d-line);
+        border-bottom-width: 2px;
+        border-radius: 5px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .fp3d-help-legend {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 8px;
+      }
+      .fp3d-help-legend li {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .fp3d-help-mark {
+        flex: none;
+        width: 26px;
+        height: 26px;
+        fill: none;
+        stroke-width: 1.6;
+      }
+      .fp3d-help-swing,
+      .fp3d-help-track {
+        stroke: var(--fp3d-warm);
+        stroke-dasharray: 3 3;
+      }
+      .fp3d-help-sel {
+        fill: rgba(55, 224, 255, 0.25);
+        stroke: var(--fp3d-accent);
+      }
       .fp3d-dialog-veil {
         position: fixed;
         inset: 0;
@@ -16247,6 +16437,7 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-hint-fixed {
         color: var(--fp3d-accent);
+        border-color: var(--fp3d-accent);
       }
       .fp3d-ctx {
         position: absolute;
@@ -16607,6 +16798,15 @@ export class Fp3dEditor extends LitElement {
       .fp3d-open-door path {
         stroke: var(--fp3d-warm);
         stroke-dasharray: 3 3;
+      }
+      .fp3d-open .fp3d-open-swing {
+        pointer-events: stroke;
+      }
+      .fp3d-open-door line.fp3d-open-leaf {
+        stroke-width: 2;
+      }
+      .fp3d-open-front line.fp3d-open-leaf {
+        stroke-width: 3;
       }
       .fp3d-open-front path,
       .fp3d-open-door line {
