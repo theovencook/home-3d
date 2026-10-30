@@ -39,6 +39,7 @@ from .const import (
 from .custom_items import CustomItems
 from .moves import Moves, load_moves, migrate_bases, migrate_building, moved_into
 from .packs import library_pack, load_bundled, with_bundled
+from .racks import RackError, new_rack_problems
 from .recipes import with_recipes
 from .schema import BUILDING_SCHEMA, empty_building, image_ids
 
@@ -165,7 +166,9 @@ class Home:
             self.revision = 1
         await self._save_building()
 
-    async def async_save_building(self, building: dict[str, Any], recipe_bases: dict[str, str] | None = None) -> int:
+    async def async_save_building(
+        self, building: dict[str, Any], recipe_bases: dict[str, str] | None = None, *, check_racks: bool = False
+    ) -> int:
         """Store a validated building, bump the revision and notify subscribers.
 
         The state before the save becomes a restore point when the last one is older than
@@ -181,6 +184,10 @@ class Home:
         # every pack item type in the plan keeps its recipe copy (#2): the one sent, else the one kept so far, else
         # a copy of the installed item; one the client sends as it started from it gives way to a newer kept one (#45)
         building = with_recipes(building, self.building.get("recipes"), self._packs(), recipe_bases)
+        # an editor's save that puts rack gear where it does not fit is refused (#113); what broke the rules before
+        # (a pack update) stays
+        if check_racks and (problems := new_rack_problems(self.building, building)):
+            raise RackError(problems)
         self.building = building
         self.revision += 1
         await self._save_building()
@@ -415,7 +422,9 @@ class FloorplanData:
         """One of the active home's images as data URL."""
         return self.active.get_image(image_id)
 
-    async def async_save_building(self, building: dict[str, Any], recipe_bases: dict[str, str] | None = None) -> int:
+    async def async_save_building(
+        self, building: dict[str, Any], recipe_bases: dict[str, str] | None = None, *, check_racks: bool = False
+    ) -> int:
         """Store the active home's building (see Home.async_save_building)."""
         return await self.active.async_save_building(building, recipe_bases)
 

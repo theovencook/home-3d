@@ -133,6 +133,13 @@ test("the pack items a plan shows: its furniture and the vehicles of its parking
   assert.deepEqual(packTypesIn(building).sort(), ["pack:cars.uk:leaf", "pack:cars.uk:van", SOFA]);
 });
 
+test("the pack items a plan shows include the gear in its racks (#113)", () => {
+  const at = { x: 0, z: 0, rotation: 0, w: 1, d: 1, h: 1, variant: null };
+  const rack = { id: "r", type: "pack:it:rack", ...at, rack: { slots: [{ id: "s1", type: "pack:it:switch", u: 1 }, { id: "s2", type: "pack:it:blank", u: 2 }] } };
+  const building = { floors: [{ furniture: [rack] }] } as unknown as Building;
+  assert.deepEqual(packTypesIn(building).sort(), ["pack:it:blank", "pack:it:rack", "pack:it:switch"]);
+});
+
 // Recipes are kept in the browser (#48): a reload draws the library without asking again while the pack is the same
 
 /** A browser store in memory: by pack id, the hash and the recipes kept. */

@@ -175,6 +175,10 @@ import { isHelpKey, LEGEND, SHORTCUTS } from "../help.ts";
 import { hintKey, type Tool } from "../editor-hint.ts";
 import { askConfirm, tell } from "../ask.ts";
 import "./library.ts";
+import "./rack-sheet.ts";
+import { rackLayout, readRackFrame } from "../rack-frame.ts";
+import { packGearOf, readRackGear, type RackSlot, type RackSpace } from "../rack.ts";
+import type { RackGearChoice } from "./rack-sheet.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
 import { detectCameraModel, isCameraModel, setCameraLook } from "../camera-models.ts";
@@ -478,6 +482,7 @@ export class Fp3dEditor extends LitElement {
     _openingNote: { state: true },
     _openingHover: { state: true },
     _help: { state: true },
+    _rackSheet: { state: true },
     _phoneHint: { state: true },
     _floorMenu: { state: true },
     _openingPreset: { state: true },
@@ -707,6 +712,8 @@ export class Fp3dEditor extends LitElement {
   private openingFormMin: { id: string; h: number } | null = null;
   /** The '?' help overlay (#95) is open. */
   private declare _help: boolean;
+  /** The rack whose "Edit rack" sheet is open (#113; its furniture id). */
+  private declare _rackSheet: string | null;
   /** The one-time "draw on a PC or tablet" hint on phones (shown by CSS on narrow screens only). */
   private declare _phoneHint: boolean;
   /** A one-time invitation for admins to switch on the usage reports (while they are off and it was not closed). */
@@ -929,6 +936,7 @@ export class Fp3dEditor extends LitElement {
     this._guides = {};
     this._view = { scale: 50, ox: 40, oy: 40 };
     this._help = false;
+    this._rackSheet = null;
     this._size = { w: 800, h: 600 };
     this._images = {};
     this._canUndo = false;
@@ -3088,6 +3096,11 @@ export class Fp3dEditor extends LitElement {
     }
     if (this._help) {
       if (e.key === "Escape") this._help = false;
+      return;
+    }
+    // the rack sheet (#113) has its own keys; none edits the plan behind it
+    if (this._rackSheet) {
+      if (e.key === "Escape") this._rackSheet = null;
       return;
     }
     const mod = e.ctrlKey || e.metaKey;
@@ -6439,6 +6452,77 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+  // ------------------------------------------------------------------------------------------ racks (#113)
+
+  /** A placed rack's frame and U layout at its placed size; null for any other item. */
+  private rackOf(f: Furniture) {
+    const frame = readRackFrame(packItem(f.type) ?? packInfo(f.type));
+    return frame ? { frame, at: rackLayout(frame, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h)) } : null;
+  }
+
+  /** Open the chosen rack's sheet. */
+  private openRackSheet(): void {
+    const f = this.furnitureItem;
+    if (f && this.rackOf(f)) this._rackSheet = f.id;
+  }
+
+  /** What the open rack sheet shows (null: none open, or its rack is gone). */
+  private rackSheetProps() {
+    const f = this._rackSheet ? this.floor?.furniture.find((o) => o.id === this._rackSheet) : undefined;
+    const rack = f && this.rackOf(f);
+    if (!f || !rack) return null;
+    const lang = this.hass?.language ?? "en";
+    const space: RackSpace = { u: rack.frame.u, width: rack.frame.width, mountDepth: rack.at.mountDepth };
+    // gear from the plan's copies first (a pack removed since), else the library's index
+    const gearOf = packGearOf((t) => packItem(t) ?? packInfo(t));
+    const gear: RackGearChoice[] = [];
+    for (const pack of this.packs ?? [])
+      for (const it of pack.items) {
+        const g = readRackGear(it);
+        if (g && g.u >= 1 && g.inch === space.width && it.size[1] <= space.mountDepth + 0.001) gear.push({ type: packType(pack.id, it.id), name: packItemName(it, lang) });
+      }
+    gear.sort((a, b) => a.name.localeCompare(b.name));
+    return {
+      heading: f.name || furnitureName(this.hass, f.type),
+      space,
+      labels: rack.at.units.map((u) => u.label),
+      slots: f.rack?.slots ?? [],
+      gear,
+      gearOf,
+      nameOf: (type: string) => furnitureName(this.hass, type),
+      editable: this.isEditor,
+    };
+  }
+
+  /** The sheet changed the rack's gear: one undo step on the placed rack. */
+  private onRackChange(e: Event): void {
+    const id = this._rackSheet;
+    const slots = (e as CustomEvent<{ slots: RackSlot[] }>).detail.slots;
+    if (!id || !this.isEditor) return;
+    this.change((_, floor) => {
+      const item = floor.furniture.find((f) => f.id === id);
+      if (item) item.rack = { ...item.rack, slots };
+    });
+  }
+
+  private renderRackSheet() {
+    const p = this.rackSheetProps();
+    if (!p) return nothing;
+    return html`<fp3d-rack-sheet
+      .heading=${p.heading}
+      .space=${p.space}
+      .labels=${p.labels}
+      .slots=${p.slots}
+      .gear=${p.gear}
+      .gearOf=${p.gearOf}
+      .nameOf=${p.nameOf}
+      .editable=${p.editable}
+      .t=${(key: string, vars?: Record<string, string | number>) => this.t(key as I18nKey, vars)}
+      @rack-change=${(e: Event) => this.onRackChange(e)}
+      @rack-close=${() => (this._rackSheet = null)}
+    ></fp3d-rack-sheet>`;
+  }
+
   /** The '?' help (#95): the shortcuts and the plan's marks, both from the tables in help.ts. */
   private renderHelp() {
     if (!this._help) return nothing;
@@ -6482,7 +6566,7 @@ export class Fp3dEditor extends LitElement {
     const floor = this.floor;
     const walls = floor ? generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }, floor.walls ?? []) : null;
     return html`
-      ${this.renderPreview()} ${this.renderWallView()} ${this.renderPartCard()} ${this.renderSettingsDialog()} ${this.renderHelp()}
+      ${this.renderPreview()} ${this.renderWallView()} ${this.renderPartCard()} ${this.renderSettingsDialog()} ${this.renderHelp()} ${this.renderRackSheet()}
       <div class="fp3d-editor ${this.narrow ? "fp3d-narrow" : ""}" style=${`--fp3d-side-w:${this._sideWidth}px`}>
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
@@ -12042,11 +12126,13 @@ export class Fp3dEditor extends LitElement {
             <div class="fp3d-actions"><button class="fp3d-btn fp3d-primary" @click=${() => this.vehicleToSpot(f)}>🅿 ${this.t("vehicle_to_spot")}</button></div>
           </section>`
         : nothing}
+      ${!admin && this.rackOf(f) ? html`<div class="fp3d-actions"><button class="fp3d-btn" @click=${() => this.openRackSheet()}>▤ ${this.t("rack_edit")}</button></div>` : nothing}
       ${admin
         ? html`<div class="fp3d-actions">
             <button class="fp3d-btn" title=${withKeys(this.t("rotate_left"), ["Shift+R"])} @click=${() => this.rotateFurniture(-90)}>${this.t("rotate_left")}</button>
             <button class="fp3d-btn" title=${withKeys(this.t("rotate_right"), ["R"])} @click=${() => this.rotateFurniture(90)}>${this.t("rotate_right")}</button>
             <button class="fp3d-btn" title=${this.t("wall_view_open")} @click=${() => this.openWallViewFor(f)}>▦ ${this.t("wall_view")}</button>
+            ${this.rackOf(f) ? html`<button class="fp3d-btn" @click=${() => this.openRackSheet()}>▤ ${this.t("rack_edit")}</button>` : nothing}
             ${f.entity && f.entity !== "none" && f.type !== "parking" ? html`<button class="fp3d-btn" title=${this.t("as_device_hint")} @click=${() => this.furnitureToDevice(f)}>${this.t("as_device")}</button>` : nothing}
             ${this.renderClipButtons()}
             <button class="fp3d-btn fp3d-danger" title=${withKeys(this.t("delete"), ["Del"])} @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>

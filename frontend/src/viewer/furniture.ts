@@ -9,6 +9,7 @@ import { builtinBase, gangsOf, stairPlan, stairsULayout, STAIR_WINDERS, POOL_VAL
 import { isRobotVacuum, mountBase, packItem, packMotion, packMovingPart, packRobotCentre, packRobotPart, packScreen, type PackItem, type PackMotion, type PackPart } from "../packs.ts";
 import { fitParts } from "../pack-scale.ts";
 import { rackLayout, rackMarks, readRackFrame } from "../rack-frame.ts";
+import { rackContents } from "../rack.ts";
 import { COLOUR_ROLES, roleColour, type RoleColours } from "../colour-roles.ts";
 import { materialId, roleMaterial, type RoleMaterials } from "../role-materials.ts";
 import { binColors, binShape, householdCountry, mailboxShape, type BinShape, type MailboxShape } from "../household.ts";
@@ -73,6 +74,12 @@ class Builder {
     const s = Math.sin(a);
     const tf = this.tf;
     return new Builder(this.buf, this.lines, (x, z) => tf(cx + (x - cx) * c - (z - cz) * s, cz + (x - cx) * s + (z - cz) * c));
+  }
+
+  /** The same buffers with the local coordinates moved by (dx, dz): an item drawn inside another (a rack's gear). */
+  moved(dx: number, dz: number): Builder {
+    const tf = this.tf;
+    return new Builder(this.buf, this.lines, (x, z) => tf(x + dx, z + dz));
   }
 
   /** Axis-aligned box in local coordinates; `edges` draws its outline. */
@@ -2034,8 +2041,8 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
         const motion = packMotion(f.type);
         const skip = motion ? (p: PackPart) => packMovingPart(motion, p) : isRobotVacuum(f.type) && !still ? packRobotPart : null;
         packModel(b, item, w, d, h, base, null, null, skip);
-        // an empty rack (#112): ticks on its front rails at every U
-        if (item.rack_frame) rackModelMarks(b, item, w, d, h, base);
+        // a rack (#112): ticks on its front rails at every U, and its gear (#113)
+        if (item.rack_frame) rackModel(b, item, f, w, d, h, base);
         // items on furniture, walls or ceilings cast no shadow on the floor
         if (base > 0.05) return;
       } else b.box(-w / 2, w / 2, 0, h, -d / 2, d / 2, C.body, C.bodyTop, EDGE_FURN);
@@ -2044,11 +2051,18 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
   contactShadow(shadow, tf, w, d, f.type === "plant" ? 0.35 : 0.5, roundFootprint(f), Math.min(0, base));
 }
 
-/** The U marks of a pack rack (rack-frame.ts) at its placed size; nothing for a rack frame that breaks the rules. */
-function rackModelMarks(b: Builder, item: PackItem, w: number, d: number, h: number, base: number): void {
+/**
+ * The U marks of a pack rack (rack-frame.ts) at its placed size and the gear in its slots (#113, rack.ts), each drawn
+ * from its own recipe (the plan's copy) at its U; nothing for a rack frame that breaks the rules.
+ */
+function rackModel(b: Builder, item: PackItem, f: Furniture, w: number, d: number, h: number, base: number): void {
   const frame = readRackFrame(item);
   if (!frame) return;
-  for (const m of rackMarks(rackLayout(frame, w, d, h))) b.box(m.x0, m.x1, base + m.y0, base + m.y1, m.z0, m.z1, C.accent, C.accent);
+  const at = rackLayout(frame, w, d, h);
+  for (const m of rackMarks(at)) b.box(m.x0, m.x1, base + m.y0, base + m.y1, m.z0, m.z1, C.accent, C.accent);
+  const slots = f.rack?.slots;
+  if (!slots?.length) return;
+  for (const g of rackContents(at, slots, packItem)) packModel(b.moved(g.x, g.z), g.item, g.w, g.d, g.h, base + g.y, null);
 }
 
 /**

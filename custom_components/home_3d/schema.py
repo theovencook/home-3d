@@ -13,6 +13,7 @@ import voluptuous as vol
 
 from .const import TIME_PATTERN
 from .packs import COLOUR_ROLES
+from .racks import RACK_CONTENTS_SCHEMA
 from .recipes import recipes_validator
 
 MAX_FLOORS = 20
@@ -469,6 +470,8 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("mods"): _MODULE_DATA,
         # when it shows in 3D (None = always)
         vol.Optional("show_when"): vol.Any(None, SHOW_WHEN_SCHEMA),
+        # a rack (#113): the gear in its U positions (racks.py)
+        vol.Optional("rack"): vol.Any(None, RACK_CONTENTS_SCHEMA),
     },
     extra=vol.ALLOW_EXTRA,
 )
