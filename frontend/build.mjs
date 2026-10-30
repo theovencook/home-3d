@@ -105,7 +105,9 @@ function copyFonts() {
 // item editor: 72 KB since #84 added list import, the brief dialog and the light preview; the editor bundle loads only
 // for editors and reached 1024.8 KB with run 2's editor tickets (#59-#96), so 1100 KB; the card editor carries the
 // whole de/en string table from i18n.ts and grows with it: 300 KB)
-const BUDGET = { "home-3d.js": 780 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 1100 * 1024, "home-3d-card-editor.js": 300 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024 };
+// home-3d.js: 780 -> 820 KB for #119 (rack links: LED status, gear details in the view, strings). The string table
+// (i18n.ts) is the main growth; splitting it is a follow-up ticket (RUN-2-NOTES).
+const BUDGET = { "home-3d.js": 820 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 1100 * 1024, "home-3d-card-editor.js": 300 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024 };
 
 copyFonts();
 if (watch) {
