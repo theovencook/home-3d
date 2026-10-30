@@ -109,7 +109,8 @@ import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from 
 import { furnitureName } from "../furniture-names.ts";
 import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
-import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion, recipeHashes } from "../packs.ts";
+import { holdTarget } from "../hold.ts";
+import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
@@ -3002,18 +3003,18 @@ export class Fp3dView3d extends LitElement {
         if (shade?.kind === "radiator") {
           // brighter while it heats
           const a = st && kindOf(st.entity_id) === "climate" ? st.attributes : null;
-          const heating = heatSensorOn(hass, f.heat_sensor) ?? a?.hvac_action === "heating";
+          const heating = heatSensorOn(hass, f.heat_sensor) ?? (!!a && isActive(st) && a.hvac_action !== "cooling"); // a TRV without hvac_action: below its target (#81)
           screens.set(f.id, { color: shade.color, level: heating ? 0.9 : 0.55, shade: true });
         } else if (shade?.kind === "tank") {
           // warm above, cooler below, like the water in it
           const s = effectSettings(b);
           const below = tempShade(shade.celsius - 0.3 * (s.tank_hot - s.tank_cold), s.tank_cold, s.tank_hot);
           screens.set(f.id, { color: below, level: 0.8, shade: true, faces: [{ part: "strata", color: below, top: shade.color, level: 0.8 }] });
-        } else if (f.type === "radiator" && ((st && kindOf(st.entity_id) === "climate") || f.heat_sensor)) {
+        } else if (isThermostatItem(f.type) && ((st && kindOf(st.entity_id) === "climate") || f.heat_sensor)) {
           // glows while it heats; brighter the further the room is below its target. A thermostat that does not tell
           // (Tuya's valves report a "work state" sensor instead) is asked through the radiator's own sensor (D637)
           const a = st && kindOf(st.entity_id) === "climate" ? st.attributes : null;
-          const heating = heatSensorOn(hass, f.heat_sensor) ?? a?.hvac_action === "heating";
+          const heating = heatSensorOn(hass, f.heat_sensor) ?? (!!a && isActive(st) && a.hvac_action !== "cooling"); // a TRV without hvac_action: below its target (#81)
           if (heating) {
             const gap = a && typeof a.temperature === "number" && typeof a.current_temperature === "number" ? a.temperature - a.current_temperature : 1;
             screens.set(f.id, { color: [1, 0.42, 0.1], level: Math.min(1, 0.45 + 0.25 * Math.max(0, gap)) });
@@ -3869,7 +3870,7 @@ export class Fp3dView3d extends LitElement {
     </nav>`;
   }
 
-  /** Long press: the quick menu at the device, or the details for devices without one. */
+  /** Long press: Home Assistant's more-info of the device, like other HA cards (#82); an own hold action wins. */
   private onDeviceHold(entityId: string, x: number, y: number): void {
     const own = this.ro ? null : gestureAction(this.actionOwners.get(entityId), "hold");
     if (own) return this.runOwnAction(own, this.actionOwners.get(entityId)!, x, y);
@@ -3900,9 +3901,11 @@ export class Fp3dView3d extends LitElement {
           }
         }
     }
-    const kind = kindOf(entityId);
-    if (kind === "light" || kind === "cover" || kind === "switch" || kind === "fan" || kind === "lock" || kind === "camera") this._menu = { entity: entityId, x, y };
-    else openMoreInfo(this, entityId);
+    // every device opens its more-info (a light, a switch, a lock and a camera too: their quick menu stays on the
+    // tap where a tap opens it, a cover's and a camera's); pins without one entity behind them do what a tap does
+    const target = holdTarget(entityId);
+    if (target) openMoreInfo(this, target);
+    else this.onDeviceTap(entityId, x, y);
   }
 
   /** Swipe up or down on a lamp (brightness) or a blind (position). */

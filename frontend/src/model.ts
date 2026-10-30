@@ -842,6 +842,8 @@ export interface BuildingSettings {
   lock_plan?: boolean;
   /** False for a sample or template home (#61): the editor never offers to add rooms from this install's areas. */
   area_import?: boolean;
+  /** Entities left out of the editor's "Unplaced entities" list on purpose (#83); unhidden from its Hidden view. */
+  unplaced_hidden?: string[];
   /** The camera the house view opens with (3D view, card, kiosk); null = fitted from the front left. */
   start_view?: StartView | null;
   /** What a module keeps for the whole house (its settings), by the module's id. */
