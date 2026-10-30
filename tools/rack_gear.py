@@ -173,10 +173,12 @@ def patch_panel(spec, *, ports, rows, label_rows=1):
     x = -g.w / 2 + 38
     pitch = (PANEL - 76 - (per_row // group - 1) * 6) / per_row if per_row >= group else 18.0
     # rows of keystone ports with a white number strip along the top
-    port_h = 14.0 if h < 60 else 16.0
-    top = h - 8
+    gap = 2.0 if h < 60 else 6.0
+    port_h = min(16.0, (h - 16 - gap * (rows - 1)) / rows)
+    top = h - 6
+    y0 = (h - 8 - (rows * port_h + (rows - 1) * gap)) / 2 + 2
     for row in range(rows):
-        y = top - 8 - port_h - row * (port_h + 3 if h < 60 else port_h + 8)
+        y = y0 + (rows - 1 - row) * (port_h + gap)
         xr = x
         left = per_row
         while left > 0:
