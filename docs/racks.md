@@ -12,8 +12,8 @@ and read the temperature or the UPS battery off a glass card above it.
 - **Gear** is a pack item with a `rack` spec: its height in U (0 to 60), its width (full, half, third), its depth and
   whether it is a shelf. See [Rack-mount gear](packs.md#rack-mount-gear).
 - **The placed rack** keeps a list of slots (`rack.slots`): which gear, at which U, in which column, on which face.
-  Nothing new is added to the plan format: the gear's recipes are copied into the plan like those of any other item,
-  so a house keeps its look when a pack changes.
+  The plan format is unchanged. The gear's recipes are copied into the plan like any other item's, so a house keeps
+  its look when a pack changes.
 
 ## Placing a rack
 
@@ -35,9 +35,9 @@ Select a placed rack and press **Edit rack**. The sheet shows the U positions nu
 2. Tap the lowest U it should take.
 3. Tap gear in the rack to move it up or down a U, to another U, to rename it or to delete it.
 
-Gear that would overlap other gear, stick out of the rack or does not fit is refused, and the clash is marked in red.
-The head of the sheet shows U used and free and the estimated watts (a minimum, shown as "≥ 93 W", when some gear has no
-figure).
+The sheet refuses gear that would overlap other gear, stick out of the rack or not fit, and marks the clash in red.
+Its head shows the U used and free and the estimated watts. When some gear has no watts figure, the total is a minimum
+and shows as "≥ 93 W".
 
 ### Faces, columns, 0U and shelves
 
@@ -67,16 +67,16 @@ has none. You can set the status entity and further links by hand; a slot links 
 
 Linked gear shows a status LED in 3D, in the front view and in the sheet: green online, amber warning (on battery, a
 problem sensor on, a linked entity unavailable), red offline. In the view, tap the gear for its status and values, hold
-it for the device's more-info dialog. The LEDs are one small mesh apart from the rack, so a state change does not rebuild
-the rack.
+it for the device's more-info dialog. The LEDs are a small mesh of their own, so a state change does not rebuild the
+rack.
 
 ## The rack card
 
-A rack with linked gear gets a glass card above it in 3D, in the look of the energy cards. Folded it shows the devices
-online and the first values; a tap unfolds every value with the device it comes from and a sparkline of the last hours.
+A rack with linked gear gets a glass card above it in 3D, styled like the energy cards. Folded, it shows the devices
+online and the first values. A tap unfolds every value with the device it comes from and a sparkline of the last hours.
 
-Without any choice the card shows, at most, the UPS load, battery and runtime, PoE watts, the hottest temperature,
-devices online, a volume's used percentage and one throughput figure. In the editor, **Card values** lets you tick
+Until you choose, the card shows whichever of these the rack has: the UPS load, battery and runtime, PoE watts, the
+hottest temperature, devices online, a volume's used percentage and one throughput figure. In the editor, **Card values** lets you tick
 up to eight values from the rack's linked entities, per device, plus two figures over the whole rack: **Hottest** and
 **Devices online**. The card can be switched off for a view in the card's options (`rack_cards`).
 
@@ -92,15 +92,15 @@ shows, and flies to the rack:
 
 A rack is meant by the word "rack" (or cabinet), by its own name or by a piece of gear it holds, so name the rack when
 there are several ("how hot is the garage rack?"). If the rack has nothing linked for what you asked, it says so;
-"hottest" and "online" work even when the card does not show them. The answers come from the card's values, not the
-whole of Home Assistant. The sentences work in German and English, with the main words of a few other languages;
-anything that is not a question about a rack goes on to Assist. Switching or restarting gear is never done by voice
+"hottest" and "online" work even when the card does not show them. Home 3D answers only from the rack's values and
+does not search the rest of Home Assistant. The sentences work in German and English, with the main words of a few
+other languages; anything that is not a question about a rack goes on to Assist. Voice never switches or restarts gear
 here.
 
 ## Performance
 
-A rack's gear is drawn as one geometry per rack with a plain far version, a full rack costs about 12 triangles a piece
-at a distance. Selecting a rack in the editor costs about twice as much as an ordinary item (the rack form and the
+Each rack's gear is drawn as one geometry, with a plain version for when the camera is far. Far away, a full rack costs
+about 12 triangles per piece of gear. Selecting a rack in the editor costs about twice as much as an ordinary item (the rack form and the
 front view). Numbers and method are in [performance.md](performance.md#racks-121).
 
 ## Catalogues
@@ -108,5 +108,5 @@ front view). Numbers and method are in [performance.md](performance.md#racks-121
 - [rack-frames.md](rack-frames.md): every bundled rack with its size and source.
 - [rack-gear.md](rack-gear.md): every bundled piece of gear with its U, size, power and source.
 
-Both lists are generated (`node tools/rack-frames.ts`, `python tools/rack_gear.py`) from the code; edit the list, not
-the JSON files. To make your own racks and gear, see [packs.md](packs.md#racks).
+Both lists and the JSON files are generated from the code (`node tools/rack-frames.ts`, `python tools/rack_gear.py`),
+so change the code's list, not the JSON files. To make your own racks and gear, see [packs.md](packs.md#racks).

@@ -13,7 +13,7 @@ import { clipConvex, netRoomArea } from "../geometry/area.ts";
 import { areaText, formatImperial, lengthText, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 import { closeGaps, straightenEdges, suggestedThickness } from "../geometry/gaps.ts";
 import { clampIntoRoom, keepInRoom, sharedEdge, snapToWall } from "../geometry/snap.ts";
-import { itemsAt, minHitPx, nextPick } from "../geometry/pick.ts";
+import { altPick, itemsAt, minHitPx, nextPick } from "../geometry/pick.ts";
 import { itemsByRoom } from "../item-list.ts";
 import "./item-list-view.ts";
 import type { ItemRow } from "./item-list-view.ts";
@@ -177,7 +177,7 @@ import { askConfirm, tell } from "../ask.ts";
 import "./library.ts";
 import "./rack-sheet.ts";
 import { rackLayout, readRackFrame } from "../rack-frame.ts";
-import { packGearOf, packLooseOf, rackMisfits, rackSpace, readRackGear, type RackSlot } from "../rack.ts";
+import { fitsDepth, packGearOf, packLooseOf, rackMisfits, rackSpace, readRackGear, type RackSlot } from "../rack.ts";
 import { rackElevation, type RackElevation } from "../rack-elevation.ts";
 import type { RackGearChoice, RackLinker } from "./rack-sheet.ts";
 import { slotStatus } from "../rack-links.ts";
@@ -219,8 +219,9 @@ type Drag =
   | { kind: "device"; entityId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "pet"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "opening"; id: string; startScreen: [number, number]; base: Building; moved: boolean }
-  | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
-  | { kind: "furnset"; ids: string[]; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
+  // `pick`: an Alt+click without moving selects this item instead (#75, #125)
+  | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; pick?: string | null }
+  | { kind: "furnset"; ids: string[]; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; pick?: string | null }
   | { kind: "marquee"; start: Vec2; end: Vec2; add: boolean }
   | { kind: "rotate"; id: string; base: Building; moved: boolean }
   | { kind: "aim"; entityId: string; base: Building; moved: boolean }
@@ -389,6 +390,9 @@ function pathLengthOf(p: PoolPipe, nodeAt: (n: string) => { x: number; z: number
 
 /** Arrow keys as plan directions (x right, z down). */
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+/** A pack item for the rack code: its recipe once fetched, else the library listing (size, rack spec, mount). */
+const rackItemOf = (type: string) => packItem(type) ?? packInfo(type);
 
 // furniture without a top to light: no "State from" box
 const NO_STATE_TYPES = new Set(["parking", "stairwell", "rug", "grid_point", "waste_bin", "mailbox", "wall_switch", "wall_socket", "wifi_ap", "water_heater"]);
@@ -777,6 +781,8 @@ export class Fp3dEditor extends LitElement {
   private drag: Drag | null = null;
   /** Set while a change that may join the last undo step runs (arrow nudges, #66). */
   private mergeKey: string | null = null;
+  /** How long after the last change of `mergeKey` a change still joins its step (a typed value: as long as it is typed). */
+  private mergeWithin: number | undefined = undefined;
   private pointers = new Map<number, [number, number]>();
   private pinch: { dist: number; mid: [number, number] } | null = null;
   private fitted = false;
@@ -989,6 +995,8 @@ export class Fp3dEditor extends LitElement {
     if (changed.has("_tool") && this.houseTool && !this._split && !this.narrow) this._split = true;
     // entering or leaving the roof tool: the 3D half frames the whole house (or the floor) again
     if (changed.has("_tool") && (this.houseTool || changed.get("_tool") === "roof" || changed.get("_tool") === "energy")) this.reframe3d = true;
+    // an armed library card (#76) belongs to the floor and home it was picked on (#126)
+    if (this._placing && (changed.has("home") || (changed.has("_floorId") && changed.get("_floorId") !== undefined))) this.cancelPlacing();
     if (changed.has("building") && this.building !== this._doc) {
       // the plan this panel's history leads up to keeps its steps (the tab was left and opened again, #66); a plan
       // from anywhere else (another home, the server, someone else's edit) starts a fresh history
@@ -1415,7 +1423,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Replace the document; `base` (the state before the change) goes into the undo history. */
   private setDoc(next: Building, base: Building | null = this._doc): void {
-    if (base) this.history.push(base, this.mergeKey);
+    if (base) this.history.push(base, this.mergeKey, this.mergeWithin);
     this.history.track(next);
     this._doc = next;
     setCameraSensors(next);
@@ -1931,8 +1939,10 @@ export class Fp3dEditor extends LitElement {
       this.drag = { kind: "aim", entityId: aimEl.getAttribute("data-aim")!, base: this._doc, moved: false };
       return;
     }
-    // an item under the press, its drawn shape grown to a minimum target (#72): it wins over the room under it
-    const pickedId = this.pickItem(target, world, e.pointerType, e.altKey);
+    // an item under the press, its drawn shape grown to a minimum target (#72): it wins over the room under it. With
+    // Alt held a press on the selected item grabs it (Alt-drag = move freely) and a click goes through the stack (#125)
+    const alt = e.altKey ? altPick(this.itemHits(target, world, e.pointerType), this.selection(), this._furnitureId) : null;
+    const pickedId = alt ? (alt.grab ?? this.pickItem(target, world, e.pointerType)) : this.pickItem(target, world, e.pointerType);
     if (pickedId) {
       const id = pickedId;
       const now = Date.now();
@@ -1950,8 +1960,8 @@ export class Fp3dEditor extends LitElement {
       this.drag = !this.isEditor
         ? { kind: "pan", last: local }
         : set.length > 1
-          ? { kind: "furnset", ids: set, start: world, startScreen: local, base: this._doc, moved: false }
-          : { kind: "furniture", id, start: world, startScreen: local, base: this._doc, moved: false };
+          ? { kind: "furnset", ids: set, start: world, startScreen: local, base: this._doc, moved: false, pick: alt?.next }
+          : { kind: "furniture", id, start: world, startScreen: local, base: this._doc, moved: false, pick: alt?.next };
       return;
     }
     const vertexEl = target.closest("[data-vertex]");
@@ -2685,6 +2695,8 @@ export class Fp3dEditor extends LitElement {
       case "poolport":
       case "pooljoint":
         if (drag.moved) this.pushHistory(drag.base);
+        // Alt+click without moving: the next item in the stack (#75, #125)
+        else if ((drag.kind === "furniture" || drag.kind === "furnset") && drag.pick) this.selectItem("furniture", drag.pick);
         // a tap on a port or a joint opens its card
         else if (drag.kind === "poolport" || drag.kind === "pooljoint") this.openCard(drag.pool, `${drag.kind === "poolport" ? "port" : "joint"}:${drag.id}`);
         break;
@@ -4776,13 +4788,16 @@ export class Fp3dEditor extends LitElement {
    * The item a plan press lands on (#72): its drawn shape grown to a 24 px target (44 px on touch), smallest item
    * first. A press on a room corner or wall-end handle is never an item.
    */
-  private pickItem(target: Element, world: Vec2, pointerType: string, through = false): string | null {
+  private pickItem(target: Element, world: Vec2, pointerType: string): string | null {
     if (!this.floor || target.closest("[data-vertex], [data-mid], [data-wall-end], [data-out-box], [data-out-vertex]")) return null;
+    return this.itemHits(target, world, pointerType)[0] ?? target.closest("[data-furniture]")?.getAttribute("data-furniture") ?? null;
+  }
+
+  /** The shown items under a plan press, best first (#72); none on a room corner or wall-end handle. */
+  private itemHits(target: Element, world: Vec2, pointerType: string): string[] {
+    if (!this.floor || target.closest("[data-vertex], [data-mid], [data-wall-end], [data-out-box], [data-out-vertex]")) return [];
     const hidden = this._hiddenItems;
-    const hits = itemsAt(this.floor.furniture, world, this._view.scale, minHitPx(pointerType), hidden.length ? (f) => hidden.includes(f.id) : undefined);
-    // Alt+click picks through a stack (#75): the item under the selected one
-    if (through) return nextPick(hits, this._furnitureId);
-    return hits[0] ?? target.closest("[data-furniture]")?.getAttribute("data-furniture") ?? null;
+    return itemsAt(this.floor.furniture, world, this._view.scale, minHitPx(pointerType), hidden.length ? (f) => hidden.includes(f.id) : undefined);
   }
 
   /** Hide an item in this editor's plan, or show it again (#75); a hidden selected item is let go. */
@@ -6460,7 +6475,7 @@ export class Fp3dEditor extends LitElement {
 
   /** A placed rack's frame and U layout at its placed size; null for any other item. */
   private rackOf(f: Furniture) {
-    const frame = readRackFrame(packItem(f.type) ?? packInfo(f.type));
+    const frame = readRackFrame(rackItemOf(f.type));
     return frame ? { frame, at: rackLayout(frame, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h)) } : null;
   }
 
@@ -6469,7 +6484,7 @@ export class Fp3dEditor extends LitElement {
 
   /** A placed rack's front view with its gear (#115); null for any other item. */
   private rackElevationOf(f: Furniture): RackElevation | null {
-    const frame = readRackFrame(packItem(f.type) ?? packInfo(f.type));
+    const frame = readRackFrame(rackItemOf(f.type));
     if (!frame) return null;
     const lang = this.hass?.language ?? "en";
     const slots = f.rack?.slots ?? [];
@@ -6495,7 +6510,7 @@ export class Fp3dEditor extends LitElement {
   private renderRackElevation(f: Furniture) {
     const el = this.rackElevationOf(f);
     if (!el || !el.pieces) return nothing;
-    const frame = readRackFrame(packItem(f.type) ?? packInfo(f.type));
+    const frame = readRackFrame(rackItemOf(f.type));
     return html`<details class="fp3d-rack-elev" open>
       <summary>${this.t("rack_front_view")} · ${this.t("rack_used", { used: el.used, u: frame?.u ?? 0 })}</summary>
       <div class="fp3d-rack-elev-box">${unsafeHTML(el.svg)}</div>
@@ -6512,8 +6527,7 @@ export class Fp3dEditor extends LitElement {
   private rackRules(f: Furniture) {
     const rack = this.rackOf(f);
     if (!rack) return null;
-    const itemOf = (t: string) => packItem(t) ?? packInfo(t);
-    return { rack, space: rackSpace(rack.frame, rack.at), gearOf: packGearOf(itemOf), looseOf: packLooseOf(itemOf) };
+    return { rack, space: rackSpace(rack.frame, rack.at), gearOf: packGearOf(rackItemOf), looseOf: packLooseOf(rackItemOf) };
   }
 
   /** What the open rack sheet shows (null: none open, or its rack is gone). */
@@ -6531,7 +6545,7 @@ export class Fp3dEditor extends LitElement {
       for (const it of pack.items) {
         const g = readRackGear(it);
         const type = packType(pack.id, it.id);
-        if (g && g.inch === space.width && it.size[1] <= space.mountDepth + 0.001) gear.push({ type, name: packItemName(it, lang) });
+        if (g && g.inch === space.width && fitsDepth(space, it.size[1])) gear.push({ type, name: packItemName(it, lang) });
         else if (!g && !it.rack_frame && it.electric && (it.group === "network" || it.group === "tech") && it.mount !== "ceiling" && it.size[0] <= opening && it.size[1] <= space.mountDepth && it.size[2] <= 0.3)
           loose.push({ type, name: packItemName(it, lang) });
       }
@@ -6577,7 +6591,7 @@ export class Fp3dEditor extends LitElement {
   /** The racks a placed rack can become (#114): every pack's racks that hang where it does (wall or not). */
   private rackFrameChoices(f: Furniture): { type: string; name: string }[] {
     const lang = this.hass?.language ?? "en";
-    const wall = (packItem(f.type) ?? packInfo(f.type))?.mount === "wall";
+    const wall = rackItemOf(f.type)?.mount === "wall";
     const out: { type: string; name: string }[] = [];
     for (const pack of this.packs ?? [])
       for (const it of pack.items) if (readRackFrame(it) && (it.mount === "wall") === wall) out.push({ type: packType(pack.id, it.id), name: packItemName(it, lang) });
@@ -6587,7 +6601,7 @@ export class Fp3dEditor extends LitElement {
   /** Swap the chosen rack for another rack type (#114): its size becomes the new rack's, its gear stays (one undo step). */
   private changeRackFrame(type: string): void {
     const f = this.furnitureItem;
-    const item = packItem(type) ?? packInfo(type);
+    const item = rackItemOf(type);
     if (!f || !this.isEditor || !item || !readRackFrame(item) || !this.rackOf(f)) return;
     const [w, d, h] = item.size;
     this.updateFurniture({ type, w, d, h });
@@ -11317,16 +11331,30 @@ export class Fp3dEditor extends LitElement {
   /** Typed numbers are saved on Enter, on leaving the box and after a pause in typing (#69). */
   private readonly typed = new TypedCommit();
 
-  /** The listeners of a typed number box; `save` gets the text (and ignores what isn't a number). */
+  /**
+   * The listeners of a typed number box; `save` gets the text (and ignores what isn't a number). The saves of one
+   * typing run (the box got the cursor, until Enter or leaving it) on the same selection are one undo step (#127).
+   */
   private typedEvents(save: (text: string) => void) {
     const box = (e: Event) => e.target as HTMLInputElement;
+    const commit = (text: string, run: number) => {
+      const on = [this._furnitureId ? this.selection().join(",") : "", this._deviceId, this._openingId, this._wallId, this._outdoorId, this._roomId, this._vertex];
+      this.mergeKey = ["typed", run, ...on].join("|");
+      this.mergeWithin = Infinity;
+      try {
+        save(text);
+      } finally {
+        this.mergeKey = null;
+        this.mergeWithin = undefined;
+      }
+    };
     return {
       focus: (e: Event) => this.typed.focus(box(e)),
-      input: (e: Event) => this.typed.input(box(e), box(e).value, save),
-      change: (e: Event) => this.typed.change(box(e), box(e).value, save),
+      input: (e: Event) => this.typed.input(box(e), box(e).value, commit),
+      change: (e: Event) => this.typed.change(box(e), box(e).value, commit),
       keydown: (e: KeyboardEvent) => {
         if (e.key !== "Enter") return;
-        this.typed.enter(box(e), box(e).value, save);
+        this.typed.enter(box(e), box(e).value, commit);
         this.requestUpdate();
       },
       blur: (e: Event) => {

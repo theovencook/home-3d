@@ -3,9 +3,10 @@
 A rack is a pack item with a `rack_frame` spec, gear a pack item with a `rack` spec (packs.py). A slot names its gear's
 pack item type and its lowest rail position counted from the bottom (`u`, 1 = the lowest U, whatever the rack's
 numbering). The schema checks the slots' shape on every save; `new_rack_problems` is what an editor's save is refused
-for: gear that overlaps other gear, sticks out of the rack, is no gear or is made for the other rack width. The rules
-are frontend/src/rack.ts's (the depth check stays in the editor: it only changes how the gear looks). They read the
-plan's recipe copies, so they hold for whatever the plan shows; gear whose recipe is gone is not checked.
+for: gear that overlaps other gear, sticks out of the rack, is deeper than the rails or wider than a side lane, is no
+gear or is made for the other rack width. The rules are frontend/src/rack.ts's, at the rack's placed size (#124). They
+read the plan's recipe copies, so they hold for whatever the plan shows; gear whose recipe is gone is not checked, but
+holds its lowest U as in the editor.
 
 A slot may carry a column and a face (#114) and links to Home Assistant (#119: `entity`, its status entity, and
 `links`, further entities of the device; frontend/src/rack-links.ts). The schema keeps unknown slot fields, like the
@@ -19,6 +20,8 @@ import math
 from typing import Any
 
 import voluptuous as vol
+
+from .packs import RACK_PANEL_WIDTH, RACK_SLACK, RACK_UNIT
 
 # at most this many pieces of gear in one rack
 RACK_MAX_SLOTS = 60
@@ -93,8 +96,8 @@ RACK_CONTENTS_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
-# (rack item id, slot id, why): why is "overlap", "outside", "not_gear", "wrong_width", "no_rear", "no_shelf",
-# "not_loose", "too_tall" or "shelf_full" (rack.ts RackRefusal)
+# (rack item id, slot id, why): why is "overlap", "outside", "not_gear", "wrong_width", "no_rear", "no_lane",
+# "too_deep", "no_shelf", "not_loose", "too_tall" or "shelf_full" (rack.ts RackRefusal)
 RackProblem = tuple[str, str, str]
 
 
@@ -111,20 +114,18 @@ def _rack_items(building: dict[str, Any]) -> Iterator[dict[str, Any]]:
                 yield item
 
 
-_UNIT = 0.04445
 # the clear opening between the rails a shelf gives loose gear, by rack width (rack-frame.ts RACK_OPENING)
 _OPENING = {19: 0.45085, 10: 0.22225}
 _COLUMNS = {"full": 1, "half": 2, "third": 3}
 # 0U gear: a lane down the left (col 0) and one down the right (col 1)
 _LANES = 2
-_SLACK = 0.001
 # a shelf's tray: loose gear stands this high above the bottom of its lowest U (rack.ts SHELF_TRAY)
 SHELF_TRAY = 0.004
 
 
 def _lane_units(height: float) -> int:
     """How many U a 0U item standing in a side lane is long (rack.ts laneUnits)."""
-    return max(1, math.ceil(height / _UNIT - 0.02))
+    return max(1, math.ceil(height / RACK_UNIT - 0.02))
 
 
 def _size(recipe: dict[str, Any]) -> list[float]:
@@ -155,16 +156,41 @@ def _whole_col(col: Any, cols: int) -> bool:
     return isinstance(col, int) and not isinstance(col, bool) and 0 <= col < cols
 
 
+# how far the rails sit in from the front and the back of the item, by form (rack-frame.ts FRONT_INSET / REAR_INSET)
+RACK_FRONT_INSET = {"frame2": 0, "frame4": 0, "cabinet": 0.08, "wall_frame": 0.02, "wall_cabinet": 0.06}
+RACK_REAR_INSET = {"frame2": 0, "frame4": 0.02, "cabinet": 0.05, "wall_frame": 0.01, "wall_cabinet": 0.04}
+
+
+def _space(frame: dict[str, Any], item: dict[str, Any], recipe: dict[str, Any]) -> dict[str, float]:
+    """How deep gear may be and how wide the side lanes are in a rack placed at its size (rack-frame.ts rackLayout,
+    the editor's rackOf)."""
+    size = _size(recipe)
+
+    def dim(key: str, i: int) -> float:
+        value = item.get(key)
+        ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+        return max(0.05, float(value) if ok else size[i])
+
+    w, d = dim("w", 0), dim("d", 1)
+    form = frame.get("form", "frame4")
+    front, rear = RACK_FRONT_INSET.get(form, 0), RACK_REAR_INSET.get(form, 0)
+    two_post = form == "frame2"
+    room = d if two_post else max(0.01, d - front - rear)
+    own = frame.get("mount_depth")
+    mount = min(own if isinstance(own, (int, float)) else room, d if two_post else d - front)
+    panel = min(w, RACK_PANEL_WIDTH.get(frame.get("width", 19), RACK_PANEL_WIDTH[19]))
+    return {"mount": mount, "lane": max(0.0, (w - panel) / 2)}
+
+
 def _gear_problem(
-    slot: dict[str, Any], gear: Any, recipe: dict[str, Any], frame: dict[str, Any]
+    slot: dict[str, Any], gear: dict[str, Any], recipe: dict[str, Any], frame: dict[str, Any], space: dict[str, float]
 ) -> tuple[str | None, int]:
-    """Why a slot's gear does not fit the rack on its own (None: it does), and how many U it takes."""
-    if not isinstance(gear, dict):
-        return "not_gear", 1
-    if gear.get("inch", 19) != frame.get("width", 19):
-        return "wrong_width", 1
+    """Why a slot's gear does not fit the rack on its own (None: it does), and how many U it takes (rack.ts checkSlot,
+    in its order)."""
     lane = gear.get("u", 0) < 1
     n = _lane_units(_size(recipe)[2]) if lane else gear["u"]
+    if gear.get("inch", 19) != frame.get("width", 19):
+        return "wrong_width", n
     low = slot.get("u", 0)
     if low < 1 or low + n - 1 > frame.get("u", 0):
         return "outside", n
@@ -172,69 +198,94 @@ def _gear_problem(
         return "outside", n
     if slot.get("face") == "rear" and frame.get("form") == "frame2":
         return "no_rear", n
+    width, depth, _ = _size(recipe)
+    if lane and width > space["lane"] + RACK_SLACK:
+        return "no_lane", n
+    if depth > space["mount"] + RACK_SLACK:
+        return "too_deep", n
     return None, n
 
 
 def _rack_slot_problems(
-    rack_id: str, frame: dict[str, Any], slots: list[dict[str, Any]], recipes: dict[str, Any]
+    item: dict[str, Any], frame: dict[str, Any], frame_recipe: dict[str, Any], recipes: dict[str, Any]
 ) -> set[RackProblem]:
-    """The rule breaks of one rack's slots (rack.ts checkSlot, without the editor-only depth and lane-width checks)."""
+    """The rule breaks of one rack's slots: each slot checked against all the others, as rack.ts rackMisfits does.
+    A slot whose recipe is gone is not checked; it and anything that is no gear hold their lowest U."""
+    rack_id = item["id"]
+    slots = [s for s in item["rack"].get("slots") or [] if isinstance(s, dict)]
+    space = _space(frame, item, frame_recipe)
     problems: set[RackProblem] = set()
-    placed: list[dict[str, Any]] = []
+    pieces: list[dict[str, Any]] = []
     shelves: dict[str, dict[str, float]] = {}
     for slot in slots:
-        recipe = _recipe(recipes, slot.get("type", ""))
-        if slot.get("on") or recipe is None:
+        if slot.get("on"):
             continue
-        gear = recipe.get("rack")
-        why, n = _gear_problem(slot, gear, recipe, frame)
-        if why is None:
-            low = slot["u"]
-            me = {
-                "id": slot["id"],
+        recipe = _recipe(recipes, slot.get("type", ""))
+        gear = recipe.get("rack") if recipe is not None else None
+        low = slot.get("u", 0)
+        if recipe is None or not isinstance(gear, dict):
+            # unknown, or no gear: it holds its one U, on both faces, across the whole width
+            pieces.append({"slot": slot, "gear": None, "why": None if recipe is None else "not_gear", "units": {low}})
+            continue
+        why, n = _gear_problem(slot, gear, recipe, frame, space)
+        pieces.append(
+            {
+                "slot": slot,
                 "gear": gear,
+                "why": why,
                 "lane": gear["u"] < 1,
                 "col": slot.get("col", 0),
                 "units": set(range(low, low + n)),
                 "faces": _faces(slot, gear),
             }
-            # both sides of an overlap count, so the order of the slots does not matter
-            hit = {
-                o["id"]
-                for o in placed
-                if o["lane"] == me["lane"] and o["units"] & me["units"] and o["faces"] & me["faces"] and _beside(me, o)
-            }
-            if hit:
-                why = "overlap"
-                problems.update((rack_id, other, "overlap") for other in hit)
-            placed.append(me)
-            if gear.get("shelf") and not me["lane"]:
-                width = _OPENING.get(frame.get("width", 19), _OPENING[19]) / _columns(gear)
-                shelves[slot["id"]] = {"w": width, "h": gear["u"] * _UNIT - SHELF_TRAY, "used": 0.0}
+        )
+        if gear.get("shelf"):
+            width = _OPENING.get(frame.get("width", 19), _OPENING[19]) / _columns(gear)
+            shelves[slot["id"]] = {"w": width, "d": _size(recipe)[1], "h": gear["u"] * RACK_UNIT - SHELF_TRAY}
+    for me in pieces:
+        why = me["why"]
+        if why is None and me["gear"] is not None and any(o is not me and _hits(me, o) for o in pieces):
+            why = "overlap"
         if why:
-            problems.add((rack_id, slot["id"], why))
-    for slot in slots:
+            problems.add((rack_id, me["slot"]["id"], why))
+    loose = [s for s in slots if s.get("on")]
+    for slot in loose:
         recipe = _recipe(recipes, slot.get("type", ""))
-        if not slot.get("on") or recipe is None:
+        if recipe is None:
             continue
-        why = _loose_problem(shelves.get(slot["on"]), recipe)
+        beside = [_recipe(recipes, o.get("type", "")) for o in loose if o is not slot and o.get("on") == slot["on"]]
+        why = _loose_problem(shelves.get(slot["on"]), recipe, [r for r in beside if r is not None])
         if why:
             problems.add((rack_id, slot["id"], why))
     return problems
 
 
-def _loose_problem(shelf: dict[str, float] | None, recipe: dict[str, Any]) -> str | None:
-    """Why loose gear can't stand on its shelf (None: it can; the shelf's room is then used up by its width)."""
+def _hits(me: dict[str, Any], other: dict[str, Any]) -> bool:
+    """Whether a piece of gear shares a place with another slot (rack.ts checkSlot's `hits`)."""
+    if other["gear"] is None:
+        return not me["lane"] and bool(me["units"] & other["units"])
+    return (
+        other["lane"] == me["lane"]
+        and bool(me["units"] & other["units"])
+        and bool(me["faces"] & other["faces"])
+        and _beside(me, other)
+    )
+
+
+def _loose_problem(shelf: dict[str, float] | None, recipe: dict[str, Any], beside: list[dict[str, Any]]) -> str | None:
+    """Why loose gear can't stand on its shelf beside the other loose gear there (None: it can; rack.ts checkLoose)."""
     if shelf is None:
         return "no_shelf"
     if "rack_frame" in recipe:
         return "not_loose"
-    width, _, height = _size(recipe)
-    if height > shelf["h"] + _SLACK:
+    width, depth, height = _size(recipe)
+    if height > shelf["h"] + RACK_SLACK:
         return "too_tall"
-    if shelf["used"] + width > shelf["w"] + _SLACK:
+    if depth > shelf["d"] + RACK_SLACK:
+        return "too_deep"
+    used = sum(_size(r)[0] for r in beside if "rack_frame" not in r)
+    if used + width > shelf["w"] + RACK_SLACK:
         return "shelf_full"
-    shelf["used"] += width
     return None
 
 
@@ -243,9 +294,10 @@ def rack_problems(building: dict[str, Any]) -> set[RackProblem]:
     recipes = building.get("recipes") or {}
     problems: set[RackProblem] = set()
     for item in _rack_items(building):
-        frame = (_recipe(recipes, item.get("type", "")) or {}).get("rack_frame")
+        frame_recipe = _recipe(recipes, item.get("type", "")) or {}
+        frame = frame_recipe.get("rack_frame")
         if isinstance(frame, dict):
-            problems |= _rack_slot_problems(item["id"], frame, item["rack"].get("slots") or [], recipes)
+            problems |= _rack_slot_problems(item, frame, frame_recipe, recipes)
     return problems
 
 
@@ -256,13 +308,33 @@ def _frames(building: dict[str, Any]) -> dict[str, tuple[Any, ...]]:
     }
 
 
+def _slots(building: dict[str, Any]) -> dict[tuple[str, Any], Any]:
+    """Every slot of every rack, by (rack item id, slot id)."""
+    return {
+        (item["id"], slot.get("id")): slot
+        for item in _rack_items(building)
+        for slot in item["rack"].get("slots") or []
+        if isinstance(slot, dict)
+    }
+
+
 def new_rack_problems(before: dict[str, Any], after: dict[str, Any]) -> set[RackProblem]:
     """The rule breaks `after` has that `before` had not: a plan that broke them already (a pack update made a box
     taller) still saves while that stays as it was. A rack whose frame changed in this save (another rack type, or
-    resized, #114) keeps its gear and saves too: the editor names what no longer fits."""
+    resized, #114) keeps the gear it had and saves too: the editor names what no longer fits. Gear added or moved in
+    the same save is checked against the new frame (#124)."""
+    new = rack_problems(after) - rack_problems(before)
     old = _frames(before)
     changed = {rack for rack, frame in _frames(after).items() if rack in old and old[rack] != frame}
-    return {p for p in rack_problems(after) - rack_problems(before) if p[0] not in changed}
+    if not changed or not new:
+        return new
+    old_slots, new_slots = _slots(before), _slots(after)
+
+    def excused(problem: RackProblem) -> bool:
+        key = (problem[0], problem[1])
+        return problem[0] in changed and key in old_slots and old_slots[key] == new_slots.get(key)
+
+    return {p for p in new if not excused(p)}
 
 
 class RackError(ValueError):

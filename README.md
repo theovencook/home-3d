@@ -33,9 +33,9 @@ You need Home Assistant 2025.1 or newer and [HACS](https://hacs.xyz). Home 3D is
 4. Go to *Settings → Devices & services → Add integration → Home 3D*.
 5. Open **Home 3D** in the sidebar.
 
-No manual HACS setup? Copy `custom_components/home_3d` into your `config/custom_components/` folder, restart, and add the integration under *Settings → Devices & services*.
+Without HACS, copy `custom_components/home_3d` into your `config/custom_components/` folder, restart, and add the integration under *Settings → Devices & services*.
 
-To keep Home 3D out of the sidebar for everyone, open the integration's **Configure** and turn off **Show in sidebar**. It takes effect at once; the panel link (`/home_3d`) and the dashboard card keep working. Each user can also hide the entry in Home Assistant's own sidebar settings.
+To keep Home 3D out of the sidebar for everyone, open the integration's **Configure** and turn off **Show in sidebar**. This takes effect at once, and the panel link (`/home_3d`) and the dashboard card keep working. Each user can also hide the entry in Home Assistant's own sidebar settings.
 
 ### Your first 10 minutes
 
@@ -47,7 +47,7 @@ A one-click sample home to explore is coming soon; until then you start from an 
 4. **Look around (1 minute).** Switch back to the live view. Drag to orbit, scroll or pinch to zoom, tap an item to use it, and hold or double-tap for the item's other actions.
 5. **Try the 2D plan and the dashboard card (2 minutes).** The **2D** button shows the flat plan, which suits a wall tablet (`?view=2d` opens it directly). To put the plan on a dashboard, add the card from the previous section.
 
-Home 3D keeps restore points of the plan, so you can go back to an earlier version, and can make a full backup of the plan, its pictures and the packs. Take one before big changes.
+Home 3D keeps restore points of the plan, so you can go back to an earlier version. It can also make a full backup of the plan, its pictures and the packs; take one before big changes.
 
 ### Supported versions
 
@@ -57,7 +57,7 @@ Home 3D keeps restore points of the plan, so you can go back to an earlier versi
 
 ### Tablets and phones
 
-- **Wall tablets** should use the 2D plan or set the quality to **Tablet** (in the view settings, or `quality` on the card). That level is the lightest: moving decorations rest after 30 seconds without a touch, and shadows and weather are reduced. **Auto** picks it for Fire tablets it recognises, such as the Fire HD 10.
+- **Wall tablets** should use the 2D plan or set the quality to **Tablet** (in the view settings, or `quality` on the card). Tablet is the lightest level. Moving decorations rest after 30 seconds without a touch, and shadows and weather are reduced. **Auto** picks it for Fire tablets it recognises, such as the Fire HD 10.
 - **Locked tablet mode:** add `?tablet` to the panel address (for example in a kiosk browser's start URL) and the panel shows only the home name, the floors and the View menu: no editor, no view settings. `?tablet=0` turns it off again. You can also tick users for tablet mode in the settings. After a quiet spell the tablet returns to the whole house; `?idle=<seconds>` changes the wait and `?idle=0` disables it.
 - **WebGL:** the 3D view needs hardware WebGL. If a tablet shows a blank 3D view, check that the browser is up to date and that hardware acceleration is on (Android System WebView and Fully Kiosk Browser use the system's WebView, so update that). Old or very cheap tablets can run out of graphics memory; use the 2D plan there.
 - **Phones** can view and control the house. Drawing works best on a computer or a tablet.

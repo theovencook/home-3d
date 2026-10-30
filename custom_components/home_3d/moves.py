@@ -98,8 +98,8 @@ def moved_copy(entry: Any, new_type: str) -> Any:
 
 
 def migrate_building(building: dict[str, Any], moves: Moves) -> dict[str, Any]:
-    """The building with every moved item under its new type: placed items, the vehicles of parking spots and the
-    recipe copies with their keys. The same object when nothing moved."""
+    """The building with every moved item under its new type: placed items, the vehicles of parking spots, the gear in
+    racks and the recipe copies with their keys. The same object when nothing moved."""
     if not moves:
         return building
     changed = False
@@ -142,6 +142,16 @@ def _migrated_item(item: dict[str, Any], moves: Moves) -> dict[str, Any]:
             {**t, "vehicle": moves[t["vehicle"]]} if isinstance(t, dict) and t.get("vehicle") in moves else t
             for t in types
         ]
+    # gear in a rack is placed by slot type (#113)
+    rack = item.get("rack")
+    slots = rack.get("slots") if isinstance(rack, dict) else None
+    if isinstance(slots, list) and any(isinstance(s, dict) and s.get("type") in moves for s in slots):
+        changes["rack"] = {
+            **rack,
+            "slots": [
+                {**s, "type": moves[s["type"]]} if isinstance(s, dict) and s.get("type") in moves else s for s in slots
+            ],
+        }
     return {**item, **changes} if changes else item
 
 

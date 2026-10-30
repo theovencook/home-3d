@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { PackItem } from "./packs.ts";
-import { rackLayout, readRackFrame } from "./rack-frame.ts";
+import { FRONT_INSET, REAR_INSET, rackLayout, readRackFrame } from "./rack-frame.ts";
 import { addSlot, SHELF_TRAY, packGearOf, packLooseOf, rackMisfits, rackSpace, rackTotals, rackContents, rackGearProblems, readRackGear, rackLedSpot, rackSlotAt, RACK_GEAR_DEPTHS, RACK_GEAR_WIDTHS, RACK_MAX_SLOTS, moveSlot, removeSlot, type GearOf, type LooseOf, type RackSlot, type RackSpace } from "./rack.ts";
 
 /** A 9U 19" rack 0.4 m deep. */
@@ -377,4 +377,27 @@ test("which gear a point in the rack hits: the piece around it, loose gear befor
   assert.equal(rackSlotAt(pieces, [b.x + b.w / 3, b.y + 0.002, b.z]), "b");
   // in the empty U between them
   assert.equal(rackSlotAt(pieces, [a.x, at.units[3].y0 + 0.02, a.z + a.d / 2]), null);
+});
+
+test("the backend checks depth and side lanes at the rack's placed size, as the editor does (#124)", () => {
+  // racks.py works the rails out itself (_space): the same insets
+  assert.deepEqual(FRONT_INSET, py(RACKS_PY, "RACK_FRONT_INSET"));
+  assert.deepEqual(REAR_INSET, py(RACKS_PY, "RACK_REAR_INSET"));
+  // the worked example in tests/test_rack_contents.py: a 9U wall cabinet placed at 600 x 450 x 500 mm
+  const frame = readRackFrame({ ...SWITCH, rack: undefined, mount: "wall", size: [0.6, 0.45, 0.5], rack_frame: { u: 9, form: "wall_cabinet" } } as PackItem)!;
+  const space = rackSpace(frame, rackLayout(frame, 0.6, 0.45, 0.5));
+  assert.ok(Math.abs(space.mountDepth - 0.35) < 1e-9);
+  assert.ok(Math.abs(space.lane! - 0.0587) < 1e-9);
+  const of: GearOf = (t) =>
+    ({
+      deep: { gear: { u: 1, width: "full", depth: "half", inch: 19 }, depth: 0.36, size: [0.48, 0.36, 0.04] },
+      wide_pdu: { gear: { u: 0, width: "full", depth: "half", inch: 19 }, depth: 0.05, size: [0.07, 0.05, 0.35] },
+      sw: { gear: { u: 1, width: "full", depth: "half", inch: 19 }, depth: 0.25, size: [0.48, 0.25, 0.04] },
+    })[t] as unknown as ReturnType<GearOf>;
+  const misfits = (...slots: RackSlot[]) => rackMisfits(space, slots, of).map((m) => [m.id, m.why]);
+  assert.deepEqual(misfits({ id: "d", type: "deep", u: 1 }), [["d", "too_deep"]]);
+  assert.deepEqual(misfits({ id: "p", type: "wide_pdu", u: 1 }), [["p", "no_lane"]]);
+  // a slot whose type is unknown holds its one U (racks.py: test_gear_whose_recipe_is_gone_is_not_checked_but_keeps_its_one_u)
+  assert.deepEqual(misfits({ id: "b", type: "gone", u: 1 }, { id: "a", type: "sw", u: 2 }), []);
+  assert.deepEqual(misfits({ id: "b", type: "gone", u: 1 }, { id: "c", type: "sw", u: 1 }), [["c", "overlap"]]);
 });

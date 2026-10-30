@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Building } from "../model.ts";
+import { TypedCommit } from "../typed-commit.ts";
 import { UndoHistory } from "../undo-history.ts";
 
 // the editor's bundle hashes are build-time constants: plain strings will do here
@@ -164,4 +165,85 @@ test("a change made in the 3D view while the Editor tab is closed is one more un
   assert.equal(table(second.el._doc).x, 3);
   second.el.undo();
   assert.equal(table(second.el._doc).x, 2);
+});
+
+/** The editor's typed-number boxes (#69) on a hand-run clock: `tick` runs the pause timers and moves history time. */
+function typing(el: Record<string, any>, clock: { t: number }) {
+  const due = new Map<number, { at: number; fn: () => void }>();
+  let next = 1;
+  const timers = {
+    set: (fn: () => void, ms: number) => (due.set(next, { at: clock.t + ms, fn }), next++),
+    clear: (id: unknown) => void due.delete(id as number),
+  };
+  Object.defineProperty(el, "typed", { value: new TypedCommit({ delay: 600, timers }) });
+  const tick = (ms: number) => {
+    clock.t += ms;
+    for (const [id, t] of [...due]) if (t.at <= clock.t) (due.delete(id), t.fn());
+  };
+  /** A number box saving into the selected item's `key`, as the item panel's X/Z boxes do. */
+  const box = (key: "x" | "z") => {
+    const input = { value: "" };
+    const on = el.typedEvents((text: string) => el.updateFurniture({ [key]: parseFloat(text) }));
+    const ev = { target: input };
+    return {
+      focus: () => on.focus(ev),
+      type: (text: string) => ((input.value = text), on.input(ev)),
+      enter: () => on.keydown({ ...ev, key: "Enter" }),
+      blur: () => (on.change(ev), on.blur(ev)),
+    };
+  };
+  return { tick, box };
+}
+
+test("one typed value is one undo step even with a pause in the middle of typing it (#127)", () => {
+  const { clock, history } = clocked();
+  const { el } = mount(plan(), history);
+  const { tick, box } = typing(el, clock);
+  el.selectItem("furniture", "t");
+  const x = box("x");
+  x.focus();
+  x.type("1.");
+  tick(600); // saved after the pause: 1
+  tick(3000); // thinking
+  x.type("1.5");
+  tick(600); // saved again: 1.5
+  x.blur();
+  assert.equal(table(el._doc).x, 1.5);
+  el.undo();
+  assert.equal(table(el._doc).x, 2);
+  assert.equal(el._canUndo, false);
+});
+
+test("Enter or leaving the box ends the step; another box or another item is a step of its own (#127)", () => {
+  const { clock, history } = clocked();
+  const b = plan();
+  b.floors[0].furniture.push({ id: "c", type: "chair", x: 4, z: 2, width: 0.5, depth: 0.5, height: 0.9, rotation: 0 } as never);
+  const { el } = mount(b, history);
+  const chair = (d: Building) => d.floors[0].furniture.find((m) => m.id === "c")!;
+  const { tick, box } = typing(el, clock);
+  el.selectItem("furniture", "t");
+  const x = box("x");
+  x.focus();
+  x.type("3");
+  x.enter(); // 3, step ends
+  x.type("4");
+  tick(600); // 4: a new step
+  const z = box("z");
+  z.focus();
+  z.type("1");
+  tick(600); // z 1: the Z box's own step
+  // the same box drawn for another item (Lit reuses it) without leaving it
+  el.selectItem("furniture", "c");
+  x.type("5");
+  tick(600);
+  assert.deepEqual([table(el._doc).x, table(el._doc).z, chair(el._doc).x], [4, 1, 5]);
+  el.undo();
+  assert.equal(chair(el._doc).x, 4);
+  el.undo();
+  assert.equal(table(el._doc).z, 2);
+  el.undo();
+  assert.equal(table(el._doc).x, 3);
+  el.undo();
+  assert.equal(table(el._doc).x, 2);
+  assert.equal(el._canUndo, false);
 });

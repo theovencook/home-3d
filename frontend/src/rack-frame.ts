@@ -113,8 +113,8 @@ export function readRackFrame(item: Pick<PackItem, "size" | "mount" | "rack_fram
 export const RACK_OPENING: Record<RackWidth, number> = { 19: 0.45085, 10: 0.22225 };
 
 /** How far the front rails sit behind the item's front, and the rear rails in front of its back (metres). */
-const FRONT_INSET: Record<RackForm, number> = { frame2: 0, frame4: 0, cabinet: 0.08, wall_frame: 0.02, wall_cabinet: 0.06 };
-const REAR_INSET: Record<RackForm, number> = { frame2: 0, frame4: 0.02, cabinet: 0.05, wall_frame: 0.01, wall_cabinet: 0.04 };
+export const FRONT_INSET: Record<RackForm, number> = { frame2: 0, frame4: 0, cabinet: 0.08, wall_frame: 0.02, wall_cabinet: 0.06 };
+export const REAR_INSET: Record<RackForm, number> = { frame2: 0, frame4: 0.02, cabinet: 0.05, wall_frame: 0.01, wall_cabinet: 0.04 };
 /** A 2-post rack's posts are this deep; gear hangs on the front of them. */
 export const RACK_POST_DEPTH = 0.075;
 

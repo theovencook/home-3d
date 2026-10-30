@@ -166,8 +166,8 @@ RACK_MAX_U = 60
 RACK_START_U_RANGE = (1, 100)
 RACK_MOUNT_DEPTH_RANGE = (0.05, 1.5)
 RACK_BOTTOM_RANGE = (0, 2)
-# measures may round to the millimetre
-_RACK_SLACK = 0.001
+# measures may round to the millimetre (racks.py too)
+RACK_SLACK = 0.001
 
 
 def _whole(value: Any) -> int:
@@ -245,13 +245,13 @@ def _rack_fits(item: dict[str, Any]) -> dict[str, Any]:
         return item
     width, depth, height = item["size"]
     form = frame["form"]
-    if RACK_PANEL_WIDTH[frame.get("width", 19)] > width + _RACK_SLACK:
+    if RACK_PANEL_WIDTH[frame.get("width", 19)] > width + RACK_SLACK:
         raise vol.Invalid("the rack's panels are wider than the item", path=["rack_frame", "width"])
-    if frame.get("mount_depth", 0) > depth + _RACK_SLACK:
+    if frame.get("mount_depth", 0) > depth + RACK_SLACK:
         raise vol.Invalid("the mounting depth is deeper than the item", path=["rack_frame", "mount_depth"])
     space = frame["u"] * RACK_UNIT
     bottom = frame.get("bottom", max(0.0, (height - space) / 2))
-    if bottom + space > height + _RACK_SLACK:
+    if bottom + space > height + RACK_SLACK:
         raise vol.Invalid(f"{frame['u']}U do not fit in the item's height", path=["rack_frame", "u"])
     mount = item.get("mount", "floor")
     if (form in RACK_WALL_FORMS) != (mount == "wall") or mount == "ceiling":

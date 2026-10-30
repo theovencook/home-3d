@@ -187,7 +187,7 @@ def test_card_values_of_the_wrong_shape_are_refused(card: dict) -> None:
 
 _GEAR = {
     "sw": {"rack": {"u": 1}, "size": [0.48, 0.25, 0.04]},
-    "ups": {"rack": {"u": 2, "depth": "full"}, "size": [0.48, 0.38, 0.088]},
+    "ups": {"rack": {"u": 2, "depth": "full"}, "size": [0.48, 0.33, 0.088]},
     "mini": {"rack": {"u": 1, "inch": 10}, "size": [0.25, 0.1, 0.04]},
     "sofa": {"size": [2, 1, 0.8]},
 }
@@ -222,11 +222,18 @@ def test_gear_that_does_not_fit_is_a_problem(slots: list[dict], why: str) -> Non
     assert why in {p[2] for p in racks.rack_problems(_plan(*slots))}
 
 
-def test_gear_whose_recipe_is_gone_is_not_checked() -> None:
-    """A pack removed without a copy kept: the slot stays as it was (it shows nothing)."""
-    plan = _plan(_slot("a", "sw", 1))
+def test_gear_whose_recipe_is_gone_is_not_checked_but_keeps_its_one_u() -> None:
+    """A pack removed without a copy kept: the slot stays as it was (it shows nothing) and, as in rack.ts, holds its
+    lowest U so nothing is put over it (#124)."""
+    plan = _plan(_slot("a", "sw", 2))
     plan["floors"][0]["furniture"][0]["rack"]["slots"].append({"id": "b", "type": "pack:t:gone", "u": 1})
     assert racks.rack_problems(plan) == set()
+    plan["floors"][0]["furniture"][0]["rack"]["slots"].append({"id": "c", "type": "pack:t:sw", "u": 1})
+    assert {(p[1], p[2]) for p in racks.rack_problems(plan)} == {("c", "overlap")}
+    # an item that is no gear holds its U too (and is a problem itself)
+    assert _problems(_slot("s", "sofa", 3), _slot("x", "sw", 3)) == {("s", "not_gear"), ("x", "overlap")}
+    # but it does not stand in a side lane
+    assert _problems(_slot("s", "sofa", 3), _slot("p", "pdu", 1)) == {("s", "not_gear")}
 
 
 # ------------------------------------------------------------------------------------------------ #114: columns, faces,
@@ -241,6 +248,10 @@ _GEAR.update(
         "hub": {"size": [0.09, 0.09, 0.026]},
         "pc": {"size": [0.18, 0.18, 0.035]},
         "nas": {"size": [0.2, 0.22, 0.166]},
+        "deep": {"rack": {"u": 1}, "size": [0.48, 0.36, 0.04]},
+        "fits_deep": {"rack": {"u": 1}, "size": [0.48, 0.35, 0.04]},
+        "wide_pdu": {"rack": {"u": 0}, "size": [0.07, 0.05, 0.35]},
+        "box": {"size": [0.2, 0.32, 0.03]},
     }
 )
 
@@ -298,6 +309,22 @@ def test_a_shelf_carries_loose_gear() -> None:
     assert _problems(shelf, _slot("r", "rack", 2, **on)) == {("r", "not_loose")}
 
 
+def test_gear_deeper_than_the_rails_or_wider_than_the_lane_is_a_problem() -> None:
+    """#124, rack.ts too_deep / no_lane. The wall cabinet (600 x 450 mm, insets 60 mm front, 40 mm rear) takes gear
+    350 mm deep; its side lanes are (600 - 482.6) / 2 = 58.7 mm wide."""
+    assert _problems(_slot("d", "deep", 1)) == {("d", "too_deep")}
+    assert _problems(_slot("d", "fits_deep", 1)) == set()
+    assert _problems(_slot("p", "wide_pdu", 1)) == {("p", "no_lane")}
+    # a narrower placed rack has narrower lanes: (500 - 482.6) / 2 = 8.7 mm
+    plan = _plan(_slot("p", "pdu", 1))
+    plan["floors"][0]["furniture"][0].update(w=0.5, d=0.45, h=0.5)
+    assert {(p[1], p[2]) for p in racks.rack_problems(plan)} == {("p", "no_lane")}
+    # a pack's own mount depth wins, and loose gear deeper than its shelf does not fit
+    shallow = {"rack_frame": {"u": 9, "form": "wall_cabinet", "mount_depth": 0.2}, "size": [0.6, 0.45, 0.5]}
+    assert _problems(_slot("s", "sw", 1), frame=shallow) == {("s", "too_deep")}
+    assert _problems(_slot("sh", "shelf", 2), _slot("b", "box", 2, on="sh")) == {("b", "too_deep")}
+
+
 def test_a_shelf_is_gear_of_at_least_1u() -> None:
     assert _verified({**SWITCH, "rack": {"u": 1, "shelf": True}})["rack"] == {"u": 1, "shelf": True}
     for bad in ({"u": 0, "shelf": True}, {"u": 1, "shelf": "yes"}):
@@ -326,6 +353,32 @@ def test_changing_the_rack_frame_keeps_the_gear_and_saves_with_what_no_longer_fi
     later = copy.deepcopy(after)
     later["floors"][0]["furniture"][0]["rack"]["slots"].append({"id": "b", "type": "pack:t:sw", "u": 7})
     assert {p[1] for p in racks.new_rack_problems(after, later)} == {"b"}
+
+
+def test_a_frame_change_excuses_only_the_gear_it_left_out() -> None:
+    """#124: a resize in the same save as newly clashing gear is refused; the gear the resize itself left outside is
+    still excused."""
+    before = _plan(_slot("a", "sw", 8))
+    before["floors"][0]["furniture"][0].update(w=0.6, d=0.45, h=0.5)
+    after = copy.deepcopy(before)
+    after["floors"][0]["furniture"][0]["h"] = 0.49
+    after["floors"][0]["furniture"][0]["rack"]["slots"] += [
+        {"id": "b", "type": "pack:t:sw", "u": 2},
+        {"id": "c", "type": "pack:t:sw", "u": 2},
+    ]
+    assert {(p[1], p[2]) for p in racks.new_rack_problems(before, after)} == {("b", "overlap"), ("c", "overlap")}
+    # a smaller frame that leaves `a` outside, plus gear put over `a` in the same save: only `a` is excused
+    small = copy.deepcopy(before)
+    small["recipes"]["pack:t:small"] = {
+        "recipe": {"rack_frame": {"u": 6, "form": "wall_cabinet"}, "size": [0.6, 0.45, 0.4]}
+    }
+    small["floors"][0]["furniture"][0]["type"] = "pack:t:small"
+    small["floors"][0]["furniture"][0]["rack"]["slots"].append({"id": "d", "type": "pack:t:sw", "u": 8})
+    assert {p[1] for p in racks.new_rack_problems(before, small)} == {"d"}
+    # a slot moved in the same save is checked against the new frame
+    moved = copy.deepcopy(small)
+    moved["floors"][0]["furniture"][0]["rack"]["slots"] = [{"id": "a", "type": "pack:t:sw", "u": 7}]
+    assert {p[1] for p in racks.new_rack_problems(before, moved)} == {"a"}
 
 
 def test_only_new_problems_count() -> None:

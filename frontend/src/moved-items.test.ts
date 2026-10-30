@@ -93,3 +93,17 @@ test("an old id that a pack still offers stays that pack's item", () => {
   assert.equal(resolvePackType("pack:test.core:lamp"), "pack:test.living:reading_lamp");
   setPacks([]);
 });
+
+test("gear in a rack takes the new ids of moved items (#123)", () => {
+  setPacks([living]);
+  const base = plan();
+  base.floors[0].furniture = [
+    { id: "r", type: "network_rack", x: 0, z: 0, rotation: 0, w: 0.6, d: 0.6, h: 2, variant: null, rack: { slots: [{ id: "s1", type: "pack:test.core:lamp", u: 1 }, { id: "s2", type: "sofa", u: 3 }] } },
+  ] as unknown as Building["floors"][0]["furniture"];
+  const moved = migratePlanTypes(base);
+  assert.deepEqual(moved.floors[0].furniture[0].rack?.slots.map((s) => s.type), ["pack:test.living:reading_lamp", "sofa"]);
+  assert.ok(moved.recipes!["pack:test.living:reading_lamp"]);
+  // nothing moved: the same object
+  assert.equal(migratePlanTypes(moved), moved);
+  setPacks([]);
+});
