@@ -3242,8 +3242,12 @@ export class Fp3dEditor extends LitElement {
   private renderRoofFloors() {
     const floors = [...this._doc.floors].sort((a, b) => b.elevation - a.elevation);
     if (floors.length < 2) return nothing;
-    return html`<div class="fp3d-seg fp3d-dev-source">
-      ${floors.map((f) => html`<button aria-pressed=${f.id === this._floorId} @click=${() => (this._floorId = f.id)}>${f.name}</button>`)}
+    // these only pick the floor the plan shows to draw along: the roof itself is the whole building's (#68)
+    return html`<div class="fp3d-roof-floors" title=${this.t("roof_floor_pick_hint")}>
+      <span class="fp3d-sub">${this.t("roof_floor_pick")}</span>
+      <div class="fp3d-seg fp3d-dev-source">
+        ${floors.map((f) => html`<button aria-pressed=${f.id === this._floorId} @click=${() => (this._floorId = f.id)}>${f.name}</button>`)}
+      </div>
     </div>`;
   }
 
@@ -13896,10 +13900,11 @@ export class Fp3dEditor extends LitElement {
     const s = this._doc.settings;
     const set = (patch: Partial<Building["settings"]>) => this.setSettings(patch);
     return html`<section>
-      <h3>${this.t("roof_basics")}</h3>
+      <h3>${this.t("roof_whole")}</h3>
+      <p class="fp3d-sub">${this.t("roof_whole_hint")}</p>
       <div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
-          >${this.t("roof")}
+          >${this.t("roof_basics")}
           <select
             @change=${(e: Event) => {
               const type = (e.target as HTMLSelectElement).value as RoofType;
@@ -15786,6 +15791,12 @@ export class Fp3dEditor extends LitElement {
         border: 1px solid color-mix(in srgb, var(--fp3d-accent) 45%, transparent);
         border-radius: 12px;
         background: color-mix(in srgb, var(--fp3d-accent) 6%, transparent);
+      }
+      .fp3d-roof-floors {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin: 0 0 10px;
       }
       .fp3d-edge-box > summary {
         display: flex;
