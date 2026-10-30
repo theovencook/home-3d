@@ -332,7 +332,6 @@
  "camera_detect_choose": "Vel deteksjonssensorane sjølv",
  "camera_detect_choose_hint": "Berre dei avkryssa sensorane tel for nåler, rørslespor og live-regi – også sensorar frå ei anna eining, t.d. Frigate sin personsensor for eit Reolink-kamera. Utan hake brukar Home 3D alle sensorane på kameraet si eining.",
  "camera_detect_add": "Legg til ein sensor",
- "camera_cone": "Vis synsfeltet i 3D",
  "camera_detect_pins": "Vis deteksjonssymbol (person, bil, dyr)",
  "camera_detect_pins_hint": "Av: ei deteksjon viser ingen symbol over kameraet, berre synsfeltet vert raudt – roligare på eit veggnettbrett.",
  "state_recording": "Tek opp",

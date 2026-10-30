@@ -332,7 +332,6 @@
  "camera_detect_choose": "Vybrat detekční senzory ručně",
  "camera_detect_choose_hint": "Pro špendlíky, stopu pohybu a živou režii se počítají jen zaškrtnuté senzory – i senzory jiného zařízení, např. senzor osob z Frigate pro kameru Reolink. Bez zaškrtnutí Home 3D použije všechny senzory zařízení kamery.",
  "camera_detect_add": "Přidat senzor",
- "camera_cone": "Zobrazit zorné pole ve 3D",
  "camera_detect_pins": "Zobrazit symboly detekce (osoba, auto, zvíře)",
  "camera_detect_pins_hint": "Vypnuto: detekce nezobrazí nad kamerou žádné symboly, jen zorné pole zčervená – klidnější na nástěnném tabletu.",
  "state_recording": "Nahrává",

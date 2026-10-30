@@ -1,6 +1,6 @@
 // Camera models (#9): a placed camera can wear the real shape of the camera (a pack item tagged "security camera",
 // such as the core pack's UniFi cameras), chosen by hand or found from the model Home Assistant's device registry
-// reports. The shape is only its look (#779): the pin keeps the live view, the wedge and the actions.
+// reports. The shape is only its look (#779): the pin keeps the live view, the aim and the actions.
 
 import { uid, type Floor, type Furniture } from "./model.ts";
 import { furnitureSize, packInfo, packType, type FurniturePack, type PackItemInfo } from "./packs.ts";
@@ -50,8 +50,8 @@ export function detectCameraModel(hass: HomeAssistant, cameraId: string, packs: 
 
 /**
  * Give a placed camera a look (a pack type), or back the built-in one (null). One look per camera: a new one replaces
- * the last. The pin keeps everything set there (field of view, wedge, actions); with a camera model it takes the
- * model's mount, so the wedge looks down like the model: a dome or turret hangs from the ceiling, the others sit on
+ * the last. The pin keeps everything set there (field of view, aim, actions); with a camera model it takes the
+ * model's mount, so the camera looks down like the model: a dome or turret hangs from the ceiling, the others sit on
  * a wall with the pin in the middle of the model.
  */
 export function setCameraLook(floor: Floor, entityId: string, type: string | null): void {
@@ -79,7 +79,7 @@ export function setCameraLook(floor: Floor, entityId: string, type: string | nul
   // any other item as its look (a plant pot hiding it) leaves the pin where it was set
   if (!item || !isCameraModel(item)) return;
   const ceiling = item.mount === "ceiling";
-  // the shape is only looks: the wedge keeps the angle, reach and tilt it had, though their defaults go by the mount
+  // the shape is only looks: the camera keeps the angle, reach and tilt it had, though their defaults go by the mount
   if (ceiling !== (pl.mount === "ceiling")) {
     const was = pl.mount === "ceiling";
     pl.fov ??= was ? 360 : 90;

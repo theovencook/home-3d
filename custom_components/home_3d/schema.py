@@ -513,9 +513,9 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Optional("circuit"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # the energy sensor (kWh) its wire end shows today's use of (#29; left out = found on the device)
         vol.Optional("energy"): vol.Any(None, vol.All(str, vol.Length(max=255))),
-        # cameras: show the field-of-view wedge on the floor (None = yes)
+        # retired: the field-of-view wedge is gone (#137); kept so saved plans still load
         vol.Optional("cone", default=None): vol.Any(None, bool),
-        # detection pins over the camera (None = shown); off leaves only the wedge turning red
+        # detection pins over the camera (None = shown); off leaves only the camera turning red
         vol.Optional("detect_pins", default=None): vol.Any(None, bool),
         # fixed against moving by accident
         vol.Optional("locked", default=None): vol.Any(None, bool),
@@ -926,6 +926,7 @@ SETTINGS_SCHEMA = vol.Schema(
             None,
             {
                 vol.Optional("motion_seconds"): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=0, max=3600))),
+                vol.Optional("camera_seconds"): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=0, max=3600))),
                 **{
                     vol.Optional(key): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=-20, max=100)))
                     for key in ("radiator_cold", "radiator_hot", "tank_cold", "tank_hot")

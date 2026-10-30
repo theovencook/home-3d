@@ -34,9 +34,10 @@ export function roomLiveSensors(hass: HomeAssistant, floor: Floor | null, room: 
   return [...new Set([...areaEntities(hass, room.area_id).filter((id) => fits(id) && !elsewhere.has(id)), ...here])];
 }
 
-/** The settings' defaults: 30 s of light after motion; radiators blue at 18 °C, red at 45 °C; a cylinder 25 to 55 °C. */
+/** The settings' defaults: 30 s of light after motion, 30 s of a red camera; radiators blue at 18 °C, red at 45 °C; a cylinder 25 to 55 °C. */
 export const EFFECT_DEFAULTS: Required<{ [K in keyof EffectSettings]: number }> = {
   motion_seconds: 30,
+  camera_seconds: 30,
   radiator_cold: 18,
   radiator_hot: 45,
   tank_cold: 25,
@@ -52,6 +53,7 @@ export function effectSettings(b: Building): Required<{ [K in keyof EffectSettin
     if (typeof v === "number" && Number.isFinite(v)) out[key] = v;
   }
   out.motion_seconds = Math.max(0, Math.min(3600, out.motion_seconds));
+  out.camera_seconds = Math.max(0, Math.min(3600, out.camera_seconds));
   return out;
 }
 

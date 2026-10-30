@@ -142,7 +142,7 @@ import { load2d } from "../load2d.ts";
 import { pinIn2d } from "../plan2d/pins.ts";
 import type { ViewerSurface } from "../viewer-surface.ts";
 import { loadFun } from "../load-fun.ts";
-import { detectionKind, scaleGlow, buildMarkers, cameraMotionSensors, openMoreInfo, setCameraSensors, stateText, toggleEntity } from "../markers.ts";
+import { detectionKind, scaleGlow, buildMarkers, cameraMotionSensors, cameraRedUntil, openMoreInfo, setCameraSensors, stateText, toggleEntity } from "../markers.ts";
 import { RACK_STATUS_COLOURS, rackLedStates, slotEntities, slotStatus } from "../rack-links.ts";
 import { fetchRackSpark, RACK_HOTTEST, RACK_ONLINE, rackCardValues, rackSpark, type RackCardValue } from "../rack-card.ts";
 import { activeSections, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
@@ -563,6 +563,8 @@ export class Fp3dView3d extends LitElement {
   private alertTimer: ReturnType<typeof setInterval> | undefined;
   /** When the next room motion lit goes dark again (#10). */
   private motionTimer: ReturnType<typeof setTimeout> | undefined;
+  /** When the next camera that saw motion turns back from red. */
+  private redTimer: ReturnType<typeof setTimeout> | undefined;
   private seenAlerts = new Set<string>();
   /** A room briefly lit up after a double tap switched its lights. */
   private roomFlash: { roomId: string; until: number } | null = null;
@@ -884,6 +886,8 @@ export class Fp3dView3d extends LitElement {
     this.alertTimer = undefined;
     clearTimeout(this.motionTimer);
     this.motionTimer = undefined;
+    clearTimeout(this.redTimer);
+    this.redTimer = undefined;
     clearInterval(this.cameraTimer);
     this.cameraTimer = undefined;
     this.live = null;
@@ -1240,7 +1244,16 @@ export class Fp3dView3d extends LitElement {
     // the energy devices' own sensors: no consumers (#43)
     const devices = deviceSensors(b, (f) => this.furnitureLinks?.get(f.id)?.power ?? null);
     const consumers = findConsumers(hass, b, devices);
-    const deviceMarkers = buildMarkers(hass, b);
+    const now = this.now();
+    const deviceMarkers = buildMarkers(hass, b, now);
+    // a camera that saw motion stays red for the set time: the view looks again when the first one turns back
+    clearTimeout(this.redTimer);
+    this.redTimer = undefined;
+    if (!this.replay) {
+      const hold = effectSettings(b).camera_seconds * 1000;
+      const next = Math.min(...deviceMarkers.filter((m) => m.motion).map((m) => cameraRedUntil(hass, m.id, hold, now) ?? Infinity));
+      if (Number.isFinite(next)) this.redTimer = setTimeout(() => this.syncDevices(true), Math.max(50, next - now + 20));
+    }
     const furniture = this.furnitureMarkers(hass, b, new Set(deviceMarkers.map((m) => m.id)), new Set(consumers.map((c) => c.powerEntity)));
     consumers.push(...furniture.consumers);
     this.lastConsumers = consumers;
@@ -1874,7 +1887,7 @@ export class Fp3dView3d extends LitElement {
    */
   private detectionPins(hass: HomeAssistant, markers: DeviceMarker[]) {
     const out: (DeviceMarker & { pin: boolean })[] = [];
-    // cameras whose detection pins are switched off: only their wedge turns red (#267)
+    // cameras whose detection pins are switched off: only the camera turns red (#267)
     const quiet = new Set(this.building?.floors.flatMap((f) => f.placements.filter((p) => p.detect_pins === false).map((p) => p.entity_id)) ?? []);
     for (const cam of markers) {
       if (!cam.model?.startsWith("camera") || quiet.has(cam.id)) continue;

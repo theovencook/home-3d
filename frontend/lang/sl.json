@@ -332,7 +332,6 @@
  "camera_detect_choose": "Senzorje zaznavanja izberi sam",
  "camera_detect_choose_hint": "Za oznake, sled gibanja in živo režijo štejejo le označeni senzorji – tudi senzorji druge naprave, npr. Frigatov senzor oseb za kamero Reolink. Brez kljukice Home 3D uporabi vse senzorje naprave kamere.",
  "camera_detect_add": "Dodaj senzor",
- "camera_cone": "Pokaži vidno polje v 3D",
  "camera_detect_pins": "Pokaži simbole zaznave (oseba, avto, žival)",
  "camera_detect_pins_hint": "Izklopljeno: zaznava ne prikaže simbolov nad kamero, le vidno polje postane rdeče – bolj umirjeno na stenskem tabličnem računalniku.",
  "state_recording": "Snemanje",

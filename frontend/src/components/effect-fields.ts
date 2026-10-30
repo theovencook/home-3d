@@ -44,5 +44,6 @@ export function effectFields(hass: HomeAssistant, effects: EffectSettings | null
     /></label>`;
   const same = (v: number) => v;
   return html`${num("motion_seconds", translate(hass, "effects_motion_seconds"), same, (v) => Math.max(0, Math.min(3600, Math.round(v))), 5)}
+  ${num("camera_seconds", translate(hass, "effects_camera_seconds"), same, (v) => Math.max(0, Math.min(3600, Math.round(v))), 5)}
   ${TEMPS.map(([key, label]) => num(key, `${translate(hass, label)} (${unit})`, (v) => fromCelsius(hass, v), (v) => Math.max(-20, Math.min(100, toCelsius(v, unit))), 1))}`;
 }

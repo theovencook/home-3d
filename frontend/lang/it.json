@@ -332,7 +332,6 @@
  "camera_detect_choose": "Scegli tu i sensori di rilevamento",
  "camera_detect_choose_hint": "Contano solo i sensori spuntati per i segnaposto, la traccia di movimento e la regia live – anche sensori di un altro dispositivo, ad es. il sensore persone di Frigate per una telecamera Reolink. Senza spunta Home 3D usa tutti i sensori del dispositivo della telecamera.",
  "camera_detect_add": "Aggiungi un sensore",
- "camera_cone": "Mostra il campo visivo in 3D",
  "camera_detect_pins": "Mostra i simboli di rilevamento (persona, auto, animale)",
  "camera_detect_pins_hint": "Disattivo: un rilevamento non mostra simboli sopra la telecamera, solo il campo visivo diventa rosso – più discreto su un tablet a parete.",
  "state_recording": "In registrazione",

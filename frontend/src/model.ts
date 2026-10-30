@@ -421,9 +421,9 @@ export interface Placement {
   circuit?: string | null;
   /** The energy sensor (kWh) its wire end shows today's use of (null = found on the device, "none" = none) – #29. */
   energy?: string | null;
-  /** Cameras: show the field-of-view wedge on the floor (null = yes). */
+  /** Retired (#137): cameras no longer draw a field-of-view wedge; kept so saved plans load. */
   cone?: boolean | null;
-  /** Cameras: detection pins (person, car, animal) over the camera (null = yes); false leaves only the wedge turning red (#267). */
+  /** Cameras: detection pins (person, car, animal) over the camera (null = yes); false leaves only the camera turning red (#267). */
   detect_pins?: boolean | null;
   /** Cameras: the detection sensors that count, chosen by hand (any device's); null = those of the camera's device (#815). */
   detect_sensors?: string[] | null;
@@ -753,6 +753,8 @@ export const DOG_BREEDS = ["dachshund", "pug", "terrier", "labrador", "shepherd"
 export interface EffectSettings {
   /** Seconds a room stays lit after motion starts (0 = motion lights nothing). */
   motion_seconds?: number | null;
+  /** Seconds a camera stays red after its motion has passed (0 = red only while the sensor is on). */
+  camera_seconds?: number | null;
   /** Radiator: the temperature (°C) it is fully blue at and fully red at. */
   radiator_cold?: number | null;
   radiator_hot?: number | null;

@@ -5,6 +5,7 @@ import { defaultHeight, entityName, isActive, isUnavailable, kindOf, lightGlow, 
 import { formatNumber, translate, type I18nKey } from "./i18n.ts";
 import { iconSvg, mdiIcon } from "./icons.ts";
 import type { Building } from "./model.ts";
+import { effectSettings } from "./room-effects.ts";
 import { pointInPolygon } from "./model.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 import type { DeviceMarker } from "./viewer/viewer3d.ts";
@@ -62,9 +63,10 @@ function translateState(hass: HomeAssistant | undefined, state: string): string 
   return s === key ? state : s;
 }
 
-/** Markers for every placed entity that still exists. */
-export function buildMarkers(hass: HomeAssistant, building: Building): DeviceMarker[] {
+/** Markers for every placed entity that still exists; `now` (epoch ms) for how long a camera stays red. */
+export function buildMarkers(hass: HomeAssistant, building: Building, now = Date.now()): DeviceMarker[] {
   const out: DeviceMarker[] = [];
+  const hold = effectSettings(building).camera_seconds * 1000;
   // cameras shown by a furniture item of their own (#779)
   const looks = new Set(building.floors.flatMap((f) => f.furniture.map((m) => m.look_of).filter((id): id is string => !!id)));
   for (const floor of building.floors) {
@@ -84,13 +86,12 @@ export function buildMarkers(hass: HomeAssistant, building: Building): DeviceMar
         lamp: kind === "light" ? (pl.mount ?? "ceiling") : null,
         model: kind === "camera" ? (pl.mount === "ceiling" ? "camera_ceiling" : "camera_wall") : undefined,
         ...(kind === "camera" && looks.has(pl.entity_id) ? { ownLook: true } : {}),
-        motion: kind === "camera" ? cameraMotion(hass, pl.entity_id) : undefined,
+        motion: kind === "camera" ? cameraRedUntil(hass, pl.entity_id, hold, now) !== null : undefined,
         fov: pl.fov ?? undefined,
         reach: pl.reach ?? undefined,
         tilt: pl.tilt ?? undefined,
         rotation: pl.rotation ?? 0,
         icon: pl.icon ? mdiIcon(pl.icon) : iconSvg(kind),
-        cone: kind === "camera" && pl.cone === false ? false : undefined,
         name: pl.name || entityName(hass, pl.entity_id, areaName),
         ownName: pl.name || undefined,
         showName: !!pl.show_name,
@@ -121,6 +122,22 @@ export function detectionKind(hass: HomeAssistant, sensorId: string): DetectionK
 /** Whether a camera's device reports motion or a person right now (its motion/occupancy sensors). */
 export function cameraMotion(hass: HomeAssistant, cameraId: string): boolean {
   return cameraMotionSensors(hass, cameraId).some((id) => hass.states[id]?.state === "on");
+}
+
+/**
+ * Until when a camera is drawn red: while a detection sensor is on, and for `holdMs` after the last one went off
+ * (epoch ms; Infinity while on, null = not red). A sensor whose time is unknown counts only while on.
+ */
+export function cameraRedUntil(hass: HomeAssistant, cameraId: string, holdMs: number, now: number): number | null {
+  let until: number | null = null;
+  for (const id of cameraMotionSensors(hass, cameraId)) {
+    const st = hass.states[id];
+    if (st?.state === "on") return Number.POSITIVE_INFINITY;
+    if (st?.state !== "off" || holdMs <= 0) continue;
+    const off = Date.parse(st.last_changed ?? "");
+    if (Number.isFinite(off) && off + holdMs > now && (until === null || off + holdMs > until)) until = off + holdMs;
+  }
+  return until;
 }
 
 /**
