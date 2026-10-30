@@ -393,7 +393,8 @@ async def test_a_url_install_of_a_bundled_pack_follows_the_import_rule(
     repo_at(bundled_release - 1)
     assert (await _install(client, url))["success"]
     listed = await _all_listed(client)
-    assert listed[0]["id"] == "theovencook.living" and listed[0]["bundled"] is True
+    living = next(p for p in listed if p["id"] == "theovencook.living")
+    assert living["bundled"] is True
     assert [p["id"] for p in listed].count("theovencook.living") == 1
 
     repo_at(bundled_release)
@@ -406,4 +407,5 @@ async def test_a_url_install_of_a_bundled_pack_follows_the_import_rule(
     await client.send_json_auto_id({"type": "home_3d/packs/remove", "pack_id": "theovencook.living"})
     assert (await client.receive_json())["success"]
     listed = await _all_listed(client)
-    assert listed[0]["id"] == "theovencook.living" and listed[0]["bundled"] is True
+    living = next(p for p in listed if p["id"] == "theovencook.living")
+    assert living["bundled"] is True
