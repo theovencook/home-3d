@@ -50,6 +50,9 @@ export interface HassEntity {
 
 export interface HassConnection {
   subscribeMessage<T>(callback: (msg: T) => void, msg: Record<string, unknown>): Promise<() => Promise<void>>;
+  /** "ready" fires when the websocket is back after a disconnect (home-assistant-js-websocket). */
+  addEventListener?(event: "ready" | "disconnected", cb: () => void): void;
+  removeEventListener?(event: "ready" | "disconnected", cb: () => void): void;
 }
 
 export interface HomeAssistant {
