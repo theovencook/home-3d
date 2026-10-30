@@ -310,3 +310,59 @@ IKEA PS 2014 shade heights, the STOCKHOLM 2025 shade heights, the BÄVE track he
 | 40 | LED lighting strip, 4 m | ORMANÄS | `lamp` | - | done, 1 item |
 | 41 | LED lighting strip with USB, 3 m | KABBLEKA | `lamp` | - | done, 1 item |
 | 42 | LED worktop/wardrobe lighting strip with sensor | SKYDRAG | `lamp` | - | done, 1 item |
+
+### Batch A3 - Decor, textiles and storage (#108)
+
+46 models, 60 items, sizes from the IKEA UK product pages (30 Oct 2026). Rugs, curtains and blinds are drawn in the
+`fabric` role, pots in `pot`, cushions in `cushion`. Hung curtain widths are half the cloth width, as for VILBORG.
+Estimated because IKEA UK does not publish them: wall clock depth (TROMMA), tray heights (GLATTIS, SKALA), the
+brackets of the BERGSHULT shelves, the TJUSIG rack's slat detail and the SAMVERKA dish height.
+
+| # | Model | IKEA name | Group | Status |
+| --- | --- | --- | --- | --- |
+| 1 | Vase, clear glass 30 cm | BERÄKNA | `vase` | done, 1 item |
+| 2 | Vase, white 22 cm | STILREN | `vase` | done, 2 items |
+| 3 | Vase, beige 22 cm | PÄRLHÄGG | `vase` | done, 1 item |
+| 4 | Plant pot, 24 cm | SOJABÖNA | `plant` | done, 1 item |
+| 5 | Plant pot, in/outdoor 19 cm | HASSELBUKETT | `plant` | done, 2 items |
+| 6 | Plant pot, in/outdoor 9 cm | FÖRENLIG | `plant` | done, 1 item |
+| 7 | Artificial bouquet, eucalyptus 60 cm | SMYCKA | `plant` | done, 1 item |
+| 8 | Candlestick, glass/gold-colour 19 cm | KUNGSTÄRNA | `candle` | done, 2 items |
+| 9 | Candlestick for 2 candles, silver-colour 20 cm | SILVERPÄRON | `candle` | done, 1 item |
+| 10 | Tealight holder, white 8 cm | SAMVERKA | `candle` | done, 2 items |
+| 11 | Unscented pillar candle, natural 19 cm | FENOMEN | `candle` | done, 2 items |
+| 12 | Scented candle in glass 12 hr | HÖKGÖK | `candle` | done, 1 item |
+| 13 | Wall clock, white 25 cm | TROMMA | `deco` | done, 1 item |
+| 14 | Wall clock, black 38 cm | BONDIS | `deco` | done, 1 item |
+| 15 | Wall clock, black 59 cm | BRAVUR | `deco` | done, 1 item |
+| 16 | Alarm clock, black 10 cm | DEKAD | `deco` | done, 1 item |
+| 17 | Cushion cover 50x50 cm | GURLI | `cushion` | done, 2 items |
+| 18 | Cushion cover 40x58 cm | SANELA | `cushion` | done, 1 item |
+| 19 | Round cushion 38 cm | SYRENBUSKE | `cushion` | done, 1 item |
+| 20 | Throw 150x200 cm, folded | VALLKRASSING | `throw` | done, 1 item |
+| 21 | Throw 130x170 cm, spread out | GUNNEMOR | `throw` | done, 1 item |
+| 22 | Rug, flatwoven 80x150 cm | LOHALS | `deco` | done, 2 items |
+| 23 | Rug, high pile 160x230 cm | ÄRENDE | `deco` | done, 1 item |
+| 24 | Rug, flatwoven 120x180 cm | TIPHEDE | `deco` | done, 1 item |
+| 25 | Rug, flatwoven in/outdoor 60x150 cm | MORUM | `deco` | done, 2 items |
+| 26 | Block-out curtains, 1 pair 145x250 cm | MAJGULL | `deco` | done, 1 item |
+| 27 | Sheer curtain, 1 piece 300x250 cm | STENFRÖ | `deco` | done, 1 item |
+| 28 | Room darkening curtains, 1 pair 145x250 cm, eyelets | ANNAKAJSA | `deco` | done, 1 item |
+| 29 | Block-out roller blind 100x195 cm | FRIDANS | `deco` | done, 2 items |
+| 30 | Roller blind 100x195 cm | SANDVEDEL | `deco` | done, 1 item |
+| 31 | Box with lid 26x35x15 cm | KUGGIS | `storage` | done, 3 items |
+| 32 | Box with lid 38x25x15 cm | SOCKERBIT | `storage` | done, 2 items |
+| 33 | Box with lid, transparent 57x39x28 cm | SAMLA | `storage` | done, 2 items |
+| 34 | Basket, rattan 32x34x32 cm | BRANÄS | `storage` | done, 2 items |
+| 35 | Basket, water hyacinth 35x25x25 cm | TÄTING | `storage` | done, 1 item |
+| 36 | Basket, natural 25 cm | TJABBIG | `storage` | done, 1 item |
+| 37 | Wall shelf 80x20 cm | BERGSHULT / PERSHULT | `storage` | done, 1 item |
+| 38 | Wall shelf 120x30 cm | BERGSHULT / SANDSHULT | `storage` | done, 1 item |
+| 39 | Wall shelf 110x26 cm | LACK | `storage` | done, 1 item |
+| 40 | Wall shelf, rattan 60x20x30 cm | FRYKSÅS | `storage` | done, 1 item |
+| 41 | Rack with 5 hooks 50 cm | LANDKRABBA | `storage` | done, 1 item |
+| 42 | Hat rack 79 cm | TJUSIG | `storage` | done, 1 item |
+| 43 | Hook, black 7 cm | HULTARP | `storage` | done, 1 item |
+| 44 | Hanger for door, white 35 cm | ENUDDEN | `storage` | done, 1 item |
+| 45 | Tray, brass-colour 38 cm | GLATTIS | `tray` | done, 1 item |
+| 46 | Tray, birch 44 cm | SKALA | `tray` | done, 1 item |
