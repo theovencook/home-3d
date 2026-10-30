@@ -20,7 +20,7 @@ estimated.
 | `ha_green` | Home Assistant Green | 112 x 112 x 32 | maker | https://www.home-assistant.io/green/ |
 | `ha_yellow` | Home Assistant Yellow (enclosure) | 123 x 123 x 36 | maker | https://www.home-assistant.io/yellow/ |
 | `ha_blue` | Home Assistant Blue (ODROID-N2+, metal case) | 105 x 98 x 33 | unverified | Hardkernel listing quoted in a search summary (page not opened); the product is discontinued |
-| `zbt1_skyconnect` | Home Assistant Connect ZBT-1 (SkyConnect) | 38.5 x 18 x 4.5 | unverified | Datasheet figure quoted by Pimoroni and search results; the datasheet link is dead and the figure looks small for the stick with its plug. https://shop.pimoroni.com/products/home-assistant-connect-zbt-1 |
+| `zbt1_skyconnect` | Home Assistant Connect ZBT-1 (SkyConnect) | 38.5 x 18 x 10 | unverified | Datasheet figure quoted by Pimoroni and search results is 38.5 x 18 x 4.5, but the datasheet link is dead and the pack format's smallest size is 10 mm, so the height is raised to 10 (the research notes put the stick at ~60 x 25 x 10 in practice). https://shop.pimoroni.com/products/home-assistant-connect-zbt-1 |
 | `zbt2_connect` | Home Assistant Connect ZBT-2 (Zigbee / Thread) | 83 x 83 x 179 | maker | https://www.home-assistant.io/connect/zbt-2/ ; overall size with the 164 mm antenna. The 83 x 83 footprint is the maker's figure; the body inside it is our drawing |
 | `sonoff_zbdongle_e` | SONOFF ZBDongle-E | 75 x 25.5 x 13.5 | maker | https://sonoff.tech/de-eu/products/sonoff-zigbee-3-0-usb-dongle-plus-zbdongle-e (figure read from a search summary; the page itself would not load) |
 | `sonoff_zbdongle_p` | SONOFF ZBDongle-P | 87 x 25.5 x 13.5 | retailer | https://openelab.io/it/products/sonoff-zbdongle-p ; the external antenna is not included |
