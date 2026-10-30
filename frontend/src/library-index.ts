@@ -5,6 +5,7 @@
 // classified here by their ids and names. Pure logic, no DOM: see library-index.test.ts.
 
 import { FURNITURE_GROUPS, LAMP_TYPES } from "./model.ts";
+import { fuzzyEquals } from "./fuzzy.ts";
 import { isElectric, packItemName, packName, packType, type FurniturePack, type PackItemInfo } from "./packs.ts";
 import { isVocabularyWord, KIND_WORDS, KINDS, ROOMS, synonymWords, type Kind, type Room } from "./vocabulary.ts";
 
@@ -20,6 +21,8 @@ export interface LibraryEntry {
   label: string;
   /** Every word that finds it (names in all languages, the id, the pack's name, the kind). */
   search: string;
+  /** The item's own words (names, id, tags, IKEA name and their synonyms): the part of `search` that ranks above the kind's and the pack's words. */
+  tags: string;
   kind: Kind;
   rooms: Room[];
   /** Links an entity (a power sensor, a switch, a light). */
@@ -343,6 +346,7 @@ export function buildIndex(src: IndexSource): LibraryEntry[] {
       key: type,
       label,
       search: `${own} ${synonymWords(own, kind)} ${src.kindName(kind)} ${KIND_WORDS[kind]}`,
+      tags: `${own} ${synonymWords(own, kind)}`,
       kind,
       rooms,
       electric: isElectric(type),
@@ -371,6 +375,7 @@ export function buildIndex(src: IndexSource): LibraryEntry[] {
         key: type,
         label,
         search: `${own} ${synonymWords(own, kind)} ${packLabel} ${packName(pack, "en")} ${src.kindName(kind)} ${KIND_WORDS[kind]}`,
+        tags: `${own} ${synonymWords(own, kind)}`,
         kind,
         rooms,
         electric: !!it.electric || !!it.light,
@@ -395,7 +400,7 @@ export function buildIndex(src: IndexSource): LibraryEntry[] {
     const twinType = e.type.replace(/(_|\b)(left|right|links|rechts)(?=$|[_\s)])/i, (_m: string, sep: string, w: string) => sep + (({ left: "right", right: "left", links: "rechts", rechts: "links" } as Record<string, string>)[w.toLowerCase()] ?? w));
     if (twinType !== e.type && byType.has(twinType)) continue;
     const label = otherSideName(e.label);
-    out.push({ ...e, key: `${e.type}#m`, mirror: true, label, search: `${e.search} ${label}`, family: e.family ?? e.type, variant: variantLabel(label) });
+    out.push({ ...e, key: `${e.type}#m`, mirror: true, label, search: `${e.search} ${label}`, tags: `${e.tags} ${label}`, family: e.family ?? e.type, variant: variantLabel(label) });
     if (!e.family) e.family = e.type;
   }
   return out;
@@ -442,12 +447,69 @@ function fitsChips(e: LibraryEntry, f: LibraryFilter): boolean {
   return (!f.pack || e.pack === f.pack) && (!f.electric || e.electric) && (!f.light || e.light) && (!f.outdoor || e.outdoor);
 }
 
-function queryMatcher(query: string): ((e: LibraryEntry) => boolean) | null {
-  const words = fold(query).split(/\s+/).filter(Boolean).map(wordMatcher);
-  if (!words.length) return null;
+/** What the ranking reads of an entry: its folded label and words, worked out once. */
+interface Prepared {
+  search: string;
+  label: string;
+  labelWords: string[];
+  tags: string;
+  tagWords: Set<string>;
+  hay: string;
+}
+const WORDS = /[^\p{L}\p{N}]+/u;
+const prepared = new WeakMap<LibraryEntry, Prepared>();
+function prepare(e: LibraryEntry): Prepared {
+  let p = prepared.get(e);
+  if (!p || p.search !== e.search) {
+    const label = fold(e.label);
+    const tags = fold(e.tags ?? "");
+    p = { search: e.search, label, labelWords: label.split(WORDS).filter(Boolean), tags, tagWords: new Set(tags.split(WORDS).filter(Boolean)), hay: fold(e.search) };
+    prepared.set(e, p);
+  }
+  return p;
+}
+
+/**
+ * How well one typed word fits an entry, from 7 down to 0 (no match): a whole word of the name (7), the start of
+ * a word of the name (6), inside the name (5), a whole tag word (4), inside the tags (3), the kind's or the pack's
+ * words (2), and last a slip of the pen in a name or tag word (1: fuzzy, never above an exact or prefix match).
+ */
+function wordScore(w: string, match: (hay: string) => boolean, p: Prepared): number {
+  if (match(p.label) || match(p.hay)) {
+    const whole = w.length <= 3 && isVocabularyWord(w);
+    if (p.labelWords.includes(w)) return 7;
+    if (!whole && p.labelWords.some((lw) => lw.startsWith(w))) return 6;
+    if (w.length > 3 && p.label.includes(w)) return 5;
+    if (p.tagWords.has(w)) return 4;
+    if (match(p.tags)) return 3;
+    return 2;
+  }
+  if (w.length < 4) return 0;
+  for (const lw of p.labelWords) if (fuzzyEquals(w, lw)) return 1;
+  for (const tw of p.tagWords) if (fuzzyEquals(w, tw)) return 1;
+  return 0;
+}
+
+/** Scores an entry against a query (higher is better), or null when a word of the query finds nothing in it. */
+function queryScorer(query: string): ((e: LibraryEntry) => number | null) | null {
+  const typed = fold(query).split(/\s+/).filter(Boolean);
+  if (!typed.length) return null;
+  const words = typed.map((w) => ({ w, match: wordMatcher(w) }));
+  const phrase = typed.join(" ");
   return (e) => {
-    const hay = fold(e.search);
-    return words.every((match) => match(hay));
+    const p = prepare(e);
+    let weakest = 7;
+    let sum = 0;
+    for (const { w, match } of words) {
+      const s = wordScore(w, match, p);
+      if (!s) return null;
+      weakest = Math.min(weakest, s);
+      sum += s;
+    }
+    // the whole query as the name (or its start, or a run of its words) beats the same words scattered
+    const label = p.labelWords.join(" ");
+    const bonus = label === phrase ? 300 : label.startsWith(phrase) ? 200 : weakest > 1 && ` ${label} `.includes(` ${phrase} `) ? 100 : 0;
+    return weakest * 1000 + sum * 10 + bonus - Math.min(label.length, 90) / 100;
   };
 }
 
@@ -456,19 +518,25 @@ function queryMatcher(query: string): ((e: LibraryEntry) => boolean) | null {
  * chip narrows the library only while nothing is typed: with a query it ranks instead (#77, see `rankEntries`).
  */
 export function filterEntries(entries: readonly LibraryEntry[], f: LibraryFilter): LibraryEntry[] {
-  const matches = queryMatcher(f.query);
-  return entries.filter((e) => fitsChips(e, f) && (matches ? matches(e) : fitsRoom(e, f.room)));
+  const score = queryScorer(f.query);
+  return entries.filter((e) => fitsChips(e, f) && (score ? score(e) !== null : fitsRoom(e, f.room)));
 }
 
 /**
- * The order of the hits (stable): the open room's items first. This is the ranking step, kept apart from the
- * filtering above so a score (fuzzy match, synonyms, tags: #78) can be added here without touching which entries
- * are found.
+ * The order of the hits (stable): best match first (the name before the tags before the kind's words, a whole
+ * word before the start of a word before the inside of one, and a fuzzy match after all of those: #78), then the
+ * open room's items ahead of the others. Without a query it is only the room step.
  */
 export function rankEntries(hits: readonly LibraryEntry[], f: LibraryFilter): LibraryEntry[] {
-  if (!f.room) return [...hits];
+  const score = queryScorer(f.query);
+  const ranked = [...hits];
+  if (score) {
+    const scores = new Map(ranked.map((e) => [e, score(e) ?? 0]));
+    ranked.sort((a, b) => scores.get(b)! - scores.get(a)!);
+  }
+  if (!f.room) return ranked;
   const room = f.room;
-  return [...hits.filter((e) => fitsRoom(e, room)), ...hits.filter((e) => !fitsRoom(e, room))];
+  return [...ranked.filter((e) => fitsRoom(e, room)), ...ranked.filter((e) => !fitsRoom(e, room))];
 }
 
 export interface LibraryHits {
@@ -499,8 +567,8 @@ export function activeFilters(f: LibraryFilter): LibraryChip[] {
 export function searchLibrary(entries: readonly LibraryEntry[], f: LibraryFilter): LibraryHits {
   const hits = rankEntries(filterEntries(entries, f), f);
   const inRoom = hits.filter((e) => fitsRoom(e, f.room));
-  const matches = queryMatcher(f.query);
-  const hiddenByChips = matches ? entries.filter((e) => !fitsChips(e, f) && matches(e)).length : 0;
+  const score = queryScorer(f.query);
+  const hiddenByChips = score ? entries.filter((e) => !fitsChips(e, f) && score(e) !== null).length : 0;
   return { hits, inRoom, otherRooms: hits.filter((e) => !fitsRoom(e, f.room)), hiddenByChips };
 }
 
