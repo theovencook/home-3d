@@ -254,3 +254,59 @@ Best-seller rank: its place on the IKEA UK best-seller list on 29 October 2026; 
 | 42 | Wash-stand | TÄNNFORSEN | `bath` | - | done, 2 items |
 | 43 | High cabinet | TÄNNFORSEN | `bath` | - | done, 1 item |
 | 44 | Shoe cabinet | STÄLL | `storage` | - | done, 2 items |
+
+## Accessories
+
+### Batch A1 - Lamps (#106)
+
+IKEA UK lamps beyond the furniture batches: table, desk and work lamps, floor lamps and uplighters, pendants, ceiling lamps and
+track, wall lamps and LED strips. Sizes from the IKEA UK product pages (30 October 2026). Every lamp has a `light` and glowing
+parts. Models already in the pack from the earlier batches (ÅRSTID, HEKTAR floor lamp, KAPPELAND, LAUTERS, NÄVLINGE clamp spotlight,
+ÖKENSAND, SINNERLIG pendant, SOLKLINT, STOCKHOLM 2025 floor lamp, STRÅLA, UPPLYST, VARMBLIXT, VINDKAST) are not repeated.
+BRYNE (named in the ticket) is no longer sold at IKEA UK and was dropped. Where IKEA does not give a measure on the page (the TERTIAL and
+IKEA PS 2014 shade heights, the STOCKHOLM 2025 shade heights, the BÄVE track height, the pendants' hanging drop) it is estimated.
+
+| # | Model | IKEA name | Group | Best-seller rank | Status |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Table lamp | NYMÅNE | `lamp` | - | done, 1 item |
+| 2 | Work lamp with wireless charging | NYMÅNE | `lamp` | - | done, 1 item |
+| 3 | Work lamp | RANARP | `lamp` | - | done, 1 item |
+| 4 | Work lamp | TERTIAL | `lamp` | - | done, 1 item |
+| 5 | Work lamp | FORSÅ | `lamp` | - | done, 1 item |
+| 6 | LED work lamp | NÄVLINGE | `lamp` | - | done, 1 item |
+| 7 | Table lamp | LAMPAN | `lamp` | - | done, 1 item |
+| 8 | Table lamp | FADO | `lamp` | - | done, 1 item |
+| 9 | Table lamp (41 and 56 cm) | RINGSTA / SKAFTET | `lamp` | - | done, 2 items |
+| 10 | Desk lamp | SAMBORD | `lamp` | - | done, 1 item |
+| 11 | Desk lamp | RÖDFLIK | `lamp` | - | done, 1 item |
+| 12 | Table lamp | BLIDVÄDER | `lamp` | - | done, 1 item |
+| 13 | Floor/reading lamp | RANARP | `lamp` | - | done, 1 item |
+| 14 | Floor lamp with 3 spots | NYMÅNE | `lamp` | - | done, 1 item |
+| 15 | Floor lamp | SINNERLIG | `lamp` | - | done, 1 item |
+| 16 | Floor uplighter | TÅGARP | `lamp` | - | done, 1 item |
+| 17 | Floor lamp | RINGSTA / SKAFTET | `lamp` | - | done, 1 item |
+| 18 | Arched floor lamp | SKOTTORP / SKAFTET | `lamp` | - | done, 1 item |
+| 19 | Floor lamp | KINNAHULT | `lamp` | - | done, 1 item |
+| 20 | Floor lamp, height adjustable | NYFORS | `lamp` | - | done, 1 item |
+| 21 | Floor uplighter/reading lamp | ISJAKT | `lamp` | - | done, 1 item |
+| 22 | Floor lamp | SIMRISHAMN | `lamp` | - | done, 1 item |
+| 23 | LED pendant lamp | NYMÅNE | `lamp` | - | done, 1 item |
+| 24 | Pendant lamp | RANARP | `lamp` | - | done, 1 item |
+| 25 | Pendant lamp | SKURUP | `lamp` | - | done, 1 item |
+| 26 | Pendant lamp | HEKTAR | `lamp` | - | done, 1 item |
+| 27 | Pendant lamp | IKEA PS 2014 | `lamp` | - | done, 1 item |
+| 28 | Pendant lamp (textile 50 and glass 54 cm) | STOCKHOLM 2025 | `lamp` | - | done, 2 items |
+| 29 | Pendant lamp, 3-armed | SIMRISHAMN | `lamp` | - | done, 1 item |
+| 30 | Pendant lamp with 3 lamps | SAMBORD | `lamp` | - | done, 1 item |
+| 31 | LED ceiling lamp | VIRRMO | `lamp` | - | done, 1 item |
+| 32 | LED ceiling lamp | NYMÅNE | `lamp` | - | done, 1 item |
+| 33 | LED ceiling lamp | KABOMBA | `lamp` | - | done, 1 item |
+| 34 | Ceiling lamp | NÖSUND | `lamp` | - | done, 1 item |
+| 35 | Ceiling spotlight with 4 spots | NYMÅNE | `lamp` | - | done, 1 item |
+| 36 | LED ceiling track, 5 spots | BÄVE | `lamp` | - | done, 1 item |
+| 37 | Wall lamp | SINNERLIG | `lamp` | - | done, 1 item |
+| 38 | Wall up/downlighter | NYMÅNE | `lamp` | - | done, 1 item |
+| 39 | Wall/clamp spotlight | RANARP | `lamp` | - | done, 1 item |
+| 40 | LED lighting strip, 4 m | ORMANÄS | `lamp` | - | done, 1 item |
+| 41 | LED lighting strip with USB, 3 m | KABBLEKA | `lamp` | - | done, 1 item |
+| 42 | LED worktop/wardrobe lighting strip with sensor | SKYDRAG | `lamp` | - | done, 1 item |
