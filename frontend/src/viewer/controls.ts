@@ -20,7 +20,8 @@ export interface ControlEvents {
   hold(x: number, y: number): void;
   /** Pointer down: return true to take the pointer (drag an object instead of turning the view). */
   grab?(x: number, y: number): boolean;
-  drag?(x: number, y: number): void;
+  /** `free`: Alt is held (move without snapping, #143). */
+  drag?(x: number, y: number, free?: boolean): void;
   drop?(): void;
   /**
    * A one-finger drag starts at (x, y) moving by (dx, dy): return true to take it as a swipe on an
@@ -206,7 +207,7 @@ export class OrbitControls {
     const p = this.pointers.get(e.pointerId);
     if (!p) return;
     if (this.grabbing) {
-      if (this.events.drag) this.events.drag(...this.local(e));
+      if (this.events.drag) this.events.drag(...this.local(e), e.altKey);
       return;
     }
     if (stale(e, performance.now()) && !this.swiping) {
