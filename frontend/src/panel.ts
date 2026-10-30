@@ -30,6 +30,7 @@ import { TimeTravel } from "./load-timetravel.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
 import type { Feature } from "./features.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
+import { UndoHistory } from "./undo-history.ts";
 
 /** The corners of the clock, as arrows in the view menu (the full name is the button's title). */
 const CLOCK_ARROW: Record<Exclude<ClockPos, "off">, string> = { tl: "↖", tr: "↗", bl: "↙", br: "↘" };
@@ -160,6 +161,8 @@ export class Floorplan3dPanel extends LitElement {
   private declare _screen: string;
 
   private readonly data = new BuildingController(this);
+  /** The editor's undo history (#66): kept here, as the editor element goes whenever another tab opens. */
+  private readonly undoHistory = new UndoHistory();
   private locateLab: (() => void) | null = null;
   /** Time travel (Pro): the last 24 hours replayed, read-only. */
   private readonly tt = new TimeTravel(this);
@@ -286,8 +289,15 @@ export class Floorplan3dPanel extends LitElement {
     prefs.set("quality", quality);
   }
 
-  /** Change one furniture item of the building (furnishing in 3D) and save. */
-  private editFurniture(id: string, change: (f: Building["floors"][number]["furniture"][number], floor: Building["floors"][number]) => void): void {
+  /** A change made here or on the Extensions page: saved, and one more step of the editor's undo history (#66). */
+  private editPlan(next: Building, mergeKey: string | null = null): void {
+    const b = this.data.building;
+    if (b) this.undoHistory.record(b, next, this.data.homeId, mergeKey);
+    this.data.edit(next);
+  }
+
+  /** Change one furniture item of the building (furnishing in 3D) and save; `mergeKey` joins a run of moves. */
+  private editFurniture(id: string, change: (f: Building["floors"][number]["furniture"][number], floor: Building["floors"][number]) => void, mergeKey: string | null = null): void {
     const b = this.data.building;
     if (!b) return;
     const next = structuredClone(b);
@@ -295,11 +305,11 @@ export class Floorplan3dPanel extends LitElement {
       const f = floor.furniture.find((m) => m.id === id);
       if (f) change(f, floor);
     }
-    this.data.edit(next);
+    this.editPlan(next, mergeKey);
   }
 
   /** Change one placed device (furnishing in 3D) and save. */
-  private editDevice(entityId: string, change: (p: Building["floors"][number]["placements"][number], floor: Building["floors"][number]) => void): void {
+  private editDevice(entityId: string, change: (p: Building["floors"][number]["placements"][number], floor: Building["floors"][number]) => void, mergeKey: string | null = null): void {
     const b = this.data.building;
     if (!b) return;
     const next = structuredClone(b);
@@ -307,7 +317,7 @@ export class Floorplan3dPanel extends LitElement {
       const p = floor.placements.find((x) => x.entity_id === entityId);
       if (p) change(p, floor);
     }
-    this.data.edit(next);
+    this.editPlan(next, mergeKey);
   }
 
   private moveDevice(e: CustomEvent<{ id: string; x: number; z: number }>): void {
@@ -316,7 +326,7 @@ export class Floorplan3dPanel extends LitElement {
     this.editDevice(id, (p, floor) => {
       const [nx, nz] = keepInRoom(floor, p.x, p.z, x, z);
       Object.assign(p, { x: nx, z: nz });
-    });
+    }, `move:${id}`);
   }
 
   /** Cameras turn in finer steps than lamps (their wedge shows where they look). */
@@ -335,7 +345,7 @@ export class Floorplan3dPanel extends LitElement {
     if (!id || !b) return;
     const next = structuredClone(b);
     for (const floor of next.floors) floor.placements = floor.placements.filter((p) => p.entity_id !== id);
-    this.data.edit(next);
+    this.editPlan(next);
     this._selDevice = null;
   }
 
@@ -412,7 +422,7 @@ export class Floorplan3dPanel extends LitElement {
       // … and near a wall it turns its back to it and sits flush, as in the editor
       const snap = snapToWall(floor, f, wall);
       if (snap) Object.assign(f, snap);
-    });
+    }, `move:${id}`);
   }
 
   /** Width, depth and height of the selected item, editable in the furnish bar. */
@@ -467,7 +477,7 @@ export class Floorplan3dPanel extends LitElement {
     if (!id || !b) return;
     const next = structuredClone(b);
     for (const floor of next.floors) floor.furniture = floor.furniture.filter((m) => m.id !== id);
-    this.data.edit(next);
+    this.editPlan(next);
     this._selFurniture = null;
   }
 
@@ -477,7 +487,7 @@ export class Floorplan3dPanel extends LitElement {
     if (!b) return;
     const view = reset ? null : this.view3d()?.currentView();
     if (!reset && !view) return;
-    this.data.edit({ ...b, settings: { ...b.settings, start_view: view ?? null } });
+    this.editPlan({ ...b, settings: { ...b.settings, start_view: view ?? null } });
   }
 
   private view3d() {
@@ -857,7 +867,7 @@ export class Floorplan3dPanel extends LitElement {
       .canEdit=${this.data.canEdit}
       .packs=${this.data.packs}
       .building=${this.data.building}
-      @building-edit=${(e: CustomEvent<Building>) => this.data.edit(e.detail)}
+      @building-edit=${(e: CustomEvent<Building>) => this.editPlan(e.detail)}
       @packs-changed=${() => void this.data.reloadPacks()}
     ></fp3d-extensions>`;
   }
@@ -872,6 +882,7 @@ export class Floorplan3dPanel extends LitElement {
       .hass=${this.hass}
       .canEdit=${this.data.canEdit}
       .home=${this.data.homeId}
+      .history=${this.undoHistory}
       .building=${b}
       .narrow=${this.narrow}
       .packs=${this.data.packs}
