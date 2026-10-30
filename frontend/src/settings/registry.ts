@@ -9,7 +9,10 @@ import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS } from "../model.ts";
 import type { HomeAssistant } from "../types.ts";
 import { fromCelsius, tempUnit, toCelsius } from "../devices.ts";
 import { doorbellCamera, doorbellEntities, HOLD_DEFAULT, HOLD_MAX, HOLD_MIN } from "../director.ts";
-import { isRainSource } from "../weather.ts";
+import { isRainSource, weatherEntity } from "../weather.ts";
+import { backdropImage } from "../backdrop.ts";
+import { TABLET_IDLE_DEFAULT } from "../kiosk.ts";
+import { getVoiceSettings, setVoiceSentences, type SentenceMode } from "../api.ts";
 import { hasFeature, released } from "../features.ts";
 import { EFFECT_DEFAULTS } from "../room-effects.ts";
 
@@ -738,8 +741,274 @@ const FUN: Setting[] = [
   },
 ];
 
+type Backdrop = NonNullable<BuildingSettings["backdrop"]>;
+const backdropOf = (env: SettingsEnv): Backdrop => env.building?.settings.backdrop ?? {};
+const backdropColour = (id: string, key: "color" | "color2", label: TextKey, fallback: string, kinds: string[]): Setting<string | null> => ({
+  id,
+  section: "scene",
+  card: "backdrop",
+  scope: "house",
+  permission: "editor",
+  label,
+  keywords: ["background", "colour", "color", "sky"],
+  control: { kind: "colour", fallback },
+  default: null,
+  visible: (env) => kinds.includes(backdropOf(env).kind ?? ""),
+  read: (env) => backdropOf(env)[key] ?? null,
+  write: (env, v) => withPart(env.building!, "backdrop", { [key]: v }),
+});
+
+const SCENE: Setting[] = [
+  houseSwitch("sun_shadow", "scene", "sun", "sun_shadow", true, "sun_shadow", "sun_shadow_hint", ["sun", "arc", "shadow"]),
+  houseSwitch("sun_patches", "scene", "sun", "sun_patches", true, "sun_patches", "sun_patches_hint", ["sun", "floor", "light"]),
+  houseSwitch("window_glow", "scene", "sun", "window_glow", true, "window_glow", "window_glow_hint", ["night", "glow", "light"]),
+  houseEntity("weather_entity", "scene", "weather", "weather_entity", "weather_entity", "weather_entity_hint", (id) => id.startsWith("weather."), (env) => (env.hass ? weatherEntity(env.hass, null) : undefined), ["forecast", "rain", "snow"]),
+  {
+    id: "weather_effects",
+    section: "scene",
+    card: "weather",
+    scope: "house",
+    permission: "editor",
+    label: "weather_effects",
+    hint: "st_weather_effects_hint",
+    keywords: ["rain", "snow", "fog", "clouds", "lightning", "moon"],
+    control: { kind: "checks", options: WEATHER_EFFECTS.map((e) => ({ value: e, label: `weather_effect_${e}` })) },
+    default: [...DEFAULT_WEATHER_EFFECTS],
+    read: (env) => [...(settingsOf(env).weather_effects ?? DEFAULT_WEATHER_EFFECTS)],
+    write: (env, v) => withSettings(env.building!, { weather_effects: WEATHER_EFFECTS.filter((e) => v.includes(e)) }),
+  } as Setting<string[]>,
+  {
+    id: "backdrop.kind",
+    section: "scene",
+    card: "backdrop",
+    scope: "house",
+    permission: "editor",
+    label: "backdrop_kind",
+    hint: "backdrop_hint",
+    keywords: ["background", "sky", "picture", "gradient", "wallpaper"],
+    control: {
+      kind: "segment",
+      options: [
+        { value: "", label: "backdrop_look" },
+        { value: "color", label: "backdrop_color" },
+        { value: "gradient", label: "backdrop_gradient" },
+        { value: "image", label: "backdrop_image" },
+      ],
+    },
+    default: "",
+    read: (env) => backdropOf(env).kind ?? "",
+    write: (env, v) => withPart(env.building!, "backdrop", { kind: (v || null) as Backdrop["kind"] }),
+  } as Setting<string>,
+  backdropColour("backdrop.color", "color", "backdrop_color", "#0b1426", ["color"]),
+  backdropColour("backdrop.top", "color", "backdrop_top", "#0b1426", ["gradient"]),
+  backdropColour("backdrop.bottom", "color2", "backdrop_bottom", "#03060c", ["gradient"]),
+  {
+    id: "backdrop.image",
+    section: "scene",
+    card: "backdrop",
+    scope: "house",
+    permission: "editor",
+    label: "backdrop_image_url",
+    keywords: ["background", "picture", "photo", "local"],
+    control: { kind: "text", placeholder: "st_backdrop_placeholder", maxLength: 500 },
+    default: "",
+    visible: (env) => backdropOf(env).kind === "image",
+    read: (env) => backdropOf(env).image ?? "",
+    write: (env, v) => withPart(env.building!, "backdrop", { image: v.trim() ? (backdropImage(v) ?? v.trim()) : null }),
+  } as Setting<string>,
+  {
+    id: "backdrop.dim",
+    section: "scene",
+    card: "backdrop",
+    scope: "house",
+    permission: "editor",
+    label: "backdrop_dim",
+    keywords: ["background", "darken", "picture"],
+    control: { kind: "range", min: 0, max: 90, step: 5 },
+    default: 45,
+    visible: (env) => backdropOf(env).kind === "image",
+    read: (env) => Math.round((backdropOf(env).dim ?? 0.45) * 100),
+    write: (env, v) => withPart(env.building!, "backdrop", { dim: clamp(v, 0, 90) / 100 }),
+  } as Setting<number>,
+  {
+    id: "terrain.level",
+    section: "scene",
+    card: "backdrop",
+    scope: "house",
+    permission: "editor",
+    label: "terrain_level",
+    hint: "terrain_hint",
+    keywords: ["ground", "cellar", "basement", "hill"],
+    control: { kind: "number", step: 0.05, min: -20, max: 20, unit: "m", clearable: true },
+    default: -0.2,
+    read: (env) => env.building?.settings.terrain?.level ?? null,
+    write: (env, v) => withPart(env.building!, "terrain", { level: v === null ? null : clamp(v, -20, 20) }),
+  } as Setting<number | null>,
+  {
+    id: "terrain.earth",
+    section: "scene",
+    card: "backdrop",
+    scope: "house",
+    permission: "editor",
+    label: "terrain_earth",
+    hint: "terrain_earth_hint",
+    keywords: ["ground", "cellar", "basement", "earth"],
+    control: { kind: "switch" },
+    default: true,
+    read: (env) => env.building?.settings.terrain?.earth !== false,
+    write: (env, v) => withPart(env.building!, "terrain", { earth: v }),
+  } as Setting<boolean>,
+];
+
+const HOUSEHOLD: Setting[] = [
+  {
+    id: "household.notes",
+    section: "household",
+    card: "pinboard",
+    scope: "house",
+    permission: "editor",
+    label: "hh_notes",
+    hint: "hh_notes_hint",
+    keywords: ["pinboard", "notes", "text", "household"],
+    control: { kind: "entity", filter: (id) => /^(input_text|text|sensor)\./.test(id) },
+    default: null,
+    read: (env) => env.building?.settings.household?.notes ?? null,
+    write: (env, v) => withPart(env.building!, "household", { notes: v }),
+  } as Setting<string | null>,
+];
+
+/** A list the editor draws (its own logic), shown as one row. */
+const embedded = (id: string, section: SectionId, card: string, topic: EmbedTopic, label: TextKey, hint: TextKey | undefined, keywords: string[], permission: Permission = "editor", read: (env: SettingsEnv) => unknown = () => null): Setting => ({
+  id,
+  section,
+  card,
+  scope: "house",
+  permission,
+  label,
+  hint,
+  keywords,
+  control: { kind: "embed", topic },
+  default: null,
+  read,
+});
+
+const FAVOURITES: Setting[] = [
+  embedded("favorites", "favourites", "favourites", "favorites", "favorites", undefined, ["star", "scene", "script", "central menu"], "editor", (env) => env.building?.settings.favorites ?? []),
+  embedded("buttons", "favourites", "buttons", "own_buttons", "own_buttons", "own_buttons_hint", ["button", "navigate", "dashboard", "popup", "browser_mod"], "editor", (env) => env.building?.settings.buttons ?? []),
+  embedded("media_presets", "favourites", "presets", "media_presets", "presets", "presets_hint", ["radio", "spotify", "playlist", "speaker", "station"], "editor", (env) => env.building?.settings.media_presets ?? []),
+];
+
+/** Assist's pipelines, for this device's choice (loaded when the Voice section opens). */
+interface Pipelines {
+  pipelines?: { id: string; name: string; stt_engine: string | null }[];
+}
+
+const VOICE: Setting[] = [
+  deviceSwitch("voice_here", "voice", "voice", "voice", false, "st_voice_here", "voice_hint", ["microphone", "speak", "assist"]),
+  {
+    id: "screen_name",
+    section: "voice",
+    card: "voice",
+    scope: "device",
+    permission: "everyone",
+    label: "screen_name",
+    hint: "screen_name_hint",
+    keywords: ["assist", "screen", "name", "home_3d.ask"],
+    control: { kind: "text", placeholder: "screen_name_placeholder", maxLength: 60 },
+    default: "",
+    prefKeys: ["screen"],
+    read: (env) => env.prefs.get("screen") ?? "",
+    write: (env, v) => env.prefs.set("screen", v.trim() || null),
+  } as Setting<string>,
+  {
+    id: "voice_pipeline",
+    section: "voice",
+    card: "voice",
+    scope: "device",
+    permission: "everyone",
+    label: "voice_pipeline",
+    keywords: ["assist", "pipeline", "speech to text"],
+    loader: "voice_pipelines",
+    control: {
+      kind: "select",
+      options: (env) => [
+        { value: "", label: "voice_pipeline_preferred" },
+        ...((env.remote?.voice_pipelines as Pipelines | undefined)?.pipelines ?? []).map((p) => ({ value: p.id, label: p.name, raw: true })),
+        // a choice whose pipeline is gone still shows, so the select doesn't jump
+        ...(env.prefs.get("voicePipeline") && !((env.remote?.voice_pipelines as Pipelines | undefined)?.pipelines ?? []).some((p) => p.id === env.prefs.get("voicePipeline"))
+          ? [{ value: env.prefs.get("voicePipeline")!, label: env.prefs.get("voicePipeline")!, raw: true }]
+          : []),
+      ],
+    },
+    default: "",
+    prefKeys: ["voicePipeline"],
+    read: (env) => env.prefs.get("voicePipeline") ?? "",
+    write: (env, v) => env.prefs.set("voicePipeline", v || null),
+  } as Setting<string>,
+  {
+    id: "voice_sentences",
+    section: "voice",
+    card: "voice",
+    scope: "house",
+    permission: "ha_admin",
+    label: "voice_sentences",
+    hint: "voice_sentences_hint",
+    keywords: ["assist", "sentences", "custom_sentences"],
+    loader: "voice_sentences",
+    control: {
+      kind: "select",
+      options: () => (["off", "distinct", "all"] as const).map((m) => ({ value: m, label: `voice_sentences_${m}` })),
+    },
+    default: "off",
+    read: (env) => (env.remote?.voice_sentences as { sentences?: SentenceMode } | undefined)?.sentences ?? "off",
+    // kept by Home Assistant (a sentence file), not in the plan
+    write: (env, v) => (env.hass ? setVoiceSentences(env.hass, v as SentenceMode) : undefined),
+  } as Setting<string>,
+  {
+    id: "mic_test",
+    section: "voice",
+    card: "voice",
+    scope: "device",
+    permission: "everyone",
+    label: "st_mic_test",
+    hint: "director_mic_hint",
+    keywords: ["microphone", "test", "https"],
+    control: { kind: "action", button: "director_mic_test", action: "mic_probe" },
+    default: null,
+    read: () => null,
+  },
+];
+
+/** What the page loads for the settings kept outside the plan (by a setting's `loader`). */
+export const LOADERS: Record<string, (hass: HomeAssistant) => Promise<unknown>> = {
+  voice_sentences: (hass) => getVoiceSettings(hass),
+  voice_pipelines: (hass) => hass.callWS<Pipelines>({ type: "assist_pipeline/pipeline/list" }),
+};
+
+const ACCESS: Setting[] = [
+  embedded("editors", "access", "editors", "editors", "editors_title", undefined, ["edit", "permission", "users", "admin"], "ha_admin"),
+  embedded("tablet_users", "access", "tablets", "tablet_users", "tablet_users", "st_tablet_users_hint", ["kiosk", "wall", "locked", "tablet"], "ha_admin", (env) => env.building?.settings.tablet_users ?? []),
+  {
+    id: "tablet_idle",
+    section: "access",
+    card: "tablets",
+    scope: "house",
+    permission: "editor",
+    label: "tablet_idle",
+    keywords: ["kiosk", "idle", "return", "whole house"],
+    control: { kind: "number", step: 10, min: 0, max: 86400, unit: "s", clearable: true },
+    default: TABLET_IDLE_DEFAULT,
+    read: (env) => settingsOf(env).tablet_idle ?? null,
+    write: (env, v) => withSettings(env.building!, { tablet_idle: v === null ? null : clamp(Math.round(v), 0, 86400) }),
+  } as Setting<number | null>,
+];
+
+const BACKUP: Setting[] = [embedded("backup", "backup", "backup", "backup", "backup", undefined, ["restore", "export", "import", "file", "history"])];
+
+const ADVANCED: Setting[] = [houseSwitch("demo", "advanced", "advanced", "demo", false, "demo_states", "st_demo_hint", ["sample", "screenshot", "fake"])];
+
 /** Every setting, in the order the page shows them. */
-export const SETTINGS: Setting[] = [...GENERAL, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS] as Setting[];
+export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...VOICE, ...ACCESS, ...BACKUP, ...ADVANCED] as Setting[];
 
 // ---------------------------------------------------------------------------------------------------- queries
 

@@ -191,6 +191,7 @@ export const de: Record<I18nKey, string> = {
   delete: "Löschen",
   new_room: "Raum {n}",
   settings: "Einstellungen",
+  all_settings: "Alle Einstellungen",
   side_resize: "Seitenleiste breiter oder schmaler ziehen",
   furn_extra: "Zusatzwert am Symbol (Sensor, z. B. Wassertemperatur)",
   settings_house: "Haus",

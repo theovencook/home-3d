@@ -15,6 +15,7 @@ import type { HomeAssistant } from "../types.ts";
 import { controls, tokens } from "../styles.ts";
 import {
   GROUPS,
+  LOADERS,
   liveSections,
   mayChange,
   searchSettings,
@@ -133,6 +134,11 @@ export class SettingsPage extends LitElement {
     return settingsTexts(this.t, () => this.hass?.language ?? navigator.language)(key, vars);
   }
 
+  /** The loaders in use: the registry's, unless a test hands in its own. */
+  private get loadersNow(): Loaders {
+    return this.loaders ?? LOADERS;
+  }
+
   private get env(): SettingsEnv {
     return { building: this.building, hass: this.hass, prefs: localPrefs, lastView: this.lastView, remote: this._remote };
   }
@@ -177,10 +183,10 @@ export class SettingsPage extends LitElement {
   /** Fetch what the open section's settings keep outside the plan (once per opening of the page). */
   private askRemote(): void {
     const hass = this.hass;
-    if (!hass || !this.loaders) return;
+    if (!hass) return;
     const wanted = new Set((this._query ? searchSettings(this._query, this.env, (k) => this.tr(k)) : settingsIn(this._section, this.env)).map((s) => s.loader).filter((l): l is string => !!l));
     for (const id of wanted) {
-      if (this.remoteAsked.has(id) || !this.loaders[id]) continue;
+      if (this.remoteAsked.has(id) || !this.loadersNow[id]) continue;
       this.remoteAsked.add(id);
       void this.reload(id);
     }
@@ -188,7 +194,7 @@ export class SettingsPage extends LitElement {
 
   private async reload(id: string): Promise<void> {
     const hass = this.hass;
-    const load = this.loaders?.[id];
+    const load = this.loadersNow[id];
     if (!hass || !load) return;
     try {
       this._remote = { ...this._remote, [id]: await load(hass) };

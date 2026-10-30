@@ -189,6 +189,7 @@ const en = {
   delete: "Delete",
   new_room: "Room {n}",
   settings: "Settings",
+  all_settings: "All settings",
   side_resize: "Drag the side bar wider or narrower",
   furn_extra: "Extra value at the symbol (sensor, e.g. water temperature)",
   settings_house: "House",

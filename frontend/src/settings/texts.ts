@@ -151,6 +151,8 @@ export const SETTINGS_EN: Record<string, string> = {
   st_controls_left: "Left",
   st_controls_right: "Right",
   st_tablet_users_hint: "Ticked users see only the home name, the floors and the View menu: no editor, no settings. A single device works with ?tablet in the address.",
+  st_voice_here: "Microphone button on this device",
+  st_backdrop_placeholder: "/local/background.jpg",
 };
 
 export const SETTINGS_DE: Record<string, string> = {
@@ -302,6 +304,8 @@ export const SETTINGS_DE: Record<string, string> = {
   st_controls_left: "Links",
   st_controls_right: "Rechts",
   st_tablet_users_hint: "Angehakte Benutzer sehen nur den Namen des Zuhauses, die Etagen und das Ansicht-Menü: keinen Editor, keine Einstellungen. Ein einzelnes Gerät geht mit ?tablet in der Adresse.",
+  st_voice_here: "Mikrofon-Taste auf diesem Gerät",
+  st_backdrop_placeholder: "/local/hintergrund.jpg",
 };
 
 /** The page's text for a key: its own (st_…) in English or German, else the main texts (`t`). */
