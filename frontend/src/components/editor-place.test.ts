@@ -71,3 +71,31 @@ test("'Place in the middle' places an armed card the old way, in the selected ro
   assert.deepEqual([f.x, f.z], [1.5, 1.5]);
   assert.equal(ed._placing, null);
 });
+
+test("switching floor or home disarms the card and the hint goes back (#126)", async () => {
+  const ed = await makeEditor(rooms());
+  ed._doc.floors.push({ ...ed._doc.floors[0], id: "g", name: "G", rooms: [], furniture: [] });
+  ed.home = "h1";
+  ed.willUpdate(new Map([["home", undefined]]));
+  ed.addFurniture("chair");
+  assert.match(ed.hintText(), /Click the plan to place/);
+  // the floor menu (Lit runs willUpdate with the old floor id)
+  ed.selectFloor("g");
+  ed.willUpdate(new Map([["_floorId", "f"]]));
+  assert.equal(ed._placing, null);
+  assert.equal(ed._placeAt, null);
+  assert.doesNotMatch(ed.hintText(), /Click the plan to place/);
+  // the next click on the new floor places nothing
+  ed.press(100, 100);
+  await settle();
+  assert.equal(ed._doc.floors.find((f: { id: string }) => f.id === "g").furniture.length, 0);
+  // another home
+  ed.addFurniture("chair");
+  ed.home = "h2";
+  ed.willUpdate(new Map([["home", "h1"]]));
+  assert.equal(ed._placing, null);
+  // an edit from elsewhere on the same floor and home keeps it armed
+  ed.addFurniture("chair");
+  ed.willUpdate(new Map([["_doc", ed._doc]]));
+  assert.equal((ed._placing as { type: string } | null)?.type, "chair");
+});
