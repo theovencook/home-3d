@@ -7,6 +7,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ### Library and packs
 
+- **Vehicles catalogue:** about 195 cars (the most popular models of 20 brands, at their real outer sizes), four snowmobiles, bikes (road, gravel, mountain, e-mountain, folding, BMX, cargo, balance), motorbikes, golf carts, quad bikes, mobility scooters, scooters, a compact tractor, a caravan and trailers in the Garden & outdoor pack. A new colour role `paint` gives every vehicle a paint colour: ten base colours and a hex value in the item panel. Checklist with sizes and sources: `docs/vehicles.md`.
 - **The core pack is split and retired:** its 847 items moved into themed packs (Living, Bedroom & kids, Kitchen & bath, Office & tech, IT & network, Decor & plants, Garden & outdoor, Household & building, plus the Smart-home devices and Makers packs). Item ids are unchanged; plans migrate on load through `moved_items.json`.
 - **Pack format v2:** a pack is a folder (`pack.json` plus one JSON file per item, no code), checked like before. A pack holds up to 1000 items.
 - **Bundled packs:** `theovencook.core` (furniture, lamps, media, office and network gear, kitchen and bath, heating and energy, decor, plants, outdoor, vehicles and architecture) and `theovencook.ikea-uk` (IKEA UK models, searchable by their IKEA name) come with the integration, next to two themed packs: `theovencook.makers` (3D printers and workshop kit) and `theovencook.devices` (smart-home devices). The library can be narrowed to one pack.

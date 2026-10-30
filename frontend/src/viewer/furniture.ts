@@ -35,6 +35,7 @@ const THEME = {
   plantTop: 0x1a4540,
   pot: 0x1d2640,
   accent: 0x2b8fb3,
+  paint: 0x2a4a78,
 };
 
 type Palette = Record<keyof typeof THEME, number>;

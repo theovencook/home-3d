@@ -140,6 +140,12 @@ export function createHome(hass: HomeAssistant, name: string, options: CreateHom
   return hass.callWS({ type: "home_3d/homes/create", name, ...(options.areaImport === false ? { area_import: false } : {}) });
 }
 
+/** Add the sample home (#54) as a new home of its own: a demo home (#100) with placeholder devices; no home is
+ * overwritten and the active home stays as it is. */
+export function loadSampleHome(hass: HomeAssistant): Promise<HomesList & { home: HomeInfo }> {
+  return hass.callWS({ type: "home_3d/homes/load_sample" });
+}
+
 export function renameHome(hass: HomeAssistant, home: string, name: string): Promise<HomesList> {
   return hass.callWS({ type: "home_3d/homes/rename", home_id: home, name });
 }

@@ -144,9 +144,9 @@ test("'Show on displays' makes the open home the active one without asking (#58)
 });
 
 test("'Show on displays' is offered only while the open home is not the active one (#58)", () => {
-  assert.deepEqual(homeActions(HOMES, "home", "flat"), ["show", "new", "rename", "duplicate", "delete"]);
-  assert.deepEqual(homeActions(HOMES, "home", "home"), ["new", "rename", "duplicate", "delete"]);
-  assert.deepEqual(homeActions(HOMES.slice(0, 1), "home", "home"), ["new", "rename", "duplicate"]);
+  assert.deepEqual(homeActions(HOMES, "home", "flat"), ["show", "new", "sample", "rename", "duplicate", "delete"]);
+  assert.deepEqual(homeActions(HOMES, "home", "home"), ["new", "sample", "rename", "duplicate", "delete"]);
+  assert.deepEqual(homeActions(HOMES.slice(0, 1), "home", "home"), ["new", "sample", "rename", "duplicate"]);
 });
 
 /** A switcher showing "home" whose dialog answers with `answers`, one per question. */

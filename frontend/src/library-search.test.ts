@@ -229,3 +229,16 @@ test("warming the index up front prepares each entry once and leaves the search 
   assert.equal(warmIndex(fresh), 0, "already prepared");
   assert.deepEqual(labels(fresh, "so"), before);
 });
+
+test("catalogue: the car catalogue is found by brand, model and body, and 'car' still lists cars (#129)", () => {
+  const puma = searchLibrary(catalogue, { ...none, query: "ford puma" }).hits;
+  assert.equal(puma[0].label, "Ford Puma", top(puma, 3));
+  const tesla = searchLibrary(catalogue, { ...none, query: "tesla" }).hits;
+  assert.ok(tesla.slice(0, 7).every((e) => /tesla/i.test(e.label)), top(tesla, 7));
+  const suv = searchLibrary(catalogue, { ...none, query: "suv" }).hits;
+  assert.ok(suv.slice(0, 10).every((e) => e.kind === "vehicle"), top(suv, 10));
+  const cars = searchLibrary(catalogue, { ...none, query: "car" }).hits;
+  assert.ok(cars.filter((e) => e.kind === "vehicle").length >= 150, "the catalogue cars are among the hits for car");
+  const bikes = searchLibrary(catalogue, { ...none, query: "snowmobile" }).hits;
+  assert.ok(bikes.length >= 4 && bikes.slice(0, 4).every((e) => /snowmobile/i.test(e.label)), top(bikes, 5));
+});

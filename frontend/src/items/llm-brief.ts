@@ -47,6 +47,7 @@ const ROLES: Record<(typeof COLOUR_ROLES)[number], string> = {
   plant: "leaves",
   pot: "plant pots, ceramics, terracotta",
   accent: "a highlight colour: buttons, LEDs, a coloured detail",
+  paint: "the paint of a vehicle body, which the owner can change to any car colour",
 };
 
 function range([lo, hi]: readonly [number, number]): string {

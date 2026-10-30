@@ -180,3 +180,23 @@ test("in Doors & windows mode with nothing selected the sidebar offers the kind 
   el._tool = "select";
   assert.doesNotMatch(markup(el.renderSide(el._doc.floors[0])), /fp3d-presets/);
 });
+
+test("a mouse move in Doors & windows mode writes the new hint into the hint bar; only a changed snap guide renders the plan again (#130)", () => {
+  const el = editor();
+  const text = { textContent: "" };
+  el.renderRoot = { activeElement: null, querySelector: (sel: string) => (sel === ".fp3d-hint-text" ? text : { getBoundingClientRect: () => ({ left: 0, top: 0 }) }) };
+  // with Alt held nothing snaps, so no snap guide changes either; nothing is waiting to render now
+  const move = (at: [number, number], on: string | null = null) => {
+    const target = { closest: (sel: string) => (on && sel === "[data-opening]" ? { getAttribute: () => on } : null) };
+    el.onPointerMove({ pointerId: 1, pointerType: "mouse", clientX: at[0] * SCALE + 100, clientY: at[1] * SCALE + 100, target, altKey: true });
+  };
+  move([3, 2]);
+  el.isUpdatePending = false;
+  move([4.5, 0]);
+  assert.match(text.textContent, /add here: door/i);
+  move([1.5, 0], "d1");
+  assert.match(text.textContent, /select: door/i);
+  move([3, 2]);
+  assert.equal(text.textContent, el.t("hint_opening", { kind: "Door" }));
+  assert.equal(el.isUpdatePending, false);
+});

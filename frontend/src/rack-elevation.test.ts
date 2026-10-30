@@ -129,3 +129,14 @@ test("linked gear shows its status LED in the front view, in the status colour; 
   // without statuses nothing changes
   assert.doesNotMatch(rackElevation(cabinet(slots)).svg, /fp3d-el-led/);
 });
+
+test("each piece of gear comes with its box in drawing pixels, its slot and its full name, for tooltips over a picture of the drawing (#130)", () => {
+  const el = rackElevation(cabinet([{ id: "a", type: SWITCH, u: 1, name: "Core switch with a name too long to show across it in full" }, { id: "b", type: PATCH, u: 3 }]));
+  const drawn = pieces(el.svg);
+  assert.deepEqual(
+    el.gear.map((g) => [g.slot, g.title]),
+    [["a", "Core switch with a name too long to show across it in full"], ["b", "Rack patch panel 24-port 1U"]],
+  );
+  for (const [i, g] of el.gear.entries()) assert.deepEqual([g.x, g.y, g.w, g.h], [drawn[i].x, drawn[i].y, drawn[i].w, drawn[i].h]);
+  assert.equal(el.label, "Rack");
+});

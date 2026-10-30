@@ -1,7 +1,7 @@
 {
   "id": "slzb_06",
   "name": {"en": "SMLIGHT SLZB-06 Ethernet Zigbee coordinator"},
-  "size": [0.16,0.022,0.024],
+  "size": [0.16,0.024,0.028],
   "group": "tech",
   "room": ["office", "utility", "hall", "living", "loft"],
   "tags": ["zigbee stick", "zigbee dongle", "coordinator", "zigbee coordinator", "slzb-06", "slzb", "smlight", "poe", "ethernet", "network zigbee", "home assistant", "smart home"],
