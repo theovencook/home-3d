@@ -1,7 +1,7 @@
 {
   "id": "rog_ally",
   "name": {"en": "ROG Ally-style handheld"},
-  "size": [0.28, 0.111, 0.0212],
+  "size": [0.28, 0.111, 0.0324],
   "group": "media",
   "room": ["living", "bedroom", "kids", "hobby", "loft", "office"],
   "tags": ["rog ally", "rog ally x", "asus", "legion go", "handheld", "gaming", "pc handheld", "console"],

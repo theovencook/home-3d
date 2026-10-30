@@ -1,7 +1,7 @@
 {
   "id": "steam_deck_dock",
   "name": {"en": "Steam Deck in dock"},
-  "size": [0.3, 0.11, 0.15],
+  "size": [0.298, 0.075, 0.14],
   "group": "media",
   "room": ["living", "bedroom", "kids", "hobby", "loft", "office"],
   "tags": ["steam deck dock", "steam deck docking station", "steam deck", "valve", "steam", "handheld", "gaming", "docked"],
@@ -11,10 +11,9 @@
   "mount": "surface",
   "watts": 20,
   "parts": [
-    {"shape": "rbox", "x": 0.0, "z": 0.0, "w": 0.55, "d": 0.9, "y": 0.0, "h": 0.18, "color": "#2a2c31", "round": 0.2},
-    {"shape": "box", "x": 0.0, "z": -0.3, "w": 0.55, "d": 0.28, "y": 0.18, "h": 0.4, "color": "#2a2c31"},
-    {"shape": "rbox", "x": 0.0, "z": -0.1, "w": 1.0, "d": 0.4455, "y": 0.2, "h": 0.78, "color": "#2a2c31", "round": 0.3},
-    {"shape": "box", "x": 0.0, "z": 0.1318, "w": 0.58, "d": 0.0091, "y": 0.22, "h": 0.6333, "color": "glass", "edges": "faint"}
+    {"shape": "rbox", "x": 0.0, "z": 0.0, "w": 0.3926, "d": 0.6733, "y": 0.0, "h": 0.2071, "color": "#2a2c31", "round": 0.2},
+    {"shape": "rbox", "x": 0.0, "z": 0.0, "w": 1.0, "d": 0.6533, "y": 0.1429, "h": 0.8357, "color": "#2a2c31", "round": 0.3},
+    {"shape": "box", "x": 0.0, "z": 0.34, "w": 0.6376, "d": 0.0133, "y": 0.25, "h": 0.6786, "color": "glass", "edges": "faint"}
   ],
   "symbol": [
     {"shape": "rect", "x": 0.0, "z": 0.0, "w": 1.0, "d": 1.0}
