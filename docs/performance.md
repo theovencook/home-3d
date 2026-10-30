@@ -240,3 +240,64 @@ Measured 30 Oct 2026, before (integration @ `29a6b81`) and after the #121 change
 
 - A real wall tablet and its GPU, and the live Home with a real rack:.
 - How the slab looks against the detail at the switch distance: checked by eye in the harness on the desktop only.
+
+## Editor renders and selection (#130)
+
+Measured 30 Oct 2026, before (integration @ `b650ade`) and after the #130 change, on the same local plan. No Home Assistant was involved and nothing was saved.
+
+### What changed
+
+- **Entity lists are kept.** The link pickers' entity lists (`entity-options.ts`) are made once per list and kept until an entity comes or goes or the entity, device or area registry changes. A list is named by its filter's source plus whatever the filter captures, so a filter closure made anew on every render still finds its list. What "automatic" would link (it clones the plan's floors and searches every entity) is kept per plan and registry the same way.
+- **A state change renders only what it touches.** While the editor renders, it notes which states it reads (`hass-watch.ts`). A new `hass` that changes only states the last render did not read skips the render; a 3D view inside the editor still gets the new `hass`. The plan still renders again when, say, a lamp on it switches, and a registry, language or user change always renders.
+- **Drags copy one floor.** A drag (item, block, resize, rotate, door or window, wall, device pin) copies only the floor being edited on each pointer move. The other floors, the settings and the plan's recipe copies are shared.
+- **Doors & windows hover.** The hint text is written straight into the hint bar, the tool no longer keeps a cursor point it never draws, and a snap guide that comes out the same doesn't render the plan again.
+- **Rack front view.** The rack's front view in the item panel is one picture of the drawing, with an empty box over each piece of gear that carries its name as a tooltip. Drawn inline, it was hundreds of SVG elements to style and lay out on every rack selection.
+
+### Method
+
+- **Browser:** headless Edge (Chromium) through puppeteer, a 1280 x 800 page at DPR 1, with **real CPU throttling** (DevTools `Emulation.setCPUThrottlingRate` 4x) as in #121. The "4x est." column is the 1x time multiplied by 4, as in #97.
+- **Plan:** a local harness with a synthetic plan: 2 floors of 16 rooms, 501 items (a third linked to entities, every lamp linked to a light), 64 doors and windows, 120 placed device pins, a **42U floor cabinet holding 40 devices** (half linked), and recipe copies, about 0.9 MB in all. The fake `hass` has 5,037 entities across 16 domains, a device and area registry and 30 areas. The 3D pane beside the plan was off, so the numbers are the editor alone.
+- **Measures**, timed from page JS as in #97 (event dispatched to `updateComplete` plus a task after the next `requestAnimationFrame`): selection by a plan press, 30 presses each alternating a linked item, the rack and a plain item without links; background load as 5 `hass` updates a second for 5 s with an item selected and with nothing selected (one random state changes in each); 5 drags of 30 moves; 40 mouse moves in the select tool and in Doors & windows. The machine was busy with other work, so before and after ran alternately, twice each. The tables show **median / worst**, the two runs as a range.
+
+### Results
+
+| Measure | Before 1x | After 1x | Before 4x | After 4x | After 4x est. |
+|---|---|---|---|---|---|
+| Select a linked item | 36 to 41 / 88 ms | **18 to 19** / 128 ms | 241 to 263 / 707 ms | **116 to 140** / 949 ms | 72 to 77 ms |
+| Select a plain item | 20 to 21 / 35 ms | **14 to 15** / 25 ms | 127 to 132 / 196 ms | **94 to 112** / 162 ms | 54 to 59 ms |
+| Select the rack | 30 to 34 / 55 ms | **18 to 20** / 67 ms | 189 to 224 / 373 ms | **137 to 162** / 380 ms | 74 to 81 ms |
+| Editor renders, item selected, 5 updates/s | 5 /s, 118 to 129 ms/s | **0.8 /s, 5 to 6 ms/s** | 4.6 /s, 621 to 647 ms/s | **0.8 /s, 25 to 26 ms/s** | |
+| Editor renders, nothing selected | 5 /s, 15 to 19 ms/s | **0.8 /s, 3 to 4 ms/s** | 2.8 /s, 58 to 61 ms/s | **0.8 /s, 17 to 18 ms/s** | |
+| Drag, move to paint | 46 to 47 / 69 ms | **30 to 31** / 47 ms | 256 to 266 / 995 ms | **149 to 160** / 264 ms | |
+| Doors & windows hover, move to paint | 8.5 to 8.6 / 26 ms | 7.7 to 8.3 / 24 ms | 34 to 54 / 90 ms | **21 to 25** / 78 ms | |
+| Select-tool hover (no change expected) | 6.1 / 12 ms | 6.0 / 16 ms | 6.0 to 6.3 / 14 ms | 6.0 to 6.1 / 11 ms | |
+
+At 4x with an item selected, before, long tasks took 662 to 688 ms of every second with no input at all. After, they take 11 ms/s. The renders left (0.8 a second) are the ones whose states are on the plan, such as a lamp that switched or a device pin's state.
+
+The worst linked selection (128 ms at 1x, 949 ms at 4x) is the first selection after the lists were dropped: it builds every entity list of that item's form once. The next selections of any item reuse them.
+
+Where a selection's time goes now, at 4x (median of 12):
+
+| Item | `update()` (render) | `updated()` (layout forced by the scroll reset) | Frame (style, layout, paint) | Total |
+|---|---|---|---|---|
+| Linked, before | 153 to 159 ms | 35 to 37 ms | 40 to 49 ms | 241 to 245 ms |
+| Linked, after | 49 to 53 ms | 40 to 44 ms | 51 to 52 ms | 148 to 152 ms |
+| Plain, after | 25 to 29 ms | 24 to 28 ms | 44 to 46 ms | 102 to 105 ms |
+| Rack, before | 82 to 90 ms | 51 ms | 55 to 58 ms | 188 to 208 ms |
+| Rack, after | 36 to 45 ms | 31 to 41 ms | 47 to 53 ms | 121 to 146 ms |
+
+### Findings per point
+
+1. **Entity lists: fixed.** The lists took most of a linked item's render (`entityOptions` 14 of 31 ms at 1x). After, a selection takes 3 ms for the lists, and 0 when they are already kept.
+2. **Re-render on every `hass` update: fixed.** It now renders 0.8 times a second instead of 5, and with an item selected it spends 5 ms/s on renders instead of 120 ms/s at 1x. The item form wasn't split into child components: noting the states each render reads covers the plan and the panel together and changes no markup.
+3. **Forced layout on selection (#71 scroll reset, `select option[selected]` pass): not worth it.** Without the scroll reset, `updated()` drops to 1 to 2 ms, but the frame's own layout grows by the same amount, and the total stayed the same (165 against 162 ms linked, 124 against 105 ms plain, at 4x). The layout is the new panel's, and it has to happen once anyway. The option pass costs about 2 ms at 4x. Both are unchanged.
+4. **Drag clones the whole plan: fixed.** A move now copies one floor and takes 30 ms at 1x instead of 47. At 4x the median is 149 to 160 ms (was 256 to 266) and the worst is 264 ms (was 995). The side panel still follows the drag, so X and Z update live.
+5. **Doors & windows hover hint: fixed.** At 4x a hover takes 21 to 25 ms (was 34 to 54). At 1x it was already cheap on this plan (8 ms). A snap guide that really moves still renders the plan, as before.
+6. **Rack selection: fixed.** Before, the rack cost 1.5 to 1.7x a plain item. It now costs the same as a linked item (18 to 20 ms against 18 to 19 at 1x) and about 1.3x a plain item that has no links. The rest is the rack form's own fields, such as the frame choice and the gear list.
+
+**Budget:** by #97's 4x estimate, every selection is now under 100 ms (54 to 81 ms). With real 4x throttling on a busy desktop, a plain item is at about 100 ms, and linked items and the rack are at 116 to 162 ms. What's left is mostly the browser's style, layout and paint of the new panel (about 70 to 90 ms of it at 4x). `contain` on the side panel and the plan made no difference to that.
+
+### Not measured (still to measure)
+
+- A real wall tablet, and the live large home with its real entities and rack.
+- The 3D pane beside the plan (#131 changes how it updates).
