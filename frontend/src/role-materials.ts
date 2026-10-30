@@ -19,6 +19,7 @@ const USUAL: Partial<Record<ColourRole, Material>> = {
   metal: "metal",
   glass: "glass",
   white: "gloss",
+  paint: "gloss",
 };
 
 const isMaterial = (m: unknown): m is Material => typeof m === "string" && (MATERIALS as readonly string[]).includes(m);

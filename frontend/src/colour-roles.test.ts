@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { COLOUR_PRESETS, COLOUR_ROLES, itemColourRoles, setRoleColour } from "./colour-roles.ts";
+import { COLOUR_PRESETS, COLOUR_ROLES, PAINT_COLOURS, itemColourRoles, parseHex, setRoleColour } from "./colour-roles.ts";
 import { setPacks, type FurniturePack } from "./packs.ts";
 
 const pack: FurniturePack = {
@@ -21,8 +21,51 @@ const pack: FurniturePack = {
   ],
 };
 
-test("the colour roles are the eleven of the plan, in the panel's order", () => {
-  assert.deepEqual([...COLOUR_ROLES], ["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent"]);
+test("the colour roles are the twelve of the plan (paint is the car's body colour), in the panel's order", () => {
+  assert.deepEqual([...COLOUR_ROLES], ["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent", "paint"]);
+});
+
+test("paint colours: ten base colours, each a #rrggbb with a unique id (#129)", () => {
+  assert.equal(PAINT_COLOURS.length, 10);
+  assert.deepEqual(
+    PAINT_COLOURS.map((c) => c.id),
+    ["white", "black", "silver", "grey", "blue", "red", "green", "orange", "bronze", "dark_blue"],
+  );
+  for (const c of PAINT_COLOURS) assert.match(c.hex, /^#[0-9a-f]{6}$/, c.id);
+  assert.equal(new Set(PAINT_COLOURS.map((c) => c.hex)).size, 10);
+});
+
+test("a typed hex value: with or without #, three or six digits, any case; anything else is not a colour (#129)", () => {
+  assert.equal(parseHex("#C0392B"), "#c0392b");
+  assert.equal(parseHex("c0392b"), "#c0392b");
+  assert.equal(parseHex(" #f80 "), "#ff8800");
+  assert.equal(parseHex("red"), null);
+  assert.equal(parseHex("#12345"), null);
+  assert.equal(parseHex(""), null);
+});
+
+test("a pack car's paint role is listed for the item panel, and saved on the placed item like any role (#129)", () => {
+  setPacks([
+    {
+      id: "demo.cars",
+      name: "Cars",
+      publisher: "Demo",
+      items: [
+        {
+          id: "hatch",
+          name: { en: "Hatch" },
+          size: [1.8, 4, 1.5],
+          parts: [
+            { shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0.2, h: 0.4, color: "paint" },
+            { shape: "box", x: 0, z: 0, w: 0.8, d: 0.5, y: 0.6, h: 0.3, color: "glass" },
+          ],
+        },
+      ],
+    },
+  ]);
+  assert.deepEqual(itemColourRoles("pack:demo.cars:hatch"), ["glass", "paint"]);
+  assert.deepEqual(setRoleColour(null, "paint", "#C0392B"), { paint: "#c0392b" });
+  setPacks([]);
 });
 
 test("an item's roles: a pack item's from its parts (fixed colours aside), a built-in's from its model (#12)", () => {

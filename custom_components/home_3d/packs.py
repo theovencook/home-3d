@@ -27,7 +27,20 @@ _LOGGER = logging.getLogger(__name__)
 # The lists and limits of an item. The item editor's brief for an LLM (frontend/src/item-format.ts, #14) states the
 # same ones, and a frontend test reads them from here, so keep these names and keep each a plain literal.
 PART_SHAPES = ["box", "cyl", "loft", "sphere", "lathe", "rbox"]
-COLOUR_ROLES = ["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent"]
+COLOUR_ROLES = [
+    "body",
+    "fabric",
+    "cushion",
+    "wood",
+    "white",
+    "metal",
+    "dark",
+    "glass",
+    "plant",
+    "pot",
+    "accent",
+    "paint",
+]
 MOUNTS = ["floor", "surface", "wall", "ceiling"]
 LIGHTS = [
     "ceiling",

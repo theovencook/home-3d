@@ -16,6 +16,27 @@ export type RoleColours = Partial<Record<ColourRole, string>>;
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
+/** A car's paint: ten base colours (#129) for the `paint` role; the i18n key is `paint_<id>`. */
+export const PAINT_COLOURS: readonly ColourPreset[] = [
+  { id: "white", hex: "#f2f2ee" },
+  { id: "black", hex: "#1b1c1f" },
+  { id: "silver", hex: "#b9bdc3" },
+  { id: "grey", hex: "#6c7075" },
+  { id: "blue", hex: "#2f63b5" },
+  { id: "red", hex: "#b3262d" },
+  { id: "green", hex: "#2f6b45" },
+  { id: "orange", hex: "#e08a1e" },
+  { id: "bronze", hex: "#7d5a3a" },
+  { id: "dark_blue", hex: "#17274a" },
+];
+
+/** A typed colour: "#rrggbb", "rrggbb" or "#rgb" (any case, spaces round it) as lower-case "#rrggbb"; null when it is none. */
+export function parseHex(text: string): string | null {
+  const t = text.trim().replace(/^#/, "").toLowerCase();
+  if (/^[0-9a-f]{3}$/.test(t)) return `#${t[0]}${t[0]}${t[1]}${t[1]}${t[2]}${t[2]}`;
+  return /^[0-9a-f]{6}$/.test(t) ? `#${t}` : null;
+}
+
 /** An item's own colour for a role ("#rrggbb"), or null when the role follows the theme. */
 export function roleColour(colors: RoleColours | null | undefined, role: ColourRole): string | null {
   const hex = colors?.[role];
