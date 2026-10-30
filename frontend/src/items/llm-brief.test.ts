@@ -95,3 +95,8 @@ test("the brief says where in the item editor the answer goes, by the editor's o
   assert.ok(brief.includes(`${ITEMS_EN.ie_paste} → ${ITEMS_EN.ie_paste_import}`), "the paste box and its button");
   assert.ok(brief.includes(ITEMS_EN.ie_import), "the file import");
 });
+
+test("the brief lets the LLM answer several items as one JSON list, which the paste box takes (#84)", () => {
+  const brief = llmBrief({ kinds: KINDS, rooms: ROOMS });
+  assert.match(brief, /several items[^.]*JSON list/i);
+});
