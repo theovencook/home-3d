@@ -1255,7 +1255,7 @@ const ADVANCED: Setting[] = [
   { ...embedded("presence", "advanced", "people", "presence", "presence", "presence_hint", ["presence", "espresense", "bermuda", "room sensor"]), visible: () => SHOW_PRESENCE },
 ];
 
-/** Where the dashboard cards' options are (they stay in each card's editor, Toby's decision on #139). */
+/** Where the dashboard cards' options are (they stay in each card's editor, as decided on #139). */
 const CARDS: Setting[] = [
   {
     id: "dashboard_cards",
