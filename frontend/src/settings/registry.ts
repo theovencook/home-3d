@@ -860,7 +860,70 @@ const SCENE: Setting[] = [
   } as Setting<boolean>,
 ];
 
+const householdOf = (env: SettingsEnv) => env.building?.settings.household ?? {};
+/** An hour of the bins' glow (Household): 0–24 in half hours, for every bin. */
+const binHour = (id: "bin_from" | "bin_until", label: TextKey, def: number, hint?: TextKey): Setting<number> => ({
+  id: `household.${id}`,
+  section: "household",
+  card: "bins",
+  scope: "house",
+  permission: "editor",
+  label,
+  hint,
+  keywords: ["bin", "waste", "rubbish", "glow", "pickup"],
+  control: { kind: "number", step: 0.5, min: 0, max: 24, unit: "h" },
+  default: def,
+  visible: () => hasFeature("household"),
+  read: (env) => householdOf(env)[id] ?? def,
+  write: (env, v) => withPart(env.building!, "household", { [id]: clamp(v, 0, 24) }),
+});
+
 const HOUSEHOLD: Setting[] = [
+  binHour("bin_from", "st_bin_from", 14, "bin_hint"),
+  binHour("bin_until", "st_bin_until", 12),
+  {
+    id: "household.bin_next_only",
+    section: "household",
+    card: "bins",
+    scope: "house",
+    permission: "editor",
+    label: "bin_next_only",
+    keywords: ["bin", "tag", "label", "pickup"],
+    control: { kind: "switch" },
+    default: false,
+    visible: () => hasFeature("household"),
+    read: (env) => !!householdOf(env).bin_next_only,
+    write: (env, v) => withPart(env.building!, "household", { bin_next_only: v || null }),
+  } as Setting<boolean>,
+  {
+    id: "household.bin_days",
+    section: "household",
+    card: "bins",
+    scope: "house",
+    permission: "editor",
+    label: "bin_days",
+    hint: "bin_tags_hint",
+    keywords: ["bin", "tag", "days", "before"],
+    control: { kind: "number", step: 1, min: 0, max: 60, clearable: true },
+    default: null,
+    visible: () => hasFeature("household"),
+    read: (env) => householdOf(env).bin_days ?? null,
+    write: (env, v) => withPart(env.building!, "household", { bin_days: v === null ? null : clamp(Math.round(v), 0, 60) }),
+  } as Setting<number | null>,
+  {
+    id: "household.kerb",
+    section: "household",
+    card: "bins",
+    scope: "house",
+    permission: "editor",
+    label: "bin_kerb",
+    hint: "st_kerb_note",
+    keywords: ["bin", "kerb", "street", "calendar"],
+    control: { kind: "action", button: "st_open_editor", action: "editor" },
+    default: null,
+    visible: () => hasFeature("household"),
+    read: () => null,
+  },
   {
     id: "household.notes",
     section: "household",
@@ -1003,6 +1066,14 @@ const ACCESS: Setting[] = [
   } as Setting<number | null>,
 ];
 
+const ENERGY: Setting[] = [
+  embedded("energy.balance", "energy", "meters", "energy_balance", "energy_balance", "energy_balance_hint", ["grid", "solar", "battery", "tariff", "cheap rate", "off-peak", "gas", "water", "meter", "sensor", "import"], "editor", (env) => env.building?.energy ?? null),
+  {
+    ...embedded("hologram", "energy", "hologram", "hologram", "holo_settings", "holo_settings_hint", ["hologram", "solar", "cards", "energy pro"], "editor", (env) => env.building?.settings.roof.hologram ?? null),
+    visible: () => hasFeature("energy_pro"),
+  },
+];
+
 const BACKUP: Setting[] = [embedded("backup", "backup", "backup", "backup", "backup", undefined, ["restore", "export", "import", "file", "history"])];
 
 const opts = (pairs: [string, TextKey][]): Option[] => pairs.map(([value, label]) => ({ value, label }));
@@ -1050,7 +1121,7 @@ const LOOK: Setting[] = [
 const ADVANCED: Setting[] = [houseSwitch("demo", "advanced", "advanced", "demo", false, "demo_states", "st_demo_hint", ["sample", "screenshot", "fake"])];
 
 /** Every setting, in the order the page shows them. */
-export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...VOICE, ...ACCESS, ...BACKUP, ...ADVANCED] as Setting[];
+export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...ENERGY, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...VOICE, ...ACCESS, ...BACKUP, ...ADVANCED] as Setting[];
 
 // ---------------------------------------------------------------------------------------------------- queries
 

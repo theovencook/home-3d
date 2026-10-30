@@ -190,6 +190,8 @@ const en = {
   new_room: "Room {n}",
   settings: "Settings",
   all_settings: "All settings",
+  settings_moved_energy: "Meters, tariff, cheap rate and the hologram are on the Settings page.",
+  settings_moved_bins: "When bins glow and which carry a tag is set for all bins on the Settings page.",
   side_resize: "Drag the side bar wider or narrower",
   furn_extra: "Extra value at the symbol (sensor, e.g. water temperature)",
   settings_house: "House",

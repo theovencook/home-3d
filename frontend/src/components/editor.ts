@@ -4443,7 +4443,8 @@ export class Fp3dEditor extends LitElement {
       return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("furniture", null)}>‹ ${this.t("tool_energy")}</button>
         ${this.renderFurnitureForm(device)}`;
     const pro = hasFeature("energy_pro");
-    return html`${this.renderEnergyChecklist()}${this.renderSolarList()}${this.renderEnergyDevices()}${this.renderEnergyBalance()}${pro ? this.renderCableSettings() : nothing}${pro ? this.renderHologramSettings() : nothing}`;
+    return html`${this.renderEnergyChecklist()}${this.renderSolarList()}${this.renderEnergyDevices()}${pro ? this.renderCableSettings() : nothing}
+      ${this.renderSettingsLink("energy", null, "settings_moved_energy")}`;
   }
 
   /**
@@ -6637,6 +6638,16 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+  /**
+   * Where a house-wide setting went (#139): a line in a tool panel or item form that opens the Settings page at it.
+   * `text` says what is there; `icon` leads it (a lock's state).
+   */
+  private renderSettingsLink(section: string, id: string | null, text: I18nKey, icon = "⚙") {
+    return html`<button class="fp3d-settings-link fp3d-wide" @click=${() => this.openSettings(section, id)}>
+      <span>${icon} ${this.t(text)}</span><b>${this.t("settings")} ›</b>
+    </button>`;
+  }
+
   /** Opens the Settings page (#139) at a section and setting; the panel listens. */
   private openSettings(section: string | null, id: string | null = null): void {
     this.dispatchEvent(new CustomEvent("open-settings", { detail: { section, id }, bubbles: true, composed: true }));
@@ -6982,6 +6993,8 @@ export class Fp3dEditor extends LitElement {
       this.askEditors();
       body = this.editorsList ? html`<div class="fp3d-form">${this.renderTabletUsers(this.editorsList.users)}</div>` : html`<p class="fp3d-sub">${this.t("loading")}</p>`;
     } else if (topic === "backup") body = this.renderBackup();
+    else if (topic === "energy_balance") body = this.renderEnergyBalance();
+    else if (topic === "hologram") body = this.renderHologramSettings();
     return html`<div class="fp3d-embed">${body}</div>`;
   }
 
@@ -11791,11 +11804,7 @@ export class Fp3dEditor extends LitElement {
           ? nothing
           : html`${admin ? html`<button class="fp3d-btn fp3d-primary" @click=${() => this.addFloor()}>${this.t("first_floor_add")}</button>` : nothing}
               <p class="fp3d-sub">${this.t("floor_none_hint")}</p>`}
-        ${admin && floor
-          ? html`<button class="fp3d-btn" aria-pressed=${!!this._doc.settings.lock_plan} title=${this.t("lock_plan_hint")} @click=${() => this.toggleLockPlan()}>
-              ${this.t(this._doc.settings.lock_plan ? "plan_unlock" : "plan_lock")}
-            </button>`
-          : nothing}
+        ${admin && floor ? this.renderSettingsLink("general", "lock_plan", this._doc.settings.lock_plan ? "plan_locked" : "plan_lock", this._doc.settings.lock_plan ? "🔒" : "🔓") : nothing}
         ${floor
           ? html`<div class="fp3d-form">
               <label class="fp3d-field fp3d-wide"
@@ -13345,14 +13354,6 @@ export class Fp3dEditor extends LitElement {
     this.updateFurniture({ colors: setRoleColour(f.colors, "paint", hex) });
   }
 
-  /** Awning: its fall, the valance, a position sensor, its run time and the other direction (with the cover above). */
-  /** Haushalt Pro: the house's household settings (the hours the bins glow – for all bins). */
-  private setHousehold(patch: NonNullable<Building["settings"]["household"]>): void {
-    const next = structuredClone(this._doc);
-    next.settings.household = { ...(next.settings.household ?? {}), ...patch };
-    this.setDoc(next);
-  }
-
   /**
    * Waste bin and mailbox: shape and colours for everyone; the waste calendar and the post sensors with Haushalt Pro
    * (a teaser while it is locked).
@@ -13397,9 +13398,6 @@ export class Fp3dEditor extends LitElement {
                 >${this.t("bin_match")}
                 <input type="text" .value=${f.bin_match ?? ""} placeholder=${this.t(`bin_kind_${kind}` as I18nKey)} ?disabled=${!admin}
                   @change=${(e: Event) => this.updateFurniture({ bin_match: (e.target as HTMLInputElement).value.trim() || null })} /></label>
-              ${this.num(this.t("bin_from"), this._doc.settings.household?.bin_from ?? 14, (v) => this.setHousehold({ bin_from: Math.max(0, Math.min(24, v)) }), 0.5)}
-              ${this.num(this.t("bin_until"), this._doc.settings.household?.bin_until ?? 12, (v) => this.setHousehold({ bin_until: Math.max(0, Math.min(24, v)) }), 0.5)}
-              <p class="fp3d-sub fp3d-wide">${this.t("bin_hint")}</p>
               ${this.entitySelect(this.t("bin_out"), f.bin_out ?? null, undefined, this.entityOptions((id) => /^(input_boolean|switch|binary_sensor)\./.test(id)), (v) => this.updateFurniture({ bin_out: v === "none" ? null : v }))}
               <p class="fp3d-sub fp3d-wide">${this.t("bin_out_hint")}</p>
               <div class="fp3d-field fp3d-wide">
@@ -13412,19 +13410,7 @@ export class Fp3dEditor extends LitElement {
                 </div>
               </div>
               <p class="fp3d-sub fp3d-wide">${this.t(this._kerbPick ? "hint_kerb_pick" : "bin_kerb_hint")}</p>
-              <label class="fp3d-check fp3d-wide"
-                ><input type="checkbox" .checked=${!!this._doc.settings.household?.bin_next_only} ?disabled=${!admin} @change=${(e: Event) => this.setHousehold({ bin_next_only: (e.target as HTMLInputElement).checked || null })} />
-                ${this.t("bin_next_only")}</label
-              >
-              <label class="fp3d-field"
-                >${this.t("bin_days")}
-                <input type="number" inputmode="numeric" min="0" max="60" step="1" placeholder=${this.t("bin_days_always")} .value=${this._doc.settings.household?.bin_days == null ? "" : String(this._doc.settings.household.bin_days)} ?disabled=${!admin}
-                  @change=${(e: Event) => {
-                    const v = parseInt((e.target as HTMLInputElement).value, 10);
-                    this.setHousehold({ bin_days: Number.isFinite(v) ? Math.max(0, Math.min(60, v)) : null });
-                  }}
-              /></label>
-              <p class="fp3d-sub fp3d-wide">${this.t("bin_tags_hint")}</p>`
+              ${this.renderSettingsLink("household", "household.bin_from", "settings_moved_bins")}`
           : teaser}
       </div>`;
     }
@@ -13486,6 +13472,7 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+  /** Awning: its fall, the valance, a position sensor, its run time and the other direction (with the cover above). */
   private renderAwningFields(f: Furniture) {
     const admin = this.isEditor;
     const sensors = this.entityOptions((id) => id.startsWith("sensor.") || id.startsWith("input_number.") || id.startsWith("number."));
@@ -14855,6 +14842,34 @@ export class Fp3dEditor extends LitElement {
       :host {
         display: block;
         height: 100%;
+      }
+      /* a house-wide setting's way to the Settings page (#139), in a tool panel or an item form */
+      .fp3d-settings-link {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 4px 10px;
+        width: 100%;
+        min-height: 40px;
+        margin: 6px 0;
+        padding: 8px 12px;
+        border: 1px dashed var(--fp3d-line);
+        border-radius: 10px;
+        background: none;
+        color: var(--fp3d-muted);
+        font: inherit;
+        font-size: 13px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-settings-link b {
+        color: var(--fp3d-accent);
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .fp3d-settings-link:hover {
+        border-color: var(--fp3d-accent);
       }
       /* a part on the Settings page (#139): its row already names it */
       .fp3d-embed summary,

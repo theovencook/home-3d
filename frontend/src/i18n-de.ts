@@ -192,6 +192,8 @@ export const de: Record<I18nKey, string> = {
   new_room: "Raum {n}",
   settings: "Einstellungen",
   all_settings: "Alle Einstellungen",
+  settings_moved_energy: "Zähler, Tarif, Günstigtarif und das Hologramm findest du auf der Seite Einstellungen.",
+  settings_moved_bins: "Wann Tonnen leuchten und welche ein Schild tragen, stellst du für alle Tonnen auf der Seite Einstellungen ein.",
   side_resize: "Seitenleiste breiter oder schmaler ziehen",
   furn_extra: "Zusatzwert am Symbol (Sensor, z. B. Wassertemperatur)",
   settings_house: "Haus",
