@@ -53,6 +53,7 @@ export class FurnitureLibrary extends LitElement {
     _electric: { state: true },
     _light: { state: true },
     _outdoor: { state: true },
+    _pack: { state: true },
     _open: { state: true },
     _fav: { state: true },
     _recent: { state: true },
@@ -79,6 +80,8 @@ export class FurnitureLibrary extends LitElement {
   private declare _electric: boolean;
   private declare _light: boolean;
   private declare _outdoor: boolean;
+  /** The pack the library is narrowed to (its id), or null for all (#109). */
+  private declare _pack: string | null;
   private declare _open: Set<string>;
   private declare _fav: string[];
   private declare _recent: string[];
@@ -108,6 +111,7 @@ export class FurnitureLibrary extends LitElement {
     this._electric = false;
     this._light = false;
     this._outdoor = false;
+    this._pack = null;
     this._open = new Set(load<string[]>(STORE_OPEN, ["sofa", "lamp"]));
     this._fav = load<string[]>(STORE_FAV, []);
     this._recent = load<string[]>(STORE_RECENT, []);
@@ -119,6 +123,8 @@ export class FurnitureLibrary extends LitElement {
   willUpdate(changed: Map<string, unknown>): void {
     if (changed.has("roomHint") && !this.roomTouched) this._room = this.roomHint;
     if (changed.has("entries")) {
+      // a pack that is gone (removed) no longer narrows anything
+      if (this._pack && !this.entries.some((e) => e.pack === this._pack)) this._pack = null;
       // packs changed: forget pictures of items that are gone and start over with the queue
       const known = new Set(this.entries.map((e) => e.key));
       this._fav = this._fav.filter((k) => known.has(k));
@@ -242,7 +248,7 @@ export class FurnitureLibrary extends LitElement {
 
   /** The filter the cards show: the typed words and the chips. */
   get filter(): LibraryFilter {
-    return { query: this._query, room: this._room, electric: this._electric, light: this._light, outdoor: this._outdoor };
+    return { query: this._query, room: this._room, electric: this._electric, light: this._light, outdoor: this._outdoor, pack: this._pack };
   }
 
   /** The chips that are switched on (shown above the cards with "Clear filters"). */
@@ -254,6 +260,7 @@ export class FurnitureLibrary extends LitElement {
   clearFilters(): void {
     this.roomTouched = true;
     this._room = null;
+    this._pack = null;
     this._electric = this._light = this._outdoor = false;
   }
 
@@ -261,6 +268,7 @@ export class FurnitureLibrary extends LitElement {
   resetFilters(): void {
     this.roomTouched = false;
     this._room = this.roomHint;
+    this._pack = null;
     this._electric = this._light = this._outdoor = false;
   }
 
@@ -281,7 +289,7 @@ export class FurnitureLibrary extends LitElement {
     // with nothing open among the sections that have hits, the first one opens by itself
     const firstOpen = sections.length && !sections.some((s) => this._open.has(s.kind)) ? sections[0].kind : null;
     const active = activeFilters(filter);
-    const chipName = (c: LibraryChip) => (c === "room" ? t(`lib_room_${this._room}`) : t(`lib_chip_${c}`));
+    const chipName = (c: LibraryChip) => (c === "room" ? t(`lib_room_${this._room}`) : c === "pack" ? (this.entries.find((e) => e.pack === this._pack)?.packLabel ?? this._pack ?? "") : t(`lib_chip_${c}`));
     return html`<input
         class="fp3d-search"
         type="search"
@@ -296,6 +304,7 @@ export class FurnitureLibrary extends LitElement {
         <button class="fp3d-chip ${this._room === null ? "on" : ""}" @click=${() => this.setRoom(null)}>${t("lib_room_all")}</button>
         ${ROOMS.map((r) => html`<button class="fp3d-chip ${this._room === r ? "on" : ""}" @click=${() => this.setRoom(r)}>${t(`lib_room_${r}`)}</button>`)}
       </div>
+      ${this.packChips()}
       <div class="fp3d-lib-chips">
         <button class="fp3d-chip fp3d-chip-f ${this._electric ? "on" : ""}" @click=${() => (this._electric = !this._electric)}>⚡ ${t("lib_chip_electric")}</button>
         <button class="fp3d-chip fp3d-chip-f ${this._light ? "on" : ""}" @click=${() => (this._light = !this._light)}>💡 ${t("lib_chip_light")}</button>
@@ -313,6 +322,17 @@ export class FurnitureLibrary extends LitElement {
       ${favs.length ? this.section("fav", `★ ${t("lib_favorites")}`, favs.map(single), searching, true) : nothing}
       ${sections.map((s) => this.section(s.kind, t(`lib_kind_${s.kind}`), s.cards, searching || s.kind === firstOpen, false))}
       ${others.length ? this.section("other-rooms", t("lib_other_rooms", { n: found.otherRooms.length }), others, true, true) : nothing}`;
+  }
+
+  /** One chip per pack to narrow the library to it; none while only one pack is installed (#109). */
+  private packChips() {
+    const packs = new Map<string, string>();
+    for (const e of this.entries) if (e.pack && e.packLabel) packs.set(e.pack, e.packLabel);
+    if (packs.size < 2) return nothing;
+    return html`<div class="fp3d-lib-chips" role="group" aria-label=${this.t("lib_pack_all")}>
+      <button class="fp3d-chip ${this._pack === null ? "on" : ""}" @click=${() => (this._pack = null)}>${this.t("lib_pack_all")}</button>
+      ${[...packs].map(([id, label]) => html`<button class="fp3d-chip ${this._pack === id ? "on" : ""}" @click=${() => (this._pack = id)}>${label}</button>`)}
+    </div>`;
   }
 
   private section(key: string, title: string, cards: LibraryCard[], searching: boolean, special: boolean) {

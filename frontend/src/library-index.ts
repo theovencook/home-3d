@@ -416,6 +416,8 @@ export interface LibraryFilter {
   electric: boolean;
   light: boolean;
   outdoor: boolean;
+  /** Only the items of this pack (its id); null or left out: every pack (#109). */
+  pack?: string | null;
 }
 
 /**
@@ -435,9 +437,9 @@ function fitsRoom(e: LibraryEntry, room: Room | null): boolean {
   return !room || !e.rooms.length || e.rooms.includes(room);
 }
 
-/** The three toggle chips (Electric, Lights up, Outdoor): hard filters, with or without a query. */
+/** The toggle chips (Electric, Lights up, Outdoor) and the pack chip: hard filters, with or without a query. */
 function fitsChips(e: LibraryEntry, f: LibraryFilter): boolean {
-  return (!f.electric || e.electric) && (!f.light || e.light) && (!f.outdoor || e.outdoor);
+  return (!f.pack || e.pack === f.pack) && (!f.electric || e.electric) && (!f.light || e.light) && (!f.outdoor || e.outdoor);
 }
 
 function queryMatcher(query: string): ((e: LibraryEntry) => boolean) | null {
@@ -480,12 +482,13 @@ export interface LibraryHits {
   hiddenByChips: number;
 }
 
-export type LibraryChip = "room" | "electric" | "light" | "outdoor";
+export type LibraryChip = "room" | "pack" | "electric" | "light" | "outdoor";
 
 /** The chips a filter has switched on, for the "Filters: ... · Clear filters" line (#77). */
 export function activeFilters(f: LibraryFilter): LibraryChip[] {
   const on: LibraryChip[] = [];
   if (f.room) on.push("room");
+  if (f.pack) on.push("pack");
   if (f.electric) on.push("electric");
   if (f.light) on.push("light");
   if (f.outdoor) on.push("outdoor");

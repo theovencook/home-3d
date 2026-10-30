@@ -14,15 +14,16 @@ function filtered() {
   lib.willUpdate(new Map([["roomHint", null], ["entries", null]]));
   lib.setRoom("bath");
   lib._electric = lib._light = lib._outdoor = true;
+  lib._pack = "acme.mixed";
   lib._query = "stool";
   return lib;
 }
 
 test("Clear filters switches every chip off and shows all rooms, the typed words stay (#77)", () => {
   const lib = filtered();
-  assert.equal(lib.activeFilters.length, 4);
+  assert.deepEqual(lib.activeFilters, ["room", "pack", "electric", "light", "outdoor"]);
   lib.clearFilters();
-  assert.deepEqual(lib.filter, { query: "stool", room: null, electric: false, light: false, outdoor: false });
+  assert.deepEqual(lib.filter, { query: "stool", room: null, electric: false, light: false, outdoor: false, pack: null });
   assert.deepEqual(lib.activeFilters, []);
 });
 
@@ -32,7 +33,7 @@ test("placing an item resets the filters: chips off, the room chip back on the o
   lib.addEventListener("library-add", (e: Event) => added.push((e as CustomEvent).detail));
   lib.pick(stool);
   assert.deepEqual(added, [{ type: "stool", mirror: false }]);
-  assert.deepEqual(lib.filter, { query: "stool", room: "kitchen", electric: false, light: false, outdoor: false });
+  assert.deepEqual(lib.filter, { query: "stool", room: "kitchen", electric: false, light: false, outdoor: false, pack: null });
   // the preset follows the open room again
   lib.roomHint = "bath";
   lib.willUpdate(new Map([["roomHint", "kitchen"]]));

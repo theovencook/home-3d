@@ -1,8 +1,10 @@
 // The home switcher (#57): its list names the home the view has actually loaded, the header chip says whether that
-// home is the one on the displays, and picking the shown home again reloads it.
+// home is the one on the displays, and picking the shown home again reloads it. Names and deletes are asked in the
+// app's own dialog, not with prompt()/confirm() (#59).
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { setAskHost, type AskAnswer, type AskRequest } from "../ask.ts";
 import type { HomeAssistant } from "../types.ts";
 import { Fp3dHomeSwitcher, homeActions, homeChip, homeOptionLabel } from "./home-switcher.ts";
 
@@ -95,11 +97,16 @@ for (const action of ["new", "duplicate"]) {
     const { hass, state } = backend();
     const { el, select } = await switcher(hass, "home");
     const opened = heard(el, "home-open");
-    globalThis.prompt = () => "Experiment";
-    select.value = action;
-    el.chosen({ target: select });
-    await tick();
-    await tick();
+    setAskHost({ ask: async () => ({ ok: true, value: "Experiment" }) });
+    try {
+      select.value = action;
+      el.chosen({ target: select });
+      await tick();
+      await tick();
+      await tick();
+    } finally {
+      setAskHost(null);
+    }
     assert.equal(state.active, "home");
     assert.equal(setActive(state.sent).length, 0);
     assert.deepEqual(opened, [{ home: "new" }]);
@@ -124,10 +131,14 @@ test("'Show on displays' makes the open home the active one without asking (#58)
   const { hass, state } = backend();
   const { el, select } = await switcher(hass, "flat");
   const opened = heard(el, "home-open");
-  globalThis.confirm = () => assert.fail("no confirmation");
-  select.value = "show";
-  el.chosen({ target: select });
-  await tick();
+  setAskHost({ ask: async () => assert.fail("no confirmation") });
+  try {
+    select.value = "show";
+    el.chosen({ target: select });
+    await tick();
+  } finally {
+    setAskHost(null);
+  }
   assert.equal(state.active, "flat");
   assert.deepEqual(opened, [{ home: null }]);
 });
@@ -136,4 +147,55 @@ test("'Show on displays' is offered only while the open home is not the active o
   assert.deepEqual(homeActions(HOMES, "home", "flat"), ["show", "new", "rename", "duplicate", "delete"]);
   assert.deepEqual(homeActions(HOMES, "home", "home"), ["new", "rename", "duplicate", "delete"]);
   assert.deepEqual(homeActions(HOMES.slice(0, 1), "home", "home"), ["new", "rename", "duplicate"]);
+});
+
+/** A switcher showing "home" whose dialog answers with `answers`, one per question. */
+function asking(answers: AskAnswer[]) {
+  const { hass, state } = backend();
+  const asked: AskRequest[] = [];
+  setAskHost({ ask: async (req) => (asked.push(req), answers.shift() ?? { ok: false, value: "" }) });
+  const el = new Fp3dHomeSwitcher() as unknown as Record<string, any>;
+  el.hass = hass;
+  el.home = "home";
+  el._homes = HOMES;
+  return { el, state, asked };
+}
+
+test("a new home is named in the app's dialog and created, not made active (#59, #58)", async () => {
+  const { el, state, asked } = asking([{ ok: true, value: " Holiday flat " }]);
+  try {
+    await el.act("new");
+    assert.equal(asked.length, 1);
+    assert.equal(asked[0].input, "New home", "the dialog suggests a name");
+    assert.deepEqual(
+      state.sent.map((m) => m.type),
+      ["home_3d/homes/create"],
+    );
+    assert.equal(state.sent[0].name, "Holiday flat");
+  } finally {
+    setAskHost(null);
+  }
+});
+
+test("cancelling the name dialog creates nothing (#59)", async () => {
+  const { el, state } = asking([{ ok: false, value: "typed" }]);
+  try {
+    await el.act("new");
+    assert.deepEqual(state.sent, []);
+  } finally {
+    setAskHost(null);
+  }
+});
+
+test("deleting a home asks first in a warning dialog and deletes only on yes (#59)", async () => {
+  const { el, state, asked } = asking([{ ok: false, value: "" }, { ok: true, value: "" }]);
+  try {
+    await el.act("delete");
+    assert.deepEqual(state.sent, [], "no means nothing is deleted");
+    await el.act("delete");
+    assert.equal(asked[1].danger, true);
+    assert.deepEqual(state.sent, [{ type: "home_3d/homes/delete", home_id: "home" }]);
+  } finally {
+    setAskHost(null);
+  }
 });

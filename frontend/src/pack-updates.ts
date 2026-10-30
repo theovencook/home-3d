@@ -62,14 +62,14 @@ export type ConfirmCode = (typeof CONFIRM_CODES)[number];
  */
 export async function askingFirst<T>(
   send: (confirm: boolean) => Promise<T>,
-  ask: (code: ConfirmCode, message: string) => boolean,
+  ask: (code: ConfirmCode, message: string) => boolean | Promise<boolean>,
 ): Promise<T | null> {
   try {
     return await send(false);
   } catch (err) {
     const { code, message } = (err ?? {}) as { code?: string; message?: string };
     if (!CONFIRM_CODES.includes(code as ConfirmCode)) throw err;
-    if (!ask(code as ConfirmCode, message ?? "")) return null;
+    if (!(await ask(code as ConfirmCode, message ?? ""))) return null;
     return send(true);
   }
 }
