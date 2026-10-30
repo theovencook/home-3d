@@ -108,7 +108,8 @@ export function tempShade(celsius: number, cold: number, hot: number): Rgb {
 
 /** What shades with its temperature: a radiator (with or without its TRV) or a hot-water tank. */
 export function shadeKind(type: string): "radiator" | "tank" | null {
-  if (type === "radiator" || /^pack:.*:(radiator|trv)(_[a-z0-9_]+)?$/.test(type)) return "radiator";
+  // towel rails warm up like a radiator: plain, heated and electric ones alike (#140)
+  if (type === "radiator" || /^pack:.*:(radiator|trv|(heated_|electric_)?towel_rail)(_[a-z0-9_]+)?$/.test(type)) return "radiator";
   if (isPackHeater(type)) return "tank";
   return null;
 }

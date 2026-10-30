@@ -26,6 +26,8 @@ const PACK: FurniturePack = {
     cam("g4_pro", ["g4 pro"]),
     cam("g5_turret", ["g5 turret"], "ceiling"),
     cam("g4_dome", ["g4 dome"], "ceiling"),
+    cam("ai_dslr", ["ai dslr"]),
+    cam("ai_dslr_long", ["ai dslr long distance"]),
     // a speaker with a model-like tag is no camera
     { id: "speaker", name: { en: "Speaker" }, size: [0.1, 0.1, 0.1], tags: ["g4 instant"], parts: [part] },
   ],
@@ -97,26 +99,26 @@ test("going back to the built-in model drops the look and leaves the pin as it i
   assert.equal(floor.placements[0].mount, "ceiling");
 });
 
-/** The office pack's camera models, as the backend sends them (one file per item in its group's folder). */
-function coreCameras(): FurniturePack {
-  const dir = fileURLToPath(new URL("../../custom_components/home_3d/bundled_packs/theovencook.office", import.meta.url));
+/** The UniFi pack's camera models, as the backend sends them (one file per item in its group's folder). */
+function unifiCameras(): FurniturePack {
+  const dir = fileURLToPath(new URL("../../custom_components/home_3d/bundled_packs/theovencook.unifi", import.meta.url));
   const items = readdirSync(dir, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .flatMap((e) => readdirSync(join(dir, e.name)).map((f) => JSON.parse(readFileSync(join(dir, e.name, f), "utf8")) as PackItem));
-  return { id: "theovencook.office", name: "Office & tech", publisher: "theovencook", items: items.filter(isCameraModel) };
+  return { id: "theovencook.unifi", name: "UniFi", publisher: "theovencook", items: items.filter(isCameraModel) };
 }
 
-test("the office pack has every UniFi camera of the ticket, found by its name; domes and turrets hang from the ceiling", () => {
-  const core = coreCameras();
+test("the UniFi pack has every UniFi camera of the ticket, found by its name; domes and turrets hang from the ceiling", () => {
+  const core = unifiCameras();
   const ceiling = ["G4 Dome", "G5 Turret", "AI 360"];
   for (const model of ["G3 Flex", "G4 Instant", "G4 Pro", "G4 Dome", "AI 360", "G5 Turret", "G5 PTZ", "G6 Entry"]) {
     const type = matchCameraModel(`UVC ${model}`, [core]);
-    assert.ok(type, `${model} is in the core pack`);
-    const item = core.items.find((it) => type.endsWith(`:${it.id}`))!;
+    // each model finds its own item (#145 added many more cameras beside these)
+    assert.equal(type, `pack:theovencook.unifi:unifi_${model.toLowerCase().replace(/ /g, "_")}`, `${model} is in the UniFi pack`);
+    const item = core.items.find((it) => type!.endsWith(`:${it.id}`))!;
     assert.equal(item.mount, ceiling.includes(model) ? "ceiling" : "wall", `${model} mount`);
     assert.ok(item.electric, `${model} is electric`);
   }
-  assert.equal(new Set(core.items.map((it) => it.id)).size, 8, "one item per model");
 });
 
 test("any other item as a camera's look (#779) leaves the pin's mount and height alone", () => {
@@ -148,4 +150,11 @@ test("the wedge stays as it was when a model moves the camera to the ceiling or 
   const same = floorWithCamera();
   setCameraLook(same, "camera.drive", "pack:test.cams:g4_pro");
   assert.deepEqual([same.placements[0].reach, same.placements[0].tilt], [undefined, undefined]);
+});
+
+test("UniFi's AI cameras match without a number in their model name (#145)", () => {
+  assert.equal(matchCameraModel("AI DSLR", [PACK]), "pack:test.cams:ai_dslr");
+  assert.equal(matchCameraModel("AI DSLR Long Distance", [PACK]), "pack:test.cams:ai_dslr_long");
+  // a bare "ai" is no model name
+  assert.equal(matchCameraModel("AI", [PACK]), null);
 });

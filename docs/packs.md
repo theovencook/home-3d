@@ -365,7 +365,7 @@ A tag with a number in it names the model as Home Assistant's device registry re
 `rlc-810a`. A camera whose device reports that model (with or without UniFi's `UVC` prefix, or a longer name that
 starts with it, like `G5 Turret Ultra` for `g5 turret`) shows it as the model *the device reports*, and a camera placed
 from now on gets that look straight away. Cameras already in the plan keep their look until one is chosen. The
-UniFi cameras in `theovencook.office/tech/` (`unifi_g3_flex`, `unifi_g4_pro`, `unifi_g4_dome`, …) are examples.
+UniFi cameras in `theovencook.unifi/tech/` (`unifi_g3_flex`, `unifi_g4_pro`, `unifi_g4_dome`, …) are examples.
 
 ### Energy devices
 

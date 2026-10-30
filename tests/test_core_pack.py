@@ -73,6 +73,7 @@ def test_the_core_pack_is_retired_and_every_bundled_pack_is_under_the_item_limit
         "theovencook.devices",
         "theovencook.makers",
         "theovencook.ikea-uk",
+        "theovencook.unifi",
     } == names
     for folder in BUNDLED.iterdir():
         count = len([f for f in folder.rglob("*.json") if f.name != packs.PACK_FILE])

@@ -2,7 +2,8 @@
 
 Rack-mount gear in the IT & network pack (`theovencook.it`, `network/rack_*.json`) with U height, size and the
 power figure Home 3D adds up per rack. The files are written by `python tools/rack_gear.py` (a test fails while a file
-differs); edit the list in that script, not the JSON. The six starters from #113 / #114 (`rack_switch_24_1u`,
+differs); edit the list in that script, not the JSON. UniFi's own gear (`rack_unifi_*`) is written into the UniFi pack
+(`theovencook.unifi/network/`) since #145; its rows stay here. The six starters from #113 / #114 (`rack_switch_24_1u`,
 `rack_patch_panel_24_1u`, `rack_blank_1u`, `rack_switch_8_half_1u`, `rack_pdu_vertical_0u`, `rack_shelf_2u`) are
 hand-written and not repeated here. Older non-rack items (`network_switch_*`, `nvr_rack_1u`, `ups_rack_2u`,
 `patch_panel_24`) are untouched.
