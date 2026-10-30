@@ -561,6 +561,15 @@ entity unavailable, an unknown state), red offline (off, disconnected, unavailab
 3D or in the front view for its details (status and linked entities with their states, each opening Home
 Assistant's more-info); hold it in 3D for its status entity's more-info. Only editors change links.
 
+**The rack card.** A rack with linked gear gets a glass card over it in 3D, in the energy cards' look. Without a
+choice it shows a default set: the UPS's load, battery and runtime, the PoE watts (else the UPS's output power), the
+hottest temperature among the gear, how many devices are online, a NAS volume's used % and one throughput figure
+(WAN or uplink first), leaving out what the rack has nothing for. Folded it shows the first few values; a tap unfolds
+every value with the device it comes from and a sparkline of the last six hours (the recorder's statistics, fetched
+when the card unfolds and at most every five minutes). In the editor, the rack's item panel lists **Card values**
+grouped by device and kind: tick up to eight (`rack.card.metrics`; unticking all hides the card, **Default values**
+goes back to the default set). The dashboard card's **Rack cards** option (`rack_cards: false`) hides them.
+
 The plan keeps a copy of each gear's recipe like any placed item's, so a rack shows its gear without the pack. Home
 Assistant refuses an editor's save that breaks the rules above (`invalid_rack`), except gear left misplaced by a
 change of the rack frame (another type or size) in that save, and breaks the plan had already.

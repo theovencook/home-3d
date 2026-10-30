@@ -408,6 +408,7 @@ clearTimeout(this.cleanTimer);
               .panelOpen=${!!this._roomId && c?.room_panel !== false}
               .alerts=${c?.alerts !== false}
               .householdCard=${c?.household_card !== false}
+              .rackCards=${c?.rack_cards !== false}
               .alertJump=${!!c?.alert_jump}
               .director=${!!c?.director}
               .voice=${!!c?.voice}

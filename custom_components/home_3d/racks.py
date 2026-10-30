@@ -9,7 +9,7 @@ plan's recipe copies, so they hold for whatever the plan shows; gear whose recip
 
 A slot may carry a column and a face (#114) and links to Home Assistant (#119: `entity`, its status entity, and
 `links`, further entities of the device; frontend/src/rack-links.ts). The schema keeps unknown slot fields, like the
-rest of the plan's schema.
+rest of the plan's schema. `card` (#120) holds the editor's pick of values for the rack card (rack-card.ts).
 """
 
 from __future__ import annotations
@@ -24,6 +24,8 @@ import voluptuous as vol
 RACK_MAX_SLOTS = 60
 # at most this many further entities linked to one piece of gear (#119)
 RACK_MAX_LINKS = 16
+# at most this many values on a rack's card (#120, frontend rack-card.ts RACK_CARD_MAX)
+RACK_CARD_MAX = 8
 _MAX_U = 60
 
 _SLOT_ID = vol.All(str, vol.Length(min=1, max=64), vol.Match(r"^[A-Za-z0-9_\-.]+$"))
@@ -74,8 +76,20 @@ def _unique_ids(slots: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return slots
 
 
+# a value on the rack card: an entity, or a figure over the whole rack (rack-card.ts RACK_HOTTEST / RACK_ONLINE)
+_CARD_METRIC = vol.Any(_ENTITY_ID, vol.In(["@hottest", "@online"]))
+
+# #120: the card over the rack; `metrics` is the editor's pick (None: the default set, []: no card)
+RACK_CARD_SCHEMA = vol.Schema(
+    {vol.Optional("metrics"): vol.Any(None, vol.All([_CARD_METRIC], vol.Length(max=RACK_CARD_MAX), _unique))},
+    extra=vol.ALLOW_EXTRA,
+)
+
 RACK_CONTENTS_SCHEMA = vol.Schema(
-    {vol.Required("slots"): vol.All([RACK_SLOT_SCHEMA], vol.Length(max=RACK_MAX_SLOTS), _unique_ids)},
+    {
+        vol.Required("slots"): vol.All([RACK_SLOT_SCHEMA], vol.Length(max=RACK_MAX_SLOTS), _unique_ids),
+        vol.Optional("card"): vol.Any(None, RACK_CARD_SCHEMA),
+    },
     extra=vol.ALLOW_EXTRA,
 )
 
