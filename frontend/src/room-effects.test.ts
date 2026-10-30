@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Furniture } from "./model.ts";
-import { effectSettings, itemShade, motionRooms, roomLiveSensors, tempShade } from "./room-effects.ts";
+import { effectSettings, itemShade, motionRooms, roomLiveSensors, shadeKind, tempShade } from "./room-effects.ts";
 import type { HomeAssistant } from "./types.ts";
 
 const st = (entity_id: string, state: string, attributes: Record<string, unknown> = {}, last_changed?: string) => ({ entity_id, state, attributes, last_changed });
@@ -158,4 +158,10 @@ test("a hot-water cylinder shows its tank temperature", () => {
   assert.equal(itemShade(hass, b, item(cyl, { temp_sensor: "sensor.hp_tank_temperature" })), null);
   // other items never shade
   assert.equal(itemShade(hass, b, item("sofa", { temp_sensor: "sensor.hp_flow_temperature" })), null);
+});
+
+test("towel rails shade like radiators; other bathroom items don't (#140)", () => {
+  for (const id of ["towel_rail_800", "heated_towel_rail_500_1200", "electric_towel_rail_500_800", "radiator_type22_600_1200"])
+    assert.equal(shadeKind(`pack:theovencook.devices:${id}`), "radiator", id);
+  assert.equal(shadeKind("pack:theovencook.kitchen-bath:towel_hook"), null);
 });
