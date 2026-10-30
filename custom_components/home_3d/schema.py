@@ -859,6 +859,8 @@ SETTINGS_SCHEMA = vol.Schema(
         vol.Optional("person_look", default=None): vol.Any(None, vol.In(["figure", "pin", "off"])),
         # plan lock: rooms, walls, doors, windows and outdoor areas cannot be moved by accident
         vol.Optional("lock_plan", default=False): bool,
+        # False for a sample or template home (#61): the editor never offers to add rooms from this install's areas
+        vol.Optional("area_import", default=True): bool,
         # stations and playlists for the speakers' quick menu (media_player.play_media type + content id)
         vol.Optional("media_presets", default=list): vol.All(
             [

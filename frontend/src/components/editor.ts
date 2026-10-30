@@ -108,6 +108,7 @@ import {
   floorElevation,
   resizeFurniture,
   roomTiles,
+  unplacedAreas,
   pointInPolygon,
   polygonArea,
   uid,
@@ -3105,14 +3106,9 @@ export class Fp3dEditor extends LitElement {
       .sort((a, b) => (a.level ?? 99) - (b.level ?? 99) || a.name.localeCompare(b.name));
   }
 
-  /** Areas of a floor's Home Assistant floor that have no room in the plan yet. */
+  /** Areas of a floor's Home Assistant floor that have no room in the plan yet (none for a sample home, #61). */
   private unplacedAreas(floor: Floor): HassArea[] {
-    if (!floor.ha_floor) return [];
-    // an area that an outdoor area stands for (the garden) is placed too
-    const used = new Set(this._doc.floors.flatMap((f) => [...f.rooms.map((r) => r.area_id), ...(f.outdoor ?? []).map((a) => a.area_id ?? null)]));
-    return Object.values(this.hass?.areas ?? {})
-      .filter((a) => a.floor_id === floor.ha_floor && !used.has(a.area_id))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return unplacedAreas(this._doc, floor, this.hass?.areas);
   }
 
   private addFloor(ha: HassFloor | null = null): void {
@@ -10581,7 +10577,10 @@ export class Fp3dEditor extends LitElement {
       ${nextKind} ${admin ? nothing : html`<p class="fp3d-note">${this.t("read_only")}</p>`}
       <section>
         <h3>${floor ? this.t("floor_settings_of", { floor: floor.name }) : this.t("floors")}</h3>
-        ${floors.length ? nothing : html`<p class="fp3d-sub">${this.t("floor_none_hint")}</p>`}
+        ${floors.length
+          ? nothing
+          : html`${admin ? html`<button class="fp3d-btn fp3d-primary" @click=${() => this.addFloor()}>${this.t("first_floor_add")}</button>` : nothing}
+              <p class="fp3d-sub">${this.t("floor_none_hint")}</p>`}
         ${admin && floor
           ? html`<button class="fp3d-btn" aria-pressed=${!!this._doc.settings.lock_plan} title=${this.t("lock_plan_hint")} @click=${() => this.toggleLockPlan()}>
               ${this.t(this._doc.settings.lock_plan ? "plan_unlock" : "plan_lock")}
@@ -10622,11 +10621,12 @@ export class Fp3dEditor extends LitElement {
                   >`
                 : nothing}
               ${admin && this.unplacedAreas(floor).length
-                ? html`<div class="fp3d-actions fp3d-wide">
-                    <button class="fp3d-btn fp3d-primary" title=${this.t("area_rooms_hint")} @click=${() => this.addAreaRooms(floor)}>
+                ? html`<p class="fp3d-sub fp3d-wide fp3d-area-import">
+                    ${this.t("area_rooms_label")}
+                    <button class="fp3d-link" title=${this.t("area_rooms_hint")} @click=${() => this.addAreaRooms(floor)}>
                       ${this.t("area_rooms", { n: this.unplacedAreas(floor).length })}
                     </button>
-                  </div>`
+                  </p>`
                 : nothing}
               ${admin
                 ? html`<div class="fp3d-actions fp3d-wide">

@@ -102,6 +102,12 @@ export class BuildingController implements ReactiveController {
     });
   }
 
+  /** Load the shown home afresh (#57: it was picked again in the home switcher); pending edits are saved first. */
+  async reopen(): Promise<void> {
+    await this.flush();
+    await this.reload();
+  }
+
   /** Call whenever the host receives a new hass object. */
   setHass(hass: HomeAssistant): void {
     const first = this.hass === null;
