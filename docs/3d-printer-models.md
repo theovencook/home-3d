@@ -72,7 +72,7 @@ Source for the #104 rows: outer dimensions are estimates from memory of the make
 | Voron 0.2 | Voron (kit) | FDM | 320 x 320 x 360 (unverified) | #104 | done | `voron_v0_2_3d_printer` + variants. camera variant |
 | Sovol SV06 | Sovol | FDM | 520 x 480 x 640 (unverified) | #104 | done | `sovol_sv06_3d_printer` + variants. camera variant |
 | Sovol SV08 | Sovol | FDM | 580 x 570 x 640 (unverified) | #104 | done | `sovol_sv08_3d_printer` + variants. camera variant |
-| FlashForge Adventurer 5M | FlashForge | FDM | 470 x 500 x 490 (unverified) | #104 | done | `flashforge_adventurer_5m_3d_printer` + variants. camera variant |
+| FlashForge Adventurer 5M | FlashForge | FDM | 470 x 500 x 490 (unverified) | #104 | done | `flashforge_adventurer_5m_3d_printer` + variants. camera variant `flashforge_adv5m_3d_printer_camera` (id kept under 40 characters) |
 | FlashForge Adventurer 5M Pro | FlashForge | FDM | 470 x 500 x 490 (unverified) | #104 | done | `flashforge_adventurer_5m_pro_3d_printer` + variants. built-in camera |
 | FlashForge AD5X | FlashForge | FDM | 480 x 500 x 500 (unverified) | #104 | done | `flashforge_ad5x_3d_printer` + variants. built-in camera |
 | Elegoo Saturn 4 Ultra | Elegoo | resin | tbc | #105 | todo | |
