@@ -14,6 +14,7 @@ import { clipConvex, netRoomArea } from "../geometry/area.ts";
 import { areaText, formatImperial, lengthText, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 import { closeGaps, straightenEdges, suggestedThickness } from "../geometry/gaps.ts";
 import { clampIntoRoom, keepInRoom, sharedEdge, snapToWall } from "../geometry/snap.ts";
+import { alignLines, halfSize, itemBox, snapOnWall, snapPoint, snapTolerance, wallGuides, type AlignLines, type Box, type Guide, type Span } from "../geometry/snap-guides.ts";
 import { altPick, firmHit, itemsAt, minHitPx, nextPick } from "../geometry/pick.ts";
 import { itemsByRoom } from "../item-list.ts";
 import "./item-list-view.ts";
@@ -221,9 +222,9 @@ type Drag =
   | { kind: "vertex"; roomId: string; index: number; base: Building; moved: boolean }
   | { kind: "device"; entityId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "pet"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
-  | { kind: "opening"; id: string; startScreen: [number, number]; base: Building; moved: boolean }
+  | { kind: "opening"; id: string; startScreen: [number, number]; base: Building; moved: boolean; peers?: Span[] }
   // `pick`: an Alt+click without moving selects this item instead (#75, #125)
-  | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; pick?: string | null }
+  | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; pick?: string | null; lines?: AlignLines }
   | { kind: "furnset"; ids: string[]; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; pick?: string | null }
   | { kind: "marquee"; start: Vec2; end: Vec2; add: boolean }
   | { kind: "rotate"; id: string; base: Building; moved: boolean }
@@ -256,10 +257,23 @@ interface Guides {
   point?: Vec2;
   x?: number;
   z?: number;
+  /** snap guides of a door, window or item being placed or dragged (#143): plan metres, with a short label */
+  lines?: { a: Vec2; b: Vec2; label: string }[];
 }
 
 /** Drags that change the document live (restored when cancelled, recorded in the history when done). */
 const EDIT_DRAGS = new Set(["vertex", "room", "device", "pet", "opening", "furniture", "furnset", "rotate", "resize", "outdoor", "roofmove", "roofcorner", "roofvertex", "outvertex", "outbox", "pipept", "poolport", "pooldev", "pooljoint", "solarmove", "solarturn", "cablept", "holopt", "bgmove", "bgscale", "bgrotate"]);
+
+/** The other doors and windows on the wall `o` sits on (#143): centre offsets and widths, for equal spacing. */
+function wallPeers(floor: Floor, o: Pick<Opening, "id" | "room_id" | "edge"> & { wall?: string | null }): Span[] {
+  const out: Span[] = [];
+  for (const x of floor.openings) {
+    if (x.id === o.id) continue;
+    const same = o.wall ? x.wall === o.wall : !x.wall && x.room_id === o.room_id && x.edge === o.edge;
+    if (same) out.push({ offset: x.offset, width: x.width });
+  }
+  return out;
+}
 
 /** The editor's item clipboard (#74): in memory, shared by every editor on the page, kept while the Editor tab is closed. */
 let clipboard: ItemClip | null = null;
@@ -589,6 +603,8 @@ export class Fp3dEditor extends LitElement {
   private declare _placing: { type: string; mirror: boolean } | null;
   /** Where the armed card would land (the pointer over the plan), for its outline. */
   private declare _placeAt: Vec2 | null;
+  /** Alignment lines for placing an armed card (#143), gathered again when the floor changes. */
+  private placeLines: { floor: Floor; lines: AlignLines } | null = null;
   /** One part of a furniture block is edited on its own (double-click), not the whole block. */
   private declare _single: boolean;
   /** Touch: taps add items to the selection, a drag on empty ground draws a frame. */
@@ -1956,7 +1972,7 @@ export class Fp3dEditor extends LitElement {
       // a press on an existing opening selects it (and drags it along its wall) before anything is added (#62)
       const openingEl = target.closest("[data-opening]");
       if (openingEl) this.pressOpening(openingEl.getAttribute("data-opening")!, local);
-      else if (!this.placeOpening(this._openingPreset, local)) this.drag = { kind: "pan", last: local };
+      else if (!this.placeOpening(this._openingPreset, local, e.altKey)) this.drag = { kind: "pan", last: local };
       return;
     }
     if (this._placing && this.isEditor && (this._tool === "select" || this._tool === "furniture")) {
@@ -2157,12 +2173,10 @@ export class Fp3dEditor extends LitElement {
     const drag = this.drag;
     if (!drag) {
       if (this._placing) this._placeAt = this.placePoint(world, e.altKey);
-      if (this._tool !== "select" && this._tool !== "furniture" && this.floor) {
-        const at = this.snap(world, undefined, e.altKey);
-        // Doors & windows draws no cursor: a new point there would only render the editor again (#130)
-        if (this._tool !== "opening") this._cursor = at;
-      }
-      if (this._tool === "opening" && e.pointerType !== "touch") this.hoverOpening(e.target as Element, local);
+      // Doors & windows draws no cursor: a new point there would only render the editor again (#130); its snap
+      // guides along the wall come from hoverOpening (#143)
+      if (this._tool !== "select" && this._tool !== "furniture" && this._tool !== "opening" && this.floor) this._cursor = this.snap(world, undefined, e.altKey);
+      if (this._tool === "opening" && e.pointerType !== "touch") this.hoverOpening(e.target as Element, local, e.altKey);
       return;
     }
     switch (drag.kind) {
@@ -2573,22 +2587,32 @@ export class Fp3dEditor extends LitElement {
         const o = baseFloor?.openings.find((x) => x.id === drag.id);
         const host = o && baseFloor ? openingHost(o, baseFloor.rooms, baseFloor.walls ?? []) : null;
         if (!o || !host) return;
-        const offset = this.offsetOnEdge(host.room, host.edge, world, o.width, e.altKey);
+        // the wall's middle and ends, equal gaps, set distances from a corner, else the grid; Alt: freely (#143)
+        drag.peers ??= wallPeers(baseFloor!, o);
+        const offset = this.snapOnEdge(host.room, host.edge, world, o.width, drag.peers, e.altKey);
         this.changeFloor((floor) => patchItem(floor.openings.find((x) => x.id === drag.id), { offset }), drag.base);
         break;
       }
       case "furniture": {
         if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
         drag.moved = true;
-        const f = drag.base.floors.find((x) => x.id === this._floorId)?.furniture.find((x) => x.id === drag.id);
-        if (!f) return;
+        const baseFloor = drag.base.floors.find((x) => x.id === this._floorId);
+        const f = baseFloor?.furniture.find((x) => x.id === drag.id);
+        if (!baseFloor || !f) return;
         const g = e.altKey ? 0.01 : this._doc.settings.grid;
-        let x = round(Math.round((f.x + world[0] - drag.start[0]) / g) * g);
-        let z = round(Math.round((f.z + world[1] - drag.start[1]) / g) * g);
+        const rx = f.x + world[0] - drag.start[0];
+        const rz = f.z + world[1] - drag.start[1];
+        // alignment with the room's centre lines and other items' edges and centres first (#143; the lines are
+        // gathered once per drag); an axis no guide takes goes on the grid
+        const aligned = e.altKey ? null : snapPoint([rx, rz], halfSize(f), (drag.lines ??= this.alignLinesFor(baseFloor, f.id)), snapTolerance(this._view.scale));
+        let x = aligned?.x ? round(aligned.p[0]) : round(Math.round(rx / g) * g);
+        let z = aligned?.z ? round(aligned.p[1]) : round(Math.round(rz / g) * g);
         let rotation = f.rotation;
         // near a wall: turn the back (or a side) to it and sit flush; Alt moves freely
         const snap = e.altKey ? null : this.snapToWall({ ...f, x, z });
         if (snap) ({ x, z, rotation } = snap);
+        // a wall that pulled the item off a guide drops that guide
+        this.showGuides(aligned?.guides.length ? aligned.guides.filter((q) => Math.abs(q.axis === "x" ? x - aligned.p[0] : z - aligned.p[1]) < 0.002) : []);
         this.changeFloor((floor) => patchItem(floor.furniture.find((q) => q.id === drag.id), { x, z, rotation }), drag.base);
         break;
       }
@@ -2701,6 +2725,7 @@ export class Fp3dEditor extends LitElement {
     }
     const drag = this.drag;
     this.drag = null;
+    if (drag?.kind === "opening" || drag?.kind === "furniture") this._guides = {};
     if (!drag || e.type === "pointercancel") {
       if (drag && EDIT_DRAGS.has(drag.kind) && "moved" in drag && drag.moved && "base" in drag) this.restoreLive(drag.base);
       return;
@@ -5080,6 +5105,7 @@ export class Fp3dEditor extends LitElement {
   private planOpening(
     preset: OpeningPreset,
     screen: [number, number],
+    free = false,
   ): { add: Opening } | { select: Opening } | { blocked: Opening } | null {
     const floor = this.floor;
     if (!floor || !this.isEditor) return null;
@@ -5118,7 +5144,8 @@ export class Fp3dEditor extends LitElement {
     const type: OpeningType = defaults.type;
     const width = round(Math.min(defaults.width, Math.max(0.3, len - 0.1)));
     const tap = this.toWorld(...screen);
-    const offset = this.offsetOnEdge(room, edge, tap, width, false);
+    // the same snap guides as when dragging one along its wall (#143)
+    const offset = this.snapOnEdge(room, edge, tap, width, wallPeers(floor, { id: "", room_id: best.roomId ?? room.id, edge, wall }), free);
     // never on top of another door or window (#62): a tap inside one selects it, a tap beside it says why not
     const span: [Vec2, Vec2] = [pointOnRoomEdge(room, edge, offset - width / 2), pointOnRoomEdge(room, edge, offset + width / 2)];
     const clash = openingTap(tap, span, floor.openings, floor.rooms, floor.walls ?? []);
@@ -5147,17 +5174,19 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Doors & windows mode with a mouse: keep the hint bar saying what a tap at the pointer would do (#62). */
-  private hoverOpening(target: Element, local: [number, number]): void {
+  private hoverOpening(target: Element, local: [number, number], free = false): void {
     const id = target?.closest?.("[data-opening]")?.getAttribute("data-opening");
     const on = id ? this.floor?.openings.find((o) => o.id === id) : undefined;
-    const plan = on ? { select: on } : this.planOpening(this._openingPreset, local);
+    const plan = on ? { select: on } : this.planOpening(this._openingPreset, local, free);
+    if (!plan || !("add" in plan)) this.showGuides([]);
     const text = plan ? this.openingHint(plan) : null;
     if (text !== this._openingHover) this._openingHover = text;
   }
 
   /** A tap in Doors & windows mode: add a door or window on the nearest wall, or select the one tapped (#62). */
-  private placeOpening(preset: OpeningPreset, screen: [number, number]): boolean {
-    const plan = this.planOpening(preset, screen);
+  private placeOpening(preset: OpeningPreset, screen: [number, number], free = false): boolean {
+    const plan = this.planOpening(preset, screen, free);
+    this.showGuides([]);
     if (!plan) return false;
     if ("select" in plan) this.pressOpening(plan.select.id, screen);
     else if ("blocked" in plan) this._openingNote = this.openingHint(plan);
@@ -5173,6 +5202,10 @@ export class Fp3dEditor extends LitElement {
   /** The hint bar under the plan (#96, #62): what the current tool does, what can be done with the selection, on a new
    *  plan the next step, and in Doors & windows mode what a tap will do right now. */
   private hintText(): string {
+    // while a guide holds what is placed or dragged, the bar says which and how to get free of it (#143)
+    // (placing and Doors & windows keep their own sentence: it already says what a click does there)
+    const snapped = this.drag ? this._guides.lines?.[0]?.label : undefined;
+    if (snapped) return this.t("hint_snapped", { what: snapped });
     const key = this.hintKeyNow();
     // the kind the next tap adds is always named: it is never inherited silently (#63)
     if (key === "hint_place" && this._placing) return this.t("hint_place", { name: furnitureName(this.hass, this._placing.type) });
@@ -5419,6 +5452,7 @@ export class Fp3dEditor extends LitElement {
       this._placing = null;
       this._placeAt = null;
     }
+    this.showGuides([]);
     void ensureRecipes(this.hass, [p.type]).then(() => this.placeFurniture(p.type, p.mirror, at));
   }
 
@@ -5429,12 +5463,66 @@ export class Fp3dEditor extends LitElement {
   private cancelPlacing(): void {
     this._placing = null;
     this._placeAt = null;
+    this.showGuides([]);
   }
 
-  /** A plan point for the armed card: on the grid, Alt places freely. */
+  /** A plan point for the armed card: on a room's centre lines or in line with other items (#143), else on the grid; Alt places freely. */
   private placePoint(world: Vec2, free: boolean): Vec2 {
     const g = this._doc.settings.grid;
-    return free || !g ? [round(world[0]), round(world[1])] : [round(Math.round(world[0] / g) * g), round(Math.round(world[1] / g) * g)];
+    const grid = (v: number) => (free || !g ? round(v) : round(Math.round(v / g) * g));
+    const p = this._placing;
+    const floor = this.floor;
+    if (free || !p || !floor) {
+      this.showGuides([]);
+      return [grid(world[0]), grid(world[1])];
+    }
+    const [w, d] = furnitureSize(p.type);
+    // the lines are gathered again only when the plan changed
+    if (this.placeLines?.floor !== floor) this.placeLines = { floor, lines: this.alignLinesFor(floor, null) };
+    const s = snapPoint(world, [w / 2, d / 2], this.placeLines.lines, snapTolerance(this._view.scale));
+    this.showGuides(s.guides);
+    return [s.x ? round(s.p[0]) : grid(world[0]), s.z ? round(s.p[1]) : grid(world[1])];
+  }
+
+  /** Alignment lines on a floor (#143): every item's edges and centre (but `skip`'s) and the rooms' centre lines. */
+  private alignLinesFor(floor: Floor, skip: string | null): AlignLines {
+    const boxes: Box[] = [];
+    for (const m of floor.furniture) if (m.id !== skip) boxes.push(itemBox(m));
+    return alignLines(boxes, floor.rooms);
+  }
+
+  /**
+   * offsetOnEdge with the snap guides (#143): the wall's middle and ends, equal gaps to the other doors and windows on
+   * it, set distances from a corner; else the grid. Alt (`free`): by the centimetre, no guides.
+   */
+  private snapOnEdge(room: Room, edge: number, world: Vec2, width: number, peers: readonly Span[], free: boolean): number {
+    if (!free) {
+      const a = room.points[edge];
+      const b = room.points[(edge + 1) % room.points.length];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const t = ((world[0] - a[0]) * (b[0] - a[0]) + (world[1] - a[1]) * (b[1] - a[1])) / len;
+      const snap = snapOnWall(t, width, len, peers, snapTolerance(this._view.scale));
+      if (snap) {
+        const offset = this.clampOffset(room, edge, width, round(snap.offset));
+        if (Math.abs(offset - snap.offset) < 0.002) {
+          this.showGuides(wallGuides(a, b, snap, 14 / this._view.scale));
+          return offset;
+        }
+      }
+    }
+    this.showGuides([]);
+    return this.offsetOnEdge(room, edge, world, width, free);
+  }
+
+  /** The guides shown on the plan (#143), labelled in the plan's unit ("mid", "= 0.60 m"); none: nothing drawn. */
+  private showGuides(guides: readonly Guide[]): void {
+    if (!guides.length) {
+      if (this._guides.lines) this._guides = {};
+      return;
+    }
+    this._guides = {
+      lines: guides.map((q) => ({ a: q.a, b: q.b, label: this.t(`snap_${q.kind}` as I18nKey, q.value !== undefined ? { d: this.m(q.value) } : undefined) })),
+    };
   }
 
   private placeFurniture(type: string, mirror: boolean, at: Vec2 | null = null): void {
@@ -6566,7 +6654,8 @@ export class Fp3dEditor extends LitElement {
     const key = this.hintKeyNow();
     const first = key === "hint_empty" || key === "hint_first_room";
     const warn = this._fixedHint || (this._tool === "opening" && !!this._openingNote);
-    return html`<div class="fp3d-hint ${warn ? "fp3d-hint-fixed" : ""} ${first ? "fp3d-hint-first" : ""}" role="status" aria-live="polite">
+    // the tooltip names the key that turns snapping off while dragging (#143)
+    return html`<div class="fp3d-hint ${warn ? "fp3d-hint-fixed" : ""} ${first ? "fp3d-hint-first" : ""}" role="status" aria-live="polite" title=${this.t("snap_off_tip")}>
       <span class="fp3d-hint-text" .textContent=${live(this.hintText())}></span>
       <button class="fp3d-hint-help" title=${this.t("help_open")} @click=${() => (this._help = true)}>? ${this.t("hint_help")}</button>
     </div>`;
@@ -11390,7 +11479,21 @@ export class Fp3dEditor extends LitElement {
       ${g.x !== undefined ? svg`<line class="fp3d-guide" x1=${this.toScreen([g.x, 0])[0]} y1="0" x2=${this.toScreen([g.x, 0])[0]} y2=${h} />` : nothing}
       ${g.z !== undefined ? svg`<line class="fp3d-guide" x1="0" y1=${this.toScreen([0, g.z])[1]} x2=${w} y2=${this.toScreen([0, g.z])[1]} />` : nothing}
       ${g.point ? svg`<circle class="fp3d-snap" cx=${this.toScreen(g.point)[0]} cy=${this.toScreen(g.point)[1]} r="9" />` : nothing}
+      ${g.lines ? this.renderSnapLines(g.lines) : nothing}
     </g>`;
+  }
+
+  /** Snap guides (#143): thin dashed accent lines, each with its short label once ("mid", "= 0.60 m"). */
+  private renderSnapLines(lines: NonNullable<Guides["lines"]>) {
+    return lines.map((l, i) => {
+      const [ax, ay] = this.toScreen(l.a);
+      const [bx, by] = this.toScreen(l.b);
+      // equal gaps repeat their label; a label already shown at an earlier line is not drawn again (but "= 0.60 m" twice is the point)
+      const show = l.label && (lines.findIndex((q) => q.label === l.label) === i || l.label.startsWith("="));
+      return svg`<line class="fp3d-snapline" x1=${ax} y1=${ay} x2=${bx} y2=${by} />${show
+        ? svg`<text class="fp3d-snaplabel" x=${(ax + bx) / 2 + 6} y=${(ay + by) / 2 - 6}>${l.label}</text>`
+        : nothing}`;
+    });
   }
 
   /** Metres or feet and inches, as the plan's setting (or Home Assistant) says (#117). */
@@ -15546,6 +15649,19 @@ export class Fp3dEditor extends LitElement {
         fill: none;
         stroke: #ff5fd2;
         stroke-width: 2;
+      }
+      /* snap guides while placing or dragging (#143) */
+      .fp3d-snapline {
+        stroke: var(--fp3d-accent);
+        stroke-width: 1;
+        stroke-dasharray: 4 3;
+      }
+      .fp3d-snaplabel {
+        fill: var(--fp3d-accent);
+        font: 600 11px var(--fp3d-font);
+        paint-order: stroke;
+        stroke: var(--fp3d-bg);
+        stroke-width: 3px;
       }
       /* the hint bar (#96): a readable strip on its own background, not a faint line on the grid */
       .fp3d-hint {

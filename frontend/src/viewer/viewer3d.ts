@@ -55,6 +55,7 @@ import { centroid, GANG_TYPES, outdoorZones, pointInPolygon, openingStyle, setTe
 import { placeWallPlate } from "../geometry/walls.ts";
 import { buildEarth } from "./earth.ts";
 import { clampIntoRoom } from "../geometry/snap.ts";
+import { alignLines, halfSize, itemBox, snapPoint, SNAP_GUIDE_PX, type AlignLines, type Box } from "../geometry/snap-guides.ts";
 import { activeSections, roofRider, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
 import { buildFloorGeometry, buildRackGear, keepFurnitureOf, SLAB, stairHoleParts, type FloorGeometry, type RackGearAt } from "./build.ts";
 import { rackDetailWanted } from "./rack-lod.ts";
@@ -824,6 +825,8 @@ export class FloorplanViewer {
     plane?: number;
     /** Seen almost level: the pointer's way on screen moves the item (a plane gives huge jumps there). */
     screen?: { x0: number; y0: number; fx: number; fz: number; right: [number, number]; fwd: [number, number]; perPx: number; gain: number };
+    /** the editor's alignment guides (#143), gathered on the first move */
+    lines?: AlignLines;
   } | null = null;
   private ghost: LineSegments | null = null;
   private selectedSet: string[] = [];
@@ -2373,7 +2376,7 @@ export class FloorplanViewer {
         this.swipe = null;
       },
       grab: (x, y) => this.grabFurniture(x, y),
-      drag: (x, y) => this.dragFurniture(x, y),
+      drag: (x, y, free) => this.dragFurniture(x, y, free),
       drop: () => this.dropFurniture(),
       doubleTap: (x, y) => {
         const roomTap = !!(this.floorId && this.options.onRoomDoubleTap);
@@ -4790,7 +4793,7 @@ export class FloorplanViewer {
     for (const [entity, pin] of this.devicePins) pin.el.classList.toggle("fp3d-dev-sel", entity === id);
   }
 
-  private dragFurniture(x: number, y: number): void {
+  private dragFurniture(x: number, y: number, free = false): void {
     if (this.surfaceDragging) {
       this.surfaceGrab?.move(this.surfaceRay(x, y));
       return;
@@ -4822,13 +4825,26 @@ export class FloorplanViewer {
     if (!p) return;
     const grid = this.building?.settings.grid ?? 0.05;
     const f = fv.floor.furniture.find((m) => m.id === g.id);
-    const gx = Math.round((p[0] + g.offset[0]) / grid) * grid;
-    const gz = Math.round((p[1] + g.offset[1]) / grid) * grid;
+    const rx = p[0] + g.offset[0];
+    const rz = p[1] + g.offset[1];
+    // the same alignment guides as in the 2D editor (#143): rooms' centre lines, other items' edges and centres; an
+    // axis no guide takes goes on the grid; Alt moves freely. Tolerance: the editor's pixels on screen
+    // when seen level, else 8 cm.
+    const s = f && !free ? snapPoint([rx, rz], halfSize(f), (g.lines ??= this.alignLinesOf(fv.floor, f.id)), sc ? sc.perPx * SNAP_GUIDE_PX : 0.08) : null;
+    const gx = s?.x ? s.p[0] : free ? Math.round(rx * 100) / 100 : Math.round(rx / grid) * grid;
+    const gz = s?.z ? s.p[1] : free ? Math.round(rz * 100) / 100 : Math.round(rz / grid) * grid;
     // the whole piece stays in its room: pushed against a wall it stops there
     [g.x, g.z] = f ? clampIntoRoom(fv.floor, f, gx, gz, this.building?.settings.wall_interior ?? 0) : [gx, gz];
     g.moved = true;
     this.updateGhost();
     this.invalidate();
+  }
+
+  /** Alignment lines on a floor (#143): every item's box but `skip`'s, and the rooms' centre lines. */
+  private alignLinesOf(floor: Floor, skip: string): AlignLines {
+    const boxes: Box[] = [];
+    for (const m of floor.furniture) if (m.id !== skip) boxes.push(itemBox(m));
+    return alignLines(boxes, floor.rooms);
   }
 
   private dropFurniture(): void {

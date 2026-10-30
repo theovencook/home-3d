@@ -64,10 +64,11 @@ test("a tap on the wall inside an existing door's width (beside its thin drawing
 
 test("a tap on a free stretch of wall adds a new opening of the active kind (#62)", () => {
   const el = editor();
-  press(el, [4.5, 0]);
+  // 4.2 m along: no snap guide near (#143), so it lands on the grid at the tap
+  press(el, [4.2, 0]);
   assert.equal(openings(el).length, 2);
   const added = openings(el)[1];
-  assert.equal(added.offset, 4.5);
+  assert.equal(added.offset, 4.2);
   assert.equal(el._openingId, added.id);
 });
 
