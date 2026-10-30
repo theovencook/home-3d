@@ -109,7 +109,7 @@ import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from 
 import { furnitureName } from "../furniture-names.ts";
 import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
-import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion, recipeHashes } from "../packs.ts";
+import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
@@ -3002,18 +3002,18 @@ export class Fp3dView3d extends LitElement {
         if (shade?.kind === "radiator") {
           // brighter while it heats
           const a = st && kindOf(st.entity_id) === "climate" ? st.attributes : null;
-          const heating = heatSensorOn(hass, f.heat_sensor) ?? a?.hvac_action === "heating";
+          const heating = heatSensorOn(hass, f.heat_sensor) ?? (!!a && isActive(st) && a.hvac_action !== "cooling"); // a TRV without hvac_action: below its target (#81)
           screens.set(f.id, { color: shade.color, level: heating ? 0.9 : 0.55, shade: true });
         } else if (shade?.kind === "tank") {
           // warm above, cooler below, like the water in it
           const s = effectSettings(b);
           const below = tempShade(shade.celsius - 0.3 * (s.tank_hot - s.tank_cold), s.tank_cold, s.tank_hot);
           screens.set(f.id, { color: below, level: 0.8, shade: true, faces: [{ part: "strata", color: below, top: shade.color, level: 0.8 }] });
-        } else if (f.type === "radiator" && ((st && kindOf(st.entity_id) === "climate") || f.heat_sensor)) {
+        } else if (isThermostatItem(f.type) && ((st && kindOf(st.entity_id) === "climate") || f.heat_sensor)) {
           // glows while it heats; brighter the further the room is below its target. A thermostat that does not tell
           // (Tuya's valves report a "work state" sensor instead) is asked through the radiator's own sensor (D637)
           const a = st && kindOf(st.entity_id) === "climate" ? st.attributes : null;
-          const heating = heatSensorOn(hass, f.heat_sensor) ?? a?.hvac_action === "heating";
+          const heating = heatSensorOn(hass, f.heat_sensor) ?? (!!a && isActive(st) && a.hvac_action !== "cooling"); // a TRV without hvac_action: below its target (#81)
           if (heating) {
             const gap = a && typeof a.temperature === "number" && typeof a.current_temperature === "number" ? a.temperature - a.current_temperature : 1;
             screens.set(f.id, { color: [1, 0.42, 0.1], level: Math.min(1, 0.45 + 0.25 * Math.max(0, gap)) });

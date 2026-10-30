@@ -27,7 +27,7 @@ import { screenName, setScreenName, setVoiceHere, setVoicePipeline, voiceOnHere,
 import { doorbellCamera, doorbellEntities, directorOnHere, HOLD_DEFAULT, HOLD_MAX, HOLD_MIN, setDirectorHere, type DirectorSettings } from "../director.ts";
 import { deviceSensors, energySummary, flowSegments, gridPoint, powerSensorFor, proposeEnergySensors, type EnergyPrefs, type FlowSegment, proposeMeters } from "../energy.ts";
 import { energySensorFor } from "../wire-ends.ts";
-import { CLIMATE_ATTRS, isPulseDrive, isStatusSensor, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
+import { CLIMATE_ATTRS, isPulseDrive, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
 import { ACTION_TYPES, GESTURES, actionTypeChoosable, parseActionData, performActionLocked, withGesture, type ActionType, type Gesture, type ItemAction, type ItemActions } from "../item-actions.ts";
 import { activeSections, sectionFloor, dormerParent, effectiveDormer, proposeDormer, sectionGeometry, floorOutline, polygonBox, headroomLines, ridgeHeight, sectionAbove, sectionCutsBelow, roofSectionsFromRooms, sectionFrame, sectionTurn, turnSectionAbout, wallTopUnder } from "../roof-sections.ts";
 import { bestFace, clampField, faceAt, faceCompass, fieldFace, fieldModules, GROUND, moveField, pointOnFace, proposeField, proposeGroundField, proposeWindow, proposeWallField, roofFaces, rowCounts, turnGroundField, fieldCenter, wallFaces, windowAsField, windowCorners, onFace, onField, rayOnFace, type RoofFace } from "../solar.ts";
@@ -163,8 +163,8 @@ import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { effectFields } from "./effect-fields.ts";
 import { itemTempSource, roomLiveSensors, shadeKind, type LiveKind } from "../room-effects.ts";
-import { energyRole, furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
-import { isPrinter } from "../printer.ts";
+import { energyRole, furnitureSize, isElectric, isPackType, isRobotVacuum, mountBase, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
+import { isCameraItem, isThermostatItem, isTvLike, linkFilter } from "../furniture-links.ts";
 import { setIntervalPart } from "../show-when.ts";
 
 /** Items that can be fixed against moving. */
@@ -12225,7 +12225,6 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderFurnitureLinks(f: Furniture) {
-    const ALARM_CLASSES = new Set(["smoke", "gas", "carbon_monoxide", "heat", "moisture", "safety", "sound", "problem"]);
     if (!this.hass) return nothing;
     const hass = this.hass;
     // what "automatic" would choose: resolve with this item's own links cleared
@@ -12237,50 +12236,23 @@ export class Fp3dEditor extends LitElement {
     const media = isMediaFurniture(f.type);
     // a pack item with only a status light (a 3D printer's panel, a wallbox's LED) links like any device:
     // "Device", with media players, switches and status sensors to choose from
-    const tvLike = media && (!isPackType(f.type) || packDisplay(f.type));
+    const tvLike = isTvLike(f.type);
     const lamp = isLamp(f.type);
-    const entities = this.entityOptions((id) =>
-      lamp
-        ? // a lamp can follow a light or a plain switch (e.g. a relay that switches the ceiling light)
-          /^(light|switch|input_boolean)\./.test(id)
-        : tvLike
-          ? // a media player, or the smart plug an older TV is switched with; a roll-down screen also its motor's cover (#511)
-            /^(media_player|switch|input_boolean|light)\./.test(id) || (packMotion(f.type) === "screen" && id.startsWith("cover."))
-          : f.type === "awning"
-            ? id.startsWith("cover.")
-            : packMotion(f.type) === "curtain" || packMotion(f.type) === "blind"
-            ? // a motorised curtain or a roof window's blind: its motor's cover (or a switch that drives it, #511, #24)
-              /^(cover|switch|input_boolean)\./.test(id)
-            : f.type === "radiator" || f.type === "ac_unit"
-            ? id.startsWith("climate.")
-            : isRobotVacuum(f.type)
-              ? id.startsWith("vacuum.")
-              : // or a status sensor (a 3D printer's print status: running, idle, finish …)
-                // (a robot vacuum from a pack, e.g. the one with its dock, follows its vacuum entity; a motorised
-                // curtain its cover, #286)
-                /^(switch|media_player|fan|input_boolean|climate|vacuum|cover)\./.test(id) ||
-                // a pack's heat pump indoor unit, boiler or buffer tank: its water_heater entity (#645)
-                (isPackHeater(f.type) && id.startsWith("water_heater.")) ||
-                // a pack's sensor model (motion, presence, contact, leak …): any sensor, with or without a class (#810)
-                // a 3D printer (#11): any of its sensors (OctoPrint reports printing as a binary sensor)
-                ((isPackSensor(f.type) || isPrinter(f.type)) && /^(binary_sensor|sensor)\./.test(id)) ||
-                isStatusSensor(hass.states[id]) ||
-                // alarms that report as binary sensors (binary_sensor.…_smoke, #490); a smoke detector takes any
-                (id.startsWith("binary_sensor.") && (f.type.endsWith("smoke_detector") || ALARM_CLASSES.has(String(hass.states[id]?.attributes.device_class ?? "")))),
-    );
+    const heating = isThermostatItem(f.type);
+    const entities = this.entityOptions(linkFilter(hass, f.type));
     const power = this.entityOptions((id) => this.isPowerSensor(id));
     const doorSensors = f.type === "fridge_smart" ? this.entityOptions((id) => id.startsWith("binary_sensor.")) : [];
     return html`<div class="fp3d-form fp3d-links">
         ${f.type === "grid_point"
           ? html`<p class="fp3d-sub fp3d-wide">${this.t("grid_point_hint")}</p>`
-          : this.entitySelect(this.t(lamp ? "furn_entity_light" : packMotion(f.type) ? "motor_cover" : tvLike ? "furn_entity_tv" : f.type === "awning" ? "awning_cover" : f.type === "radiator" || f.type === "ac_unit" ? "furn_entity_climate" : isRobotVacuum(f.type) ? "furn_entity_vacuum" : "furn_entity"), f.entity ?? null, autoPick("entity"), entities, (v) =>
+          : this.entitySelect(this.t(lamp ? "furn_entity_light" : packMotion(f.type) ? "motor_cover" : tvLike ? "furn_entity_tv" : f.type === "awning" ? "awning_cover" : heating || f.type === "ac_unit" ? "furn_entity_climate" : isRobotVacuum(f.type) ? "furn_entity_vacuum" : isCameraItem(f.type) ? "furn_entity_camera" : "furn_entity"), f.entity ?? null, autoPick("entity"), entities, (v) =>
               this.updateFurniture({ entity: v }),
             )}
         ${f.type === "lamp_fan"
           ? html`${this.entitySelect(this.t("fan_entity"), f.fan ?? null, undefined, this.entityOptions((id) => id.startsWith("fan.")), (v) => this.updateFurniture({ fan: v && v !== "none" ? v : null }))}
               <p class="fp3d-sub fp3d-wide">${this.t("fan_hint")}</p>`
           : nothing}
-        ${f.type === "radiator"
+        ${heating
           ? html`${this.entitySelect(this.t("heat_sensor"), f.heat_sensor ?? null, undefined, this.entityOptions((id) => /^(binary_sensor|sensor|switch|input_boolean|number)\./.test(id)), (v) => this.updateFurniture({ heat_sensor: v && v !== "none" ? v : null }))}
               <p class="fp3d-sub fp3d-wide">${this.t("heat_sensor_hint")}</p>`
           : nothing}
