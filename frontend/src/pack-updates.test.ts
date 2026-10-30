@@ -79,3 +79,16 @@ test("the next check follows the frequency, time and weekday", () => {
   // monthly on the 1st
   assert.deepEqual(at({ frequency: "monthly", time: "03:00" }), new Date(2026, 10, 1, 3, 0));
 });
+
+test("the question may be answered later, in the app's own dialog (#59)", async () => {
+  const sent: boolean[] = [];
+  const pinned = Object.assign(new Error("pinned"), { code: "pinned" });
+  const send = async (confirm: boolean) => {
+    sent.push(confirm);
+    if (!confirm) throw pinned;
+    return "installed";
+  };
+  assert.equal(await askingFirst(send, async () => false), null);
+  assert.deepEqual(sent, [false], "an awaited no sends nothing again");
+  assert.equal(await askingFirst(send, async () => true), "installed");
+});

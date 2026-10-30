@@ -14,6 +14,15 @@ export function shownLook(look: Look, hass: HomeAssistant | null | undefined): T
   return look;
 }
 
+/**
+ * The look after switching a follow ("theme": Home Assistant's theme, "auto": the sun) on or off (#87). Off keeps the
+ * look the device showed, so nothing jumps; switching off a follow that isn't the current one changes nothing.
+ */
+export function followLook(current: Look, follow: "theme" | "auto", on: boolean, hass: HomeAssistant | null | undefined): Look {
+  if (on) return follow;
+  return current === follow ? shownLook(current, hass) : current;
+}
+
 /** A CSS colour as "#rrggbb" (lower case): "#rgb", "#rrggbb" or "rgb(r, g, b)"; null for anything else. */
 function hexOf(css: string): string | null {
   const v = css.trim().toLowerCase();
