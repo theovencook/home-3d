@@ -730,6 +730,8 @@ export class Fp3dEditor extends LitElement {
   private fitted = false;
   /** The view fit() set last (the plan follows size changes until it is moved). */
   private fittedView: unknown = null;
+  /** The last fit framed everything (plot, garden items), not just the house: a resize keeps that (#91). */
+  private fittedAll = false;
   private resizeObserver?: ResizeObserver;
   private loadingImages = new Set<string>();
 
@@ -968,7 +970,7 @@ export class Fp3dEditor extends LitElement {
       // a plan nobody has moved since it was fitted stays fitted (the 3D half opening beside the roof tool)
       if ((!this.fitted || this._view === this.fittedView) && this._size.w > 0) {
         this.fitted = true;
-        this.fit();
+        this.fit(this.fittedAll);
       }
     });
     this.resizeObserver.observe(stage);
@@ -1224,6 +1226,7 @@ export class Fp3dEditor extends LitElement {
             <button aria-pressed=${this._wall3d === "auto"} @click=${() => this.setWall3d("auto")}>${this.t("walls_auto")}</button>
             <button aria-pressed=${this._wall3d === "cut"} @click=${() => this.setWall3d("cut")}>${this.t("walls_cut")}</button>
           </div>`}
+      <button class="fp3d-3d-fold" title=${this.t("split_fold_hint")} aria-label=${this.t("split_fold_hint")} @click=${() => this.toggleSplit()}>✕ 3D</button>
       ${this.render3dBar()}
       <fp3d-view3d
               .walkable=${false}
@@ -1410,9 +1413,18 @@ export class Fp3dEditor extends LitElement {
     return [e.clientX - rect.left, e.clientY - rect.top];
   }
 
-  private fit(): void {
+  /** "Whole plan": the floor's rooms; `all` ("Fit everything", #91): the plot, items and devices in the garden too. */
+  private fit(all = false): void {
     const pts = this.floor?.rooms.flatMap((r) => r.points) ?? [];
-    if (this._tool === "outdoor" || this._tool === "pool") for (const a of this.floor?.outdoor ?? []) pts.push(...a.points);
+    if (all || this._tool === "outdoor" || this._tool === "pool") for (const a of this.floor?.outdoor ?? []) pts.push(...a.points);
+    if (all) {
+      for (const f of this.floor?.furniture ?? []) {
+        const r = Math.max(f.w, f.d) / 2;
+        pts.push([f.x - r, f.z - r], [f.x + r, f.z + r]);
+      }
+      for (const p of this.floor?.placements ?? []) pts.push([p.x, p.z]);
+    }
+    this.fittedAll = all;
     // the roof tool shows the roof sections too, which reach past the rooms
     if (this._tool === "roof") for (const s of this._doc.settings.roof.sections ?? []) pts.push([s.x0, s.z0], [s.x1, s.z1]);
     const b = pts.length ? bounds(pts) : { x0: 0, z0: 0, x1: 10, z1: 8 };
@@ -5895,14 +5907,18 @@ export class Fp3dEditor extends LitElement {
         })}
         ${plain("furniture", this.t("tool_furniture"))} ${plain("energy", this.t("tool_energy"))}
       </div>
+      <!-- Wall view is a mode: beside the tools, kept away from the view buttons by undo / redo (#91) -->
+      <div class="fp3d-seg fp3d-seg-menu">
+        <button aria-pressed=${this._wallPick} title=${this.t("wall_view_open")} @click=${(e: Event) => (close(), this.toggleWallPick(e.currentTarget as HTMLElement))}>${this.t("wall_view")}</button>
+      </div>
       <div class="fp3d-seg fp3d-seg-menu">
         <button class="fp3d-undo" ?disabled=${!this._canUndo} @click=${() => this.undo()} title=${`${this.t("undo")} (Ctrl+Z)`} aria-label=${this.t("undo")}>↶</button>
         <button class="fp3d-undo" ?disabled=${!this._canRedo} @click=${() => this.redo()} title=${`${this.t("redo")} (Ctrl+Y)`} aria-label=${this.t("redo")}>↷</button>
       </div>
-      <div class="fp3d-seg fp3d-seg-menu">
-        <button aria-pressed=${this._split} title=${this.t("split_3d_hint")} @click=${() => (close(), this.toggleSplit())}>${this.t("split_3d")}</button>
-        <button aria-pressed=${this._wallPick} title=${this.t("wall_view_open")} @click=${(e: Event) => (close(), this.toggleWallPick(e.currentTarget as HTMLElement))}>${this.t("wall_view")}</button>
+      <div class="fp3d-seg fp3d-seg-menu fp3d-seg-views">
+        <button class="fp3d-split-btn" aria-pressed=${this._split} title=${this.t("split_3d_hint")} @click=${() => (close(), this.toggleSplit())}>${this._split ? "◧ " : "▢ "}${this.t("split_3d")}</button>
         <button title=${this.t("fit_hint")} @click=${() => (close(), this.fit())}>${this.t("fit")}</button>
+        <button title=${this.t("fit_all_hint")} @click=${() => (close(), this.fit(true))}>${this.t("fit_all")}</button>
       </div>
       ${this.renderSettingsMenu(close)}`;
   }
@@ -14267,6 +14283,26 @@ export class Fp3dEditor extends LitElement {
       .fp3d-editor-3d fp3d-view3d {
         display: block;
         height: 100%;
+      }
+      /* folds the 3D pane away (the choice is remembered like the toolbar's "3D beside", #91) */
+      .fp3d-3d-fold {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 3;
+        min-height: 32px;
+        padding: 4px 12px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 999px;
+        background: var(--fp3d-chrome);
+        color: inherit;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .fp3d-3d-fold:hover,
+      .fp3d-3d-fold:focus-visible {
+        border-color: var(--fp3d-accent);
       }
       .fp3d-3d-walls {
         position: absolute;

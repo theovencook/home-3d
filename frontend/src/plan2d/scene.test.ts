@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Building, type Furniture, type Opening, type Room } from "../model.ts";
 import type { DeviceMarker, FlowPiece } from "../viewer/viewer3d.ts";
-import { anchorSpots, fitView, floorPictures, flowLines, planItems, planMarkers, planOpenings, shownFloor, zoomView } from "./scene.ts";
+import { anchorSpots, fitInside, fitView, floorPictures, flowLines, planItems, planMarkers, planOpenings, shownFloor, zoomView } from "./scene.ts";
 
 const rect = (id: string, x0: number, z0: number, x1: number, z1: number): Room => ({ id, name: id, area_id: null, points: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]] }) as Room;
 const item = (id: string, type: string, extra: Partial<Furniture> = {}): Furniture => ({ id, type, x: 1, z: 1, rotation: 0, w: 1, d: 0.5, h: 1, variant: null, ...extra }) as Furniture;
@@ -140,4 +140,23 @@ test("a radiator or cylinder that shades with its temperature is filled with its
   const [rad, cold] = planItems(floor, new Map(), [], new Map([["rad", [1, 0.2, 0.1]]]));
   assert.deepEqual([rad.glow, rad.shade], ["rgb(255,51,26)", true]);
   assert.equal(cold.glow, null);
+});
+
+test("the fitted plan stays above the bottom bar and below the stat chips, beside the floor pictures (#91)", () => {
+  const box = { x0: 0, z0: 0, x1: 10, z1: 10 };
+  const size = { w: 1000, h: 700 };
+  const v = fitInside(box, size, { left: 184, top: 64, bottom: 116 });
+  const top = v.ty + box.z0 * v.k;
+  const bottom = v.ty + box.z1 * v.k;
+  const left = v.tx + box.x0 * v.k;
+  assert.ok(top >= 64, `top ${top}`);
+  assert.ok(bottom <= 700 - 116, `bottom ${bottom} runs under the bar`);
+  assert.ok(left >= 184, `left ${left}`);
+  // and it uses that area: the square plan fills its height (less the padding)
+  assert.ok(bottom - top >= 700 - 64 - 116 - 2 * 28 - 1);
+});
+
+test("without insets the plan is fitted to the whole view (#91)", () => {
+  const box = { x0: -2, z0: 1, x1: 6, z1: 5 };
+  assert.deepEqual(fitInside(box, { w: 800, h: 600 }, { left: 0, top: 0, bottom: 0 }), fitView(box, 800, 600, 28));
 });
