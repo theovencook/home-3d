@@ -1,5 +1,5 @@
 {
-  "id": "anycubic_photon_mono_m7_3d_printer",
+  "id": "anycubic_m7_3d_printer",
   "name": {
     "en": "Anycubic Photon Mono M7"
   },
@@ -27,7 +27,7 @@
     "photon",
     "m7"
   ],
-  "family": "anycubic_photon_mono_m7",
+  "family": "anycubic_m7",
   "variant": {
     "en": "Printer only"
   },

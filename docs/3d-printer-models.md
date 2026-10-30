@@ -64,11 +64,11 @@ Sizes of the AMS add-ons are approximate.
 | Voron Trident (300) | Voron (kit) | FDM | tbc | #104 | todo | |
 | Sovol SV08 | Sovol | FDM | tbc | #104 | todo | |
 | FlashForge Adventurer 5M Pro | FlashForge | FDM | tbc | #104 | todo | |
-| Elegoo Saturn 4 Ultra | Elegoo | resin | 260 x 240 x 446 (unverified) | #105 | done | `elegoo_saturn_4_ultra_3d_printer` + camera variant |
+| Elegoo Saturn 4 Ultra | Elegoo | resin | 260 x 240 x 446 (unverified) | #105 | done | `elegoo_saturn_4u_3d_printer` + camera variant |
 | Elegoo Mars 5 | Elegoo | resin | 241 x 241 x 419 (retailer listing, converted from inches) | #105 | done | `elegoo_mars_5_3d_printer` + camera variant |
-| Anycubic Photon Mono M7 | Anycubic | resin | 270 x 270 x 490 (unverified) | #105 | done | `anycubic_photon_mono_m7_3d_printer` + camera variant |
-| Anycubic Photon Mono M5s | Anycubic | resin | 270 x 270 x 480 (unverified) | #105 | done | `anycubic_photon_mono_m5s_3d_printer` + camera variant |
-| Phrozen Sonic Mighty 8K | Phrozen | resin | 320 x 290 x 530 (unverified) | #105 | done | `phrozen_sonic_mighty_8k_3d_printer` + camera variant |
+| Anycubic Photon Mono M7 | Anycubic | resin | 270 x 270 x 490 (unverified) | #105 | done | `anycubic_m7_3d_printer` + camera variant |
+| Anycubic Photon Mono M5s | Anycubic | resin | 270 x 270 x 480 (unverified) | #105 | done | `anycubic_m5s_3d_printer` + camera variant |
+| Phrozen Sonic Mighty 8K | Phrozen | resin | 320 x 290 x 530 (unverified) | #105 | done | `phrozen_mighty_8k_3d_printer` + camera variant |
 | Formlabs Form 4 | Formlabs | resin | 353 x 350 x 538 (from memory, unverified) | #105 | done | `formlabs_form_4_3d_printer` + camera variant |
 | Elegoo Mercury | Elegoo | wash+cure | 400 x 220 x 280 (unverified) | #105 | done | `elegoo_mercury_wash_cure`; Mercury Plus style, wash and cure side by side |
 | Anycubic Wash & Cure | Anycubic | wash+cure | 300 x 280 x 340 (unverified) | #105 | done | `anycubic_wash_and_cure`; Plus style |
