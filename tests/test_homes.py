@@ -309,7 +309,8 @@ async def test_a_sample_home_can_be_marked_as_a_demo(hass: HomeAssistant, hass_w
     building = got["building"]
     await _ok(client, {"type": "home_3d/building/save", "home_id": sample.id, "building": building})
     assert settings(await _ok(client, {"type": "home_3d/building/get", "home_id": sample.id}))["demo"] is True
-    copy_ = (await _ok(client, {"type": "home_3d/homes/duplicate", "home_id": sample.id, "name": "Sample 2"}))["home"]["id"]
+    duplicate = {"type": "home_3d/homes/duplicate", "home_id": sample.id, "name": "Sample 2"}
+    copy_ = (await _ok(client, duplicate))["home"]["id"]
     assert settings(await _ok(client, {"type": "home_3d/building/get", "home_id": copy_}))["demo"] is True
     real = (await _ok(client, {"type": "home_3d/homes/create", "name": "Flat"}))["home"]["id"]
     assert settings(await _ok(client, {"type": "home_3d/building/get", "home_id": real})).get("demo", False) is False
