@@ -332,7 +332,6 @@
  "camera_detect_choose": "Vælg selv registreringssensorerne",
  "camera_detect_choose_hint": "Kun de afkrydsede sensorer tæller for nåle, bevægelsesspor og live-instruktion – også sensorer fra en anden enhed, f.eks. Frigates personsensor til et Reolink-kamera. Uden flueben bruger Home 3D alle sensorer på kameraets enhed.",
  "camera_detect_add": "Tilføj en sensor",
- "camera_cone": "Vis synsfeltet i 3D",
  "camera_detect_pins": "Vis registreringssymboler (person, bil, dyr)",
  "camera_detect_pins_hint": "Fra: en registrering viser ingen symboler over kameraet, kun synsfeltet bliver rødt – roligere på en vægtablet.",
  "state_recording": "Optager",

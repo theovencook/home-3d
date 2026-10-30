@@ -332,7 +332,6 @@
  "camera_detect_choose": "Wybierz czujniki wykrywania samodzielnie",
  "camera_detect_choose_hint": "Dla pinezek, śladu ruchu i reżyserii na żywo liczą się tylko zaznaczone czujniki – także czujniki innego urządzenia, np. czujnik osób z Frigate dla kamery Reolink. Bez zaznaczenia Home 3D bierze wszystkie czujniki urządzenia kamery.",
  "camera_detect_add": "Dodaj czujnik",
- "camera_cone": "Pokaż pole widzenia w 3D",
  "camera_detect_pins": "Pokaż symbole wykrycia (osoba, auto, zwierzę)",
  "camera_detect_pins_hint": "Wył.: wykrycie nie pokazuje symboli nad kamerą, tylko pole widzenia robi się czerwone – spokojniej na tablecie ściennym.",
  "state_recording": "Nagrywanie",

@@ -332,7 +332,6 @@
  "camera_detect_choose": "Escolher os sensores de deteção manualmente",
  "camera_detect_choose_hint": "Só os sensores marcados contam para os marcadores, o rasto de movimento e a realização ao vivo – também sensores de outro dispositivo, p. ex. o sensor de pessoas do Frigate para uma câmara Reolink. Sem a marca, o Home 3D usa todos os sensores do dispositivo da câmara.",
  "camera_detect_add": "Adicionar um sensor",
- "camera_cone": "Mostrar o campo de visão em 3D",
  "camera_detect_pins": "Mostrar símbolos de deteção (pessoa, carro, animal)",
  "camera_detect_pins_hint": "Desligado: uma deteção não mostra símbolos sobre a câmara, só o campo de visão fica vermelho – mais calmo num tablet de parede.",
  "state_recording": "A gravar",
