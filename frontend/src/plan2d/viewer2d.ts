@@ -275,6 +275,8 @@ export class Plan2dViewer implements ViewerSurface {
   setAngleLock(): void {}
   setAutoOrbit(): void {}
   setAwnings(): void {}
+  setBinCues(): void {}
+  setBinSpots(): void {}
   setExplode(): void {}
   setFloorInfo(): void {}
   setFloorStack(): void {}

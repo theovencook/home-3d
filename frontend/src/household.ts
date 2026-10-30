@@ -7,7 +7,7 @@
  * evening before its pickup (from a waste calendar, e.g. Waste Collection Schedule, or a sensor with the days left),
  * a mailbox glows while post lies in it.
  */
-import type { EntityRef, Furniture } from "./model.ts";
+import type { EntityRef, Furniture, Vec2 } from "./model.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 import { packItem } from "./packs.ts";
 
@@ -298,6 +298,23 @@ function onEntity(id: EntityRef | undefined, hass: HomeAssistant): boolean {
 /** Whether a bin has been put out: its "put out" entity (an input_boolean a nightly automation resets) is on. */
 export function binOut(f: Pick<Furniture, "bin_out">, hass: HomeAssistant): boolean {
   return onEntity(f.bin_out, hass);
+}
+
+/** A bin's kerb spot (#142) when it has a usable one. */
+export function binKerb(f: Pick<Furniture, "bin_kerb">): Vec2 | null {
+  const k = f.bin_kerb;
+  return k && Number.isFinite(k.x) && Number.isFinite(k.z) ? [k.x, k.z] : null;
+}
+
+/**
+ * Where a bin is drawn and whether it asks to be taken out (#142). With a kerb spot it stands there while it is
+ * marked out; while it glows (its pickup is near) and is not out yet, a cue points from it to the spot. Without a
+ * kerb spot it stays where it is and shows no cue.
+ */
+export function binPlace(f: Pick<Furniture, "x" | "z" | "bin_kerb">, glow: boolean, out: boolean): { at: Vec2; kerb: boolean; cue: Vec2 | null } {
+  const kerb = binKerb(f);
+  if (kerb && out) return { at: kerb, kerb: true, cue: null };
+  return { at: [f.x, f.z], kerb: false, cue: kerb && glow && !out ? kerb : null };
 }
 
 /** A "put out" entity a tap can switch: an input_boolean or a switch (a binary sensor is only read). */

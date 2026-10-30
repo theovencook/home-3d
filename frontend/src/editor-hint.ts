@@ -15,6 +15,8 @@ export interface HintState {
   /** A library card is armed: the next click places it (#76). */
   placing?: boolean;
   wallPick?: boolean;
+  /** A bin's kerb spot is being picked (#142). */
+  kerbPick?: boolean;
   /** A drag on a fixed item just became a pan. */
   fixedHint?: boolean;
   outdoorFree?: boolean;
@@ -31,6 +33,7 @@ export function hintKey(s: HintState): I18nKey {
   if (!s.hasFloor) return "hint_empty";
   if (s.placing) return "hint_place";
   if (s.wallPick) return "hint_wall_pick";
+  if (s.kerbPick) return "hint_kerb_pick";
   if (s.fixedHint) return "fixed_drag_hint";
   if (s.tool === "outdoor" && s.outdoorFree) return "hint_outdoor_free";
   if (s.tool === "pool") {

@@ -491,6 +491,7 @@ export class Fp3dEditor extends LitElement {
     _wallFrame: { state: true },
     _wallPicTick: { state: true },
     _wallPick: { state: true },
+    _kerbPick: { state: true },
     _runMode: { state: true },
     _techMode: { state: true },
     _feedKind: { state: true },
@@ -672,6 +673,8 @@ export class Fp3dEditor extends LitElement {
   private declare _wallPicTick: number;
   /** The toolbar's wall view button is on: the next tap on a wall in the plan opens it. */
   private declare _wallPick: boolean;
+  /** A bin's "Set kerb spot" is on (#142): the next tap in the plan is where the bin stands while it is out. */
+  private declare _kerbPick: boolean;
   /** Pool Pro in the wall view: laying a pipe, or placing a ball valve or sight glass on one. */
   private declare _runMode: "draw" | "valve" | "sight" | "hole_wall" | "hole_floor" | "tee" | "y" | "feed" | "erase" | null;
   /** Pool Pro, "Technik zeichnen": the wall view draws the technical room (devices, lines from outside, pipes). */
@@ -884,6 +887,7 @@ export class Fp3dEditor extends LitElement {
     this._wallFrame = null;
     this._wallPicTick = 0;
     this._wallPick = false;
+    this._kerbPick = false;
     this._runMode = null;
     this._runDraft = null;
     this._runSel = null;
@@ -1757,6 +1761,10 @@ export class Fp3dEditor extends LitElement {
     const target = e.target as Element;
     if (this._wallPick) {
       this.pickWall(world);
+      return;
+    }
+    if (this._kerbPick) {
+      this.setKerb(world);
       return;
     }
     if (this._bgLevel && this.isEditor && this.floor?.background) {
@@ -3280,6 +3288,10 @@ export class Fp3dEditor extends LitElement {
 
   /** One step back per Escape (#70): the box with the cursor, a menu, a pipe or outline, the item, the tool, the room. */
   private escape(): void {
+    if (this._kerbPick) {
+      this._kerbPick = false;
+      return;
+    }
     const step = escapeStep({
       typing: takesTyping(deepActive(this.renderRoot as ShadowRoot)),
       menu: !!this._ctx,
@@ -5038,6 +5050,7 @@ export class Fp3dEditor extends LitElement {
   /** Select a room, an opening or a furniture item (only one at a time). */
   private selectItem(kind: "room" | "opening" | "furniture" | "device" | "outdoor" | "wall", id: string | null): void {
     this._notice = null;
+    this._kerbPick = false;
     // a selection made in the plan (or by a tool) opens the folded sidebar
     if (id) this._sideOpen = true;
     this._outdoorId = kind === "outdoor" ? id : null;
@@ -5223,6 +5236,7 @@ export class Fp3dEditor extends LitElement {
       placing: !!this._placing,
       selected: this._deviceId ? "device" : this._furnitureId ? "furniture" : this._openingId ? "opening" : this._roomId ? "room" : null,
       wallPick: this._wallPick,
+      kerbPick: this._kerbPick,
       fixedHint: this._fixedHint,
       outdoorFree: !!this._outdoorFree,
       jointPlace: !!this._jointPlace,
@@ -5580,6 +5594,26 @@ export class Fp3dEditor extends LitElement {
       <span title=${this.t("stair_top_hint")}>${this.len(this.t("stair_top"), f.stair_top ?? 0, (v) => apply({ stair_top: v }), 0.05, 0)}</span>
       ${this.len(this.t("stair_start"), f.mount_y ?? 0, (v) => this.updateFurniture({ mount_y: Math.round(Math.min(MAX_MOUNT_Y, Math.max(0, v)) * 1000) / 1000 || null }), 0.05, 0)}
     </div>`;
+  }
+
+  /** The tapped point becomes the selected bin's kerb spot (#142). */
+  private setKerb(world: Vec2): void {
+    this._kerbPick = false;
+    if (!this.isEditor) return;
+    this.updateFurniture({ bin_kerb: { x: Math.round(world[0] * 100) / 100, z: Math.round(world[1] * 100) / 100 } });
+  }
+
+  /** The selected bin's kerb spot (#142): a dashed line from the bin to a ring on the spot. */
+  private renderKerb(floor: Floor) {
+    const f = this._furnitureId ? floor.furniture.find((x) => x.id === this._furnitureId) : undefined;
+    const k = f?.type === "waste_bin" ? f.bin_kerb : null;
+    if (!f || !k) return nothing;
+    const [ax, ay] = this.toScreen([f.x, f.z]);
+    const [bx, by] = this.toScreen([k.x, k.z]);
+    return svg`<g pointer-events="none" class="fp3d-kerb">
+      <line x1=${ax} y1=${ay} x2=${bx} y2=${by} />
+      <circle cx=${bx} cy=${by} r="8" />
+    </g>`;
   }
 
   private updateFurniture(patch: Partial<Furniture>): void {
@@ -7033,6 +7067,7 @@ export class Fp3dEditor extends LitElement {
               ${this.room && this._tool === "select" ? this.renderSplitMarks(this.room) : nothing}
               ${floor ? this.renderHeadroom(floor) : nothing}
               ${this._tool === "roof" ? svg`${this.renderRoofSections()}${this.renderRoofWindows()}` : this._tool === "energy" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}${this.renderCables()}${this.renderEnergyMarkers()}` : this._tool === "pool" && floor && this.pipeRules ? this.renderPoolPlan(floor) : nothing} ${this.renderDraft()} ${this.renderGuides()}
+              ${floor ? this.renderKerb(floor) : nothing}
             </svg>
             ${this.renderContext()}
             ${this.renderHint()}
@@ -13573,6 +13608,16 @@ export class Fp3dEditor extends LitElement {
               <p class="fp3d-sub fp3d-wide">${this.t("bin_hint")}</p>
               ${this.entitySelect(this.t("bin_out"), f.bin_out ?? null, undefined, this.entityOptions((id) => /^(input_boolean|switch|binary_sensor)\./.test(id)), (v) => this.updateFurniture({ bin_out: v === "none" ? null : v }))}
               <p class="fp3d-sub fp3d-wide">${this.t("bin_out_hint")}</p>
+              <div class="fp3d-field fp3d-wide">
+                <span>${this.t("bin_kerb")}</span>
+                <div class="fp3d-actions">
+                  <button class="fp3d-btn" aria-pressed=${this._kerbPick} ?disabled=${!admin} @click=${() => (this._kerbPick = !this._kerbPick)}>
+                    ${this._kerbPick ? "✓ " : ""}${this.t(f.bin_kerb ? "bin_kerb_move" : "bin_kerb_set")}
+                  </button>
+                  ${f.bin_kerb ? html`<button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ bin_kerb: null })}>${this.t("bin_kerb_clear")}</button>` : nothing}
+                </div>
+              </div>
+              <p class="fp3d-sub fp3d-wide">${this.t(this._kerbPick ? "hint_kerb_pick" : "bin_kerb_hint")}</p>
               <label class="fp3d-check fp3d-wide"
                 ><input type="checkbox" .checked=${!!this._doc.settings.household?.bin_next_only} ?disabled=${!admin} @change=${(e: Event) => this.setHousehold({ bin_next_only: (e.target as HTMLInputElement).checked || null })} />
                 ${this.t("bin_next_only")}</label
@@ -15640,6 +15685,16 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-cursor {
         fill: var(--fp3d-warm);
+      }
+      .fp3d-kerb line {
+        stroke: var(--fp3d-accent, #37e0ff);
+        stroke-width: 2;
+        stroke-dasharray: 6 5;
+      }
+      .fp3d-kerb circle {
+        fill: none;
+        stroke: var(--fp3d-accent, #37e0ff);
+        stroke-width: 2.5;
       }
       .fp3d-guide {
         stroke: rgba(255, 95, 210, 0.55);

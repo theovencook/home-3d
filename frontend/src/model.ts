@@ -266,6 +266,8 @@ export interface Furniture {
   bin_match?: string | null;
   /** Haushalt Pro: an entity that is on while the bin is out (input_boolean, switch, binary_sensor; null = none). */
   bin_out?: EntityRef;
+  /** Haushalt Pro: where the bin stands while it is out (a point on its floor's plan, #142; null = it does not move). */
+  bin_kerb?: { x: number; z: number } | null;
   /** Haushalt Pro, mailbox: the sensor of the door it is emptied through (post counts until it opens). */
   mailbox_door?: EntityRef;
   /** Haushalt Pro, plant: a plant.* entity or a soil moisture sensor; thirsty below `moisture_min`. */

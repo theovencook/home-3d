@@ -49,7 +49,7 @@ import {
   type BufferGeometry,
   type Material,
 } from "three";
-import type { Building, Floor, Furniture, Room, StartView } from "../model.ts";
+import type { Building, Floor, Furniture, Room, StartView, Vec2 } from "../model.ts";
 import { recolorLamps, SHADE_SENTINEL, shadeFactors } from "./lamp-colors.ts";
 import { centroid, GANG_TYPES, outdoorZones, pointInPolygon, openingStyle, setTerrain, WALL_LAMP_Y, zonesOf } from "../model.ts";
 import { placeWallPlate } from "../geometry/walls.ts";
@@ -64,7 +64,7 @@ import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { CameraProjections, PROJECTION_LAYER, type ProjectionSurface, type ProjectorPose } from "./projection.ts";
 import type { RoleColours } from "../colour-roles.ts";
 import type { RoleMaterials } from "../role-materials.ts";
-import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, pushRackLeds, setLightLook, hasOwnColours, furnitureLook } from "./furniture.ts";
+import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, pushFurniture, pushRackLeds, setLightLook, hasOwnColours, furnitureLook } from "./furniture.ts";
 import { pushPipeTube, type PipeTube } from "./pipes.ts";
 // the walk through the house at eye height (lives with the viewer it drives)
 export { FloorMap, WalkCamera, type WalkState } from "./walk.ts";
@@ -75,6 +75,7 @@ export const funLib = { Group, Mesh, MeshBasicMaterial, CanvasTexture, Color, Pl
 export type { PipeTube };
 import { groundUnder, isCooktopZone, mountBase, packItem, packMotion, packsVersion, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "../packs.ts";
 import { withVehicles } from "../parking.ts";
+import { BIN_GLIDE_MS, binGlides, cueDashes, glidePos, type BinGlide } from "./bin-move.ts";
 import { floorKeys } from "./floor-keys.ts";
 import { RebuildBatch } from "./rebuild-batch.ts";
 import { buildOrder } from "./floor-order.ts";
@@ -238,6 +239,15 @@ export interface DeviceMarker {
 export type FloorStack = "dim" | "stacked" | "single";
 
 /** A spot of the motion trail: where motion was reported, with an age from 0 (new) to 1 (old). */
+/** A "take me out" cue (#142): from a bin (its edge `skip` m out) to its kerb spot, in the bin's glow colour. */
+export interface BinCue {
+  floorId: string;
+  from: Vec2;
+  to: Vec2;
+  skip: number;
+  color: string;
+}
+
 export interface TrailSpot {
   floorId: string;
   x: number;
@@ -705,6 +715,8 @@ export class FloorplanViewer {
   /** Scene rebuilds, once per batch of changes (#131). */
   private readonly rebuilds = new RebuildBatch((incremental) => {
     this.rebuild(incremental);
+    // the trail and the bins' cues live in each floor's trail mesh: a rebuilt floor gets them again
+    this.drawTrail();
     if (this.fitBuilt) {
       this.fit(0);
       this.fitAll = this.pendingFloors.size > 0;
@@ -799,6 +811,18 @@ export class FloorplanViewer {
   /** Vehicles standing in parking spots (spot id -> pack item type); they join the floor geometry. */
   private parked = new Map<string, string>();
   private parkedSig = "";
+  /** Bins marked out (#142): bin id -> its kerb spot, where it is drawn instead of its own place. */
+  private binSpots = new Map<string, Vec2>();
+  private binSig = "";
+  /** The bins' places were handed over once: from then on a change glides (a bin out already at the start just stands there). */
+  private binSeen = false;
+  /** Bins on their way to the kerb or back (drawn in the moving mesh, left out of the floor's geometry). */
+  private binGlide = new Map<string, BinGlide>();
+  private binSettle: ReturnType<typeof setTimeout> | undefined;
+  /** The "take me out" cues (#142): dashed lines on the ground from a due bin to its kerb spot. */
+  private binCues: BinCue[] = [];
+  private binCueSig = "";
+  private trailArgs: { spots: TrailSpot[]; paths: { floorId: string; points: [number, number][] }[] } = { spots: [], paths: [] };
   /** Slow automatic turn of the view (kiosk screensaver), in radians per second. */
   private orbitSpeed = 0;
   private orbitLast = 0;
@@ -946,6 +970,47 @@ export class FloorplanViewer {
     this.parkedSig = sig;
     this.parked = parked;
     if (this.building) this.rebuilds.request(false);
+  }
+
+  /**
+   * Bins marked out (#142, bin id -> kerb spot): drawn there instead of at their own place, gliding there and back
+   * (no glide on the tablet level, with reduced motion or on the first look). A change rebuilds the floors.
+   */
+  setBinSpots(spots: Map<string, Vec2>): void {
+    const sig = [...spots]
+      .map(([id, [x, z]]) => `${id}=${x.toFixed(3)},${z.toFixed(3)}`)
+      .sort()
+      .join("|");
+    const first = !this.binSeen;
+    if (this.building) this.binSeen = true;
+    if (sig === this.binSig.split("#")[0]) return;
+    const home = new Map<string, Vec2>(this.building ? this.building.floors.flatMap((fl) => fl.furniture.filter((f) => f.type === "waste_bin").map((f) => [f.id, [f.x, f.z] as Vec2] as const)) : []);
+    const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.binGlide = binGlides(this.binSpots, spots, home, this.binGlide, !first && !still && !this.lowQuality && !!this.building);
+    this.binSpots = spots;
+    this.binSig = `${sig}#${[...this.binGlide.keys()].join(",")}`;
+    if (this.building) this.rebuilds.request(false);
+  }
+
+  /** The floor as drawn (#142): bins marked out stand at their kerb spot, gliding bins are drawn apart. */
+  private placeBins(floor: Floor): Floor {
+    if (!this.binSpots.size && !this.binGlide.size) return floor;
+    if (!floor.furniture.some((f) => this.binSpots.has(f.id) || this.binGlide.has(f.id))) return floor;
+    const furniture = floor.furniture.flatMap((f) => {
+      if (this.binGlide.has(f.id)) return [];
+      const at = this.binSpots.get(f.id);
+      return at ? [{ ...f, x: at[0], z: at[1] }] : [f];
+    });
+    return { ...floor, furniture };
+  }
+
+  /** "Take me out" cues (#142): a dashed line in the bin's glow colour from the bin to its kerb spot. */
+  setBinCues(cues: BinCue[]): void {
+    const sig = JSON.stringify(cues);
+    if (sig === this.binCueSig) return;
+    this.binCueSig = sig;
+    this.binCues = cues;
+    this.drawTrail();
   }
 
   /**
@@ -2196,13 +2261,45 @@ export class FloorplanViewer {
       }
     }
     for (const id of this.stepAwnings(dt)) touched.add(id);
+    for (const id of this.stepBins(dt)) touched.add(id);
     if (!touched.size) return false;
     for (const fv of this.floors) if (fv.floor.furniture.some((f) => touched.has(f.id))) this.buildFridges(fv);
     return true;
   }
 
+  /**
+   * Bins on the move (#142): each glide runs its course; a finished one stays drawn at its end until the floors are
+   * rebuilt with the bin back in them (a moment later, outside the frame).
+   */
+  private stepBins(dt: number): string[] {
+    const touched: string[] = [];
+    let done = false;
+    for (const [id, g] of this.binGlide) {
+      if (g.t >= 1) continue;
+      g.t = Math.min(1, g.t + dt / BIN_GLIDE_MS);
+      touched.push(id);
+      if (g.t >= 1) done = true;
+    }
+    if (done && this.binSettle === undefined)
+      this.binSettle = setTimeout(() => {
+        this.binSettle = undefined;
+        if (this.disposed) return;
+        for (const [id, g] of this.binGlide) if (g.t >= 1) this.binGlide.delete(id);
+        this.binSig = `${this.binSig.split("#")[0]}#${[...this.binGlide.keys()].join(",")}`;
+        this.rebuilds.request(false);
+      }, 0);
+    return touched;
+  }
+
   private buildFridges(fv: FloorView): void {
     const buf = new GeoBuffer();
+    // a bin on its way to the kerb or back (#142)
+    for (const f of fv.floor.furniture) {
+      const g = this.binGlide.get(f.id);
+      if (!g) continue;
+      const [x, z] = glidePos(g);
+      pushFurniture(buf, new LineBuffer(), new GeoBuffer(), { ...f, x, z }, mountBase(fv.floor, f));
+    }
     for (const f of fv.floor.furniture) {
       if (f.type !== "fridge_smart") continue;
       const st = this.fridges.get(f.id);
@@ -2301,6 +2398,7 @@ export class FloorplanViewer {
     clearTimeout(this.flowTimer);
     clearTimeout(this.effectTimer);
     clearTimeout(this.robotTimer);
+    clearTimeout(this.binSettle);
     clearTimeout(this.fanTimer);
     clearTimeout(this.orbitTimer);
     clearTimeout(this.weatherTimer);
@@ -2809,7 +2907,7 @@ export class FloorplanViewer {
     const b = this.building;
     // the look counts only for floors with items in colours of their own (they draw them differently, #609)
     const look = furnitureLook();
-    const keys = b ? floorKeys(b, `${packsVersion()}|${this.parkedSig}|${this.lowQuality}`, (f) => (f.furniture.some(hasOwnColours) ? look : "")) : new Map<string, string>();
+    const keys = b ? floorKeys(b, `${packsVersion()}|${this.parkedSig}|${this.binSig}|${this.lowQuality}`, (f) => (f.furniture.some(hasOwnColours) ? look : "")) : new Map<string, string>();
     const keep = new Map<string, FloorView>();
     if (incremental) for (const fv of this.floors) if (keys.get(fv.floor.id) === fv.key) keep.set(fv.floor.id, fv);
     // a new home (none of its floors shown yet) comes in one floor per frame, the open one first, so no single task
@@ -2854,7 +2952,7 @@ export class FloorplanViewer {
             return y === null ? null : y - floor.elevation;
           }
         : undefined;
-      const geo = buildFloorGeometry(withVehicles(floor, this.parked), b.settings.wall_exterior, b.settings.wall_interior, stairHoleParts(b.floors, floor), garden, roofUnder);
+      const geo = buildFloorGeometry(withVehicles(this.placeBins(floor), this.parked), b.settings.wall_exterior, b.settings.wall_interior, stairHoleParts(b.floors, floor), garden, roofUnder);
       const mask: FoldMasks = { standing: { value: 0xffff }, glass: { value: 0 } };
       const materials = this.makeMaterials(mask);
       const group = new Group();
@@ -3819,7 +3917,7 @@ export class FloorplanViewer {
   /** Lit screens of a floor: a bright panel in the app colour and a faint glow around it. */
   private buildScreens(fv: FloorView): void {
     // the vehicles in the parking spots count as furniture here too (Auto Pro lights a band on them)
-    const items = withVehicles(fv.floor, this.parked).furniture.filter((f) => this.screens.has(f.id));
+    const items = withVehicles(this.placeBins(fv.floor), this.parked).furniture.filter((f) => this.screens.has(f.id));
     // (with the accent colour: a light switch's rocker glows in it)
     const accent = accentOnUniform.value ? accentUniform.value.toArray().map((v) => Math.round(v * 255)).join(",") : "";
     const sig = accent + "|" + items.map((f) => `${f.id}:${f.x},${f.z},${f.rotation},${f.w},${f.d},${f.h},${f.mount_y ?? ""},${f.mirror ? 1 : 0}:${JSON.stringify(this.screens.get(f.id))}`).join(";");
@@ -5229,6 +5327,12 @@ export class FloorplanViewer {
    * they cleaned (green lines through the rooms' centres).
    */
   setTrail(spots: TrailSpot[], paths: { floorId: string; points: [number, number][] }[] = []): void {
+    this.trailArgs = { spots, paths };
+    this.drawTrail();
+  }
+
+  private drawTrail(): void {
+    const { spots, paths } = this.trailArgs;
     const col = (age: number) => new Color(0.25 - 0.2 * age, 0.95 - 0.83 * age, 1 - 0.7 * age);
     const dark = new Color(0, 0, 0);
     const green = new Color(0.3, 1, 0.6);
@@ -5271,6 +5375,38 @@ export class FloorplanViewer {
           buf.tri([p.x, y, p.z], [p.x + Math.cos(a1) * 0.22, y, p.z + Math.sin(a1) * 0.22], [p.x + Math.cos(a0) * 0.22, y, p.z + Math.sin(a0) * 0.22], c, dark, dark);
         }
         prev = p;
+      }
+      // a due bin's cue: dashes on the ground to its kerb spot, an arrow head and a ring on the spot
+      for (const cue of this.binCues) {
+        if (cue.floorId !== fv.floor.id) continue;
+        const c = new Color(cue.color);
+        const [fx, fz] = cue.from;
+        const [tx, tz] = cue.to;
+        const len = Math.hypot(tx - fx, tz - fz) || 1;
+        const ux = (tx - fx) / len;
+        const uz = (tz - fz) / len;
+        const w = 0.05;
+        for (const [a, b] of cueDashes(cue.from, cue.to, cue.skip, 0.32)) {
+          buf.tri([a[0] - uz * w, y, a[1] + ux * w], [b[0] - uz * w, y, b[1] + ux * w], [b[0] + uz * w, y, b[1] - ux * w], c, c, c);
+          buf.tri([a[0] - uz * w, y, a[1] + ux * w], [b[0] + uz * w, y, b[1] - ux * w], [a[0] + uz * w, y, a[1] - ux * w], c, c, c);
+        }
+        if (len > cue.skip + 0.32) {
+          const bx = tx - ux * 0.32;
+          const bz = tz - uz * 0.32;
+          buf.tri([bx - uz * 0.16, y, bz + ux * 0.16], [tx - ux * 0.02, y, tz - uz * 0.02], [bx + uz * 0.16, y, bz - ux * 0.16], c, c, c);
+        }
+        for (let i = 0; i < 16; i++) {
+          const a0 = (i / 16) * Math.PI * 2;
+          const a1 = ((i + 1) / 16) * Math.PI * 2;
+          const r0 = 0.3;
+          const r1 = 0.36;
+          const p0: [number, number, number] = [tx + Math.cos(a0) * r0, y, tz + Math.sin(a0) * r0];
+          const p1: [number, number, number] = [tx + Math.cos(a1) * r0, y, tz + Math.sin(a1) * r0];
+          const q0: [number, number, number] = [tx + Math.cos(a0) * r1, y, tz + Math.sin(a0) * r1];
+          const q1: [number, number, number] = [tx + Math.cos(a1) * r1, y, tz + Math.sin(a1) * r1];
+          buf.tri(p0, q1, q0, c, c, c);
+          buf.tri(p0, p1, q1, c, c, c);
+        }
       }
       fv.trailMesh.geometry.dispose();
       fv.trailMesh.geometry = buf.geometry();

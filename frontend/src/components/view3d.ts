@@ -41,7 +41,7 @@ import { effectFields } from "./effect-fields.ts";
 import { effectSettings, itemShade, motionRooms, tempShade } from "../room-effects.ts";
 import { alertEntities, alertSources, alertText, alertTint, findAlerts, isOutage, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg, mdiIcon } from "../icons.ts";
-import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
+import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binPlace, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
 import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, type EnergyPrefs, fieldLevels, fieldPowers, findConsumers, flowDots, isLoad, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type SolarDay, type FlowKind, type StatRow } from "../energy.ts";
 import { fieldFace, fieldSize, roofFaces, roofWindowRoom } from "../solar.ts";
 import { type CustomButton, type EntityRef, DEFAULT_HOLOGRAM, lockAlong, type PoolPipe, type RoofWindow, type SolarField, uid } from "../model.ts";
@@ -151,7 +151,7 @@ import { detectionKind, scaleGlow, buildMarkers, cameraMotionSensors, cameraRedU
 import { RACK_STATUS_COLOURS, rackLedStates, slotEntities, slotStatus } from "../rack-links.ts";
 import { fetchRackSpark, RACK_HOTTEST, RACK_ONLINE, rackCardValues, rackSpark, type RackCardValue } from "../rack-card.ts";
 import { activeSections, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
-import { centroid, furnitureFootprint, gangEntities, gangsOf, GANG_TYPES, TECH_TYPES, isLamp, setTerrain, poolFloorY, LAMP_MODEL, LIFT_SPOTS, outdoorGround, pointInPolygon, poolWaterY, spotDepth, surfaceHeight, zonesOf, type Building, type Floor, type Furniture, type Pet, type StartView } from "../model.ts";
+import { centroid, furnitureFootprint, gangEntities, gangsOf, GANG_TYPES, TECH_TYPES, isLamp, setTerrain, poolFloorY, LAMP_MODEL, LIFT_SPOTS, outdoorGround, pointInPolygon, poolWaterY, spotDepth, surfaceHeight, zonesOf, type Building, type Floor, type Furniture, type Pet, type StartView, type Vec2 } from "../model.ts";
 
 import { pathLength, pipePath, pointAlong, type P3 } from "../geometry/runs.ts";
 import { pipePieces, poolAreas, poolNodeAt, poolWallNormal, underBasin, PIPE_IDLE, type PipePiece } from "../pool-runs.ts";
@@ -162,7 +162,7 @@ import { flowWidth } from "../viewer/flow-style.ts";
 import { floorCounts, floorInfoText, locatedPersons, personLook, personsInRooms, personsShown } from "../presence.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
-import type { DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SoundSource, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
+import type { BinCue, DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SoundSource, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 import { wallLayout } from "../camera-wall.ts";
 import { watchedEntities } from "../watched.ts";
 import { isPrinter, printerFaces, printerState } from "../printer.ts";
@@ -681,6 +681,9 @@ export class Fp3dView3d extends LitElement {
   private householdTimer: ReturnType<typeof setInterval> | undefined;
   /** Haushalt Pro: small holograms – bins that go out today or tomorrow, post, a thirsty plant (set by the furniture pass). */
   private binHolos: HouseholdTag[] = [];
+  /** Haushalt Pro (#142): bins marked out stand at their kerb spot (id -> spot); due bins point at theirs. */
+  private binSpots = new Map<string, Vec2>();
+  private binCues: BinCue[] = [];
   /** 3D printers with a camera (#11): the camera a tap on the printer opens, by the id the tap reports. */
   private printerCams = new Map<string, string>();
   /** Haushalt Pro: appliances that ended their program while the page is open ("finished" until the door opens). */
@@ -1350,6 +1353,8 @@ export class Fp3dView3d extends LitElement {
     for (const w of b.settings.roof?.windows ?? []) roofWindows.set(w.id, roofWindowState(hass, w));
     v.setRoofWindows(roofWindows);
     v.setParked(parkedVehicles(hass, b));
+    v.setBinSpots(this.binSpots);
+    v.setBinCues(this.binCues);
     const types = new Map(b.floors.flatMap((f) => f.openings.map((o) => [o.id, o.type] as const)));
     const openingStates = new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e, types.get(id))]));
     v.setOpeningStates(openingStates, jump);
@@ -3191,6 +3196,8 @@ export class Fp3dView3d extends LitElement {
     const household = hasFeature("household");
     const today: HouseholdItem[] = [];
     this.binHolos = [];
+    this.binSpots = new Map();
+    this.binCues = [];
     this.printerCams.clear();
     // a module lights furniture of its own (Pool Pro: the pump while it runs, the heat pump while it heats)
     const glows = new Map(this.scene.filter((p): p is Extract<ScenePiece, { kind: "glow" }> => p.kind === "glow").map((p) => [p.furnitureId, p]));
@@ -3750,9 +3757,12 @@ export class Fp3dView3d extends LitElement {
     };
     if (f.type === "waste_bin") {
       const src = typeof f.bin_source === "string" && f.bin_source !== "none" ? f.bin_source : null;
-      if (!src) return null;
-      const due = binDue(f, hass, this.pickups, new Date(), { from: this.building?.settings.household?.bin_from, until: this.building?.settings.household?.bin_until });
-      if (!due) return null;
+      const due = src ? binDue(f, hass, this.pickups, new Date(), { from: this.building?.settings.household?.bin_from, until: this.building?.settings.household?.bin_until }) : null;
+      // a bin marked out stands at its kerb spot (#142); not while furnishing, where it is moved by hand
+      const place = this.furnish ? null : binPlace(f, !!due?.glow, binOut(f, hass));
+      if (place?.kerb) this.binSpots.set(f.id, place.at);
+      const [bx, bz] = place?.at ?? [f.x, f.z];
+      if (!due || !src) return null;
       const text = due.days === 0 ? translate(hass, "bin_today") : due.days === 1 ? translate(hass, "bin_tomorrow") : translate(hass, "bin_in_days", { n: due.days });
       // the lid's colour at full strength in its own hue (the paper bin glows blue, the bio bin amber); a grey or
       // black lid glows white
@@ -3766,7 +3776,9 @@ export class Fp3dView3d extends LitElement {
       const out = binOut(f, hass);
       const hex = `#${col.map((v) => Math.round(v * 255).toString(16).padStart(2, "0")).join("")}`;
       const when = out ? translate(hass, "bin_out_done") : text;
-      this.binHolos.push({ id: f.id, floorId: floor.id, x: f.x, z: f.z, y: mountBase(floor, f) + f.h, r: Math.max(f.w, f.d) / 2, name: label, color: hex, when, soon: due.days <= 1 && !out, days: due.days, out });
+      this.binHolos.push({ id: f.id, floorId: floor.id, x: bx, z: bz, y: mountBase(floor, f) + f.h, r: Math.max(f.w, f.d) / 2, name: label, color: hex, when, soon: due.days <= 1 && !out, days: due.days, out });
+      // due and still in: a dashed line on the ground to its kerb spot ("take me out")
+      if (place?.cue) this.binCues.push({ floorId: floor.id, from: [f.x, f.z], to: place.cue, skip: Math.max(f.w, f.d) / 2 + 0.1, color: hex });
       return { item: due.days <= 1 ? { icon: out ? "check-circle-outline" : "trash-can-outline", text: `${label}: ${when}`, entity: src, hot: due.glow && !out } : undefined };
     }
     if (f.type !== "mailbox") {

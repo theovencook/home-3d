@@ -415,6 +415,10 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("mailbox_door"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # Haushalt Pro: on while the bin is out (an input_boolean a nightly automation resets)
         vol.Optional("bin_out"): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # where the bin stands while it is out (#142): a point on its floor's plan, drawn there while bin_out is on
+        vol.Optional("bin_kerb"): vol.Any(
+            None, vol.Schema({vol.Required("x"): _COORD, vol.Required("z"): _COORD}, extra=vol.PREVENT_EXTRA)
+        ),
         # Haushalt Pro: a plant's moisture, an appliance's time left, a service, a fridge's door alarm
         vol.Optional("moisture"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("moisture_min"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=100))),
