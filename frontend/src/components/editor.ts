@@ -404,6 +404,8 @@ export class Fp3dEditor extends LitElement {
     _furnitureId: { state: true },
     _multi: { state: true },
     _hiddenItems: { state: true },
+    _placing: { state: true },
+    _placeAt: { state: true },
     _single: { state: true },
     _multiMode: { state: true },
     _deviceId: { state: true },
@@ -515,6 +517,10 @@ export class Fp3dEditor extends LitElement {
   private declare _multi: string[];
   /** Items hidden in this editor's plan only (#75), to reach what lies under them; not saved. */
   private declare _hiddenItems: string[];
+  /** A library card waiting for a click on the plan that places it (#76). */
+  private declare _placing: { type: string; mirror: boolean } | null;
+  /** Where the armed card would land (the pointer over the plan), for its outline. */
+  private declare _placeAt: Vec2 | null;
   /** One part of a furniture block is edited on its own (double-click), not the whole block. */
   private declare _single: boolean;
   /** Touch: taps add items to the selection, a drag on empty ground draws a frame. */
@@ -723,6 +729,8 @@ export class Fp3dEditor extends LitElement {
     this._furnitureId = null;
     this._multi = [];
     this._hiddenItems = [];
+    this._placing = null;
+    this._placeAt = null;
     this._single = false;
     this._multiMode = false;
     this._deviceId = null;
@@ -1487,6 +1495,8 @@ export class Fp3dEditor extends LitElement {
     this._ctx = null;
     this._fixedHint = false;
     this.fixedPan = false;
+    // a press that places an armed library card (#76) is no long press for the item menu
+    const placing = !!this._placing;
     this.pointerDown(e);
     if (this.pointers.size !== 1) {
       clearTimeout(this.pressTimer);
@@ -1495,7 +1505,7 @@ export class Fp3dEditor extends LitElement {
     this.guardFixed(this.localPoint(e));
     clearTimeout(this.pressTimer);
     this.pressStart = null;
-    if (e.pointerType === "touch" && (this._tool === "select" || this._tool === "furniture")) {
+    if (e.pointerType === "touch" && !placing && (this._tool === "select" || this._tool === "furniture")) {
       const at = this.localPoint(e);
       const target = e.target as Element;
       this.pressStart = at;
@@ -1763,6 +1773,12 @@ export class Fp3dEditor extends LitElement {
       if (!this.placeOpening(this._openingPreset, local)) this.drag = { kind: "pan", last: local };
       return;
     }
+    if (this._placing && this.isEditor && (this._tool === "select" || this._tool === "furniture")) {
+      // an armed library card lands where the plan is clicked (#76); Shift keeps it for the next click
+      this.placeArmed(this.placePoint(world, e.altKey), e.shiftKey);
+      this.drag = null;
+      return;
+    }
     if (this.isEditor && (this._tool === "select" || this._tool === "furniture") && (e.shiftKey || this._multiMode)) {
       // several furniture items: shift-click (or the multi mode on touch) adds or removes one, a drag draws a frame
       const fEl = target.closest("[data-furniture]");
@@ -1952,6 +1968,7 @@ export class Fp3dEditor extends LitElement {
     const world = this.toWorld(...local);
     const drag = this.drag;
     if (!drag) {
+      if (this._placing) this._placeAt = this.placePoint(world, e.altKey);
       if (this._tool !== "select" && this._tool !== "furniture" && this.floor) this._cursor = this.snap(world, undefined, e.altKey);
       return;
     }
@@ -2980,6 +2997,10 @@ export class Fp3dEditor extends LitElement {
     } else if (e.key === "Escape") {
       if (this._ctx) {
         this._ctx = null;
+        return;
+      }
+      if (this._placing) {
+        this.cancelPlacing();
         return;
       }
       if (this._pipeDraft) {
@@ -4971,21 +4992,54 @@ export class Fp3dEditor extends LitElement {
     >`;
   }
 
-  /** Add a library item: its recipe first (#44), so it shows as itself at once. */
+  /**
+   * A library card was chosen (#76): it waits for a click on the plan, which places it there ("Place in the
+   * middle" keeps the old way). Its recipe is fetched meanwhile (#44), so it shows as itself at once.
+   */
   private addFurniture(type: string, mirror = false): void {
-    if (!this.hass) return;
-    void ensureRecipes(this.hass, [type]).then(() => this.placeFurniture(type, mirror));
+    if (!this.hass || !this.isEditor) return;
+    this._placing = { type, mirror };
+    this._placeAt = null;
+    void ensureRecipes(this.hass, [type]);
   }
 
-  private placeFurniture(type: string, mirror: boolean): void {
+  /** The armed card placed at a plan point (or in the room's middle without one); Shift keeps it armed. */
+  private placeArmed(at: Vec2 | null, keep = false): void {
+    const p = this._placing;
+    if (!p || !this.hass) return;
+    if (!keep) {
+      this._placing = null;
+      this._placeAt = null;
+    }
+    void ensureRecipes(this.hass, [p.type]).then(() => this.placeFurniture(p.type, p.mirror, at));
+  }
+
+  private placeArmedInMiddle(): void {
+    this.placeArmed(null);
+  }
+
+  private cancelPlacing(): void {
+    this._placing = null;
+    this._placeAt = null;
+  }
+
+  /** A plan point for the armed card: on the grid, Alt places freely. */
+  private placePoint(world: Vec2, free: boolean): Vec2 {
+    const g = this._doc.settings.grid;
+    return free || !g ? [round(world[0]), round(world[1])] : [round(Math.round(world[0] / g) * g), round(Math.round(world[1] / g) * g)];
+  }
+
+  private placeFurniture(type: string, mirror: boolean, at: Vec2 | null = null): void {
     const floor = this.floor;
     if (!floor || !this.isEditor) return;
+    // placed by a click (#76): into the room under the point
+    if (at) this._roomId = this.roomAt(at) ?? this._roomId;
     const [w, d, h0] = furnitureSize(type);
     // stairs reach up to the next floor
     const above = this._doc.floors.filter((f) => f.elevation > floor.elevation).sort((p, q) => p.elevation - q.elevation)[0];
     const h = STAIR_TYPES.has(type) ? round(above ? above.elevation - floor.elevation : floor.height + 0.25) : h0;
     const room = this.room;
-    const [x, z] = room ? centroid(room.points) : this.toWorld(this._size.w / 2, this._size.h / 2);
+    const [x, z] = at ?? (room ? centroid(room.points) : this.toWorld(this._size.w / 2, this._size.h / 2));
     let rotation = 0;
     if (type === "parking" && room) {
       // a parking spot runs into the room from its garage door, else along the room's longer side
@@ -5560,6 +5614,7 @@ export class Fp3dEditor extends LitElement {
   private setTool(tool: Tool): void {
     const floor = this.floor;
     this._tool = tool;
+    if (tool !== "select" && tool !== "furniture") this.cancelPlacing();
     this._draft = [];
     this._cursor = null;
     this._pipeMode = false;
@@ -5858,7 +5913,7 @@ export class Fp3dEditor extends LitElement {
               @contextmenu=${this.onContextMenu}
             >
               ${this.renderBackground(floor)} ${this.renderGrid()} ${this.renderGhost()} ${walls ? this.renderWalls(walls.walls) : nothing}
-              ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing}
+              ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing} ${this.renderPlaceGhost()}
               ${floor ? this.renderFreeWalls(floor) : nothing}
               ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
@@ -5870,7 +5925,7 @@ export class Fp3dEditor extends LitElement {
               ${this._tool === "roof" ? svg`${this.renderRoofSections()}${this.renderRoofWindows()}` : this._tool === "energy" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}${this.renderCables()}${this.renderEnergyMarkers()}` : this._tool === "pool" && floor && this.pipeRules ? this.renderPoolPlan(floor) : nothing} ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             ${this.renderContext()}
-            <p class="fp3d-hint ${this._fixedHint ? "fp3d-hint-fixed" : ""}">${!floor ? this.t("hint_empty") : this._wallPick ? this.t("hint_wall_pick") : this._fixedHint ? this.t("fixed_drag_hint") : this._tool === "outdoor" && this._outdoorFree ? this.t("hint_outdoor_free") : this._tool === "pool" && this._jointPlace ? this.t("hint_joint_place") : this._tool === "pool" && this._pipeMode ? this.t(!this.poolArea ? "hint_pipe_pool" : this._pipeDraft ? "hint_pipe_next" : "hint_pipe_start") : this._tool === "pool" && released("pool") ? this.t("hint_pool_tech") : this.t(`hint_${this._tool}` as I18nKey)}</p>
+            <p class="fp3d-hint ${this._fixedHint ? "fp3d-hint-fixed" : ""}">${!floor ? this.t("hint_empty") : this._placing ? this.t("hint_place", { name: furnitureName(this.hass, this._placing.type) }) : this._wallPick ? this.t("hint_wall_pick") : this._fixedHint ? this.t("fixed_drag_hint") : this._tool === "outdoor" && this._outdoorFree ? this.t("hint_outdoor_free") : this._tool === "pool" && this._jointPlace ? this.t("hint_joint_place") : this._tool === "pool" && this._pipeMode ? this.t(!this.poolArea ? "hint_pipe_pool" : this._pipeDraft ? "hint_pipe_next" : "hint_pipe_start") : this._tool === "pool" && released("pool") ? this.t("hint_pool_tech") : this.t(`hint_${this._tool}` as I18nKey)}</p>
           </div>
           ${this._split && !this.narrow
             ? html`<div class="fp3d-split-handle" title=${this.t("split_handle_hint")} @pointerdown=${this.onSplitDown}></div>`
@@ -6003,6 +6058,17 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Rooms of the floor below, as orientation. */
+  /** The outline of an armed library card under the pointer (#76). */
+  private renderPlaceGhost() {
+    const p = this._placing;
+    const at = this._placeAt;
+    if (!p || !at) return nothing;
+    const [w, d] = furnitureSize(p.type);
+    const k = this._view.scale;
+    const [cx, cy] = this.toScreen(at);
+    return svg`<rect class="fp3d-place-ghost" x=${cx - (w * k) / 2} y=${cy - (d * k) / 2} width=${w * k} height=${d * k} />`;
+  }
+
   private renderGhost() {
     const i = this._doc?.floors.findIndex((f) => f.id === this._floorId) ?? -1;
     const below = i > 0 ? this._doc.floors[i - 1] : undefined;
@@ -12898,6 +12964,13 @@ export class Fp3dEditor extends LitElement {
     return html`<section>
       <h3>${this.t("furniture_add")}</h3>
       <p class="fp3d-sub">${room ? this.t("furniture_into", { room: room.name }) : this.t("furniture_pick_room")}</p>
+      ${this._placing
+        ? html`<div class="fp3d-placing" role="status">
+            <span>${this.t("place_armed", { name: furnitureName(this.hass, this._placing.type) })}</span>
+            <button class="fp3d-btn fp3d-primary" @click=${() => this.placeArmedInMiddle()}>${room ? this.t("place_middle_room", { room: room.name }) : this.t("place_middle")}</button>
+            <button class="fp3d-btn" @click=${() => this.cancelPlacing()}>${this.t("cancel")}</button>
+          </div>`
+        : nothing}
       <fp3d-library
         .entries=${this.libraryEntries(lang)}
         .language=${lang}
@@ -14150,6 +14223,26 @@ export class Fp3dEditor extends LitElement {
       .fp3d-vertex,
       .fp3d-mid {
         cursor: grab;
+      }
+      .fp3d-place-ghost {
+        fill: color-mix(in srgb, var(--fp3d-accent) 18%, transparent);
+        stroke: var(--fp3d-accent);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 4;
+        pointer-events: none;
+      }
+      .fp3d-placing {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin: 8px 0;
+        padding: 8px 10px;
+        border: 1px solid var(--fp3d-accent);
+        border-radius: 10px;
+      }
+      .fp3d-placing span {
+        flex: 1 1 100%;
       }
       .fp3d-hit {
         fill: transparent;
