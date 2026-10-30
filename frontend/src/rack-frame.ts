@@ -147,6 +147,8 @@ export interface RackLayout {
   rear: number | null;
   /** The deepest gear that fits behind the front rails. */
   mountDepth: number;
+  /** Width of the side lane left and right of the panels, where 0U gear (a vertical PDU) stands (#114). */
+  lane: number;
 }
 
 export function rackLayout(frame: RackFrame, w: number, d: number, h: number): RackLayout {
@@ -173,6 +175,7 @@ export function rackLayout(frame: RackFrame, w: number, d: number, h: number): R
     front,
     rear: twoPost ? null : front - mountDepth,
     mountDepth,
+    lane: Math.max(0, (w - Math.min(w, RACK_PANEL_WIDTH[frame.width])) / 2),
   };
 }
 

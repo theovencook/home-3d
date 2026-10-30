@@ -99,6 +99,8 @@ export interface PackItem {
   rack_frame?: RackFrameSpec;
   /** Rack-mount gear that fits into a rack (#113; rules in rack.ts). */
   rack?: RackGearSpec;
+  /** Estimated typical power draw in watts (#114): a rack's total adds up its gear's. */
+  watts?: number;
 }
 
 /**

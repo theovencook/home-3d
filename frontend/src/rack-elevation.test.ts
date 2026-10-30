@@ -27,6 +27,8 @@ test("an open frame or a 2-post rack has no door to swing (#115)", () => {
 });
 
 const GEAR = Object.fromEntries(["rack_switch_24_1u", "rack_patch_panel_24_1u", "rack_blank_1u"].map((id) => [`pack:t.it:${id}`, read(id)]));
+// a full-depth box (#114): it takes the front and the rear face
+GEAR["pack:t.it:deep"] = { ...read("rack_switch_24_1u"), id: "deep", size: [0.4826, 0.35, 0.0437], rack: { u: 1, depth: "full" } };
 const SWITCH = "pack:t.it:rack_switch_24_1u";
 const PATCH = "pack:t.it:rack_patch_panel_24_1u";
 const cabinet = (slots: RackSlot[], extra: Partial<ElevationInput> = {}): ElevationInput => ({
@@ -83,7 +85,7 @@ test("the elevation shows the front face: gear on the rear face waits for the re
   const slots = [
     { id: "f", type: SWITCH, u: 1 },
     { id: "r", type: SWITCH, u: 2, face: "rear", col: 0 },
-    { id: "both", type: PATCH, u: 4, face: "both" },
+    { id: "both", type: "pack:t.it:deep", u: 4 },
     { id: "gone", type: "pack:t.it:missing", u: 5 },
     { id: "high", type: SWITCH, u: 10 },
   ] as RackSlot[];

@@ -5,7 +5,7 @@
 
 import type { PackItem, PackPart } from "./packs.ts";
 import { RACK_CABINET_FORMS, RACK_UNIT, rackLayout, type RackFrame } from "./rack-frame.ts";
-import { rackContents, readRackGear, type RackSlot } from "./rack.ts";
+import { rackContents, readRackGear, type RackPiece, type RackSlot } from "./rack.ts";
 
 type Pt = [number, number];
 
@@ -112,11 +112,8 @@ const short = (name: string, room: number): string => {
   return name.length <= n ? name : `${name.slice(0, n - 1).trimEnd()}…`;
 };
 
-/** Is a slot on this face? Gear on "both" faces (full depth, #114) shows on either. */
-const onFace = (slot: RackSlot, face: RackFace): boolean => {
-  const f = (slot as RackSlot & { face?: string }).face;
-  return f === "both" || (f ?? "front") === face;
-};
+/** Is a piece of gear on this face? Full-depth gear (#114) shows on either; the rest where rackContents turned it. */
+const onFace = (piece: RackPiece, face: RackFace): boolean => (!piece.slot.on && readRackGear(piece.item)?.depth === "full") || piece.back === (face === "rear");
 
 /**
  * The front (or rear) elevation of a placed rack: the frame's outline and rails, every U numbered on both sides in
@@ -153,7 +150,7 @@ export function rackElevation(input: ElevationInput): RackElevation {
     out.push(`<text class="fp3d-el-u fp3d-el-u-r" x="${width - GUTTER + 6}" y="${y}" font-size="${NUMBER_PX}" fill="${NUMBER}">${u.label}</text>`);
   }
   // the gear where rack.ts puts it (columns and faces follow once #114 places them there)
-  const shown = rackContents(at, slots.filter((s) => onFace(s, face)), itemOf);
+  const shown = rackContents(at, slots, itemOf).filter((p) => onFace(p, face));
   let used = 0;
   for (const p of shown) {
     used += readRackGear(p.item)?.u ?? 0;

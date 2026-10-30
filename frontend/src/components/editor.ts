@@ -177,7 +177,7 @@ import { askConfirm, tell } from "../ask.ts";
 import "./library.ts";
 import "./rack-sheet.ts";
 import { rackLayout, readRackFrame } from "../rack-frame.ts";
-import { packGearOf, readRackGear, type RackSlot, type RackSpace } from "../rack.ts";
+import { packGearOf, packLooseOf, rackMisfits, rackSpace, readRackGear, type RackSlot } from "../rack.ts";
 import { rackElevation, type RackElevation } from "../rack-elevation.ts";
 import type { RackGearChoice } from "./rack-sheet.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
@@ -6501,32 +6501,93 @@ export class Fp3dEditor extends LitElement {
     if (f && this.rackOf(f)) this._rackSheet = f.id;
   }
 
+  /** The rules' view of a placed rack: its room, and the gear and loose-gear lookups (plan copies first). */
+  private rackRules(f: Furniture) {
+    const rack = this.rackOf(f);
+    if (!rack) return null;
+    const itemOf = (t: string) => packItem(t) ?? packInfo(t);
+    return { rack, space: rackSpace(rack.frame, rack.at), gearOf: packGearOf(itemOf), looseOf: packLooseOf(itemOf) };
+  }
+
   /** What the open rack sheet shows (null: none open, or its rack is gone). */
   private rackSheetProps() {
     const f = this._rackSheet ? this.floor?.furniture.find((o) => o.id === this._rackSheet) : undefined;
-    const rack = f && this.rackOf(f);
-    if (!f || !rack) return null;
+    const rules = f && this.rackRules(f);
+    if (!f || !rules) return null;
+    const { rack, space, gearOf, looseOf } = rules;
     const lang = this.hass?.language ?? "en";
-    const space: RackSpace = { u: rack.frame.u, width: rack.frame.width, mountDepth: rack.at.mountDepth };
-    // gear from the plan's copies first (a pack removed since), else the library's index
-    const gearOf = packGearOf((t) => packItem(t) ?? packInfo(t));
     const gear: RackGearChoice[] = [];
+    // loose gear for shelves (#114): small electric things of the network and tech groups, no racks, no rack gear
+    const loose: RackGearChoice[] = [];
+    const opening = rack.at.opening;
     for (const pack of this.packs ?? [])
       for (const it of pack.items) {
         const g = readRackGear(it);
-        if (g && g.u >= 1 && g.inch === space.width && it.size[1] <= space.mountDepth + 0.001) gear.push({ type: packType(pack.id, it.id), name: packItemName(it, lang) });
+        const type = packType(pack.id, it.id);
+        if (g && g.inch === space.width && it.size[1] <= space.mountDepth + 0.001) gear.push({ type, name: packItemName(it, lang) });
+        else if (!g && !it.rack_frame && it.electric && (it.group === "network" || it.group === "tech") && it.mount !== "ceiling" && it.size[0] <= opening && it.size[1] <= space.mountDepth && it.size[2] <= 0.3)
+          loose.push({ type, name: packItemName(it, lang) });
       }
     gear.sort((a, b) => a.name.localeCompare(b.name));
+    loose.sort((a, b) => a.name.localeCompare(b.name));
     return {
       heading: f.name || furnitureName(this.hass, f.type),
       space,
       labels: rack.at.units.map((u) => u.label),
       slots: f.rack?.slots ?? [],
       gear,
+      loose,
       gearOf,
+      looseOf,
       nameOf: (type: string) => furnitureName(this.hass, type),
       editable: this.isEditor,
     };
+  }
+
+  /** The racks a placed rack can become (#114): every pack's racks that hang where it does (wall or not). */
+  private rackFrameChoices(f: Furniture): { type: string; name: string }[] {
+    const lang = this.hass?.language ?? "en";
+    const wall = (packItem(f.type) ?? packInfo(f.type))?.mount === "wall";
+    const out: { type: string; name: string }[] = [];
+    for (const pack of this.packs ?? [])
+      for (const it of pack.items) if (readRackFrame(it) && (it.mount === "wall") === wall) out.push({ type: packType(pack.id, it.id), name: packItemName(it, lang) });
+    return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  }
+
+  /** Swap the chosen rack for another rack type (#114): its size becomes the new rack's, its gear stays (one undo step). */
+  private changeRackFrame(type: string): void {
+    const f = this.furnitureItem;
+    const item = packItem(type) ?? packInfo(type);
+    if (!f || !this.isEditor || !item || !readRackFrame(item) || !this.rackOf(f)) return;
+    const [w, d, h] = item.size;
+    this.updateFurniture({ type, w, d, h });
+  }
+
+  /** The chosen rack's frame picker and the gear that no longer fits it (#114). */
+  private renderRackFrameForm(f: Furniture) {
+    const rules = this.rackRules(f);
+    if (!rules) return nothing;
+    const misfits = rackMisfits(rules.space, f.rack?.slots ?? [], rules.gearOf, rules.looseOf);
+    const choices = this.rackFrameChoices(f);
+    return html`${this.isEditor && choices.length > 1
+      ? html`<div class="fp3d-form">
+          <label class="fp3d-field fp3d-wide"
+            >${this.t("rack_frame_pick")}
+            <select @change=${(e: Event) => this.changeRackFrame((e.target as HTMLSelectElement).value)}>
+              ${choices.map((c) => html`<option value=${c.type} ?selected=${c.type === f.type}>${c.name}</option>`)}
+            </select></label
+          >
+        </div>`
+      : nothing}
+    ${misfits.length
+      ? html`<p class="fp3d-sub fp3d-pack-error" role="alert">
+          ${this.t("rack_misfits", { n: misfits.length })}
+          ${misfits.map((m) => {
+            const s = f.rack!.slots.find((o) => o.id === m.id)!;
+            return html`<br />${s.name || furnitureName(this.hass, s.type)}: ${this.t(`rack_${m.why}` as I18nKey)}`;
+          })}
+        </p>`
+      : nothing}`;
   }
 
   /** The sheet changed the rack's gear: one undo step on the placed rack. */
@@ -6549,7 +6610,9 @@ export class Fp3dEditor extends LitElement {
       .labels=${p.labels}
       .slots=${p.slots}
       .gear=${p.gear}
+      .loose=${p.loose}
       .gearOf=${p.gearOf}
+      .looseOf=${p.looseOf}
       .nameOf=${p.nameOf}
       .editable=${p.editable}
       .t=${(key: string, vars?: Record<string, string | number>) => this.t(key as I18nKey, vars)}
@@ -12161,6 +12224,7 @@ export class Fp3dEditor extends LitElement {
             <div class="fp3d-actions"><button class="fp3d-btn fp3d-primary" @click=${() => this.vehicleToSpot(f)}>🅿 ${this.t("vehicle_to_spot")}</button></div>
           </section>`
         : nothing}
+      ${this.rackOf(f) ? this.renderRackFrameForm(f) : nothing}
       ${this.renderRackElevation(f)}
       ${!admin && this.rackOf(f) ? html`<div class="fp3d-actions"><button class="fp3d-btn" @click=${() => this.openRackSheet()}>▤ ${this.t("rack_edit")}</button></div>` : nothing}
       ${admin

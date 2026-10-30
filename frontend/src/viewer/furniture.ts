@@ -2062,7 +2062,8 @@ function rackModel(b: Builder, item: PackItem, f: Furniture, w: number, d: numbe
   for (const m of rackMarks(at)) b.box(m.x0, m.x1, base + m.y0, base + m.y1, m.z0, m.z1, C.accent, C.accent);
   const slots = f.rack?.slots;
   if (!slots?.length) return;
-  for (const g of rackContents(at, slots, packItem)) packModel(b.moved(g.x, g.z), g.item, g.w, g.d, g.h, base + g.y, null);
+  // rear-face gear is turned round (#114), its front to the rack's back
+  for (const g of rackContents(at, slots, packItem)) packModel(g.back ? b.moved(g.x, g.z).rotated(0, 0, 180) : b.moved(g.x, g.z), g.item, g.w, g.d, g.h, base + g.y, null);
 }
 
 /**

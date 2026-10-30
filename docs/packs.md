@@ -507,20 +507,50 @@ for that device.
 
 | Field | Value | Default |
 | --- | --- | --- |
-| `u` | Height in rack units, a whole number from 0 to 60 (0: a vertical PDU in the side lane, placed from a later release). | required |
-| `width` | `full`, `half` or `third` of the rack's width (half and third are placed side by side from a later release; until then they take the whole U). | `full` |
-| `depth` | `half` (on the front rails) or `full` (blocks the rear face too, from a later release). | `half` |
+| `u` | Height in rack units, a whole number from 0 to 60. 0: a vertical PDU, which stands in a side lane beside the rails, as many U long as it is tall. | required |
+| `width` | `full`, `half` or `third` of the rack's width. Half- and third-width gear share a U side by side, a column each. | `full` |
+| `depth` | `half` (on the face it is mounted on) or `full` (it takes the front and the rear face). | `half` |
 | `inch` | The rack width it is made for: `19` or `10`. It only goes into racks of that width. | `19` |
+| `shelf` | `true`: a shelf, at least 1U. Loose gear (a hub, a mini PC, a modem) stands on it. | `false` |
 
-Draw gear with its front at +z and its `size` the real box: across the ears (482.6 mm for 19-inch gear), its depth
-and its height (a 1U box is 43.7 mm). In a rack it is drawn at its own size on the front rails, centred in its U;
-gear deeper than the rack's mounting depth does not go in. The bundled `theovencook.it` pack has three starters:
-`rack_switch_24_1u`, `rack_patch_panel_24_1u` and `rack_blank_1u`.
+Draw gear with its front at +z and its `size` the real box: across the ears (482.6 mm for 19-inch gear, about
+220 mm for half width), its depth and its height (a 1U box is 43.7 mm). In a rack it is drawn at its own size in its
+column, centred in its U; gear deeper than the rack's mounting depth does not go in. A shelf is drawn from the bottom
+of its lowest U; loose gear stands on its 4 mm tray, side by side from the left, its front at the shelf's front.
 
-The gear is saved on the placed rack (`rack.slots`: each slot's `id`, `type`, `u` = its lowest rail position counted
-from the bottom, 1 = the lowest U whatever the rack's numbering, and an optional `name`), and the plan keeps a copy
-of each gear's recipe like any placed item's, so a rack shows its gear without the pack. Home Assistant refuses an
-editor's save that breaks the rules above (`invalid_rack`).
+Any item may give its estimated typical power draw in `watts` (a number, 0 to 100,000). The rack sheet adds up the
+watts of a rack's gear, shelves' loose gear included; when electric gear has no `watts` the total is shown as a minimum ("≥ 93 W").
+
+The bundled `theovencook.it` pack has six starters: `rack_switch_24_1u`, `rack_patch_panel_24_1u`, `rack_blank_1u`,
+`rack_switch_8_half_1u` (half width), `rack_pdu_vertical_0u` (0U, 980 mm: for floor cabinets) and `rack_shelf_2u`.
+
+The gear is saved on the placed rack (`rack.slots`). Each slot has:
+
+| Field | Value |
+| --- | --- |
+| `id` | Unique within the rack. |
+| `type` | The gear's item type. |
+| `u` | Its lowest rail position counted from the bottom, 1 = the lowest U whatever the rack's numbering. Loose gear: its shelf's. |
+| `name` | Its own name (optional). |
+| `col` | Its column: 0 or 1 for half width, 0 to 2 for a third, from the left; for 0U gear its lane, 0 left, 1 right. Default 0. |
+| `face` | `front` (default) or `rear`. A 2-post rack has no rear. Full-depth gear takes both faces whichever it names. |
+| `on` | Loose gear only: the id of the shelf slot it stands on. |
+
+The rules: gear takes whole U from its lowest one up; two pieces clash when they share a U, a face and some of the
+width (0U gear only clashes with 0U gear in the same lane and face, loose gear only with the room left on its
+shelf). Gear sticks out when it runs past the top or the bottom, or has no such column or lane. Loose gear must be no
+taller than the shelf's U less the tray, no deeper than the shelf, and all loose gear on a shelf together no wider
+than the opening between the rails (its half or third for a narrower shelf).
+
+The editor's **Edit rack** sheet shows the front or the rear (a toggle in its head, beside U used / free and the
+estimated watts). Half- and third-width gear goes into the column under the pointer; 0U gear goes into the narrow
+lanes either side of the U numbers. Choose a shelf to put loose gear on it. A rack's item panel has a **Rack frame**
+picker: another rack of the same kind (wall or floor) takes the rack's place at its own size, and the gear stays; gear
+that no longer fits is listed with why (in the panel and in the sheet) and is not drawn until it is moved.
+
+The plan keeps a copy of each gear's recipe like any placed item's, so a rack shows its gear without the pack. Home
+Assistant refuses an editor's save that breaks the rules above (`invalid_rack`), except gear left misplaced by a
+change of the rack frame (another type or size) in that save, and breaks the plan had already.
 
 ## What the loader checks
 
