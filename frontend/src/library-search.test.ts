@@ -6,7 +6,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { basicTypes, buildIndex, searchLibrary, type LibraryEntry } from "./library-index.ts";
+import { basicTypes, buildIndex, searchLibrary, warmIndex, type LibraryEntry } from "./library-index.ts";
 import { editDistance } from "./fuzzy.ts";
 import type { FurniturePack, PackItem } from "./packs.ts";
 
@@ -219,6 +219,15 @@ test("catalogue: the IT devices are found by the words people type (#118)", () =
   find("unifi u7", /Wi-Fi 7/i);
   find("cloud gateway", /Cloud Gateway/i);
   find("dream router", /Dream Router/i);
+});
+
+test("warming the index up front prepares each entry once and leaves the search as it was (#131)", () => {
+  const entries = indexOf([pack(item("sofa_3", "Sofa"), item("bed_double", "Double bed"), item("tv_55", "TV 55 inch"))]);
+  const before = labels(entries, "so");
+  const fresh = indexOf([pack(item("sofa_3", "Sofa"), item("bed_double", "Double bed"), item("tv_55", "TV 55 inch"))]);
+  assert.equal(warmIndex(fresh), fresh.length);
+  assert.equal(warmIndex(fresh), 0, "already prepared");
+  assert.deepEqual(labels(fresh, "so"), before);
 });
 
 test("catalogue: the car catalogue is found by brand, model and body, and 'car' still lists cars (#129)", () => {

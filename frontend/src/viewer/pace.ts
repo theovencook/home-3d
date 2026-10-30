@@ -48,3 +48,15 @@ export const SENSOR_SYNC_MS = 2000;
 export function lowSyncDelay(sinceLast: number): number {
   return Math.max(0, SENSOR_SYNC_MS - sinceLast);
 }
+
+/**
+ * Every other device: measured values alone reach the 3D view at most this often (#131). Power sensors tick several
+ * times a second and each sync redoes markers, light, cables and cards (16 ms on average on a large home, 130 ms at
+ * worst); a value shown a second late is still live.
+ */
+export const SENSOR_SYNC_FULL_MS = 1000;
+
+/** How long a sensor-only change waits, given the time since the last sync and the tablet level (0: show it now). */
+export function sensorSyncDelay(sinceLast: number, low: boolean): number {
+  return low ? lowSyncDelay(sinceLast) : Math.max(0, SENSOR_SYNC_FULL_MS - sinceLast);
+}

@@ -16,12 +16,12 @@ import { furnitureFootprint, GANG_TYPES, isLamp, pointInPolygon, polygonArea, ST
 import { freeWallRoomLeft, generateWalls, locateOpening, openingHost, placeWallPlate, slopeTop, wallContinuation, type Wall } from "../geometry/walls.ts";
 import { clipConvex, isConvex } from "../geometry/area.ts";
 import { holeInRoom, insetHole, mergeHoles } from "../geometry/holes.ts";
-import { pushFurniture, pushRackGear } from "./furniture.ts";
-import { mountBase, packItem } from "../packs.ts";
+import { furnitureLook, hasOwnColours, pushFurniture, pushRackGear } from "./furniture.ts";
+import { mountBase, packItem, packsVersion } from "../packs.ts";
 import { pushOutdoor } from "./outdoor.ts";
 import { pushModules } from "./roof.ts";
 import type { RoofFace } from "../solar.ts";
-import { cutAbove, cutLinesAbove, FURN_OFFSET, ALWAYS, CAP_OFFSET, CUT_OFFSET, EDGE_BASE, EDGE_CUT, EDGE_SOFT, EDGE_TOP, GeoBuffer, LineBuffer, LOWER_OFFSET, pushPrism, triangulate } from "./geo.ts";
+import { cutAbove, cutLinesAbove, FURN_OFFSET, ALWAYS, CAP_OFFSET, CUT_OFFSET, EDGE_BASE, EDGE_CUT, EDGE_SOFT, EDGE_TOP, GeoBuffer, LineBuffer, type GeoSlice, type LineSlice, LOWER_OFFSET, pushPrism, triangulate } from "./geo.ts";
 
 export { ALWAYS, CUT_OFFSET, FURN_OFFSET, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
 
@@ -477,9 +477,21 @@ export function buildFloorGeometry(
   // lamps are drawn live by the viewer (they glow with their light)
   const furnitureTris: FloorGeometry["furnitureTris"] = [];
   const racks: RackGearAt[] = [];
+  // an item drawn exactly as in this floor's last build is copied from it instead of modelled again (#131): an edit
+  // in the editor's 3D beside moves one item, the other hundreds stay as they were
+  const look = `${packsVersion()}|${cut}`;
+  const last = furnitureCache.get(floor.id);
+  const had = last?.look === look ? last.pieces : null;
+  const pieces = new Map<string, FurniturePiece>();
+  furnitureCache.set(floor.id, { look, pieces });
+  // only items in colours of their own draw differently in the neon and the light looks
+  const lookOf = furnitureLook();
+  const otherLook = furnitureLook(true);
   for (const item of floor.furniture) {
     if (isLamp(item.type)) continue;
     const start = wallBuf.count;
+    // indices into the arrays count from the last copied item (GeoBuffer.append)
+    const t0 = wallBuf.p.length / 9;
     const l0 = lines.p.length / 6;
     let f = item;
     let base = mountBase(floor, f);
@@ -491,13 +503,31 @@ export function buildFloorGeometry(
     }
     // a rack's gear is drawn on its own by the viewer (#121)
     const gear = !!f.rack?.slots?.length && !!packItem(f.type)?.rack_frame;
-    pushFurniture(wallBuf, lines, shadow, f, base, false, !gear);
-    if (gear) racks.push({ f, base });
-    // a wardrobe or a stair reaching above the cut height is cut with the walls, so it hides nothing behind it
-    if (base + f.h > cut + 0.05) {
-      cutAbove(wallBuf, start, cut, FURN_OFFSET);
-      cutLinesAbove(lines, l0, cut, FURN_OFFSET);
+    const own = hasOwnColours(f);
+    const drawn = `|${base}|${JSON.stringify(f)}`;
+    const key = `${own ? lookOf : ""}${drawn}`;
+    const piece = had?.get(key);
+    if (piece) {
+      wallBuf.append(piece.solid);
+      lines.append(piece.lines);
+      shadow.append(piece.shadow);
+      cacheStats.hits++;
+    } else {
+      const s0 = shadow.p.length / 9;
+      pushFurniture(wallBuf, lines, shadow, f, base, false, !gear);
+      // a wardrobe or a stair reaching above the cut height is cut with the walls, so it hides nothing behind it
+      if (base + f.h > cut + 0.05) {
+        cutAbove(wallBuf, t0, cut, FURN_OFFSET);
+        cutLinesAbove(lines, l0, cut, FURN_OFFSET);
+      }
+      cacheStats.misses++;
+      pieces.set(key, { solid: wallBuf.slice(t0), lines: lines.slice(l0 * 2), shadow: shadow.slice(s0) });
     }
+    if (piece) pieces.set(key, piece);
+    // the other look's copy stays too: a look switch back and forth models it only once
+    const other = own ? had?.get(`${otherLook}${drawn}`) : undefined;
+    if (other) pieces.set(`${otherLook}${drawn}`, other);
+    if (gear) racks.push({ f, base });
     furnitureTris.push({ id: f.id, start, end: wallBuf.count });
   }
 
@@ -518,6 +548,37 @@ export function buildFloorGeometry(
     racks,
     roofUnder,
   };
+}
+
+/** An item's triangles, edges and contact shadow as one floor build drew them (#131). */
+interface FurniturePiece {
+  solid: GeoSlice;
+  lines: LineSlice;
+  shadow: GeoSlice;
+}
+
+/**
+ * Per floor: the items of its last build, by what they were drawn from (the look for items in colours of their own,
+ * base height and the item), valid while the packs and the cut height stay (`look`). Only the items of the last build
+ * are kept, those in colours of their own also as the other look drew them: never more than two copies.
+ */
+const furnitureCache = new Map<string, { look: string; pieces: Map<string, FurniturePiece> }>();
+const cacheStats = { hits: 0, misses: 0 };
+
+/** Forget every floor's items (the next build models them all). */
+export function clearFurnitureCache(): void {
+  furnitureCache.clear();
+}
+
+/** Forget the items of every floor but these (#131: the floors of another home). */
+export function keepFurnitureOf(floorIds: Iterable<string>): void {
+  const keep = new Set(floorIds);
+  for (const id of furnitureCache.keys()) if (!keep.has(id)) furnitureCache.delete(id);
+}
+
+/** Items copied from the last build (hits) and modelled (misses) so far. */
+export function furnitureCacheStats(): { hits: number; misses: number } {
+  return { ...cacheStats };
 }
 
 /** A rack whose gear the viewer draws on its own (#121): the item as drawn and its mount height. */

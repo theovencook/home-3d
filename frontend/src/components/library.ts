@@ -7,7 +7,7 @@
 
 import { css, html, LitElement, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
-import { KINDS, activeFilters, cardsOf, searchLibrary, sizeText, type LibraryCard, type LibraryChip, type LibraryEntry, type LibraryFilter, type Room, ROOMS } from "../library-index.ts";
+import { KINDS, activeFilters, cardsOf, searchLibrary, warmIndex, sizeText, type LibraryCard, type LibraryChip, type LibraryEntry, type LibraryFilter, type Room, ROOMS } from "../library-index.ts";
 import { updatesOnCard } from "../pack-updates.ts";
 import { tokens } from "../styles.ts";
 import { thumbFor } from "../thumbs.ts";
@@ -98,6 +98,7 @@ export class FurnitureLibrary extends LitElement {
   private observed = new WeakSet<Element>();
   private wanted = new Set<string>();
   private drawing = 0;
+  private warmTimer: ReturnType<typeof setTimeout> | undefined;
   private queue: LibraryEntry[] = [];
 
   constructor() {
@@ -128,6 +129,16 @@ export class FurnitureLibrary extends LitElement {
   willUpdate(changed: Map<string, unknown>): void {
     if (changed.has("roomHint") && !this.roomTouched) this._room = this.roomHint;
     if (changed.has("entries")) {
+      // the search's index is worked out while nothing is typed yet, not on the first letter (#131)
+      clearTimeout(this.warmTimer);
+      const entries = this.entries;
+      // in short slices, so a slow tablet never stalls on it
+      const warm = (from: number) => {
+        const end = Math.min(entries.length, from + 200);
+        warmIndex(entries.slice(from, end));
+        if (end < entries.length) this.warmTimer = setTimeout(() => warm(end), 0);
+      };
+      this.warmTimer = setTimeout(() => warm(0), 300);
       // a pack that is gone (removed) no longer narrows anything
       if (this._pack && !this.entries.some((e) => e.pack === this._pack)) this._pack = null;
       // packs changed: forget pictures of items that are gone and start over with the queue
@@ -140,6 +151,7 @@ export class FurnitureLibrary extends LitElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    clearTimeout(this.warmTimer);
     this.observer?.disconnect();
     this.observer = null;
   }
@@ -157,16 +169,19 @@ export class FurnitureLibrary extends LitElement {
       { root: null, rootMargin: "200px" },
     );
     const byKey = this.byKey;
-    const bottom = window.innerHeight + 200;
     for (const el of this.renderRoot.querySelectorAll<HTMLElement>(".fp3d-lc-pic[data-key]")) {
+      // a new card: the observer reports it once it is laid out (in view or not)
       if (!this.observed.has(el)) {
         this.observed.add(el);
         this.observer.observe(el);
+        continue;
       }
       const entry = byKey.get(el.dataset.key ?? "");
-      if (!entry || this._thumbs.has(entry.type)) continue;
-      const r = el.getBoundingClientRect();
-      if (r.bottom >= -200 && r.top <= bottom) this.want(entry);
+      if (!entry || this._thumbs.has(entry.type) || this.wanted.has(entry.type)) continue;
+      // a card still without its picture: asked again if it is in view; observing it anew reports that after the next
+      // layout, where measuring it here forced a layout of every new card on each keystroke (#131)
+      this.observer.unobserve(el);
+      this.observer.observe(el);
     }
   }
 
@@ -549,6 +564,9 @@ export class FurnitureLibrary extends LitElement {
         position: relative;
         display: flex;
         flex-direction: column;
+        /* cards out of view are not laid out or painted: a first letter typed shows hundreds of them (#131) */
+        content-visibility: auto;
+        contain-intrinsic-size: auto 220px;
         background: rgba(255, 255, 255, 0.04);
         border: 1px solid var(--fp3d-line);
         border-radius: 10px;

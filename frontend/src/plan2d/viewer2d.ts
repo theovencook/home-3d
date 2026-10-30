@@ -287,6 +287,15 @@ export class Plan2dViewer implements ViewerSurface {
   setKeepRoof(): void {}
   setKeepView(): void {}
   setParked(): void {}
+
+  /** The 2D plan draws each change as it comes (#131: the 3D viewer rebuilds once per batch). */
+  batch(changes: () => void): void {
+    changes();
+  }
+
+  busy(): boolean {
+    return false;
+  }
   setPatches(): void {}
   setPersonLook(): void {}
   setPersons(): void {}

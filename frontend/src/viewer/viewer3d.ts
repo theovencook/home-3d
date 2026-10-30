@@ -7,7 +7,7 @@
 
 import { rackDrawOf, type RackDraw } from "../rack-elevation.ts";
 import { RACK_STATUS_COLOURS, slotEntities, type RackStatus } from "../rack-links.ts";
-import { rackContents, rackSlotAt, type RackSlot } from "../rack.ts";
+import { rackContents, rackTapSlot, type RackSlot } from "../rack.ts";
 import { rackLayout, readRackFrame } from "../rack-frame.ts";
 import {
   AdditiveBlending,
@@ -56,14 +56,14 @@ import { placeWallPlate } from "../geometry/walls.ts";
 import { buildEarth } from "./earth.ts";
 import { clampIntoRoom } from "../geometry/snap.ts";
 import { activeSections, roofRider, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
-import { buildFloorGeometry, buildRackGear, SLAB, stairHoleParts, type FloorGeometry, type RackGearAt } from "./build.ts";
+import { buildFloorGeometry, buildRackGear, keepFurnitureOf, SLAB, stairHoleParts, type FloorGeometry, type RackGearAt } from "./build.ts";
 import { rackDetailWanted } from "./rack-lod.ts";
 import { OrbitControls, type OrbitView } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { CameraProjections, PROJECTION_LAYER, type ProjectionSurface, type ProjectorPose } from "./projection.ts";
 import type { RoleColours } from "../colour-roles.ts";
 import type { RoleMaterials } from "../role-materials.ts";
-import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, pushRackLeds, setLightLook, hasOwnColours } from "./furniture.ts";
+import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, pushRackLeds, setLightLook, hasOwnColours, furnitureLook } from "./furniture.ts";
 import { pushPipeTube, type PipeTube } from "./pipes.ts";
 // the walk through the house at eye height (lives with the viewer it drives)
 export { FloorMap, WalkCamera, type WalkState } from "./walk.ts";
@@ -72,8 +72,11 @@ export { FloorMap, WalkCamera, type WalkState } from "./walk.ts";
 export const funLib = { Group, Mesh, MeshBasicMaterial, CanvasTexture, Color, PlaneGeometry, BufferGeometry: Geometry, Float32BufferAttribute, DoubleSide };
 
 export type { PipeTube };
-import { groundUnder, isCooktopZone, mountBase, packItem, packMotion, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "../packs.ts";
+import { groundUnder, isCooktopZone, mountBase, packItem, packMotion, packsVersion, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "../packs.ts";
 import { withVehicles } from "../parking.ts";
+import { floorKeys } from "./floor-keys.ts";
+import { RebuildBatch } from "./rebuild-batch.ts";
+import { buildOrder } from "./floor-order.ts";
 import { buildRoof, type RoofGeometry, type RoofWindowState } from "./roof.ts";
 import { SunFx } from "./sun-fx.ts";
 import { Realism } from "./realism.ts";
@@ -499,6 +502,8 @@ interface RackView {
 
 interface FloorView {
   floor: Floor;
+  /** What the floor was drawn from (floor-keys.ts, #131): a new plan with the same key keeps this view. */
+  key: string;
   /** Position in the stack, ordered by elevation. */
   rank: number;
   group: Group;
@@ -697,6 +702,31 @@ export class FloorplanViewer {
   private lastWake = performance.now();
   /** The tints and selection last written into each floor's colours (applyHighlight skips floors that stay). */
   private highlighted = new WeakMap<object, string>();
+  /** Scene rebuilds, once per batch of changes (#131). */
+  private readonly rebuilds = new RebuildBatch((incremental) => {
+    this.rebuild(incremental);
+    if (this.fitBuilt) {
+      this.fit(0);
+      this.fitAll = this.pendingFloors.size > 0;
+    }
+    this.fitBuilt = false;
+    this.invalidate();
+  });
+  /** A new home's floors still to build, one per frame (#131). */
+  private pendingFloors = new Set<string>();
+  private floorFrame = 0;
+  /** A look's shaders compiling in the background (#131): no frames until they are ready. */
+  private warming: Promise<void> | null = null;
+  /** A renderer of another quality compiling its shaders before it takes over (#131). */
+  private nextRenderer: WebGLRenderer | null = null;
+  /** Own colours are drawn for the light looks (setLightLook): the scene was built that way. */
+  private lightLook = false;
+  /** The first plan arrived: the view fits it once it is built (`fitAll`: again once its last floor is, #131). */
+  private fitAll = false;
+  /** The first plan arrived: the view fits it once it is built. */
+  private fitBuilt = false;
+  /** Per floor: its light surface as last built and what from (kept while rooms, walls and openings stay, #131). */
+  private lightSurfaces = new Map<string, { key: string; surface: LightSurface }>();
   private decorWas = false;
   /** A frame asked for by a module's decoration (pets, ghost, fish), at the decorative pace. */
   private decorTimer: ReturnType<typeof setTimeout> | undefined;
@@ -911,10 +941,15 @@ export class FloorplanViewer {
     if (sig === this.parkedSig) return;
     this.parkedSig = sig;
     this.parked = parked;
-    if (this.building) {
-      this.rebuild();
-      this.invalidate();
-    }
+    if (this.building) this.rebuilds.request(false);
+  }
+
+  /**
+   * Changes that each rebuild the scene (packs, parked cars, a new plan) run together and rebuild it once (#131): a
+   * home switch handed all three over and the scene was built three times.
+   */
+  batch(changes: () => void): void {
+    this.rebuilds.run(changes);
   }
 
   /** Frame statistics are only gathered while something shows them. */
@@ -946,11 +981,47 @@ export class FloorplanViewer {
   }
 
   setQuality(quality: Quality): void {
-    const canvas = this.renderer.domElement;
     const next = this.makeRenderer(quality);
     this.rebuildTier();
     this.applyTierFlags();
-    canvas.replaceWith(next.domElement);
+    // the new context compiles the scene's shaders before it takes over (#131): the old one keeps drawing meanwhile
+    this.nextRenderer?.dispose();
+    this.nextRenderer?.forceContextLoss();
+    this.nextRenderer?.domElement.remove();
+    this.nextRenderer = next;
+    if (this.realism.active) this.realism.setPlan(next, this.realPlan());
+    void compiled(next, this.scene, this.camera).then(() => {
+      if (this.nextRenderer !== next || this.disposed) return;
+      this.nextRenderer = null;
+      this.useRenderer(next);
+    });
+  }
+
+  /**
+   * Shaders of a new look or quality still compile in the background, or a new home's floors are still being built
+   * (#131): pictures of the view wait for them.
+   */
+  busy(): boolean {
+    return !!this.warming || !!this.nextRenderer || this.pendingFloors.size > 0;
+  }
+
+  /**
+   * Compiles the scene's shaders in the background (#131): a new look, a new home. No frame is drawn until they are
+   * ready – the first one would compile them on the spot and block the page for up to a second.
+   */
+  private warm(): void {
+    if (this.realism.active) this.realism.realize(this.scene, !!this.realPlan(), this.renderer);
+    const warm = compiled(this.renderer, this.scene, this.camera).then(() => {
+      if (this.warming !== warm) return;
+      this.warming = null;
+      this.invalidate();
+    });
+    this.warming = warm;
+  }
+
+  /** A new renderer (another quality) takes over the canvas. */
+  private useRenderer(next: WebGLRenderer): void {
+    this.renderer.domElement.replaceWith(next.domElement);
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer = next;
@@ -969,10 +1040,7 @@ export class FloorplanViewer {
   setPacks(packs: FurniturePack[], recipes?: Record<string, PlanRecipe>): void {
     setPacks(packs);
     if (recipes) setPlanRecipes(recipes);
-    if (this.building) {
-      this.rebuild();
-      this.invalidate();
-    }
+    if (this.building) this.rebuilds.request(false);
   }
 
   setBuilding(building: Building): void {
@@ -982,9 +1050,9 @@ export class FloorplanViewer {
     // this bundle's own copy of the ground (outdoor areas, earth around cellars) and of the plan's recipes (#2)
     setTerrain(building);
     setPlanRecipes(building.recipes);
-    this.rebuild();
-    if (first) this.fit(0);
-    this.invalidate();
+    // an edit changes one floor, mostly: the others stay as they are (#131)
+    if (first) this.fitBuilt = true;
+    this.rebuilds.request(true);
   }
 
   /** Show one floor (null = the whole house). */
@@ -1510,7 +1578,10 @@ export class FloorplanViewer {
     // waste bins, pack items and items in colours of their own (#12) keep them in the light looks: drawn anew in full colour (#609)
     const light = theme !== "neon";
     setLightLook(light);
-    if (this.building?.floors.some((f) => f.furniture.some(hasOwnColours))) this.rebuild();
+    // only between neon and the light looks (day, blueprint, realistic all draw own colours in full), and only the
+    // floors with such items (#131)
+    if (light !== this.lightLook && this.building?.floors.some((f) => f.furniture.some(hasOwnColours))) this.rebuilds.request(true);
+    this.lightLook = light;
     const blending = lineBlending(theme);
     const lineMats = [...this.floors.map((f) => f.materials.lines), ...(this.roof ? [this.roof.lines] : [])];
     for (const m of lineMats) {
@@ -1521,6 +1592,9 @@ export class FloorplanViewer {
     this.placeGround();
     this.realism.enable(this.scene, theme === "realistic");
     this.applyRealism();
+    // the realistic look's lit surfaces compile in the background; the last picture stays until they are ready (#131)
+    this.warming = null;
+    if (this.realism.active) this.warm();
     // real shadows replace the drawn patches of sunlight
     for (const fv of this.floors) {
       fv.sunSig = "-";
@@ -2215,6 +2289,10 @@ export class FloorplanViewer {
     this.projections.dispose();
     this.realism.dispose();
     this.disposed = true;
+    cancelAnimationFrame(this.floorFrame);
+    this.nextRenderer?.dispose();
+    this.nextRenderer?.forceContextLoss();
+    this.nextRenderer = null;
     cancelAnimationFrame(this.frame);
     clearTimeout(this.flowTimer);
     clearTimeout(this.effectTimer);
@@ -2357,11 +2435,13 @@ export class FloorplanViewer {
     }
   }
 
-  private clear(): void {
+  /** Takes the floors down, except those in `keep` (they stay in the scene with their labels, #131). */
+  private clear(keep: ReadonlyMap<string, FloorView> = new Map()): void {
     // robots share one geometry: keep them out of the floor groups while those are disposed
-    for (const r of this.robots.values()) r.group.removeFromParent();
-    for (const f of this.fans.values()) f.group.removeFromParent();
+    for (const r of this.robots.values()) if (!keep.has(r.info.floorId)) r.group.removeFromParent();
+    for (const f of this.fans.values()) if (!keep.has(f.floorId)) f.group.removeFromParent();
     for (const fv of this.floors) {
+      if (keep.get(fv.floor.id) === fv) continue;
       for (const pic of fv.screenPics.values()) {
         (pic.mesh.material as Material).dispose();
         pic.texture?.dispose();
@@ -2378,8 +2458,11 @@ export class FloorplanViewer {
     }
     this.floors = [];
     this.floorMap = new Map();
-    // device pins survive a rebuild; only floor and room labels are recreated
-    for (const el of [...this.labels.children]) if (!(el as HTMLElement).dataset.entity) el.remove();
+    // device pins survive a rebuild; only floor and room labels are recreated (a kept floor keeps its own)
+    for (const el of [...this.labels.children]) {
+      const data = (el as HTMLElement).dataset;
+      if (!data.entity && !(data.floor && keep.has(data.floor))) el.remove();
+    }
   }
 
   private makeDevicePin(entityId: string): HTMLButtonElement {
@@ -2446,10 +2529,17 @@ export class FloorplanViewer {
   /** Light surface of a floor (rebuilt with the floor plan and when the detail level changes). */
   private buildLightSurface(fv: FloorView): void {
     const cell = this.lowQuality ? 0.5 : 0.25;
-    const surface = buildLightSurface(fv.floor, fv.geo.walls2d, fv.geo.wallBuckets, fv.geo.openings, cell, fv.geo.holes, fv.geo.roofUnder);
+    // the surface follows rooms, walls and openings, not the furniture: an item moved keeps it (#131)
+    const f = fv.floor;
+    const key = JSON.stringify([cell, f.elevation, f.height, f.cut_height, f.rooms, f.walls, f.openings, fv.geo.holes, this.building?.settings.roof ?? null, this.building?.settings.wall_exterior, this.building?.settings.wall_interior]);
+    const had = this.lightSurfaces.get(f.id);
+    const raw = had?.key === key ? had.surface : buildLightSurface(fv.floor, fv.geo.walls2d, fv.geo.wallBuckets, fv.geo.openings, cell, fv.geo.holes, fv.geo.roofUnder);
+    this.lightSurfaces.set(f.id, { key, surface: raw });
     // rooms joined by "no wall" form one zone: a lamp lights the open neighbour as if it stood in the same room
     const zones = lightZonesOf(fv.floor, fv.geo.openRooms);
     fv.lightZones = zones.some((z, i) => z !== i) ? zones : null;
+    // the zones are written into a copy: the kept surface stays as built
+    const surface = fv.lightZones ? { ...raw, room: raw.room.slice(), doors: raw.doors.map((d) => ({ ...d })), blockers: raw.blockers.map((w) => ({ ...w })) } : raw;
     if (fv.lightZones) {
       for (let i = 0; i < surface.room.length; i++) {
         const r = surface.room[i];
@@ -2705,14 +2795,40 @@ export class FloorplanViewer {
     };
   }
 
-  private rebuild(): void {
+  /**
+   * Draws the building. `incremental` (a new plan, #131): a floor whose key (floor-keys.ts) stayed keeps its meshes,
+   * labels and lights; only the others are built again. Anything else (packs, parked cars, a look) builds every floor.
+   */
+  private rebuild(incremental = false): void {
     const previous = new Map(this.floors.map((f) => [f.floor.id, { y: f.y, o: f.o }]));
     const previousOpenings = new Map(this.floors.map((f) => [f.floor.id, f.openings]));
-    this.clear();
     const b = this.building;
+    // the look counts only for floors with items in colours of their own (they draw them differently, #609)
+    const look = furnitureLook();
+    const keys = b ? floorKeys(b, `${packsVersion()}|${this.parkedSig}|${this.lowQuality}`, (f) => (f.furniture.some(hasOwnColours) ? look : "")) : new Map<string, string>();
+    const keep = new Map<string, FloorView>();
+    if (incremental) for (const fv of this.floors) if (keys.get(fv.floor.id) === fv.key) keep.set(fv.floor.id, fv);
+    // a new home (none of its floors shown yet) comes in one floor per frame, the open one first, so no single task
+    // builds the whole house (#131); a floor of it built meanwhile is kept by the next pass
+    const fresh = !!b && b.floors.length > 1 && !this.floors.some((fv) => keys.has(fv.floor.id));
+    const loading = fresh || this.pendingFloors.size > 0;
+    const next = loading && b ? buildOrder(b, this.floorId).find((id) => !keep.has(id)) : undefined;
+    const pending = new Set<string>();
+    this.clear(keep);
     if (!b) return;
     const ordered = [...b.floors].sort((p, q) => p.elevation - q.elevation);
     for (const floor of b.floors) {
+      const kept = keep.get(floor.id);
+      if (kept) {
+        kept.floor = floor;
+        kept.rank = ordered.indexOf(floor);
+        this.floors.push(kept);
+        continue;
+      }
+      if (loading && floor.id !== next) {
+        pending.add(floor.id);
+        continue;
+      }
       // solar fields in the garden stand on the ground floor, wall fields hang on their floor's walls
       const fields = b.settings.roof?.solar ?? [];
       const garden = groundFloor(b)?.id === floor.id ? fields.filter((f) => f.face === GROUND).map((field) => ({ field, face: groundFace(b, field) })) : [];
@@ -2894,6 +3010,7 @@ export class FloorplanViewer {
       }
       this.floors.push({
         floor,
+        key: keys.get(floor.id) ?? "",
         rank: ordered.indexOf(floor),
         group,
         geo,
@@ -2964,7 +3081,12 @@ export class FloorplanViewer {
       });
     }
     this.floorMap = new Map(this.floors.map((f) => [f.floor.id, f]));
-    for (const fv of this.floors) {
+    // what was kept for floors that are gone (another home) goes with them
+    for (const id of this.lightSurfaces.keys()) if (!this.floorMap.has(id)) this.lightSurfaces.delete(id);
+    keepFurnitureOf(this.floorMap.keys());
+    // a kept floor still has its lamps, lights, doors and cables (the device updates keep them current)
+    const built = this.floors.filter((fv) => keep.get(fv.floor.id) !== fv);
+    for (const fv of built) {
       this.buildFridges(fv);
       this.buildRackLeds(fv);
       this.buildPipes(fv);
@@ -2972,7 +3094,7 @@ export class FloorplanViewer {
     }
     this.labelsDirty = true;
     if (this.floorId && !b.floors.some((f) => f.id === this.floorId)) this.floorId = null;
-    for (const fv of this.floors) {
+    for (const fv of built) {
       this.buildLamps(fv);
       this.buildScreens(fv);
       const prev = previousOpenings.get(fv.floor.id);
@@ -2984,13 +3106,28 @@ export class FloorplanViewer {
       this.buildLightSurface(fv);
       this.buildSun(fv);
     }
-    this.applyTargets(previous.size === 0);
+    this.applyTargets(previous.size === 0 || loading);
     this.applyHighlight();
     this.applyTierFlags();
     this.buildRoofMesh();
     this.buildSunFx();
     this.applyRealism();
     this.updateGhost();
+    this.pendingFloors = pending;
+    // a new home's first floor: its shaders compile before its first frame (the floors after it use the same ones)
+    if (fresh || previous.size === 0) this.warm();
+    if (pending.size) {
+      // the next floor after this frame is drawn
+      cancelAnimationFrame(this.floorFrame);
+      this.floorFrame = requestAnimationFrame(() => {
+        this.floorFrame = 0;
+        setTimeout(() => !this.disposed && this.pendingFloors.size && this.rebuilds.request(true), 0);
+      });
+    } else if (loading && !fresh && this.fitAll) {
+      // the first plan is all there: the view fitted to its first floor takes it all in (unless it was moved since)
+      if (stillFitted(this.fitted, this.controls.goal)) this.fit(0);
+      this.fitAll = false;
+    }
   }
 
   private buildRoofMesh(): void {
@@ -4404,7 +4541,7 @@ export class FloorplanViewer {
         // a rack's gear is a mesh of its own (#121): it belongs to the rack
         const id = (hit.object.userData.rackId as string | undefined) ?? inRange(fv.geo.furnitureTris, tri);
         // a rack's gear (#119): the piece under the tap, before the rack's own device; the rack itself after it
-        const rack = id ? this.rackHit(fv, id, hit.point) : null;
+        const rack = id ? this.rackHit(fv, id, hit.point, ray.ray.direction) : null;
         if (rack?.slot) return { floorId: fv.floor.id, roomId: null, rack };
         const entity = id ? this.pickFurniture.get(id) : undefined;
         if (entity) return { entity };
@@ -4441,7 +4578,7 @@ export class FloorplanViewer {
   }
 
   /** The rack with gear a tap on furniture `id` hit, and the slot whose gear lies under the hit point (#119). */
-  private rackHit(fv: FloorView, id: string, point: Vector3): RackHit | null {
+  private rackHit(fv: FloorView, id: string, point: Vector3, dir: Vector3): RackHit | null {
     const f = fv.floor.furniture.find((o) => o.id === id);
     const slots = f?.rack?.slots;
     const frame = slots?.length ? readRackFrame(packItem(f!.type)) : null;
@@ -4454,8 +4591,11 @@ export class FloorplanViewer {
     const dx = p.x - f.x;
     const dz = p.z - f.z;
     const local: [number, number, number] = [(f.mirror ? -1 : 1) * (dx * c + dz * s), p.y - mountBase(fv.floor, f), -dx * s + dz * c];
-    const at = rackLayout(frame, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h));
-    const slotId = rackSlotAt(rackContents(at, slots, packItem), local);
+    // the tap's direction the same way (a tap on a glass or mesh door goes on to the gear behind it, #131)
+    const q = fv.group.worldToLocal(point.clone().add(dir)).sub(p);
+    const along: [number, number, number] = [(f.mirror ? -1 : 1) * (q.x * c + q.z * s), q.y, -q.x * s + q.z * c];
+    const [w, d, h] = [Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h)];
+    const slotId = rackTapSlot(frame, w, d, h, rackContents(rackLayout(frame, w, d, h), slots, packItem), local, along);
     return { id, slot: slotId ? (slots.find((o) => o.id === slotId) ?? null) : null, f };
   }
 
@@ -5198,6 +5338,8 @@ export class FloorplanViewer {
   private render(now: number): void {
     this.frame = 0;
     if (this.disposed) return;
+    // a new look's shaders still compile: the last frame stays (the next one is asked for when they are ready)
+    if (this.warming) return;
     const dt = this.lastFrame ? Math.min(100, now - this.lastFrame) : 16;
     let orbiting = false;
     if (this.orbitSpeed && !this.controls.active) {
@@ -6052,4 +6194,22 @@ export function pushLampModel(
       break;
     }
   }
+}
+
+/** Longest wait for shaders compiling in the background (#131): a frame is drawn after it anyway. */
+const COMPILE_WAIT_MS = 4000;
+
+/**
+ * The scene's shaders compiled by `renderer` without blocking the page where the browser compiles them in parallel
+ * (KHR_parallel_shader_compile; elsewhere it compiles them at once, as the first frame would have).
+ */
+function compiled(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): Promise<void> {
+  let wait: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    renderer.compileAsync(scene, camera).then(
+      () => undefined,
+      () => undefined,
+    ),
+    new Promise<void>((done) => (wait = setTimeout(done, COMPILE_WAIT_MS))),
+  ]).finally(() => clearTimeout(wait));
 }
