@@ -61,3 +61,25 @@ test("editing the chosen item (typing changes the plan) keeps the cursor (#56)",
   el.updateFurniture({ name: "Couch" });
   assert.equal(input.blurs, 0);
 });
+
+test("Escape with the cursor in a box lets go of the box and keeps the item (#70)", () => {
+  const { el, input } = editor();
+  el._tool = "furniture";
+  el.selectItem("furniture", "sofa");
+  input.focus();
+  el.escape();
+  assert.equal(input.blurs, 1);
+  assert.equal(el._furnitureId, "sofa");
+});
+
+test("Escape while furnishing goes back to the library: the item is let go, the room and the tool stay (#70)", () => {
+  const { el } = editor();
+  el._tool = "furniture";
+  el.selectItem("room", "r");
+  el.selectItem("furniture", "sofa");
+  el._roomId = "r";
+  el.escape();
+  assert.equal(el._furnitureId, null);
+  assert.equal(el._roomId, "r");
+  assert.equal(el._tool, "furniture");
+});

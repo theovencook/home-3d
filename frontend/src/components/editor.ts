@@ -55,7 +55,9 @@ import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { edgeReach, generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } from "../i18n.ts";
 import { ISSUES_URL } from "./extensions.ts";
-import { beforeSelectionChange } from "../focus-release.ts";
+import { beforeSelectionChange, deepActive, releaseTyping, takesTyping } from "../focus-release.ts";
+import { escapeStep } from "../editor-keys.ts";
+import { furnitureFields, type FurnitureField } from "../item-panel.ts";
 import { iconPath } from "../icons.ts";
 import { moduleAreaFields, moduleFurnitureFields, moduleHelp, moduleRoomFields, modulePipeRules, syncModules, type ModuleField, type ModuleHost, type PipeRules } from "../modules.ts";
 import { pipePlanner } from "../pipe-planner.ts";
@@ -2923,7 +2925,11 @@ export class Fp3dEditor extends LitElement {
   private readonly onKey = (e: KeyboardEvent) => {
     this.shiftHeld = e.shiftKey;
     const path = e.composedPath();
-    if (path.some((el) => el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) return;
+    if (path.some((el) => el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
+      // Escape in one of the editor's boxes lets go of it (what was typed is kept): the shortcuts work again (#70)
+      if (e.key === "Escape" && path.includes(this)) this.escape();
+      return;
+    }
     if (!this.isConnected || !this.offsetParent) return;
     const mod = e.ctrlKey || e.metaKey;
     // the wall view has its own keys: Delete there must never reach what is chosen in the plan behind it
@@ -2967,24 +2973,35 @@ export class Fp3dEditor extends LitElement {
     } else if (e.key === "Enter" && this.drawingPoints) {
       this.closeDraft();
     } else if (e.key === "Escape") {
-      if (this._ctx) {
-        this._ctx = null;
-        return;
-      }
-      if (this._pipeDraft) {
-        this._pipeDraft = null;
-        return;
-      }
-      if (this._pipeMode) {
-        this._pipeMode = false;
-        return;
-      }
-      if (this._draft.length) this._draft = [];
-      else if (this._tool !== "select") this._tool = "select";
+      this.escape();
+    }
+  };
+
+  /** One step back per Escape (#70): the box with the cursor, a menu, a pipe or outline, the item, the tool, the room. */
+  private escape(): void {
+    const step = escapeStep({
+      typing: takesTyping(deepActive(this.renderRoot as ShadowRoot)),
+      menu: !!this._ctx,
+      pipeDraft: !!this._pipeDraft,
+      pipeMode: this._pipeMode,
+      drawing: this._draft.length > 0,
+      item: !!(this._furnitureId || this._openingId || this._deviceId || this._outdoorId || this._wallId),
+      tool: this._tool,
+      room: !!this._roomId,
+    });
+    if (step === "release") releaseTyping(this.renderRoot as ShadowRoot);
+    else if (step === "close_menu") this._ctx = null;
+    else if (step === "cancel_pipe") this._pipeDraft = null;
+    else if (step === "end_pipe_mode") this._pipeMode = false;
+    else {
+      if (step === "clear_draft") this._draft = [];
+      // back to the library (furnishing) or to the item's room, the tool stays
+      else if (step === "deselect_item") this.selectItem("room", this._roomId);
+      else if (step === "select_tool") this._tool = "select";
       else this.selectItem("room", null);
       this._cursor = null;
     }
-  };
+  }
 
   // ------------------------------------------------------------------ actions
 
@@ -10393,7 +10410,12 @@ export class Fp3dEditor extends LitElement {
     if (this._tool === "pool") return this.renderPoolPanel(floor);
     // furnishing: the library and the selected item come first
     if (this._tool === "furniture" && floor && admin) {
-      return html`${this.furnitureItem ? this.renderFurnitureForm(this.furnitureItem) : nothing} ${this.renderFurnitureLibrary()}`;
+      // a way back to the library: the item panel takes its place while an item is chosen (#70)
+      return html`${this.furnitureItem
+          ? html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", this._roomId)}>‹ ${this.t("back_to_library")}</button>
+              ${this.renderFurnitureForm(this.furnitureItem)}`
+          : nothing}
+        ${this.renderFurnitureLibrary()}`;
     }
     // a selected item shows only its own form, with a way back to the floor and room
     const item =
@@ -11097,62 +11119,7 @@ export class Fp3dEditor extends LitElement {
           }}>${this.t("block_select")}</button></p>`
         : nothing}
       <div class="fp3d-form">
-        <label class="fp3d-field fp3d-wide"
-          >${this.t("furn_name")}
-          <input type="text" maxlength="60" .value=${f.name ?? ""} ?disabled=${!admin} placeholder=${this.t(`furn_${f.type}` as I18nKey) === `furn_${f.type}` ? "" : this.t(`furn_${f.type}` as I18nKey)} @change=${(e: Event) => this.updateFurniture({ name: (e.target as HTMLInputElement).value.trim() || null })} />
-        </label>
-        <label class="fp3d-field fp3d-wide" title=${this.t("aliases_hint")}
-          >${this.t("aliases")}
-          <input type="text" maxlength="240" .value=${(f.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.t("aliases_placeholder")} @change=${(e: Event) => this.updateFurniture({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
-        /></label>
-        ${f.name
-          ? html`<label class="fp3d-check fp3d-wide"
-              ><input type="checkbox" .checked=${!!f.show_name} ?disabled=${!admin} @change=${(ev: Event) => this.updateFurniture({ show_name: (ev.target as HTMLInputElement).checked || undefined })} />
-              ${this.t("show_name")}</label
-            >`
-          : nothing}
-        <label class="fp3d-field fp3d-wide"
-          >${this.t("furniture_type")}
-          <select ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ type: (e.target as HTMLSelectElement).value })}>
-            ${this.typeChoices(f.type).map((t) => html`<option value=${t} ?selected=${t === f.type}>${this.t(`furn_${t}` as I18nKey)}</option>`)}
-            ${(this.packs ?? [])
-              .filter((pack) => pack.items.length)
-              .map(
-              (pack) => html`<optgroup label=${packName(pack, (this.hass?.language ?? "de"))}>
-                ${pack.items.map((it) => {
-                  const t = packType(pack.id, it.id);
-                  return html`<option value=${t} ?selected=${t === f.type}>${packItemName(it, this.hass?.language ?? "en")}</option>`;
-                })}
-              </optgroup>`,
-            )}
-            ${f.type.startsWith("pack:") && !(this.packs ?? []).some((p) => f.type.startsWith(`pack:${p.id}:`))
-              ? html`<option value=${f.type} selected>${furnitureName(this.hass, f.type)}</option>`
-              : nothing}
-          </select></label
-        >
-        ${this.len(this.t("x"), f.x, (v) => this.updateFurniture({ x: v }))} ${this.len(this.t("z"), f.z, (v) => this.updateFurniture({ z: v }))}
-        ${this.len(this.t("width"), f.w, (v) => this.updateFurniture({ w: Math.max(0.01, v) }), 0.01, 0.01)}
-        ${this.len(this.t("depth"), f.d, (v) => this.updateFurniture({ d: Math.max(0.01, v) }), 0.01, 0.01)}
-        ${this.len(this.t("height_m"), f.h, (v) => this.updateFurniture({ h: Math.max(0.005, v) }), 0.01, 0)}
-        ${this.num(this.t("rotation"), f.rotation, (v) => this.updateFurniture({ rotation: ((v % 360) + 360) % 360 }), 1)}
-        ${isLamp(f.type)
-          ? nothing
-          : html`<label class="fp3d-check" title=${this.t("furn_mirror_hint")}
-              ><input type="checkbox" .checked=${!!f.mirror} ?disabled=${!admin} @change=${(ev: Event) => this.updateFurniture({ mirror: (ev.target as HTMLInputElement).checked })} />
-              ${this.t("furn_mirror")}</label
-            >`}
-        ${f.type === "led_strip"
-          ? html`${this.num(this.t("strip_tilt"), f.tilt ?? 0, (v) => this.updateFurniture({ tilt: Math.max(-90, Math.min(90, Math.round(v))) }), 5)}
-              ${f.upright ? nothing : html`<span title=${this.t("strip_rise_hint")}>${this.num(this.t("strip_rise"), f.rise ?? 0, (v) => this.updateFurniture({ rise: Math.max(-80, Math.min(80, Math.round(v))) || undefined }), 5)}</span>`}
-              <label class="fp3d-check" title=${this.t("strip_upright_hint")}
-                ><input type="checkbox" .checked=${!!f.upright} ?disabled=${!admin} @change=${(ev: Event) => this.updateFurniture({ upright: (ev.target as HTMLInputElement).checked })} />
-                ${this.t("strip_upright")}</label
-              >`
-          : nothing}
-        ${canLift(f) && this.floor
-          ? html`${this.len(this.t("mount_height"), f.mount_y ?? mountBase(this.floor, f), (v) => this.updateFurniture({ mount_y: Math.min(MAX_MOUNT_Y, Math.max(0, v)) }), 0.01, 0)}
-              ${f.mount_y != null ? html`<button class="fp3d-btn fp3d-field-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ mount_y: null })}>${this.t("height_auto")}</button>` : nothing}`
-          : nothing}
+        ${furnitureFields({ mirror: !isLamp(f.type), strip: f.type === "led_strip", lift: canLift(f) && !!this.floor }).map((field) => this.furnitureField(f, field))}
       </div>
       ${this.renderColourRoles(f)}
       ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
@@ -11210,6 +11177,77 @@ export class Fp3dEditor extends LitElement {
           ${this.renderMultiToggle()}`
         : nothing}
     </section>`;
+  }
+
+  /** One field (or a few that belong together) of the item panel, in the order of furnitureFields (#70). */
+  private furnitureField(f: Furniture, field: FurnitureField) {
+    const admin = this.isEditor;
+    switch (field) {
+      case "x":
+        return this.len(this.t("x"), f.x, (v) => this.updateFurniture({ x: v }));
+      case "z":
+        return this.len(this.t("z"), f.z, (v) => this.updateFurniture({ z: v }));
+      case "rotation":
+        return this.num(this.t("rotation"), f.rotation, (v) => this.updateFurniture({ rotation: ((v % 360) + 360) % 360 }), 1);
+      case "w":
+        return this.len(this.t("width"), f.w, (v) => this.updateFurniture({ w: Math.max(0.01, v) }), 0.01, 0.01);
+      case "d":
+        return this.len(this.t("depth"), f.d, (v) => this.updateFurniture({ d: Math.max(0.01, v) }), 0.01, 0.01);
+      case "h":
+        return this.len(this.t("height_m"), f.h, (v) => this.updateFurniture({ h: Math.max(0.005, v) }), 0.01, 0);
+      case "mount":
+        return html`${this.len(this.t("mount_height"), f.mount_y ?? mountBase(this.floor!, f), (v) => this.updateFurniture({ mount_y: Math.min(MAX_MOUNT_Y, Math.max(0, v)) }), 0.01, 0)}
+          ${f.mount_y != null ? html`<button class="fp3d-btn fp3d-field-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ mount_y: null })}>${this.t("height_auto")}</button>` : nothing}`;
+      case "mirror":
+        return html`<label class="fp3d-check" title=${this.t("furn_mirror_hint")}
+          ><input type="checkbox" .checked=${!!f.mirror} ?disabled=${!admin} @change=${(ev: Event) => this.updateFurniture({ mirror: (ev.target as HTMLInputElement).checked })} />
+          ${this.t("furn_mirror")}</label
+        >`;
+      case "strip":
+        return html`${this.num(this.t("strip_tilt"), f.tilt ?? 0, (v) => this.updateFurniture({ tilt: Math.max(-90, Math.min(90, Math.round(v))) }), 5)}
+          ${f.upright ? nothing : html`<span title=${this.t("strip_rise_hint")}>${this.num(this.t("strip_rise"), f.rise ?? 0, (v) => this.updateFurniture({ rise: Math.max(-80, Math.min(80, Math.round(v))) || undefined }), 5)}</span>`}
+          <label class="fp3d-check" title=${this.t("strip_upright_hint")}
+            ><input type="checkbox" .checked=${!!f.upright} ?disabled=${!admin} @change=${(ev: Event) => this.updateFurniture({ upright: (ev.target as HTMLInputElement).checked })} />
+            ${this.t("strip_upright")}</label
+          >`;
+      case "name":
+        return html`<label class="fp3d-field fp3d-wide"
+          >${this.t("furn_name")}
+          <input type="text" maxlength="60" .value=${f.name ?? ""} ?disabled=${!admin} placeholder=${this.t(`furn_${f.type}` as I18nKey) === `furn_${f.type}` ? "" : this.t(`furn_${f.type}` as I18nKey)} @change=${(e: Event) => this.updateFurniture({ name: (e.target as HTMLInputElement).value.trim() || null })} />
+        </label>`;
+      case "show_name":
+        return f.name
+          ? html`<label class="fp3d-check fp3d-wide"
+              ><input type="checkbox" .checked=${!!f.show_name} ?disabled=${!admin} @change=${(ev: Event) => this.updateFurniture({ show_name: (ev.target as HTMLInputElement).checked || undefined })} />
+              ${this.t("show_name")}</label
+            >`
+          : nothing;
+      case "aliases":
+        return html`<label class="fp3d-field fp3d-wide" title=${this.t("aliases_hint")}
+          >${this.t("aliases")}
+          <input type="text" maxlength="240" .value=${(f.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.t("aliases_placeholder")} @change=${(e: Event) => this.updateFurniture({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
+        /></label>`;
+      case "type":
+        return html`<label class="fp3d-field fp3d-wide"
+          >${this.t("furniture_type")}
+          <select ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ type: (e.target as HTMLSelectElement).value })}>
+            ${this.typeChoices(f.type).map((t) => html`<option value=${t} ?selected=${t === f.type}>${this.t(`furn_${t}` as I18nKey)}</option>`)}
+            ${(this.packs ?? [])
+              .filter((pack) => pack.items.length)
+              .map(
+                (pack) => html`<optgroup label=${packName(pack, this.hass?.language ?? "de")}>
+                  ${pack.items.map((it) => {
+                    const t = packType(pack.id, it.id);
+                    return html`<option value=${t} ?selected=${t === f.type}>${packItemName(it, this.hass?.language ?? "en")}</option>`;
+                  })}
+                </optgroup>`,
+              )}
+            ${f.type.startsWith("pack:") && !(this.packs ?? []).some((p) => f.type.startsWith(`pack:${p.id}:`))
+              ? html`<option value=${f.type} selected>${furnitureName(this.hass, f.type)}</option>`
+              : nothing}
+          </select></label
+        >`;
+    }
   }
 
   private setEnergy(patch: Partial<Building["energy"]>): void {
