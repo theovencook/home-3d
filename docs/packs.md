@@ -552,6 +552,34 @@ in the folder of its `group`; `frontend/src/core-pack.test.ts` checks that each 
 section. Adding an item does not touch `pack.json`; its `release` goes up once per Home 3D release that changes the
 pack, so installs holding an older imported copy pick up the bundled one.
 
+### Moving an item to another bundled pack
+
+An item's type names its pack (`pack:<pack id>:<item id>`), so moving an item file into another pack folder changes
+the id every placed copy refers to. Every move goes into `custom_components/home_3d/moved_items.json`, old type to
+new type (the item id may change too):
+
+```json
+{
+  "moved": {
+    "pack:theovencook.core:loveseat_simple": "pack:theovencook.living:loveseat_simple"
+  }
+}
+```
+
+- Plans migrate wherever they come in: when a home loads (written back once, at the same revision), when a plan is
+  saved or imported, when a backup or a restore point is restored and when a home is added (the sample home too).
+  Placed items, parking spots' vehicles and the plan's recipe copies take the new ids; a copy keeps the recipe the
+  plan showed, with its release reset to 1 (the old pack's release says nothing about the new pack).
+- An old id still resolves: the library lists the old ids of the items that moved into each pack (`aliases`), so a
+  browser draws an old plan file before it is saved, and the editor's plan import takes the new ids at once.
+- A pin follows the items into their new packs. Rolling back a pack that items moved out of also rolls back the moved
+  placed items that had taken its update.
+- A pack all of whose items moved away can be retired: delete its folder. Its pin, rollback entry and last check are
+  dropped; plans keep working through the table. Never remove an entry from the table.
+- A later move of the same item adds another entry (`a -> b`, then `b -> c`); the chain is followed.
+- `tests/test_moved_items.py` checks that every entry leads to an item a bundled pack has, and that no bundled pack
+  still offers an old id.
+
 ### The IKEA UK pack
 
 `theovencook.ikea-uk` holds models of IKEA UK bestsellers, laid out like the core pack

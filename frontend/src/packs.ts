@@ -3,7 +3,7 @@
 // "pack:<pack id>:<item id>". Every bundle (main, editor, 3D) keeps its own
 // registry, filled with setPacks() from the packs the backend returns.
 
-import { builtinBase, techBase, ELECTRIC_FURNITURE, FURNITURE_SIZE, LIFT_SPOTS, outdoorGround, pointInPolygon, spotDepth, surfaceHeight, WALL_LAMP_Y, type Floor, type Furniture } from "./model.ts";
+import { builtinBase, techBase, ELECTRIC_FURNITURE, type Building, FURNITURE_SIZE, LIFT_SPOTS, outdoorGround, pointInPolygon, spotDepth, surfaceHeight, WALL_LAMP_Y, type Floor, type Furniture } from "./model.ts";
 import type { LampModel } from "./viewer/viewer3d.ts";
 
 /** A cooking zone of a pack cooktop: a thin disc lying on the item's top. */
@@ -128,6 +128,11 @@ export interface FurniturePack {
   custom?: boolean;
   /** What was imported: the files of a v2 folder (or an old pack's payload), and where it came from (#25). */
   source?: { files?: Record<string, string>; origin?: PackOrigin };
+  /**
+   * The old ids of items that moved into this pack from another (#110, the backend's moved_items.json): old type
+   * ("pack:<old pack>:<old item>") -> the item's id here. An old id still resolves to the item.
+   */
+  aliases?: Record<string, string>;
 }
 
 /** Where a pack installed from a GitHub URL came from (#25); an update check compares `commit` (#26). */
@@ -178,6 +183,8 @@ export interface PlanRecipe {
 
 let registry: FurniturePack[] = [];
 let items = new Map<string, PackItemInfo>();
+/** Old type -> new type of the items that moved between packs (#110). */
+let moved = new Map<string, string>();
 let planItems = new Map<string, PackItem>();
 let planRecipes: Record<string, PlanRecipe> | undefined;
 let planKey = "";
@@ -195,7 +202,55 @@ export function setPacks(packs: FurniturePack[]): void {
   }
   registry = packs;
   items = new Map(packs.flatMap((p) => p.items.map((it) => [packType(p.id, it.id), it] as const)));
+  moved = new Map(packs.flatMap((p) => Object.entries(p.aliases ?? {}).map(([old, id]) => [old, packType(p.id, id)] as const)));
+  // an old id finds the moved item, unless a pack still offers an item under it
+  for (const [old, type] of moved) {
+    const entry = items.get(type);
+    if (entry && !items.has(old)) items.set(old, entry);
+  }
   version++;
+}
+
+/** The type an item has now: its new type when it moved to another pack (#110), else itself. */
+export function resolvePackType(type: string): string {
+  return moved.get(type) ?? type;
+}
+
+/**
+ * A plan with every moved item under its new type (#110): placed items, parking spots' vehicles and the plan's
+ * recipe copies with their keys (the backend checks a copy again and gives it its hash). The same object when
+ * nothing moved; the backend migrates whatever reaches it as well.
+ */
+export function migratePlanTypes(building: Building): Building {
+  if (!moved.size) return building;
+  const had = (t: string | null | undefined): t is string => !!t && moved.has(t);
+  const furnitureMoved = building.floors.some((fl) => fl.furniture.some((f) => had(f.type) || had(f.vehicle) || (f.types ?? []).some((t) => had(t.vehicle))));
+  const recipes = building.recipes ?? {};
+  const recipesMoved = Object.keys(recipes).some(had);
+  if (!furnitureMoved && !recipesMoved) return building;
+  const to = (t: string): string => moved.get(t) ?? t;
+  const floors = building.floors.map((fl) => ({
+    ...fl,
+    furniture: fl.furniture.map((f) =>
+      had(f.type) || had(f.vehicle) || (f.types ?? []).some((t) => had(t.vehicle))
+        ? { ...f, type: to(f.type), ...(f.vehicle ? { vehicle: to(f.vehicle) } : {}), ...(f.types ? { types: f.types.map((t) => ({ ...t, vehicle: to(t.vehicle) })) } : {}) }
+        : f,
+    ),
+  }));
+  const next: Record<string, PlanRecipe> = {};
+  for (const [type, copy] of Object.entries(recipes)) {
+    const target = to(type);
+    if (target === type) {
+      next[type] ??= copy;
+      continue;
+    }
+    // a plan that already has a copy under the new type keeps that one
+    if (recipes[target]) continue;
+    const [, pack, item] = target.split(":");
+    // the release named the old pack's
+    next[target] = { ...copy, pack, item, release: 1, recipe: { ...copy.recipe, id: item } };
+  }
+  return { ...building, floors, ...(building.recipes ? { recipes: next } : {}) };
 }
 
 /** Whether a listed item has its recipe (fetched, or sent whole). */
@@ -214,7 +269,9 @@ export function missingRecipes(types: readonly string[]): Map<string, string[]> 
   for (const type of new Set(types)) {
     const entry = items.get(type);
     if (!entry || hasRecipe(entry)) continue;
-    const pack = registry.find((p) => type === packType(p.id, entry.id));
+    // an old id (#110) asks the pack its item moved into
+    const at = items.get(resolvePackType(type)) === entry ? resolvePackType(type) : type;
+    const pack = registry.find((p) => at === packType(p.id, entry.id));
     if (pack) out.set(pack.id, [...(out.get(pack.id) ?? []), entry.id]);
   }
   return out;
