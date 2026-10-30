@@ -12,6 +12,7 @@ import { clipConvex, netRoomArea } from "../geometry/area.ts";
 import { areaText, formatImperial, lengthText, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 import { closeGaps, straightenEdges, suggestedThickness } from "../geometry/gaps.ts";
 import { clampIntoRoom, keepInRoom, sharedEdge, snapToWall } from "../geometry/snap.ts";
+import { itemsAt, minHitPx } from "../geometry/pick.ts";
 import { cornerPoint, nearestOnPath, onWall, pipePath, type P3 } from "../geometry/runs.ts";
 import { connectionsAt, laidPipe, nearestOnOutline, planConnection, poolNodeAt, runLead, runsOnWall, splitPipe, type Connection, type ConnectVia, type WallRun } from "../pool-runs.ts";
 import { devicePorts, FILTER_VALVES, jointPortAt, jointPorts, nodePart, poolPortFlow, portFlow, splitNode, type PortName } from "../pool-ports.ts";
@@ -1491,7 +1492,7 @@ export class Fp3dEditor extends LitElement {
         const d = this.drag;
         if (d && "moved" in d && d.moved) return;
         this.drag = null;
-        this.openContext(target, at);
+        this.openContext(target, at, "touch");
       }, 550);
     }
   }
@@ -1794,9 +1795,10 @@ export class Fp3dEditor extends LitElement {
       this.drag = { kind: "aim", entityId: aimEl.getAttribute("data-aim")!, base: this._doc, moved: false };
       return;
     }
-    const furnitureEl = target.closest("[data-furniture]");
-    if (furnitureEl && !target.closest("[data-vertex], [data-mid]")) {
-      const id = furnitureEl.getAttribute("data-furniture")!;
+    // an item under the press, its drawn shape grown to a minimum target (#72): it wins over the room under it
+    const pickedId = this.pickItem(target, world, e.pointerType);
+    if (pickedId) {
+      const id = pickedId;
       const now = Date.now();
       const twice = this.lastFurnTap?.id === id && now - this.lastFurnTap.t < 400;
       this.lastFurnTap = { id, t: now };
@@ -1899,9 +1901,11 @@ export class Fp3dEditor extends LitElement {
     const roomId = target.closest("[data-room]")?.getAttribute("data-room") ?? this.roomAt(world);
     if (roomId) {
       if (roomId !== this._roomId) this._vertex = null;
+      // the body moves the room only once the room alone is selected (#72); the first press selects it and pans
+      const selectedAlone = roomId === this._roomId && !this._furnitureId && !this._openingId && !this._deviceId && !this._outdoorId && !this._wallId && !this._multi.length;
       this.selectItem("room", roomId);
       this.drag =
-        this.isEditor && this._tool !== "furniture"
+        this.isEditor && this._tool !== "furniture" && selectedAlone
         ? { kind: "room", roomId, start: world, startScreen: local, base: this._doc, moved: false }
         : { kind: "pan", last: local };
       return;
@@ -4504,14 +4508,23 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Select the item under a plan point and open its menu. */
-  private openContext(target: Element, local: [number, number]): void {
+  /**
+   * The item a plan press lands on (#72): its drawn shape grown to a 24 px target (44 px on touch), smallest item
+   * first. A press on a room corner or wall-end handle is never an item.
+   */
+  private pickItem(target: Element, world: Vec2, pointerType: string): string | null {
+    if (!this.floor || target.closest("[data-vertex], [data-mid], [data-wall-end], [data-out-box], [data-out-vertex]")) return null;
+    return itemsAt(this.floor.furniture, world, this._view.scale, minHitPx(pointerType))[0] ?? target.closest("[data-furniture]")?.getAttribute("data-furniture") ?? null;
+  }
+
+  private openContext(target: Element, local: [number, number], pointerType = "mouse"): void {
     if (!this.isEditor || !this.floor) return;
     const world = this.toWorld(...local);
     const attr = (sel: string) => target.closest(`[${sel}]`)?.getAttribute(sel) ?? null;
     let hit: [FixKind, string] | null = null;
     const device = attr("data-device");
     const opening = attr("data-opening");
-    const furniture = target.closest("[data-vertex], [data-mid]") ? null : attr("data-furniture");
+    const furniture = this.pickItem(target, world, pointerType);
     const wall = attr("data-free-wall");
     const outdoor = attr("data-outdoor") ? (this.outdoorAt(world) ?? attr("data-outdoor")) : null;
     const room = attr("data-room") ?? this.roomAt(world);
