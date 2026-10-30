@@ -375,13 +375,24 @@ export function packMovingPart(kind: PackMotion, p: PackPart): boolean {
   return p.shape !== "cyl";
 }
 
+/** Families of pack items that report through sensors: sensor models, smart water meters, smoke / CO / heat alarms (#79). */
+const PACK_SENSOR_FAMILIES = new Set(["sensor", "water_meter", "smoke_alarm"]);
+
+/**
+ * A generic marker (#79): a sensor or switch placeholder that takes any entity, to stand for a device Home 3D has no
+ * model for. Pack items of the family `entity_marker`.
+ */
+export function isEntityMarker(type: string): boolean {
+  return isPackType(type) && packInfo(type)?.family === "entity_marker";
+}
+
 /**
  * A pack's sensor model (motion, mmWave presence, contact, leak, CO₂, temperature …): it follows a sensor of its own,
  * whatever class the integration gave it (Local Tuya's motion sensors have none, #810).
  */
 export function isPackSensor(type: string): boolean {
   if (!isPackType(type)) return false;
-  return packInfo(type)?.family === "sensor" || /:(\w+_sensor|door_contact|presence_mmwave)$/.test(type);
+  return PACK_SENSOR_FAMILIES.has(packInfo(type)?.family ?? "") || /:(\w+_sensor|door_contact|presence_mmwave)$/.test(type);
 }
 
 /** A robot vacuum: the built-in dock, or one from a pack (the smart home pack's robot with its dock, #470). */
@@ -409,7 +420,7 @@ export function packRobotCentre(item: PackItem | undefined): number {
  * climate entity it takes a water_heater entity like the built-in water heater (#645).
  */
 export function isPackHeater(type: string): boolean {
-  return isPackType(type) && /:(heat_pump_indoor|gas_boiler|buffer_tank|water_heater|hot_water_cylinder(?:_[a-z0-9_]+)?)$/.test(type);
+  return isPackType(type) && /:(heat_pump_indoor|gas_boiler|combi_boiler(?:_[a-z0-9_]+)?|buffer_tank|water_heater|hot_water_cylinder(?:_[a-z0-9_]+)?)$/.test(type);
 }
 
 /** What an item is in the energy flow: where the cables meet (meter), a source (solar, inverter, battery) or a wallbox. */
