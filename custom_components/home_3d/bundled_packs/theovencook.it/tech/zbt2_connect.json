@@ -4,7 +4,7 @@
   "size": [0.083,0.083,0.179],
   "group": "tech",
   "room": ["office", "utility", "hall", "living", "loft"],
-  "tags": ["zigbee stick", "zigbee dongle", "coordinator", "zigbee coordinator", "usb stick", "zbt-2", "zbt2", "thread", "thread dongle", "thread stick", "matter", "home assistant connect", "home assistant", "smart home", "nabu casa"],
+  "tags": ["zigbee stick", "zigbee dongle", "coordinator", "zigbee coordinator", "usb stick", "zbt-2", "zbt2", "thread", "thread dongle", "thread stick", "matter", "home assistant connect"],
   "family": "zigbee_stick",
   "variant": {"en": "ZBT-2 with antenna"},
   "electric": true,

@@ -4,7 +4,7 @@
   "size": [0.0385,0.018,0.0045],
   "group": "tech",
   "room": ["office", "utility", "hall", "living", "loft"],
-  "tags": ["zigbee stick", "zigbee dongle", "coordinator", "zigbee coordinator", "usb stick", "usb dongle", "home assistant", "smart home", "zbt-1", "zbt1", "skyconnect", "sky connect", "thread", "thread dongle", "thread stick", "matter", "home assistant connect", "nabu casa"],
+  "tags": ["zbt-1", "zbt1", "skyconnect", "sky connect", "thread", "thread dongle", "thread stick", "matter", "home assistant connect", "nabu casa", "zigbee stick", "zigbee dongle"],
   "family": "zigbee_stick",
   "variant": {"en": "ZBT-1 / SkyConnect"},
   "electric": true,

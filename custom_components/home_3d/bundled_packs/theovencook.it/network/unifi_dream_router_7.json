@@ -4,7 +4,7 @@
   "size": [0.11,0.11,0.1841],
   "group": "network",
   "room": ["office", "utility", "loft", "living", "hall"],
-  "tags": ["unifi", "dream router", "udr", "udr7", "dream machine", "udm", "gateway", "router", "wifi router", "wifi 7", "broadband", "internet", "ubiquiti"],
+  "tags": ["unifi", "dream router", "udr", "udr7", "dream machine", "udm", "gateway", "router", "wifi router", "wifi 7", "broadband", "internet"],
   "family": "unifi_gateway",
   "variant": {"en": "Dream Router 7"},
   "electric": true,

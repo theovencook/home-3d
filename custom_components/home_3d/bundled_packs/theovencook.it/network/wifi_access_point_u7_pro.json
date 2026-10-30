@@ -3,7 +3,7 @@
   "name": {"en": "Wi-Fi 7 access point (ceiling)"},
   "size": [0.206,0.206,0.046],
   "group": "network",
-  "tags": ["access point", "wifi", "wireless", "unifi", "ap", "mesh", "u6", "ceiling ap", "u7", "u7 pro", "wifi 7", "wi-fi 7"],
+  "tags": ["u7", "u7 pro", "wifi 7", "wi-fi 7", "access point", "wifi", "wireless", "unifi", "ap", "mesh", "u6", "ceiling ap"],
   "family": "wifi_access_point",
   "variant": {"en": "Ceiling, Wi-Fi 7"},
   "electric": true,

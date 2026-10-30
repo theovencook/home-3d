@@ -3,7 +3,7 @@
   "name": {"en": "Wi-Fi access point (in-wall, wide)"},
   "size": [0.096,0.0312,0.1397],
   "group": "network",
-  "tags": ["access point", "wifi", "wireless", "unifi", "in-wall", "ap", "wall plate", "u6", "u6 in-wall", "u6-iw", "in wall"],
+  "tags": ["u6 in-wall", "u6-iw", "in wall", "wall plate", "access point", "wifi", "wireless", "unifi", "in-wall", "ap", "u6"],
   "family": "wifi_access_point",
   "variant": {"en": "In-wall, wide"},
   "electric": true,

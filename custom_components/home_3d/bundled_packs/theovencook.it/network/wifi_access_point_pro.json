@@ -3,7 +3,7 @@
   "name": {"en": "Wi-Fi access point (ceiling, Pro)"},
   "size": [0.197,0.197,0.035],
   "group": "network",
-  "tags": ["access point", "wifi", "wireless", "unifi", "ap", "mesh", "u6", "ceiling ap", "u6 pro", "pro", "wifi 6"],
+  "tags": ["u6 pro", "pro", "wifi 6", "access point", "wifi", "wireless", "unifi", "ap", "mesh", "u6", "ceiling ap"],
   "family": "wifi_access_point",
   "variant": {"en": "Ceiling, Pro"},
   "electric": true,
