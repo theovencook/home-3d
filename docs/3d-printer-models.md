@@ -75,15 +75,22 @@ Source for the #104 rows: outer dimensions are estimates from memory of the make
 | FlashForge Adventurer 5M | FlashForge | FDM | 470 x 500 x 490 (unverified) | #104 | done | `flashforge_adventurer_5m_3d_printer` + variants. camera variant `flashforge_adv5m_3d_printer_camera` (id kept under 40 characters) |
 | FlashForge Adventurer 5M Pro | FlashForge | FDM | 470 x 500 x 490 (unverified) | #104 | done | `flashforge_adventurer_5m_pro_3d_printer` + variants. built-in camera |
 | FlashForge AD5X | FlashForge | FDM | 480 x 500 x 500 (unverified) | #104 | done | `flashforge_ad5x_3d_printer` + variants. built-in camera |
-| Elegoo Saturn 4 Ultra | Elegoo | resin | tbc | #105 | todo | |
-| Elegoo Mars 5 | Elegoo | resin | tbc | #105 | todo | |
-| Anycubic Photon Mono M7 | Anycubic | resin | tbc | #105 | todo | |
-| Anycubic Photon Mono M5s | Anycubic | resin | tbc | #105 | todo | |
-| Phrozen Sonic Mighty 8K | Phrozen | resin | tbc | #105 | todo | |
-| Formlabs Form 4 | Formlabs | resin | tbc | #105 | todo | |
-| Elegoo Mercury | Elegoo | wash+cure | tbc | #105 | todo | |
-| Anycubic Wash & Cure | Anycubic | wash+cure | tbc | #105 | todo | |
-| Formlabs Form Wash | Formlabs | wash+cure | tbc | #105 | todo | |
-| Formlabs Form Cure | Formlabs | wash+cure | tbc | #105 | todo | |
+| Elegoo Saturn 4 Ultra | Elegoo | resin | 260 x 240 x 446 (unverified) | #105 | done | `elegoo_saturn_4u_3d_printer` + camera variant |
+| Elegoo Mars 5 | Elegoo | resin | 241 x 241 x 419 (retailer listing, converted from inches) | #105 | done | `elegoo_mars_5_3d_printer` + camera variant |
+| Anycubic Photon Mono M7 | Anycubic | resin | 270 x 270 x 490 (unverified) | #105 | done | `anycubic_m7_3d_printer` + camera variant |
+| Anycubic Photon Mono M5s | Anycubic | resin | 270 x 270 x 480 (unverified) | #105 | done | `anycubic_m5s_3d_printer` + camera variant |
+| Phrozen Sonic Mighty 8K | Phrozen | resin | 320 x 290 x 530 (unverified) | #105 | done | `phrozen_mighty_8k_3d_printer` + camera variant |
+| Formlabs Form 4 | Formlabs | resin | 353 x 350 x 538 (from memory, unverified) | #105 | done | `formlabs_form_4_3d_printer` + camera variant |
+| Elegoo Mercury | Elegoo | wash+cure | 400 x 220 x 280 (unverified) | #105 | done | `elegoo_mercury_wash_cure`; Mercury Plus style, wash and cure side by side |
+| Anycubic Wash & Cure | Anycubic | wash+cure | 300 x 280 x 340 (unverified) | #105 | done | `anycubic_wash_and_cure`; Plus style |
+| Formlabs Form Wash | Formlabs | wash+cure | 300 x 310 x 340 (unverified) | #105 | done | `formlabs_form_wash` |
+| Formlabs Form Cure | Formlabs | wash+cure | 300 x 300 x 330 (unverified) | #105 | done | `formlabs_form_cure` |
+| Printer enclosure tent | generic | kit | 700 x 700 x 900 | #105 | done | `printer_enclosure_tent` |
+| Fume extractor (desktop) | generic | kit | 280 x 200 x 260 | #105 | done | `fume_extractor_desktop` |
+| Air purifier (workshop) | generic | kit | 260 x 260 x 520 | #105 | done | `air_purifier_workshop` |
+| Printer workbench | generic | kit | 1200 x 600 x 900 | #105 | done | `printer_workbench` |
+| Printer cabinet | generic | kit | 800 x 600 x 1100 | #105 | done | `printer_cabinet`. Filament dryers, dry boxes and spool racks already exist in `theovencook.core/tech` (#36), not duplicated |
 
 Bambu Lab enclosure: Bambu sells no separate enclosure; the H2/P2S/X-series are already enclosed and the A1 series stays open (an enclosure tent is part of #105).
+
+Resin and wash and cure sizes (#105) are rough outer dimensions from memory: the maker pages were not checked; marked unverified.
