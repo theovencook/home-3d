@@ -778,6 +778,8 @@ export class Fp3dEditor extends LitElement {
   private drag: Drag | null = null;
   /** Set while a change that may join the last undo step runs (arrow nudges, #66). */
   private mergeKey: string | null = null;
+  /** How long after the last change of `mergeKey` a change still joins its step (a typed value: as long as it is typed). */
+  private mergeWithin: number | undefined = undefined;
   private pointers = new Map<number, [number, number]>();
   private pinch: { dist: number; mid: [number, number] } | null = null;
   private fitted = false;
@@ -1418,7 +1420,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Replace the document; `base` (the state before the change) goes into the undo history. */
   private setDoc(next: Building, base: Building | null = this._doc): void {
-    if (base) this.history.push(base, this.mergeKey);
+    if (base) this.history.push(base, this.mergeKey, this.mergeWithin);
     this.history.track(next);
     this._doc = next;
     setCameraSensors(next);
@@ -11327,16 +11329,30 @@ export class Fp3dEditor extends LitElement {
   /** Typed numbers are saved on Enter, on leaving the box and after a pause in typing (#69). */
   private readonly typed = new TypedCommit();
 
-  /** The listeners of a typed number box; `save` gets the text (and ignores what isn't a number). */
+  /**
+   * The listeners of a typed number box; `save` gets the text (and ignores what isn't a number). The saves of one
+   * typing run (the box got the cursor, until Enter or leaving it) on the same selection are one undo step (#127).
+   */
   private typedEvents(save: (text: string) => void) {
     const box = (e: Event) => e.target as HTMLInputElement;
+    const commit = (text: string, run: number) => {
+      const on = [this._furnitureId ? this.selection().join(",") : "", this._deviceId, this._openingId, this._wallId, this._outdoorId, this._roomId, this._vertex];
+      this.mergeKey = ["typed", run, ...on].join("|");
+      this.mergeWithin = Infinity;
+      try {
+        save(text);
+      } finally {
+        this.mergeKey = null;
+        this.mergeWithin = undefined;
+      }
+    };
     return {
       focus: (e: Event) => this.typed.focus(box(e)),
-      input: (e: Event) => this.typed.input(box(e), box(e).value, save),
-      change: (e: Event) => this.typed.change(box(e), box(e).value, save),
+      input: (e: Event) => this.typed.input(box(e), box(e).value, commit),
+      change: (e: Event) => this.typed.change(box(e), box(e).value, commit),
       keydown: (e: KeyboardEvent) => {
         if (e.key !== "Enter") return;
-        this.typed.enter(box(e), box(e).value, save);
+        this.typed.enter(box(e), box(e).value, commit);
         this.requestUpdate();
       },
       blur: (e: Event) => {

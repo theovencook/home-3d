@@ -65,12 +65,12 @@ export class UndoHistory {
 
   /**
    * A change was made: `base` (the plan before it) becomes a step. With a `key` (the same for, say, nudges of one
-   * item), a change that follows the last one of that key within MERGE_MS joins its step instead: one undo takes
-   * back the whole run.
+   * item), a change that follows the last one of that key within `within` ms (MERGE_MS) joins its step instead: one
+   * undo takes back the whole run. A key that is unique to one run (a typed value, #127) may join without a limit.
    */
-  push(base: Building, key: string | null = null): void {
+  push(base: Building, key: string | null = null, within = MERGE_MS): void {
     const at = this.now();
-    const joins = key !== null && this.run?.key === key && at - this.run.at <= MERGE_MS && this.past.length > 0;
+    const joins = key !== null && this.run?.key === key && at - this.run.at <= within && this.past.length > 0;
     this.run = key === null ? null : { key, at };
     this.future = [];
     if (joins) return;
