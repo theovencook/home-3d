@@ -33,6 +33,7 @@ import type { HistorySpec } from "./timetravel/types.ts";
 import type { Feature } from "./features.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 import { UndoHistory } from "./undo-history.ts";
+import { showsDemo, withDemo } from "./demo.ts";
 
 /** The corners of the clock, as arrows in the view menu (the full name is the button's title). */
 const CLOCK_ARROW: Record<Exclude<ClockPos, "off">, string> = { tl: "↖", tr: "↗", bl: "↙", br: "↘" };
@@ -1007,6 +1008,8 @@ export class Floorplan3dPanel extends LitElement {
     const floor = b.floors.find((f) => f.id === this._floorId);
     const roomFloors = floor ? [floor] : b.floors;
     const tt = this.tt.active;
+    // a sample / demo home: devices this Home Assistant lacks show fixed demo states (#100)
+    const hass = withDemo(this.tt.hass(this.hass), b);
     // 3D or the 2D plan: beside the View menu, inside it on a tablet (#92)
     const planView = html`<div class="fp3d-seg" role="group" aria-label=${this.t("plan_view")}>
       <button aria-pressed=${!this._plan2d} @click=${() => this.setPlan2d(false)}>${this.t("view_3d")}</button>
@@ -1076,7 +1079,7 @@ export class Floorplan3dPanel extends LitElement {
           .noSettings=${this._tablet}
           .home=${this.data.homeId}
           .pivotMark=${this._pinHover}
-          .hass=${this.tt.hass(this.hass)}
+          .hass=${hass}
           .replay=${this.tt.session?.replay ?? null}
           .building=${b}
           .packs=${this.data.packs}
@@ -1132,7 +1135,7 @@ export class Floorplan3dPanel extends LitElement {
           ? html`<fp3d-room-panel
               class="fp3d-room-panel"
               @camera-look=${(e: CustomEvent<{ entity: string }>) => this.view3d()?.lookThrough(e.detail.entity)}
-              .hass=${this.tt.hass(this.hass)}
+              .hass=${hass}
               ?readOnly=${tt}
               ?noLook=${this._plan2d}
               .room=${b.floors.flatMap((f) => zonesOf(f)).find((r) => r.id === this._roomId) ?? null}
@@ -1145,6 +1148,7 @@ export class Floorplan3dPanel extends LitElement {
             ></fp3d-room-panel>`
           : nothing}
         ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session}></fp3d-time-bar>` : nothing}
+        ${showsDemo(hass) ? html`<div class="fp3d-demo-chip" title=${this.t("demo_hint")}>${this.t("demo_chip")}</div>` : nothing}
         ${this._clean ? nothing : html`<div class="fp3d-overlay">
           ${this._tablet ? nothing : planView}
           <div class="fp3d-show-wrap">
@@ -1608,6 +1612,22 @@ export class Floorplan3dPanel extends LitElement {
         width: 1px;
         margin: 4px 4px;
         background: var(--fp3d-line);
+      }
+      .fp3d-demo-chip {
+        position: absolute;
+        top: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 3;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        color: var(--fp3d-s-text, #e8f4ff);
+        background: var(--fp3d-s-chrome, rgba(10, 20, 35, 0.72));
+        border: 1px solid var(--fp3d-s-line, rgba(120, 200, 255, 0.35));
+        pointer-events: auto;
+        cursor: help;
       }
       .fp3d-stage-wrap {
         position: relative;

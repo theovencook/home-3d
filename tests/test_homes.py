@@ -292,3 +292,25 @@ async def test_a_sample_home_can_be_made_without_the_area_import(hass: HomeAssis
     loaded = await data.async_create_home("Sample", _named("Sample living"), area_import=False)
     assert loaded.building["settings"]["area_import"] is False
     assert loaded.building["floors"][0]["rooms"][0]["name"] == "Sample living"
+
+
+async def test_a_sample_home_can_be_marked_as_a_demo(hass: HomeAssistant, hass_ws_client) -> None:
+    """#100: a sample home is marked `demo`, so its devices show fixed demo states where this install lacks them;
+    the mark survives a save and a copy, and an ordinary home is no demo."""
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    data = hass.data[DOMAIN]
+    sample = await data.async_create_home("Sample", _named("Sample living"), area_import=False, demo=True)
+    assert sample.building["settings"]["demo"] is True
+    assert sample.building["settings"]["area_import"] is False
+    got = await _ok(client, {"type": "home_3d/building/get", "home_id": sample.id})
+    assert settings(got)["demo"] is True
+    # an editor's save keeps the mark (the schema knows it)
+    building = got["building"]
+    await _ok(client, {"type": "home_3d/building/save", "home_id": sample.id, "building": building})
+    assert settings(await _ok(client, {"type": "home_3d/building/get", "home_id": sample.id}))["demo"] is True
+    duplicate = {"type": "home_3d/homes/duplicate", "home_id": sample.id, "name": "Sample 2"}
+    copy_ = (await _ok(client, duplicate))["home"]["id"]
+    assert settings(await _ok(client, {"type": "home_3d/building/get", "home_id": copy_}))["demo"] is True
+    real = (await _ok(client, {"type": "home_3d/homes/create", "name": "Flat"}))["home"]["id"]
+    assert settings(await _ok(client, {"type": "home_3d/building/get", "home_id": real})).get("demo", False) is False

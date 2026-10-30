@@ -861,6 +861,8 @@ SETTINGS_SCHEMA = vol.Schema(
         vol.Optional("lock_plan", default=False): bool,
         # False for a sample or template home (#61): the editor never offers to add rooms from this install's areas
         vol.Optional("area_import", default=True): bool,
+        # a sample or demo home (#100): linked entities this install lacks show fixed demo states in the viewer
+        vol.Optional("demo", default=False): bool,
         # entities left out of the editor's "Unplaced entities" list on purpose (#83)
         vol.Optional("unplaced_hidden", default=list): vol.All(
             [vol.All(str, vol.Length(max=255))], vol.Length(max=2000)
