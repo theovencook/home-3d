@@ -67,7 +67,7 @@ import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } fr
 import { ISSUES_URL } from "./extensions.ts";
 import { beforeSelectionChange, deepActive, releaseTyping, selectionMoved, takesTyping } from "../focus-release.ts";
 import { escapeStep } from "../editor-keys.ts";
-import { furniturePanel, type FurnitureField } from "../item-panel.ts";
+import { furniturePanel, typeOptionLabels, type FurnitureField } from "../item-panel.ts";
 import { moveToFloor } from "../item-floor.ts";
 import { clipboardKey, copyItems, pasteItems, withKeys, type ItemClip } from "../clipboard.ts";
 import { TypedCommit } from "../typed-commit.ts";
@@ -5238,6 +5238,18 @@ export class Fp3dEditor extends LitElement {
           set(Math.abs(v - 1) < 0.001 ? null : v);
         }}
     /></label>`;
+  }
+
+  private typeLabelMemo = new WeakMap<FurniturePack, { lang: string; labels: string[] }>();
+
+  /** A pack's lines in the Type list, same-named items told apart (#132); kept per pack and language. */
+  private typeLabels(pack: FurniturePack): string[] {
+    const lang = this.hass?.language ?? "en";
+    const kept = this.typeLabelMemo.get(pack);
+    if (kept && kept.lang === lang) return kept.labels;
+    const labels = typeOptionLabels(pack.items, lang);
+    this.typeLabelMemo.set(pack, { lang, labels });
+    return labels;
   }
 
   /**
@@ -12538,9 +12550,9 @@ export class Fp3dEditor extends LitElement {
               .filter((pack) => pack.items.length)
               .map(
                 (pack) => html`<optgroup label=${packName(pack, this.hass?.language ?? "de")}>
-                  ${pack.items.map((it) => {
-                    const t = packType(pack.id, it.id);
-                    return html`<option value=${t} ?selected=${t === f.type}>${packItemName(it, this.hass?.language ?? "en")}</option>`;
+                  ${this.typeLabels(pack).map((label, i) => {
+                    const t = packType(pack.id, pack.items[i].id);
+                    return html`<option value=${t} ?selected=${t === f.type}>${label}</option>`;
                   })}
                 </optgroup>`,
               )}
