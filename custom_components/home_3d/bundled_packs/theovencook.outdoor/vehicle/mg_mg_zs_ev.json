@@ -4,7 +4,7 @@
   "size": [1.809, 4.323, 1.649],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "mg", "mg zs ev", "suv", "electric car", "ev", "electric vehicle", "charging", "parking", "driveway"],
+  "tags": ["mg", "mg zs ev", "suv", "ev", "electric", "charging", "parking", "driveway"],
   "vehicle": true,
   "electric": true,
   "parts": [

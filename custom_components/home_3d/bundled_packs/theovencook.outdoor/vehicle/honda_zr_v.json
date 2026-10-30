@@ -4,7 +4,7 @@
   "size": [1.84, 4.568, 1.62],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "honda", "zr-v", "suv", "parking", "driveway"],
+  "tags": ["honda", "zr-v", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4293, "z": 0.32, "w": 0.1304, "d": 0.1642, "y": 0.0, "h": 0.463, "color": "dark", "axis": "x"},

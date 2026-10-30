@@ -4,7 +4,7 @@
   "size": [1.793, 4.241, 1.531],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "skoda", "kamiq", "suv", "parking", "driveway"],
+  "tags": ["skoda", "kamiq", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4275, "z": 0.32, "w": 0.1339, "d": 0.1768, "y": 0.0, "h": 0.4899, "color": "dark", "axis": "x"},

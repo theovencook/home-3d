@@ -4,7 +4,7 @@
   "size": [2.083, 5.036, 1.684],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "tesla", "model x", "suv", "electric car", "ev", "electric vehicle", "charging", "parking", "driveway"],
+  "tags": ["tesla", "model x", "suv", "ev", "electric", "charging", "parking", "driveway"],
   "vehicle": true,
   "electric": true,
   "parts": [

@@ -4,7 +4,7 @@
   "size": [1.849, 4.902, 1.511],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "skoda", "superb estate", "estate", "parking", "driveway"],
+  "tags": ["skoda", "superb estate", "estate", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4351, "z": 0.32, "w": 0.119, "d": 0.1367, "y": 0.0, "h": 0.4434, "color": "dark", "axis": "x"},

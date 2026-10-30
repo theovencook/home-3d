@@ -4,7 +4,7 @@
   "size": [1.9, 4.81, 1.695],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "kia", "sorento", "suv", "parking", "driveway"],
+  "tags": ["kia", "sorento", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4316, "z": 0.32, "w": 0.1263, "d": 0.1559, "y": 0.0, "h": 0.4425, "color": "dark", "axis": "x"},

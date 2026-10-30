@@ -4,7 +4,7 @@
   "size": [1.76, 4.14, 1.5],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "kia", "stonic", "suv", "parking", "driveway"],
+  "tags": ["kia", "stonic", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4261, "z": 0.32, "w": 0.1364, "d": 0.1812, "y": 0.0, "h": 0.5, "color": "dark", "axis": "x"},

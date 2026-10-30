@@ -4,7 +4,7 @@
   "size": [1.754, 4.084, 1.495],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "mini", "aceman", "suv", "electric car", "ev", "electric vehicle", "charging", "parking", "driveway"],
+  "tags": ["mini", "aceman", "suv", "ev", "electric", "charging", "parking", "driveway"],
   "vehicle": true,
   "electric": true,
   "parts": [

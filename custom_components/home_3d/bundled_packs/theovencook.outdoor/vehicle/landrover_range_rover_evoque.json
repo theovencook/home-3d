@@ -4,7 +4,7 @@
   "size": [1.904, 4.371, 1.649],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "land rover", "range rover evoque", "suv", "parking", "driveway"],
+  "tags": ["land rover", "range rover evoque", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4317, "z": 0.32, "w": 0.1261, "d": 0.1716, "y": 0.0, "h": 0.4548, "color": "dark", "axis": "x"},

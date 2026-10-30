@@ -167,9 +167,11 @@ def car(brand_id: str, brand: str, model: str, body: str, length_mm: int, width_
         v.box(sx * (W / 2 - 0.03), zc(0.69 if body != "van" else 0.8), 0.08, 0.12, belt + 0.03, 0.08, "paint")
     v.box(0, L / 2 - 0.07, body_w * 0.94, 0.14, gc, 0.16, "dark")
     v.box(0, -L / 2 + 0.07, body_w * 0.94, 0.14, gc, 0.16, "dark")
-    words = ["car", "vehicle", brand.lower(), model.lower(), BODY_WORDS[body]]
+    # no "car" or "vehicle" tag: the library knows those words from the item's kind, and 195 cars with the tag would bury the
+    # hand-made ones (the Leaf) in a search for "car"
+    words = [brand.lower(), model.lower(), BODY_WORDS[body]]
     if ev:
-        words += ["electric car", "ev", "electric vehicle", "charging"]
+        words += ["ev", "electric", "charging"]
     words += ["parking", "driveway"]
     return v.item(car_id(brand_id, model), f"{brand} {model}", list(dict.fromkeys(words)), electric=ev)
 

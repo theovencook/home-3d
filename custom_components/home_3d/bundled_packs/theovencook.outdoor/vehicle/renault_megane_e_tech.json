@@ -4,7 +4,7 @@
   "size": [1.768, 4.2, 1.505],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "renault", "megane e-tech", "hatchback", "electric car", "ev", "electric vehicle", "charging", "parking", "driveway"],
+  "tags": ["renault", "megane e-tech", "hatchback", "ev", "electric", "charging", "parking", "driveway"],
   "vehicle": true,
   "electric": true,
   "parts": [

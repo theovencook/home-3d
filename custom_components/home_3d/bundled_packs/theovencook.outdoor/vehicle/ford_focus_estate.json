@@ -4,7 +4,7 @@
   "size": [1.825, 4.668, 1.481],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "ford", "focus estate", "estate", "parking", "driveway"],
+  "tags": ["ford", "focus estate", "estate", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4342, "z": 0.32, "w": 0.1205, "d": 0.1435, "y": 0.0, "h": 0.4524, "color": "dark", "axis": "x"},

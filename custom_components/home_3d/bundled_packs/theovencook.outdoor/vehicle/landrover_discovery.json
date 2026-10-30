@@ -4,7 +4,7 @@
   "size": [2.073, 4.956, 1.846],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "land rover", "discovery", "suv", "parking", "driveway"],
+  "tags": ["land rover", "discovery", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4373, "z": 0.32, "w": 0.1158, "d": 0.1513, "y": 0.0, "h": 0.4063, "color": "dark", "axis": "x"},

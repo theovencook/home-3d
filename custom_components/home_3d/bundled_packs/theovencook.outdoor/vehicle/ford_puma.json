@@ -4,7 +4,7 @@
   "size": [1.805, 4.186, 1.537],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "ford", "puma", "suv", "parking", "driveway"],
+  "tags": ["ford", "puma", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.428, "z": 0.32, "w": 0.133, "d": 0.1792, "y": 0.0, "h": 0.488, "color": "dark", "axis": "x"},

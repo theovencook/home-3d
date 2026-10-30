@@ -4,7 +4,7 @@
   "size": [1.93, 4.803, 1.665],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "land rover", "range rover velar", "suv", "parking", "driveway"],
+  "tags": ["land rover", "range rover velar", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4326, "z": 0.32, "w": 0.1244, "d": 0.1562, "y": 0.0, "h": 0.4505, "color": "dark", "axis": "x"},

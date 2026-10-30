@@ -4,7 +4,7 @@
   "size": [1.826, 4.395, 1.495],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "kia", "xceed", "suv", "parking", "driveway"],
+  "tags": ["kia", "xceed", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4288, "z": 0.32, "w": 0.1314, "d": 0.1701, "y": 0.0, "h": 0.5, "color": "dark", "axis": "x"},

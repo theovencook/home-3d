@@ -4,7 +4,7 @@
   "size": [1.855, 4.6, 1.685],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "toyota", "rav4", "suv", "parking", "driveway"],
+  "tags": ["toyota", "rav4", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4299, "z": 0.32, "w": 0.1294, "d": 0.163, "y": 0.0, "h": 0.4451, "color": "dark", "axis": "x"},

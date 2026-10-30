@@ -4,7 +4,7 @@
   "size": [1.756, 3.858, 1.46],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "mini", "cooper electric", "hatchback", "electric car", "ev", "electric vehicle", "charging", "parking", "driveway"],
+  "tags": ["mini", "cooper electric", "hatchback", "ev", "electric", "charging", "parking", "driveway"],
   "vehicle": true,
   "electric": true,
   "parts": [

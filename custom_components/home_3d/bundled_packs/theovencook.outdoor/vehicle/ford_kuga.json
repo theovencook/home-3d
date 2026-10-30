@@ -4,7 +4,7 @@
   "size": [1.883, 4.614, 1.661],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "ford", "kuga", "suv", "parking", "driveway"],
+  "tags": ["ford", "kuga", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.431, "z": 0.32, "w": 0.1275, "d": 0.1625, "y": 0.0, "h": 0.4515, "color": "dark", "axis": "x"},

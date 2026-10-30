@@ -4,7 +4,7 @@
   "size": [1.745, 4.055, 1.43],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "peugeot", "e-208", "hatchback", "electric car", "ev", "electric vehicle", "charging", "parking", "driveway"],
+  "tags": ["peugeot", "e-208", "hatchback", "ev", "electric", "charging", "parking", "driveway"],
   "vehicle": true,
   "electric": true,
   "parts": [

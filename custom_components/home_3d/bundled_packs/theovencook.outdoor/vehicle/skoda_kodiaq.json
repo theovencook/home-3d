@@ -4,7 +4,7 @@
   "size": [1.864, 4.758, 1.655],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "skoda", "kodiaq", "suv", "parking", "driveway"],
+  "tags": ["skoda", "kodiaq", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4303, "z": 0.32, "w": 0.1288, "d": 0.1576, "y": 0.0, "h": 0.4532, "color": "dark", "axis": "x"},

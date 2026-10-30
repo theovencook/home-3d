@@ -4,7 +4,7 @@
   "size": [1.745, 4.055, 1.43],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "peugeot", "208", "hatchback", "parking", "driveway"],
+  "tags": ["peugeot", "208", "hatchback", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4341, "z": 0.338, "w": 0.1203, "d": 0.1578, "y": 0.0, "h": 0.4476, "color": "dark", "axis": "x"},

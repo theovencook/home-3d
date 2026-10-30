@@ -4,7 +4,7 @@
   "size": [1.794, 4.208, 1.508],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "audi", "q2", "suv", "parking", "driveway"],
+  "tags": ["audi", "q2", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4275, "z": 0.32, "w": 0.1338, "d": 0.1782, "y": 0.0, "h": 0.4973, "color": "dark", "axis": "x"},

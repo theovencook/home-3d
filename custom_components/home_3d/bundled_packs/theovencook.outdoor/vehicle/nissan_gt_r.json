@@ -4,7 +4,7 @@
   "size": [1.895, 4.71, 1.37],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "nissan", "gt-r", "coupe", "parking", "driveway"],
+  "tags": ["nissan", "gt-r", "coupe", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4314, "z": 0.32, "w": 0.1266, "d": 0.1401, "y": 0.0, "h": 0.4818, "color": "dark", "axis": "x"},

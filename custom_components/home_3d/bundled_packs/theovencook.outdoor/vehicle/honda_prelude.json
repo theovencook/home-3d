@@ -4,7 +4,7 @@
   "size": [1.88, 4.52, 1.355],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "honda", "prelude", "coupe", "parking", "driveway"],
+  "tags": ["honda", "prelude", "coupe", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4309, "z": 0.32, "w": 0.1277, "d": 0.146, "y": 0.0, "h": 0.4871, "color": "dark", "axis": "x"},

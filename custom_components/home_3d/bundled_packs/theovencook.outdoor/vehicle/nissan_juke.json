@@ -4,7 +4,7 @@
   "size": [1.8, 4.21, 1.595],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "nissan", "juke", "suv", "parking", "driveway"],
+  "tags": ["nissan", "juke", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4278, "z": 0.32, "w": 0.1333, "d": 0.1781, "y": 0.0, "h": 0.4702, "color": "dark", "axis": "x"},

@@ -4,7 +4,7 @@
   "size": [1.838, 4.425, 1.625],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "nissan", "qashqai", "suv", "parking", "driveway"],
+  "tags": ["nissan", "qashqai", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4293, "z": 0.32, "w": 0.1306, "d": 0.1695, "y": 0.0, "h": 0.4615, "color": "dark", "axis": "x"},

@@ -4,7 +4,7 @@
   "size": [2.036, 5.037, 1.747],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "volvo", "ex90", "suv", "electric car", "ev", "electric vehicle", "charging", "parking", "driveway"],
+  "tags": ["volvo", "ex90", "suv", "ev", "electric", "charging", "parking", "driveway"],
   "vehicle": true,
   "electric": true,
   "parts": [

@@ -4,7 +4,7 @@
   "size": [1.847, 4.762, 1.495],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "audi", "a4 avant", "estate", "parking", "driveway"],
+  "tags": ["audi", "a4 avant", "estate", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.435, "z": 0.32, "w": 0.1191, "d": 0.1407, "y": 0.0, "h": 0.4482, "color": "dark", "axis": "x"},

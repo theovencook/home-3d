@@ -4,7 +4,7 @@
   "size": [1.78, 4.108, 1.459],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "skoda", "fabia", "hatchback", "parking", "driveway"],
+  "tags": ["skoda", "fabia", "hatchback", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4354, "z": 0.338, "w": 0.118, "d": 0.1558, "y": 0.0, "h": 0.4387, "color": "dark", "axis": "x"},

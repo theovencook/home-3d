@@ -4,7 +4,7 @@
   "size": [1.765, 4.06, 1.435],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "vauxhall", "corsa electric", "hatchback", "electric car", "ev", "electric vehicle", "charging", "parking", "driveway"],
+  "tags": ["vauxhall", "corsa electric", "hatchback", "ev", "electric", "charging", "parking", "driveway"],
   "vehicle": true,
   "electric": true,
   "parts": [

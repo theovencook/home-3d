@@ -4,7 +4,7 @@
   "size": [1.797, 4.239, 1.576],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "renault", "captur", "suv", "parking", "driveway"],
+  "tags": ["renault", "captur", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4277, "z": 0.32, "w": 0.1336, "d": 0.1769, "y": 0.0, "h": 0.4759, "color": "dark", "axis": "x"},

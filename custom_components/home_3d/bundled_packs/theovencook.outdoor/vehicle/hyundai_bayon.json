@@ -4,7 +4,7 @@
   "size": [1.775, 4.18, 1.5],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "hyundai", "bayon", "suv", "parking", "driveway"],
+  "tags": ["hyundai", "bayon", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4268, "z": 0.32, "w": 0.1352, "d": 0.1794, "y": 0.0, "h": 0.5, "color": "dark", "axis": "x"},

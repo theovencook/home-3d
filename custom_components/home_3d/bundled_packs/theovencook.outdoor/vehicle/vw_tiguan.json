@@ -4,7 +4,7 @@
   "size": [1.842, 4.539, 1.665],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "volkswagen", "tiguan", "suv", "parking", "driveway"],
+  "tags": ["volkswagen", "tiguan", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4294, "z": 0.32, "w": 0.1303, "d": 0.1652, "y": 0.0, "h": 0.4505, "color": "dark", "axis": "x"},

@@ -4,7 +4,7 @@
   "size": [1.829, 4.689, 1.47],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "skoda", "octavia", "hatchback", "parking", "driveway"],
+  "tags": ["skoda", "octavia", "hatchback", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4371, "z": 0.338, "w": 0.1148, "d": 0.1365, "y": 0.0, "h": 0.4354, "color": "dark", "axis": "x"},

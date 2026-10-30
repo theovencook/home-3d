@@ -4,7 +4,7 @@
   "size": [1.744, 3.876, 1.432],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "mini", "cooper s 5-door", "hatchback", "parking", "driveway"],
+  "tags": ["mini", "cooper s 5-door", "hatchback", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4341, "z": 0.338, "w": 0.1204, "d": 0.1651, "y": 0.0, "h": 0.4469, "color": "dark", "axis": "x"},

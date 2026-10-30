@@ -4,7 +4,7 @@
   "size": [1.774, 3.922, 1.498],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "renault", "renault 5 e-tech", "hatchback", "electric car", "ev", "electric vehicle", "charging", "parking", "driveway"],
+  "tags": ["renault", "renault 5 e-tech", "hatchback", "ev", "electric", "charging", "parking", "driveway"],
   "vehicle": true,
   "electric": true,
   "parts": [

@@ -4,7 +4,7 @@
   "size": [1.765, 4.212, 1.59],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "vauxhall", "crossland", "suv", "parking", "driveway"],
+  "tags": ["vauxhall", "crossland", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4263, "z": 0.32, "w": 0.136, "d": 0.1781, "y": 0.0, "h": 0.4717, "color": "dark", "axis": "x"},

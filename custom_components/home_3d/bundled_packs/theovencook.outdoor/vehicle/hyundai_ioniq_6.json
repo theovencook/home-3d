@@ -4,7 +4,7 @@
   "size": [1.88, 4.855, 1.495],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "hyundai", "ioniq 6", "saloon", "electric car", "ev", "electric vehicle", "charging", "parking", "driveway"],
+  "tags": ["hyundai", "ioniq 6", "saloon", "ev", "electric", "charging", "parking", "driveway"],
   "vehicle": true,
   "electric": true,
   "parts": [

@@ -4,7 +4,7 @@
   "size": [1.79, 4.37, 1.435],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "toyota", "corolla", "hatchback", "parking", "driveway"],
+  "tags": ["toyota", "corolla", "hatchback", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4358, "z": 0.338, "w": 0.1173, "d": 0.1465, "y": 0.0, "h": 0.446, "color": "dark", "axis": "x"},

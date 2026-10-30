@@ -4,7 +4,7 @@
   "size": [1.852, 4.783, 1.448],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "bmw", "i4", "saloon", "electric car", "ev", "electric vehicle", "charging", "parking", "driveway"],
+  "tags": ["bmw", "i4", "saloon", "ev", "electric", "charging", "parking", "driveway"],
   "vehicle": true,
   "electric": true,
   "parts": [

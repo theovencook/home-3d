@@ -4,7 +4,7 @@
   "size": [1.795, 4.395, 1.54],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "mazda", "cx-30", "suv", "parking", "driveway"],
+  "tags": ["mazda", "cx-30", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4276, "z": 0.32, "w": 0.1337, "d": 0.1706, "y": 0.0, "h": 0.487, "color": "dark", "axis": "x"},

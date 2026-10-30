@@ -4,7 +4,7 @@
   "size": [1.735, 3.915, 1.235],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "mazda", "mx-5", "coupe", "parking", "driveway"],
+  "tags": ["mazda", "mx-5", "coupe", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4251, "z": 0.32, "w": 0.1383, "d": 0.1577, "y": 0.0, "h": 0.5, "color": "dark", "axis": "x"},

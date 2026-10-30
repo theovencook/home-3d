@@ -83,7 +83,15 @@ def test_the_other_vehicles_are_there_and_use_the_paint_role() -> None:
 
 def test_the_existing_vehicles_are_untouched() -> None:
     items = _items()
-    for i in ("nissan_leaf", "nissan_leaf_black", "bicycle", "bicycle_child", "bicycle_electric", "moped_red", "scooter_kick_adult"):
+    for i in (
+        "nissan_leaf",
+        "nissan_leaf_black",
+        "bicycle",
+        "bicycle_child",
+        "bicycle_electric",
+        "moped_red",
+        "scooter_kick_adult",
+    ):
         assert i in items
     assert items["nissan_leaf"]["electric"] is True
 

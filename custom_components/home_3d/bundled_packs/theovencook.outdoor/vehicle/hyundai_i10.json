@@ -4,7 +4,7 @@
   "size": [1.68, 3.67, 1.48],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "hyundai", "i10", "hatchback", "parking", "driveway"],
+  "tags": ["hyundai", "i10", "hatchback", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4315, "z": 0.338, "w": 0.125, "d": 0.1744, "y": 0.0, "h": 0.4324, "color": "dark", "axis": "x"},

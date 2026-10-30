@@ -4,7 +4,7 @@
   "size": [1.984, 4.946, 1.82],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "land rover", "range rover sport", "suv", "parking", "driveway"],
+  "tags": ["land rover", "range rover sport", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4345, "z": 0.32, "w": 0.121, "d": 0.1516, "y": 0.0, "h": 0.4121, "color": "dark", "axis": "x"},

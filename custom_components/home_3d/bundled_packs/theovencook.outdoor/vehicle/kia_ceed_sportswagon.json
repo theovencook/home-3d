@@ -4,7 +4,7 @@
   "size": [1.8, 4.605, 1.475],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "kia", "ceed sportswagon", "estate", "parking", "driveway"],
+  "tags": ["kia", "ceed sportswagon", "estate", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4333, "z": 0.32, "w": 0.1222, "d": 0.1455, "y": 0.0, "h": 0.4542, "color": "dark", "axis": "x"},

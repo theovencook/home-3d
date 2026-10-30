@@ -4,7 +4,7 @@
   "size": [1.904, 4.904, 1.99],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "volkswagen", "transporter", "van", "parking", "driveway"],
+  "tags": ["volkswagen", "transporter", "van", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.437, "z": 0.32, "w": 0.1155, "d": 0.1387, "y": 0.0, "h": 0.3417, "color": "dark", "axis": "x"},

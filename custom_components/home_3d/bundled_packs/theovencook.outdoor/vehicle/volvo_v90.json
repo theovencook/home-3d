@@ -4,7 +4,7 @@
   "size": [1.879, 4.936, 1.475],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "volvo", "v90", "estate", "parking", "driveway"],
+  "tags": ["volvo", "v90", "estate", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4361, "z": 0.32, "w": 0.1171, "d": 0.1357, "y": 0.0, "h": 0.4542, "color": "dark", "axis": "x"},

@@ -4,7 +4,7 @@
   "size": [1.88, 4.949, 1.468],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "mercedes-benz", "e-class", "saloon", "parking", "driveway"],
+  "tags": ["mercedes-benz", "e-class", "saloon", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4362, "z": 0.32, "w": 0.117, "d": 0.1374, "y": 0.0, "h": 0.4632, "color": "dark", "axis": "x"},

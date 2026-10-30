@@ -4,7 +4,7 @@
   "size": [1.859, 4.75, 1.403],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "peugeot", "508", "saloon", "parking", "driveway"],
+  "tags": ["peugeot", "508", "saloon", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4354, "z": 0.32, "w": 0.1183, "d": 0.1432, "y": 0.0, "h": 0.4847, "color": "dark", "axis": "x"},

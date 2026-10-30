@@ -4,7 +4,7 @@
   "size": [1.921, 4.486, 1.872],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "nissan", "townstar", "van", "parking", "driveway"],
+  "tags": ["nissan", "townstar", "van", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4375, "z": 0.32, "w": 0.1145, "d": 0.1516, "y": 0.0, "h": 0.3632, "color": "dark", "axis": "x"},

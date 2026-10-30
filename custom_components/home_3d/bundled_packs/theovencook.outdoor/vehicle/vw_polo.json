@@ -4,7 +4,7 @@
   "size": [1.751, 4.074, 1.451],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "volkswagen", "polo", "hatchback", "parking", "driveway"],
+  "tags": ["volkswagen", "polo", "hatchback", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4343, "z": 0.338, "w": 0.1199, "d": 0.1571, "y": 0.0, "h": 0.4411, "color": "dark", "axis": "x"},

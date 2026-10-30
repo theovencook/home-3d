@@ -4,7 +4,7 @@
   "size": [1.818, 4.544, 1.513],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "mg", "mg5 ev", "estate", "electric car", "ev", "electric vehicle", "charging", "parking", "driveway"],
+  "tags": ["mg", "mg5 ev", "estate", "ev", "electric", "charging", "parking", "driveway"],
   "vehicle": true,
   "electric": true,
   "parts": [

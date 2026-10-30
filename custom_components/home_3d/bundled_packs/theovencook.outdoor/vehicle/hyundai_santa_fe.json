@@ -4,7 +4,7 @@
   "size": [1.9, 4.83, 1.72],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "hyundai", "santa fe", "suv", "parking", "driveway"],
+  "tags": ["hyundai", "santa fe", "suv", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.4316, "z": 0.32, "w": 0.1263, "d": 0.1553, "y": 0.0, "h": 0.436, "color": "dark", "axis": "x"},

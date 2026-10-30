@@ -4,7 +4,7 @@
   "size": [1.743, 3.999, 1.455],
   "group": "vehicle",
   "room": ["garage", "garden"],
-  "tags": ["car", "vehicle", "nissan", "micra", "hatchback", "parking", "driveway"],
+  "tags": ["nissan", "micra", "hatchback", "parking", "driveway"],
   "vehicle": true,
   "parts": [
     {"shape": "cyl", "x": -0.434, "z": 0.338, "w": 0.1205, "d": 0.16, "y": 0.0, "h": 0.4399, "color": "dark", "axis": "x"},
