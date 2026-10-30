@@ -1,6 +1,6 @@
 // Lit wrapper around the lazily loaded 3D viewer.
 
-import { css, html, LitElement, nothing, svg, type PropertyValues } from "lit";
+import { css, html, LitElement, nothing, svg, unsafeCSS, type PropertyValues } from "lit";
 import { linesField } from "./lines-field.ts";
 import { actionIndex, gestureAction, runItemAction, TapSequencer, type ActionOwner, type ItemAction } from "../item-actions.ts";
 import { carState, type CarState, heatSensorOn, roomClimateValue,
@@ -161,6 +161,7 @@ import { cheapRate } from "../cheap-rate.ts";
 import { askConfirm } from "../ask.ts";
 import "./ask-dialog.ts";
 import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
+import { isPhoneWidth, NO_FIT_MARGIN, PHONE_FIT_MARGIN, PHONE_MEDIA, thumbsCompact } from "../phone.ts";
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 /** "room": no symbols in the house and floor views, in a room only that room's (D477, D595). */
@@ -313,6 +314,7 @@ export class Fp3dView3d extends LitElement {
     _low: { state: true },
     _micProbe: { state: true },
     _narrowStage: { state: true },
+    _phoneStage: { state: true },
     _alerts: { state: true },
     _household: { state: true },
     _hhFolded: { state: true },
@@ -499,6 +501,10 @@ export class Fp3dView3d extends LitElement {
   declare angleLock: boolean;
   /** The stage is narrower than 700 px (smaller floor pictures, phone layout). */
   private declare _narrowStage: boolean;
+  /** The stage is phone-wide (#93): floor pictures folded, the house fitted clear of the bars. */
+  private declare _phoneStage: boolean;
+  /** The floor pictures' fold as the user left it ("1"/"0"; null: never touched, the stage width decides). */
+  private thumbsSaved: string | null = null;
   private resizeObs: ResizeObserver | null = null;
   /** Warnings (smoke, water, alarm, window in the rain): pulsing rooms and a banner; jump to new ones. */
   declare alerts: boolean;
@@ -717,10 +723,12 @@ export class Fp3dView3d extends LitElement {
     this._settingsOpen = false;
     this._note = null;
     try {
-      this._thumbsCompact = localStorage.getItem("home3d.thumbs_compact") === "1";
+      this.thumbsSaved = localStorage.getItem("home3d.thumbs_compact");
     } catch {
-      this._thumbsCompact = false;
+      this.thumbsSaved = null;
     }
+    this._thumbsCompact = thumbsCompact(this.thumbsSaved, false);
+    this._phoneStage = false;
     this._armed = null;
     this.central = true;
     this.walkable = true;
@@ -896,7 +904,13 @@ export class Fp3dView3d extends LitElement {
     const stage = this.renderRoot.querySelector(".fp3d-stage");
     if (!stage || this.resizeObs || typeof ResizeObserver !== "function") return;
     this.resizeObs = new ResizeObserver((entries) => {
-      const narrow = (entries[0]?.contentRect.width ?? 1000) < 700;
+      const width = entries[0]?.contentRect.width ?? 1000;
+      const narrow = width < 700;
+      const phone = isPhoneWidth(width);
+      if (phone !== this._phoneStage) {
+        this._phoneStage = phone;
+        this._thumbsCompact = thumbsCompact(this.thumbsSaved, phone);
+      }
       if (narrow === this._narrowStage) return;
       this._narrowStage = narrow;
       this.scheduleThumbs();
@@ -1056,6 +1070,7 @@ export class Fp3dView3d extends LitElement {
     if (forced || changed.has("hass") || ticked) this.syncDevices(forced, ticked && (this.trail || this.detecting));
     if (changed.has("hass") || changed.has("director")) this.direct();
     if (changed.has("autoOrbit")) v.setAutoOrbit(this.autoOrbit ? 0.06 : 0);
+    v.setFitMargin(this._phoneStage ? PHONE_FIT_MARGIN : NO_FIT_MARGIN);
     if (changed.has("_thumbs") || changed.has("_narrowStage")) v.setLabelInset(this._thumbs.length ? (this.narrowThumbs ? 136 : 184) : 0);
     if (changed.has("floorId")) v.setFloor(this.floorId);
     if (changed.has("roomId") && (this.roomId || changed.get("roomId"))) v.selectRoom(this.roomId);
@@ -3862,8 +3877,9 @@ export class Fp3dView3d extends LitElement {
     const compact = this._thumbsCompact;
     const fold = () => {
       this._thumbsCompact = !compact;
+      this.thumbsSaved = this._thumbsCompact ? "1" : "0";
       try {
-        localStorage.setItem("home3d.thumbs_compact", this._thumbsCompact ? "1" : "0");
+        localStorage.setItem("home3d.thumbs_compact", this.thumbsSaved);
       } catch {
         // private mode: the choice lasts for this page only
       }
@@ -4235,7 +4251,7 @@ export class Fp3dView3d extends LitElement {
     if (!this._walk)
       return html`<button class="fp3d-walk-btn" title=${t("walk_start")} aria-label=${t("walk_start")} @click=${() => void this.startWalk()}>
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4.5" r="1.8" /><path d="m9 20 2.5-6 2.5 2.5V21M7.5 11l3-3.5 3.5 1.5 2 3.5M11.5 14l1-5" /></svg>
-        <span>${t("walk_title")}</span>
+        <span class="fp3d-walk-label">${t("walk_title")}</span>
       </button>`;
     const w = this._walk;
     // the stick (tablets): forward and back, turning left and right
@@ -8245,6 +8261,36 @@ export class Fp3dView3d extends LitElement {
         position: absolute;
         inset: auto 16px 16px;
         color: var(--fp3d-danger);
+      }
+      /* phones (#93): Walk as a 44 px symbol that stays above the energy cards; 44 px touch targets */
+      @media ${unsafeCSS(PHONE_MEDIA)} {
+        .fp3d-walk-btn {
+          z-index: 5;
+          width: 44px;
+          height: 44px;
+          padding: 0;
+          justify-content: center;
+        }
+        .fp3d-walk-label {
+          display: none;
+        }
+        .fp3d-thumbs-fold,
+        .fp3d-find-btn,
+        .fp3d-central-btn,
+        .fp3d-eye {
+          width: 44px;
+          height: 44px;
+        }
+        .fp3d-eye {
+          left: 62px;
+        }
+        .fp3d-central-btn {
+          bottom: calc(62px + var(--fp3d-bottom-inset, 0px));
+        }
+        .fp3d-thumbs-compact .fp3d-thumb,
+        .fp3d-thumb-house {
+          min-height: 44px;
+        }
       }
     `,
   ];

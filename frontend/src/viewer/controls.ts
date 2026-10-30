@@ -157,6 +157,12 @@ export class OrbitControls {
     this.events.change();
   }
 
+  /** Where the view is headed: the end of a running flight, else where it stands. */
+  get goal(): OrbitView {
+    const v = this.flight?.to ?? this.view;
+    return { ...v, target: v.target.clone() };
+  }
+
   get busy(): boolean {
     return this.flight !== null || this.pointers.size > 0;
   }

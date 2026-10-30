@@ -29,6 +29,7 @@ export type ViewerSurface = Pick<
   | "setExplode"
   | "setFloor"
   | "setFloorInfo"
+  | "setFitMargin"
   | "setFloorStack"
   | "setFlows"
   | "setFridgeDoors"
