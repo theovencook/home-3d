@@ -10,6 +10,8 @@ Items are modelled from simple shapes in this repo; no maker images or 3D files.
 Source for the Bambu rows: the maker's tech-spec pages (bambulab.com, per model) as quoted in third-party and store listings; bambulab.com itself blocked automated fetching, so entries marked approx. or unverified come from memory or a single listing and should be checked against the spec page.
 Sizes of the AMS add-ons are approximate.
 
+Source for the #104 rows: outer dimensions are estimates from memory of the makers' spec sheets and store listings (web search only returned build volumes), so every #104 size is marked unverified and should be checked against the maker's spec page. Multi-colour units (CFS, ACE Pro, CANVAS) sit on top and add their height; the enclosed models include an external rear spool holder where the real printer has one.
+
 | Model | Maker | Type | Size (mm) | Batch | Status | Notes / source |
 | --- | --- | --- | --- | --- | --- | --- |
 | Bambu Lab X1 Carbon | Bambu Lab | FDM | 389 x 389 x 457 | #102 | done | `bambu_x1_carbon_3d_printer` + variants. Discontinued 2026; AMS |
@@ -41,29 +43,38 @@ Sizes of the AMS add-ons are approximate.
 | Prusa MMU3 | Prusa | FDM | tbc | #103 | todo | |
 | Prusa SL1S Speed | Prusa | resin / wash+cure | tbc | #103 | todo | |
 | Prusa CW1S | Prusa | resin / wash+cure | tbc | #103 | todo | |
-| Creality Ender-3 V3 | Creality | FDM | tbc | #104 | todo | |
-| Creality Ender-3 V3 SE | Creality | FDM | tbc | #104 | todo | |
-| Creality Ender-3 V3 KE | Creality | FDM | tbc | #104 | todo | |
-| Creality Ender-5 | Creality | FDM | tbc | #104 | todo | |
-| Creality K1 | Creality | FDM | tbc | #104 | todo | |
-| Creality K1 Max | Creality | FDM | tbc | #104 | todo | |
-| Creality K1C | Creality | FDM | tbc | #104 | todo | |
-| Creality K2 Plus | Creality | FDM | tbc | #104 | todo | |
-| Snapmaker A350T | Snapmaker | FDM | tbc | #104 | todo | |
-| Snapmaker J1S | Snapmaker | FDM | tbc | #104 | todo | |
-| Snapmaker U1 | Snapmaker | FDM | tbc | #104 | todo | |
-| Anycubic Kobra 3 | Anycubic | FDM | tbc | #104 | todo | |
-| Anycubic Kobra S1 | Anycubic | FDM | tbc | #104 | todo | |
-| Elegoo Neptune 4 | Elegoo | FDM | tbc | #104 | todo | |
-| Elegoo Neptune 4 Pro | Elegoo | FDM | tbc | #104 | todo | |
-| Elegoo Neptune 4 Max | Elegoo | FDM | tbc | #104 | todo | |
-| Elegoo Centauri Carbon | Elegoo | FDM | tbc | #104 | todo | |
-| Qidi Q1 Pro | Qidi | FDM | tbc | #104 | todo | |
-| Qidi X-Max 3 | Qidi | FDM | tbc | #104 | todo | |
-| Voron 2.4 (350) | Voron (kit) | FDM | tbc | #104 | todo | |
-| Voron Trident (300) | Voron (kit) | FDM | tbc | #104 | todo | |
-| Sovol SV08 | Sovol | FDM | tbc | #104 | todo | |
-| FlashForge Adventurer 5M Pro | FlashForge | FDM | tbc | #104 | todo | |
+| Creality Ender-3 V2 | Creality | FDM | 475 x 470 x 620 (unverified) | #104 | done | `creality_ender_3_v2_3d_printer` + variants. camera variant |
+| Creality Ender-3 V3 | Creality | FDM | 495 x 478 x 620 (unverified) | #104 | done | `creality_ender_3_v3_3d_printer` + variants. camera variant |
+| Creality Ender-3 V3 SE | Creality | FDM | 440 x 440 x 620 (unverified) | #104 | done | `creality_ender_3_v3_se_3d_printer` + variants. camera variant |
+| Creality Ender-3 V3 KE | Creality | FDM | 440 x 440 x 620 (unverified) | #104 | done | `creality_ender_3_v3_ke_3d_printer` + variants. camera variant |
+| Creality Ender-5 | Creality | FDM | 500 x 500 x 650 (unverified) | #104 | done | `creality_ender_5_3d_printer` + variants. camera variant |
+| Creality K1 | Creality | FDM | 355 x 345 x 483 (unverified) | #104 | done | `creality_k1_3d_printer` + variants. camera variant |
+| Creality K1C | Creality | FDM | 355 x 345 x 483 (unverified) | #104 | done | `creality_k1c_3d_printer` + variants. built-in camera; CFS variant |
+| Creality K1 Max | Creality | FDM | 435 x 462 x 495 (unverified) | #104 | done | `creality_k1_max_3d_printer` + variants. built-in camera; CFS variant |
+| Creality K2 Plus | Creality | FDM | 700 x 550 x 640 (unverified) | #104 | done | `creality_k2_plus_3d_printer` + variants. built-in camera; CFS variant |
+| Creality Hi | Creality | FDM | 450 x 430 x 520 (unverified) | #104 | done | `creality_hi_3d_printer` + variants. built-in camera; CFS variant |
+| Snapmaker A350T | Snapmaker | FDM | 700 x 640 x 640 (unverified) | #104 | done | `snapmaker_a350t_3d_printer` + variants. camera variant |
+| Snapmaker J1S | Snapmaker | FDM | 520 x 500 x 480 (unverified) | #104 | done | `snapmaker_j1s_3d_printer` + variants. camera variant |
+| Snapmaker U1 | Snapmaker | FDM | 380 x 400 x 400 (unverified) | #104 | done | `snapmaker_u1_3d_printer` + variants. built-in camera |
+| Anycubic Kobra 3 | Anycubic | FDM | 460 x 450 x 620 (unverified) | #104 | done | `anycubic_kobra_3_3d_printer` + variants. camera variant; ACE Pro variant |
+| Anycubic Kobra 3 Max | Anycubic | FDM | 620 x 640 x 700 (unverified) | #104 | done | `anycubic_kobra_3_max_3d_printer` + variants. camera variant |
+| Anycubic Kobra S1 | Anycubic | FDM | 440 x 430 x 490 (unverified) | #104 | done | `anycubic_kobra_s1_3d_printer` + variants. built-in camera; ACE Pro variant |
+| Elegoo Neptune 4 | Elegoo | FDM | 430 x 420 x 620 (unverified) | #104 | done | `elegoo_neptune_4_3d_printer` + variants. camera variant |
+| Elegoo Neptune 4 Pro | Elegoo | FDM | 430 x 420 x 620 (unverified) | #104 | done | `elegoo_neptune_4_pro_3d_printer` + variants. camera variant |
+| Elegoo Neptune 4 Plus | Elegoo | FDM | 500 x 500 x 680 (unverified) | #104 | done | `elegoo_neptune_4_plus_3d_printer` + variants. camera variant |
+| Elegoo Neptune 4 Max | Elegoo | FDM | 600 x 590 x 700 (unverified) | #104 | done | `elegoo_neptune_4_max_3d_printer` + variants. camera variant |
+| Elegoo Centauri Carbon | Elegoo | FDM | 410 x 400 x 430 (unverified) | #104 | done | `elegoo_centauri_carbon_3d_printer` + variants. built-in camera; CANVAS variant |
+| Qidi Q1 Pro | Qidi | FDM | 440 x 450 x 500 (unverified) | #104 | done | `qidi_q1_pro_3d_printer` + variants. built-in camera |
+| Qidi Plus 4 | Qidi | FDM | 500 x 500 x 580 (unverified) | #104 | done | `qidi_plus_4_3d_printer` + variants. built-in camera |
+| Qidi X-Max 3 | Qidi | FDM | 580 x 560 x 640 (unverified) | #104 | done | `qidi_x_max_3_3d_printer` + variants. built-in camera |
+| Voron 2.4 (350) | Voron (kit) | FDM | 640 x 640 x 760 (unverified) | #104 | done | `voron_2_4_350_3d_printer` + variants. camera variant |
+| Voron Trident (300) | Voron (kit) | FDM | 560 x 560 x 640 (unverified) | #104 | done | `voron_trident_300_3d_printer` + variants. camera variant |
+| Voron 0.2 | Voron (kit) | FDM | 320 x 320 x 360 (unverified) | #104 | done | `voron_v0_2_3d_printer` + variants. camera variant |
+| Sovol SV06 | Sovol | FDM | 520 x 480 x 640 (unverified) | #104 | done | `sovol_sv06_3d_printer` + variants. camera variant |
+| Sovol SV08 | Sovol | FDM | 580 x 570 x 640 (unverified) | #104 | done | `sovol_sv08_3d_printer` + variants. camera variant |
+| FlashForge Adventurer 5M | FlashForge | FDM | 470 x 500 x 490 (unverified) | #104 | done | `flashforge_adventurer_5m_3d_printer` + variants. camera variant |
+| FlashForge Adventurer 5M Pro | FlashForge | FDM | 470 x 500 x 490 (unverified) | #104 | done | `flashforge_adventurer_5m_pro_3d_printer` + variants. built-in camera |
+| FlashForge AD5X | FlashForge | FDM | 480 x 500 x 500 (unverified) | #104 | done | `flashforge_ad5x_3d_printer` + variants. built-in camera |
 | Elegoo Saturn 4 Ultra | Elegoo | resin | tbc | #105 | todo | |
 | Elegoo Mars 5 | Elegoo | resin | tbc | #105 | todo | |
 | Anycubic Photon Mono M7 | Anycubic | resin | tbc | #105 | todo | |
