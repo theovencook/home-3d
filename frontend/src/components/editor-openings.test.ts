@@ -95,11 +95,88 @@ test("the hint bar says what a tap will do where the mouse rests: add, select or
   assert.match(el.hintText(), /overlap/i);
   // away from any wall: the general hint
   hover(el, [3, 2]);
-  assert.equal(el.hintText(), el.t("hint_opening"));
+  assert.equal(el.hintText(), el.t("hint_opening", { kind: "Door" }));
 });
 
 test("the overlap message shows in the hint bar until the next press (#62)", () => {
   const el = editor();
   press(el, [2.3, 0]);
   assert.match(el.hintText(), /overlap/i);
+});
+
+test("the hint bar names the kind the next tap adds, so it is never inherited silently (#63)", () => {
+  const el = editor();
+  assert.match(el.hintText(), /Door/);
+  el.selectItem("opening", "d1");
+  el.setOpeningPreset(openings(el)[0], "front");
+  assert.match(el.hintText(), /Front door/);
+});
+
+test("a new opening is exactly the active kind, front door style included (#63)", () => {
+  const el = editor();
+  el._openingPreset = "front";
+  press(el, [4.5, 0]);
+  const added = openings(el)[1];
+  assert.equal(added.style, "front");
+  assert.equal(added.width, 1);
+});
+
+test("a plain new door keeps the automatic style, so in an outer wall it still looks like a front door (#63)", () => {
+  const el = editor();
+  press(el, [4.5, 0]);
+  assert.equal(openings(el)[1].style, undefined);
+});
+
+test("the position field says which corner it measures from (#63)", () => {
+  const el = editor();
+  assert.equal(el.openingPositionLabel(openings(el)[0]), "Centre from west corner (m)");
+  el._doc.settings.north = 180;
+  assert.equal(el.openingPositionLabel(openings(el)[0]), "Centre from east corner (m)");
+});
+
+/** A lit template as plain markup text, near enough to look for classes in it. */
+function markup(v: unknown): string {
+  if (Array.isArray(v)) return v.map(markup).join("");
+  if (v && typeof v === "object" && "strings" in v) {
+    const t = v as { strings: readonly string[]; values: unknown[] };
+    return t.strings.map((s, i) => s + (i < t.values.length ? markup(t.values[i]) : "")).join("");
+  }
+  return typeof v === "string" || typeof v === "number" ? String(v) : "";
+}
+
+test("the selected opening is drawn with a highlight ring, the others are not (#63)", () => {
+  const el = editor();
+  el._doc.floors[0].openings.push(door("d2", 4.5));
+  el.selectItem("opening", "d2");
+  const floor = el._doc.floors[0];
+  const svg = markup(el.renderOpenings(floor, []));
+  const groups = svg.split("<g data-opening=").slice(1);
+  assert.equal(groups.length, 2);
+  assert.doesNotMatch(groups[0], /fp3d-open-ring/);
+  assert.match(groups[1], /fp3d-open-ring/);
+});
+
+test("dragging a door slides it along its wall, in Doors & windows mode as well (#63)", () => {
+  const el = editor();
+  press(el, [1.5, 0], "d1");
+  el.pointers.set(1, [0, 0]);
+  el.onPointerMove({ pointerId: 1, pointerType: "mouse", clientX: 3 * SCALE + 100, clientY: 0.4 * SCALE + 100, target: { closest: () => null }, altKey: false });
+  el.onPointerUp({ pointerId: 1, pointerType: "mouse", clientX: 3 * SCALE + 100, clientY: 0.4 * SCALE + 100, target: { closest: () => null }, currentTarget: { releasePointerCapture() {} } });
+  const d = openings(el)[0];
+  assert.equal(d.offset, 3);
+  assert.equal(d.edge, 0);
+  assert.equal(openings(el).length, 1);
+});
+
+test("in Doors & windows mode with nothing selected the sidebar offers the kind for the next tap (#63)", () => {
+  const el = editor();
+  el.selectItem("room", null);
+  const side = markup(el.renderSide(el._doc.floors[0]));
+  assert.match(side, /fp3d-presets/);
+  el.pickOpeningKind("window");
+  assert.equal(el._openingPreset, "window");
+  assert.equal(openings(el)[0].type, "door");
+  assert.match(el.hintText(), /add: Window/);
+  el._tool = "select";
+  assert.doesNotMatch(markup(el.renderSide(el._doc.floors[0])), /fp3d-presets/);
 });

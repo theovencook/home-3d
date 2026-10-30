@@ -56,3 +56,16 @@ export function openingTap(tap: Vec2, span: [Vec2, Vec2], openings: readonly Ope
   const t = along(other, tap);
   return t.s >= 0 && t.s <= t.len && t.d <= SAME_WALL ? { select: hit } : { blocked: hit };
 }
+
+export type Compass = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
+
+/**
+ * Compass direction of the corner an opening's position is measured from (the edge's first point), seen from
+ * the edge's other end; `north` is the plan's north in degrees clockwise from up (-z) (#63).
+ */
+export function edgeStartCorner(room: Pick<Room, "points">, edge: number, north: number): Compass {
+  const a = room.points[edge];
+  const b = room.points[(edge + 1) % room.points.length];
+  const bearing = ((Math.atan2(a[0] - b[0], -(a[1] - b[1])) * 180) / Math.PI - north + 720) % 360;
+  return (["n", "ne", "e", "se", "s", "sw", "w", "nw"] as const)[Math.round(bearing / 45) % 8];
+}
