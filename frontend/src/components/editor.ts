@@ -154,6 +154,7 @@ import { load3d } from "../load3d.ts";
 import { ensureRecipes, packTypesIn } from "../pack-recipes.ts";
 import "./ask-dialog.ts";
 import { isHelpKey, LEGEND, SHORTCUTS } from "../help.ts";
+import { hintKey, type Tool } from "../editor-hint.ts";
 import { askConfirm, tell } from "../ask.ts";
 import "./library.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
@@ -179,8 +180,6 @@ const MAX_MOUNT_Y = 10;
 /** A paw (24 × 24), the static pets' mark in the plan. */
 const PAW = "M8.3 3.5a2 1.6 0 1 1 0 3.2 2 1.6 0 0 1 0-3.2m7.4 0a2 1.6 0 1 1 0 3.2 2 1.6 0 0 1 0-3.2M4.5 8a1.8 1.5 0 1 1 0 3 1.8 1.5 0 0 1 0-3m15 0a1.8 1.5 0 1 1 0 3 1.8 1.5 0 0 1 0-3M12 10c2.5 0 4.6 1.9 5.3 4.3.6 2 .2 3.7-1.3 4.5-1.4.8-2.6-.2-4-.2s-2.6 1-4 .2c-1.5-.8-1.9-2.5-1.3-4.5C7.4 11.9 9.5 10 12 10";
 
-
-type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "hole" | "wall" | "roof" | "energy" | "pool";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
@@ -5759,6 +5758,29 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+  /** The hint bar under the plan (#96): the current tool, the selection, or on a new plan the next step. */
+  private renderHint(floor: Floor | undefined) {
+    const key = hintKey({
+      tool: this._tool,
+      hasFloor: !!floor,
+      rooms: floor?.rooms.length ?? 0,
+      selected: this._deviceId ? "device" : this._furnitureId ? "furniture" : this._openingId ? "opening" : this._roomId ? "room" : null,
+      wallPick: this._wallPick,
+      fixedHint: this._fixedHint,
+      outdoorFree: !!this._outdoorFree,
+      jointPlace: !!this._jointPlace,
+      pipeMode: !!this._pipeMode,
+      poolArea: !!this.poolArea,
+      pipeDraft: !!this._pipeDraft,
+      poolTech: released("pool"),
+    });
+    const first = key === "hint_empty" || key === "hint_first_room";
+    return html`<div class="fp3d-hint ${this._fixedHint ? "fp3d-hint-fixed" : ""} ${first ? "fp3d-hint-first" : ""}" role="status" aria-live="polite">
+      <span>${this.t(key)}</span>
+      <button class="fp3d-hint-help" title=${this.t("help_open")} @click=${() => (this._help = true)}>? ${this.t("hint_help")}</button>
+    </div>`;
+  }
+
   /** The '?' help (#95): the shortcuts and the plan's marks, both from the tables in help.ts. */
   private renderHelp() {
     if (!this._help) return nothing;
@@ -5857,7 +5879,7 @@ export class Fp3dEditor extends LitElement {
               ${this._tool === "roof" ? svg`${this.renderRoofSections()}${this.renderRoofWindows()}` : this._tool === "energy" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}${this.renderCables()}${this.renderEnergyMarkers()}` : this._tool === "pool" && floor && this.pipeRules ? this.renderPoolPlan(floor) : nothing} ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             ${this.renderContext()}
-            <p class="fp3d-hint ${this._fixedHint ? "fp3d-hint-fixed" : ""}">${!floor ? this.t("hint_empty") : this._wallPick ? this.t("hint_wall_pick") : this._fixedHint ? this.t("fixed_drag_hint") : this._tool === "outdoor" && this._outdoorFree ? this.t("hint_outdoor_free") : this._tool === "pool" && this._jointPlace ? this.t("hint_joint_place") : this._tool === "pool" && this._pipeMode ? this.t(!this.poolArea ? "hint_pipe_pool" : this._pipeDraft ? "hint_pipe_next" : "hint_pipe_start") : this._tool === "pool" && released("pool") ? this.t("hint_pool_tech") : this.t(`hint_${this._tool}` as I18nKey)}</p>
+            ${this.renderHint(floor)}
           </div>
           ${this._split && !this.narrow
             ? html`<div class="fp3d-split-handle" title=${this.t("split_handle_hint")} @pointerdown=${this.onSplitDown}></div>`
@@ -14147,15 +14169,46 @@ export class Fp3dEditor extends LitElement {
         stroke: #ff5fd2;
         stroke-width: 2;
       }
+      /* the hint bar (#96): a readable strip on its own background, not a faint line on the grid */
       .fp3d-hint {
         position: absolute;
         left: 12px;
-        right: 12px;
-        bottom: 8px;
-        margin: 0;
-        font-size: 12px;
-        color: var(--fp3d-muted);
+        bottom: 10px;
+        max-width: calc(100% - 24px);
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 8px 7px 14px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 12px;
+        background: var(--fp3d-chrome-solid);
+        box-shadow: var(--fp3d-shadow);
+        font-size: 14px;
+        line-height: 1.35;
+        color: var(--fp3d-text);
         pointer-events: none;
+      }
+      .fp3d-hint-first {
+        border-color: var(--fp3d-accent);
+        font-weight: 600;
+      }
+      .fp3d-hint-help {
+        flex: none;
+        pointer-events: auto;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--fp3d-muted);
+        background: none;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 999px;
+        padding: 3px 10px;
+        cursor: pointer;
+      }
+      .fp3d-hint-help:hover {
+        color: var(--fp3d-text);
+        border-color: var(--fp3d-accent);
       }
       .fp3d-side-grip {
         position: absolute;
@@ -16033,6 +16086,7 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-hint-fixed {
         color: var(--fp3d-accent);
+        border-color: var(--fp3d-accent);
       }
       .fp3d-ctx {
         position: absolute;
