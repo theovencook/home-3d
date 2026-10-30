@@ -1,26 +1,28 @@
-import { css } from "lit";
+import { css, unsafeCSS } from "lit";
+import { DARK, LIGHT, schemeVars, type Scheme } from "./scheme.ts";
 
-/** Neon design tokens shared by panel, card and editor. */
+/**
+ * Design tokens shared by panel, card and editor. Each colour reads an inherited `--fp3d-s-*` scheme variable with the
+ * dark neon value as fallback; a host with the `light` attribute (the viewer under the Day look, #85) sets the light
+ * scheme, and every Home 3D part nested in it inherits that.
+ */
+const key = (k: string) => k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+const TOKENS = (Object.keys(DARK) as (keyof Scheme)[])
+  .filter((k) => k !== "colorScheme")
+  .map((k) => `--fp3d-${key(k)}: var(--fp3d-s-${key(k)}, ${DARK[k]});`)
+  .join("\n");
+
 export const tokens = css`
   :host {
-    --fp3d-bg: #070b14;
-    --fp3d-bg2: #0d1424;
-    --fp3d-chrome: rgba(14, 21, 38, 0.86);
-    --fp3d-chrome-solid: #0f1729;
-    --fp3d-line: rgba(120, 170, 255, 0.16);
-    --fp3d-text: #e6eefc;
-    --fp3d-muted: #8a9bb8;
-    --fp3d-accent: #37e0ff;
-    --fp3d-accent-text: #041018;
-    --fp3d-soft: #5b7cff;
-    --fp3d-warm: #ffb547;
-    --fp3d-danger: #ff6b8b;
-    --fp3d-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    ${unsafeCSS(TOKENS)}
     --fp3d-font: "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --fp3d-title-font: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
-    color-scheme: dark;
+    color-scheme: var(--fp3d-s-color-scheme, dark);
     font-family: var(--fp3d-font);
     color: var(--fp3d-text);
+  }
+  :host([light]) {
+    ${unsafeCSS(schemeVars(LIGHT))}
   }
 `;
 
