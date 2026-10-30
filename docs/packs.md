@@ -427,6 +427,8 @@ those cannot show, or for places without a wall or a roof to cut:
 
 ### Racks
 
+The whole rack feature (placing, filling, linking to Home Assistant, the card, voice) is described in [racks.md](racks.md); this section is the pack format.
+
 An item with a `rack_frame` is an empty 19-inch or 10-inch rack. Its `parts` draw the frame like any other item;
 the spec says how many rack units (U) it has and where they sit, so Home 3D can mark them and fit rack-mount gear
 into them (see "Rack-mount gear" below). It places, moves and rotates like any other item.
@@ -480,7 +482,7 @@ left, as wide as the cabinet), so the room it needs to open stays clear.
 The bundled racks in `theovencook.it` (`network/rack_*.json`) are written by `node tools/rack-frames.ts` from the list
 in `frontend/src/rack-catalogue.ts`, which draws each frame from its spec (`rackFrameParts` in
 `frontend/src/rack-frame.ts`); a test fails while a file differs. To add a bundled rack, add it to that list and run
-the tool. The catalogue (30 racks) and where each size comes from are in [rack-frames.md](rack-frames.md). Other packs may draw their racks any way they like.
+the tool. The catalogue (33 racks) and where each size comes from are in [rack-frames.md](rack-frames.md). Other packs may draw their racks any way they like.
 
 ### Rack-mount gear
 

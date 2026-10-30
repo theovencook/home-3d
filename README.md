@@ -93,6 +93,8 @@ A pack is a folder of plain JSON: a `pack.json` that names the pack and its lice
 file on import. Import one under **Extensions** → **Import a pack folder …**. Old single-file packs still import.
 `python tools/fp3dpack.py validate <folder>` checks a pack before you import or publish it.
 
+Racks, rack-mount gear, links to Home Assistant, the rack card and voice questions are in [docs/racks.md](docs/racks.md).
+
 ## Development
 
 ```bash

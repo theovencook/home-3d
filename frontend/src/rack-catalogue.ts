@@ -77,6 +77,9 @@ export const RACKS: RackEntry[] = [
   r("rack_mini_10in_8u", "Mini rack 10-inch 8U", [0.28, 0.2, 0.406], "surface", { u: 8, form: "frame4", width: 10 }, "rack_mini", MINI_ROOMS, MINI_TAGS),
   // 10-inch wall racks
   r("rack_wall_frame_10in_6u", "Wall frame 10-inch 6U", [0.28, 0.15, 0.31], "wall", { u: 6, form: "wall_frame", width: 10 }, "rack_wall_frame_10in", WALL_ROOMS, ["10 inch", "open frame", "wall rack", "homelab", "rack"], 1.2),
+  // wall brackets and mini-rack mounts (#122): open 10-inch frames, the 6U above is the family's middle size
+  r("rack_wall_frame_10in_4u", "Wall frame 10-inch 4U", [0.28, 0.15, 0.221], "wall", { u: 4, form: "wall_frame", width: 10 }, "rack_wall_frame_10in", WALL_ROOMS, ["10 inch", "open frame", "wall rack", "mini rack mount", "homelab", "rack"], 1.3),
+  r("rack_wall_frame_10in_9u", "Wall frame 10-inch 9U", [0.28, 0.15, 0.443], "wall", { u: 9, form: "wall_frame", width: 10 }, "rack_wall_frame_10in", WALL_ROOMS, ["10 inch", "open frame", "wall rack", "mini rack mount", "homelab", "rack"], 1.1),
   r("rack_wall_cabinet_10in_6u", "Wall cabinet 10-inch 6U", [0.28, 0.31, 0.336], "wall", { u: 6, form: "wall_cabinet", width: 10, door: "glass" }, "rack_wall_cabinet_10in", WALL_ROOMS, ["10 inch", "mini cabinet", "wall rack", "homelab", "rack"], 1.2),
   r("rack_wall_cabinet_10in_9u", "Wall cabinet 10-inch 9U", [0.28, 0.31, 0.469], "wall", { u: 9, form: "wall_cabinet", width: 10, door: "glass" }, "rack_wall_cabinet_10in", WALL_ROOMS, ["10 inch", "mini cabinet", "wall rack", "homelab", "rack"], 1.2),
   // 19-inch desktop open frames (2-post)
@@ -85,6 +88,7 @@ export const RACKS: RackEntry[] = [
   r("rack_desktop_frame_12u", "Desktop rack frame 19-inch 12U", [0.504, 0.292, 0.584], "surface", { u: 12, form: "frame2" }, "rack_desktop_frame", MINI_ROOMS, DESK_TAGS),
   // 19-inch wall frames
   r("rack_wall_frame_6u", "Wall frame 19-inch 6U", [0.504, 0.305, 0.374], "wall", { u: 6, form: "wall_frame" }, "rack_wall_frame", WALL_ROOMS, WALLF_TAGS, 1.2),
+  r("rack_wall_frame_9u", "Wall frame 19-inch 9U", [0.504, 0.305, 0.508], "wall", { u: 9, form: "wall_frame" }, "rack_wall_frame", WALL_ROOMS, WALLF_TAGS, 1.1),
   r("rack_wall_frame_12u", "Wall frame 19-inch 12U", [0.504, 0.305, 0.641], "wall", { u: 12, form: "wall_frame" }, "rack_wall_frame", WALL_ROOMS, WALLF_TAGS, 1.0),
   // 19-inch wall cabinets, 600 x 450, glass door (the 9U is above)
   r("rack_wall_cabinet_4u", "Wall cabinet 19-inch 4U", [0.6, 0.45, 0.29], "wall", { u: 4, form: "wall_cabinet", door: "glass" }, "rack_wall_cabinet", WALL_ROOMS, WALLC_TAGS, 1.3),

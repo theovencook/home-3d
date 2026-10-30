@@ -4,3 +4,4 @@ export { MicProbe } from "./mic-probe.ts";
 export { converse, listenOnce, speak } from "./listen.ts";
 export { showCommand } from "./commands.ts";
 export { showTarget, SYNONYMS } from "./targets.ts";
+export { rackAnswer } from "./racks.ts";

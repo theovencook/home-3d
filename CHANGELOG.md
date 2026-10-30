@@ -21,6 +21,19 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - **Items can move between bundled packs:** plans, backups, restore points, imported plans and pins follow an item to its new pack, and its old id keeps working.
 - `tools/publish_packs.py` and `tools/check_pack_urls.py` publish the bundled packs to a pack repository and check that they install by URL.
 
+### Racks
+
+- **Racks as items (#112):** an item with a `rack_frame` spec (1-60 U, 19 or 10 inch, frame, cabinet or wall forms, optional door) is an empty rack, with U ticks on its rails in 3D.
+- **Fill a rack with gear (#113):** items with a `rack` spec go into a placed rack from the **Edit rack** sheet. Overlaps and gear that does not fit are refused; the backend checks saves.
+- **Half and third width, front and rear, 0U PDUs, shelves, power totals, frame change (#114):** several small boxes share a U, rear-mounted gear, vertical PDUs in side lanes, shelves with loose gear on them, used/free U and estimated watts, and swapping the rack frame while keeping the gear.
+- **Door swing and front view (#115):** cabinet doors swing open in 2D, and a rack with gear shows a front drawing in the item panel and, on tap, in the 2D view.
+- **Rack catalogue (#116, #122):** 33 racks (10-inch mini racks, wall frames and cabinets, desktop frames, floor cabinets, open frames, relay and AV racks) with sizes and sources in `docs/rack-frames.md`. #122 adds wall brackets and mini-rack wall mounts: 10-inch wall frames in 4U and 9U, a 19-inch 9U wall frame.
+- **Rack-mount gear catalogue (#117):** 46 switches, patch panels, firewalls, NVRs, UniFi gear, shelves, UPS, PDUs, servers and NAS boxes with checked sizes (`docs/rack-gear.md`).
+- **Link gear to Home Assistant (#119):** pick the device behind each box; a status LED shows online, warning or offline in 3D, in the front view and in the sheet. Tap gear for its values, hold for more-info.
+- **Rack card (#120):** a glass card over the rack with the UPS load, battery and runtime, PoE watts, the hottest temperature, devices online, a volume and a throughput figure, with sparklines. The editor picks up to eight values; the card has the option `rack_cards`.
+- **Big racks stay fast (#121):** a rack's gear is one geometry per rack, a plain box per piece when far away and full detail when near.
+- **Voice and translations (#122):** "How hot is the rack?", "What's the UPS battery?" and "Which devices are online?" are answered from the rack card's values in the voice bundle. The rack strings are in all 16 language files (machine translated, not reviewed). New: `docs/racks.md`, a chapter on racks.
+
 ### Items and the item editor
 
 - **Item editor:** build your own furniture from simple shapes. The items are kept in Home Assistant, appear in the library for everyone in the household, and can be exported and imported as files.
