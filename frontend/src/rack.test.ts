@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { PackItem } from "./packs.ts";
 import { FRONT_INSET, REAR_INSET, rackLayout, readRackFrame } from "./rack-frame.ts";
-import { addSlot, SHELF_TRAY, packGearOf, packLooseOf, rackMisfits, rackSpace, rackTotals, rackContents, rackGearProblems, readRackGear, rackLedSpot, rackSlotAt, RACK_GEAR_DEPTHS, RACK_GEAR_WIDTHS, RACK_MAX_SLOTS, moveSlot, removeSlot, type GearOf, type LooseOf, type RackSlot, type RackSpace } from "./rack.ts";
+import { addSlot, rackTapSlot, SHELF_TRAY, packGearOf, packLooseOf, rackMisfits, rackSpace, rackTotals, rackContents, rackGearProblems, readRackGear, rackLedSpot, rackSlotAt, RACK_GEAR_DEPTHS, RACK_GEAR_WIDTHS, RACK_MAX_SLOTS, moveSlot, removeSlot, type GearOf, type LooseOf, type RackSlot, type RackSpace } from "./rack.ts";
 
 /** A 9U 19" rack 0.4 m deep. */
 const SPACE: RackSpace = { u: 9, width: 19, mountDepth: 0.4 };
@@ -400,4 +400,24 @@ test("the backend checks depth and side lanes at the rack's placed size, as the 
   // a slot whose type is unknown holds its one U (racks.py: test_gear_whose_recipe_is_gone_is_not_checked_but_keeps_its_one_u)
   assert.deepEqual(misfits({ id: "b", type: "gone", u: 1 }, { id: "a", type: "sw", u: 2 }), []);
   assert.deepEqual(misfits({ id: "b", type: "gone", u: 1 }, { id: "c", type: "sw", u: 1 }), [["c", "overlap"]]);
+});
+
+test("a tap on a glass or mesh door's rim or bars goes on to the gear behind it; a solid door keeps it (#131)", () => {
+  const glass = readRackFrame(CABINET)!;
+  const at = rackLayout(glass, 0.6, 0.45, 0.5);
+  const pieces = rackContents(at, [slot("a", "t", 2), slot("b", "t", 5)], () => SWITCH);
+  const [a, b] = pieces;
+  const door = 0.45 / 2 - 0.01; // inside the door, in front of the gear
+  const back: [number, number, number] = [0, 0, -1];
+  assert.equal(rackTapSlot(glass, 0.6, 0.45, 0.5, pieces, [a.x, a.y + a.h / 2, door], back), "a");
+  // slanting down from above b's front onto it
+  assert.equal(rackTapSlot(glass, 0.6, 0.45, 0.5, pieces, [b.x, b.y + b.h + 0.01, door], [0, -0.2, -1]), "b");
+  assert.equal(rackTapSlot({ ...glass, door: "mesh" }, 0.6, 0.45, 0.5, pieces, [a.x, a.y + a.h / 2, door], back), "a");
+  assert.equal(rackTapSlot({ ...glass, door: "solid" }, 0.6, 0.45, 0.5, pieces, [a.x, a.y + a.h / 2, door], back), null, "nothing shows through");
+  // through the door where no gear is
+  assert.equal(rackTapSlot(glass, 0.6, 0.45, 0.5, pieces, [a.x, at.units[3].y0 + 0.02, door], back), null);
+  // the side panel is no door: what lies behind it is not meant
+  assert.equal(rackTapSlot(glass, 0.6, 0.45, 0.5, pieces, [0.295, a.y + a.h / 2, 0], [-1, 0, 0]), null);
+  // a hit on the gear itself is the gear, door or none
+  assert.equal(rackTapSlot({ ...glass, door: "solid" }, 0.6, 0.45, 0.5, pieces, [a.x, a.y + a.h / 2, a.z + a.d / 2], back), "a");
 });

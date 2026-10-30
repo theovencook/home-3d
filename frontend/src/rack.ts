@@ -7,7 +7,7 @@
 // optional fields on RackSlot.
 
 import type { PackItem } from "./packs.ts";
-import { RACK_MAX_U, RACK_OPENING, RACK_UNIT, RACK_WIDTHS, type RackLayout, type RackProblem, type RackWidth } from "./rack-frame.ts";
+import { RACK_DOOR_DEPTH, RACK_MAX_U, RACK_OPENING, RACK_UNIT, RACK_WIDTHS, type RackFrame, type RackLayout, type RackProblem, type RackWidth } from "./rack-frame.ts";
 
 /** How much of the rack's width the gear takes: all of it, or half / a third on a shared U (#114). */
 export const RACK_GEAR_WIDTHS = ["full", "half", "third"] as const;
@@ -460,6 +460,40 @@ export function rackSlotAt(pieces: readonly RackPiece[], at: readonly [number, n
     if (!best || p.w * p.h * p.d < best.w * best.h * best.d) best = p;
   }
   return best?.slot.id ?? null;
+}
+
+/**
+ * The gear a tap on a rack meant (#119, #131), in rack-local metres like rackSlotAt: the piece at the hit point; a hit
+ * on a glass or mesh door (its rim, its bars: the pane itself draws nothing) goes on along `dir` to the first gear
+ * behind it, as the eye does. A solid door, a side panel or the roof keep the tap.
+ */
+export function rackTapSlot(frame: RackFrame, w: number, d: number, h: number, pieces: readonly RackPiece[], at: readonly [number, number, number], dir: readonly [number, number, number]): string | null {
+  const hit = rackSlotAt(pieces, at);
+  if (hit || (frame.door !== "glass" && frame.door !== "mesh")) return hit;
+  const [x, y, z] = at;
+  const onDoor = z >= d / 2 - RACK_DOOR_DEPTH - 0.005 && Math.abs(x) <= w / 2 + 0.005 && y >= -0.005 && y <= h + 0.005;
+  if (!onDoor) return null;
+  // the first box the ray enters (slab method), each grown like rackSlotAt's
+  const grow = 0.006;
+  let best: { t: number; id: string } | null = null;
+  for (const p of pieces) {
+    const lo = [p.x - p.w / 2 - grow, p.y - grow, p.z - p.d / 2 - grow];
+    const hi = [p.x + p.w / 2 + grow, p.y + p.h + grow, p.z + p.d / 2 + grow];
+    let t0 = 0;
+    let t1 = Infinity;
+    for (let k = 0; k < 3 && t0 <= t1; k++) {
+      if (Math.abs(dir[k]) < 1e-12) {
+        if (at[k] < lo[k] || at[k] > hi[k]) t0 = Infinity;
+        continue;
+      }
+      const a = (lo[k] - at[k]) / dir[k];
+      const b = (hi[k] - at[k]) / dir[k];
+      t0 = Math.max(t0, Math.min(a, b));
+      t1 = Math.min(t1, Math.max(a, b));
+    }
+    if (t0 <= t1 && (!best || t0 < best.t)) best = { t: t0, id: p.slot.id };
+  }
+  return best?.id ?? null;
 }
 
 /** A piece of gear that does not fit where it is (#114: the rack frame changed, a pack update made it bigger). */

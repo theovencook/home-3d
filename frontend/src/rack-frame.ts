@@ -191,6 +191,8 @@ const RAIL_DEPTH = 0.015;
 const SIDE = 0.015;
 const BACK = 0.012;
 const DOOR = 0.02;
+/** How deep a cabinet's door is (its front face at the cabinet's front, #131: taps on it). */
+export const RACK_DOOR_DEPTH = DOOR;
 const DOOR_RIM = 0.035;
 const POST = 0.03;
 

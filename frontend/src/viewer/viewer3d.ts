@@ -7,7 +7,7 @@
 
 import { rackDrawOf, type RackDraw } from "../rack-elevation.ts";
 import { RACK_STATUS_COLOURS, slotEntities, type RackStatus } from "../rack-links.ts";
-import { rackContents, rackSlotAt, type RackSlot } from "../rack.ts";
+import { rackContents, rackTapSlot, type RackSlot } from "../rack.ts";
 import { rackLayout, readRackFrame } from "../rack-frame.ts";
 import {
   AdditiveBlending,
@@ -4541,7 +4541,7 @@ export class FloorplanViewer {
         // a rack's gear is a mesh of its own (#121): it belongs to the rack
         const id = (hit.object.userData.rackId as string | undefined) ?? inRange(fv.geo.furnitureTris, tri);
         // a rack's gear (#119): the piece under the tap, before the rack's own device; the rack itself after it
-        const rack = id ? this.rackHit(fv, id, hit.point) : null;
+        const rack = id ? this.rackHit(fv, id, hit.point, ray.ray.direction) : null;
         if (rack?.slot) return { floorId: fv.floor.id, roomId: null, rack };
         const entity = id ? this.pickFurniture.get(id) : undefined;
         if (entity) return { entity };
@@ -4578,7 +4578,7 @@ export class FloorplanViewer {
   }
 
   /** The rack with gear a tap on furniture `id` hit, and the slot whose gear lies under the hit point (#119). */
-  private rackHit(fv: FloorView, id: string, point: Vector3): RackHit | null {
+  private rackHit(fv: FloorView, id: string, point: Vector3, dir: Vector3): RackHit | null {
     const f = fv.floor.furniture.find((o) => o.id === id);
     const slots = f?.rack?.slots;
     const frame = slots?.length ? readRackFrame(packItem(f!.type)) : null;
@@ -4591,8 +4591,11 @@ export class FloorplanViewer {
     const dx = p.x - f.x;
     const dz = p.z - f.z;
     const local: [number, number, number] = [(f.mirror ? -1 : 1) * (dx * c + dz * s), p.y - mountBase(fv.floor, f), -dx * s + dz * c];
-    const at = rackLayout(frame, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h));
-    const slotId = rackSlotAt(rackContents(at, slots, packItem), local);
+    // the tap's direction the same way (a tap on a glass or mesh door goes on to the gear behind it, #131)
+    const q = fv.group.worldToLocal(point.clone().add(dir)).sub(p);
+    const along: [number, number, number] = [(f.mirror ? -1 : 1) * (q.x * c + q.z * s), q.y, -q.x * s + q.z * c];
+    const [w, d, h] = [Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h)];
+    const slotId = rackTapSlot(frame, w, d, h, rackContents(rackLayout(frame, w, d, h), slots, packItem), local, along);
     return { id, slot: slotId ? (slots.find((o) => o.id === slotId) ?? null) : null, f };
   }
 
