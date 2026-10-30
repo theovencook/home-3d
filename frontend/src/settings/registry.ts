@@ -17,6 +17,7 @@ import type { PackUpdateSettings, PackUpdateStatus } from "../pack-updates.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, released } from "../features.ts";
 import { EFFECT_DEFAULTS } from "../room-effects.ts";
+import { formatImperial, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 
 export type Scope = "house" | "device";
 /** Who may change it: anyone (device rows), editors (house rows), Home Assistant admins. */
@@ -92,6 +93,8 @@ export type Control =
       unit?: string | ((env: SettingsEnv) => string);
       /** An empty field is allowed and means the default (null). */
       clearable?: boolean;
+      /** A length: stored in metres, shown and typed in the plan's unit (feet and inches when imperial, #117). */
+      length?: boolean;
     }
   | { kind: "segment"; options: Option[] | ((env: SettingsEnv) => Option[]) }
   | { kind: "select"; options: (env: SettingsEnv) => Option[] }
@@ -470,7 +473,7 @@ const GENERAL: Setting[] = [
     permission: "editor",
     label: "grid",
     keywords: ["snap", "step"],
-    control: { kind: "number", step: 0.01, min: 0.01, max: 1 },
+    control: { kind: "number", step: 0.01, min: 0.01, max: 1, length: true },
     default: 0.05,
     read: (env) => settingsOf(env).grid ?? 0.05,
     write: (env, v) => withSettings(env.building!, { grid: clamp(v, 0.01, 1) }),
@@ -483,7 +486,7 @@ const GENERAL: Setting[] = [
     permission: "editor",
     label: "wall_exterior",
     keywords: ["thickness", "outer"],
-    control: { kind: "number", step: 0.01, min: 0.02, max: 1 },
+    control: { kind: "number", step: 0.01, min: 0.02, max: 1, length: true },
     default: 0.24,
     read: (env) => settingsOf(env).wall_exterior ?? 0.24,
     write: (env, v) => withSettings(env.building!, { wall_exterior: clamp(v, 0.02, 1) }),
@@ -496,7 +499,7 @@ const GENERAL: Setting[] = [
     permission: "editor",
     label: "wall_interior",
     keywords: ["thickness", "inner"],
-    control: { kind: "number", step: 0.01, min: 0.02, max: 1 },
+    control: { kind: "number", step: 0.01, min: 0.02, max: 1, length: true },
     default: 0.12,
     read: (env) => settingsOf(env).wall_interior ?? 0.12,
     write: (env, v) => withSettings(env.building!, { wall_interior: clamp(v, 0.02, 1) }),
@@ -844,7 +847,7 @@ const SCENE: Setting[] = [
     label: "terrain_level",
     hint: "terrain_hint",
     keywords: ["ground", "cellar", "basement", "hill"],
-    control: { kind: "number", step: 0.05, min: -20, max: 20, unit: "m", clearable: true },
+    control: { kind: "number", step: 0.05, min: -20, max: 20, unit: "m", clearable: true, length: true },
     default: -0.2,
     read: (env) => env.building?.settings.terrain?.level ?? null,
     write: (env, v) => withPart(env.building!, "terrain", { level: v === null ? null : clamp(v, -20, 20) }),
@@ -1271,6 +1274,28 @@ const CARDS: Setting[] = [
 
 /** Every setting, in the order the page shows them. */
 export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...ENERGY, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...CARDS, ...VOICE, ...ACCESS, ...PACKS, ...BACKUP, ...ADVANCED] as Setting[];
+
+// ---------------------------------------------------------------------------------------------------- lengths
+
+/** The unit the plan's lengths show in: its own setting, else Home Assistant's unit system (#117). */
+export function planUnit(env: SettingsEnv): LengthUnit {
+  return lengthUnit(env.hass, env.building?.settings.units);
+}
+
+/** A stored length (metres) as its field shows it: feet and inches when imperial, else the plain number. */
+export function shownLength(env: SettingsEnv, metres: number): string {
+  return planUnit(env) === "imperial" ? formatImperial(metres) : String(Math.round(metres * 1000) / 1000);
+}
+
+/** What was typed into a length field, in metres (8' 2", 98in, 2.5m …; null: not a length). */
+export function typedLength(env: SettingsEnv, text: string): number | null {
+  return parseLength(text, planUnit(env));
+}
+
+/** A length row's label in the unit shown ("Grid (m)" becomes "Grid (ft)"). */
+export function lengthLabel(env: SettingsEnv, label: string): string {
+  return unitLabel(label, planUnit(env));
+}
 
 // ---------------------------------------------------------------------------------------------------- queries
 

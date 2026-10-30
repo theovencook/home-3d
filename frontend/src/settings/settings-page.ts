@@ -32,6 +32,10 @@ import {
   type Viewer,
   type WriteResult,
   deviceKeys,
+  lengthLabel,
+  planUnit,
+  shownLength,
+  typedLength,
 } from "./registry.ts";
 import { settingsTexts } from "./texts.ts";
 
@@ -346,7 +350,7 @@ export class SettingsPage extends LitElement {
     const wide = s.control.kind === "embed" || s.control.kind === "list" || s.control.kind === "checks" || s.control.kind === "entity";
     return html`<div class="st-row st-k-${s.control.kind} ${s.hint ? "" : "st-nohint"} ${wide ? "st-row-wide" : ""} ${hit || this._flash === s.id ? "st-hit" : ""}" data-id=${s.id}>
       <div class="st-lbl">
-        <span class="st-name">${this.tr(s.label)}</span>
+        <span class="st-name">${s.control.kind === "number" && s.control.length ? lengthLabel(this.env, this.tr(s.label)) : this.tr(s.label)}</span>
         ${s.control.kind === "note" ? nothing : html`<span class="st-scope st-scope-${s.scope}" title=${this.tr(s.scope === "house" ? "st_scope_house_hint" : "st_scope_device_hint")}>${this.tr(s.scope === "house" ? "st_scope_house" : "st_scope_device")}</span>`}
         ${s.permission === "ha_admin" ? html`<span class="st-scope st-scope-admin" title=${this.tr("st_admin_hint")}>${this.tr("st_admin")}</span>` : nothing}
       </div>
@@ -371,6 +375,36 @@ export class SettingsPage extends LitElement {
       case "switch":
         return html`<button class="st-sw" role="switch" aria-checked=${!!value} aria-label=${aria} ?disabled=${disabled} @click=${() => this.write(s as Setting<boolean>, !value)}></button>`;
       case "number": {
+        // a length in feet and inches: a text box with the editor's formatter and parser (units.ts), metres stored
+        if (c.length && planUnit(env) === "imperial") {
+          return html`<span class="st-num">
+            <input
+              class="st-len"
+              type="text"
+              inputmode="text"
+              spellcheck="false"
+              .value=${typeof value === "number" ? shownLength(env, value) : ""}
+              placeholder=${c.clearable && typeof s.default === "number" ? shownLength(env, s.default) : ""}
+              aria-label=${aria}
+              ?disabled=${disabled}
+              @change=${(e: Event) => {
+                const input = e.target as HTMLInputElement;
+                const raw = input.value.trim();
+                if (raw === "") {
+                  if (c.clearable) this.write(s as Setting<number | null>, null);
+                  return;
+                }
+                const v = typedLength(env, raw);
+                if (v === null) {
+                  // not a length: the old value shows again
+                  input.value = typeof value === "number" ? shownLength(env, value) : "";
+                  return;
+                }
+                this.write(s as Setting<number | null>, v);
+              }}
+            />
+          </span>`;
+        }
         const unit = typeof c.unit === "function" ? c.unit(env) : c.unit;
         const shown = typeof value === "number" ? String(Math.round(value * 1000) / 1000) : "";
         return html`<span class="st-num">
@@ -832,6 +866,17 @@ export class SettingsPage extends LitElement {
         padding: 0 9px;
         min-height: 36px;
         min-width: 0;
+      }
+      .st-num .st-len {
+        width: 110px;
+        font: inherit;
+        font-size: 14px;
+        color: var(--fp3d-text);
+        background: var(--fp3d-bg2);
+        border: 1px solid var(--fp3d-line);
+        border-radius: 8px;
+        padding: 0 9px;
+        min-height: 36px;
       }
       .st-num input[type="number"] {
         width: 90px;

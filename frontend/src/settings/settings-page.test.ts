@@ -124,3 +124,14 @@ test("resetting this device's preferences removes every key a device row keeps, 
     delete (globalThis as Record<string, unknown>).localStorage;
   }
 });
+
+test("an imperial plan's length rows are text boxes in feet and inches (#117)", () => {
+  const p = page();
+  p.building = { ...p.building, settings: { ...p.building.settings, units: "imperial" } };
+  const text = sectionText(p, "general");
+  assert.match(text, /st-len/);
+  assert.ok(text.includes('9.4"'), "exterior wall 0.24 m");
+  assert.ok(text.includes("(ft)"), "labels in feet");
+  const metric = sectionText(page(), "general");
+  assert.doesNotMatch(metric, /st-len/);
+});

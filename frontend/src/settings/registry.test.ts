@@ -182,3 +182,28 @@ test("only sections with settings are listed", () => {
   for (const id of sections) assert.ok(settingsIn(id, env()).length > 0);
   assert.ok(sections.includes("general"));
 });
+
+test("length rows show and take feet and inches on an imperial plan, metres stay stored (#117)", async () => {
+  const { lengthLabel, planUnit, shownLength, typedLength } = await import("./registry.ts");
+  const e = env();
+  const imperial = { ...e, building: settingById("units")!.write!(e, "imperial") as Building };
+  assert.equal(planUnit(imperial), "imperial");
+  const lengths = SETTINGS.filter((s) => s.control.kind === "number" && s.control.length).map((s) => s.id);
+  assert.deepEqual(lengths.sort(), ["grid", "terrain.level", "wall_exterior", "wall_interior"]);
+  // shown: the stored metres in feet and inches, labelled in feet
+  const wall = settingById("wall_exterior")!;
+  assert.equal(shownLength(imperial, wall.read(imperial) as number), '9.4"');
+  assert.equal(lengthLabel(imperial, "Exterior wall (m)"), "Exterior wall (ft)");
+  // typed: feet and inches go in as metres
+  const typed = typedLength(imperial, "1' 2\"");
+  assert.ok(typed !== null && Math.abs(typed - 0.3556) < 1e-9);
+  const next = wall.write!(imperial, typed as never) as Building;
+  assert.ok(Math.abs(next.settings.wall_exterior - 0.3556) < 1e-9);
+  assert.equal(shownLength({ ...imperial, building: next }, next.settings.wall_exterior), "1' 2\"");
+  const ground = typedLength(imperial, "-4'");
+  assert.ok(Math.abs((settingById("terrain.level")!.write!(imperial, ground as never) as Building).settings.terrain!.level! - -1.2192) < 1e-9);
+  assert.equal(typedLength(imperial, "a lot"), null);
+  // a metric plan keeps plain metres
+  assert.equal(shownLength(e, 0.24), "0.24");
+  assert.equal(typedLength(e, "0.3"), 0.3);
+});
