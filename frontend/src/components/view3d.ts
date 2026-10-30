@@ -130,6 +130,7 @@ import { SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, projectionOn, released, type Feature } from "../features.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import type { Shown } from "../voice/targets.ts";
+import type { SpokenRack } from "../voice/racks.ts";
 import { anyModule, moduleAlerts, moduleCards, moduleMenuSheets, modulePools, moduleRoomSheets, moduleScene, moduleSettings, modulesWithSettings, moduleVoice, moduleWatched, syncModules, type ModuleCard, type ModuleField, type ModuleHost, type ModuleSheet, type ScenePiece, type SpokenAlert, type SpokenCar, type SpokenDevice, type SpokenOpening, type VoiceAnswer } from "../modules.ts";
 import { lineFlows, majorOnly, markerEmoji, markerPath, sparkPoints } from "../module-scene.ts";
 import { generateWalls, openingHost, placeWallPlate, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
@@ -2505,6 +2506,32 @@ export class Fp3dView3d extends LitElement {
     return out;
   }
 
+  /**
+   * The racks voice can answer about (#122): the card's values (the editor's pick), plus the hottest and the online
+   * count even when the pick left them out. Computed per spoken sentence, not per frame.
+   */
+  private spokenRacks(hass: HomeAssistant, b: Building): SpokenRack[] {
+    const out: SpokenRack[] = [];
+    for (const floor of b.floors) {
+      const zones = zonesOf(floor);
+      for (const f of floor.furniture) {
+        const slots = f.rack?.slots;
+        if (!slots?.length) continue;
+        const card = rackCardValues(hass, slots, f.rack?.card?.metrics);
+        const extra = rackCardValues(hass, slots, [RACK_HOTTEST, RACK_ONLINE]).filter((x) => !card.some((c) => c.key === x.key));
+        const zone = zones.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
+        out.push({
+          id: f.id,
+          name: f.name || furnitureName(hass, f.type),
+          room: zone?.name ?? "",
+          names: Object.fromEntries(slots.map((s) => [s.id, s.name || furnitureName(hass, s.type)])),
+          values: [...card, ...extra].map((x) => ({ key: x.key, kind: x.kind, slot: x.slot, label: this.rackValueLabel(x), text: this.rackValueText(x), value: x.value, of: x.of })),
+        });
+      }
+    }
+    return out;
+  }
+
   /** Folds or unfolds a rack card; unfolded it shows every value with its sparkline (fetched now). */
   private toggleRackCard(id: string): void {
     if (!this.rackOpen.delete(id)) this.rackOpen.add(id);
@@ -4796,6 +4823,17 @@ export class Fp3dView3d extends LitElement {
           setTimeout(() => this.fire("room-tap", { floorId: place.floorId, roomId: place.roomId }), 60);
         }
         return translate(hass, "voice_showing", { name });
+      }
+      // a rack question ("how hot is the rack?", "what's the UPS battery?"): answered from the rack card's values
+      const racks = this.spokenRacks(hass, b);
+      const rackSaid = racks.length ? v.rackAnswer(text, racks, (key, vars) => translate(hass, key as I18nKey, vars)) : null;
+      if (rackSaid) {
+        say("done", `“${text}” – ${rackSaid.text}`);
+        this.directing.touch(Date.now());
+        const item = items.get(`furniture:${rackSaid.rackId}`);
+        if (item) this.goTo(item);
+        if (speak) void v.speak(hass, rackSaid.text, voicePipeline());
+        return rackSaid.text;
       }
       // who and what is where: locating answers first (the same answer Assist gets) and flies there
       const located = await hass
