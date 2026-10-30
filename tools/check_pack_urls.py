@@ -54,7 +54,9 @@ async def check(repo: str, pack_ids: list[str]) -> bool:
             ok = False
             print(f"FAIL  {repo}: installed although it holds several packs")
         except packs.PackError as err:
-            good = err.code == "not_a_pack" and all(pack_id in err.detail for pack_id in pack_ids)
+            # the refusal lists at most 10 folders (pack_github.py)
+            shown = sum(pack_id in err.detail for pack_id in pack_ids)
+            good = err.code == "not_a_pack" and shown >= min(10, len(pack_ids))
             ok = ok and good
             print(f"{'ok  ' if good else 'FAIL'}  {repo}: refused ({err.code}), folders listed")
     return ok
