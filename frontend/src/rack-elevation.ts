@@ -108,6 +108,7 @@ const ROLE: Record<string, string> = {
   plant: "#3f7a4f",
   pot: "#6b5a4a",
   accent: "#2bb3e0",
+  paint: "#4a6ea8",
 };
 const BG = "#0d1017";
 const RACK = "#161a22";

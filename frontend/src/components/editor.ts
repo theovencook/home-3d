@@ -186,7 +186,7 @@ import { defaultRackMetrics, RACK_CARD_MAX, RACK_HOTTEST, RACK_ONLINE, rackMetri
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
 import { detectCameraModel, isCameraModel, setCameraLook } from "../camera-models.ts";
-import { COLOUR_PRESETS, itemColourRoles, roleColour, setRoleColour, type ColourRole } from "../colour-roles.ts";
+import { COLOUR_PRESETS, PAINT_COLOURS, itemColourRoles, parseHex, roleColour, setRoleColour, type ColourRole } from "../colour-roles.ts";
 import { MATERIALS, ownMaterial, setRoleMaterial, usualMaterial, type Material } from "../role-materials.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { movePet, staticPetsOn } from "../pet-place.ts";
@@ -13217,6 +13217,7 @@ export class Fp3dEditor extends LitElement {
       <h4 class="fp3d-lib-head fp3d-wide">${this.t("colours")}</h4>
       ${roles.map((role) => {
         const own = roleColour(f.colors, role);
+        if (role === "paint") return this.renderPaint(f, own);
         const preset = own ? COLOUR_PRESETS.find((p) => p.hex === own) : undefined;
         const mat = ownMaterial(f.materials, role);
         return html`<div class="fp3d-field fp3d-colour-role">
@@ -13239,6 +13240,34 @@ export class Fp3dEditor extends LitElement {
       })}
       <p class="fp3d-sub fp3d-wide">${this.t("colours_hint")}</p>
     </div>`;
+  }
+
+  /** A vehicle's paint (#129): ten base colours as swatches plus a hex field, saved in the item's `paint` colour role. */
+  private renderPaint(f: Furniture, own: string | null) {
+    const admin = this.isEditor;
+    const name = this.t("colour_role_paint");
+    return html`<div class="fp3d-field fp3d-colour-role fp3d-wide">
+      <span>${name}</span>
+      <span class="fp3d-paint">
+        ${PAINT_COLOURS.map((c) => {
+          const label = this.t(`paint_${c.id}` as I18nKey);
+          return html`<button type="button" class="fp3d-swatch" style=${`background:${c.hex}`} title=${label} aria-label=${label} aria-pressed=${own === c.hex ? "true" : "false"}
+            ?disabled=${!admin} @click=${() => this.setPaint(f, c.hex)}></button>`;
+        })}
+        <input type="text" class="fp3d-paint-hex" maxlength="7" placeholder="#rrggbb" aria-label=${this.t("paint_hex")} .value=${own ?? ""} ?disabled=${!admin}
+          @change=${(e: Event) => this.setPaint(f, (e.target as HTMLInputElement).value)} />
+        <input type="color" class=${own ? "" : "fp3d-colour-unset"} aria-label=${this.t("paint_hex")} .value=${own ?? "#808080"} ?disabled=${!admin}
+          @change=${(e: Event) => this.setPaint(f, (e.target as HTMLInputElement).value)} />
+        ${own ? html`<button type="button" ?disabled=${!admin} @click=${() => this.setPaint(f, "")}>${this.t("colour_theme")}</button>` : nothing}
+      </span>
+    </div>`;
+  }
+
+  /** Sets the paint of an item from a swatch or typed text: a colour is saved, empty goes back to the look, anything else is ignored. */
+  private setPaint(f: Furniture, text: string): void {
+    const hex = parseHex(text);
+    if (text.trim() && !hex) return;
+    this.updateFurniture({ colors: setRoleColour(f.colors, "paint", hex) });
   }
 
   /** Awning: its fall, the valance, a position sensor, its run time and the other direction (with the cover above). */
