@@ -17,7 +17,9 @@ U space is 44.45 mm per U and sits inside the height with room for plinth or cas
 | `rack_mini_10in_4u` | 4 | 280 x 200 x 274 | DeskPi RackMate T0, listed at Pi Hut and OZ Robotics (280x200x274 external) | verified |
 | `rack_mini_10in_6u` | 6 | 280 x 200 x 320 | #112 starter, DeskPi-class footprint; no 6U DeskPi exists | generic |
 | `rack_mini_10in_8u` | 8 | 280 x 200 x 406 | DeskPi RackMate T1: cnx-software, PLE, OZ Robotics (406 x 280 x 200) | verified |
+| `rack_wall_frame_10in_4u` | 4 | 280 x 150 x 221 | 6U bracket less 2U (89 mm); no listing found | derived, unverified |
 | `rack_wall_frame_10in_6u` | 6 | 280 x 150 x 310 | no product found; typical 10" 6U wall bracket | generic, unverified |
+| `rack_wall_frame_10in_9u` | 9 | 280 x 150 x 443 | 6U bracket plus 3U (133 mm); no listing found | derived, unverified |
 | `rack_wall_cabinet_10in_6u` | 6 | 280 x 310 x 336 | Lanberg WF10-2306 (Aspen, Proshop DK) | verified |
 | `rack_wall_cabinet_10in_9u` | 9 | 280 x 310 x 469 | Lanberg WF10-2309 (Aspen, Skroutz) | verified |
 
@@ -30,6 +32,7 @@ Other 10" wall cabinets (LogiLink W66Z30, Roline) are 312-320 x 300 x 312-330: n
 | `rack_desktop_frame_12u` | 12 | 504 x 292 x 584 | StarTech RK12OD, 2-post desktop (SHI, Brokerbin, IP Security Depot) | verified |
 | `rack_desktop_frame_9u` | 9 | 504 x 292 x 451 | RK12OD less 3U (133 mm); no 9U listing found | derived, unverified |
 | `rack_desktop_frame_6u` | 6 | 504 x 292 x 317 | RK12OD less 6U (267 mm); no 6U listing found | derived, unverified |
+| `rack_wall_frame_9u` | 9 | 504 x 305 x 508 | RK12WALLO less 3U (133 mm); no 9U listing found | derived, unverified |
 | `rack_wall_frame_12u` | 12 | 504 x 305 x 641 | StarTech RK12WALLO, 12" deep (e-nitiative, Area9: 502.9 x 304.8 x 640.1) | verified |
 | `rack_wall_frame_6u` | 6 | 504 x 305 x 374 | RK12WALLO less 6U; no 6U listing found | derived, unverified |
 
