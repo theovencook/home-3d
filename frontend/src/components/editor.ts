@@ -63,6 +63,8 @@ import { ISSUES_URL } from "./extensions.ts";
 import { beforeSelectionChange, deepActive, releaseTyping, selectionMoved, takesTyping } from "../focus-release.ts";
 import { escapeStep } from "../editor-keys.ts";
 import { furniturePanel, type FurnitureField } from "../item-panel.ts";
+import { moveToFloor } from "../item-floor.ts";
+import { clipboardKey, copyItems, pasteItems, withKeys, type ItemClip } from "../clipboard.ts";
 import { TypedCommit } from "../typed-commit.ts";
 import { typedValue } from "./typed-value.ts";
 import { iconPath } from "../icons.ts";
@@ -241,6 +243,8 @@ interface Guides {
 const EDIT_DRAGS = new Set(["vertex", "room", "device", "pet", "opening", "furniture", "furnset", "rotate", "resize", "outdoor", "roofmove", "roofcorner", "roofvertex", "outvertex", "outbox", "pipept", "poolport", "pooldev", "pooljoint", "solarmove", "solarturn", "cablept", "holopt", "bgmove", "bgscale", "bgrotate"]);
 
 const HISTORY = 100;
+/** The editor's item clipboard (#74): in memory, shared by every editor on the page, kept while the Editor tab is closed. */
+let clipboard: ItemClip | null = null;
 /** An angle turned on by `d` degrees, kept between -180 and 180. */
 const turnBy = (a: number, d: number): number => {
   const v = (((a + d) % 360) + 360) % 360;
@@ -3021,6 +3025,10 @@ export class Fp3dEditor extends LitElement {
     } else if (mod && e.key.toLowerCase() === "y") {
       e.preventDefault();
       this.redo();
+    } else if (clipboardKey(e)) {
+      // the editor's own clipboard (#74); a key with nothing to do leaves the browser's copy and paste alone
+      const act = clipboardKey(e);
+      if (act === "copy" ? this.copySelection() : act === "paste" ? this.pasteClipboard() : this.selectAll()) e.preventDefault();
     } else if (mod && e.key.toLowerCase() === "d") {
       e.preventDefault();
       if (this._furnitureId) this.duplicateFurniture();
@@ -4744,9 +4752,11 @@ export class Fp3dEditor extends LitElement {
         ? html`<button title=${this.t("fix_hint")} @click=${run(() => this.toggleFixed(c.kind, c.id))}>${fixed ? `🔓 ${this.t("unfix")}` : `🔒 ${this.t("fix")}`}</button>`
         : html`<button title=${this.t("lock_plan_hint")} @click=${run(() => this.toggleLockPlan())}>${this._doc.settings.lock_plan ? `🔓 ${this.t("plan_unlock")}` : `🔒 ${this.t("plan_lock")}`}</button>`}
       ${c.kind === "room" ? html`<button @click=${run(() => this.duplicateRoom())}>⧉ ${this.t("duplicate")}</button>` : nothing}
+      ${c.kind === "room" && clipboard ? html`<button title=${withKeys(this.t("paste_items"), ["Ctrl+V"])} @click=${run(() => this.pasteClipboard())}>⎘ ${this.t("paste_items_n", { n: clipboard.items.length })}</button>` : nothing}
       ${c.kind === "furniture"
-        ? html`<button @click=${run(() => this.duplicateFurniture())}>⧉ ${this.t("duplicate")}</button>
-            <button ?disabled=${fixed} @click=${run(() => this.rotateFurniture(90))}>↻ ${this.t("ctx_rotate")}</button>
+        ? html`<button title=${withKeys(this.t("duplicate"), ["Ctrl+D"])} @click=${run(() => this.duplicateFurniture())}>⧉ ${this.t("duplicate")}</button>
+            <button title=${withKeys(this.t("copy_items"), ["Ctrl+C"])} @click=${run(() => this.copySelection())}>⎘ ${this.t("copy_items")}</button>
+            <button ?disabled=${fixed} title=${withKeys(this.t("ctx_rotate"), ["R"])} @click=${run(() => this.rotateFurniture(90))}>↻ ${this.t("ctx_rotate")}</button>
             <button ?disabled=${fixed} @click=${run(() => this.mirrorFurniture())}>⇋ ${this.t("furn_mirror")}</button>
             <button @click=${run(() => {
               const f = this.floor?.furniture.find((m) => m.id === c.id);
@@ -5303,6 +5313,75 @@ export class Fp3dEditor extends LitElement {
     const copy = { ...structuredClone(f), id: uid("furniture"), x: round(f.x + 0.3), z: round(f.z + 0.3), group: this._single ? f.group : null };
     this.change((_, floor) => floor.furniture.push(copy));
     this.selectItem("furniture", copy.id);
+  }
+
+  /**
+   * The item panel's floor dropdown (#73): the chosen item (its block, the multi selection) goes to another floor
+   * with its links, in one undo step, and the editor follows it there, still chosen. Fixed items stay put.
+   */
+  private moveSelectionToFloor(to: string): void {
+    const from = this._floorId;
+    const ids = this._furnitureId ? this.selection() : [];
+    if (!from || to === from || !ids.length || !this.isEditor) return;
+    if (ids.some((id) => this.isFixedItem("furniture", id))) {
+      this._fixedHint = true;
+      return;
+    }
+    const [first, multi, single] = [this._furnitureId!, this._multi.length > 1, this._single];
+    let moved: string[] = [];
+    this.change((doc) => (moved = moveToFloor(doc, from, ids, to)));
+    if (!moved.length) return;
+    this._floorId = to;
+    this._vertex = null;
+    this._draft = [];
+    if (multi) this.setMulti(moved);
+    else this.selectItem("furniture", first);
+    this._single = single;
+    const item = this.furnitureItem;
+    this._roomId = item ? this.roomAt([item.x, item.z]) : null;
+  }
+
+  /** Ctrl+C (#74): the chosen items (block, multi selection) go to the editor's clipboard; false when none is chosen. */
+  private copySelection(): boolean {
+    const floor = this.floor;
+    const clip = floor && this._furnitureId ? copyItems(floor, this.selection()) : null;
+    if (!clip) return false;
+    clipboard = clip;
+    this.requestUpdate();
+    return true;
+  }
+
+  /** Ctrl+V (#74): copies of the clipboard's items on the floor being edited, chosen; false with nothing to paste. */
+  private pasteClipboard(): boolean {
+    const floor = this.floor;
+    if (!clipboard || !floor || !this.isEditor) return false;
+    const copies = pasteItems(clipboard, floor.id, uid);
+    this.change((_, f) => f.furniture.push(...copies));
+    this.setMulti(copies.map((c) => c.id));
+    const first = this.furnitureItem;
+    if (first) this._roomId = this.roomAt([first.x, first.z]) ?? this._roomId;
+    return true;
+  }
+
+  /** Ctrl+A (#74): every item on the floor; false when it has none. */
+  private selectAll(): boolean {
+    const items = this.floor?.furniture ?? [];
+    if (!items.length) return false;
+    this.setMulti(items.map((m) => m.id));
+    return true;
+  }
+
+  /** Duplicate, copy and (with something copied) paste, each with its shortcut in the tooltip (#74). */
+  private renderClipButtons() {
+    return html`<button class="fp3d-btn" title=${withKeys(this.t("duplicate"), ["Ctrl+D"])} @click=${() => this.duplicateFurniture()}>${this.t("duplicate")}</button>
+      <button class="fp3d-btn" title=${withKeys(this.t("help_key_copy"), ["Ctrl+C"])} @click=${() => this.copySelection()}>${this.t("copy_items")}</button>
+      ${this.renderPasteButton()}`;
+  }
+
+  /** "Paste (n)" while the clipboard holds items (#74): pastes them on this floor. */
+  private renderPasteButton() {
+    if (!clipboard || !this.isEditor) return nothing;
+    return html`<button class="fp3d-btn" title=${withKeys(this.t("help_key_paste"), ["Ctrl+V"])} @click=${() => this.pasteClipboard()}>${this.t("paste_items_n", { n: clipboard.items.length })}</button>`;
   }
 
   // ------------------------------------------------------------------ furniture blocks and multi selection
@@ -10426,15 +10505,16 @@ export class Fp3dEditor extends LitElement {
           }}>${m.name || furnitureName(this.hass, m.type)}</button>`,
         )}
       </div>
+      ${this._doc.floors.length > 1 ? html`<div class="fp3d-form">${this.renderItemFloor()}</div>` : nothing}
       <div class="fp3d-actions">
         ${block
           ? html`<button class="fp3d-btn" @click=${() => this.ungroupSelection()}>${this.t("block_break")}</button>`
           : html`<button class="fp3d-btn fp3d-primary" @click=${() => this.groupSelection()}>▣ ${this.t("block_make")}</button>`}
-        <button class="fp3d-btn" @click=${() => this.rotateSelection(-90)}>${this.t("rotate_left")}</button>
-        <button class="fp3d-btn" @click=${() => this.rotateSelection(90)}>${this.t("rotate_right")}</button>
-        <button class="fp3d-btn" @click=${() => this.duplicateFurniture()}>${this.t("duplicate")}</button>
-        <button class="fp3d-btn ${some ? "fp3d-primary" : ""}" @click=${() => this.lockSelection(!fixed && !some)}>${fixed ? `🔓 ${this.t("unfix")}` : some ? `🔓 ${this.t("unfix_all")}` : `🔒 ${this.t("fix")}`}</button>
-        <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
+        <button class="fp3d-btn" title=${withKeys(this.t("rotate_left"), ["Shift+R"])} @click=${() => this.rotateSelection(-90)}>${this.t("rotate_left")}</button>
+        <button class="fp3d-btn" title=${withKeys(this.t("rotate_right"), ["R"])} @click=${() => this.rotateSelection(90)}>${this.t("rotate_right")}</button>
+        ${this.renderClipButtons()}
+        <button class="fp3d-btn ${some ? "fp3d-primary" : ""}" title=${withKeys(this.t(fixed || some ? "unfix" : "fix"), ["L"])} @click=${() => this.lockSelection(!fixed && !some)}>${fixed ? `🔓 ${this.t("unfix")}` : some ? `🔓 ${this.t("unfix_all")}` : `🔒 ${this.t("fix")}`}</button>
+        <button class="fp3d-btn fp3d-danger" title=${withKeys(this.t("delete"), ["Del"])} @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
       </div>
       ${this.renderMultiToggle()}
     </section>`;
@@ -11024,6 +11104,7 @@ export class Fp3dEditor extends LitElement {
                     <button class="fp3d-btn" title=${this.t("floor_order_hint")} @click=${() => this.moveFloor(1)}>${this.t("move_up")}</button>
                     <button class="fp3d-btn" title=${this.t("floor_order_hint")} @click=${() => this.moveFloor(-1)}>${this.t("move_down")}</button>
                     <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteFloor()}>${this.t("delete_floor")}</button>
+                    ${this.renderPasteButton()}
                   </div>
                   <div class="fp3d-actions fp3d-wide">
                     <button class="fp3d-btn" title=${this.t("gaps_hint")} ?disabled=${floor.rooms.length < 2} @click=${() => this.closeFloorGaps()}>
@@ -11219,8 +11300,9 @@ export class Fp3dEditor extends LitElement {
         ? html`<div class="fp3d-actions">
             <button class="fp3d-btn fp3d-primary" @click=${() => (this._packages = !this._packages)}>${this.t("pkg_open")}</button>
             <button class="fp3d-btn" @click=${() => this.openSpotForm(room)}>${this.t("spots_place")}</button>
-            <button class="fp3d-btn" @click=${() => this.duplicateRoom()}>${this.t("duplicate")}</button>
-            <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteRoom()}>${this.t("delete")}</button>
+            <button class="fp3d-btn" title=${withKeys(this.t("duplicate"), ["Ctrl+D"])} @click=${() => this.duplicateRoom()}>${this.t("duplicate")}</button>
+            ${this.renderPasteButton()}
+            <button class="fp3d-btn fp3d-danger" title=${withKeys(this.t("delete"), ["Del"])} @click=${() => this.deleteRoom()}>${this.t("delete")}</button>
           </div>`
         : nothing}
       ${this.renderModuleRoomFields(room)}
@@ -11699,7 +11781,7 @@ export class Fp3dEditor extends LitElement {
   private renderFurnitureForm(f: Furniture) {
     if (this.selection().length > 1) return this.renderBlockForm();
     const admin = this.isEditor;
-    const panel = furniturePanel({ mirror: !isLamp(f.type), strip: f.type === "led_strip", lift: canLift(f) && !!this.floor });
+    const panel = furniturePanel({ mirror: !isLamp(f.type), strip: f.type === "led_strip", lift: canLift(f) && !!this.floor, floors: this._doc.floors.length > 1 });
     return html`<section>
       <div class="fp3d-pos-head">
         <div class="fp3d-h3row"><h3>${f.name || this.t("furniture")}</h3>${this.fixButton("furniture", f.id)}</div>
@@ -11758,12 +11840,12 @@ export class Fp3dEditor extends LitElement {
         : nothing}
       ${admin
         ? html`<div class="fp3d-actions">
-            <button class="fp3d-btn" @click=${() => this.rotateFurniture(-90)}>${this.t("rotate_left")}</button>
-            <button class="fp3d-btn" @click=${() => this.rotateFurniture(90)}>${this.t("rotate_right")}</button>
+            <button class="fp3d-btn" title=${withKeys(this.t("rotate_left"), ["Shift+R"])} @click=${() => this.rotateFurniture(-90)}>${this.t("rotate_left")}</button>
+            <button class="fp3d-btn" title=${withKeys(this.t("rotate_right"), ["R"])} @click=${() => this.rotateFurniture(90)}>${this.t("rotate_right")}</button>
             <button class="fp3d-btn" title=${this.t("wall_view_open")} @click=${() => this.openWallViewFor(f)}>▦ ${this.t("wall_view")}</button>
             ${f.entity && f.entity !== "none" && f.type !== "parking" ? html`<button class="fp3d-btn" title=${this.t("as_device_hint")} @click=${() => this.furnitureToDevice(f)}>${this.t("as_device")}</button>` : nothing}
-            <button class="fp3d-btn" @click=${() => this.duplicateFurniture()}>${this.t("duplicate")}</button>
-            <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
+            ${this.renderClipButtons()}
+            <button class="fp3d-btn fp3d-danger" title=${withKeys(this.t("delete"), ["Del"])} @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
           </div>
           ${this.renderMultiToggle()}`
         : nothing}
@@ -11837,7 +11919,19 @@ export class Fp3dEditor extends LitElement {
               : nothing}
           </select></label
         >`;
+      case "floor":
+        return this.renderItemFloor();
     }
+  }
+
+  /** The floor the chosen item (block, multi selection) stands on: picking another moves it there (#73). */
+  private renderItemFloor() {
+    return html`<label class="fp3d-field fp3d-wide" title=${this.t("item_floor_hint")}
+      >${this.t("floor")}
+      <select ?disabled=${!this.isEditor} @change=${(e: Event) => this.moveSelectionToFloor((e.target as HTMLSelectElement).value)}>
+        ${[...this._doc.floors].reverse().map((fl) => html`<option value=${fl.id} ?selected=${fl.id === this._floorId}>${fl.name}</option>`)}
+      </select></label
+    >`;
   }
 
   private setEnergy(patch: Partial<Building["energy"]>): void {
