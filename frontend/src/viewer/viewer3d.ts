@@ -76,6 +76,7 @@ import { groundUnder, isCooktopZone, mountBase, packItem, packMotion, packsVersi
 import { withVehicles } from "../parking.ts";
 import { floorKeys } from "./floor-keys.ts";
 import { RebuildBatch } from "./rebuild-batch.ts";
+import { buildOrder } from "./floor-order.ts";
 import { buildRoof, type RoofGeometry, type RoofWindowState } from "./roof.ts";
 import { SunFx } from "./sun-fx.ts";
 import { Realism } from "./realism.ts";
@@ -704,16 +705,24 @@ export class FloorplanViewer {
   /** Scene rebuilds, once per batch of changes (#131). */
   private readonly rebuilds = new RebuildBatch((incremental) => {
     this.rebuild(incremental);
-    if (this.fitBuilt) this.fit(0);
+    if (this.fitBuilt) {
+      this.fit(0);
+      this.fitAll = this.pendingFloors.size > 0;
+    }
     this.fitBuilt = false;
     this.invalidate();
   });
+  /** A new home's floors still to build, one per frame (#131). */
+  private pendingFloors = new Set<string>();
+  private floorFrame = 0;
   /** A look's shaders compiling in the background (#131): no frames until they are ready. */
   private warming: Promise<void> | null = null;
   /** A renderer of another quality compiling its shaders before it takes over (#131). */
   private nextRenderer: WebGLRenderer | null = null;
   /** Own colours are drawn for the light looks (setLightLook): the scene was built that way. */
   private lightLook = false;
+  /** The first plan arrived: the view fits it once it is built (`fitAll`: again once its last floor is, #131). */
+  private fitAll = false;
   /** The first plan arrived: the view fits it once it is built. */
   private fitBuilt = false;
   /** Per floor: its light surface as last built and what from (kept while rooms, walls and openings stay, #131). */
@@ -988,9 +997,26 @@ export class FloorplanViewer {
     });
   }
 
-  /** Shaders of a new look or quality still compile in the background (#131): pictures of the view wait for them. */
-  compiling(): boolean {
-    return !!this.warming || !!this.nextRenderer;
+  /**
+   * Shaders of a new look or quality still compile in the background, or a new home's floors are still being built
+   * (#131): pictures of the view wait for them.
+   */
+  busy(): boolean {
+    return !!this.warming || !!this.nextRenderer || this.pendingFloors.size > 0;
+  }
+
+  /**
+   * Compiles the scene's shaders in the background (#131): a new look, a new home. No frame is drawn until they are
+   * ready – the first one would compile them on the spot and block the page for up to a second.
+   */
+  private warm(): void {
+    if (this.realism.active) this.realism.realize(this.scene, !!this.realPlan(), this.renderer);
+    const warm = compiled(this.renderer, this.scene, this.camera).then(() => {
+      if (this.warming !== warm) return;
+      this.warming = null;
+      this.invalidate();
+    });
+    this.warming = warm;
   }
 
   /** A new renderer (another quality) takes over the canvas. */
@@ -1568,15 +1594,7 @@ export class FloorplanViewer {
     this.applyRealism();
     // the realistic look's lit surfaces compile in the background; the last picture stays until they are ready (#131)
     this.warming = null;
-    if (this.realism.active) {
-      this.realism.realize(this.scene, !!this.realPlan(), this.renderer);
-      const warm = compiled(this.renderer, this.scene, this.camera).then(() => {
-        if (this.warming !== warm) return;
-        this.warming = null;
-        this.invalidate();
-      });
-      this.warming = warm;
-    }
+    if (this.realism.active) this.warm();
     // real shadows replace the drawn patches of sunlight
     for (const fv of this.floors) {
       fv.sunSig = "-";
@@ -2271,6 +2289,7 @@ export class FloorplanViewer {
     this.projections.dispose();
     this.realism.dispose();
     this.disposed = true;
+    cancelAnimationFrame(this.floorFrame);
     this.nextRenderer?.dispose();
     this.nextRenderer?.forceContextLoss();
     this.nextRenderer = null;
@@ -2789,6 +2808,12 @@ export class FloorplanViewer {
     const keys = b ? floorKeys(b, `${packsVersion()}|${this.parkedSig}|${this.lowQuality}`, (f) => (f.furniture.some(hasOwnColours) ? look : "")) : new Map<string, string>();
     const keep = new Map<string, FloorView>();
     if (incremental) for (const fv of this.floors) if (keys.get(fv.floor.id) === fv.key) keep.set(fv.floor.id, fv);
+    // a new home (none of its floors shown yet) comes in one floor per frame, the open one first, so no single task
+    // builds the whole house (#131); a floor of it built meanwhile is kept by the next pass
+    const fresh = !!b && b.floors.length > 1 && !this.floors.some((fv) => keys.has(fv.floor.id));
+    const loading = fresh || this.pendingFloors.size > 0;
+    const next = loading && b ? buildOrder(b, this.floorId).find((id) => !keep.has(id)) : undefined;
+    const pending = new Set<string>();
     this.clear(keep);
     if (!b) return;
     const ordered = [...b.floors].sort((p, q) => p.elevation - q.elevation);
@@ -2798,6 +2823,10 @@ export class FloorplanViewer {
         kept.floor = floor;
         kept.rank = ordered.indexOf(floor);
         this.floors.push(kept);
+        continue;
+      }
+      if (loading && floor.id !== next) {
+        pending.add(floor.id);
         continue;
       }
       // solar fields in the garden stand on the ground floor, wall fields hang on their floor's walls
@@ -3077,13 +3106,28 @@ export class FloorplanViewer {
       this.buildLightSurface(fv);
       this.buildSun(fv);
     }
-    this.applyTargets(previous.size === 0);
+    this.applyTargets(previous.size === 0 || loading);
     this.applyHighlight();
     this.applyTierFlags();
     this.buildRoofMesh();
     this.buildSunFx();
     this.applyRealism();
     this.updateGhost();
+    this.pendingFloors = pending;
+    // a new home's first floor: its shaders compile before its first frame (the floors after it use the same ones)
+    if (fresh || previous.size === 0) this.warm();
+    if (pending.size) {
+      // the next floor after this frame is drawn
+      cancelAnimationFrame(this.floorFrame);
+      this.floorFrame = requestAnimationFrame(() => {
+        this.floorFrame = 0;
+        setTimeout(() => !this.disposed && this.pendingFloors.size && this.rebuilds.request(true), 0);
+      });
+    } else if (loading && !fresh && this.fitAll) {
+      // the first plan is all there: the view fitted to its first floor takes it all in (unless it was moved since)
+      if (stillFitted(this.fitted, this.controls.goal)) this.fit(0);
+      this.fitAll = false;
+    }
   }
 
   private buildRoofMesh(): void {

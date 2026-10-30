@@ -293,7 +293,7 @@ export class Plan2dViewer implements ViewerSurface {
     changes();
   }
 
-  compiling(): boolean {
+  busy(): boolean {
     return false;
   }
   setPatches(): void {}

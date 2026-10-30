@@ -7,7 +7,7 @@ export type ViewerSurface = Pick<
   FloorplanViewer,
   | "low"
   | "batch"
-  | "compiling"
+  | "busy"
   | "dispose"
   | "currentView"
   | "getView"

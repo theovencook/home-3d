@@ -4048,7 +4048,7 @@ export class Fp3dView3d extends LitElement {
     }
     // at most every few seconds, however often lamps change (the tablet level waits longer)
     const wait = Math.max(delay, this.thumbsAt + (this._low ? 8000 : 4000) - Date.now());
-    this.thumbTimer = setTimeout(() => {
+    const draw = () => {
       // at night (kiosk) the pictures are drawn once and then rest
       if (!this.viewer || (this.dimmed && this._thumbs.length)) return;
       // a hidden tab draws nothing; the pictures follow once it shows again
@@ -4056,14 +4056,15 @@ export class Fp3dView3d extends LitElement {
         this.scheduleThumbs(3000);
         return;
       }
-      // a new look still compiling: drawing the pictures now would compile it on the spot (#131)
-      if (this.viewer.compiling()) {
-        this.scheduleThumbs(500);
+      // a new look still compiling, a new home still coming in: the pictures follow right after (#131)
+      if (this.viewer.busy()) {
+        this.thumbTimer = setTimeout(draw, 300);
         return;
       }
       this.thumbsAt = Date.now();
       this._thumbs = this.viewer.floorThumbnails(this.narrowThumbs ? 104 : 150, this.narrowThumbs ? 78 : 112);
-    }, wait);
+    };
+    this.thumbTimer = setTimeout(draw, wait);
   }
 
   private get narrowThumbs(): boolean {
