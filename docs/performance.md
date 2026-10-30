@@ -240,3 +240,68 @@ Measured 30 Oct 2026, before (integration @ `29a6b81`) and after the #121 change
 
 - A real wall tablet and its GPU, and the live Home with a real rack:.
 - How the slab looks against the detail at the switch distance: checked by eye in the harness on the desktop only.
+
+## 3D: incremental updates, paced syncs, faster loads (#131)
+
+Measured 30 Oct 2026, before (integration @ `b650ade`) and after the #131 change, on the same local plans. No Home Assistant was involved.
+
+### What changed
+
+- **3D beside after an edit (#97 item 3).** An edit no longer rebuilds the whole scene. A floor whose drawing inputs are unchanged keeps its meshes, labels and lights (`viewer/floor-keys.ts`). On a floor that is rebuilt, every item drawn exactly as in the last build is copied from that build instead of being modelled again (`build.ts` furniture cache, copied as typed-array chunks by `GeoBuffer.append`). The light surface is kept while rooms, walls and openings stay the same. Packs, parked cars, a new look and a new quality still rebuild every floor.
+- **Sensor syncs (#97 item 4).** If only measured values changed, the 3D view syncs at most once a second on every device. The tablet level keeps its 2 s (`pace.ts sensorSyncDelay`). A switch, door or alarm still shows at once. With this pacing, the rest of a sync costs a few ms, so narrowing it further was not worth it.
+- **Load and home switch (#97 item 5).** New packs, parked cars and the plan, when handed over in one view update, rebuild the scene once (`Viewer.batch`, `viewer/rebuild-batch.ts`). Before, a home switch built the scene three times and synced devices three times. A new home is built one floor per frame, starting with the open floor or the ground floor (`viewer/floor-order.ts`). Its shaders compile with `compileAsync` before the first frame. The view refits once the last floor of the first plan is in, unless it has been moved.
+- **Look and quality switches (#97 item 9).** A look switch rebuilds only between neon and the light looks, and only floors with items in colours of their own. The cache keeps both looks' copies of those items. The realistic look compiles its lit shaders in the background and keeps the last frame meanwhile. A new quality's renderer compiles before it takes over the canvas. Floor pictures wait until the viewer is no longer busy.
+- **Library (#97 item 10).** Cards out of view are not laid out or painted (`content-visibility: auto`). A card without a picture is asked for again through the IntersectionObserver, instead of measuring every card on each render (a forced layout). The search index is warmed in slices before the first keystroke (`warmIndex`).
+- **Racks.** A tap on a glass or mesh door's rim or bars goes on along the ray to the first gear behind it (`rack.ts rackTapSlot`). A solid door, the side panels and the roof still keep the tap.
+
+### Method
+
+- Headless Edge (Chromium) through puppeteer, as in #121: desktop GPU over D3D11, a 1280 x 800 page at DPR 1, a 1224 x 680 canvas. Real CPU throttling (DevTools `Emulation.setCPUThrottlingRate` 4x).
+- A local harness mounts `<fp3d-view3d>` with a fake `hass` (4,900 states) and generated plans. The **large plan** has 2 floors, 32 rooms and 514 items (about 660 KB): pack items from the bundled packs, a ceiling light and a radiator per room, 15% of the items linked, a 42U mesh-door cabinet with 20 devices and a 9U glass-door cabinet with 4. The **small plan** has 2 floors, 18 rooms and 126 items. The floor ids differ between the two plans, as between real homes.
+- **Edit:** 12 edits, each a new document (structured clone) with one item moved, as the editor hands it to 3D beside. Timed to the view updated and to the next paint, plus the longest frame in the 400 ms after. **Ticks:** 10 s of HA updates every 250 ms, each changing 5 unrelated sensors and one linked power sensor. **Switch:** large to small and back, 3 times. **Look:** neon, realistic, day, blueprint, neon, realistic, neon, then quality high and auto. **Library:** `<fp3d-library>` with all 1,751 bundled pack entries; "sofa", "double bed", "smoke alarm", "radiatr", "bambu x1c" and "tv" typed letter by letter, 3 times.
+- The before and after runs were made back to back on the same machine. Other work was running on it, so absolute numbers drift by about 20% between sessions. Compare within a table. Times are **median / worst**, and "longest" is a single long animation frame.
+
+### Results at 1x
+
+| Measure | Before | After |
+|---|---|---|
+| Edit in 3D beside: to painted | 286 / 363 ms | **65 / 80 ms** |
+| Edit: scene rebuild | 259 / 323 ms | **43 / 55 ms** |
+| Edit: longest frame after it | 293 / 370 ms | **72 / 87 ms** |
+| Sensor ticks, 10 s: `syncDevices` total | 379 ms (39 syncs) | **105 ms** (paced) |
+| Load (large plan): longest task / total blocking | 1,217 / 1,726 ms | **540 / 585 ms** |
+| Switch to the large plan: longest task | 637 to 685 ms | **165 to 205 ms** |
+| Switch: scene rebuilds / device syncs | 3 / 3 | **1 (+1 floor) / 2** |
+| Look switch to realistic, first time: longest task | 1,129 ms | **249 ms** |
+| Look switch day / blueprint / neon: longest task | 319 / 281 / 252 ms | **68 / 0 / 125 ms** |
+| Quality high / auto: longest task | 182 / 164 ms | 134 / 115 ms |
+| Library, 1st and 2nd letter: to painted | 42 / 99 ms | **21 / 58 ms** |
+| Library, later letters | 4.4 / 13 ms | 4.7 / 12 ms |
+
+### Results at 4x CPU throttling
+
+| Measure | Before | After |
+|---|---|---|
+| Edit in 3D beside: to painted | 1,259 / 1,385 ms | **292 / 340 ms** |
+| Edit: longest frame after it | 1,292 / 1,421 ms | **327 / 375 ms** |
+| Sensor ticks, 10 s: `syncDevices` total / long frames | 1,036 ms / 19 | **459 ms / 8** |
+| Load (large plan): longest task | 3,018 ms | **1,728 ms** |
+| Switch to the large plan: longest task | 3,226 to 3,336 ms | **792 to 906 ms** |
+| Switch to the small plan: longest task | 1,269 to 1,621 ms | **298 to 416 ms** |
+| Look switch to realistic, first time: longest task | 2,440 ms | **1,089 ms** |
+| Look switch day / blueprint / neon: longest task | 1,506 / 1,321 / 1,394 ms | **194 / 136 / 472 ms** |
+| Library, 1st and 2nd letter: to painted (2 runs) | 260 / 608 to 648 ms | **160 to 170 / 491 to 918 ms** |
+
+### Findings
+
+- **3D beside** shows an edit in about a fifth of the time it took before. What is left is the edited floor (its walls, rooms, lamps and light, plus copying the cached items) and one `syncDevices`. The editor's 150 ms hand-off debounce (`queue3d`) is unchanged.
+- **Load** now runs as one task per floor. The longest one is the first floor plus the first device sync. The shader compile, about 1 s on its own on the first frame before, no longer blocks the page where the browser compiles in parallel (`KHR_parallel_shader_compile`). Total load time to the first frame is about the same.
+- **Look switches** within the light looks cost almost nothing now. Neon to a light look still rebuilds the floors with own-coloured items. On these plans that is every floor, because most pack items carry `#rrggbb` parts. The first switch to realistic still pays the first frame's shadow pass and the floor pictures.
+- **Library:** the first letters are about 40% faster at the median. The worst case stays noisy at 4x (one run better than before, one worse). What is left is Lit rendering the cards of every open section. Capping the cards for one- and two-letter queries would cut it further, but it changes what the library shows, so it was left for a decision.
+- **Memory:** the furniture cache keeps one typed-array copy of each floor's items, plus a second copy of the own-coloured items for the other look. On the large plan that is a few MB.
+- **Hot paths touched:** the floor build (`buildFloorGeometry`, a JSON key per item), the 3D frame (`render` returns early while shaders compile) and `syncDevices` pacing. Selection is unchanged.
+
+### Not measured
+
+- A real wall tablet and its GPU, and a live Home Assistant home.
+- The editor itself with 3D beside open: the harness drives the 3D view directly with the documents the editor would hand over.
