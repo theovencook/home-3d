@@ -38,6 +38,7 @@ import voluptuous as vol
 
 from .const import STORAGE_KEY_PACK_UPDATES, STORAGE_VERSION, TIME_PATTERN
 from .custom_items import not_reserved
+from .moves import migrate_pins, moved_copy, moved_out_of, retired_packs
 from .pack_github import checked_origin, fetch_pack, latest_release
 from .packs import CUSTOM_PACK_ID, PackError, source_of_folder, verify_folder, with_bundled
 from .recipes import installed_copies, placed_types, recipe_copy
@@ -158,6 +159,25 @@ class PackUpdates:
         self.previous = dict(stored.get("previous") or {})
         self.checks = dict(stored.get("checks") or {})
         self.last_check = stored.get("last_check")
+        if self._follow_moves():
+            await self._async_save()
+
+    def _follow_moves(self) -> bool:
+        """Pins and rollback entries after items moved between packs (#110): a pin follows the items into their new
+        packs; a retired pack (every item moved out, no longer installed) keeps no pin, rollback entry or check.
+        Whether anything changed."""
+        moves = self.data.moves
+        if not moves:
+            return False
+        installed = {p["id"] for p in with_bundled(self.data.bundled, self.data.packs)}
+        retired = retired_packs(moves, installed)
+        pinned = migrate_pins(self.pinned, moves, installed)
+        previous = {k: v for k, v in self.previous.items() if k not in retired}
+        checks = {k: v for k, v in self.checks.items() if k not in retired}
+        if (pinned, previous, checks) == (self.pinned, self.previous, self.checks):
+            return False
+        self.pinned, self.previous, self.checks = pinned, previous, checks
+        return True
 
     async def _async_save(self) -> None:
         await self._store.async_save(
@@ -407,6 +427,15 @@ class PackUpdates:
                     if i["id"] == copy_["item"]
                 )
             }
+            # and the placed items that moved out of the pack since and still show that release (#110)
+            current_items = {i["id"]: i for i in current["items"]}
+            took_moved = {
+                type_: item_id
+                for type_, item_id in moved_out_of(pack_id, self.data.moves).items()
+                if (copy_ := (self.data.building.get("recipes") or {}).get(type_)) is not None
+                and item_id in current_items
+                and moved_copy(recipe_copy(current, current_items[item_id]), type_)["hash"] == copy_.get("hash")
+            }
             if previous.get("bundled"):
                 # the bundled release comes back once the imported copy is gone
                 await self.data.async_remove_pack(pack_id)
@@ -418,11 +447,15 @@ class PackUpdates:
             await self._async_save()
             restored = self._installed(pack_id)
             release = restored.get("release", 1) if restored else previous.get("release", 1)
-            if restored is not None and took:
+            if restored is not None and (took or took_moved):
                 installed = installed_copies([restored])
                 recipes = dict(self.data.building.get("recipes") or {})
                 for type_ in took:
                     if type_ in installed:
                         recipes[type_] = recipe_copy(*installed[type_])
+                restored_items = {i["id"]: i for i in restored["items"]}
+                for type_, item_id in took_moved.items():
+                    if item_id in restored_items:
+                        recipes[type_] = moved_copy(recipe_copy(restored, restored_items[item_id]), type_)
                 await self.data.async_save_building({**self.data.building, "recipes": recipes})
         return {"release": release}

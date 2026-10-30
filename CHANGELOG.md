@@ -16,6 +16,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - **The library loads light:** the pack list sends an index of every item; the recipes come on demand and are kept in the browser.
 - **Saves keep recipe copies:** a pack update that happened on the server while an editor was open is no longer undone by that editor's next save.
 - **Pack install and update robustness:** clearer errors for a missing release, a bad size or a repository that does not exist.
+- **Items can move between bundled packs:** plans, backups, restore points, imported plans and pins follow an item to its new pack, and its old id keeps working.
 - `tools/publish_packs.py` and `tools/check_pack_urls.py` publish the bundled packs to a pack repository and check that they install by URL.
 
 ### Items and the item editor

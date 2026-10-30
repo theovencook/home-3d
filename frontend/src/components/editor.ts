@@ -170,7 +170,7 @@ import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { effectFields } from "./effect-fields.ts";
 import { itemTempSource, roomLiveSensors, shadeKind, type LiveKind } from "../room-effects.ts";
-import { energyRole, furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
+import { energyRole, furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, migratePlanTypes, mountBase, packDisplay, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
 import { isPrinter } from "../printer.ts";
 import { setIntervalPart } from "../show-when.ts";
 
@@ -13582,7 +13582,8 @@ export class Fp3dEditor extends LitElement {
     if (!file || !this.hass) return;
     let building: Building;
     try {
-      building = parseExport(await file.text());
+      // a plan exported before items moved between packs takes their new ids (#110)
+      building = migratePlanTypes(parseExport(await file.text()));
     } catch (err) {
       const code = (err as Error).message;
       alert(code === "not_json" ? this.t("import_error_not_json") : code === "not_plan" ? this.t("import_error_not_plan") : this.t("backup_import_error", { error: code }));
