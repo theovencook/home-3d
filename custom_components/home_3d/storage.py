@@ -312,9 +312,15 @@ class FloorplanData:
         building: dict[str, Any] | None = None,
         images: dict[str, str] | None = None,
         home_id: str | None = None,
+        *,
+        area_import: bool = True,
     ) -> Home:
         """Add a home: empty, or with a given (checked, completed) building and its pictures. The new home is not
-        made active. #54 loads a sample home with this."""
+        made active. #54 loads a sample home with this; a sample or template passes `area_import=False` (#61) so the
+        editor never offers to fill it with this install's own Home Assistant areas."""
+        if not area_import:
+            building = copy.deepcopy(building) if building is not None else empty_building()
+            building["settings"] = {**building.get("settings", {}), "area_import": False}
         if home_id is None:
             home_id = uuid.uuid4().hex[:8]
         if home_id in self.homes:

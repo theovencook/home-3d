@@ -124,9 +124,15 @@ export function listHomes(hass: HomeAssistant): Promise<HomesList> {
   return hass.callWS({ type: "home_3d/homes/list" });
 }
 
+/** How a home is created: `areaImport: false` for a sample or template home (#61), which never offers to add rooms
+ * from this install's Home Assistant areas. */
+export interface CreateHomeOptions {
+  areaImport?: boolean;
+}
+
 /** Add an empty home; it does not become active. */
-export function createHome(hass: HomeAssistant, name: string): Promise<HomesList & { home: HomeInfo }> {
-  return hass.callWS({ type: "home_3d/homes/create", name });
+export function createHome(hass: HomeAssistant, name: string, options: CreateHomeOptions = {}): Promise<HomesList & { home: HomeInfo }> {
+  return hass.callWS({ type: "home_3d/homes/create", name, ...(options.areaImport === false ? { area_import: false } : {}) });
 }
 
 export function renameHome(hass: HomeAssistant, home: string, name: string): Promise<HomesList> {
