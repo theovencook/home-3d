@@ -1,6 +1,6 @@
 // Lit wrapper around the lazily loaded 3D viewer.
 
-import { css, html, LitElement, nothing, svg, type PropertyValues } from "lit";
+import { css, html, LitElement, nothing, svg, unsafeCSS, type PropertyValues } from "lit";
 import { linesField } from "./lines-field.ts";
 import { actionIndex, gestureAction, runItemAction, TapSequencer, type ActionOwner, type ItemAction } from "../item-actions.ts";
 import { carState, type CarState, heatSensorOn, roomClimateValue,
@@ -161,6 +161,7 @@ import { cheapRate } from "../cheap-rate.ts";
 import { askConfirm } from "../ask.ts";
 import "./ask-dialog.ts";
 import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
+import { isPhoneWidth, NO_FIT_MARGIN, PHONE_FIT_MARGIN, PHONE_MEDIA, thumbsCompact } from "../phone.ts";
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 /** "room": no symbols in the house and floor views, in a room only that room's (D477, D595). */
@@ -218,6 +219,7 @@ export class Fp3dView3d extends LitElement {
     hass: { attribute: false },
     building: { attribute: false },
     canEdit: { attribute: false },
+    noSettings: { attribute: false },
     home: { attribute: false },
     floorId: { attribute: false },
     roomId: { attribute: false },
@@ -256,6 +258,7 @@ export class Fp3dView3d extends LitElement {
     _stats: { state: true },
     _error: { state: true },
     _energy: { state: true },
+    _bigTile: { state: true },
     _holos: { state: true },
     _rows: { state: true },
     _meters: { state: true },
@@ -312,6 +315,7 @@ export class Fp3dView3d extends LitElement {
     _low: { state: true },
     _micProbe: { state: true },
     _narrowStage: { state: true },
+    _phoneStage: { state: true },
     _alerts: { state: true },
     _household: { state: true },
     _hhFolded: { state: true },
@@ -327,6 +331,8 @@ export class Fp3dView3d extends LitElement {
   declare building: Building | null;
   /** On the editors list (#7): may change the plan's settings from the view. Unset: admins may (a backend before #7). */
   declare canEdit: boolean | undefined;
+  /** Locked tablet mode (#92): the central menu offers no view settings. */
+  declare noSettings: boolean;
   /** The home shown (#53): its pictures are fetched and its settings saved there; unset: the active home. */
   declare home: string | null | undefined;
   /** Time travel: the replayed moment (hass is then the past, read-only); null = live. */
@@ -419,6 +425,8 @@ export class Fp3dView3d extends LitElement {
   private declare _stats: ViewerStats | null;
   private declare _error: string | null;
   private declare _energy: EnergySummary | null;
+  /** The energy tile shown enlarged after a tap (touch has no hover), null = none (#90). */
+  private declare _bigTile: string | null;
   /** Energie Pro: today's solar statistics for the hologram (kWh, peak and the day curve). */
   /** The hologram cards (main plant first) and today's statistics rows of their sensors. */
   private declare _holos: HoloCard[];
@@ -496,6 +504,10 @@ export class Fp3dView3d extends LitElement {
   declare angleLock: boolean;
   /** The stage is narrower than 700 px (smaller floor pictures, phone layout). */
   private declare _narrowStage: boolean;
+  /** The stage is phone-wide (#93): floor pictures folded, the house fitted clear of the bars. */
+  private declare _phoneStage: boolean;
+  /** The floor pictures' fold as the user left it ("1"/"0"; null: never touched, the stage width decides). */
+  private thumbsSaved: string | null = null;
   private resizeObs: ResizeObserver | null = null;
   /** Warnings (smoke, water, alarm, window in the rain): pulsing rooms and a banner; jump to new ones. */
   declare alerts: boolean;
@@ -696,6 +708,7 @@ export class Fp3dView3d extends LitElement {
     this._stats = null;
     this._error = null;
     this._energy = null;
+    this._bigTile = null;
     this._holos = [];
     this._rows = null;
     this._holoOpen = true;
@@ -713,10 +726,12 @@ export class Fp3dView3d extends LitElement {
     this._settingsOpen = false;
     this._note = null;
     try {
-      this._thumbsCompact = localStorage.getItem("home3d.thumbs_compact") === "1";
+      this.thumbsSaved = localStorage.getItem("home3d.thumbs_compact");
     } catch {
-      this._thumbsCompact = false;
+      this.thumbsSaved = null;
     }
+    this._thumbsCompact = thumbsCompact(this.thumbsSaved, false);
+    this._phoneStage = false;
     this._armed = null;
     this.central = true;
     this.walkable = true;
@@ -730,6 +745,7 @@ export class Fp3dView3d extends LitElement {
     this.plan2d = false;
     this.clean = false;
     this.cleanButton = false;
+    this.noSettings = false;
     this.roomLabels = true;
     this.floorStack = "dim";
     this._low = false;
@@ -892,7 +908,13 @@ export class Fp3dView3d extends LitElement {
     const stage = this.renderRoot.querySelector(".fp3d-stage");
     if (!stage || this.resizeObs || typeof ResizeObserver !== "function") return;
     this.resizeObs = new ResizeObserver((entries) => {
-      const narrow = (entries[0]?.contentRect.width ?? 1000) < 700;
+      const width = entries[0]?.contentRect.width ?? 1000;
+      const narrow = width < 700;
+      const phone = isPhoneWidth(width);
+      if (phone !== this._phoneStage) {
+        this._phoneStage = phone;
+        this._thumbsCompact = thumbsCompact(this.thumbsSaved, phone);
+      }
       if (narrow === this._narrowStage) return;
       this._narrowStage = narrow;
       this.scheduleThumbs();
@@ -1052,6 +1074,7 @@ export class Fp3dView3d extends LitElement {
     if (forced || changed.has("hass") || ticked) this.syncDevices(forced, ticked && (this.trail || this.detecting));
     if (changed.has("hass") || changed.has("director")) this.direct();
     if (changed.has("autoOrbit")) v.setAutoOrbit(this.autoOrbit ? 0.06 : 0);
+    v.setFitMargin(this._phoneStage ? PHONE_FIT_MARGIN : NO_FIT_MARGIN);
     if (changed.has("_thumbs") || changed.has("_narrowStage")) v.setLabelInset(this._thumbs.length ? (this.narrowThumbs ? 136 : 184) : 0);
     if (changed.has("floorId")) v.setFloor(this.floorId);
     if (changed.has("roomId") && (this.roomId || changed.get("roomId"))) v.selectRoom(this.roomId);
@@ -3858,8 +3881,9 @@ export class Fp3dView3d extends LitElement {
     const compact = this._thumbsCompact;
     const fold = () => {
       this._thumbsCompact = !compact;
+      this.thumbsSaved = this._thumbsCompact ? "1" : "0";
       try {
-        localStorage.setItem("home3d.thumbs_compact", this._thumbsCompact ? "1" : "0");
+        localStorage.setItem("home3d.thumbs_compact", this.thumbsSaved);
       } catch {
         // private mode: the choice lasts for this page only
       }
@@ -4231,7 +4255,7 @@ export class Fp3dView3d extends LitElement {
     if (!this._walk)
       return html`<button class="fp3d-walk-btn" title=${t("walk_start")} aria-label=${t("walk_start")} @click=${() => void this.startWalk()}>
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4.5" r="1.8" /><path d="m9 20 2.5-6 2.5 2.5V21M7.5 11l3-3.5 3.5 1.5 2 3.5M11.5 14l1-5" /></svg>
-        <span>${t("walk_title")}</span>
+        <span class="fp3d-walk-label">${t("walk_title")}</span>
       </button>`;
     const w = this._walk;
     // the stick (tablets): forward and back, turning left and right
@@ -4364,10 +4388,12 @@ export class Fp3dView3d extends LitElement {
       <div class="fp3d-central" role="dialog" aria-label=${t("central")}>
         <div class="fp3d-central-top">
           <b>${floor ? floor.name : t("central_house")}</b>
-          <button class="fp3d-btn fp3d-central-gear" title=${t("view_settings")} aria-label=${t("view_settings")} @click=${() => {
-            this._central = false;
-            this._settingsOpen = true;
-          }}>⚙ ${t("view_settings")}</button>
+          ${this.noSettings
+            ? nothing
+            : html`<button class="fp3d-btn fp3d-central-gear" title=${t("view_settings")} aria-label=${t("view_settings")} @click=${() => {
+                this._central = false;
+                this._settingsOpen = true;
+              }}>⚙ ${t("view_settings")}</button>`}
         </div>
         ${sheets.length
           ? html`<div class="fp3d-central-favs">
@@ -5756,7 +5782,14 @@ export class Fp3dView3d extends LitElement {
     if (e.tariff) items.push({ cls: "tariff", label: t("energy_tariff"), value: `${formatNumber(this.hass, e.tariff.value, 3)} ${e.tariff.unit}`.trim() });
     return html`<div class="fp3d-energy" aria-live="off">
       ${this._cheap ? html`<div class="fp3d-energy-item fp3d-energy-cheap" role="status"><span>${t("cheap_rate")}</span><b>${t("cheap_rate_now")}</b></div>` : nothing}
-      ${this._holoOn ? nothing : items.map((i) => html`<div class="fp3d-energy-item fp3d-energy-${i.cls}"><span>${i.label}</span><b>${i.value}</b></div>`)}
+      ${this._holoOn
+        ? nothing
+        : items.map(
+            (i) =>
+              html`<div class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}${this._bigTile === i.cls ? " fp3d-energy-big" : ""}" tabindex="0" @click=${() => this.toggleEnergyTile(i.cls)}>
+                <span>${i.label}</span><b>${i.value}</b>
+              </div>`,
+          )}
       ${this.flows !== null
         ? nothing
         : html`<button class="fp3d-energy-item fp3d-flow-toggle" aria-pressed=${this._flows} title=${`${t("flows_hint")} (${t(this._flows ? "flow_on" : "flow_off")})`} aria-label=${t("flows")} @click=${() => this.toggleFlows()}>
@@ -5768,6 +5801,11 @@ export class Fp3dView3d extends LitElement {
         <span>${t("holos")}</span><b>◫</b>
       </button>`}
     </div>`;
+  }
+
+  /** A tap enlarges an energy tile so its value reads without zooming; a second tap shrinks it (#90). */
+  private toggleEnergyTile(cls: string): void {
+    this._bigTile = this._bigTile === cls ? null : cls;
   }
 
   private renderLegend() {
@@ -7963,6 +8001,36 @@ export class Fp3dView3d extends LitElement {
         backdrop-filter: blur(6px);
         font-variant-numeric: tabular-nums;
       }
+      /* a value tile grows when hovered, focused or tapped, so it reads without zooming in (#90) */
+      .fp3d-energy-tile {
+        position: relative;
+        pointer-events: auto;
+        cursor: zoom-in;
+        transform-origin: top left;
+        transition: transform 160ms ease-out;
+      }
+      .fp3d-energy-big {
+        transform: scale(1.5);
+        z-index: 2;
+        cursor: zoom-out;
+      }
+      .fp3d-energy-tile:focus-visible {
+        transform: scale(1.5);
+        z-index: 2;
+        outline: 2px solid var(--fp3d-accent);
+        outline-offset: 2px;
+      }
+      @media (hover: hover) {
+        .fp3d-energy-tile:hover {
+          transform: scale(1.5);
+          z-index: 2;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .fp3d-energy-tile {
+          transition: none;
+        }
+      }
       .fp3d-energy-item span {
         font-size: 11px;
         color: var(--fp3d-muted);
@@ -8071,6 +8139,16 @@ export class Fp3dView3d extends LitElement {
           overflow-x: auto;
           scrollbar-width: none;
           pointer-events: auto;
+        }
+        /* the scrolling row would clip a scaled tile: there the enlarged tile gets bigger text instead (#90) */
+        .fp3d-energy .fp3d-energy-tile {
+          transform: none;
+        }
+        .fp3d-energy-big span {
+          font-size: 13px;
+        }
+        .fp3d-energy-big b {
+          font-size: 22px;
         }
         .fp3d-legend {
           bottom: auto;
@@ -8189,6 +8267,36 @@ export class Fp3dView3d extends LitElement {
         position: absolute;
         inset: auto 16px 16px;
         color: var(--fp3d-danger);
+      }
+      /* phones (#93): Walk as a 44 px symbol that stays above the energy cards; 44 px touch targets */
+      @media ${unsafeCSS(PHONE_MEDIA)} {
+        .fp3d-walk-btn {
+          z-index: 5;
+          width: 44px;
+          height: 44px;
+          padding: 0;
+          justify-content: center;
+        }
+        .fp3d-walk-label {
+          display: none;
+        }
+        .fp3d-thumbs-fold,
+        .fp3d-find-btn,
+        .fp3d-central-btn,
+        .fp3d-eye {
+          width: 44px;
+          height: 44px;
+        }
+        .fp3d-eye {
+          left: 62px;
+        }
+        .fp3d-central-btn {
+          bottom: calc(62px + var(--fp3d-bottom-inset, 0px));
+        }
+        .fp3d-thumbs-compact .fp3d-thumb,
+        .fp3d-thumb-house {
+          min-height: 44px;
+        }
       }
     `,
   ];

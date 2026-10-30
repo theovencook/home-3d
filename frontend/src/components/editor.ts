@@ -1,6 +1,7 @@
 // 2D editor: floors, rooms (rectangles and free shapes), snapping, undo, background template.
 
-import { css, html, LitElement, nothing, svg, type PropertyDeclaration, type PropertyValues, type TemplateResult } from "lit";
+import { css, html, LitElement, nothing, svg, unsafeCSS, type PropertyDeclaration, type PropertyValues, type TemplateResult } from "lit";
+import { PHONE_MEDIA } from "../phone.ts";
 import { linesField } from "./lines-field.ts";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { ref } from "lit/directives/ref.js";
@@ -165,7 +166,8 @@ import "./entity-picker.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
 import { fetchBackup, fetchPackUpdates, getEditors, restoreBackup, setEditors, updatePlacedItems, type BackupFile, type BackupHome } from "../api.ts";
 import { libraryUpdates } from "../pack-updates.ts";
-import { lastAdmin, pickEditor, type EditorUser } from "../editors.ts";
+import { lastAdmin, pickEditor, pickTabletUser, type EditorUser } from "../editors.ts";
+import { TABLET_IDLE_DEFAULT } from "../kiosk.ts";
 import { load3d } from "../load3d.ts";
 import { ensureRecipes, packTypesIn } from "../pack-recipes.ts";
 import "./ask-dialog.ts";
@@ -416,6 +418,7 @@ export class Fp3dEditor extends LitElement {
     _splitRatio: { state: true },
     _backupBusy: { state: true },
     _wall3d: { state: true },
+    _solarDim: { state: true },
     _sidePinned: { state: true },
     _sideMin: { state: true },
     _sideOpen: { state: true },
@@ -536,6 +539,8 @@ export class Fp3dEditor extends LitElement {
   private declare _backupBusy: boolean;
   /** Walls in the 3D pane: full height ("auto") or cut at the cut height (shows wall units and shelves). */
   private declare _wall3d: WallMode;
+  /** Energy tool: roof solar fields drawn faint over the floor plan (the selected one stays full), per device (#89). */
+  private declare _solarDim: boolean;
   /** Sidebar beside the 3D pane: pinned open always, or folded to a strip while nothing is selected. */
   private declare _sidePinned: boolean;
   /** The sidebar folded to a narrow strip beside the plan (more room to move furniture); remembered per browser. */
@@ -766,6 +771,8 @@ export class Fp3dEditor extends LitElement {
   private fitted = false;
   /** The view fit() set last (the plan follows size changes until it is moved). */
   private fittedView: unknown = null;
+  /** The last fit framed everything (plot, garden items), not just the house: a resize keeps that (#91). */
+  private fittedAll = false;
   private resizeObserver?: ResizeObserver;
   private loadingImages = new Set<string>();
 
@@ -869,6 +876,12 @@ export class Fp3dEditor extends LitElement {
       this._wallsOpen = localStorage.getItem("home3d.wallsOpen") === "1";
     } catch {
       // no storage: the default
+    }
+    this._solarDim = true;
+    try {
+      if (localStorage.getItem("home3d.solarDim") === "off") this._solarDim = false;
+    } catch {
+      // no storage: dimmed
     }
     this._doc3d = this._doc;
     this._sideOpen = false;
@@ -1010,7 +1023,7 @@ export class Fp3dEditor extends LitElement {
       // a plan nobody has moved since it was fitted stays fitted (the 3D half opening beside the roof tool)
       if ((!this.fitted || this._view === this.fittedView) && this._size.w > 0) {
         this.fitted = true;
-        this.fit();
+        this.fit(this.fittedAll);
       }
     });
     this.resizeObserver.observe(stage);
@@ -1266,6 +1279,7 @@ export class Fp3dEditor extends LitElement {
             <button aria-pressed=${this._wall3d === "auto"} @click=${() => this.setWall3d("auto")}>${this.t("walls_auto")}</button>
             <button aria-pressed=${this._wall3d === "cut"} @click=${() => this.setWall3d("cut")}>${this.t("walls_cut")}</button>
           </div>`}
+      <button class="fp3d-3d-fold" title=${this.t("split_fold_hint")} aria-label=${this.t("split_fold_hint")} @click=${() => this.toggleSplit()}>✕ 3D</button>
       ${this.render3dBar()}
       <fp3d-view3d
               .walkable=${false}
@@ -1449,9 +1463,18 @@ export class Fp3dEditor extends LitElement {
     return [e.clientX - rect.left, e.clientY - rect.top];
   }
 
-  private fit(): void {
+  /** "Whole plan": the floor's rooms; `all` ("Fit everything", #91): the plot, items and devices in the garden too. */
+  private fit(all = false): void {
     const pts = this.floor?.rooms.flatMap((r) => r.points) ?? [];
-    if (this._tool === "outdoor" || this._tool === "pool") for (const a of this.floor?.outdoor ?? []) pts.push(...a.points);
+    if (all || this._tool === "outdoor" || this._tool === "pool") for (const a of this.floor?.outdoor ?? []) pts.push(...a.points);
+    if (all) {
+      for (const f of this.floor?.furniture ?? []) {
+        const r = Math.max(f.w, f.d) / 2;
+        pts.push([f.x - r, f.z - r], [f.x + r, f.z + r]);
+      }
+      for (const p of this.floor?.placements ?? []) pts.push([p.x, p.z]);
+    }
+    this.fittedAll = all;
     // the roof tool shows the roof sections too, which reach past the rooms
     if (this._tool === "roof") for (const s of this._doc.settings.roof.sections ?? []) pts.push([s.x0, s.z0], [s.x1, s.z1]);
     const b = pts.length ? bounds(pts) : { x0: 0, z0: 0, x1: 10, z1: 8 };
@@ -3515,6 +3538,16 @@ export class Fp3dEditor extends LitElement {
     return { u: (p[0] - face.o[0]) * face.eu[0] + (p[1] - face.o[2]) * face.eu[2], s: Number.NaN };
   }
 
+  /** Draw roof solar fields faint over the plan (or at full strength); remembered on this device (#89). */
+  private setSolarDim(on: boolean): void {
+    this._solarDim = on;
+    try {
+      localStorage.setItem("home3d.solarDim", on ? "on" : "off");
+    } catch {
+      // no storage: this session only
+    }
+  }
+
   /** Solar fields over the plan: every module as a small rectangle; the selected field highlighted. */
   private renderSolarFields() {
     const fields = this._doc.settings.roof.solar ?? [];
@@ -3524,6 +3557,8 @@ export class Fp3dEditor extends LitElement {
       const face = fieldFace(this._doc, f, faces);
       if (!face || (face.wall && face.wall.floorId !== this._floorId)) return nothing;
       const sel = f.id === this._solarId;
+      // a field on the roof lies over every floor's plan: faint unless chosen, so the rooms under it stay readable
+      const dim = this._solarDim && !sel && !face.wall && !face.unbounded;
       let handle: unknown = nothing;
       if (sel && face.unbounded && this.isEditor && !f.locked) {
         const [cx, cz] = fieldCenter(face, f);
@@ -3539,7 +3574,7 @@ export class Fp3dEditor extends LitElement {
         </g>`;
       }
       // the selected field also shows its switched-off modules (dashed), so they can be switched on again
-      return svg`<g data-solar=${f.id} class=${`fp3d-solar${sel ? " fp3d-solar-sel" : ""}${sel && this._solarPick ? " fp3d-solar-pick" : ""}`}>${fieldModules(face, f, sel).map(
+      return svg`<g data-solar=${f.id} class=${`fp3d-solar${sel ? " fp3d-solar-sel" : ""}${dim ? " fp3d-solar-dim" : ""}${sel && this._solarPick ? " fp3d-solar-pick" : ""}`}>${fieldModules(face, f, sel).map(
         (m) => {
           // on a wall the modules stand upright: in the plan a strip just outside the wall
           // as deep as the modules stand off the wall (tilted ones further), at least 30 cm to grab
@@ -3998,6 +4033,12 @@ export class Fp3dEditor extends LitElement {
       ${this.renderRoofFloors()}
       <h3>☀ ${this.t("solar_fields")}</h3>
       <p class="fp3d-sub">${this.t(roofList.length ? "solar_hint" : "solar_no_roof")}</p>
+      ${fields.length
+        ? html`<label class="fp3d-check fp3d-solar-dim-toggle"
+            ><input type="checkbox" .checked=${this._solarDim} @change=${(e: Event) => this.setSolarDim((e.target as HTMLInputElement).checked)} />
+            ${this.t("solar_dim")}</label
+          >`
+        : nothing}
       ${fields.length
         ? html`<div class="fp3d-room-list">
             ${fields.map((f, i) => {
@@ -6073,7 +6114,7 @@ export class Fp3dEditor extends LitElement {
     const admin = this.isEditor;
     const open = this._toolMenu === "floor";
     const close = () => ((this._toolMenu = null), (this._floorMenu = false));
-    return html`<div class="fp3d-seg fp3d-seg-menu">
+    return html`<div class="fp3d-seg fp3d-seg-menu fp3d-seg-floor">
       <div class="fp3d-menu-wrap">
         <button aria-haspopup="menu" aria-expanded=${open} @click=${() => ((this._toolMenu = open ? null : "floor"), (this._floorMenu = false), (this._viewMenu = false))}>
           <span class="fp3d-menu-label">${this.t("floor_label")}</span> ${floor?.name ?? this.t("floors")} <span class="fp3d-caret">▾</span>
@@ -6266,14 +6307,18 @@ export class Fp3dEditor extends LitElement {
         })}
         ${plain("furniture", this.t("tool_furniture"))} ${plain("energy", this.t("tool_energy"))}
       </div>
+      <!-- Wall view is a mode: beside the tools, kept away from the view buttons by undo / redo (#91) -->
+      <div class="fp3d-seg fp3d-seg-menu">
+        <button aria-pressed=${this._wallPick} title=${this.t("wall_view_open")} @click=${(e: Event) => (close(), this.toggleWallPick(e.currentTarget as HTMLElement))}>${this.t("wall_view")}</button>
+      </div>
       <div class="fp3d-seg fp3d-seg-menu">
         <button class="fp3d-undo" ?disabled=${!this._canUndo} @click=${() => this.undo()} title=${`${this.t("undo")} (Ctrl+Z)`} aria-label=${this.t("undo")}>↶</button>
         <button class="fp3d-undo" ?disabled=${!this._canRedo} @click=${() => this.redo()} title=${`${this.t("redo")} (Ctrl+Y)`} aria-label=${this.t("redo")}>↷</button>
       </div>
-      <div class="fp3d-seg fp3d-seg-menu">
-        <button aria-pressed=${this._split} title=${this.t("split_3d_hint")} @click=${() => (close(), this.toggleSplit())}>${this.t("split_3d")}</button>
-        <button aria-pressed=${this._wallPick} title=${this.t("wall_view_open")} @click=${(e: Event) => (close(), this.toggleWallPick(e.currentTarget as HTMLElement))}>${this.t("wall_view")}</button>
+      <div class="fp3d-seg fp3d-seg-menu fp3d-seg-views">
+        <button class="fp3d-split-btn" aria-pressed=${this._split} title=${this.t("split_3d_hint")} @click=${() => (close(), this.toggleSplit())}>${this._split ? "◧ " : "▢ "}${this.t("split_3d")}</button>
         <button title=${this.t("fit_hint")} @click=${() => (close(), this.fit())}>${this.t("fit")}</button>
+        <button title=${this.t("fit_all_hint")} @click=${() => (close(), this.fit(true))}>${this.t("fit_all")}</button>
         <button class="fp3d-help-btn" aria-pressed=${this._help} aria-label=${this.t("help_open")} title=${this.t("help_open")} @click=${() => (close(), (this._help = !this._help))}>?</button>
       </div>
       ${this.renderSettingsMenu(close)}`;
@@ -12601,7 +12646,30 @@ export class Fp3dEditor extends LitElement {
       ${list?.custom
         ? html`<div class="fp3d-actions fp3d-wide"><button class="fp3d-btn" @click=${() => void answer(setEditors(hass, null))}>${this.t("editors_reset")}</button></div>`
         : nothing}
+      ${list ? this.renderTabletUsers(list.users) : nothing}
     </div>`;
+  }
+
+  /** Wall tablets (#92): users whose panel opens locked (no editor, no view settings), and its idle return. */
+  private renderTabletUsers(users: EditorUser[]) {
+    const ticked = this._doc.settings.tablet_users ?? [];
+    return html`<h4 class="fp3d-wide">${this.t("tablet_users")}</h4>
+      <p class="fp3d-sub fp3d-wide">${this.t("tablet_users_hint")}</p>
+      ${users.map(
+        (u) => html`<label class="fp3d-check fp3d-wide"
+          ><input type="checkbox" .checked=${ticked.includes(u.id)} @change=${(e: Event) => this.setTabletUser(u.id, (e.target as HTMLInputElement).checked)} />
+          ${u.name || u.id}</label
+        >`,
+      )}
+      ${this.num(this.t("tablet_idle"), this._doc.settings.tablet_idle ?? TABLET_IDLE_DEFAULT, (v) => this.setTabletIdle(v), 10, 0)}`;
+  }
+
+  private setTabletUser(id: string, on: boolean): void {
+    this.change((d) => (d.settings.tablet_users = pickTabletUser(d.settings.tablet_users, id, on)));
+  }
+
+  private setTabletIdle(seconds: number): void {
+    this.change((d) => (d.settings.tablet_idle = Math.min(86400, Math.max(0, Math.round(seconds)))));
   }
 
   private voicePipes: { id: string; name: string; stt: boolean }[] | null = null;
@@ -14780,6 +14848,26 @@ export class Fp3dEditor extends LitElement {
         display: block;
         height: 100%;
       }
+      /* folds the 3D pane away (the choice is remembered like the toolbar's "3D beside", #91) */
+      .fp3d-3d-fold {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 3;
+        min-height: 32px;
+        padding: 4px 12px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 999px;
+        background: var(--fp3d-chrome);
+        color: inherit;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .fp3d-3d-fold:hover,
+      .fp3d-3d-fold:focus-visible {
+        border-color: var(--fp3d-accent);
+      }
       .fp3d-3d-walls {
         position: absolute;
         top: 10px;
@@ -16655,7 +16743,7 @@ export class Fp3dEditor extends LitElement {
       .fp3d-phone-hint {
         display: none;
       }
-      @media (max-width: 600px) {
+      @media ${unsafeCSS(PHONE_MEDIA)} {
         .fp3d-phone-hint {
           position: absolute;
           top: 8px;
@@ -16727,6 +16815,12 @@ export class Fp3dEditor extends LitElement {
         stroke: #9fb8ff;
         stroke-width: 1.5;
         cursor: move;
+      }
+      /* roof fields over the floor plan (#89): an outline only, so the rooms under them stay readable */
+      .fp3d-solar-dim polygon {
+        fill: color-mix(in srgb, #1b3a8f 18%, transparent);
+        stroke: color-mix(in srgb, #9fb8ff 45%, transparent);
+        stroke-width: 1;
       }
       .fp3d-solar-sel polygon {
         fill: color-mix(in srgb, #1b3a8f 80%, transparent);
@@ -17559,6 +17653,35 @@ export class Fp3dEditor extends LitElement {
         margin: 0;
         font-size: 12.5px;
         color: var(--fp3d-warm);
+      }
+      /* phones (#94): drawing is for a PC or tablet (the banner says so), but the plan keeps a usable height
+         whatever the toolbar wraps to, and the toolbar packs tighter */
+      @media ${unsafeCSS(PHONE_MEDIA)} {
+        .fp3d-editor.fp3d-narrow {
+          grid-template-rows: auto auto;
+        }
+        .fp3d-narrow .fp3d-canvas-wrap {
+          min-height: max(320px, 52vh);
+        }
+        .fp3d-toolbar {
+          gap: 4px 6px;
+          padding: 6px 8px;
+        }
+        .fp3d-toolbar .fp3d-seg > button,
+        .fp3d-toolbar .fp3d-menu-wrap > button {
+          padding: 6px 10px;
+          font-size: 13.5px;
+        }
+        /* the floor menu and ⚙ share the first row; the tools, undo and the view buttons follow */
+        .fp3d-toolbar > * {
+          order: 2;
+        }
+        .fp3d-toolbar > .fp3d-seg-floor {
+          order: 0;
+        }
+        .fp3d-toolbar > .fp3d-seg-settings {
+          order: 1;
+        }
       }
     `,
   ];

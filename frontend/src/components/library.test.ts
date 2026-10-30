@@ -39,3 +39,18 @@ test("placing an item resets the filters: chips off, the room chip back on the o
   lib.willUpdate(new Map([["roomHint", "kitchen"]]));
   assert.equal(lib.filter.room, "bath");
 });
+
+test("the Recently used block folds away and back, and starts open (#78)", () => {
+  const lib = new FurnitureLibrary() as unknown as Record<string, any>;
+  assert.equal(lib._recentShut, false);
+  const open = (): boolean => {
+    const t = lib.section("recent", "Recently used", [], false, true);
+    return t.values.some((v: unknown) => v === true);
+  };
+  assert.equal(open(), true);
+  lib.toggleRecent();
+  assert.equal(lib._recentShut, true);
+  assert.equal(open(), false);
+  lib.toggleRecent();
+  assert.equal(lib._recentShut, false);
+});

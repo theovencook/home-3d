@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addPart, changePart, CUSTOM_PACK_ID, customPack, duplicatePart, itemFile, newItem, PART_SHAPES, profileText, readItemFile, readProfile, removePart, setDetails, toggleFix, type CustomItem } from "./custom-items.ts";
+import { addPart, changePart, CUSTOM_PACK_ID, customPack, duplicatePart, itemFile, newItem, PART_SHAPES, profileText, readItemFile, readItemFiles, readProfile, removePart, setDetails, toggleFix, type CustomItem } from "./custom-items.ts";
 import { buildIndex, filterEntries } from "./library-index.ts";
 import { furnitureSize, packItem, setPacks, type PackItem, type PackPart } from "./packs.ts";
 
@@ -175,4 +175,25 @@ test("an LLM's answer reads as the item it holds, fenced or with a line of chat 
   }
   assert.deepEqual(readItemFile("Sorry, I can't help with that.", []), { error: "not_json" });
   assert.deepEqual(readItemFile("```json\n{ broken\n```", []), { error: "not_json" });
+});
+
+test("a list of items imports as one item each, from a file, a paste or an LLM's answer (#84)", () => {
+  const stool = { id: "stool", name: { en: "Stool" }, size: [0.3, 0.3, 0.45], parts: [{ shape: "cyl", x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "wood" }] };
+  const bench = { ...stool, id: "bench", name: { en: "Bench" } };
+  const list = JSON.stringify([stool, bench], null, 2);
+  for (const answer of [list, `Here are both:\n\n\`\`\`json\n${list}\n\`\`\`\nAnything else?`, JSON.stringify({ items: [stool, bench] })]) {
+    assert.deepEqual(readItemFiles(answer, []), [{ item: stool }, { item: bench }], answer);
+  }
+  // one item reads as a list of one, as before
+  assert.deepEqual(readItemFiles(JSON.stringify(stool), []), [{ item: stool }]);
+  // a bad entry is reported on its own, the good ones still import
+  assert.deepEqual(readItemFiles(JSON.stringify([stool, { name: "no parts" }]), []), [{ item: stool }, { error: "not_an_item" }]);
+  // the same id twice in one list: the second gets a free id, as does one already taken
+  assert.deepEqual(
+    readItemFiles(JSON.stringify([stool, stool]), ["stool"]).map((r) => ("item" in r ? r.item.id : r.error)),
+    ["stool_2", "stool_3"],
+  );
+  assert.deepEqual(readItemFiles("[]", []), [{ error: "not_an_item" }]);
+  assert.deepEqual(readItemFiles("no json here", []), [{ error: "not_json" }]);
+  assert.deepEqual(readItemFiles(JSON.stringify({ format: "home3d-pack", version: 2, id: "a.b", items: [stool] }), []), [{ error: "pack_file" }]);
 });

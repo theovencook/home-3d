@@ -86,8 +86,9 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
     const req = this.queue.current;
     if (!req) return nothing;
     return html`<div class="backdrop" @click=${() => this.answer(false)}></div>
-      <div class="box" role=${req.cancel === undefined ? "dialog" : "alertdialog"} aria-modal="true" aria-describedby="ask-text" @keydown=${(e: KeyboardEvent) => this.key(e)}>
+      <div class="box ${req.detail !== undefined ? "wide" : ""}" role=${req.cancel === undefined ? "dialog" : "alertdialog"} aria-modal="true" aria-describedby="ask-text" @keydown=${(e: KeyboardEvent) => this.key(e)}>
         <p id="ask-text" class="text">${req.text}</p>
+        ${req.detail !== undefined ? html`<textarea class="detail" readonly rows="14" spellcheck="false" aria-labelledby="ask-text" .value=${req.detail}></textarea>` : nothing}
         ${req.input !== undefined
           ? html`<label class="fp3d-field"><input type="text" aria-labelledby="ask-text" .value=${live(this.typed)} @input=${(e: Event) => (this.typed = (e.target as HTMLInputElement).value)} /></label>`
           : nothing}
@@ -134,6 +135,20 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
         background: var(--fp3d-chrome-solid);
         box-shadow: var(--fp3d-shadow);
       }
+      .box.wide {
+        width: min(720px, calc(100% - 32px));
+      }
+      .detail {
+        font: 12px/1.45 ui-monospace, monospace;
+        color: var(--fp3d-text);
+        background: rgba(127, 127, 127, 0.08);
+        border: 1px solid var(--fp3d-line);
+        border-radius: 10px;
+        padding: 8px 10px;
+        min-height: 160px;
+        max-height: 55vh;
+        resize: vertical;
+      }
       .text {
         margin: 0;
         font-size: 1rem;
@@ -161,6 +176,7 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
         border-color: transparent;
       }
       button:focus-visible,
+      textarea:focus-visible,
       input:focus-visible {
         outline: 2px solid var(--fp3d-accent);
         outline-offset: 2px;
