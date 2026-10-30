@@ -470,6 +470,21 @@ function prepare(e: LibraryEntry): Prepared {
 }
 
 /**
+ * Works out what the search reads of each entry ahead of the first keystroke (#131: folding 1,500 names and tags
+ * otherwise landed on the first letter typed); returns how many it prepared now.
+ */
+export function warmIndex(entries: readonly LibraryEntry[]): number {
+  let n = 0;
+  for (const e of entries) {
+    const p = prepared.get(e);
+    if (p && p.search === e.search) continue;
+    prepare(e);
+    n++;
+  }
+  return n;
+}
+
+/**
  * How well one typed word fits an entry, from 7 down to 0 (no match): a whole word of the name (7), the start of
  * a word of the name (6), inside the name (5), a whole tag word (4), inside the tags (3), the kind's or the pack's
  * words (2), and last a slip of the pen in a name or tag word (1: fuzzy, never above an exact or prefix match).
