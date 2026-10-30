@@ -30,6 +30,8 @@ export type TestEditor = Record<string, any> & {
   press(sx: number, sy: number, o?: PressOptions): void;
   move(sx: number, sy: number, o?: PressOptions): void;
   release(sx: number, sy: number, o?: PressOptions): void;
+  /** A key press with nothing focused (the plan has the keyboard). */
+  key(key: string, o?: { shiftKey?: boolean; altKey?: boolean }): { prevented: boolean };
 };
 
 /** One floor "f" with the given rooms and items; the view is 100 px per metre with the origin at the top left. */
@@ -64,6 +66,13 @@ export async function makeEditor(rooms: Room[], furniture: Furniture[] = []): Pr
   el.press = (sx, sy, o) => el.pointerDown(event(sx, sy, o));
   el.move = (sx, sy, o) => el.onPointerMove(event(sx, sy, o));
   el.release = (sx, sy, o) => el.onPointerUp(event(sx, sy, o));
+  Object.defineProperty(el, "isConnected", { value: true, configurable: true });
+  Object.defineProperty(el, "offsetParent", { value: {}, configurable: true });
+  el.key = (key, o = {}) => {
+    const out = { prevented: false };
+    el.onKey({ key, shiftKey: !!o.shiftKey, altKey: !!o.altKey, ctrlKey: false, metaKey: false, composedPath: () => [], preventDefault: () => (out.prevented = true) });
+    return out;
+  };
   return el;
 }
 

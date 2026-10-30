@@ -38,3 +38,14 @@ export function itemsAt(items: readonly Furniture[], p: Vec2, scale: number, min
   near.sort((x, y) => x.dist - y.dist);
   return [...real.map((x) => x.id), ...near.map((x) => x.id)];
 }
+
+/**
+ * Pick-through (#75): the hit after `current` in `hits` (round again after the last), else the first hit.
+ * Also Tab cycling through a list of items, `step` -1 going backwards.
+ */
+export function nextPick(hits: readonly string[], current: string | null, step = 1): string | null {
+  if (!hits.length) return null;
+  const i = current ? hits.indexOf(current) : -1;
+  if (i < 0) return step < 0 ? hits[hits.length - 1] : hits[0];
+  return hits[(i + step + hits.length) % hits.length];
+}

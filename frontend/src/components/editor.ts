@@ -12,7 +12,10 @@ import { clipConvex, netRoomArea } from "../geometry/area.ts";
 import { areaText, formatImperial, lengthText, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 import { closeGaps, straightenEdges, suggestedThickness } from "../geometry/gaps.ts";
 import { clampIntoRoom, keepInRoom, sharedEdge, snapToWall } from "../geometry/snap.ts";
-import { itemsAt, minHitPx } from "../geometry/pick.ts";
+import { itemsAt, minHitPx, nextPick } from "../geometry/pick.ts";
+import { itemsByRoom } from "../item-list.ts";
+import "./item-list-view.ts";
+import type { ItemRow } from "./item-list-view.ts";
 import { cornerPoint, nearestOnPath, onWall, pipePath, type P3 } from "../geometry/runs.ts";
 import { connectionsAt, laidPipe, nearestOnOutline, planConnection, poolNodeAt, runLead, runsOnWall, splitPipe, type Connection, type ConnectVia, type WallRun } from "../pool-runs.ts";
 import { devicePorts, FILTER_VALVES, jointPortAt, jointPorts, nodePart, poolPortFlow, portFlow, splitNode, type PortName } from "../pool-ports.ts";
@@ -400,6 +403,7 @@ export class Fp3dEditor extends LitElement {
     _openingId: { state: true },
     _furnitureId: { state: true },
     _multi: { state: true },
+    _hiddenItems: { state: true },
     _single: { state: true },
     _multiMode: { state: true },
     _deviceId: { state: true },
@@ -509,6 +513,8 @@ export class Fp3dEditor extends LitElement {
   private declare _furnitureId: string | null;
   /** Several furniture items selected together (shift-click, a frame); empty = the usual single selection. */
   private declare _multi: string[];
+  /** Items hidden in this editor's plan only (#75), to reach what lies under them; not saved. */
+  private declare _hiddenItems: string[];
   /** One part of a furniture block is edited on its own (double-click), not the whole block. */
   private declare _single: boolean;
   /** Touch: taps add items to the selection, a drag on empty ground draws a frame. */
@@ -716,6 +722,7 @@ export class Fp3dEditor extends LitElement {
     this._openingId = null;
     this._furnitureId = null;
     this._multi = [];
+    this._hiddenItems = [];
     this._single = false;
     this._multiMode = false;
     this._deviceId = null;
@@ -1382,6 +1389,10 @@ export class Fp3dEditor extends LitElement {
 
   /** Bring a plan point to the middle of the plan, zoomed in enough to see a small item there. */
   private showPoint(x: number, z: number): void {
+    // already in view (with a margin): the plan stays where it is (#75)
+    const [sx, sy] = this.toScreen([x, z]);
+    const m = 32;
+    if (sx >= m && sy >= m && sx <= this._size.w - m && sy <= this._size.h - m) return;
     const scale = Math.max(this._view.scale, 70);
     this._view = { scale, ox: this._size.w / 2 - x * scale, oy: this._size.h / 2 - z * scale };
   }
@@ -1796,7 +1807,7 @@ export class Fp3dEditor extends LitElement {
       return;
     }
     // an item under the press, its drawn shape grown to a minimum target (#72): it wins over the room under it
-    const pickedId = this.pickItem(target, world, e.pointerType);
+    const pickedId = this.pickItem(target, world, e.pointerType, e.altKey);
     if (pickedId) {
       const id = pickedId;
       const now = Date.now();
@@ -2955,6 +2966,13 @@ export class Fp3dEditor extends LitElement {
       if (this.nudge(dx * step, dz * step)) e.preventDefault();
     } else if (e.key.toLowerCase() === "r" && !mod && this._furnitureId) {
       this.rotateFurniture(e.shiftKey ? -90 : 90);
+    } else if (e.key === "Tab" && !mod && !e.altKey && this._furnitureId && (this._tool === "select" || this._tool === "furniture") && this.keysFree(path)) {
+      // Tab steps through the items of the room (#75), Shift+Tab backwards
+      const next = nextPick(this.tabItems(), this._furnitureId, e.shiftKey ? -1 : 1);
+      if (next) {
+        e.preventDefault();
+        this.selectFromList(next);
+      }
     } else if (e.key === "Backspace" && this.drawingPoints) {
       this._draft = this._draft.slice(0, -1);
     } else if (e.key === "Enter" && this.drawingPoints) {
@@ -2978,6 +2996,17 @@ export class Fp3dEditor extends LitElement {
       this._cursor = null;
     }
   };
+
+  /**
+   * Nothing that uses Tab itself has the keyboard (#75): no button, link or field is focused, so Tab may step
+   * through items instead of moving the focus.
+   */
+  private keysFree(path: EventTarget[]): boolean {
+    const top = path[0];
+    if (!top) return true;
+    if (top === this || (typeof document !== "undefined" && (top === document.body || top === document.documentElement))) return true;
+    return typeof SVGElement !== "undefined" && top instanceof SVGElement;
+  }
 
   // ------------------------------------------------------------------ actions
 
@@ -4512,9 +4541,48 @@ export class Fp3dEditor extends LitElement {
    * The item a plan press lands on (#72): its drawn shape grown to a 24 px target (44 px on touch), smallest item
    * first. A press on a room corner or wall-end handle is never an item.
    */
-  private pickItem(target: Element, world: Vec2, pointerType: string): string | null {
+  private pickItem(target: Element, world: Vec2, pointerType: string, through = false): string | null {
     if (!this.floor || target.closest("[data-vertex], [data-mid], [data-wall-end], [data-out-box], [data-out-vertex]")) return null;
-    return itemsAt(this.floor.furniture, world, this._view.scale, minHitPx(pointerType))[0] ?? target.closest("[data-furniture]")?.getAttribute("data-furniture") ?? null;
+    const hidden = this._hiddenItems;
+    const hits = itemsAt(this.floor.furniture, world, this._view.scale, minHitPx(pointerType), hidden.length ? (f) => hidden.includes(f.id) : undefined);
+    // Alt+click picks through a stack (#75): the item under the selected one
+    if (through) return nextPick(hits, this._furnitureId);
+    return hits[0] ?? target.closest("[data-furniture]")?.getAttribute("data-furniture") ?? null;
+  }
+
+  /** Hide an item in this editor's plan, or show it again (#75); a hidden selected item is let go. */
+  private toggleItemHidden(id: string): void {
+    const hidden = this._hiddenItems;
+    this._hiddenItems = hidden.includes(id) ? hidden.filter((x) => x !== id) : [...hidden, id];
+    if (this._hiddenItems.includes(id) && this.selection().includes(id)) this.selectItem("room", this._roomId);
+  }
+
+  /** The items Tab cycles through (#75): the shown ones in the selected item's room, else on the floor. */
+  private tabItems(): string[] {
+    const floor = this.floor;
+    const f = this.furnitureItem;
+    if (!floor || !f) return [];
+    const shown = floor.furniture.filter((m) => !this._hiddenItems.includes(m.id));
+    const groups = itemsByRoom(floor.rooms, shown);
+    for (const list of groups.values()) if (list.some((m) => m.id === f.id)) return list.map((m) => m.id);
+    return shown.map((m) => m.id);
+  }
+
+  /** An item chosen in the items list (#75): selected, and brought into view only if it is out of view. */
+  private selectFromList(id: string): void {
+    const f = this.floor?.furniture.find((m) => m.id === id);
+    if (!f) return;
+    this.selectItem("furniture", id);
+    this._single = !!f.group;
+    this.showPoint(f.x, f.z);
+  }
+
+  /** Delete one item from the items list (#75): that row only, even when it is part of a block. */
+  private deleteFromList(id: string): void {
+    if (!this.floor?.furniture.some((m) => m.id === id)) return;
+    this.selectItem("furniture", id);
+    this._single = true;
+    this.deleteFurniture();
   }
 
   private openContext(target: Element, local: [number, number], pointerType = "mouse"): void {
@@ -9859,7 +9927,9 @@ export class Fp3dEditor extends LitElement {
     const k = this._view.scale;
     const set = this._furnitureId ? this.selection() : [];
     const many = set.length > 1;
-    return svg`<g>${this.renderSelectionFrame(floor, set)}${floor.furniture.map((f) => {
+    const hidden = this._hiddenItems;
+    const shown = hidden.length ? floor.furniture.filter((f) => !hidden.includes(f.id)) : floor.furniture;
+    return svg`<g>${this.renderSelectionFrame(floor, set)}${shown.map((f) => {
       const member = set.includes(f.id);
       const sel = f.id === this._furnitureId && !many;
       const [cx, cy] = this.toScreen([f.x, f.z]);
@@ -10505,7 +10575,7 @@ export class Fp3dEditor extends LitElement {
           : room
             ? html`${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}`
             : floor
-              ? this.renderRoomList(floor)
+              ? html`${this.renderRoomList(floor)} ${this.renderItemsList(floor.furniture, true)}`
               : nothing}
       ${this.renderHelpLinks()}
       ${admin && SHOW_PRESENCE ? this.renderPresenceSettings() : nothing}
@@ -10542,6 +10612,38 @@ export class Fp3dEditor extends LitElement {
         )}
       </div>
     </section>`;
+  }
+
+  /**
+   * The items of a floor (with their room) or of one room (#75): select one that is hard to hit in the plan,
+   * hide it in the plan to reach what is under it, or delete it. The list draws only the rows in view.
+   */
+  private renderItemsList(items: Furniture[], withRoom: boolean) {
+    const floor = this.floor;
+    if (!floor || !items.length) return nothing;
+    const names = withRoom ? new Map(floor.rooms.map((r) => [r.id, r.name])) : null;
+    const byRoom = withRoom ? itemsByRoom(floor.rooms, items) : null;
+    const roomOf = new Map<string, string>();
+    if (byRoom && names) for (const [id, list] of byRoom) for (const f of list) roomOf.set(f.id, id ? (names.get(id) ?? "") : "");
+    const set = this._furnitureId ? this.selection() : [];
+    const rows: ItemRow[] = items.map((f) => ({
+      id: f.id,
+      name: f.name || furnitureName(this.hass, f.type),
+      note: roomOf.get(f.id),
+      hidden: this._hiddenItems.includes(f.id),
+      selected: set.includes(f.id),
+    }));
+    return html`<details class="fp3d-points fp3d-items">
+      <summary>${this.t("items_list")} (${items.length})</summary>
+      <fp3d-item-list
+        .rows=${rows}
+        .texts=${{ hide: this.t("item_hide"), show: this.t("item_show"), remove: this.t("delete") }}
+        ?editable=${this.isEditor}
+        @item-select=${(e: CustomEvent<{ id: string }>) => this.selectFromList(e.detail.id)}
+        @item-hide=${(e: CustomEvent<{ id: string }>) => this.toggleItemHidden(e.detail.id)}
+        @item-delete=${(e: CustomEvent<{ id: string }>) => this.deleteFromList(e.detail.id)}
+      ></fp3d-item-list>
+    </details>`;
   }
 
   /** The room's doors and windows as a list: a tap selects one that is hard to hit in the plan (#312). */
@@ -10620,6 +10722,7 @@ export class Fp3dEditor extends LitElement {
       <p class="fp3d-sub" title=${this.t("room_area_net_hint")}>${this.t("room_area_net", { a: this.area(polygonArea(room.points)), n: this.area(netRoomArea(room, this.floor!, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior })) })}</p>
       <p class="fp3d-sub fp3d-room-id">${this.t("room_id")} <code title=${this.t("license_copy")} @click=${() => void navigator.clipboard?.writeText(room.id).catch(() => undefined)}>${room.id}</code></p>
       ${this.renderEdgeHeights(room)} ${this.renderRoomClimate(room)} ${this.renderRoomLive(room)} ${this.renderRoomOpenings(room)}
+      ${this.renderItemsList(this.floor ? (itemsByRoom(this.floor.rooms, this.floor.furniture).get(room.id) ?? []) : [], false)}
       <details class="fp3d-points" ?open=${!rect}>
         <summary>${this.t("points")} (${room.points.length})</summary>
         ${room.points.map(

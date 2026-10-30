@@ -47,3 +47,18 @@ test("with an item selected, a press on its room's floor selects the room withou
   assert.equal(ed._roomId, "r");
   assert.equal(ed.drag?.kind, "pan");
 });
+
+const sideboard = (): Furniture => ({ id: "sb", type: "box", x: 2, z: 2, rotation: 0, w: 1.6, d: 0.45, h: 0.8, variant: null });
+
+test("Alt+click picks through stacked items, one deeper per click (#75)", async () => {
+  const ed = await makeEditor([square("r", 0, 0, 4, 4)], [sideboard(), thermostat()]);
+  ed.press(200, 200);
+  ed.release(200, 200);
+  assert.equal(ed._furnitureId, "t", "the small one on top first");
+  ed.press(200, 200, { altKey: true });
+  ed.release(200, 200, { altKey: true });
+  assert.equal(ed._furnitureId, "sb");
+  ed.press(200, 200, { altKey: true });
+  ed.release(200, 200, { altKey: true });
+  assert.equal(ed._furnitureId, "t", "and round again");
+});
