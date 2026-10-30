@@ -5132,6 +5132,11 @@ export class Fp3dView3d extends LitElement {
    * window light, sun patches), the warnings, and every module's own settings. Changes count for the whole house
    * and only administrators make them; the editor keeps the full set.
    */
+  /** Opens the ⚙ sheet (sun, window glow, alerts …): the panel's "Sun and lights" button (#87). */
+  openSettings(): void {
+    this._settingsOpen = true;
+  }
+
   private renderSettings() {
     const hass = this.hass;
     const b = this.building;
