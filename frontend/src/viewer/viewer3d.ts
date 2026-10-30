@@ -56,7 +56,8 @@ import { placeWallPlate } from "../geometry/walls.ts";
 import { buildEarth } from "./earth.ts";
 import { clampIntoRoom } from "../geometry/snap.ts";
 import { activeSections, roofRider, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
-import { buildFloorGeometry, SLAB, stairHoleParts, type FloorGeometry } from "./build.ts";
+import { buildFloorGeometry, buildRackGear, SLAB, stairHoleParts, type FloorGeometry, type RackGearAt } from "./build.ts";
+import { rackDetailWanted } from "./rack-lod.ts";
 import { OrbitControls, type OrbitView } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { CameraProjections, PROJECTION_LAYER, type ProjectionSurface, type ProjectorPose } from "./projection.ts";
@@ -483,6 +484,19 @@ interface FloorMaterials {
   earthLines: LineBasicMaterial;
 }
 
+/**
+ * A rack's gear in 3D (#121): one geometry per rack, never part of the floor's. `slab` (one box per piece) is built with
+ * the floor, `detail` (every part) only once the camera comes near; one of the two shows (rack-lod.ts).
+ */
+interface RackView {
+  at: RackGearAt;
+  /** The rack's centre in floor coordinates. */
+  centre: Vector3;
+  slab: [Mesh, LineSegments];
+  detail: [Mesh, LineSegments] | null;
+  near: boolean;
+}
+
 interface FloorView {
   floor: Floor;
   /** Position in the stack, ordered by elevation. */
@@ -525,6 +539,8 @@ interface FloorView {
   fridgeMesh: Mesh;
   /** Status LEDs of linked rack gear (#119): built when the racks change, coloured in place on a status change. */
   rackLedMesh: Mesh;
+  /** Racks with gear (#121): their gear as slabs, and in detail once the camera came near (updateRackDetail). */
+  racks: RackView[];
   rackLedShape: string;
   rackLedColor: string;
   /** Triangle range of each LED, by "<rack id>/<slot id>". */
@@ -2318,6 +2334,29 @@ export class FloorplanViewer {
     this.retired = [];
   }
 
+  /**
+   * A rack's gear in detail near the camera, as slabs further away (#121, rack-lod.ts); the detail is built the first
+   * time the camera comes near and kept until the next rebuild. Runs before every frame: a few distances.
+   */
+  private updateRackDetail(): void {
+    const eye = this.camera.position;
+    const at = new Vector3();
+    for (const fv of this.floors) {
+      if (!fv.racks.length || !fv.group.visible) continue;
+      for (const r of fv.racks) {
+        const near = rackDetailWanted(eye.distanceTo(fv.group.localToWorld(at.copy(r.centre))), r.near, this.lowQuality);
+        if (near === r.near) continue;
+        r.near = near;
+        if (near && !r.detail) {
+          r.detail = rackGearMeshes(fv.floor, r.at, true, fv.materials);
+          fv.group.add(...r.detail);
+        }
+        for (const o of r.slab) o.visible = !near;
+        for (const o of r.detail ?? []) o.visible = near;
+      }
+    }
+  }
+
   private clear(): void {
     // robots share one geometry: keep them out of the floor groups while those are disposed
     for (const r of this.robots.values()) r.group.removeFromParent();
@@ -2732,6 +2771,14 @@ export class FloorplanViewer {
       fridgeMesh.visible = false;
       const rackLedMesh = new Mesh(new Geometry(), materials.lamps);
       rackLedMesh.visible = false;
+      // a rack's gear (#121): slabs now, the detail when the camera comes near
+      const racks: RackView[] = geo.racks.map((at) => ({
+        at,
+        centre: new Vector3(at.f.x, at.base + at.f.h / 2, at.f.z),
+        slab: rackGearMeshes(floor, at, false, materials),
+        detail: null,
+        near: false,
+      }));
       const pipeMesh = new Mesh(new Geometry(), materials.lamps);
       pipeMesh.visible = false;
       const patchMesh = new Mesh(new Geometry(), materials.patch);
@@ -2800,6 +2847,7 @@ export class FloorplanViewer {
         trailMesh,
         fridgeMesh,
         rackLedMesh,
+        ...racks.flatMap((r) => r.slab),
         pipeMesh,
         patchMesh,
         patchGlowMesh,
@@ -2875,6 +2923,7 @@ export class FloorplanViewer {
         trailMesh,
         fridgeMesh,
         rackLedMesh,
+        racks,
         rackLedShape: "",
         rackLedColor: "",
         rackLedRanges: new Map(),
@@ -4331,7 +4380,7 @@ export class FloorplanViewer {
   private pick(x: number, y: number): { entity: string } | { floorId: string; roomId: string | null; rack?: RackHit } | null {
     const ray = this.rayAt(x, y);
     const floors = this.activeFloors();
-    const meshes = floors.flatMap((f) => [f.lampMesh, f.coneMesh, f.framesMesh, f.glassMesh, f.blindsMesh, f.wallMesh, f.floorMesh].filter((m) => m.visible));
+    const meshes = floors.flatMap((f) => [f.lampMesh, f.coneMesh, f.framesMesh, f.glassMesh, f.blindsMesh, f.wallMesh, f.floorMesh, ...rackGearShown(f)].filter((m) => m.visible));
     const inRange = (list: { id: string; start: number; end: number }[], tri: number) => list.find((r) => tri >= r.start && tri < r.end)?.id;
     for (const hit of ray.intersectObjects(meshes, false)) {
       if (hit.faceIndex == null) continue;
@@ -4351,8 +4400,9 @@ export class FloorplanViewer {
         const id = inRange(hit.object === fv.framesMesh ? fv.frameTris : hit.object === fv.glassMesh ? fv.glassTris : fv.blindTris, tri);
         const entity = id ? this.pickOpenings.get(id) : undefined;
         if (entity) return { entity };
-      } else if (hit.object === fv.wallMesh) {
-        const id = inRange(fv.geo.furnitureTris, tri);
+      } else if (hit.object === fv.wallMesh || hit.object.userData.rackId) {
+        // a rack's gear is a mesh of its own (#121): it belongs to the rack
+        const id = (hit.object.userData.rackId as string | undefined) ?? inRange(fv.geo.furnitureTris, tri);
         // a rack's gear (#119): the piece under the tap, before the rack's own device; the rack itself after it
         const rack = id ? this.rackHit(fv, id, hit.point) : null;
         if (rack?.slot) return { floorId: fv.floor.id, roomId: null, rack };
@@ -4438,11 +4488,12 @@ export class FloorplanViewer {
     const floors = this.activeFloors();
     // a TV's screen and its picture, a smart fridge's doors are meshes of their own: they belong to the item too
     const extra = (f: FloorView) => [f.screenMesh, f.fridgeMesh, ...[...f.screenPics.values()].map((p) => p.mesh)];
-    const meshes = floors.flatMap((f) => [f.lampMesh, f.wallMesh, ...extra(f)].filter((m) => m.visible));
+    const meshes = floors.flatMap((f) => [f.lampMesh, f.wallMesh, ...rackGearShown(f), ...extra(f)].filter((m) => m.visible));
     for (const hit of ray.intersectObjects(meshes, false)) {
       if (hit.faceIndex == null) continue;
       const fv = floors.find((f) => f.group === hit.object.parent || extra(f).includes(hit.object as Mesh))!;
       if (!fv) continue;
+      if (hit.object.userData.rackId) return { fv, id: hit.object.userData.rackId as string, y: hit.point.y };
       if (hit.object !== fv.lampMesh && hit.object !== fv.wallMesh) {
         const id = this.furnitureNear(fv, hit.point.x, hit.point.z);
         if (id) return { fv, id, y: hit.point.y };
@@ -5195,6 +5246,7 @@ export class FloorplanViewer {
     this.flowTime.value = this.flowSeconds();
     if (this.soundActive) this.animateSound(now);
     this.updateWalls();
+    this.updateRackDetail();
     if (this.projections.active) this.updateProjections();
     // the house's shadow belongs to the whole house
     this.sunFx.showShadow(this.floorId === null && this.shadowSig !== "");
@@ -5801,6 +5853,20 @@ function makeGroundTexture(): CanvasTexture {
 }
 
 export { furnitureFront, furniturePreview, itemPicture, type FrontPicture, type PreviewItem } from "./preview.ts";
+
+/** A rack's gear as a mesh and its edges (#121), drawn with the floor's materials; tagged with the rack for taps. */
+function rackGearMeshes(floor: Floor, at: RackGearAt, detail: boolean, materials: { wall: Material; lines: Material }): [Mesh, LineSegments] {
+  const gear = buildRackGear(floor, at, detail);
+  const mesh = new Mesh(gear.mesh, materials.wall);
+  const lines = new LineSegments(gear.lines, materials.lines);
+  mesh.userData.rackId = lines.userData.rackId = at.f.id;
+  return [mesh, lines];
+}
+
+/** The rack gear meshes a tap can hit on a floor (#121): the shown level of each rack. */
+function rackGearShown(fv: FloorView): Mesh[] {
+  return fv.racks.map((r) => (r.near && r.detail ? r.detail[0] : r.slab[0]));
+}
 
 export function createViewer(host: HTMLElement, options?: ViewerOptions): FloorplanViewer {
   return new FloorplanViewer(host, options);

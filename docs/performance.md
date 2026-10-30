@@ -180,3 +180,63 @@ sample home (~86k triangles):
 - **Network-cold load:** the HTTP disk cache can't be cleared from the page. The bundle fetch times above are the network part.
 - **Trusted input via the Event Timing API:** the pane was 229 px wide, so coordinate clicks on the scaled 1280 x 800 page weren't reliable. All input was synthetic events through the real handlers.
 - **Phone (#93 and #94) and touch long-press paths.**
+
+## Racks (#121)
+
+Measured 30 Oct 2026, before (integration @ `29a6b81`) and after the #121 change, on the same local plan. No Home Assistant was involved.
+
+### What changed
+
+- **One geometry per rack, not part of the floor's.** A rack's gear used to be drawn into the floor's walls geometry, so it was built with every floor rebuild and drawn twice (the wall pass and the glass-wall pass). Now the floor build leaves it out (`build.ts` `FloorGeometry.racks`), and the viewer gives each rack its gear as one mesh plus one set of edges (`buildRackGear`).
+- **Full detail only near the camera.** Further away, each piece of gear is one plain box in its biggest front part's colour, about 12 triangles a piece ("slab", `furniture.ts gearSlab`). The full detail is built the first time the camera comes within 6 m (3.6 m on the tablet level) and kept until the next rebuild. It turns back into slabs past 7 m (4.2 m on the tablet level). The distances are constants in `viewer/rack-lod.ts`. The status LEDs (#119) are unchanged and show on both.
+- **Taps** hit the gear mesh as part of the rack, so the gear under the tap still opens (`pick`, `furnitureAt`).
+- **Part limits** are unchanged. Gear stays as separate pack items, each under the 60-part cap. A rack holds at most 60 slots. In slab form a full rack costs about 12 triangles per slot, however detailed its gear's recipes are.
+
+### Method
+
+- **Browser:** headless Edge (Chromium) through puppeteer on the same desktop: RTX 3080 over D3D11, a 1280 x 800 page at DPR 1 and a 1224 x 680 canvas. This time **real CPU throttling** was used (DevTools `Emulation.setCPUThrottlingRate` 4x), not the 1x times multiplied by 4.
+- **Plan:** a local harness plan with 5 rooms, 60 ordinary items, a **42U floor cabinet holding 40 devices** and a **9U wall cabinet holding 6**. The devices are real `theovencook.it/network` ids (#117): UDM Pro Max, USW Pro 48 / Max 48 / HD 24 / XG 24, UNVR (Pro), servers, NAS units, UPSs, PDUs (two 0U lanes), patch, brush and blanking panels, cable managers, two half-width units side by side, and one rear-face panel. Half of the slots are linked, so they get LEDs. `rackMisfits` was empty for both racks.
+- **Measures**, as in #97: floor build (`buildFloorGeometry`, 15 times), the whole `setBuilding` rebuild (8 times), and frame time as one `render()` plus a 1-pixel `readPixels`, 40 frames after 15 warm-up frames. Frames were taken near the rack (1.6 m), mid-room (5.7 m) and from across the house (20 m). Draw calls and triangles come from `renderer.info`. Also measured: a 3D tap on the rack (`pick` + `rackHit`, 30 times), a 3D selection plus a frame (20 times), and the editor selection with 3D beside on (a press on the rack in the plan, timed to the updated panel painted, 20 presses alternating with a sofa). Each run was repeated 3 times at 1x and 2 times at 4x. The tables show **median / worst**.
+- An "empty racks" plan (the same racks with no gear) gives the floor's own cost.
+
+### Results at 1x
+
+| Measure | Empty racks | Before | After |
+|---|---|---|---|
+| Floor build | 6.0 / 23 ms | 12.7 / 32 ms | **6.4 / 23 ms** |
+| `setBuilding` (whole rebuild) | 10.9 / 19 ms | 15.5 / 28 ms | **11.6 / 22 ms** |
+| First approach (detail built once) | - | - | 7.3 ms |
+| Triangles drawn, near / far | 13,546 | 27,974 / 27,974 | **20,898 / 14,390** |
+| Draw calls, near / far | 8 / 10 | 9 / 11 | 13 / 15 |
+| Frame near the rack | 0.5 / 1.0 ms | 0.5 / 2.4 ms | 0.7 / 1.9 ms |
+| Frame from across the house | 0.5 / 0.8 ms | 0.5 / 3.6 ms | 0.5 / 1.6 ms |
+| 3D tap on the rack | 0.2 / 2.5 ms | 0.5 / 2.5 ms | 0.3 / 2.9 ms |
+| 3D selection + frame | 2.4 / 7.0 ms | 2.5 / 7.7 ms | 2.3 / 8.6 ms |
+| Editor: select the rack | 6.6 / 12 ms | 13.3 / 30 ms | 13.6 / 27 ms |
+| Editor: select another item | 6.5 / 54 ms | 6.8 / 43 ms | 6.8 / 39 ms |
+
+### Results at 4x CPU throttling
+
+| Measure | Before | After |
+|---|---|---|
+| Floor build | 60 / 170 ms | **32 / 124 ms** |
+| `setBuilding` (whole rebuild) | 78 / 127 ms | **58 / 122 ms** |
+| First approach (detail built once) | - | 29 ms |
+| Frame near the rack | 2.2 to 4.2 / 8.3 ms | 1.4 to 2.4 / 3.8 ms |
+| Frame from across the house | 1.9 to 2.2 / 4.7 ms | 1.3 to 2.1 / 3.0 ms |
+| 3D tap on the rack | 2.5 / 13 ms | 1.5 / 12 ms |
+| 3D selection + frame | 7.0 / 14 ms | 5.6 / 11 ms |
+| Editor: select the rack | 76 / 150 ms | 77 / 163 ms |
+| Editor: select another item | 37 / 275 ms | 38 / 240 ms |
+
+### Findings
+
+- **Build:** the 46 devices now add about 0.4 ms at 1x to the floor build and to every rebuild (before: 6.7 ms at 1x; at 4x a floor build went from 60 to 32 ms). That cost is paid on every 3D-beside rebuild after an edit (#97 over-budget item 3). The detail costs about 7 ms at 1x (29 ms at 4x) once, when the camera first comes near.
+- **GPU:** from across the house the full rack draws 844 triangles instead of 14,428, about 6% of before. Near it, the detail is 7,350 triangles, about half of before, because the walls' glass pass no longer draws it a second time. Each rack adds 2 draw calls (its gear and its edges). On a desktop GPU the frame time doesn't change in a way that can be measured (well under 1 ms either way). The tablet's GPU can't be measured from here.
+- **Selection:** the 3D tap and 3D selection are unchanged. Selecting the rack in the editor stays about 2x an ordinary item (13 ms against 7 ms at 1x, 77 ms against 38 ms at 4x), before and after. That cost is the item panel: the rack's form and its front elevation SVG (#115/#119). It is not the 3D, and it is a candidate for its own ticket.
+- **Hot path:** the floor build (`buildFloorGeometry`) and the 3D frame (`updateRackDetail` runs before every frame, a few distance checks per rack).
+
+### Not measured (still to measure)
+
+- A real wall tablet and its GPU, and the live Home with a real rack:.
+- How the slab looks against the detail at the switch distance: checked by eye in the harness on the desktop only.

@@ -8,7 +8,7 @@ import type { Furniture, Vec2 } from "../model.ts";
 import { builtinBase, gangsOf, stairPlan, stairsULayout, STAIR_WINDERS, POOL_VALVE_Y } from "../model.ts";
 import { isRobotVacuum, mountBase, packItem, packMotion, packMovingPart, packRobotCentre, packRobotPart, packScreen, type PackItem, type PackMotion, type PackPart } from "../packs.ts";
 import { fitParts } from "../pack-scale.ts";
-import { rackLayout, rackMarks, readRackFrame } from "../rack-frame.ts";
+import { rackLayout, rackMarks, readRackFrame, type RackLayout } from "../rack-frame.ts";
 import { rackContents, rackLedSpot } from "../rack.ts";
 import { COLOUR_ROLES, roleColour, type RoleColours } from "../colour-roles.ts";
 import { materialId, roleMaterial, type RoleMaterials } from "../role-materials.ts";
@@ -1741,11 +1741,14 @@ function contactShadow(shadow: GeoBuffer, tf: Tf, w: number, d: number, strength
   if (tfMirrors(tf)) flipWinding(shadow, s0);
 }
 
-/** `still`: a picture of the item (a preview), so a pack's robot vacuum keeps its robot instead of driving it (#645). */
-export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Furniture, base = 0, still = false): void {
+/**
+ * `still`: a picture of the item (a preview), so a pack's robot vacuum keeps its robot instead of driving it (#645).
+ * `gear`: false leaves a rack's gear out (#121: the viewer draws it on its own with pushRackGear, near or far).
+ */
+export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Furniture, base = 0, still = false, gear = true): void {
   // a mirrored item needs no rewinding here: boxes, lofts and upright cylinders wind themselves (ccw),
   // lying cylinders and the contact shadow rewind themselves when the transform mirrors (#159)
-  withColours(buf, f, () => pushUpright(buf, lines, shadow, f, base, still));
+  withColours(buf, f, () => pushUpright(buf, lines, shadow, f, base, still, gear));
 }
 
 /** Swap the second and third vertex of every triangle from `from` on (positions, colours, folds, uvs, tiles). */
@@ -1770,12 +1773,12 @@ export function flipWinding(buf: GeoBuffer, from: number): void {
   }
 }
 
-function pushUpright(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Furniture, base: number, still = false): void {
+function pushUpright(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Furniture, base: number, still = false, gear = true): void {
   // pack items place their parts at `base` themselves; built-in models are drawn on the floor and
   // lifted as a whole (a dryer on the washer, a shelf on the wall), without a shadow on the floor
   // the mount height is absolute: a wall cabinet drawn at 1.45 m moves by the difference (up or down)
   const lift = packItem(f.type) ? 0 : base - builtinBase(f);
-  if (packItem(f.type) || Math.abs(lift) < 0.001) return buildFurniture(buf, lines, shadow, f, base, still);
+  if (packItem(f.type) || Math.abs(lift) < 0.001) return buildFurniture(buf, lines, shadow, f, base, still, gear);
   const p0 = buf.p.length;
   const l0 = lines.p.length;
   const s0 = shadow.p.length;
@@ -1786,7 +1789,7 @@ function pushUpright(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Fu
   if (base < 0) for (let i = s0 + 1; i < shadow.p.length; i += 3) shadow.p[i] += lift;
 }
 
-function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Furniture, base: number, still = false): void {
+function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Furniture, base: number, still = false, gear = true): void {
   const a = f.rotation * DEG;
   const c = Math.cos(a);
   const s = Math.sin(a);
@@ -2042,7 +2045,7 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
         const skip = motion ? (p: PackPart) => packMovingPart(motion, p) : isRobotVacuum(f.type) && !still ? packRobotPart : null;
         packModel(b, item, w, d, h, base, null, null, skip);
         // a rack (#112): ticks on its front rails at every U, and its gear (#113)
-        if (item.rack_frame) rackModel(b, item, f, w, d, h, base);
+        if (item.rack_frame) rackModel(b, item, f, w, d, h, base, gear);
         // items on furniture, walls or ceilings cast no shadow on the floor
         if (base > 0.05) return;
       } else b.box(-w / 2, w / 2, 0, h, -d / 2, d / 2, C.body, C.bodyTop, EDGE_FURN);
@@ -2053,17 +2056,76 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
 
 /**
  * The U marks of a pack rack (rack-frame.ts) at its placed size and the gear in its slots (#113, rack.ts), each drawn
- * from its own recipe (the plan's copy) at its U; nothing for a rack frame that breaks the rules.
+ * from its own recipe (the plan's copy) at its U; nothing for a rack frame that breaks the rules. `gear`: false leaves
+ * the gear out (#121).
  */
-function rackModel(b: Builder, item: PackItem, f: Furniture, w: number, d: number, h: number, base: number): void {
+function rackModel(b: Builder, item: PackItem, f: Furniture, w: number, d: number, h: number, base: number, gear = true): void {
   const frame = readRackFrame(item);
   if (!frame) return;
   const at = rackLayout(frame, w, d, h);
   for (const m of rackMarks(at)) b.box(m.x0, m.x1, base + m.y0, base + m.y1, m.z0, m.z1, C.accent, C.accent);
+  if (gear) rackGear(b, f, at, base, true);
+}
+
+/**
+ * The gear in a rack's slots (rack-local, `at` = rackLayout at the placed size): `detail` every part of every piece
+ * from its recipe, else one plain box per piece (gearSlab, #121: a rack seen from afar).
+ */
+function rackGear(b: Builder, f: Pick<Furniture, "rack">, at: RackLayout, base: number, detail: boolean): void {
   const slots = f.rack?.slots;
   if (!slots?.length) return;
-  // rear-face gear is turned round (#114), its front to the rack's back
-  for (const g of rackContents(at, slots, packItem)) packModel(g.back ? b.moved(g.x, g.z).rotated(0, 0, 180) : b.moved(g.x, g.z), g.item, g.w, g.d, g.h, base + g.y, null);
+  for (const g of rackContents(at, slots, packItem)) {
+    // rear-face gear is turned round (#114), its front to the rack's back
+    const gb = g.back ? b.moved(g.x, g.z).rotated(0, 0, 180) : b.moved(g.x, g.z);
+    if (detail) packModel(gb, g.item, g.w, g.d, g.h, base + g.y, null);
+    else gearSlab(gb, g.item, g.w, g.d, g.h, base + g.y);
+  }
+}
+
+/**
+ * One box over the space a piece of gear's parts fill (#121), in the colours of its biggest part seen from the front,
+ * with faint edges: about 12 triangles a piece, whatever its recipe holds.
+ */
+function gearSlab(b: Builder, item: PackItem, w: number, d: number, h: number, base: number): void {
+  const parts = fitParts(item, w, d, h);
+  if (!parts.length) return;
+  const box = [Infinity, -Infinity, Infinity, -Infinity, Infinity, -Infinity];
+  const reach = (k: number, ...v: number[]) => {
+    box[k] = Math.min(box[k], ...v);
+    box[k + 1] = Math.max(box[k + 1], ...v);
+  };
+  let face = parts[0];
+  for (const p of parts) {
+    // a turned part may reach anywhere in the piece: it counts as the whole piece; a loft's top may stick out
+    const loft = p.shape === "loft";
+    if (p.rot) reach(0, -0.5, 0.5);
+    else reach(0, p.x - p.w / 2, p.x + p.w / 2, ...(loft ? [(p.tx ?? p.x) - (p.tw ?? p.w) / 2, (p.tx ?? p.x) + (p.tw ?? p.w) / 2] : []));
+    if (p.rot) reach(2, -0.5, 0.5);
+    else reach(2, p.z - p.d / 2, p.z + p.d / 2, ...(loft ? [(p.tz ?? p.z) - (p.td ?? p.d) / 2, (p.tz ?? p.z) + (p.td ?? p.d) / 2] : []));
+    reach(4, p.y, p.y + p.h);
+    if (p.w * p.h > face.w * face.h) face = p;
+  }
+  const side = packColor(face.color, false) ?? C.body;
+  const top = packColor(face.top, false) ?? packColor(face.color, true) ?? shade(side, 1.25).getHex();
+  b.box(box[0] * w, box[1] * w, base + box[4] * h, base + Math.min(h, box[5] * h), box[2] * d, box[3] * d, side, top, EDGE_FAINT);
+}
+
+/**
+ * A placed rack's gear on its own (#121), placed and turned with the rack: `detail` exactly as pushFurniture draws it
+ * inside the rack, else one slab per piece (gearSlab). The viewer keeps each in a mesh of its own per rack and shows the
+ * detail only near the camera (rack-lod.ts).
+ */
+export function pushRackGear(buf: GeoBuffer, lines: LineBuffer, f: Furniture, base: number, detail: boolean): void {
+  const item = packItem(f.type);
+  const frame = item ? readRackFrame(item) : null;
+  if (!frame || !f.rack?.slots?.length) return;
+  const a = f.rotation * DEG;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const mx = f.mirror ? -1 : 1;
+  const b = new Builder(buf, lines, (x, z) => [f.x + mx * x * c - z * s, f.z + mx * x * s + z * c]);
+  const at = rackLayout(frame, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h));
+  withColours(buf, f, () => rackGear(b, f, at, base, detail));
 }
 
 /**
