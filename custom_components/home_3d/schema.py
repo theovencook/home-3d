@@ -932,8 +932,8 @@ SETTINGS_SCHEMA = vol.Schema(
         # warnings name the device after the room
         vol.Optional("alert_names", default=True): bool,
         vol.Optional("alert_unavailable", default=False): bool,
-        # warnings dismissed from the 3D view's banner (#138): "for now" until the warning clears (the 3D view of an
-        # editor removes the entry then), "for good" for one entity and kind; a safety kind is never ignored for good
+        # warnings dismissed from the 3D view's banner (#138): "for now" while the same activation stands (began at or
+        # before `at`; an editor's 3D view tidies spent ones), "for good" for one entity and kind (never a safety kind)
         vol.Optional("alert_snoozed", default=list): vol.All(
             [
                 vol.Schema(

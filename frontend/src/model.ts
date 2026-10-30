@@ -821,8 +821,8 @@ export interface BuildingSettings {
    */
   alert_unavailable?: boolean;
   /**
-   * Warnings dismissed "for now" from the banner (#138): hidden until the warning clears, then removed so it fires again.
-   * `at`: when it was dismissed (ms).
+   * Warnings dismissed "for now" from the banner (#138): hidden while the same activation stands (it began at or before `at`);
+   * one that fired again shows. `at`: when it was dismissed (ms, never before the warning began).
    */
   alert_snoozed?: { kind: string; entity: string; at: number }[];
   /** Warnings ignored "for good" (#138): this entity never raises this kind of warning; never a safety kind (smoke, CO, gas, water, alarm). */

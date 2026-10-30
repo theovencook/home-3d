@@ -570,8 +570,6 @@ export class Fp3dView3d extends LitElement {
   /** When the next camera that saw motion turns back from red. */
   private redTimer: ReturnType<typeof setTimeout> | undefined;
   private seenAlerts = new Set<string>();
-  /** "For now" dismissals (snooze keys) this view saw their warning clear for: spent here even before an editor's view removes them (#138). */
-  private spentSnoozes = new Set<string>();
   /** A room briefly lit up after a double tap switched its lights. */
   private roomFlash: { roomId: string; until: number } | null = null;
   /** Scene and script chips of the selected room. */
@@ -1342,9 +1340,9 @@ export class Fp3dView3d extends LitElement {
     const modulesOn = this.alerts && anyModule();
     const fromModules = modulesOn ? moduleAlerts(this.sceneHost(hass, b)).map((a) => ({ kind: a.kind, entity: a.entity, roomId: a.roomId, floorId: a.floorId, text: a.text, color: a.color, quiet: !a.roomId })) : [];
     const active = [...own, ...fromModules];
-    if (this.alertSrc) this.tidySnoozes(hass, b, active, modulesOn);
+    if (this.alertSrc) this.tidySnoozes(b, active, modulesOn);
     // dismissed warnings stay out of the banner, the rooms' pulse, the director and the voice answers (#138)
-    this.setAlerts(shownAlerts(active, b.settings, this.ro ? undefined : this.spentSnoozes));
+    this.setAlerts(shownAlerts(active, b.settings));
     // Haushalt Pro: an open fridge door warns once it stood open too long – look again at that moment
     clearTimeout(this.fridgeTimer);
     const fridgeWait = hasFeature("household") && !this.replay ? nextFridgeCheck(b.floors.flatMap((f) => f.furniture), hass) : null;
@@ -2806,16 +2804,14 @@ export class Fp3dView3d extends LitElement {
   }
 
   /**
-   * "For now" dismissals end when their warning clears (#138): this view stops honouring them at once, and an editor's
-   * live view also takes them out of the plan, so every screen (a wall tablet without edit rights too) shows the warning
-   * again the next time it fires. Never while replaying; a module's warning only while the modules report.
+   * Tidying only (#138): an editor's live view takes spent "for now" dismissals (their warning cleared, or fired again)
+   * out of the plan. Whether a warning shows never depends on it (shownAlerts compares the activation's start with the
+   * dismissal). Never while replaying; a module's warning only while the modules report.
    */
-  private tidySnoozes(hass: HomeAssistant, b: Building, active: Alert[], modulesOn: boolean): void {
-    if (this.ro) return;
-    const done = clearedSnoozes(b.settings.alert_snoozed, active, hass).filter((s) => modulesOn || HOUSE_ALERTS.has(s.kind));
+  private tidySnoozes(b: Building, active: Alert[], modulesOn: boolean): void {
+    if (this.ro || !this.mayEdit) return;
+    const done = clearedSnoozes(b.settings.alert_snoozed, active).filter((s) => modulesOn || HOUSE_ALERTS.has(s.kind));
     if (!done.length) return;
-    for (const s of done) this.spentSnoozes.add(snoozeKey(s));
-    if (!this.mayEdit) return;
     const gone = new Set(done.map(snoozeKey));
     this.setPlanSettings({ alert_snoozed: (b.settings.alert_snoozed ?? []).filter((s) => !gone.has(snoozeKey(s))) });
   }

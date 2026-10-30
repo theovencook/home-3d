@@ -9,7 +9,7 @@ for (const k of ["VIEWER", "EDITOR", "LOCATE", "ITEMS", "LANG", "PLAN2D", "FUN",
 (globalThis as Record<string, unknown>).__FP3D_VERSION__ = "test";
 const { Fp3dView3d } = await import("./view3d.ts");
 
-// "for now" dismissals leave the plan once their warning clears – written by an editor's live view only (#138)
+// spent "for now" dismissals leave the plan (tidying only) – written by an editor's live view only (#138)
 
 const ENTITY = "binary_sensor.sample_window";
 const contact: Alert = { kind: "contact_unavailable", entity: ENTITY, roomId: "k", floorId: "f" };
@@ -19,9 +19,8 @@ type View = {
   hass: HomeAssistant;
   canEdit?: boolean;
   replay: unknown;
-  tidySnoozes(hass: HomeAssistant, b: Building, active: Alert[], modulesOn: boolean): void;
+  tidySnoozes(b: Building, active: Alert[], modulesOn: boolean): void;
   dismiss(a: Alert, forGood: boolean): void;
-  spentSnoozes: Set<string>;
 };
 
 function view(state: string, canEdit: boolean, replay: unknown = null) {
@@ -43,38 +42,35 @@ function view(state: string, canEdit: boolean, replay: unknown = null) {
 }
 
 test("an editor's view takes a cleared warning's snooze out of the plan", () => {
-  const { el, hass, b, saved } = view("off", true);
-  el.tidySnoozes(hass, b, [], false);
+  const { el, b, saved } = view("off", true);
+  el.tidySnoozes(b, [], false);
   assert.equal(saved.length, 1);
   assert.deepEqual(saved[0].settings.alert_snoozed, []);
   assert.deepEqual(el.building.settings.alert_snoozed, []);
 });
 
 test("while the warning stands nothing is written", () => {
-  const { el, hass, b, saved } = view("unavailable", true);
-  el.tidySnoozes(hass, b, [contact], false);
+  const { el, b, saved } = view("unavailable", true);
+  el.tidySnoozes(b, [{ ...contact, since: 500 }], false);
   assert.equal(saved.length, 0);
-  assert.equal(el.spentSnoozes.size, 0);
 });
 
-test("a view without edit rights never writes, but stops honouring the spent snooze itself", () => {
-  const { el, hass, b, saved } = view("off", false);
-  el.tidySnoozes(hass, b, [], false);
+test("a view without edit rights never writes", () => {
+  const { el, b, saved } = view("off", false);
+  el.tidySnoozes(b, [], false);
   assert.equal(saved.length, 0);
-  assert.equal(el.spentSnoozes.size, 1);
 });
 
-test("time travel neither writes nor spends a snooze", () => {
-  const { el, hass, b, saved } = view("off", true, { t: 0 });
-  el.tidySnoozes(hass, b, [], false);
+test("time travel never writes", () => {
+  const { el, b, saved } = view("off", true, { t: 0 });
+  el.tidySnoozes(b, [], false);
   assert.equal(saved.length, 0);
-  assert.equal(el.spentSnoozes.size, 0);
 });
 
 test("a module's warning is kept snoozed while the modules do not report", () => {
-  const { el, hass, b, saved } = view("off", true);
+  const { el, b, saved } = view("off", true);
   b.settings.alert_snoozed = [{ kind: "pool_ph", entity: ENTITY, at: 1 }];
-  el.tidySnoozes(hass, b, [], false);
+  el.tidySnoozes(b, [], false);
   assert.equal(saved.length, 0);
 });
 
