@@ -546,7 +546,7 @@ export const de: Record<I18nKey, string> = {
   view_settings_admin: "Nur Administratoren können diese Einstellungen ändern – sie gelten für das ganze Haus.",
   view_settings_look: "Darstellung",
   view_settings_alerts: "Warnungen",
-  view_settings_more: "Alle weiteren Einstellungen findest du im Editor unter ⚙ Einstellungen.",
+  view_settings_more: "Alle weiteren Einstellungen findest du auf der Seite Einstellungen (⚙ oben).",
   lines_add: "Hinzufügen",
   lines_new: "Neuer Eintrag …",
   sheet_mic: "Sprechen",

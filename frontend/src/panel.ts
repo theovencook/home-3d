@@ -391,6 +391,7 @@ export class Floorplan3dPanel extends LitElement {
   private readonly onOpenSettings = (e: Event) => {
     const d = (e as CustomEvent<{ section?: string | null; id?: string | null }>).detail ?? {};
     e.stopPropagation();
+    e.preventDefault();
     this.openSettings(d.section ?? null, d.id ?? null);
   };
 
@@ -727,6 +728,7 @@ export class Floorplan3dPanel extends LitElement {
     super.connectedCallback();
     window.addEventListener("keydown", this.onKey);
     window.addEventListener("hashchange", this.onHash);
+    window.addEventListener("location-changed", this.onHash);
     this.addEventListener("open-settings", this.onOpenSettings);
   }
 
@@ -734,6 +736,7 @@ export class Floorplan3dPanel extends LitElement {
     super.disconnectedCallback();
     window.removeEventListener("keydown", this.onKey);
     window.removeEventListener("hashchange", this.onHash);
+    window.removeEventListener("location-changed", this.onHash);
     this.removeEventListener("open-settings", this.onOpenSettings);
     this.listenTouches(false);
     this.tt.stop();
@@ -954,6 +957,7 @@ export class Floorplan3dPanel extends LitElement {
                 </button>
               </div>
               </section>
+              ${this.renderAllSettings("look")}
               </div>`
             : nothing}
           ${this._mode === "editor" && saveState !== "idle"
@@ -1069,6 +1073,11 @@ export class Floorplan3dPanel extends LitElement {
       @building-edit=${(e: CustomEvent<Building>) => this.editPlan(e.detail)}
       @packs-changed=${() => void this.data.reloadPacks()}
     ></fp3d-extensions>`;
+  }
+
+  /** "All settings" at the foot of a quick menu (#139): opens the Settings page at that section. */
+  private renderAllSettings(section: string, id: string | null = null) {
+    return html`<button class="fp3d-chip fp3d-all-settings" @click=${() => this.openSettings(section, id)}>⚙ ${this.t("all_settings")} ›</button>`;
   }
 
   /** The Settings page (#139): its own bundle, loaded the first time the tab opens. */
@@ -1389,6 +1398,7 @@ export class Floorplan3dPanel extends LitElement {
           >
             ${hasFeature("weather") ? "" : "🔒 "}${this.t("weather_short")}
           </button>
+          ${this._tablet ? nothing : this.renderAllSettings("look", "walls")}
                   </div>`
               : nothing}
           </div>
@@ -1426,6 +1436,14 @@ export class Floorplan3dPanel extends LitElement {
     tokens,
     controls,
     css`
+      .fp3d-all-settings {
+        justify-self: start;
+        align-self: flex-start;
+        color: var(--fp3d-accent);
+        box-shadow: none;
+        background: none;
+        padding-left: 4px;
+      }
       .fp3d-badge {
         display: inline-block;
         margin-left: 6px;

@@ -1005,10 +1005,52 @@ const ACCESS: Setting[] = [
 
 const BACKUP: Setting[] = [embedded("backup", "backup", "backup", "backup", "backup", undefined, ["restore", "export", "import", "file", "history"])];
 
+const opts = (pairs: [string, TextKey][]): Option[] => pairs.map(([value, label]) => ({ value, label }));
+
+/** This device's look and what its 3D view shows (the ⚙ View menu and the Show chip keep the quick ones). */
+const LOOK: Setting[] = [
+  deviceChoice("theme", "look", "look", "theme", ["theme", "neon", "blueprint", "day", "realistic", "auto"], "theme", "theme", opts([["theme", "theme_theme"], ["neon", "theme_neon"], ["blueprint", "theme_blueprint"], ["day", "theme_day"], ["realistic", "theme_realistic"], ["auto", "theme_auto"]]), undefined, ["dark", "light", "day", "night", "neon", "theme", "colour scheme"], "select"),
+  {
+    id: "accent",
+    section: "look",
+    card: "look",
+    scope: "device",
+    permission: "everyone",
+    label: "accent",
+    hint: "accent_hint",
+    keywords: ["colour", "color", "cyan", "highlight"],
+    control: { kind: "colour", fallback: "#37e0ff", clearable: true },
+    default: null,
+    prefKeys: ["accent"],
+    read: (env) => {
+      const v = env.prefs.get("accent");
+      return v && /^#[0-9a-f]{6}$/i.test(v) ? v : null;
+    },
+    write: (env, v) => env.prefs.set("accent", v),
+  } as Setting<string | null>,
+  deviceChoice("quality", "look", "look", "quality", ["auto", "low", "high"], "auto", "quality", opts([["auto", "quality_auto"], ["low", "quality_low"], ["high", "quality_high"]]), undefined, ["performance", "tablet", "speed", "graphics"]),
+  deviceChoice("clock", "look", "look", "clock", ["off", "tl", "tr", "bl", "br"], "off", "st_clock", opts([["off", "st_clock_off"], ["tl", "st_clock_tl"], ["tr", "st_clock_tr"], ["bl", "st_clock_bl"], ["br", "st_clock_br"]]), undefined, ["time", "clock", "corner"], "select"),
+  deviceChoice("markers", "look", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), undefined, ["pins", "icons", "symbols", "devices"]),
+  deviceChoice("pinSize", "look", "markers", "pinSize", ["small", "normal", "large"], "normal", "pin_size", opts([["small", "pin_size_small"], ["normal", "pin_size_normal"], ["large", "pin_size_large"]]), undefined, ["pins", "icons", "symbols", "size"]),
+  deviceChoice("controls", "look", "markers", "controls", ["left", "right"], "left", "controls_side", opts([["left", "st_controls_left"], ["right", "st_controls_right"]]), undefined, ["left", "right", "star", "search"]),
+  deviceSwitch("keep_view", "look", "markers", "keep_view", false, "keep_view", "keep_view_hint", ["camera", "floor"]),
+  deviceSwitch("angle_lock", "look", "markers", "angle_lock", false, "angle_lock", "angle_lock_hint", ["lock", "turn", "rotate"]),
+  deviceSwitch("nav_wrap", "look", "markers", "nav_wrap", false, "st_nav_wrap", undefined, ["floors", "rooms", "bar", "chips"]),
+  deviceSwitch("plan2d", "look", "show", "plan2d", false, "st_view_2d", undefined, ["2d", "plan", "flat"]),
+  deviceChoice("walls", "look", "show", "walls", ["auto", "cut"], "auto", "st_walls", opts([["auto", "walls_auto"], ["cut", "walls_cut"]]), undefined, ["walls", "cut", "tall"]),
+  deviceChoice("explode", "look", "show", "explode", ["1", "0"], "1", "st_floors", opts([["1", "floors_apart"], ["0", "floors_stacked"]]), undefined, ["floors", "apart", "stacked", "explode"]),
+  deviceChoice("floor_stack", "look", "show", "floor_stack", ["dim", "stacked", "single"], "dim", "st_floor_stack", opts([["dim", "floor_stack_short_dim"], ["stacked", "floor_stack_short_stacked"], ["single", "floor_stack_short_single"]]), undefined, ["floors", "below", "dimmed"]),
+  deviceSwitch("roof", "look", "show", "roof", false, "st_keep_roof", "roof_keep_hint", ["roof", "zoom"]),
+  deviceChoice("heat", "look", "show", "heat", ["none", "temperature", "humidity", "co2", "values"], "none", "st_heat", opts([["none", "heat_off"], ["temperature", "heat_short_temperature"], ["humidity", "heat_short_humidity"], ["co2", "heat_short_co2"], ["values", "heat_short_values"]]), undefined, ["heatmap", "temperature", "humidity", "co2"]),
+  deviceSwitch("room_names", "look", "show", "room_names", true, "st_room_names", undefined, ["labels", "names", "rooms"]),
+  deviceSwitch("trail", "look", "show", "trail", false, "st_trail", "trail_hint", ["motion", "trail", "history"]),
+  deviceSwitch("weather", "look", "show", "weather", true, "st_weather", "weather_hint", ["rain", "snow", "weather"]),
+];
+
 const ADVANCED: Setting[] = [houseSwitch("demo", "advanced", "advanced", "demo", false, "demo_states", "st_demo_hint", ["sample", "screenshot", "fake"])];
 
 /** Every setting, in the order the page shows them. */
-export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...VOICE, ...ACCESS, ...BACKUP, ...ADVANCED] as Setting[];
+export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...VOICE, ...ACCESS, ...BACKUP, ...ADVANCED] as Setting[];
 
 // ---------------------------------------------------------------------------------------------------- queries
 

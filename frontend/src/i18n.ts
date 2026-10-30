@@ -544,7 +544,7 @@ const en = {
   view_settings_admin: "Only administrators can change these settings – they apply to the whole house.",
   view_settings_look: "Look",
   view_settings_alerts: "Warnings",
-  view_settings_more: "Every other setting is in the editor under ⚙ Settings.",
+  view_settings_more: "Every other setting is on the Settings page (⚙ tab at the top).",
   lines_add: "Add",
   lines_new: "New entry …",
   sheet_mic: "Speak",

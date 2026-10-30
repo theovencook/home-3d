@@ -5702,6 +5702,20 @@ export class Fp3dView3d extends LitElement {
         ${effectFields(hass, st.effects, !admin, (effects) => this.setPlanSettings({ effects }))}
         ${modules.map((fields) => html`<div class="fp3d-set-module">${fields.map((f) => this.renderViewField(hass, f, admin))}</div>`)}
         <p class="fp3d-set-note">${t("view_settings_more")}</p>
+        <button
+          class="fp3d-btn"
+          @click=${() => {
+            this._settingsOpen = false;
+            // the panel opens its Settings tab (#139); a dashboard card has no panel around it: go to the panel's page
+            const asked = new CustomEvent("open-settings", { detail: { section: null, id: null }, bubbles: true, composed: true, cancelable: true });
+            if (this.dispatchEvent(asked)) {
+              history.pushState(null, "", "/home_3d#settings");
+              window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+            }
+          }}
+        >
+          ⚙ ${t("all_settings")} ›
+        </button>
       </div>`;
   }
 
