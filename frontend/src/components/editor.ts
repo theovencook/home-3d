@@ -3171,6 +3171,8 @@ export class Fp3dEditor extends LitElement {
       return;
     }
     if (!this.isConnected || !this.offsetParent) return;
+    // an entity picker with its list open has the keyboard, even when a press beside its box took the focus (#132)
+    if (this.pickerOpen()) return;
     // '?' shows the help (#95); while it is open no key edits the plan behind it, and Esc closes it first
     if (isHelpKey(e)) {
       e.preventDefault();
@@ -3242,6 +3244,12 @@ export class Fp3dEditor extends LitElement {
       this.escape();
     }
   };
+
+  /** Whether one of the side panel's entity pickers shows its list (#132). */
+  private pickerOpen(): boolean {
+    const pickers = (this.renderRoot as ShadowRoot | undefined)?.querySelectorAll?.("fp3d-entity-picker") ?? [];
+    return [...pickers].some((p) => (p as unknown as { open?: boolean }).open);
+  }
 
   /** One step back per Escape (#70): the box with the cursor, a menu, a pipe or outline, the item, the tool, the room. */
   private escape(): void {
@@ -12051,7 +12059,22 @@ export class Fp3dEditor extends LitElement {
       <p class="fp3d-sub fp3d-wide">${this.t("energy_wire_sensor_hint")}</p>`;
   }
 
-  private entitySelect(label: string, value: string | null, auto: string | null | undefined, options: { id: string; label: string }[], onChange: (v: string | null) => void) {
+  /** The HA area of what the side panel edits (#132): the room an item stands in, else the chosen room's. */
+  private pickerArea(): string | null {
+    const f = this.furnitureItem;
+    const roomId = f ? (this.roomAt([f.x, f.z]) ?? this._roomId) : this._roomId;
+    return (roomId && this.floor?.rooms.find((r) => r.id === roomId)?.area_id) || null;
+  }
+
+  /** `domains`: the link's likely entity domains, best first (#132); with the room's area they lead the list. */
+  private entitySelect(
+    label: string,
+    value: string | null,
+    auto: string | null | undefined,
+    options: { id: string; label: string }[],
+    onChange: (v: string | null) => void,
+    domains: readonly string[] = [],
+  ) {
     const autoLabel =
       auto === undefined ? null : auto ? this.t("entity_auto", { name: entityName(this.hass, auto) }) : this.t("entity_auto_none");
     // searchable picker: the fixed choices (automatic, none) first, then the entities filtered as you type
@@ -12063,6 +12086,7 @@ export class Fp3dEditor extends LitElement {
         .options=${options}
         .fixed=${fixed}
         .value=${current}
+        .prefer=${{ area: this.pickerArea(), domains }}
         .placeholder=${this.t("entity_search")}
         ?disabled=${!this.isEditor}
         @change=${(e: CustomEvent<{ value: string }>) => {
