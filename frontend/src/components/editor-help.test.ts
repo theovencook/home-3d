@@ -105,6 +105,7 @@ test("the help lists every shortcut of the shortcut table and every legend entry
   for (const l of LEGEND) assert.ok(shown.includes(translate(hass, l.text)), `legend "${l.text}" is listed`);
   assert.ok(LEGEND.some((l) => l.mark === "swing"), "the orange dashed door swing is explained");
   assert.ok(SHORTCUTS.some((s) => s.keys.includes("?")), "the help names its own key");
+  for (const k of ["Ctrl+C", "Ctrl+V", "Ctrl+A"]) assert.ok(SHORTCUTS.some((s) => s.keys.includes(k)), `copy/paste key ${k} is listed (#74)`);
 });
 
 test("a door's dashed swing is drawn only while that door is selected, with a tooltip (#95)", () => {

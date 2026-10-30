@@ -5,7 +5,7 @@
  * the Name box no longer sits where the library's search box was (a search typed there renamed the item).
  */
 
-export type FurnitureField = "x" | "z" | "w" | "d" | "h" | "rotation" | "mirror" | "strip" | "mount" | "name" | "show_name" | "aliases" | "type";
+export type FurnitureField = "x" | "z" | "w" | "d" | "h" | "rotation" | "mirror" | "strip" | "mount" | "name" | "show_name" | "aliases" | "type" | "floor";
 
 export interface FurnitureFieldNeeds {
   /** It can be mirrored (lamps can't). */
@@ -14,9 +14,11 @@ export interface FurnitureFieldNeeds {
   strip: boolean;
   /** It can hang higher up (a height above the floor). */
   lift: boolean;
+  /** The home has more than one floor: a dropdown moves the item to another one (#73). */
+  floors?: boolean;
 }
 
-const ORDER: readonly FurnitureField[] = ["x", "z", "rotation", "w", "d", "h", "mount", "mirror", "strip", "name", "show_name", "aliases", "type"];
+const ORDER: readonly FurnitureField[] = ["x", "z", "rotation", "w", "d", "h", "mount", "mirror", "strip", "name", "show_name", "aliases", "type", "floor"];
 
 /** The position fields, pinned in a header at the top of the panel while it scrolls (#71). */
 export const FURNITURE_HEAD: readonly FurnitureField[] = ["x", "z", "rotation"];
@@ -32,5 +34,5 @@ export function furniturePanel(needs: FurnitureFieldNeeds): { head: FurnitureFie
 
 /** The item panel's fields for an item, top to bottom. */
 export function furnitureFields(needs: FurnitureFieldNeeds): FurnitureField[] {
-  return ORDER.filter((f) => (f === "mirror" ? needs.mirror : f === "strip" ? needs.strip : f === "mount" ? needs.lift : true));
+  return ORDER.filter((f) => (f === "mirror" ? needs.mirror : f === "strip" ? needs.strip : f === "mount" ? needs.lift : f === "floor" ? !!needs.floors : true));
 }
