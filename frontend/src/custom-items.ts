@@ -207,30 +207,45 @@ export function itemFile(item: CustomItem): { name: string; text: string } {
 /** Why a file did not import: not JSON, not an item, or the pack.json of a pack folder. */
 export type ItemFileError = "not_json" | "not_an_item" | "pack_file";
 
-/**
- * An item file read for import, its id made free when a custom item already has it (the backend checks the rest,
- * with the same schema as a pack's items).
- */
-export function readItemFile(text: string, taken: Iterable<string>): { item: CustomItem } | { error: ItemFileError } {
-  let data: unknown;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    // an LLM's answer pasted as it came: the object inside a code fence or a line of chat
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
+/** JSON as typed or pasted: the whole text, else the list or object inside it (an LLM's answer with a code fence
+ * or a line of chat around it), whichever starts first. */
+function looseJson(text: string): { data: unknown } | null {
+  const spans = ["{}", "[]"].map((p) => [text.indexOf(p[0]), text.lastIndexOf(p[1])]).filter(([s, e]) => s >= 0 && e > s);
+  spans.sort((x, y) => x[0] - y[0]);
+  for (const part of [text, ...spans.map(([s, e]) => text.slice(s, e + 1))]) {
     try {
-      data = JSON.parse(text.slice(start, end + 1));
+      return { data: JSON.parse(part) };
     } catch {
-      return { error: "not_json" };
+      // the next try
     }
   }
-  if (!data || typeof data !== "object" || Array.isArray(data)) return { error: "not_an_item" };
-  const obj = data as Record<string, unknown>;
-  if (obj.format === "home3d-pack" || obj.format === "fp3dpack") return { error: "pack_file" };
-  if (typeof obj.id !== "string" || !Array.isArray(obj.parts)) return { error: "not_an_item" };
-  const item = obj as unknown as CustomItem;
-  return { item: { ...item, id: freeId(item.id, taken) } };
+  return null;
+}
+
+/**
+ * Item files read for import (#84): one item, a list of them, or `{ "items": [...] }`, one result per item. Ids are
+ * made free when a custom item (or an earlier one in the list) already has them; the backend checks the rest, with
+ * the same schema as a pack's items.
+ */
+export function readItemFiles(text: string, taken: Iterable<string>): ({ item: CustomItem } | { error: ItemFileError })[] {
+  const read = looseJson(text);
+  if (!read) return [{ error: "not_json" }];
+  const data = read.data as Record<string, unknown> | null;
+  if (data?.format === "home3d-pack" || data?.format === "fp3dpack") return [{ error: "pack_file" }];
+  const list: unknown[] = Array.isArray(data) ? data : Array.isArray(data?.items) && !data.parts ? data.items : [data];
+  if (!list.length) return [{ error: "not_an_item" }];
+  const used = [...taken];
+  return list.map((entry) => {
+    const item = entry as CustomItem | null;
+    if (!item || typeof item !== "object" || typeof item.id !== "string" || !Array.isArray(item.parts)) return { error: "not_an_item" };
+    used.push(freeId(item.id, used));
+    return { item: { ...item, id: used[used.length - 1] } };
+  });
+}
+
+/** One item file read for import (the first item of a list). */
+export function readItemFile(text: string, taken: Iterable<string>): { item: CustomItem } | { error: ItemFileError } {
+  return readItemFiles(text, taken)[0];
 }
 
 /** The custom items as the backend offers them: one pack (custom_items.py custom_pack). */

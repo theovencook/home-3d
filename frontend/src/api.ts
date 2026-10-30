@@ -14,8 +14,13 @@ const at = (home?: string | null): { home_id?: string } => (home ? { home_id: ho
 export async function fetchBuilding(
   hass: HomeAssistant,
   home?: string | null,
-): Promise<{ building: Building; revision: number; version?: string; can_edit?: boolean; home_id?: string; home_name?: string }> {
+): Promise<{ building: Building; revision: number; version?: string; build?: string; can_edit?: boolean; home_id?: string; home_name?: string }> {
   return hass.callWS({ type: "home_3d/building/get", ...at(home) });
+}
+
+/** The integration version the backend runs and the frontend build it serves now (#60). */
+export async function fetchVersion(hass: HomeAssistant): Promise<{ version?: string; build?: string }> {
+  return hass.callWS({ type: "home_3d/version" });
 }
 
 /** Save the plan; the backend answers with its revision and the plan's recipe copies as stored (#2). */

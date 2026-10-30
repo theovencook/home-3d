@@ -6,9 +6,11 @@ import type { Furniture } from "../model.ts";
 import { DRAFT_TYPE, isPackType, packItem, setPacks, withPackItem, type FurniturePack, type PackItem } from "../packs.ts";
 import { pushFurniture, pushPackLamp } from "./furniture.ts";
 import { GeoBuffer, LineBuffer } from "./geo.ts";
+import { themed, themeIndex } from "./theme.ts";
 import { pushLampModel, type LampModel } from "./viewer3d.ts";
 
 let renderer: WebGLRenderer | null = null;
+const DAY = { value: themeIndex("day") };
 const cache = new Map<string, string>();
 
 export interface PreviewItem {
@@ -53,18 +55,18 @@ export function furniturePreview(item: PreviewItem, size = 180, packs?: Furnitur
 /**
  * The item editor's live picture (#13): an item being edited, drawn like a placed pack item at its default size,
  * seen from `yaw` degrees around it (0: from the front) and `pitch` degrees above. Not cached: it changes with
- * every edit.
+ * every edit. `light`: in the day look's colours (white parts white, dark lines) for a light background (#84).
  */
-export function itemPicture(item: PackItem, size = 320, yaw = 35, pitch = 25, brightness = 1.3): string {
+export function itemPicture(item: PackItem, size = 320, yaw = 35, pitch = 25, light = false): string {
   const [w, d, h] = item.size;
   const model = withPackItem(DRAFT_TYPE, item, () => buildModel({ type: DRAFT_TYPE, w, d, h }));
   const a = (yaw * Math.PI) / 180;
   const b = (Math.max(-80, Math.min(80, pitch)) * Math.PI) / 180;
-  return picture(model, size, new Vector3(Math.sin(a) * Math.cos(b), Math.sin(b), Math.cos(a) * Math.cos(b)), brightness);
+  return picture(model, size, new Vector3(Math.sin(a) * Math.cos(b), Math.sin(b), Math.cos(a) * Math.cos(b)), 1.3, light);
 }
 
 /** Draw a model seen from `dir` (towards the camera) into a square PNG data URL, the model filling it. */
-function picture({ buf, lines }: { buf: GeoBuffer; lines: LineBuffer }, size: number, dir: Vector3, brightness: number): string {
+function picture({ buf, lines }: { buf: GeoBuffer; lines: LineBuffer }, size: number, dir: Vector3, brightness: number, light = false): string {
   renderer ??= new WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   renderer.setSize(size, size, false);
@@ -74,6 +76,11 @@ function picture({ buf, lines }: { buf: GeoBuffer; lines: LineBuffer }, size: nu
   // the neon palette is made for a dark room: pictures get a little more light and brighter edges
   const mesh = new Mesh(buf.geometry(), new MeshBasicMaterial({ vertexColors: true, color: new Color(brightness, brightness, brightness) }));
   const edges = new LineSegments(lines.geometry(), new LineBasicMaterial({ vertexColors: true, color: new Color(brightness * 1.8, brightness * 1.8, brightness * 1.8) }));
+  if (light) {
+    // the 3D view's day look (theme.ts), so the picture matches a light plan
+    themed(mesh.material, DAY);
+    themed(edges.material, DAY, true);
+  }
   scene.add(mesh, edges);
 
   // fit the item's box into the picture

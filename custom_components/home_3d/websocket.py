@@ -14,6 +14,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.loader import async_get_integration
 import voluptuous as vol
 
+from . import frontend_build
 from .const import (
     DATA_ASK,
     DATA_EDITORS,
@@ -59,6 +60,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
     """Register all websocket commands."""
     for command in (
         ws_get_building,
+        ws_version,
         ws_save_building,
         ws_subscribe_building,
         ws_get_image,
@@ -153,8 +155,24 @@ async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveC
             "version": str(integration.version),
             # whether this user is on the editors list (#7); the backend checks every change again
             "can_edit": can_edit(hass, connection.user),
+            **await _async_build(hass),
         },
     )
+
+
+async def _async_build(hass: HomeAssistant) -> dict[str, str]:
+    """`{"build": id}` of the frontend files served now (#60), empty without a build file."""
+    build = await hass.async_add_executor_job(frontend_build.read_build)
+    return {"build": build} if build else {}
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/version"})
+@websocket_api.async_response
+async def ws_version(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The running integration version and the frontend build on disk (#60): an open page asks again when its
+    websocket reconnects and offers a reload when it runs older JavaScript."""
+    integration = await async_get_integration(hass, DOMAIN)
+    connection.send_result(msg["id"], {"version": str(integration.version), **await _async_build(hass)})
 
 
 @websocket_api.websocket_command(

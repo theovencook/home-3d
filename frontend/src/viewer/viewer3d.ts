@@ -87,6 +87,8 @@ import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
 import { circlePath, cleaningPath, stepRobot, type RobotInfo, type RobotMotion } from "./robot.ts";
 import { decorDelay, lowEndDevice, petDelay } from "./pace.ts";
 import { flowSpeed } from "./flow-style.ts";
+import { HALO_SIZE, haloSize } from "./halo-size.ts";
+import { fitDistance, refitOnResize, startViewRadius, stillFitted, type FitMargin, type FitView } from "./fit.ts";
 
 export type { RobotInfo } from "./robot.ts";
 
@@ -719,6 +721,9 @@ export class FloorplanViewer {
   private size = { w: 1, h: 1 };
   /** Width taken on the left by the host (the floor pictures); floor labels keep clear of it. */
   private labelInset = 0;
+  private fitMargin: FitMargin = { x: 0, y: 0 };
+  /** Where the last fit put the camera (null: moved on to something else), for a resize to frame the house again (#93). */
+  private fitted: FitView | null = null;
   /** Floors with lamps that run a colour effect, and the floor of every device (for flashes). */
   private effectFloors = new Set<string>();
   private deviceFloor = new Map<string, string>();
@@ -877,6 +882,14 @@ export class FloorplanViewer {
   /** Frame statistics are only gathered while something shows them. */
   setStats(on: boolean): void {
     this.statsOn = on;
+  }
+
+  /** Share of the view at each edge the house is fitted clear of (the host's bars over a phone's view, #93). */
+  setFitMargin(margin: FitMargin): void {
+    if (this.fitMargin.x === margin.x && this.fitMargin.y === margin.y) return;
+    this.fitMargin = margin;
+    // a view nobody moved yet is framed again for the new margins
+    if (stillFitted(this.fitted, this.controls.goal)) this.fit(0);
   }
 
   /** Space on the left the floor labels leave free (the floor pictures of the host). */
@@ -2213,11 +2226,14 @@ export class FloorplanViewer {
   private resize(): void {
     const w = this.host.clientWidth || 1;
     const h = this.host.clientHeight || 1;
+    const before = this.camera.aspect;
     this.size = { w, h };
     this.labelsDirty = true;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    // the phone turned or the bars above the view folded: an unmoved house view is framed for the new shape (#93)
+    if (refitOnResize(this.fitted, this.controls.goal, before, this.camera.aspect)) this.fit(0);
     this.invalidate();
   }
 
@@ -2563,7 +2579,7 @@ export class FloorplanViewer {
       lamps: themed(new MeshBasicMaterial({ vertexColors: true }), this.themeUniform),
       halos: new PointsMaterial({
         map: this.haloTexture,
-        size: 0.9,
+        size: HALO_SIZE,
         sizeAttenuation: true,
         vertexColors: true,
         transparent: true,
@@ -4160,7 +4176,7 @@ export class FloorplanViewer {
     const center = box.getCenter(new Vector3());
     const size = box.getSize(new Vector3());
     // perspective widens the near corners; portrait screens need a little more room for that
-    const radius = Math.max(8, this.distanceFor(size) * (this.camera.aspect < 1 ? 1.16 : 1.02));
+    const radius = Math.max(8, fitDistance(size.length() / 2, this.camera.fov, this.camera.aspect, this.fitMargin) * (this.camera.aspect < 1 ? 1.16 : 1.02));
     this.controls.maxRadius = Math.max(40, radius * 3);
     center.y = box.min.y + size.y * (this.houseView ? 0.45 : 0.3);
     if (this.floorId === null || this.floors.length === 1) this.houseRadius = radius;
@@ -4171,18 +4187,21 @@ export class FloorplanViewer {
     const own = !house ? (this.floorMap.get(this.floorId!)?.floor.start_view ?? null) : null;
     const start = own ?? this.startView;
     const useRadius = !!start && (house || !!own);
-    if (start && useRadius) this.controls.maxRadius = Math.max(this.controls.maxRadius, start.radius * 1.5);
+    if (start && useRadius) this.controls.maxRadius = Math.max(this.controls.maxRadius, startViewRadius(start.radius, this.camera.fov, this.camera.aspect) * 1.5);
     // the start view's framing (#206): the point it looks at, counted from the opened floor
     const at = useRadius ? start!.target : null;
     if (at) center.set(at.x, at.y + (own ? this.floorBase(this.floorId) : 0), at.z);
     if (this.keepNext) {
       // the same angle, distance and spot – only lifted to the opened floor
       this.keepNext = false;
+      this.fitted = null;
       const cur = this.controls.view;
       this.controls.flyTo({ target: new Vector3(cur.target.x, center.y, cur.target.z), radius: cur.radius, phi: cur.phi, theta: cur.theta }, duration);
       return;
     }
-    this.controls.flyTo({ target: center, radius: useRadius ? start!.radius : radius, phi: start ? start.phi : 0.85, theta: start ? start.theta : -0.6 }, duration, !!start);
+    const startRadius = useRadius ? startViewRadius(start!.radius, this.camera.fov, this.camera.aspect) : radius;
+    this.controls.flyTo({ target: center, radius: startRadius, phi: start ? start.phi : 0.85, theta: start ? start.theta : -0.6 }, duration, !!start);
+    this.fitted = this.controls.goal;
   }
 
   /** The ground grid lies under the lowest floor and reaches well beyond the building. */
@@ -5065,6 +5084,9 @@ export class FloorplanViewer {
     this.sunFx.showShadow(this.floorId === null && this.shadowSig !== "");
     // the realistic look: lit twins for new surfaces; the tablet level redraws its shadows only when more than the camera moved
     if (this.realism.active) this.realism.realize(this.scene, !!this.realPlan(), this.renderer, floorsMoving || openingsMoving || roofMoving || robotsMoving || fansTurning);
+    // lamp glows keep a visible size when zoomed out (#89): one number per floor material, no rebuild
+    const halo = haloSize(this.controls.view.radius, this.size.h);
+    for (const fv of this.floors) fv.materials.halos.size = halo;
     this.renderer.render(this.scene, this.camera);
     this.disposeRetired();
     // labels are placed only when the view or something on it moved (style writes cost layout)

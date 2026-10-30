@@ -2,7 +2,7 @@
 
 import { build, context } from "esbuild";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 const out = "../custom_components/home_3d/frontend";
 const watch = process.argv.includes("--watch");
@@ -52,6 +52,15 @@ const locateConfig = { ...common, entryPoints: ["src/locate/entry.ts"], outfile:
 // never taken from the browser cache (the integration version only changes after a restart).
 // the frontend knows its own version, to notice a backend that still runs an older one
 const version = JSON.parse(readFileSync("../custom_components/home_3d/manifest.json", "utf8")).version;
+// Which build this is (#60): a hash of everything the bundles are made from. The main bundle knows it, and build.json
+// next to the bundles tells the backend, which reports it; an open page whose id differs runs older JavaScript than is
+// served now (also when the version stayed the same) and offers a reload.
+const inputs = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? inputs(`${dir}/${e.name}`) : [`${dir}/${e.name}`])).sort();
+const buildId = (() => {
+  const h = createHash("sha256").update(version);
+  for (const file of [...inputs("src"), ...inputs("lang"), "package-lock.json", "build.mjs"]) if (existsSync(file)) h.update(file).update(readFileSync(file));
+  return h.digest("hex").slice(0, 12);
+})();
 // `hashes`: the content hash of each bundle it loads, by name (viewer, editor, cardEditor, timeTravel, fun, voice, locate, plan2d)
 const mainConfig = (hashes) => ({
   ...common,
@@ -67,6 +76,7 @@ const mainConfig = (hashes) => ({
     __FP3D_LOCATE_HASH__: JSON.stringify(hashes.locate),
     __FP3D_PLAN2D_HASH__: JSON.stringify(hashes.plan2d),
     __FP3D_VERSION__: JSON.stringify(version),
+    __FP3D_BUILD__: JSON.stringify(buildId),
     __FP3D_LANG_HASH__: JSON.stringify(langHash),
   },
 });
@@ -91,8 +101,9 @@ function copyFonts() {
   }
 }
 
-// size budgets of the bundles (kept small for old wall tablets)
-const BUDGET = { "home-3d.js": 780 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 1024 * 1024, "home-3d-card-editor.js": 280 * 1024, "home-3d-items.js": 64 * 1024, "home-3d-2d.js": 72 * 1024 };
+// size budgets of the bundles (kept small for old wall tablets; the items bundle loads only for editors opening the
+// item editor: 72 KB since #84 added list import, the brief dialog and the light preview)
+const BUDGET = { "home-3d.js": 780 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 1024 * 1024, "home-3d-card-editor.js": 300 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024 };
 
 copyFonts();
 if (watch) {
@@ -122,6 +133,8 @@ if (watch) {
       plan2d: hashOf(plan2dConfig.outfile),
     }),
   );
+  writeFileSync(`${out}/build.json`, `${JSON.stringify({ build: buildId, version })}
+`);
   let over = false;
   // old Fire-tablet WebViews (Chrome before 91, e.g. Fully Kiosk on a Fire 7) throw on an optional call with spread
   // arguments, `a?.b(...x)` – the roof failed there; lowering the target for it would cost ~11 KB, so it is banned
