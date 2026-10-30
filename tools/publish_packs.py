@@ -188,10 +188,7 @@ def _retire(target: Path, published: list[str], moves_file: Path) -> list[str]:
             "",
             *[f"- https://github.com/{REPO}/tree/{BRANCH}/{p}" for p in sorted(new_packs - {pack_id})],
         ]
-        (target / pack_id / "README.md").write_text("
-".join(lines) + "
-", encoding="utf-8", newline="
-")
+        (target / pack_id / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
         retired.append(pack_id)
     return retired
 
