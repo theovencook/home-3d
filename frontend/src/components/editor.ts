@@ -54,6 +54,7 @@ import { type CarLinks, type Background, OUTDOOR_TOP, sidelightLayout, DEFAULT_W
 import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { edgeReach, generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { edgeStartCorner, openingTap } from "../geometry/openings.ts";
+import { carryRectResize, strandedBy, type ResizeNote as ResizeNoteOf } from "../geometry/room-resize.ts";
 import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } from "../i18n.ts";
 import { ISSUES_URL } from "./extensions.ts";
 import { beforeSelectionChange, deepActive, releaseTyping, selectionMoved, takesTyping } from "../focus-release.ts";
@@ -174,6 +175,7 @@ import { isPrinter } from "../printer.ts";
 import { setIntervalPart } from "../show-when.ts";
 
 /** Items that can be fixed against moving. */
+type ResizeNote = ResizeNoteOf<Building>;
 type FixKind = "room" | "opening" | "furniture" | "device" | "wall" | "outdoor";
 
 /** Highest mount height the backend accepts (schema: 0–10 m); "40" meant as centimetres would refuse every save. */
@@ -418,6 +420,7 @@ export class Fp3dEditor extends LitElement {
     _cableId: { state: true },
     _expanded: { state: true },
     _notice: { state: true },
+    _resize: { state: true },
     _history: { state: true },
     _spots: { state: true },
     _outdoorId: { state: true },
@@ -551,6 +554,8 @@ export class Fp3dEditor extends LitElement {
   private declare _expanded: Set<string>;
   /** Short confirmation shown after an action (e.g. closed gaps). */
   private declare _notice: string | null;
+  /** What the last outline edit of a room carried or left outside (#64); stale once the document moves on. */
+  private declare _resize: ResizeNote | null;
   /** Restore points, loaded when the backup section is opened. */
   private declare _history: Snapshot[] | null;
   /** The opt-in reports: their status (null = not loaded, "error" = backend without them). */
@@ -2602,6 +2607,7 @@ export class Fp3dEditor extends LitElement {
       case "room":
         // the drag already changed the document without history; record the state before the drag
         if (drag.moved) this.pushHistory(drag.base);
+        if (drag.moved && drag.kind === "vertex") this.noteResize(drag.roomId, drag.base);
         this._guides = {};
         break;
       default:
@@ -5333,6 +5339,7 @@ export class Fp3dEditor extends LitElement {
     if (!room || room.points.length <= 3) return;
     const n = room.points.length;
     const prev = (index - 1 + n) % n;
+    const base = this._doc;
     this.change((_, floor) => {
       const target = floor.rooms.find((r) => r.id === room.id)!;
       target.points.splice(index, 1);
@@ -5349,6 +5356,7 @@ export class Fp3dEditor extends LitElement {
         .filter((o) => o.room_id !== room.id || o.wall || (o.edge !== index && o.edge !== prev))
         .map((o) => (o.room_id === room.id && !o.wall && o.edge > index ? { ...o, edge: o.edge - 1 } : o));
     });
+    this.noteResize(room.id, base);
     this._vertex = null;
   }
 
@@ -5470,7 +5478,75 @@ export class Fp3dEditor extends LitElement {
     if (field === "z") [z0, z1] = [value, value + (z1 - z0)];
     if (field === "w" && value > 0.05) x1 = x0 + value;
     if (field === "d" && value > 0.05) z1 = z0 + value;
-    this.updateRoom({ points: [[round(x0), round(z0)], [round(x1), round(z0)], [round(x1), round(z1)], [round(x0), round(z1)]] });
+    const points: Vec2[] = [[round(x0), round(z0)], [round(x1), round(z0)], [round(x1), round(z1)], [round(x0), round(z1)]];
+    // a rectangle carries its contents and shared walls along (#64); "Outline only" swaps in the plain edit
+    const base = this._doc;
+    const floorId = this._floorId;
+    const outline = structuredClone(base);
+    const plain = outline.floors.find((f) => f.id === floorId)?.rooms.find((r) => r.id === room.id);
+    if (plain) plain.points = points;
+    let carried: ReturnType<typeof carryRectResize> = null;
+    this.change((_, floor) => {
+      carried = carryRectResize(floor, room.id, points);
+      if (!carried) floor.rooms.find((r) => r.id === room.id)!.points = points;
+    });
+    this.noteResize(room.id, base, carried, outline);
+  }
+
+  /** The note of the last outline edit, while the document is still the one it describes. */
+  private resizeNote(): ResizeNote | null {
+    const n = this._resize;
+    return n && n.doc === this._doc ? n : null;
+  }
+
+  /** After an outline edit of `roomId` (`base` = the document before it): remember what moved and what it left outside. */
+  private noteResize(roomId: string, base: Building, carried: ResizeNote["carried"] = null, outline: Building | null = null): void {
+    // the previous note still holds if it described the document this edit started from
+    const prev = this._resize?.doc === base ? this._resize : null;
+    const floor = this.floor;
+    const room = floor?.rooms.find((r) => r.id === roomId);
+    // a run of edits on the same room counts from the outline before the first one
+    const before = prev?.roomId === roomId ? prev.before : base.floors.find((f) => f.id === this._floorId)?.rooms.find((r) => r.id === roomId)?.points;
+    this._resize = floor && room && before ? { roomId, before, doc: this._doc, base, carried, outline, stranded: strandedBy(floor, before, room.points) } : null;
+  }
+
+  /** "Outline only": keep the new outline, put the contents and neighbouring walls back (same undo step). */
+  private outlineOnly(): void {
+    const n = this.resizeNote();
+    if (!n?.outline) return;
+    this.setDoc(structuredClone(n.outline), null);
+    this.noteResize(n.roomId, n.base);
+  }
+
+  /** Select the items (else the first device) a resize left outside the room. */
+  private selectStranded(): void {
+    const n = this.resizeNote();
+    if (!n) return;
+    const ids = n.stranded.furniture.filter((id) => this.floor?.furniture.some((m) => m.id === id));
+    if (ids.length) this.setMulti(ids);
+    else if (n.stranded.devices.length) this.selectItem("device", n.stranded.devices[0]);
+  }
+
+  private renderResizeNote(room: Room) {
+    const n = this.resizeNote();
+    if (!n || n.roomId !== room.id || !this.isEditor) return nothing;
+    const c = n.carried;
+    const moved = n.outline && c ? c.furniture + c.devices + c.walls : 0;
+    const out = n.stranded.furniture.length + n.stranded.devices.length;
+    if (!moved && !out) return nothing;
+    return html`<div class="fp3d-resize-note" role="status">
+      ${moved && c
+        ? html`<p class="fp3d-sub">${this.t("resize_carried", { n: c.furniture + c.devices, w: c.walls })}</p>
+            <div class="fp3d-actions">
+              <button class="fp3d-btn" title=${this.t("resize_outline_only_hint")} @click=${() => this.outlineOnly()}>${this.t("resize_outline_only")}</button>
+              <button class="fp3d-btn" @click=${() => this.undo()}>${this.t("undo")}</button>
+            </div>`
+        : nothing}
+      ${out
+        ? html`<p class="fp3d-sub">${out === 1 ? this.t("resize_outside_one") : this.t("resize_outside", { n: out })}</p>
+            <div class="fp3d-actions"><button class="fp3d-btn" @click=${() => this.selectStranded()}>${this.t("resize_select")}</button></div>`
+        : nothing}
+    </div>`;
   }
 
   private setPoint(index: number, axis: 0 | 1, value: number): void {
@@ -5478,7 +5554,9 @@ export class Fp3dEditor extends LitElement {
     if (!room || !Number.isFinite(value)) return;
     const points = room.points.map((p) => [...p] as Vec2);
     points[index][axis] = round(value);
+    const base = this._doc;
     this.updateRoom({ points });
+    this.noteResize(room.id, base);
   }
 
   private async loadImage(imageId: string): Promise<void> {
@@ -10723,6 +10801,7 @@ export class Fp3dEditor extends LitElement {
     const b = bounds(room.points);
     return html`<section>
       <div class="fp3d-h3row"><h3>${this.t("room")}</h3>${this.fixButton("room", room.id)}</div>
+      ${this.renderResizeNote(room)}
       <button class="fp3d-btn fp3d-wv-open" title=${this.t("wall_view_open")} @click=${() => this.openRoomWalls(room)}>▦ ${this.t("wall_view_room")}</button>
       <div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
@@ -16603,6 +16682,16 @@ export class Fp3dEditor extends LitElement {
         font-weight: 600;
       }
       .fp3d-notice {
+        color: var(--fp3d-accent);
+      }
+      .fp3d-resize-note {
+        margin: 0 0 10px;
+        padding: 6px 10px;
+        border: 1px solid var(--fp3d-accent);
+        border-radius: 8px;
+      }
+      .fp3d-resize-note p {
+        margin: 4px 0;
         color: var(--fp3d-accent);
       }
       .fp3d-device-sel circle:not(.fp3d-hit) {
