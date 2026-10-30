@@ -554,6 +554,7 @@ export class Floorplan3dPanel extends LitElement {
                 .hass=${this.hass}
                 .home=${this.data.homeId}
                 @home-reload=${() => void this.data.reopen()}
+                @home-open=${(e: CustomEvent<{ home: string | null }>) => this.data.setHome(e.detail.home ?? undefined)}
               ></fp3d-home-switcher>` : nothing}
           ${this.canEdit
             ? html`<div class="fp3d-seg" role="tablist">

@@ -114,3 +114,24 @@ test("reopening the shown home loads it afresh from the backend (#57)", async ()
   c.hostDisconnected();
   setPlanRecipes(undefined);
 });
+
+test("a view opens another home for itself only and then follows the active home again (#58)", async () => {
+  const { hass, state, homes } = backend();
+  const c = await open(hass);
+  c.setHome("flat");
+  await tick();
+  await tick();
+  assert.equal(c.homeId, "flat");
+  assert.equal(state.active, "home");
+  c.edit(empty("Flat changed") as unknown as Building);
+  await c.flush();
+  assert.equal(homes.flat.revision, 3);
+  assert.equal(homes.home.revision, 7);
+  c.setHome(undefined);
+  await tick();
+  await tick();
+  assert.equal(c.homeId, "home");
+  assert.equal(c.building?.floors[0].name, "Own");
+  c.hostDisconnected();
+  setPlanRecipes(undefined);
+});
