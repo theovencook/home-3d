@@ -57,3 +57,50 @@ test("a fixed item stays on its floor (#73)", () => {
   assert.deepEqual(ids(1), []);
   assert.equal(el._floorId, "g");
 });
+
+test("Ctrl+C on an item, then Ctrl+V upstairs pastes a copy there, chosen, and the original stays (#74)", () => {
+  const { el, ids } = editor();
+  el.selectItem("furniture", "tv");
+  assert.equal(el.copySelection(), true);
+  el.selectFloor("u");
+  assert.equal(el.pasteClipboard(), true);
+  assert.deepEqual(ids(0), ["tv", "sofa", "k1", "k2"]);
+  const [copy] = el._doc.floors[1].furniture as Item[];
+  assert.notEqual(copy.id, "tv");
+  assert.equal(copy.entity, "media_player.sample_tv");
+  assert.deepEqual([copy.x, copy.z], [1, 2]);
+  assert.equal(el._furnitureId, copy.id);
+  el.undo();
+  assert.deepEqual(ids(1), []);
+});
+
+test("the clipboard outlives the editor: leaving the Editor tab and coming back keeps it (#74)", () => {
+  const first = editor();
+  first.el.selectItem("furniture", "sofa");
+  first.el.copySelection();
+  const { el, ids } = editor();
+  el.pasteClipboard();
+  assert.equal(ids(0).length, 5);
+});
+
+test("Ctrl+A chooses every item on the floor; a paste of them is chosen as a whole (#74)", () => {
+  const { el } = editor();
+  el.selectAll();
+  assert.deepEqual([...el.selection()].sort(), ["k1", "k2", "sofa", "tv"]);
+  el.copySelection();
+  el.selectFloor("u");
+  el.pasteClipboard();
+  assert.equal(el.selection().length, 4);
+  assert.deepEqual(el.selection(), (el._doc.floors[1].furniture as Item[]).map((f) => f.id));
+});
+
+test("copying with nothing chosen leaves the clipboard as it was (#74)", () => {
+  const { el, ids } = editor();
+  el.selectItem("furniture", "sofa");
+  el.copySelection();
+  el.selectItem("room", "lounge");
+  assert.equal(el.copySelection(), false);
+  el.pasteClipboard();
+  assert.equal((el._doc.floors[0].furniture as Item[]).at(-1)!.x, 3.3);
+  assert.equal(ids(0).length, 5);
+});
