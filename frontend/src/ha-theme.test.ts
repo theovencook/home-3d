@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { shownAccent, shownLook, textOn, themeAccent } from "./ha-theme.ts";
+import { followLook, shownAccent, shownLook, textOn, themeAccent } from "./ha-theme.ts";
 import { lookOf } from "./themes.ts";
 import type { HomeAssistant } from "./types.ts";
 
@@ -58,4 +58,16 @@ test("the accent shown: one set on the card or panel wins; the theme's only whil
   assert.equal(shownAccent("theme", null, own, read), "#e65100");
   assert.equal(shownAccent("neon", null, own, read), null);
   assert.equal(shownAccent("theme", "not a colour", own, read), "#e65100");
+});
+
+test("turning 'Follow Home Assistant' on follows the theme; off keeps the look it showed (#87)", () => {
+  assert.equal(followLook("neon", "theme", true, hass(false)), "theme");
+  // off: whatever the theme resolved to stays, so nothing jumps
+  assert.equal(followLook("theme", "theme", false, hass(false)), "day");
+  assert.equal(followLook("theme", "theme", false, hass(true)), "neon");
+  // following the sun works the same way
+  assert.equal(followLook("blueprint", "auto", true, hass(true)), "auto");
+  assert.equal(followLook("auto", "auto", false, hass(true, "above_horizon")), "day");
+  // switching one follow off leaves another follow alone
+  assert.equal(followLook("auto", "theme", false, hass(false)), "auto");
 });

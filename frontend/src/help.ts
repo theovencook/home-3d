@@ -1,6 +1,7 @@
 // What the editor's '?' help shows (#95): the keyboard shortcuts and a legend of the plan's marks. Both are tables, so
 // a new shortcut (copy and paste, #74) is one more row here and shows up in the overlay by itself.
 
+import { CLIPBOARD_SHORTCUTS } from "./clipboard.ts";
 import type { I18nKey } from "./i18n.ts";
 
 export interface Shortcut {
@@ -14,6 +15,8 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: ["Ctrl+Z"], text: "help_key_undo" },
   { keys: ["Ctrl+Y", "Ctrl+Shift+Z"], text: "help_key_redo" },
   { keys: ["Ctrl+D"], text: "help_key_duplicate" },
+  // copy, paste and select-all (#74)
+  ...CLIPBOARD_SHORTCUTS,
   { keys: ["Del", "Backspace"], text: "help_key_delete" },
   { keys: ["←↑→↓"], text: "help_key_nudge" },
   { keys: ["R", "Shift+R"], text: "help_key_rotate" },

@@ -514,7 +514,7 @@ export class Extensions extends LitElement {
         </div>`,
       )}
 
-      <label class="fp3d-btn fp3d-primary fp3d-pack-import">
+      <label class="fp3d-btn fp3d-pack-import">
         ${this.t("pack_import")}
         <input type="file" accept=".fp3dpack,.json,application/json" multiple hidden @change=${(e: Event) => this.importPackFile(e)} />
       </label>
@@ -738,12 +738,13 @@ export class Extensions extends LitElement {
         border-radius: 14px;
         background: var(--fp3d-chrome);
       }
+      /* headings and body copy in light, neutral tones: blue on navy read poorly (#88) */
       .fp3d-ext-card h3 {
         margin: 0 0 8px;
         font-size: 13px;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: var(--fp3d-soft);
+        color: var(--fp3d-text);
       }
       .fp3d-ext-pro {
         display: grid;
@@ -778,8 +779,9 @@ export class Extensions extends LitElement {
         border: 1px solid var(--fp3d-line);
         border-radius: 12px;
       }
+      /* an active feature is marked by its tick and "active", not a cyan frame on every card (#88) */
       .fp3d-ext-on {
-        border-color: var(--fp3d-accent);
+        border-color: var(--fp3d-line);
       }
       .fp3d-ext-state {
         color: var(--fp3d-accent);
@@ -792,8 +794,9 @@ export class Extensions extends LitElement {
         font-size: 13px;
       }
       .fp3d-sub {
-        color: var(--fp3d-soft);
+        color: var(--fp3d-muted);
         font-size: 13px;
+        line-height: 1.45;
       }
       .fp3d-notice {
         color: var(--fp3d-accent);
