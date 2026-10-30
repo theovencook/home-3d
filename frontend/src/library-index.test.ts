@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { basicTypes, buildIndex, cardsOf, classify, familyLabel, familyOf, filterEntries, KINDS, ROOMS, roomKindOf, sizeText, variantLabel, type LibraryEntry } from "./library-index.ts";
+import { basicTypes, buildIndex, cardsOf, classify, familyLabel, familyOf, filterEntries, KINDS, searchLibrary, ROOMS, roomKindOf, sizeText, variantLabel, type LibraryEntry } from "./library-index.ts";
 import { furnitureName } from "./furniture-names.ts";
 import { translate } from "./i18n.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -307,4 +307,44 @@ test("docs/packs.md lists every kind and room id the library knows, for pack aut
   assert.deepEqual(listed("group"), [...KINDS]);
   assert.deepEqual(listed("room"), [...ROOMS]);
   assert.ok(docs.includes("`ikea`"), "the IKEA name field is documented");
+});
+
+// #77: hidden filters must not hide search results
+const acme: FurniturePack = {
+  id: "acme.mixed",
+  name: "Mixed",
+  publisher: "Acme",
+  items: [
+    item("kitchen_stool", "Kitchen stool", "Küchenhocker", { room: ["kitchen"] }),
+    item("bath_stool", "Bath stool", "Badhocker", { room: ["bath"] }),
+    item("garden_stool", "Garden stool", "Gartenhocker", { room: ["garden"] }),
+    item("stool_lamp", "Stool lamp", "Hockerlampe", { group: "lamp", light: {} as PackItem["light"] }),
+  ],
+};
+
+test("with a query the room chip no longer hides items: the room's items come first, the rest are counted (#77)", () => {
+  const entries = indexOf([acme], []);
+  const found = searchLibrary(entries, { ...none, query: "stool", room: "kitchen" });
+  const types = (list: readonly LibraryEntry[]) => list.map((e) => e.type.replace("pack:acme.mixed:", ""));
+  assert.deepEqual(types(found.inRoom).sort(), ["kitchen_stool", "stool_lamp"], "kitchen items and items for any room");
+  assert.deepEqual(types(found.otherRooms).sort(), ["bath_stool", "garden_stool"]);
+  assert.deepEqual(types(found.hits).slice(0, 2).sort(), ["kitchen_stool", "stool_lamp"], "the open room's items rank first");
+  assert.equal(found.hits.length, 4);
+});
+
+test("without a query the room chip still narrows the library to the room (#77)", () => {
+  const entries = indexOf([acme], []);
+  const found = searchLibrary(entries, { ...none, room: "kitchen" });
+  assert.ok(found.hits.some((e) => e.type === "pack:acme.mixed:kitchen_stool"));
+  assert.ok(!found.hits.some((e) => e.type === "pack:acme.mixed:bath_stool"));
+  assert.deepEqual(found.otherRooms, []);
+});
+
+test("a lingering toggle chip still filters, but the matches it hides are counted (#77)", () => {
+  const entries = indexOf([acme], []);
+  const found = searchLibrary(entries, { ...none, query: "stool", light: true });
+  assert.deepEqual(found.hits.map((e) => e.type), ["pack:acme.mixed:stool_lamp"]);
+  assert.equal(found.hiddenByChips, 3, "the three stools that do not light up");
+  assert.equal(searchLibrary(entries, { ...none, query: "stool" }).hiddenByChips, 0);
+  assert.equal(searchLibrary(entries, { ...none, light: true }).hiddenByChips, 0, "browsing without a query counts nothing");
 });
