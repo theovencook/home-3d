@@ -256,6 +256,7 @@ export class Fp3dView3d extends LitElement {
     _stats: { state: true },
     _error: { state: true },
     _energy: { state: true },
+    _bigTile: { state: true },
     _holos: { state: true },
     _rows: { state: true },
     _meters: { state: true },
@@ -419,6 +420,8 @@ export class Fp3dView3d extends LitElement {
   private declare _stats: ViewerStats | null;
   private declare _error: string | null;
   private declare _energy: EnergySummary | null;
+  /** The energy tile shown enlarged after a tap (touch has no hover), null = none (#90). */
+  private declare _bigTile: string | null;
   /** Energie Pro: today's solar statistics for the hologram (kWh, peak and the day curve). */
   /** The hologram cards (main plant first) and today's statistics rows of their sensors. */
   private declare _holos: HoloCard[];
@@ -696,6 +699,7 @@ export class Fp3dView3d extends LitElement {
     this._stats = null;
     this._error = null;
     this._energy = null;
+    this._bigTile = null;
     this._holos = [];
     this._rows = null;
     this._holoOpen = true;
@@ -5756,7 +5760,14 @@ export class Fp3dView3d extends LitElement {
     if (e.tariff) items.push({ cls: "tariff", label: t("energy_tariff"), value: `${formatNumber(this.hass, e.tariff.value, 3)} ${e.tariff.unit}`.trim() });
     return html`<div class="fp3d-energy" aria-live="off">
       ${this._cheap ? html`<div class="fp3d-energy-item fp3d-energy-cheap" role="status"><span>${t("cheap_rate")}</span><b>${t("cheap_rate_now")}</b></div>` : nothing}
-      ${this._holoOn ? nothing : items.map((i) => html`<div class="fp3d-energy-item fp3d-energy-${i.cls}"><span>${i.label}</span><b>${i.value}</b></div>`)}
+      ${this._holoOn
+        ? nothing
+        : items.map(
+            (i) =>
+              html`<div class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}${this._bigTile === i.cls ? " fp3d-energy-big" : ""}" tabindex="0" @click=${() => this.toggleEnergyTile(i.cls)}>
+                <span>${i.label}</span><b>${i.value}</b>
+              </div>`,
+          )}
       ${this.flows !== null
         ? nothing
         : html`<button class="fp3d-energy-item fp3d-flow-toggle" aria-pressed=${this._flows} title=${`${t("flows_hint")} (${t(this._flows ? "flow_on" : "flow_off")})`} aria-label=${t("flows")} @click=${() => this.toggleFlows()}>
@@ -5768,6 +5779,11 @@ export class Fp3dView3d extends LitElement {
         <span>${t("holos")}</span><b>◫</b>
       </button>`}
     </div>`;
+  }
+
+  /** A tap enlarges an energy tile so its value reads without zooming; a second tap shrinks it (#90). */
+  private toggleEnergyTile(cls: string): void {
+    this._bigTile = this._bigTile === cls ? null : cls;
   }
 
   private renderLegend() {
@@ -7963,6 +7979,36 @@ export class Fp3dView3d extends LitElement {
         backdrop-filter: blur(6px);
         font-variant-numeric: tabular-nums;
       }
+      /* a value tile grows when hovered, focused or tapped, so it reads without zooming in (#90) */
+      .fp3d-energy-tile {
+        position: relative;
+        pointer-events: auto;
+        cursor: zoom-in;
+        transform-origin: top left;
+        transition: transform 160ms ease-out;
+      }
+      .fp3d-energy-big {
+        transform: scale(1.5);
+        z-index: 2;
+        cursor: zoom-out;
+      }
+      .fp3d-energy-tile:focus-visible {
+        transform: scale(1.5);
+        z-index: 2;
+        outline: 2px solid var(--fp3d-accent);
+        outline-offset: 2px;
+      }
+      @media (hover: hover) {
+        .fp3d-energy-tile:hover {
+          transform: scale(1.5);
+          z-index: 2;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .fp3d-energy-tile {
+          transition: none;
+        }
+      }
       .fp3d-energy-item span {
         font-size: 11px;
         color: var(--fp3d-muted);
@@ -8071,6 +8117,16 @@ export class Fp3dView3d extends LitElement {
           overflow-x: auto;
           scrollbar-width: none;
           pointer-events: auto;
+        }
+        /* the scrolling row would clip a scaled tile: there the enlarged tile gets bigger text instead (#90) */
+        .fp3d-energy .fp3d-energy-tile {
+          transform: none;
+        }
+        .fp3d-energy-big span {
+          font-size: 13px;
+        }
+        .fp3d-energy-big b {
+          font-size: 22px;
         }
         .fp3d-legend {
           bottom: auto;

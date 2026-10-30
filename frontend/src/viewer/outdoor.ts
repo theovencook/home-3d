@@ -16,19 +16,25 @@ interface Look {
   edgeAlpha: number;
 }
 
+// green areas are lifted off the navy ground so a garden reads as grass in the neon look (#89)
 const LOOKS: Record<OutdoorType, Look> = {
-  lawn: { color: 0x0d2620, side: 0x0b1e1a, edge: 0x3de0a0, edgeAlpha: 0.16 },
+  lawn: { color: 0x1c4a30, side: 0x153a26, edge: 0x3de0a0, edgeAlpha: 0.28 },
   terrace: { color: 0x1d1c30, side: 0x151527, edge: 0x5b7cff, edgeAlpha: 0.32 },
   path: { color: 0x1a2133, side: 0x141a28, edge: 0x5b7cff, edgeAlpha: 0.22 },
   driveway: { color: 0x161c2b, side: 0x111624, edge: 0x5b7cff, edgeAlpha: 0.18 },
   pool: { color: 0x0b3a5a, side: 0x0d2438, edge: 0x37e0ff, edgeAlpha: 0.6 },
   bed: { color: 0x1a1512, side: 0x14100e, edge: 0x3de0a0, edgeAlpha: 0.2 },
-  wild: { color: 0x14211a, side: 0x0f1a14, edge: 0x9ad24f, edgeAlpha: 0.14 },
-  hedge: { color: 0x16402f, side: 0x103024, edge: 0x3de0a0, edgeAlpha: 0.35 },
+  wild: { color: 0x23402a, side: 0x1a3020, edge: 0x9ad24f, edgeAlpha: 0.22 },
+  hedge: { color: 0x22603f, side: 0x184a30, edge: 0x3de0a0, edgeAlpha: 0.4 },
   fence: { color: 0x1d2946, side: 0x1d2946, edge: 0x5b7cff, edgeAlpha: 0.45 },
   pergola: { color: 0x2a2238, side: 0x1f1a2c, edge: 0x5b7cff, edgeAlpha: 0.5 },
   balcony: { color: 0x1d2238, side: 0x161a2c, edge: 0x5b7cff, edgeAlpha: 0.5 },
 };
+
+/** How an outdoor area of this type is coloured in the neon look. */
+export function outdoorLook(type: OutdoorType): Readonly<Look> {
+  return LOOKS[type];
+}
 
 /** Whether an edge runs along a room's outline on this floor (a balcony needs no railing at the house wall). */
 function againstWall(floor: Floor, p: Vec2, q: Vec2): boolean {
