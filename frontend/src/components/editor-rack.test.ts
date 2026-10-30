@@ -10,7 +10,9 @@ import type { RackSlot } from "../rack.ts";
 import { makeEditor, square } from "./editor-harness.ts";
 
 const NETWORK = new URL("../../../custom_components/home_3d/bundled_packs/theovencook.it/network/", import.meta.url);
-const read = (id: string): PackItem => JSON.parse(readFileSync(new URL(`${id}.json`, NETWORK), "utf8"));
+// UniFi's own gear lives in the UniFi pack (#145); the tests only need its shape
+const UNIFI = new URL("../../../custom_components/home_3d/bundled_packs/theovencook.unifi/network/", import.meta.url);
+const read = (id: string): PackItem => JSON.parse(readFileSync(new URL(`${id}.json`, id.startsWith("unifi_") ? UNIFI : NETWORK), "utf8"));
 const PACK = { id: "theovencook.it", name: "IT", publisher: "t", items: ["rack_wall_cabinet_9u", "rack_switch_24_1u", "rack_patch_panel_24_1u", "rack_blank_1u", "router"].map(read) } as unknown as FurniturePack;
 const RACK = "pack:theovencook.it:rack_wall_cabinet_9u";
 const SWITCH = "pack:theovencook.it:rack_switch_24_1u";

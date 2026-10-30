@@ -157,7 +157,7 @@ test("every device on the IT checklist is in theovencook.it at the size the chec
     const mm = item.size.map((n) => String(Math.round(n * 10000) / 10)).join(" x ");
     assert.ok(row.includes(`| ${mm} |`), `${id}: the checklist size matches the item (${mm})`);
   }
-  for (const id of ["esp32_devkitc", "raspberry_pi_board", "ha_green", "zbt2_connect", "hue_bridge", "sure_petcare_hub", "nas_5_bay", "unifi_cloud_gateway_ultra"]) assert.ok(rows.some((r) => r.startsWith(`| \`${id}\``)), `${id} is on the checklist`);
+  for (const id of ["esp32_devkitc", "raspberry_pi_board", "ha_green", "zbt2_connect", "hue_bridge", "sure_petcare_hub", "nas_5_bay"]) assert.ok(rows.some((r) => r.startsWith(`| \`${id}\``)), `${id} is on the checklist`);
 });
 
 test("smart-home models batch 2 (#80): radiators take a thermostat, speakers a media player, lamps and fires glow", async () => {

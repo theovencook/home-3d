@@ -19,7 +19,7 @@ U = 0.04445
 
 def test_files_match_the_generator() -> None:
     for id, item in ITEMS.items():
-        path = rack_gear.NETWORK / f"{id}.json"
+        path = rack_gear.path_of(id)
         assert path.read_text(encoding="utf8") == rack_gear.text_of(item), f"{id}: run python tools/rack_gear.py"
 
 
