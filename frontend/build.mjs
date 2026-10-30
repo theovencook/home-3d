@@ -23,8 +23,12 @@ const viewerConfig = { ...common, entryPoints: ["src/viewer/viewer3d.ts"], outfi
 // the card's visual editor only loads in the dashboard's card dialog
 // the language files (lang/*.json) are fetched with a hash of their content, so a new text is never stale
 const LANGS = ["fr", "es", "nl", "it", "hu", "da", "sv", "nb", "nn", "fi", "cs", "pl", "ro", "sl", "zh", "pt"];
+// German (#134) is written to lang/de.json from src/i18n-de.ts (typed against the English keys) instead of being
+// bundled: the main, editor and card-editor bundles each carried the whole German table (~135 KB) for every user
+const { de } = await import("./src/i18n-de.ts");
+const deJson = `${JSON.stringify(de, null, 1)}\n`;
 const langHash = createHash("sha256")
-  .update(LANGS.map((l) => (existsSync(`lang/${l}.json`) ? readFileSync(`lang/${l}.json`) : "")).join("\n"))
+  .update([deJson, ...LANGS.map((l) => (existsSync(`lang/${l}.json`) ? readFileSync(`lang/${l}.json`) : ""))].join("\n"))
   .digest("hex")
   .slice(0, 12);
 const cardEditorConfig = { ...common, entryPoints: ["src/card-editor.ts"], outfile: `${out}/home-3d-card-editor.js`, define: { __FP3D_LANG_HASH__: JSON.stringify(langHash) } };
@@ -94,6 +98,7 @@ function copyFonts() {
   // further languages, fetched by the bundles only when Home Assistant runs in them
   mkdirSync(`${out}/lang`, { recursive: true });
   for (const l of LANGS) if (existsSync(`lang/${l}.json`)) copyFileSync(`lang/${l}.json`, `${out}/lang/${l}.json`);
+  writeFileSync(`${out}/lang/de.json`, deJson);
   for (const [pkg, file, name] of FONTS) {
     const dir = `node_modules/@fontsource-variable/${pkg}`;
     copyFileSync(`${dir}/files/${file}`, `${out}/fonts/${name}`);
@@ -103,11 +108,10 @@ function copyFonts() {
 
 // size budgets of the bundles (kept small for old wall tablets; the items bundle loads only for editors opening the
 // item editor: 72 KB since #84 added list import, the brief dialog and the light preview; the editor bundle loads only
-// for editors and reached 1024.8 KB with run 2's editor tickets (#59-#96), so 1100 KB; the card editor carries the
-// whole de/en string table from i18n.ts and grows with it: 300 KB)
-// home-3d.js: 780 -> 820 KB for #119 (rack links: LED status, gear details in the view, strings). The string table
-// (i18n.ts) is the main growth; splitting it is a follow-up ticket (RUN-2-NOTES).
-const BUDGET = { "home-3d.js": 820 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 1100 * 1024, "home-3d-card-editor.js": 300 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024 };
+// for editors). #134 moved the German table out of the bundles into lang/de.json; the main, editor and card-editor
+// budgets were then set just above their new sizes (668.3 / 961.8 / 154.2 KB) so growth shows again: raise one only
+// with a reason in this comment, and keep new strings' growth in the bundle that uses them.
+const BUDGET = { "home-3d.js": 680 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 975 * 1024, "home-3d-card-editor.js": 160 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024 };
 
 copyFonts();
 if (watch) {
@@ -164,6 +168,15 @@ if (watch) {
         console.log(`OLD-WEBVIEW ${file}:${i + 1}: ${newer ? `"${newer[0]}" is missing in old WebViews` : "dvh outside @supports (height: 100dvh)"}`);
       }
     });
+  }
+  // German is fetched (lang/de.json, #134): a bundle that imports the German table again carries it for everyone
+  const german = [de.no_building_admin, de.no_persons, de.phone_hint];
+  for (const file of Object.keys(BUDGET)) {
+    const text = readFileSync(`${out}/${file}`, "utf8");
+    if (german.some((s) => text.includes(JSON.stringify(s).slice(1, -1)))) {
+      over = true;
+      console.log(`GERMAN ${file}: holds the German table – import i18n.ts (English), never i18n-de.ts`);
+    }
   }
   for (const [file, limit] of Object.entries(BUDGET)) {
     const size = statSync(`${out}/${file}`).size;
