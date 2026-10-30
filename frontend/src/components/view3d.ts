@@ -105,6 +105,7 @@ const GRID_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" s
 const GRID_OFF_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/><path d="M3 3l18 18"/></svg>';
 import { STAGE, type Look, type Theme } from "../themes.ts";
 import { shownLook } from "../ha-theme.ts";
+import { lightChrome } from "../scheme.ts";
 import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { fetchImage, saveBuilding } from "../api.ts";
@@ -256,6 +257,7 @@ export class Fp3dView3d extends LitElement {
     _stats: { state: true },
     _error: { state: true },
     _energy: { state: true },
+    _bigTile: { state: true },
     _holos: { state: true },
     _rows: { state: true },
     _meters: { state: true },
@@ -421,6 +423,8 @@ export class Fp3dView3d extends LitElement {
   private declare _stats: ViewerStats | null;
   private declare _error: string | null;
   private declare _energy: EnergySummary | null;
+  /** The energy tile shown enlarged after a tap (touch has no hover), null = none (#90). */
+  private declare _bigTile: string | null;
   /** Energie Pro: today's solar statistics for the hologram (kWh, peak and the day curve). */
   /** The hologram cards (main plant first) and today's statistics rows of their sensors. */
   private declare _holos: HoloCard[];
@@ -698,6 +702,7 @@ export class Fp3dView3d extends LitElement {
     this._stats = null;
     this._error = null;
     this._energy = null;
+    this._bigTile = null;
     this._holos = [];
     this._rows = null;
     this._holoOpen = true;
@@ -1006,6 +1011,8 @@ export class Fp3dView3d extends LitElement {
   }
 
   protected updated(changed: PropertyValues): void {
+    // the chrome goes light with the Day look (#85): the shared tokens read the attribute, nested parts inherit it
+    if (changed.has("hass") || changed.has("theme")) this.toggleAttribute("light", lightChrome(this.effectiveTheme()));
     if (changed.has("plan2d") && changed.get("plan2d") !== undefined) this.switchViewer();
     if (changed.has("hass") && this.live?.el) this.live.el.hass = this.hass;
     if (changed.has("hass")) this.watchAsk();
@@ -1063,6 +1070,14 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("keepRoof")) v.setKeepRoof(this.keepRoof);
     if (changed.has("hideRoof")) v.setHideRoof(this.hideRoof);
     if (changed.has("floorStack")) v.setFloorStack(this.floorStack);
+    // a look that follows HA's theme or the sun changes with hass alone (#85: a theme switch moves no watched entity,
+    // so waiting for syncDevices left the scene neon under a Day sky); setTheme ignores a look it already shows
+    if (changed.has("hass") && !changed.has("theme") && (this.theme === "theme" || this.theme === "auto")) {
+      const look = this.effectiveTheme();
+      v.setTheme(look);
+      // the floor pictures beside the view are drawn in the look too
+      if (look !== shownLook(this.theme, changed.get("hass") as HomeAssistant | undefined)) this.scheduleThumbs();
+    }
     if (changed.has("theme")) {
       v.setTheme(this.effectiveTheme());
       // the realistic look's sky and the fog colour follow at once
@@ -5128,6 +5143,11 @@ export class Fp3dView3d extends LitElement {
    * window light, sun patches), the warnings, and every module's own settings. Changes count for the whole house
    * and only administrators make them; the editor keeps the full set.
    */
+  /** Opens the ⚙ sheet (sun, window glow, alerts …): the panel's "Sun and lights" button (#87). */
+  openSettings(): void {
+    this._settingsOpen = true;
+  }
+
   private renderSettings() {
     const hass = this.hass;
     const b = this.building;
@@ -5746,7 +5766,14 @@ export class Fp3dView3d extends LitElement {
     if (e.tariff) items.push({ cls: "tariff", label: t("energy_tariff"), value: `${formatNumber(this.hass, e.tariff.value, 3)} ${e.tariff.unit}`.trim() });
     return html`<div class="fp3d-energy" aria-live="off">
       ${this._cheap ? html`<div class="fp3d-energy-item fp3d-energy-cheap" role="status"><span>${t("cheap_rate")}</span><b>${t("cheap_rate_now")}</b></div>` : nothing}
-      ${this._holoOn ? nothing : items.map((i) => html`<div class="fp3d-energy-item fp3d-energy-${i.cls}"><span>${i.label}</span><b>${i.value}</b></div>`)}
+      ${this._holoOn
+        ? nothing
+        : items.map(
+            (i) =>
+              html`<div class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}${this._bigTile === i.cls ? " fp3d-energy-big" : ""}" tabindex="0" @click=${() => this.toggleEnergyTile(i.cls)}>
+                <span>${i.label}</span><b>${i.value}</b>
+              </div>`,
+          )}
       ${this.flows !== null
         ? nothing
         : html`<button class="fp3d-energy-item fp3d-flow-toggle" aria-pressed=${this._flows} title=${`${t("flows_hint")} (${t(this._flows ? "flow_on" : "flow_off")})`} aria-label=${t("flows")} @click=${() => this.toggleFlows()}>
@@ -5758,6 +5785,11 @@ export class Fp3dView3d extends LitElement {
         <span>${t("holos")}</span><b>◫</b>
       </button>`}
     </div>`;
+  }
+
+  /** A tap enlarges an energy tile so its value reads without zooming; a second tap shrinks it (#90). */
+  private toggleEnergyTile(cls: string): void {
+    this._bigTile = this._bigTile === cls ? null : cls;
   }
 
   private renderLegend() {
@@ -6062,7 +6094,7 @@ export class Fp3dView3d extends LitElement {
         gap: 2px;
         padding: 6px;
         border-radius: 14px;
-        background: rgba(10, 18, 34, 0.72);
+        background: var(--fp3d-s-chrome, rgba(10, 18, 34, 0.72));
         border: 1px solid rgba(110, 220, 255, 0.28);
         backdrop-filter: blur(8px);
         box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
@@ -6698,7 +6730,7 @@ export class Fp3dView3d extends LitElement {
         padding: 0;
         border-radius: 50%;
         border: 1px solid rgba(160, 240, 255, 0.35);
-        background: rgba(8, 16, 34, 0.7);
+        background: var(--fp3d-s-chrome, rgba(8, 16, 34, 0.7));
         color: var(--fp3d-text);
         cursor: pointer;
         z-index: 4;
@@ -6758,7 +6790,7 @@ export class Fp3dView3d extends LitElement {
         padding: 0;
         border-radius: 50%;
         border: 1px solid rgba(160, 240, 255, 0.35);
-        background: rgba(8, 16, 34, 0.7);
+        background: var(--fp3d-s-chrome, rgba(8, 16, 34, 0.7));
         color: var(--fp3d-text);
         cursor: pointer;
         z-index: 4;
@@ -6774,7 +6806,7 @@ export class Fp3dView3d extends LitElement {
         max-width: min(420px, calc(100% - 80px));
         padding: 6px 12px;
         border-radius: 14px;
-        background: rgba(8, 16, 34, 0.85);
+        background: var(--fp3d-s-chrome, rgba(8, 16, 34, 0.85));
         border: 1px solid rgba(160, 240, 255, 0.35);
         color: var(--fp3d-text);
         font-size: 14px;
@@ -7765,6 +7797,24 @@ export class Fp3dView3d extends LitElement {
       .fp3d-holo-plain .fp3d-holo-scan {
         display: none;
       }
+      /* Day (#86): the cyan glass vanished on the pale sky; the cards become dark glass with a deep cyan rim */
+      :host([light]) .fp3d-holo:not(.fp3d-holo-bin) {
+        background: linear-gradient(140deg, rgba(22, 58, 100, 0.9) 0%, rgba(12, 34, 70, 0.92) 55%, rgba(8, 24, 52, 0.94) 100%);
+        border-color: rgba(11, 122, 153, 0.85);
+        box-shadow:
+          0 6px 22px rgba(20, 40, 80, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.25);
+        text-shadow: none;
+      }
+      :host([light]) .fp3d-holo-link line {
+        stroke: rgba(11, 122, 153, 0.9);
+        filter: none;
+      }
+      :host([light]) .fp3d-holo-link circle {
+        fill: #ffffff;
+        stroke: #0b7a99;
+        filter: none;
+      }
       /* the thin line from the solar field up to the card, with a dot on the field */
       .fp3d-holo-link {
         position: absolute;
@@ -7935,6 +7985,36 @@ export class Fp3dView3d extends LitElement {
         backdrop-filter: blur(6px);
         font-variant-numeric: tabular-nums;
       }
+      /* a value tile grows when hovered, focused or tapped, so it reads without zooming in (#90) */
+      .fp3d-energy-tile {
+        position: relative;
+        pointer-events: auto;
+        cursor: zoom-in;
+        transform-origin: top left;
+        transition: transform 160ms ease-out;
+      }
+      .fp3d-energy-big {
+        transform: scale(1.5);
+        z-index: 2;
+        cursor: zoom-out;
+      }
+      .fp3d-energy-tile:focus-visible {
+        transform: scale(1.5);
+        z-index: 2;
+        outline: 2px solid var(--fp3d-accent);
+        outline-offset: 2px;
+      }
+      @media (hover: hover) {
+        .fp3d-energy-tile:hover {
+          transform: scale(1.5);
+          z-index: 2;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .fp3d-energy-tile {
+          transition: none;
+        }
+      }
       .fp3d-energy-item span {
         font-size: 11px;
         color: var(--fp3d-muted);
@@ -8044,6 +8124,16 @@ export class Fp3dView3d extends LitElement {
           scrollbar-width: none;
           pointer-events: auto;
         }
+        /* the scrolling row would clip a scaled tile: there the enlarged tile gets bigger text instead (#90) */
+        .fp3d-energy .fp3d-energy-tile {
+          transform: none;
+        }
+        .fp3d-energy-big span {
+          font-size: 13px;
+        }
+        .fp3d-energy-big b {
+          font-size: 22px;
+        }
         .fp3d-legend {
           bottom: auto;
           top: 62px;
@@ -8105,7 +8195,8 @@ export class Fp3dView3d extends LitElement {
         font-weight: 600;
         line-height: 1.35;
         color: var(--fp3d-text);
-        background: rgba(10, 16, 32, 0.72);
+        /* a notch more solid so names read over bright neon edges (#88) */
+        background: rgba(10, 16, 32, 0.88);
         pointer-events: none;
       }
       .fp3d-dev-sel {

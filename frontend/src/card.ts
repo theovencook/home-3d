@@ -12,7 +12,8 @@ import type { HomeAssistant } from "./types.ts";
 import { showsPlan2d, type CardConfig, type CardControl } from "./card-config.ts";
 import { nightActive } from "./kiosk.ts";
 import { lookOf } from "./themes.ts";
-import { shownAccent, textOn } from "./ha-theme.ts";
+import { lightChrome } from "./scheme.ts";
+import { shownAccent, shownLook, textOn } from "./ha-theme.ts";
 import { loadCardEditor } from "./load-card-editor.ts";
 import type { WallMode } from "./viewer/viewer3d.ts";
 import { hasFeature, type Feature } from "./features.ts";
@@ -293,6 +294,11 @@ clearTimeout(this.cleanTimer);
       const night = nightActive(this._config?.night, this.hass);
       if (night !== this._night) this._night = night;
     }
+  }
+
+  protected updated(): void {
+    // the card's chrome goes light with the Day look (#85)
+    this.toggleAttribute("light", lightChrome(shownLook(lookOf(this._config?.theme), this.hass)));
   }
 
   /** One level up: room -> floor -> house. */

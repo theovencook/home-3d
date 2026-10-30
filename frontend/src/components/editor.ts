@@ -12,6 +12,10 @@ import { clipConvex, netRoomArea } from "../geometry/area.ts";
 import { areaText, formatImperial, lengthText, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 import { closeGaps, straightenEdges, suggestedThickness } from "../geometry/gaps.ts";
 import { clampIntoRoom, keepInRoom, sharedEdge, snapToWall } from "../geometry/snap.ts";
+import { itemsAt, minHitPx, nextPick } from "../geometry/pick.ts";
+import { itemsByRoom } from "../item-list.ts";
+import "./item-list-view.ts";
+import type { ItemRow } from "./item-list-view.ts";
 import { cornerPoint, nearestOnPath, onWall, pipePath, type P3 } from "../geometry/runs.ts";
 import { connectionsAt, laidPipe, nearestOnOutline, planConnection, poolNodeAt, runLead, runsOnWall, splitPipe, type Connection, type ConnectVia, type WallRun } from "../pool-runs.ts";
 import { devicePorts, FILTER_VALVES, jointPortAt, jointPorts, nodePart, poolPortFlow, portFlow, splitNode, type PortName } from "../pool-ports.ts";
@@ -54,11 +58,16 @@ import { type CarLinks, type Background, OUTDOOR_TOP, sidelightLayout, DEFAULT_W
 import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { edgeReach, generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { edgeStartCorner, openingTap } from "../geometry/openings.ts";
+import { nameNewRoom, roomNameSuggestions } from "../room-naming.ts";
+import { wallSummary } from "../geometry/room-walls.ts";
+import { carryRectResize, strandedBy, type ResizeNote as ResizeNoteOf } from "../geometry/room-resize.ts";
 import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } from "../i18n.ts";
 import { ISSUES_URL } from "./extensions.ts";
 import { beforeSelectionChange, deepActive, releaseTyping, selectionMoved, takesTyping } from "../focus-release.ts";
 import { escapeStep } from "../editor-keys.ts";
 import { furniturePanel, type FurnitureField } from "../item-panel.ts";
+import { moveToFloor } from "../item-floor.ts";
+import { clipboardKey, copyItems, pasteItems, withKeys, type ItemClip } from "../clipboard.ts";
 import { TypedCommit } from "../typed-commit.ts";
 import { typedValue } from "./typed-value.ts";
 import { iconPath } from "../icons.ts";
@@ -182,8 +191,10 @@ import { hiddenUnplaced, setUnplacedHidden, suggestLinks, unplacedByArea, type L
 /** Drag-and-drop type of an entity dragged from the unplaced list onto the plan (#83). */
 const ENTITY_DRAG = "application/x-home3d-entity";
 import { setIntervalPart } from "../show-when.ts";
+import { UndoHistory } from "../undo-history.ts";
 
 /** Items that can be fixed against moving. */
+type ResizeNote = ResizeNoteOf<Building>;
 type FixKind = "room" | "opening" | "furniture" | "device" | "wall" | "outdoor";
 
 /** Highest mount height the backend accepts (schema: 0–10 m); "40" meant as centimetres would refuse every save. */
@@ -237,7 +248,8 @@ interface Guides {
 /** Drags that change the document live (restored when cancelled, recorded in the history when done). */
 const EDIT_DRAGS = new Set(["vertex", "room", "device", "pet", "opening", "furniture", "furnset", "rotate", "resize", "outdoor", "roofmove", "roofcorner", "roofvertex", "outvertex", "outbox", "pipept", "poolport", "pooldev", "pooljoint", "solarmove", "solarturn", "cablept", "holopt", "bgmove", "bgscale", "bgrotate"]);
 
-const HISTORY = 100;
+/** The editor's item clipboard (#74): in memory, shared by every editor on the page, kept while the Editor tab is closed. */
+let clipboard: ItemClip | null = null;
 /** An angle turned on by `d` degrees, kept between -180 and 180. */
 const turnBy = (a: number, d: number): number => {
   const v = (((a + d) % 360) + 360) % 360;
@@ -405,6 +417,7 @@ export class Fp3dEditor extends LitElement {
     _splitRatio: { state: true },
     _backupBusy: { state: true },
     _wall3d: { state: true },
+    _solarDim: { state: true },
     _sidePinned: { state: true },
     _sideMin: { state: true },
     _sideOpen: { state: true },
@@ -414,6 +427,9 @@ export class Fp3dEditor extends LitElement {
     _openingId: { state: true },
     _furnitureId: { state: true },
     _multi: { state: true },
+    _hiddenItems: { state: true },
+    _placing: { state: true },
+    _placeAt: { state: true },
     _single: { state: true },
     _multiMode: { state: true },
     _deviceId: { state: true },
@@ -429,6 +445,7 @@ export class Fp3dEditor extends LitElement {
     _cableId: { state: true },
     _expanded: { state: true },
     _notice: { state: true },
+    _resize: { state: true },
     _history: { state: true },
     _spots: { state: true },
     _outdoorId: { state: true },
@@ -466,6 +483,8 @@ export class Fp3dEditor extends LitElement {
     _measureLen: { state: true },
     _packages: { state: true },
     _rectSize: { state: true },
+    _rectName: { state: true },
+    _wallsOpen: { state: true },
     _tool: { state: true },
     _toolMenu: { state: true },
     _settingsMenu: { state: true },
@@ -489,6 +508,7 @@ export class Fp3dEditor extends LitElement {
     _canRedo: { state: true },
     canEdit: { attribute: false },
     home: { attribute: false },
+    history: { attribute: false },
   };
 
   declare hass: HomeAssistant;
@@ -497,6 +517,8 @@ export class Fp3dEditor extends LitElement {
   declare canEdit: boolean | undefined;
   /** The home being edited (#53): pictures, restore points and backups go there; unset: the active home. */
   declare home: string | null | undefined;
+  /** The undo history (#66): the panel's, so it outlives this element when another tab opens; else its own. */
+  declare history: UndoHistory;
   declare narrow: boolean;
   /** Imported furniture packs (from the panel's controller). */
   declare packs: FurniturePack[] | undefined;
@@ -516,6 +538,8 @@ export class Fp3dEditor extends LitElement {
   private declare _backupBusy: boolean;
   /** Walls in the 3D pane: full height ("auto") or cut at the cut height (shows wall units and shelves). */
   private declare _wall3d: WallMode;
+  /** Energy tool: roof solar fields drawn faint over the floor plan (the selected one stays full), per device (#89). */
+  private declare _solarDim: boolean;
   /** Sidebar beside the 3D pane: pinned open always, or folded to a strip while nothing is selected. */
   private declare _sidePinned: boolean;
   /** The sidebar folded to a narrow strip beside the plan (more room to move furniture); remembered per browser. */
@@ -528,6 +552,12 @@ export class Fp3dEditor extends LitElement {
   private declare _furnitureId: string | null;
   /** Several furniture items selected together (shift-click, a frame); empty = the usual single selection. */
   private declare _multi: string[];
+  /** Items hidden in this editor's plan only (#75), to reach what lies under them; not saved. */
+  private declare _hiddenItems: string[];
+  /** A library card waiting for a click on the plan that places it (#76). */
+  private declare _placing: { type: string; mirror: boolean } | null;
+  /** Where the armed card would land (the pointer over the plan), for its outline. */
+  private declare _placeAt: Vec2 | null;
   /** One part of a furniture block is edited on its own (double-click), not the whole block. */
   private declare _single: boolean;
   /** Touch: taps add items to the selection, a drag on empty ground draws a frame. */
@@ -566,6 +596,8 @@ export class Fp3dEditor extends LitElement {
   private declare _expanded: Set<string>;
   /** Short confirmation shown after an action (e.g. closed gaps). */
   private declare _notice: string | null;
+  /** What the last outline edit of a room carried or left outside (#64); stale once the document moves on. */
+  private declare _resize: ResizeNote | null;
   /** Restore points, loaded when the backup section is opened. */
   private declare _history: Snapshot[] | null;
   /** The opt-in reports: their status (null = not loaded, "error" = backend without them). */
@@ -691,6 +723,10 @@ export class Fp3dEditor extends LitElement {
   /** The package list of the selected room is open. */
   private declare _packages: boolean;
   private declare _rectSize: [number, number];
+  /** Name typed for the next "Rectangle by size" room (#65); empty = "Room N". */
+  private declare _rectName: string;
+  /** The room panel's Walls section is unfolded (#67; per browser, `home3d.wallsOpen`). */
+  private declare _wallsOpen: boolean;
   private declare _spots: { type: FurnitureType; rows: number; cols: number; entity: string | null } | null;
   private declare _tool: Tool;
   /** The toolbar menu open (its group), and which tool's choices are unfolded in it. */
@@ -726,14 +762,16 @@ export class Fp3dEditor extends LitElement {
   private declare _canUndo: boolean;
   private declare _canRedo: boolean;
 
-  private past: string[] = [];
-  private future: string[] = [];
   private drag: Drag | null = null;
+  /** Set while a change that may join the last undo step runs (arrow nudges, #66). */
+  private mergeKey: string | null = null;
   private pointers = new Map<number, [number, number]>();
   private pinch: { dist: number; mid: [number, number] } | null = null;
   private fitted = false;
   /** The view fit() set last (the plan follows size changes until it is moved). */
   private fittedView: unknown = null;
+  /** The last fit framed everything (plot, garden items), not just the house: a resize keeps that (#91). */
+  private fittedAll = false;
   private resizeObserver?: ResizeObserver;
   private loadingImages = new Set<string>();
 
@@ -746,6 +784,9 @@ export class Fp3dEditor extends LitElement {
     this._openingId = null;
     this._furnitureId = null;
     this._multi = [];
+    this._hiddenItems = [];
+    this._placing = null;
+    this._placeAt = null;
     this._single = false;
     this._multiMode = false;
     this._deviceId = null;
@@ -828,10 +869,18 @@ export class Fp3dEditor extends LitElement {
     this._backupBusy = false;
     // the 3D pane's wall view stays as it was last set on this device (#309)
     this._wall3d = "cut";
+    this._wallsOpen = false;
     try {
       if (localStorage.getItem("home3d.walls3d") === "auto") this._wall3d = "auto";
+      this._wallsOpen = localStorage.getItem("home3d.wallsOpen") === "1";
     } catch {
       // no storage: the default
+    }
+    this._solarDim = true;
+    try {
+      if (localStorage.getItem("home3d.solarDim") === "off") this._solarDim = false;
+    } catch {
+      // no storage: dimmed
     }
     this._doc3d = this._doc;
     this._sideOpen = false;
@@ -854,6 +903,7 @@ export class Fp3dEditor extends LitElement {
     this._measureLen = 3;
     this._packages = false;
     this._rectSize = [4, 3];
+    this._rectName = "";
     this._tool = "select";
     this._toolMenu = null;
     this._settingsMenu = false;
@@ -882,6 +932,7 @@ export class Fp3dEditor extends LitElement {
     this._images = {};
     this._canUndo = false;
     this._canRedo = false;
+    this.history = new UndoHistory();
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -926,6 +977,10 @@ export class Fp3dEditor extends LitElement {
     // entering or leaving the roof tool: the 3D half frames the whole house (or the floor) again
     if (changed.has("_tool") && (this.houseTool || changed.get("_tool") === "roof" || changed.get("_tool") === "energy")) this.reframe3d = true;
     if (changed.has("building") && this.building !== this._doc) {
+      // the plan this panel's history leads up to keeps its steps (the tab was left and opened again, #66); a plan
+      // from anywhere else (another home, the server, someone else's edit) starts a fresh history
+      this.history.adopt(this.building, this.home);
+      this.showHistory();
       this._doc = this.building;
       this._doc3d = this.building;
       // the first plan: the floor chosen in the house settings (D418), else the first of the list
@@ -967,7 +1022,7 @@ export class Fp3dEditor extends LitElement {
       // a plan nobody has moved since it was fitted stays fitted (the 3D half opening beside the roof tool)
       if ((!this.fitted || this._view === this.fittedView) && this._size.w > 0) {
         this.fitted = true;
-        this.fit();
+        this.fit(this.fittedAll);
       }
     });
     this.resizeObserver.observe(stage);
@@ -1223,6 +1278,7 @@ export class Fp3dEditor extends LitElement {
             <button aria-pressed=${this._wall3d === "auto"} @click=${() => this.setWall3d("auto")}>${this.t("walls_auto")}</button>
             <button aria-pressed=${this._wall3d === "cut"} @click=${() => this.setWall3d("cut")}>${this.t("walls_cut")}</button>
           </div>`}
+      <button class="fp3d-3d-fold" title=${this.t("split_fold_hint")} aria-label=${this.t("split_fold_hint")} @click=${() => this.toggleSplit()}>✕ 3D</button>
       ${this.render3dBar()}
       <fp3d-view3d
               .walkable=${false}
@@ -1346,15 +1402,11 @@ export class Fp3dEditor extends LitElement {
 
   /** Replace the document; `base` (the state before the change) goes into the undo history. */
   private setDoc(next: Building, base: Building | null = this._doc): void {
-    if (base) {
-      this.past.push(JSON.stringify(base));
-      if (this.past.length > HISTORY) this.past.shift();
-      this.future = [];
-    }
+    if (base) this.history.push(base, this.mergeKey);
+    this.history.track(next);
     this._doc = next;
     setCameraSensors(next);
-    this._canUndo = this.past.length > 0;
-    this._canRedo = this.future.length > 0;
+    this.showHistory();
     this.dispatchEvent(new CustomEvent("building-changed", { detail: { building: next }, bubbles: true, composed: true }));
   }
 
@@ -1369,17 +1421,19 @@ export class Fp3dEditor extends LitElement {
   }
 
   private undo(): void {
-    const prev = this.past.pop();
-    if (!prev) return;
-    this.future.push(JSON.stringify(this._doc));
-    this.restore(JSON.parse(prev));
+    const prev = this.history.undo(this._doc);
+    if (prev) this.restore(prev);
   }
 
   private redo(): void {
-    const next = this.future.pop();
-    if (!next) return;
-    this.past.push(JSON.stringify(this._doc));
-    this.restore(JSON.parse(next));
+    const next = this.history.redo(this._doc);
+    if (next) this.restore(next);
+  }
+
+  /** The undo / redo buttons follow the history. */
+  private showHistory(): void {
+    this._canUndo = this.history.canUndo;
+    this._canRedo = this.history.canRedo;
   }
 
   private restore(doc: Building): void {
@@ -1387,8 +1441,7 @@ export class Fp3dEditor extends LitElement {
     if (!doc.floors.some((f) => f.id === this._floorId)) this._floorId = doc.floors[0]?.id ?? null;
     if (!this.floor?.rooms.some((r) => r.id === this._roomId)) this._roomId = null;
     this._vertex = null;
-    this._canUndo = this.past.length > 0;
-    this._canRedo = this.future.length > 0;
+    this.showHistory();
     this.dispatchEvent(new CustomEvent("building-changed", { detail: { building: doc }, bubbles: true, composed: true }));
   }
 
@@ -1409,9 +1462,18 @@ export class Fp3dEditor extends LitElement {
     return [e.clientX - rect.left, e.clientY - rect.top];
   }
 
-  private fit(): void {
+  /** "Whole plan": the floor's rooms; `all` ("Fit everything", #91): the plot, items and devices in the garden too. */
+  private fit(all = false): void {
     const pts = this.floor?.rooms.flatMap((r) => r.points) ?? [];
-    if (this._tool === "outdoor" || this._tool === "pool") for (const a of this.floor?.outdoor ?? []) pts.push(...a.points);
+    if (all || this._tool === "outdoor" || this._tool === "pool") for (const a of this.floor?.outdoor ?? []) pts.push(...a.points);
+    if (all) {
+      for (const f of this.floor?.furniture ?? []) {
+        const r = Math.max(f.w, f.d) / 2;
+        pts.push([f.x - r, f.z - r], [f.x + r, f.z + r]);
+      }
+      for (const p of this.floor?.placements ?? []) pts.push([p.x, p.z]);
+    }
+    this.fittedAll = all;
     // the roof tool shows the roof sections too, which reach past the rooms
     if (this._tool === "roof") for (const s of this._doc.settings.roof.sections ?? []) pts.push([s.x0, s.z0], [s.x1, s.z1]);
     const b = pts.length ? bounds(pts) : { x0: 0, z0: 0, x1: 10, z1: 8 };
@@ -1429,6 +1491,10 @@ export class Fp3dEditor extends LitElement {
 
   /** Bring a plan point to the middle of the plan, zoomed in enough to see a small item there. */
   private showPoint(x: number, z: number): void {
+    // already in view (with a margin): the plan stays where it is (#75)
+    const [sx, sy] = this.toScreen([x, z]);
+    const m = 32;
+    if (sx >= m && sy >= m && sx <= this._size.w - m && sy <= this._size.h - m) return;
     const scale = Math.max(this._view.scale, 70);
     this._view = { scale, ox: this._size.w / 2 - x * scale, oy: this._size.h / 2 - z * scale };
   }
@@ -1523,6 +1589,8 @@ export class Fp3dEditor extends LitElement {
     this._ctx = null;
     this._fixedHint = false;
     this.fixedPan = false;
+    // a press that places an armed library card (#76) is no long press for the item menu
+    const placing = !!this._placing;
     this.pointerDown(e);
     if (this.pointers.size !== 1) {
       clearTimeout(this.pressTimer);
@@ -1531,7 +1599,7 @@ export class Fp3dEditor extends LitElement {
     this.guardFixed(this.localPoint(e));
     clearTimeout(this.pressTimer);
     this.pressStart = null;
-    if (e.pointerType === "touch" && (this._tool === "select" || this._tool === "furniture")) {
+    if (e.pointerType === "touch" && !placing && (this._tool === "select" || this._tool === "furniture")) {
       const at = this.localPoint(e);
       const target = e.target as Element;
       this.pressStart = at;
@@ -1539,7 +1607,7 @@ export class Fp3dEditor extends LitElement {
         const d = this.drag;
         if (d && "moved" in d && d.moved) return;
         this.drag = null;
-        this.openContext(target, at);
+        this.openContext(target, at, "touch");
       }, 550);
     }
   }
@@ -1803,6 +1871,12 @@ export class Fp3dEditor extends LitElement {
       else if (!this.placeOpening(this._openingPreset, local)) this.drag = { kind: "pan", last: local };
       return;
     }
+    if (this._placing && this.isEditor && (this._tool === "select" || this._tool === "furniture")) {
+      // an armed library card lands where the plan is clicked (#76); Shift keeps it for the next click
+      this.placeArmed(this.placePoint(world, e.altKey), e.shiftKey);
+      this.drag = null;
+      return;
+    }
     if (this.isEditor && (this._tool === "select" || this._tool === "furniture") && (e.shiftKey || this._multiMode)) {
       // several furniture items: shift-click (or the multi mode on touch) adds or removes one, a drag draws a frame
       const fEl = target.closest("[data-furniture]");
@@ -1844,9 +1918,10 @@ export class Fp3dEditor extends LitElement {
       this.drag = { kind: "aim", entityId: aimEl.getAttribute("data-aim")!, base: this._doc, moved: false };
       return;
     }
-    const furnitureEl = target.closest("[data-furniture]");
-    if (furnitureEl && !target.closest("[data-vertex], [data-mid]")) {
-      const id = furnitureEl.getAttribute("data-furniture")!;
+    // an item under the press, its drawn shape grown to a minimum target (#72): it wins over the room under it
+    const pickedId = this.pickItem(target, world, e.pointerType, e.altKey);
+    if (pickedId) {
+      const id = pickedId;
       const now = Date.now();
       const twice = this.lastFurnTap?.id === id && now - this.lastFurnTap.t < 400;
       this.lastFurnTap = { id, t: now };
@@ -1949,9 +2024,11 @@ export class Fp3dEditor extends LitElement {
     const roomId = target.closest("[data-room]")?.getAttribute("data-room") ?? this.roomAt(world);
     if (roomId) {
       if (roomId !== this._roomId) this._vertex = null;
+      // the body moves the room only once the room alone is selected (#72); the first press selects it and pans
+      const selectedAlone = roomId === this._roomId && !this._furnitureId && !this._openingId && !this._deviceId && !this._outdoorId && !this._wallId && !this._multi.length;
       this.selectItem("room", roomId);
       this.drag =
-        this.isEditor && this._tool !== "furniture"
+        this.isEditor && this._tool !== "furniture" && selectedAlone
         ? { kind: "room", roomId, start: world, startScreen: local, base: this._doc, moved: false }
         : { kind: "pan", last: local };
       return;
@@ -1987,6 +2064,7 @@ export class Fp3dEditor extends LitElement {
     const world = this.toWorld(...local);
     const drag = this.drag;
     if (!drag) {
+      if (this._placing) this._placeAt = this.placePoint(world, e.altKey);
       if (this._tool !== "select" && this._tool !== "furniture" && this.floor) this._cursor = this.snap(world, undefined, e.altKey);
       if (this._tool === "opening" && e.pointerType !== "touch") this.hoverOpening(e.target as Element, local);
       return;
@@ -2622,6 +2700,7 @@ export class Fp3dEditor extends LitElement {
       case "room":
         // the drag already changed the document without history; record the state before the drag
         if (drag.moved) this.pushHistory(drag.base);
+        if (drag.moved && drag.kind === "vertex") this.noteResize(drag.roomId, drag.base);
         this._guides = {};
         break;
       default:
@@ -2643,11 +2722,8 @@ export class Fp3dEditor extends LitElement {
   }
 
   private pushHistory(base: Building): void {
-    this.past.push(JSON.stringify(base));
-    if (this.past.length > HISTORY) this.past.shift();
-    this.future = [];
-    this._canUndo = true;
-    this._canRedo = false;
+    this.history.push(base);
+    this.showHistory();
   }
 
   private restoreLive(base: Building): void {
@@ -2740,8 +2816,26 @@ export class Fp3dEditor extends LitElement {
     const start = this._draft[0] ?? [0, 0];
     const [w, d] = this._rectSize;
     if (!(w > 0.1 && d > 0.1)) return;
-    this.addRoom([start, step(start, w, "right"), step(step(start, w, "right"), d, "down"), step(start, d, "down")]);
+    const floor = this.floor;
+    const fallback = this.t("new_room", { n: (floor?.rooms.length ?? 0) + 1 });
+    const named = nameNewRoom(this._rectName, Object.values(this.hass?.areas ?? {}), this.usedAreas(), fallback);
+    this.addRoom([start, step(start, w, "right"), step(step(start, w, "right"), d, "down"), step(start, d, "down")], named);
     this._draft = [];
+    this._rectName = "";
+  }
+
+  /** Type the start corner of the next room (#65): moves a tapped start and any walls typed from it. */
+  private setRectStart(axis: 0 | 1, value: number): void {
+    if (!Number.isFinite(value)) return;
+    const start: Vec2 = this._draft[0] ?? [0, 0];
+    const delta = round(value - start[axis]);
+    const shift = (p: Vec2): Vec2 => (axis === 0 ? [round(p[0] + delta), p[1]] : [p[0], round(p[1] + delta)]);
+    this._draft = this._draft.length ? this._draft.map(shift) : [shift(start)];
+  }
+
+  /** Areas some room or outdoor area of the home already stands for. */
+  private usedAreas(): Set<string | null> {
+    return new Set(this._doc.floors.flatMap((f) => [...f.rooms.map((r) => r.area_id), ...(f.outdoor ?? []).map((a) => a.area_id ?? null)]));
   }
 
   private renderMeasureForm() {
@@ -2796,6 +2890,23 @@ export class Fp3dEditor extends LitElement {
             ${draft.length >= 3 ? html`<p class="fp3d-sub">${this.t("measure_gap", { gap: len(gap) })}</p>` : nothing}`}
       <h4 class="fp3d-lib-head">${this.t("rect_by_size")}</h4>
       <div class="fp3d-form">
+        <label class="fp3d-field fp3d-wide"
+          >${this.t("room_name")}
+          <input
+            list="fp3d-room-names"
+            .value=${this._rectName}
+            placeholder=${this.t("new_room", { n: (this.floor?.rooms.length ?? 0) + 1 })}
+            @change=${(e: Event) => (this._rectName = (e.target as HTMLInputElement).value)}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key !== "Enter") return;
+              this._rectName = (e.target as HTMLInputElement).value;
+              this.rectBySize();
+            }}
+          /><datalist id="fp3d-room-names">
+            ${roomNameSuggestions(Object.values(this.hass?.areas ?? {}), this.usedAreas(), this.floor?.ha_floor ?? null).map((n) => html`<option value=${n}></option>`)}
+          </datalist></label
+        >
+        ${this.len(this.t("x"), first?.[0] ?? 0, (v) => this.setRectStart(0, v))} ${this.len(this.t("z"), first?.[1] ?? 0, (v) => this.setRectStart(1, v))}
         ${this.len(this.t("width"), this._rectSize[0], (v) => (this._rectSize = [Math.max(0.1, v), this._rectSize[1]]), 0.01, 0.1)}
         ${this.len(this.t("depth"), this._rectSize[1], (v) => (this._rectSize = [this._rectSize[0], Math.max(0.1, v)]), 0.01, 0.1)}
         <button class="fp3d-btn fp3d-wide" @click=${() => this.rectBySize()}>${this.t("rect_add")}</button>
@@ -2946,13 +3057,12 @@ export class Fp3dEditor extends LitElement {
     this.selectItem("outdoor", copy.id);
   }
 
-  private addRoom(points: Vec2[]): void {
+  private addRoom(points: Vec2[], named?: { name: string; area_id: string | null }): void {
     if (!this.floor) return;
     const id = uid("room");
     const n = this.floor.rooms.length + 1;
-    this.change((_, floor) =>
-      floor.rooms.push({ id, name: this.t("new_room", { n }), area_id: null, points: points.map(([x, z]) => [round(x), round(z)]), floor_material: "wood" }),
-    );
+    const { name, area_id } = named ?? { name: this.t("new_room", { n }), area_id: null };
+    this.change((_, floor) => floor.rooms.push({ id, name, area_id, points: points.map(([x, z]) => [round(x), round(z)]), floor_material: "wood" }));
     this._roomId = id;
     this._vertex = null;
     // the tool stays: one room after the other (Esc or "Select" ends it)
@@ -2990,6 +3100,10 @@ export class Fp3dEditor extends LitElement {
     } else if (mod && e.key.toLowerCase() === "y") {
       e.preventDefault();
       this.redo();
+    } else if (clipboardKey(e)) {
+      // the editor's own clipboard (#74); a key with nothing to do leaves the browser's copy and paste alone
+      const act = clipboardKey(e);
+      if (act === "copy" ? this.copySelection() : act === "paste" ? this.pasteClipboard() : this.selectAll()) e.preventDefault();
     } else if (mod && e.key.toLowerCase() === "d") {
       e.preventDefault();
       if (this._furnitureId) this.duplicateFurniture();
@@ -3016,6 +3130,13 @@ export class Fp3dEditor extends LitElement {
       if (this.nudge(dx * step, dz * step)) e.preventDefault();
     } else if (e.key.toLowerCase() === "r" && !mod && this._furnitureId) {
       this.rotateFurniture(e.shiftKey ? -90 : 90);
+    } else if (e.key === "Tab" && !mod && !e.altKey && this._furnitureId && (this._tool === "select" || this._tool === "furniture") && this.keysFree(path)) {
+      // Tab steps through the items of the room (#75), Shift+Tab backwards
+      const next = nextPick(this.tabItems(), this._furnitureId, e.shiftKey ? -1 : 1);
+      if (next) {
+        e.preventDefault();
+        this.selectFromList(next);
+      }
     } else if (e.key === "Backspace" && this.drawingPoints) {
       this._draft = this._draft.slice(0, -1);
     } else if (e.key === "Enter" && this.drawingPoints) {
@@ -3030,6 +3151,7 @@ export class Fp3dEditor extends LitElement {
     const step = escapeStep({
       typing: takesTyping(deepActive(this.renderRoot as ShadowRoot)),
       menu: !!this._ctx,
+      placing: !!this._placing,
       pipeDraft: !!this._pipeDraft,
       pipeMode: this._pipeMode,
       drawing: this._draft.length > 0,
@@ -3039,6 +3161,7 @@ export class Fp3dEditor extends LitElement {
     });
     if (step === "release") releaseTyping(this.renderRoot as ShadowRoot);
     else if (step === "close_menu") this._ctx = null;
+    else if (step === "cancel_place") this.cancelPlacing();
     else if (step === "cancel_pipe") this._pipeDraft = null;
     else if (step === "end_pipe_mode") this._pipeMode = false;
     else {
@@ -3051,10 +3174,34 @@ export class Fp3dEditor extends LitElement {
     }
   }
 
+  /**
+   * Nothing that uses Tab itself has the keyboard (#75): no button, link or field is focused, so Tab may step
+   * through items instead of moving the focus.
+   */
+  private keysFree(path: EventTarget[]): boolean {
+    const top = path[0];
+    if (!top) return true;
+    if (top === this || (typeof document !== "undefined" && (top === document.body || top === document.documentElement))) return true;
+    return typeof SVGElement !== "undefined" && top instanceof SVGElement;
+  }
+
   // ------------------------------------------------------------------ actions
 
-  /** Moves the selected item by (dx, dz) metres; false when nothing movable is selected. */
+  /**
+   * Moves the selected item by (dx, dz) metres; false when nothing movable is selected. Nudges of the same selection
+   * in quick succession are one undo step (#66).
+   */
   private nudge(dx: number, dz: number): boolean {
+    const key = ["nudge", this._furnitureId ? this.selection().join(",") : "", this._deviceId, this._openingId, this._wallId, this._outdoorId, this._roomId, this._vertex].join("|");
+    this.mergeKey = key;
+    try {
+      return this.nudgeBy(dx, dz);
+    } finally {
+      this.mergeKey = null;
+    }
+  }
+
+  private nudgeBy(dx: number, dz: number): boolean {
     const floor = this.floor;
     if (!floor || !this.isEditor) return false;
     const fix = this.selectedFix;
@@ -3216,8 +3363,12 @@ export class Fp3dEditor extends LitElement {
   private renderRoofFloors() {
     const floors = [...this._doc.floors].sort((a, b) => b.elevation - a.elevation);
     if (floors.length < 2) return nothing;
-    return html`<div class="fp3d-seg fp3d-dev-source">
-      ${floors.map((f) => html`<button aria-pressed=${f.id === this._floorId} @click=${() => (this._floorId = f.id)}>${f.name}</button>`)}
+    // these only pick the floor the plan shows to draw along: the roof itself is the whole building's (#68)
+    return html`<div class="fp3d-roof-floors" title=${this.t("roof_floor_pick_hint")}>
+      <span class="fp3d-sub">${this.t("roof_floor_pick")}</span>
+      <div class="fp3d-seg fp3d-dev-source">
+        ${floors.map((f) => html`<button aria-pressed=${f.id === this._floorId} @click=${() => (this._floorId = f.id)}>${f.name}</button>`)}
+      </div>
     </div>`;
   }
 
@@ -3386,6 +3537,16 @@ export class Fp3dEditor extends LitElement {
     return { u: (p[0] - face.o[0]) * face.eu[0] + (p[1] - face.o[2]) * face.eu[2], s: Number.NaN };
   }
 
+  /** Draw roof solar fields faint over the plan (or at full strength); remembered on this device (#89). */
+  private setSolarDim(on: boolean): void {
+    this._solarDim = on;
+    try {
+      localStorage.setItem("home3d.solarDim", on ? "on" : "off");
+    } catch {
+      // no storage: this session only
+    }
+  }
+
   /** Solar fields over the plan: every module as a small rectangle; the selected field highlighted. */
   private renderSolarFields() {
     const fields = this._doc.settings.roof.solar ?? [];
@@ -3395,6 +3556,8 @@ export class Fp3dEditor extends LitElement {
       const face = fieldFace(this._doc, f, faces);
       if (!face || (face.wall && face.wall.floorId !== this._floorId)) return nothing;
       const sel = f.id === this._solarId;
+      // a field on the roof lies over every floor's plan: faint unless chosen, so the rooms under it stay readable
+      const dim = this._solarDim && !sel && !face.wall && !face.unbounded;
       let handle: unknown = nothing;
       if (sel && face.unbounded && this.isEditor && !f.locked) {
         const [cx, cz] = fieldCenter(face, f);
@@ -3410,7 +3573,7 @@ export class Fp3dEditor extends LitElement {
         </g>`;
       }
       // the selected field also shows its switched-off modules (dashed), so they can be switched on again
-      return svg`<g data-solar=${f.id} class=${`fp3d-solar${sel ? " fp3d-solar-sel" : ""}${sel && this._solarPick ? " fp3d-solar-pick" : ""}`}>${fieldModules(face, f, sel).map(
+      return svg`<g data-solar=${f.id} class=${`fp3d-solar${sel ? " fp3d-solar-sel" : ""}${dim ? " fp3d-solar-dim" : ""}${sel && this._solarPick ? " fp3d-solar-pick" : ""}`}>${fieldModules(face, f, sel).map(
         (m) => {
           // on a wall the modules stand upright: in the plan a strip just outside the wall
           // as deep as the modules stand off the wall (tilted ones further), at least 30 cm to grab
@@ -3869,6 +4032,12 @@ export class Fp3dEditor extends LitElement {
       ${this.renderRoofFloors()}
       <h3>☀ ${this.t("solar_fields")}</h3>
       <p class="fp3d-sub">${this.t(roofList.length ? "solar_hint" : "solar_no_roof")}</p>
+      ${fields.length
+        ? html`<label class="fp3d-check fp3d-solar-dim-toggle"
+            ><input type="checkbox" .checked=${this._solarDim} @change=${(e: Event) => this.setSolarDim((e.target as HTMLInputElement).checked)} />
+            ${this.t("solar_dim")}</label
+          >`
+        : nothing}
       ${fields.length
         ? html`<div class="fp3d-room-list">
             ${fields.map((f, i) => {
@@ -4585,14 +4754,63 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Select the item under a plan point and open its menu. */
-  private openContext(target: Element, local: [number, number]): void {
+  /**
+   * The item a plan press lands on (#72): its drawn shape grown to a 24 px target (44 px on touch), smallest item
+   * first. A press on a room corner or wall-end handle is never an item.
+   */
+  private pickItem(target: Element, world: Vec2, pointerType: string, through = false): string | null {
+    if (!this.floor || target.closest("[data-vertex], [data-mid], [data-wall-end], [data-out-box], [data-out-vertex]")) return null;
+    const hidden = this._hiddenItems;
+    const hits = itemsAt(this.floor.furniture, world, this._view.scale, minHitPx(pointerType), hidden.length ? (f) => hidden.includes(f.id) : undefined);
+    // Alt+click picks through a stack (#75): the item under the selected one
+    if (through) return nextPick(hits, this._furnitureId);
+    return hits[0] ?? target.closest("[data-furniture]")?.getAttribute("data-furniture") ?? null;
+  }
+
+  /** Hide an item in this editor's plan, or show it again (#75); a hidden selected item is let go. */
+  private toggleItemHidden(id: string): void {
+    const hidden = this._hiddenItems;
+    this._hiddenItems = hidden.includes(id) ? hidden.filter((x) => x !== id) : [...hidden, id];
+    if (this._hiddenItems.includes(id) && this.selection().includes(id)) this.selectItem("room", this._roomId);
+  }
+
+  /** The items Tab cycles through (#75): the shown ones in the selected item's room, else on the floor. */
+  private tabItems(): string[] {
+    const floor = this.floor;
+    const f = this.furnitureItem;
+    if (!floor || !f) return [];
+    const shown = floor.furniture.filter((m) => !this._hiddenItems.includes(m.id));
+    const groups = itemsByRoom(floor.rooms, shown);
+    for (const list of groups.values()) if (list.some((m) => m.id === f.id)) return list.map((m) => m.id);
+    return shown.map((m) => m.id);
+  }
+
+  /** An item chosen in the items list (#75): selected, and brought into view only if it is out of view. */
+  private selectFromList(id: string): void {
+    const f = this.floor?.furniture.find((m) => m.id === id);
+    if (!f) return;
+    this.selectItem("furniture", id);
+    this._single = !!f.group;
+    this.showPoint(f.x, f.z);
+  }
+
+  /** Delete one item from the items list (#75): that row only, even when it is part of a block. */
+  private async deleteFromList(id: string): Promise<void> {
+    if (!this.floor?.furniture.some((m) => m.id === id)) return;
+    this.selectItem("furniture", id);
+    this._single = true;
+    // asks first for a fixed item, in the app's own dialog (#59)
+    await this.deleteFurniture();
+  }
+
+  private openContext(target: Element, local: [number, number], pointerType = "mouse"): void {
     if (!this.isEditor || !this.floor) return;
     const world = this.toWorld(...local);
     const attr = (sel: string) => target.closest(`[${sel}]`)?.getAttribute(sel) ?? null;
     let hit: [FixKind, string] | null = null;
     const device = attr("data-device");
     const opening = attr("data-opening");
-    const furniture = target.closest("[data-vertex], [data-mid]") ? null : attr("data-furniture");
+    const furniture = this.pickItem(target, world, pointerType);
     const wall = attr("data-free-wall");
     const outdoor = attr("data-outdoor") ? (this.outdoorAt(world) ?? attr("data-outdoor")) : null;
     const room = attr("data-room") ?? this.roomAt(world);
@@ -4644,9 +4862,11 @@ export class Fp3dEditor extends LitElement {
         ? html`<button title=${this.t("fix_hint")} @click=${run(() => this.toggleFixed(c.kind, c.id))}>${fixed ? `🔓 ${this.t("unfix")}` : `🔒 ${this.t("fix")}`}</button>`
         : html`<button title=${this.t("lock_plan_hint")} @click=${run(() => this.toggleLockPlan())}>${this._doc.settings.lock_plan ? `🔓 ${this.t("plan_unlock")}` : `🔒 ${this.t("plan_lock")}`}</button>`}
       ${c.kind === "room" ? html`<button @click=${run(() => this.duplicateRoom())}>⧉ ${this.t("duplicate")}</button>` : nothing}
+      ${c.kind === "room" && clipboard ? html`<button title=${withKeys(this.t("paste_items"), ["Ctrl+V"])} @click=${run(() => this.pasteClipboard())}>⎘ ${this.t("paste_items_n", { n: clipboard.items.length })}</button>` : nothing}
       ${c.kind === "furniture"
-        ? html`<button @click=${run(() => this.duplicateFurniture())}>⧉ ${this.t("duplicate")}</button>
-            <button ?disabled=${fixed} @click=${run(() => this.rotateFurniture(90))}>↻ ${this.t("ctx_rotate")}</button>
+        ? html`<button title=${withKeys(this.t("duplicate"), ["Ctrl+D"])} @click=${run(() => this.duplicateFurniture())}>⧉ ${this.t("duplicate")}</button>
+            <button title=${withKeys(this.t("copy_items"), ["Ctrl+C"])} @click=${run(() => this.copySelection())}>⎘ ${this.t("copy_items")}</button>
+            <button ?disabled=${fixed} title=${withKeys(this.t("ctx_rotate"), ["R"])} @click=${run(() => this.rotateFurniture(90))}>↻ ${this.t("ctx_rotate")}</button>
             <button ?disabled=${fixed} @click=${run(() => this.mirrorFurniture())}>⇋ ${this.t("furn_mirror")}</button>
             <button @click=${run(() => {
               const f = this.floor?.furniture.find((m) => m.id === c.id);
@@ -4839,6 +5059,7 @@ export class Fp3dEditor extends LitElement {
   private hintText(): string {
     const key = this.hintKeyNow();
     // the kind the next tap adds is always named: it is never inherited silently (#63)
+    if (key === "hint_place" && this._placing) return this.t("hint_place", { name: furnitureName(this.hass, this._placing.type) });
     if (key === "hint_opening") return this._openingNote ?? this._openingHover ?? this.t("hint_opening", { kind: this.t(`preset_${this._openingPreset}` as I18nKey) });
     return this.t(key);
   }
@@ -4850,6 +5071,7 @@ export class Fp3dEditor extends LitElement {
       tool: this._tool,
       hasFloor: !!floor,
       rooms: floor?.rooms.length ?? 0,
+      placing: !!this._placing,
       selected: this._deviceId ? "device" : this._furnitureId ? "furniture" : this._openingId ? "opening" : this._roomId ? "room" : null,
       wallPick: this._wallPick,
       fixedHint: this._fixedHint,
@@ -5050,21 +5272,54 @@ export class Fp3dEditor extends LitElement {
     >`;
   }
 
-  /** Add a library item: its recipe first (#44), so it shows as itself at once. */
+  /**
+   * A library card was chosen (#76): it waits for a click on the plan, which places it there ("Place in the
+   * middle" keeps the old way). Its recipe is fetched meanwhile (#44), so it shows as itself at once.
+   */
   private addFurniture(type: string, mirror = false): void {
-    if (!this.hass) return;
-    void ensureRecipes(this.hass, [type]).then(() => this.placeFurniture(type, mirror));
+    if (!this.hass || !this.isEditor) return;
+    this._placing = { type, mirror };
+    this._placeAt = null;
+    void ensureRecipes(this.hass, [type]);
   }
 
-  private placeFurniture(type: string, mirror: boolean): void {
+  /** The armed card placed at a plan point (or in the room's middle without one); Shift keeps it armed. */
+  private placeArmed(at: Vec2 | null, keep = false): void {
+    const p = this._placing;
+    if (!p || !this.hass) return;
+    if (!keep) {
+      this._placing = null;
+      this._placeAt = null;
+    }
+    void ensureRecipes(this.hass, [p.type]).then(() => this.placeFurniture(p.type, p.mirror, at));
+  }
+
+  private placeArmedInMiddle(): void {
+    this.placeArmed(null);
+  }
+
+  private cancelPlacing(): void {
+    this._placing = null;
+    this._placeAt = null;
+  }
+
+  /** A plan point for the armed card: on the grid, Alt places freely. */
+  private placePoint(world: Vec2, free: boolean): Vec2 {
+    const g = this._doc.settings.grid;
+    return free || !g ? [round(world[0]), round(world[1])] : [round(Math.round(world[0] / g) * g), round(Math.round(world[1] / g) * g)];
+  }
+
+  private placeFurniture(type: string, mirror: boolean, at: Vec2 | null = null): void {
     const floor = this.floor;
     if (!floor || !this.isEditor) return;
+    // placed by a click (#76): into the room under the point
+    if (at) this._roomId = this.roomAt(at) ?? this._roomId;
     const [w, d, h0] = furnitureSize(type);
     // stairs reach up to the next floor
     const above = this._doc.floors.filter((f) => f.elevation > floor.elevation).sort((p, q) => p.elevation - q.elevation)[0];
     const h = STAIR_TYPES.has(type) ? round(above ? above.elevation - floor.elevation : floor.height + 0.25) : h0;
     const room = this.room;
-    const [x, z] = room ? centroid(room.points) : this.toWorld(this._size.w / 2, this._size.h / 2);
+    const [x, z] = at ?? (room ? centroid(room.points) : this.toWorld(this._size.w / 2, this._size.h / 2));
     let rotation = 0;
     if (type === "parking" && room) {
       // a parking spot runs into the room from its garage door, else along the room's longer side
@@ -5168,6 +5423,75 @@ export class Fp3dEditor extends LitElement {
     const copy = { ...structuredClone(f), id: uid("furniture"), x: round(f.x + 0.3), z: round(f.z + 0.3), group: this._single ? f.group : null };
     this.change((_, floor) => floor.furniture.push(copy));
     this.selectItem("furniture", copy.id);
+  }
+
+  /**
+   * The item panel's floor dropdown (#73): the chosen item (its block, the multi selection) goes to another floor
+   * with its links, in one undo step, and the editor follows it there, still chosen. Fixed items stay put.
+   */
+  private moveSelectionToFloor(to: string): void {
+    const from = this._floorId;
+    const ids = this._furnitureId ? this.selection() : [];
+    if (!from || to === from || !ids.length || !this.isEditor) return;
+    if (ids.some((id) => this.isFixedItem("furniture", id))) {
+      this._fixedHint = true;
+      return;
+    }
+    const [first, multi, single] = [this._furnitureId!, this._multi.length > 1, this._single];
+    let moved: string[] = [];
+    this.change((doc) => (moved = moveToFloor(doc, from, ids, to)));
+    if (!moved.length) return;
+    this._floorId = to;
+    this._vertex = null;
+    this._draft = [];
+    if (multi) this.setMulti(moved);
+    else this.selectItem("furniture", first);
+    this._single = single;
+    const item = this.furnitureItem;
+    this._roomId = item ? this.roomAt([item.x, item.z]) : null;
+  }
+
+  /** Ctrl+C (#74): the chosen items (block, multi selection) go to the editor's clipboard; false when none is chosen. */
+  private copySelection(): boolean {
+    const floor = this.floor;
+    const clip = floor && this._furnitureId ? copyItems(floor, this.selection()) : null;
+    if (!clip) return false;
+    clipboard = clip;
+    this.requestUpdate();
+    return true;
+  }
+
+  /** Ctrl+V (#74): copies of the clipboard's items on the floor being edited, chosen; false with nothing to paste. */
+  private pasteClipboard(): boolean {
+    const floor = this.floor;
+    if (!clipboard || !floor || !this.isEditor) return false;
+    const copies = pasteItems(clipboard, floor.id, uid);
+    this.change((_, f) => f.furniture.push(...copies));
+    this.setMulti(copies.map((c) => c.id));
+    const first = this.furnitureItem;
+    if (first) this._roomId = this.roomAt([first.x, first.z]) ?? this._roomId;
+    return true;
+  }
+
+  /** Ctrl+A (#74): every item on the floor; false when it has none. */
+  private selectAll(): boolean {
+    const items = this.floor?.furniture ?? [];
+    if (!items.length) return false;
+    this.setMulti(items.map((m) => m.id));
+    return true;
+  }
+
+  /** Duplicate, copy and (with something copied) paste, each with its shortcut in the tooltip (#74). */
+  private renderClipButtons() {
+    return html`<button class="fp3d-btn" title=${withKeys(this.t("duplicate"), ["Ctrl+D"])} @click=${() => this.duplicateFurniture()}>${this.t("duplicate")}</button>
+      <button class="fp3d-btn" title=${withKeys(this.t("help_key_copy"), ["Ctrl+C"])} @click=${() => this.copySelection()}>${this.t("copy_items")}</button>
+      ${this.renderPasteButton()}`;
+  }
+
+  /** "Paste (n)" while the clipboard holds items (#74): pastes them on this floor. */
+  private renderPasteButton() {
+    if (!clipboard || !this.isEditor) return nothing;
+    return html`<button class="fp3d-btn" title=${withKeys(this.t("help_key_paste"), ["Ctrl+V"])} @click=${() => this.pasteClipboard()}>${this.t("paste_items_n", { n: clipboard.items.length })}</button>`;
   }
 
   // ------------------------------------------------------------------ furniture blocks and multi selection
@@ -5514,6 +5838,7 @@ export class Fp3dEditor extends LitElement {
     if (!room || room.points.length <= 3) return;
     const n = room.points.length;
     const prev = (index - 1 + n) % n;
+    const base = this._doc;
     this.change((_, floor) => {
       const target = floor.rooms.find((r) => r.id === room.id)!;
       target.points.splice(index, 1);
@@ -5530,6 +5855,7 @@ export class Fp3dEditor extends LitElement {
         .filter((o) => o.room_id !== room.id || o.wall || (o.edge !== index && o.edge !== prev))
         .map((o) => (o.room_id === room.id && !o.wall && o.edge > index ? { ...o, edge: o.edge - 1 } : o));
     });
+    this.noteResize(room.id, base);
     this._vertex = null;
   }
 
@@ -5651,7 +5977,75 @@ export class Fp3dEditor extends LitElement {
     if (field === "z") [z0, z1] = [value, value + (z1 - z0)];
     if (field === "w" && value > 0.05) x1 = x0 + value;
     if (field === "d" && value > 0.05) z1 = z0 + value;
-    this.updateRoom({ points: [[round(x0), round(z0)], [round(x1), round(z0)], [round(x1), round(z1)], [round(x0), round(z1)]] });
+    const points: Vec2[] = [[round(x0), round(z0)], [round(x1), round(z0)], [round(x1), round(z1)], [round(x0), round(z1)]];
+    // a rectangle carries its contents and shared walls along (#64); "Outline only" swaps in the plain edit
+    const base = this._doc;
+    const floorId = this._floorId;
+    const outline = structuredClone(base);
+    const plain = outline.floors.find((f) => f.id === floorId)?.rooms.find((r) => r.id === room.id);
+    if (plain) plain.points = points;
+    let carried: ReturnType<typeof carryRectResize> = null;
+    this.change((_, floor) => {
+      carried = carryRectResize(floor, room.id, points);
+      if (!carried) floor.rooms.find((r) => r.id === room.id)!.points = points;
+    });
+    this.noteResize(room.id, base, carried, outline);
+  }
+
+  /** The note of the last outline edit, while the document is still the one it describes. */
+  private resizeNote(): ResizeNote | null {
+    const n = this._resize;
+    return n && n.doc === this._doc ? n : null;
+  }
+
+  /** After an outline edit of `roomId` (`base` = the document before it): remember what moved and what it left outside. */
+  private noteResize(roomId: string, base: Building, carried: ResizeNote["carried"] = null, outline: Building | null = null): void {
+    // the previous note still holds if it described the document this edit started from
+    const prev = this._resize?.doc === base ? this._resize : null;
+    const floor = this.floor;
+    const room = floor?.rooms.find((r) => r.id === roomId);
+    // a run of edits on the same room counts from the outline before the first one
+    const before = prev?.roomId === roomId ? prev.before : base.floors.find((f) => f.id === this._floorId)?.rooms.find((r) => r.id === roomId)?.points;
+    this._resize = floor && room && before ? { roomId, before, doc: this._doc, base, carried, outline, stranded: strandedBy(floor, before, room.points) } : null;
+  }
+
+  /** "Outline only": keep the new outline, put the contents and neighbouring walls back (same undo step). */
+  private outlineOnly(): void {
+    const n = this.resizeNote();
+    if (!n?.outline) return;
+    this.setDoc(structuredClone(n.outline), null);
+    this.noteResize(n.roomId, n.base);
+  }
+
+  /** Select the items (else the first device) a resize left outside the room. */
+  private selectStranded(): void {
+    const n = this.resizeNote();
+    if (!n) return;
+    const ids = n.stranded.furniture.filter((id) => this.floor?.furniture.some((m) => m.id === id));
+    if (ids.length) this.setMulti(ids);
+    else if (n.stranded.devices.length) this.selectItem("device", n.stranded.devices[0]);
+  }
+
+  private renderResizeNote(room: Room) {
+    const n = this.resizeNote();
+    if (!n || n.roomId !== room.id || !this.isEditor) return nothing;
+    const c = n.carried;
+    const moved = n.outline && c ? c.furniture + c.devices + c.walls : 0;
+    const out = n.stranded.furniture.length + n.stranded.devices.length;
+    if (!moved && !out) return nothing;
+    return html`<div class="fp3d-resize-note" role="status">
+      ${moved && c
+        ? html`<p class="fp3d-sub">${this.t("resize_carried", { n: c.furniture + c.devices, w: c.walls })}</p>
+            <div class="fp3d-actions">
+              <button class="fp3d-btn" title=${this.t("resize_outline_only_hint")} @click=${() => this.outlineOnly()}>${this.t("resize_outline_only")}</button>
+              <button class="fp3d-btn" @click=${() => this.undo()}>${this.t("undo")}</button>
+            </div>`
+        : nothing}
+      ${out
+        ? html`<p class="fp3d-sub">${out === 1 ? this.t("resize_outside_one") : this.t("resize_outside", { n: out })}</p>
+            <div class="fp3d-actions"><button class="fp3d-btn" @click=${() => this.selectStranded()}>${this.t("resize_select")}</button></div>`
+        : nothing}
+    </div>`;
   }
 
   private setPoint(index: number, axis: 0 | 1, value: number): void {
@@ -5659,7 +6053,9 @@ export class Fp3dEditor extends LitElement {
     if (!room || !Number.isFinite(value)) return;
     const points = room.points.map((p) => [...p] as Vec2);
     points[index][axis] = round(value);
+    const base = this._doc;
     this.updateRoom({ points });
+    this.noteResize(room.id, base);
   }
 
   private async loadImage(imageId: string): Promise<void> {
@@ -5772,6 +6168,7 @@ export class Fp3dEditor extends LitElement {
   private setTool(tool: Tool): void {
     const floor = this.floor;
     this._tool = tool;
+    if (tool !== "select" && tool !== "furniture") this.cancelPlacing();
     this._draft = [];
     this._cursor = null;
     this._openingNote = null;
@@ -5909,14 +6306,18 @@ export class Fp3dEditor extends LitElement {
         })}
         ${plain("furniture", this.t("tool_furniture"))} ${plain("energy", this.t("tool_energy"))}
       </div>
+      <!-- Wall view is a mode: beside the tools, kept away from the view buttons by undo / redo (#91) -->
+      <div class="fp3d-seg fp3d-seg-menu">
+        <button aria-pressed=${this._wallPick} title=${this.t("wall_view_open")} @click=${(e: Event) => (close(), this.toggleWallPick(e.currentTarget as HTMLElement))}>${this.t("wall_view")}</button>
+      </div>
       <div class="fp3d-seg fp3d-seg-menu">
         <button class="fp3d-undo" ?disabled=${!this._canUndo} @click=${() => this.undo()} title=${`${this.t("undo")} (Ctrl+Z)`} aria-label=${this.t("undo")}>↶</button>
         <button class="fp3d-undo" ?disabled=${!this._canRedo} @click=${() => this.redo()} title=${`${this.t("redo")} (Ctrl+Y)`} aria-label=${this.t("redo")}>↷</button>
       </div>
-      <div class="fp3d-seg fp3d-seg-menu">
-        <button aria-pressed=${this._split} title=${this.t("split_3d_hint")} @click=${() => (close(), this.toggleSplit())}>${this.t("split_3d")}</button>
-        <button aria-pressed=${this._wallPick} title=${this.t("wall_view_open")} @click=${(e: Event) => (close(), this.toggleWallPick(e.currentTarget as HTMLElement))}>${this.t("wall_view")}</button>
+      <div class="fp3d-seg fp3d-seg-menu fp3d-seg-views">
+        <button class="fp3d-split-btn" aria-pressed=${this._split} title=${this.t("split_3d_hint")} @click=${() => (close(), this.toggleSplit())}>${this._split ? "◧ " : "▢ "}${this.t("split_3d")}</button>
         <button title=${this.t("fit_hint")} @click=${() => (close(), this.fit())}>${this.t("fit")}</button>
+        <button title=${this.t("fit_all_hint")} @click=${() => (close(), this.fit(true))}>${this.t("fit_all")}</button>
         <button class="fp3d-help-btn" aria-pressed=${this._help} aria-label=${this.t("help_open")} title=${this.t("help_open")} @click=${() => (close(), (this._help = !this._help))}>?</button>
       </div>
       ${this.renderSettingsMenu(close)}`;
@@ -6126,7 +6527,7 @@ export class Fp3dEditor extends LitElement {
               @drop=${this.onPlanDrop}
             >
               ${this.renderBackground(floor)} ${this.renderGrid()} ${this.renderGhost()} ${walls ? this.renderWalls(walls.walls) : nothing}
-              ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing}
+              ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing} ${this.renderPlaceGhost()}
               ${floor ? this.renderFreeWalls(floor) : nothing}
               ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
@@ -6271,6 +6672,17 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Rooms of the floor below, as orientation. */
+  /** The outline of an armed library card under the pointer (#76). */
+  private renderPlaceGhost() {
+    const p = this._placing;
+    const at = this._placeAt;
+    if (!p || !at) return nothing;
+    const [w, d] = furnitureSize(p.type);
+    const k = this._view.scale;
+    const [cx, cy] = this.toScreen(at);
+    return svg`<rect class="fp3d-place-ghost" x=${cx - (w * k) / 2} y=${cy - (d * k) / 2} width=${w * k} height=${d * k} />`;
+  }
+
   private renderGhost() {
     const i = this._doc?.floors.findIndex((f) => f.id === this._floorId) ?? -1;
     const below = i > 0 ? this._doc.floors[i - 1] : undefined;
@@ -6492,8 +6904,13 @@ export class Fp3dEditor extends LitElement {
         list[edge] = v;
         r.wall_thickness = list.every((t) => t === null) ? undefined : list;
       });
-    return html`<div class="fp3d-edge-box">
-      <h4>${this.t("wall_heights")}</h4>
+    const sum = wallSummary(room);
+    const special = [sum.open ? this.t("walls_open_n", { n: sum.open }) : "", sum.sloping ? this.t("walls_sloping_n", { n: sum.sloping }) : ""].filter(Boolean).join(", ");
+    return html`<details class="fp3d-edge-box" ?open=${this._wallsOpen} @toggle=${(e: Event) => this.setWallsOpen((e.target as HTMLDetailsElement).open)}>
+      <summary>
+        <h4>${this.t("walls_section", { n: sum.walls })}</h4>
+        ${special ? html`<span class="fp3d-sub">${special}</span>` : nothing}
+      </summary>
       ${room.points.flatMap((a, i) => {
         const b = room.points[(i + 1) % n];
         const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -6553,7 +6970,17 @@ export class Fp3dEditor extends LitElement {
         });
       })}
       <p class="fp3d-sub">${this.t("room_wall_hint")}</p>
-    </div>`;
+    </details>`;
+  }
+
+  private setWallsOpen(open: boolean): void {
+    if (this._wallsOpen === open) return;
+    this._wallsOpen = open;
+    try {
+      localStorage.setItem("home3d.wallsOpen", open ? "1" : "0");
+    } catch {
+      // no storage (private mode): open for this visit only
+    }
   }
 
 
@@ -10195,7 +10622,9 @@ export class Fp3dEditor extends LitElement {
     const k = this._view.scale;
     const set = this._furnitureId ? this.selection() : [];
     const many = set.length > 1;
-    return svg`<g>${this.renderSelectionFrame(floor, set)}${floor.furniture.map((f) => {
+    const hidden = this._hiddenItems;
+    const shown = hidden.length ? floor.furniture.filter((f) => !hidden.includes(f.id)) : floor.furniture;
+    return svg`<g>${this.renderSelectionFrame(floor, set)}${shown.map((f) => {
       const member = set.includes(f.id);
       const sel = f.id === this._furnitureId && !many;
       const [cx, cy] = this.toScreen([f.x, f.z]);
@@ -10277,15 +10706,16 @@ export class Fp3dEditor extends LitElement {
           }}>${m.name || furnitureName(this.hass, m.type)}</button>`,
         )}
       </div>
+      ${this._doc.floors.length > 1 ? html`<div class="fp3d-form">${this.renderItemFloor()}</div>` : nothing}
       <div class="fp3d-actions">
         ${block
           ? html`<button class="fp3d-btn" @click=${() => this.ungroupSelection()}>${this.t("block_break")}</button>`
           : html`<button class="fp3d-btn fp3d-primary" @click=${() => this.groupSelection()}>▣ ${this.t("block_make")}</button>`}
-        <button class="fp3d-btn" @click=${() => this.rotateSelection(-90)}>${this.t("rotate_left")}</button>
-        <button class="fp3d-btn" @click=${() => this.rotateSelection(90)}>${this.t("rotate_right")}</button>
-        <button class="fp3d-btn" @click=${() => this.duplicateFurniture()}>${this.t("duplicate")}</button>
-        <button class="fp3d-btn ${some ? "fp3d-primary" : ""}" @click=${() => this.lockSelection(!fixed && !some)}>${fixed ? `🔓 ${this.t("unfix")}` : some ? `🔓 ${this.t("unfix_all")}` : `🔒 ${this.t("fix")}`}</button>
-        <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
+        <button class="fp3d-btn" title=${withKeys(this.t("rotate_left"), ["Shift+R"])} @click=${() => this.rotateSelection(-90)}>${this.t("rotate_left")}</button>
+        <button class="fp3d-btn" title=${withKeys(this.t("rotate_right"), ["R"])} @click=${() => this.rotateSelection(90)}>${this.t("rotate_right")}</button>
+        ${this.renderClipButtons()}
+        <button class="fp3d-btn ${some ? "fp3d-primary" : ""}" title=${withKeys(this.t(fixed || some ? "unfix" : "fix"), ["L"])} @click=${() => this.lockSelection(!fixed && !some)}>${fixed ? `🔓 ${this.t("unfix")}` : some ? `🔓 ${this.t("unfix_all")}` : `🔒 ${this.t("fix")}`}</button>
+        <button class="fp3d-btn fp3d-danger" title=${withKeys(this.t("delete"), ["Del"])} @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
       </div>
       ${this.renderMultiToggle()}
     </section>`;
@@ -10875,6 +11305,7 @@ export class Fp3dEditor extends LitElement {
                     <button class="fp3d-btn" title=${this.t("floor_order_hint")} @click=${() => this.moveFloor(1)}>${this.t("move_up")}</button>
                     <button class="fp3d-btn" title=${this.t("floor_order_hint")} @click=${() => this.moveFloor(-1)}>${this.t("move_down")}</button>
                     <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteFloor()}>${this.t("delete_floor")}</button>
+                    ${this.renderPasteButton()}
                   </div>
                   <div class="fp3d-actions fp3d-wide">
                     <button class="fp3d-btn" title=${this.t("gaps_hint")} ?disabled=${floor.rooms.length < 2} @click=${() => this.closeFloorGaps()}>
@@ -10904,7 +11335,7 @@ export class Fp3dEditor extends LitElement {
           : room
             ? html`${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}`
             : floor
-              ? html`${this.renderRoomList(floor)} ${this.renderUnplaced()}`
+              ? html`${this.renderRoomList(floor)} ${this.renderItemsList(floor.furniture, true)} ${this.renderUnplaced()}`
               : nothing}
       ${this.renderHelpLinks()}
       ${admin && SHOW_PRESENCE ? this.renderPresenceSettings() : nothing}
@@ -10943,6 +11374,38 @@ export class Fp3dEditor extends LitElement {
     </section>`;
   }
 
+  /**
+   * The items of a floor (with their room) or of one room (#75): select one that is hard to hit in the plan,
+   * hide it in the plan to reach what is under it, or delete it. The list draws only the rows in view.
+   */
+  private renderItemsList(items: Furniture[], withRoom: boolean) {
+    const floor = this.floor;
+    if (!floor || !items.length) return nothing;
+    const names = withRoom ? new Map(floor.rooms.map((r) => [r.id, r.name])) : null;
+    const byRoom = withRoom ? itemsByRoom(floor.rooms, items) : null;
+    const roomOf = new Map<string, string>();
+    if (byRoom && names) for (const [id, list] of byRoom) for (const f of list) roomOf.set(f.id, id ? (names.get(id) ?? "") : "");
+    const set = this._furnitureId ? this.selection() : [];
+    const rows: ItemRow[] = items.map((f) => ({
+      id: f.id,
+      name: f.name || furnitureName(this.hass, f.type),
+      note: roomOf.get(f.id),
+      hidden: this._hiddenItems.includes(f.id),
+      selected: set.includes(f.id),
+    }));
+    return html`<details class="fp3d-points fp3d-items">
+      <summary>${this.t("items_list")} (${items.length})</summary>
+      <fp3d-item-list
+        .rows=${rows}
+        .texts=${{ hide: this.t("item_hide"), show: this.t("item_show"), remove: this.t("delete") }}
+        ?editable=${this.isEditor}
+        @item-select=${(e: CustomEvent<{ id: string }>) => this.selectFromList(e.detail.id)}
+        @item-hide=${(e: CustomEvent<{ id: string }>) => this.toggleItemHidden(e.detail.id)}
+        @item-delete=${(e: CustomEvent<{ id: string }>) => void this.deleteFromList(e.detail.id)}
+      ></fp3d-item-list>
+    </details>`;
+  }
+
   /** The room's doors and windows as a list: a tap selects one that is hard to hit in the plan (#312). */
   private renderRoomOpenings(room: Room) {
     const own = (this.floor?.openings ?? []).filter((o) => o.room_id === room.id);
@@ -10965,6 +11428,7 @@ export class Fp3dEditor extends LitElement {
     const b = bounds(room.points);
     return html`<section>
       <div class="fp3d-h3row"><h3>${this.t("room")}</h3>${this.fixButton("room", room.id)}</div>
+      ${this.renderResizeNote(room)}
       <button class="fp3d-btn fp3d-wv-open" title=${this.t("wall_view_open")} @click=${() => this.openRoomWalls(room)}>▦ ${this.t("wall_view_room")}</button>
       <div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
@@ -10994,6 +11458,7 @@ export class Fp3dEditor extends LitElement {
             ${this.len(this.t("depth"), b.z1 - b.z0, (v) => this.setRect("d", v), 0.01, 0.05)}`
           : nothing}
       </div>
+      ${this.renderEdgeHeights(room)}
       <div class="fp3d-form">
         <label class="fp3d-field" title=${this.t("room_ceiling_hint")}
           >${unitLabel(this.t("room_ceiling"), this.unit)}
@@ -11018,7 +11483,8 @@ export class Fp3dEditor extends LitElement {
       </div>
       <p class="fp3d-sub" title=${this.t("room_area_net_hint")}>${this.t("room_area_net", { a: this.area(polygonArea(room.points)), n: this.area(netRoomArea(room, this.floor!, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior })) })}</p>
       <p class="fp3d-sub fp3d-room-id">${this.t("room_id")} <code title=${this.t("license_copy")} @click=${() => void navigator.clipboard?.writeText(room.id).catch(() => undefined)}>${room.id}</code></p>
-      ${this.renderEdgeHeights(room)} ${this.renderRoomClimate(room)} ${this.renderRoomLive(room)} ${this.renderRoomOpenings(room)}
+      ${this.renderRoomClimate(room)} ${this.renderRoomLive(room)} ${this.renderRoomOpenings(room)}
+      ${this.renderItemsList(this.floor ? (itemsByRoom(this.floor.rooms, this.floor.furniture).get(room.id) ?? []) : [], false)}
       <details class="fp3d-points" ?open=${!rect}>
         <summary>${this.t("points")} (${room.points.length})</summary>
         ${room.points.map(
@@ -11037,8 +11503,9 @@ export class Fp3dEditor extends LitElement {
         ? html`<div class="fp3d-actions">
             <button class="fp3d-btn fp3d-primary" @click=${() => (this._packages = !this._packages)}>${this.t("pkg_open")}</button>
             <button class="fp3d-btn" @click=${() => this.openSpotForm(room)}>${this.t("spots_place")}</button>
-            <button class="fp3d-btn" @click=${() => this.duplicateRoom()}>${this.t("duplicate")}</button>
-            <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteRoom()}>${this.t("delete")}</button>
+            <button class="fp3d-btn" title=${withKeys(this.t("duplicate"), ["Ctrl+D"])} @click=${() => this.duplicateRoom()}>${this.t("duplicate")}</button>
+            ${this.renderPasteButton()}
+            <button class="fp3d-btn fp3d-danger" title=${withKeys(this.t("delete"), ["Del"])} @click=${() => this.deleteRoom()}>${this.t("delete")}</button>
           </div>`
         : nothing}
       ${this.renderModuleRoomFields(room)}
@@ -11517,7 +11984,7 @@ export class Fp3dEditor extends LitElement {
   private renderFurnitureForm(f: Furniture) {
     if (this.selection().length > 1) return this.renderBlockForm();
     const admin = this.isEditor;
-    const panel = furniturePanel({ mirror: !isLamp(f.type), strip: f.type === "led_strip", lift: canLift(f) && !!this.floor });
+    const panel = furniturePanel({ mirror: !isLamp(f.type), strip: f.type === "led_strip", lift: canLift(f) && !!this.floor, floors: this._doc.floors.length > 1 });
     return html`<section>
       <div class="fp3d-pos-head">
         <div class="fp3d-h3row"><h3>${f.name || this.t("furniture")}</h3>${this.fixButton("furniture", f.id)}</div>
@@ -11576,12 +12043,12 @@ export class Fp3dEditor extends LitElement {
         : nothing}
       ${admin
         ? html`<div class="fp3d-actions">
-            <button class="fp3d-btn" @click=${() => this.rotateFurniture(-90)}>${this.t("rotate_left")}</button>
-            <button class="fp3d-btn" @click=${() => this.rotateFurniture(90)}>${this.t("rotate_right")}</button>
+            <button class="fp3d-btn" title=${withKeys(this.t("rotate_left"), ["Shift+R"])} @click=${() => this.rotateFurniture(-90)}>${this.t("rotate_left")}</button>
+            <button class="fp3d-btn" title=${withKeys(this.t("rotate_right"), ["R"])} @click=${() => this.rotateFurniture(90)}>${this.t("rotate_right")}</button>
             <button class="fp3d-btn" title=${this.t("wall_view_open")} @click=${() => this.openWallViewFor(f)}>▦ ${this.t("wall_view")}</button>
             ${f.entity && f.entity !== "none" && f.type !== "parking" ? html`<button class="fp3d-btn" title=${this.t("as_device_hint")} @click=${() => this.furnitureToDevice(f)}>${this.t("as_device")}</button>` : nothing}
-            <button class="fp3d-btn" @click=${() => this.duplicateFurniture()}>${this.t("duplicate")}</button>
-            <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
+            ${this.renderClipButtons()}
+            <button class="fp3d-btn fp3d-danger" title=${withKeys(this.t("delete"), ["Del"])} @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
           </div>
           ${this.renderMultiToggle()}`
         : nothing}
@@ -11655,7 +12122,19 @@ export class Fp3dEditor extends LitElement {
               : nothing}
           </select></label
         >`;
+      case "floor":
+        return this.renderItemFloor();
     }
+  }
+
+  /** The floor the chosen item (block, multi selection) stands on: picking another moves it there (#73). */
+  private renderItemFloor() {
+    return html`<label class="fp3d-field fp3d-wide" title=${this.t("item_floor_hint")}
+      >${this.t("floor")}
+      <select ?disabled=${!this.isEditor} @change=${(e: Event) => this.moveSelectionToFloor((e.target as HTMLSelectElement).value)}>
+        ${[...this._doc.floors].reverse().map((fl) => html`<option value=${fl.id} ?selected=${fl.id === this._floorId}>${fl.name}</option>`)}
+      </select></label
+    >`;
   }
 
   private setEnergy(patch: Partial<Building["energy"]>): void {
@@ -13234,6 +13713,13 @@ export class Fp3dEditor extends LitElement {
     return html`<section>
       <h3>${this.t("furniture_add")}</h3>
       <p class="fp3d-sub">${room ? this.t("furniture_into", { room: room.name }) : this.t("furniture_pick_room")}</p>
+      ${this._placing
+        ? html`<div class="fp3d-placing" role="status">
+            <span>${this.t("place_armed", { name: furnitureName(this.hass, this._placing.type) })}</span>
+            <button class="fp3d-btn fp3d-primary" @click=${() => this.placeArmedInMiddle()}>${room ? this.t("place_middle_room", { room: room.name }) : this.t("place_middle")}</button>
+            <button class="fp3d-btn" @click=${() => this.cancelPlacing()}>${this.t("cancel")}</button>
+          </div>`
+        : nothing}
       <fp3d-library
         .entries=${this.libraryEntries(lang)}
         .language=${lang}
@@ -13994,10 +14480,11 @@ export class Fp3dEditor extends LitElement {
     const s = this._doc.settings;
     const set = (patch: Partial<Building["settings"]>) => this.setSettings(patch);
     return html`<section>
-      <h3>${this.t("roof_basics")}</h3>
+      <h3>${this.t("roof_whole")}</h3>
+      <p class="fp3d-sub">${this.t("roof_whole_hint")}</p>
       <div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
-          >${this.t("roof")}
+          >${this.t("roof_basics")}
           <select
             @change=${(e: Event) => {
               const type = (e.target as HTMLSelectElement).value as RoofType;
@@ -14360,6 +14847,26 @@ export class Fp3dEditor extends LitElement {
         display: block;
         height: 100%;
       }
+      /* folds the 3D pane away (the choice is remembered like the toolbar's "3D beside", #91) */
+      .fp3d-3d-fold {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 3;
+        min-height: 32px;
+        padding: 4px 12px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 999px;
+        background: var(--fp3d-chrome);
+        color: inherit;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .fp3d-3d-fold:hover,
+      .fp3d-3d-fold:focus-visible {
+        border-color: var(--fp3d-accent);
+      }
       .fp3d-3d-walls {
         position: absolute;
         top: 10px;
@@ -14487,6 +14994,26 @@ export class Fp3dEditor extends LitElement {
       .fp3d-vertex,
       .fp3d-mid {
         cursor: grab;
+      }
+      .fp3d-place-ghost {
+        fill: color-mix(in srgb, var(--fp3d-accent) 18%, transparent);
+        stroke: var(--fp3d-accent);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 4;
+        pointer-events: none;
+      }
+      .fp3d-placing {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin: 8px 0;
+        padding: 8px 10px;
+        border: 1px solid var(--fp3d-accent);
+        border-radius: 10px;
+      }
+      .fp3d-placing span {
+        flex: 1 1 100%;
       }
       .fp3d-hit {
         fill: transparent;
@@ -15980,6 +16507,25 @@ export class Fp3dEditor extends LitElement {
         border-radius: 12px;
         background: color-mix(in srgb, var(--fp3d-accent) 6%, transparent);
       }
+      .fp3d-roof-floors {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin: 0 0 10px;
+      }
+      .fp3d-edge-box > summary {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 4px 10px;
+        cursor: pointer;
+      }
+      .fp3d-edge-box > summary h4 {
+        display: inline;
+      }
+      .fp3d-edge-box[open] > summary {
+        margin-bottom: 6px;
+      }
       .fp3d-edge-box h4 {
         margin: 0 0 4px;
         color: var(--fp3d-accent);
@@ -16268,6 +16814,12 @@ export class Fp3dEditor extends LitElement {
         stroke: #9fb8ff;
         stroke-width: 1.5;
         cursor: move;
+      }
+      /* roof fields over the floor plan (#89): an outline only, so the rooms under them stay readable */
+      .fp3d-solar-dim polygon {
+        fill: color-mix(in srgb, #1b3a8f 18%, transparent);
+        stroke: color-mix(in srgb, #9fb8ff 45%, transparent);
+        stroke-width: 1;
       }
       .fp3d-solar-sel polygon {
         fill: color-mix(in srgb, #1b3a8f 80%, transparent);
@@ -16946,6 +17498,16 @@ export class Fp3dEditor extends LitElement {
         font-weight: 600;
       }
       .fp3d-notice {
+        color: var(--fp3d-accent);
+      }
+      .fp3d-resize-note {
+        margin: 0 0 10px;
+        padding: 6px 10px;
+        border: 1px solid var(--fp3d-accent);
+        border-radius: 8px;
+      }
+      .fp3d-resize-note p {
+        margin: 4px 0;
         color: var(--fp3d-accent);
       }
       .fp3d-device-sel circle:not(.fp3d-hit) {

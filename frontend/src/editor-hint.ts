@@ -12,6 +12,8 @@ export interface HintState {
   rooms: number;
   /** What is selected in the plan. */
   selected: "room" | "opening" | "furniture" | "device" | null;
+  /** A library card is armed: the next click places it (#76). */
+  placing?: boolean;
   wallPick?: boolean;
   /** A drag on a fixed item just became a pan. */
   fixedHint?: boolean;
@@ -27,6 +29,7 @@ export interface HintState {
 
 export function hintKey(s: HintState): I18nKey {
   if (!s.hasFloor) return "hint_empty";
+  if (s.placing) return "hint_place";
   if (s.wallPick) return "hint_wall_pick";
   if (s.fixedHint) return "fixed_drag_hint";
   if (s.tool === "outdoor" && s.outdoorFree) return "hint_outdoor_free";
