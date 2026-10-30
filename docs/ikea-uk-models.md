@@ -1,6 +1,6 @@
 # IKEA UK models
 
-Models: 200. Done: 200 (408 items).
+Models: 310 (200 furniture, 110 accessories: A1 42, A2 22, A3 46). Done: 310 (547 items).
 
 The 200 IKEA UK models the `theovencook.ikea-uk` pack is built towards (tickets #30 to #34), so each batch picks
 from this list without overlap. Most come from the IKEA UK best-seller list as it stood on 29 October 2026
