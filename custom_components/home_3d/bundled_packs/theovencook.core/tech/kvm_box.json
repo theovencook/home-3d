@@ -4,7 +4,7 @@
   "size": [0.075, 0.06, 0.045],
   "group": "tech",
   "room": ["office", "hobby", "loft", "utility"],
-  "tags": ["kvm", "ip kvm", "kvm over ip", "jetkvm", "pikvm", "remote control", "server access", "homelab"],
+  "tags": ["kvm", "ip kvm", "kvm over ip", "jetkvm", "pikvm", "raspberry pi", "pi", "remote control", "server access", "homelab"],
   "family": "kvm_box",
   "variant": {"en": "IP KVM"},
   "electric": true,
