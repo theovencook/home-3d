@@ -860,7 +860,9 @@ SETTINGS_SCHEMA = vol.Schema(
         # plan lock: rooms, walls, doors, windows and outdoor areas cannot be moved by accident
         vol.Optional("lock_plan", default=False): bool,
         # entities left out of the editor's "Unplaced entities" list on purpose (#83)
-        vol.Optional("unplaced_hidden", default=list): vol.All([vol.All(str, vol.Length(max=255))], vol.Length(max=2000)),
+        vol.Optional("unplaced_hidden", default=list): vol.All(
+            [vol.All(str, vol.Length(max=255))], vol.Length(max=2000)
+        ),
         # stations and playlists for the speakers' quick menu (media_player.play_media type + content id)
         vol.Optional("media_presets", default=list): vol.All(
             [
