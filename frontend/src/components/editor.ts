@@ -195,7 +195,7 @@ import { furnitureName } from "../furniture-names.ts";
 import { effectFields } from "./effect-fields.ts";
 import { itemTempSource, roomLiveSensors, shadeKind, type LiveKind } from "../room-effects.ts";
 import { energyRole, furnitureSize, isElectric, isPackType, isRobotVacuum, migratePlanTypes, mountBase, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
-import { isCameraItem, isThermostatItem, isTvLike, linkFilter } from "../furniture-links.ts";
+import { isThermostatItem, linkField, linkFilter } from "../furniture-links.ts";
 import { hiddenUnplaced, setUnplacedHidden, suggestLinks, unplacedByArea, type LinkSuggestion } from "../unplaced.ts";
 
 /** Drag-and-drop type of an entity dragged from the unplaced list onto the plan (#83). */
@@ -13637,20 +13637,17 @@ export class Fp3dEditor extends LitElement {
         return furnitureEntities(hass, probe).get(f.id)?.[key] ?? null;
       });
     const media = isMediaFurniture(f.type);
-    // a pack item with only a status light (a 3D printer's panel, a wallbox's LED) links like any device:
-    // "Device", with media players, switches and status sensors to choose from
-    const tvLike = isTvLike(f.type);
     const lamp = isLamp(f.type);
     const heating = isThermostatItem(f.type);
+    // the field's label and likely domains from the item's kind, family and tags (#132)
+    const field = linkField(f.type);
     const entities = this.entityOptions(linkFilter(hass, f.type), f.type);
     const power = this.entityOptions((id) => this.isPowerSensor(id));
     const doorSensors = f.type === "fridge_smart" ? this.entityOptions((id) => id.startsWith("binary_sensor.")) : [];
     return html`<div class="fp3d-form fp3d-links">
         ${f.type === "grid_point"
           ? html`<p class="fp3d-sub fp3d-wide">${this.t("grid_point_hint")}</p>`
-          : this.entitySelect(this.t(lamp ? "furn_entity_light" : packMotion(f.type) ? "motor_cover" : tvLike ? "furn_entity_tv" : f.type === "awning" ? "awning_cover" : heating || f.type === "ac_unit" ? "furn_entity_climate" : isRobotVacuum(f.type) ? "furn_entity_vacuum" : isCameraItem(f.type) ? "furn_entity_camera" : "furn_entity"), f.entity ?? null, autoPick("entity"), entities, (v) =>
-              this.updateFurniture({ entity: v }),
-            )}
+          : this.entitySelect(this.t(field.label), f.entity ?? null, autoPick("entity"), entities, (v) => this.updateFurniture({ entity: v }), field.domains)}
         ${f.type === "lamp_fan"
           ? html`${this.entitySelect(this.t("fan_entity"), f.fan ?? null, undefined, this.entityOptions((id) => id.startsWith("fan.")), (v) => this.updateFurniture({ fan: v && v !== "none" ? v : null }))}
               <p class="fp3d-sub fp3d-wide">${this.t("fan_hint")}</p>`
