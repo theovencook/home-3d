@@ -3,6 +3,8 @@
 
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
 import { areaEntities, coverTiltButtons, entityName, groupByDevice, isUnavailable, kindOf, roomClimateSensors, roomClimateValue, roomPanelEntities, fromCelsius, tempUnit, type DeviceKind } from "../devices.ts";
+import { askConfirm } from "../ask.ts";
+import "./ask-dialog.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { hasFeature, released } from "../features.ts";
 import { locatedPersons, personsShown } from "../presence.ts";
@@ -124,14 +126,14 @@ export class Fp3dRoomPanel extends LitElement {
   }
 
   /** Ask first for devices marked so (a blind that must not move by accident). */
-  private askFor(id: string): boolean {
-    return !this.confirmEntities?.has(id) || confirm(this.t("confirm_switch", { name: this.name(id) }));
+  private async askFor(id: string): Promise<boolean> {
+    return !this.confirmEntities?.has(id) || (await askConfirm(this.t("confirm_switch", { name: this.name(id) }), { ok: this.t("action_confirm_ok"), cancel: this.t("cancel") }));
   }
 
   private toggle(st: HassEntity, on: boolean, onToggle: () => void) {
-    const guarded = () => {
+    const guarded = async () => {
       if (this.readOnly) return;
-      if (this.confirmEntities?.has(st.entity_id) && !confirm(this.t("confirm_switch", { name: this.name(st.entity_id) }))) return;
+      if (!(await this.askFor(st.entity_id))) return;
       onToggle();
     };
     return html`<button
@@ -370,11 +372,11 @@ export class Fp3dRoomPanel extends LitElement {
       ${this.nameButton(id)}
       <span class="fp3d-rp-state">${this.stateOf(st)}</span>
       <div class="fp3d-rp-buttons">
-        <button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.askFor(id) && this.call("cover", "open_cover", { entity_id: id })}>${this.t("cover_open")}</button>
+        <button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${async () => (await this.askFor(id)) && this.call("cover", "open_cover", { entity_id: id })}>${this.t("cover_open")}</button>
         ${features & COVER_STOP
           ? html`<button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.call("cover", "stop_cover", { entity_id: id })}>${this.t("cover_stop")}</button>`
           : nothing}
-        <button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.askFor(id) && this.call("cover", "close_cover", { entity_id: id })}>${this.t("cover_close")}</button>
+        <button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${async () => (await this.askFor(id)) && this.call("cover", "close_cover", { entity_id: id })}>${this.t("cover_close")}</button>
       </div>
       ${features & COVER_SET_POSITION && typeof a.current_position === "number"
         ? html`<label class="fp3d-rp-slider"

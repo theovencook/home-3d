@@ -22,6 +22,8 @@ import { FEATURES, FUN, knownFeature, released, unlockedFeatures } from "../feat
 import { DOG_BREEDS, PET_EYES, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
 import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
 import { translate, type I18nKey } from "../i18n.ts";
+import { askConfirm } from "../ask.ts";
+import "./ask-dialog.ts";
 import { planPackFolders } from "../pack-folder.ts";
 import { askingFirst, nextCheck, updateSummary, type CheckFrequency, type ConfirmCode, type PackUpdateSettings, type PackUpdateStatus } from "../pack-updates.ts";
 import { packName, packOrigin, type FurniturePack } from "../packs.ts";
@@ -274,8 +276,8 @@ export class Extensions extends LitElement {
             ${state.previous_release != null
               ? html`<button
                   class="fp3d-btn"
-                  @click=${() => {
-                    if (!confirm(this.t("pack_rollback_confirm", { name, release: state.previous_release! }))) return;
+                  @click=${async () => {
+                    if (!(await this.ask(this.t("pack_rollback_confirm", { name, release: state.previous_release! }), this.t("ask_ok")))) return;
                     void this.updatesCall((hass) => rollbackPack(hass, pack.id), true);
                   }}
                 >
@@ -287,7 +289,12 @@ export class Extensions extends LitElement {
   }
 
   /** The question for an import the backend asks about first (an older release, a pinned pack). */
-  private askConfirm = (code: ConfirmCode, message: string): boolean => confirm(this.t(`pack_confirm_${code}`, { detail: message }));
+  private askConfirm = (code: ConfirmCode, message: string): Promise<boolean> => this.ask(this.t(`pack_confirm_${code}`, { detail: message }), this.t("ask_ok"));
+
+  /** A yes / no question in the app's own dialog (#59); a warning when `ok` deletes or overwrites. */
+  private ask(text: string, ok: string, danger = false): Promise<boolean> {
+    return askConfirm(text, { ok, cancel: this.t("cancel"), danger });
+  }
 
   private get isEditor(): boolean {
     return this.canEdit ?? this.hass?.user?.is_admin ?? false;
@@ -632,7 +639,7 @@ export class Extensions extends LitElement {
   }
 
   private async deletePack(pack: FurniturePack): Promise<void> {
-    if (!this.hass || !confirm(this.t("pack_remove_confirm", { name: packName(pack, this.hass?.language ?? "de") }))) return;
+    if (!this.hass || !(await this.ask(this.t("pack_remove_confirm", { name: packName(pack, this.hass?.language ?? "de") }), this.t("delete"), true))) return;
     await removePack(this.hass, pack.id);
     this._packMsg = null;
     this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));

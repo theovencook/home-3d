@@ -152,6 +152,8 @@ import { libraryUpdates } from "../pack-updates.ts";
 import { lastAdmin, pickEditor, type EditorUser } from "../editors.ts";
 import { load3d } from "../load3d.ts";
 import { ensureRecipes, packTypesIn } from "../pack-recipes.ts";
+import "./ask-dialog.ts";
+import { askConfirm, tell } from "../ask.ts";
 import "./library.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
@@ -2771,9 +2773,9 @@ export class Fp3dEditor extends LitElement {
     this.change((_, floor) => Object.assign((floor.walls ?? []).find((w) => w.id === id)!, patch));
   }
 
-  private deleteFreeWall(): void {
+  private async deleteFreeWall(): Promise<void> {
     const id = this._wallId;
-    if (!id || !this.isEditor || !this.confirmFixedDelete("wall", id)) return;
+    if (!id || !this.isEditor || !(await this.confirmFixedDelete("wall", id))) return;
     this.change((_, floor) => {
       floor.walls = (floor.walls ?? []).filter((w) => w.id !== id);
       floor.openings = floor.openings.filter((o) => o.wall !== id);
@@ -2876,13 +2878,13 @@ export class Fp3dEditor extends LitElement {
     this.change((_, floor) => patchItem(floor.outdoor.find((o) => o.id === id), patch));
   }
 
-  private deleteOutdoor(): void {
+  private async deleteOutdoor(): Promise<void> {
     const id = this._outdoorId;
-    if (!id || !this.isEditor || !this.confirmFixedDelete("outdoor", id)) return;
+    if (!id || !this.isEditor || !(await this.confirmFixedDelete("outdoor", id))) return;
     // a pool with its pipes is a lot of work: ask first
     const a = this.floor?.outdoor.find((o) => o.id === id);
     const pipes = a?.pool?.pipes?.length ?? 0;
-    if (a?.type === "pool" && pipes && !confirm(this.t("pool_delete_confirm", { n: pipes }))) return;
+    if (a?.type === "pool" && pipes && !(await this.ask(this.t("pool_delete_confirm", { n: pipes })))) return;
     this.change((_, floor) => (floor.outdoor = floor.outdoor.filter((o) => o.id !== id)));
     this._outdoorId = null;
   }
@@ -3103,9 +3105,9 @@ export class Fp3dEditor extends LitElement {
     this.setDoc(next);
   }
 
-  private deleteFloor(): void {
+  private async deleteFloor(): Promise<void> {
     const floor = this.floor;
-    if (!floor || !confirm(this.t("delete_floor_confirm", { name: floor.name }))) return;
+    if (!floor || !(await this.ask(this.t("delete_floor_confirm", { name: floor.name })))) return;
     const next = structuredClone(this._doc);
     next.floors = next.floors.filter((f) => f.id !== floor.id);
     this.setDoc(next);
@@ -3113,9 +3115,9 @@ export class Fp3dEditor extends LitElement {
     this._roomId = null;
   }
 
-  private deleteRoom(): void {
+  private async deleteRoom(): Promise<void> {
     const id = this._roomId;
-    if (!id || !this.isEditor || !this.confirmFixedDelete("room", id)) return;
+    if (!id || !this.isEditor || !(await this.confirmFixedDelete("room", id))) return;
     this.change((_, floor) => {
       const room = floor.rooms.find((r) => r.id === id);
       floor.rooms = floor.rooms.filter((r) => r.id !== id);
@@ -3157,10 +3159,10 @@ export class Fp3dEditor extends LitElement {
 
 
   /** Switch to a roof of sections; without sections yet, propose them from the rooms. */
-  private useRoofSections(regenerate = false): void {
+  private async useRoofSections(regenerate = false): Promise<void> {
     if (!this.isEditor) return;
     const has = (this._doc.settings.roof.sections ?? []).length > 0;
-    if (regenerate && has && !confirm(this.t("roof_regen_confirm"))) return;
+    if (regenerate && has && !(await this.ask(this.t("roof_regen_confirm"), this.t("ask_ok")))) return;
     this.change((doc) => {
       doc.settings.roof.type = "custom";
       if (regenerate || !has) doc.settings.roof.sections = roofSectionsFromRooms(doc, () => uid("roof"));
@@ -4490,8 +4492,18 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** A fixed item is only deleted after asking. */
-  private confirmFixedDelete(kind: FixKind, id: string): boolean {
-    return !this.isFixedItem(kind, id) || confirm(this.t("fixed_delete_confirm"));
+  private async confirmFixedDelete(kind: FixKind, id: string): Promise<boolean> {
+    return !this.isFixedItem(kind, id) || (await this.ask(this.t("fixed_delete_confirm")));
+  }
+
+  /** A yes / no question in the app's own dialog (#59); `ok` names what yes does, a warning unless `danger` is false. */
+  private ask(text: string, ok: string = this.t("delete"), danger = true): Promise<boolean> {
+    return askConfirm(text, { ok, cancel: this.t("cancel"), danger });
+  }
+
+  /** A message in the app's own dialog (#59). */
+  private tell(text: string): Promise<void> {
+    return tell(text, { ok: this.t("ask_ok") });
   }
 
   private onContextMenu(e: MouseEvent): void {
@@ -4531,9 +4543,9 @@ export class Fp3dEditor extends LitElement {
     this._ctx = { x: local[0], y: local[1], kind, id };
   }
 
-  private deleteItem(kind: FixKind, id: string): void {
+  private async deleteItem(kind: FixKind, id: string): Promise<void> {
     if (kind === "device") {
-      if (!this.confirmFixedDelete(kind, id)) return;
+      if (!(await this.confirmFixedDelete(kind, id))) return;
       this.removeDevice(id);
       this._deviceId = null;
       return;
@@ -4725,9 +4737,9 @@ export class Fp3dEditor extends LitElement {
     this.change((_, floor) => patchItem(floor.openings.find((o) => o.id === id), patch));
   }
 
-  private deleteOpening(): void {
+  private async deleteOpening(): Promise<void> {
     const id = this._openingId;
-    if (!id || !this.isEditor || !this.confirmFixedDelete("opening", id)) return;
+    if (!id || !this.isEditor || !(await this.confirmFixedDelete("opening", id))) return;
     this.change((_, floor) => (floor.openings = floor.openings.filter((o) => o.id !== id)));
     this._openingId = null;
   }
@@ -4975,19 +4987,19 @@ export class Fp3dEditor extends LitElement {
     this.updateFurniture({ rotation: (((f.rotation + delta) % 360) + 360) % 360 });
   }
 
-  private deleteFurniture(): void {
+  private async deleteFurniture(): Promise<void> {
     const id = this._furnitureId;
     if (!id || !this.isEditor) return;
     const set = this.selection();
     if (set.length > 1) {
       const fixed = set.some((x) => this.isFixedItem("furniture", x));
-      if (!confirm(this.t(fixed ? "block_delete_fixed" : "block_delete", { n: set.length }))) return;
+      if (!(await this.ask(this.t(fixed ? "block_delete_fixed" : "block_delete", { n: set.length })))) return;
       const ids = new Set(set);
       this.change((_, floor) => (floor.furniture = floor.furniture.filter((f) => !ids.has(f.id))));
       this.selectItem("room", this._roomId);
       return;
     }
-    if (!this.confirmFixedDelete("furniture", id)) return;
+    if (!(await this.confirmFixedDelete("furniture", id))) return;
     this.change((_, floor) => (floor.furniture = floor.furniture.filter((f) => f.id !== id)));
     this._furnitureId = null;
   }
@@ -7522,11 +7534,11 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Deletes the chosen pieces of the wall view (several or a fixed one only after asking). */
-  private deleteOnWall(ids: string[]): void {
+  private async deleteOnWall(ids: string[]): Promise<void> {
     if (!ids.length || !this.isEditor) return;
     if (ids.length > 1) {
-      if (!confirm(this.t(ids.some((id) => this.isFixedItem("furniture", id)) ? "block_delete_fixed" : "block_delete", { n: ids.length }))) return;
-    } else if (!this.confirmFixedDelete("furniture", ids[0])) return;
+      if (!(await this.ask(this.t(ids.some((id) => this.isFixedItem("furniture", id)) ? "block_delete_fixed" : "block_delete", { n: ids.length })))) return;
+    } else if (!(await this.confirmFixedDelete("furniture", ids[0]))) return;
     const set = new Set(ids);
     this.change((_, floor) => (floor.furniture = floor.furniture.filter((m) => !set.has(m.id))));
     this._wallSel = null;
@@ -11561,7 +11573,7 @@ export class Fp3dEditor extends LitElement {
   private rememberFloorView(): void {
     const v = this.paneView();
     if (!v) {
-      alert(this.t("floor_start_view_need_pane"));
+      void this.tell(this.t("floor_start_view_need_pane"));
       return;
     }
     this.updateFloor({ start_view: v });
@@ -11571,7 +11583,7 @@ export class Fp3dEditor extends LitElement {
   private rememberRoomView(): void {
     const v = this.paneView();
     if (!v) {
-      alert(this.t("room_start_view_need_pane"));
+      void this.tell(this.t("room_start_view_need_pane"));
       return;
     }
     this.updateRoom({ start_view: v });
@@ -13021,8 +13033,8 @@ export class Fp3dEditor extends LitElement {
       .value=${this._deviceQuery}
       @input=${(e: Event) => (this._deviceQuery = (e.target as HTMLInputElement).value)}
     />`;
-    const placeAll = () => {
-      if (confirm(this.t("devices_place_all_confirm", { n: unplacedMain.length }))) this.placeDevices(unplacedMain);
+    const placeAll = async () => {
+      if (await this.ask(this.t("devices_place_all_confirm", { n: unplacedMain.length }), this.t("ask_ok"), false)) this.placeDevices(unplacedMain);
     };
     return html`<section>
       <h3>${this.t("devices")}</h3>
@@ -13254,7 +13266,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   private async restoreFromHistory(snap: Snapshot): Promise<void> {
-    if (!this.hass || !confirm(this.t("backup_restore_confirm", { time: this.snapshotTime(snap) }))) return;
+    if (!this.hass || !(await this.ask(this.t("backup_restore_confirm", { time: this.snapshotTime(snap) }), this.t("backup_restore")))) return;
     await restoreSnapshot(this.hass, snap.id, this.home);
     this._notice = this.t("backup_restored");
     await this.loadHistory();
@@ -13289,7 +13301,7 @@ export class Fp3dEditor extends LitElement {
       const file = { ...base, ...(base.homes ? { homes } : {}), exported_at: new Date().toISOString(), images };
       download(`home-3d-${this.t("export_name_full")}-${day}.json`, JSON.stringify(file));
     } catch (err) {
-      alert(this.t("backup_import_error", { error: String((err as { message?: string })?.message ?? err) }));
+      await this.tell(this.t("backup_import_error", { error: String((err as { message?: string })?.message ?? err) }));
     } finally {
       this._backupBusy = false;
     }
@@ -13304,14 +13316,14 @@ export class Fp3dEditor extends LitElement {
     try {
       data = JSON.parse(await file.text()) as BackupFile;
     } catch {
-      alert(this.t("import_error_not_json"));
+      await this.tell(this.t("import_error_not_json"));
       return;
     }
     if (data?.format !== "home3d-backup" || !data.building) {
-      alert(this.t("backup_full_not_backup"));
+      await this.tell(this.t("backup_full_not_backup"));
       return;
     }
-    if (!confirm(this.t("backup_full_confirm"))) return;
+    if (!(await this.ask(this.t("backup_full_confirm"), this.t("backup_restore")))) return;
     this._backupBusy = true;
     try {
       // several homes (#53): one restore per home keeps each message small (a plan can be megabytes); a file from
@@ -13349,7 +13361,7 @@ export class Fp3dEditor extends LitElement {
       // a lost connection comes as the whole result message ({ error: { code, message } }), e.g. when the backup is
       // larger than Home Assistant takes in one message
       const e = (err ?? {}) as { code?: string | number; message?: string; error?: { code?: string | number; message?: string } };
-      alert(this.t("backup_import_error", { error: String(e.message ?? e.error?.message ?? e.code ?? e.error?.code ?? err) }));
+      await this.tell(this.t("backup_import_error", { error: String(e.message ?? e.error?.message ?? e.code ?? e.error?.code ?? err) }));
     } finally {
       this._backupBusy = false;
     }
@@ -13370,10 +13382,10 @@ export class Fp3dEditor extends LitElement {
       building = parseExport(await file.text());
     } catch (err) {
       const code = (err as Error).message;
-      alert(code === "not_json" ? this.t("import_error_not_json") : code === "not_plan" ? this.t("import_error_not_plan") : this.t("backup_import_error", { error: code }));
+      await this.tell(code === "not_json" ? this.t("import_error_not_json") : code === "not_plan" ? this.t("import_error_not_plan") : this.t("backup_import_error", { error: code }));
       return;
     }
-    if (!confirm(this.t("backup_import_confirm"))) return;
+    if (!(await this.ask(this.t("backup_import_confirm"), this.t("ask_ok")))) return;
     // the current plan stays available as a restore point
     await takeSnapshot(this.hass, this.home).catch(() => undefined);
     this.setDoc(building);

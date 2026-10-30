@@ -2,9 +2,11 @@
 // delete one. The backend checks every change again; the panel follows the active home by its subscription.
 
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
+import { askConfirm, askText, tell } from "../ask.ts";
 import { createHome, deleteHome, duplicateHome, listHomes, renameHome, setActiveHome, type HomeInfo, type HomesList } from "../api.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import type { HomeAssistant } from "../types.ts";
+import "./ask-dialog.ts";
 
 const ACTIONS = ["new", "rename", "duplicate", "delete"] as const;
 type Action = (typeof ACTIONS)[number];
@@ -47,24 +49,25 @@ export class Fp3dHomeSwitcher extends LitElement {
     try {
       this._homes = (await change()).homes;
     } catch (err) {
-      alert(this.t("home_failed", { error: String((err as { message?: string })?.message ?? err) }));
+      await tell(this.t("home_failed", { error: String((err as { message?: string })?.message ?? err) }), { ok: this.t("ask_ok") });
     }
   }
 
   private async act(action: Action): Promise<void> {
     const current = this._homes?.find((h) => h.id === this.home);
+    const named = (value: string) => askText(this.t("home_name_prompt"), value, { ok: this.t("ask_ok"), cancel: this.t("cancel") });
     if (action === "new") {
-      const name = prompt(this.t("home_name_prompt"), this.t("home_new_name"))?.trim();
+      const name = await named(this.t("home_new_name"));
       if (name) await this.run(async () => setActiveHome(this.hass, (await createHome(this.hass, name)).home.id));
     } else if (!current) {
       return;
     } else if (action === "rename") {
-      const name = prompt(this.t("home_name_prompt"), current.name)?.trim();
+      const name = await named(current.name);
       if (name && name !== current.name) await this.run(() => renameHome(this.hass, current.id, name));
     } else if (action === "duplicate") {
-      const name = prompt(this.t("home_name_prompt"), this.t("home_copy_name", { name: current.name }))?.trim();
+      const name = await named(this.t("home_copy_name", { name: current.name }));
       if (name) await this.run(async () => setActiveHome(this.hass, (await duplicateHome(this.hass, current.id, name)).home.id));
-    } else if (confirm(this.t("home_delete_confirm", { name: current.name }))) {
+    } else if (await askConfirm(this.t("home_delete_confirm", { name: current.name }), { ok: this.t("delete"), cancel: this.t("cancel"), danger: true })) {
       await this.run(() => deleteHome(this.hass, current.id));
     }
   }

@@ -156,6 +156,8 @@ import { Director, HOLD_DEFAULT, directorAny, doorbellCamera, doorbellEntities, 
 import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
 import { sunPath, type SunPath } from "../sun-path.ts";
 import { cheapRate } from "../cheap-rate.ts";
+import { askConfirm } from "../ask.ts";
+import "./ask-dialog.ts";
 import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
@@ -278,7 +280,6 @@ export class Fp3dView3d extends LitElement {
     ghostOn: { attribute: false },
     _central: { state: true },
     _sheet: { state: true },
-    _ask: { state: true },
     _settingsOpen: { state: true },
     _note: { state: true },
     _thumbsCompact: { state: true },
@@ -560,7 +561,6 @@ export class Fp3dView3d extends LitElement {
   /** The ⚙ settings over the view are open. */
   private declare _settingsOpen: boolean;
   /** An own action asking first (#6): its question, and the answer to give. */
-  private declare _ask: { text: string; answer: (yes: boolean) => void } | null;
   /** Items with own tap, hold or double-tap actions, by the id a tap on them reports (#6). */
   private actionOwners = new Map<string, ActionOwner>();
   /** Tells a tap from a double tap on items that have a double-tap action. */
@@ -816,7 +816,6 @@ export class Fp3dView3d extends LitElement {
     this.wireKey = "";
     document.removeEventListener("visibilitychange", this.onVisible);
     this.taps.cancel();
-    this._ask?.answer(false);
     this.stopWalk();
     this.pets?.dispose();
     this.pets = null;
@@ -2204,11 +2203,11 @@ export class Fp3dView3d extends LitElement {
     };
     const svc = (domain: string, service: string, id: string) => void hass.callService(domain, service, { entity_id: id });
     const onOff = (id: string, on: boolean) => (id.startsWith("climate.") ? svc("climate", on ? "turn_on" : "turn_off", id) : svc("homeassistant", on ? "turn_on" : "turn_off", id));
-    const lockTap = () => {
+    const lockTap = async () => {
       if (!c.lock) return;
       const isLock = c.lock.startsWith("lock.");
       if (c.locked) {
-        if (!confirm(t("car_unlock_confirm"))) return;
+        if (!(await this.ask(t("car_unlock_confirm")))) return;
         if (isLock) svc("lock", "unlock", c.lock);
         else svc("homeassistant", "turn_off", c.lock);
       } else if (isLock) svc("lock", "lock", c.lock);
@@ -3367,9 +3366,8 @@ export class Fp3dView3d extends LitElement {
           const w = g.power && g.power !== "none" ? readPower(hass.states[g.power]) : null;
           const label = `${socket ? "🔌" : "▭"} ${i + 1} · ${id ? entityName(hass, id) : "–"}`;
           return html`<button class="fp3d-chip ${st && isActive(st) ? "fp3d-gang-on" : ""}" ?disabled=${!id || (st ? isUnavailable(st) : true)}
-            @click=${() => {
-              if (!id) return;
-              if (this.confirmSet.has(id) && !confirm(translate(hass, "confirm_switch", { name: entityName(hass, id) }))) return;
+            @click=${async () => {
+              if (!id || !(await this.confirmFor(id))) return;
               void toggleEntity(hass, id);
             }}>${label}${st ? html` <small>${stateText(hass, st)}${w !== null ? ` · ${formatPower(hass, Math.max(0, w))}` : ""}</small>` : nothing}</button>`;
         })}
@@ -5555,32 +5553,14 @@ export class Fp3dView3d extends LitElement {
     }).catch((err: unknown) => this.showNote(translate(hass, "action_failed", { error: err instanceof Error ? err.message : String(err) })));
   }
 
-  /** Ask a question in the app's own dialog; true for yes. A question still open is answered no. */
+  /** A yes / no question in the app's own dialog (#59); true for yes. */
   private ask(text: string): Promise<boolean> {
-    this._ask?.answer(false);
-    return new Promise((resolve) => {
-      this._ask = {
-        text,
-        answer: (yes) => {
-          this._ask = null;
-          resolve(yes);
-        },
-      };
-    });
+    return askConfirm(text, { ok: translate(this.hass, "action_confirm_ok"), cancel: translate(this.hass, "cancel") });
   }
 
-  private renderAsk() {
-    const a = this._ask;
-    if (!a) return nothing;
-    const t = (k: I18nKey) => translate(this.hass, k);
-    return html`<div class="fp3d-sheet-backdrop" @click=${() => a.answer(false)}></div>
-      <div class="fp3d-sheet fp3d-ask" role="alertdialog" aria-modal="true" aria-label=${t("action_confirm_title")} @keydown=${(e: KeyboardEvent) => e.key === "Escape" && a.answer(false)}>
-        <p class="fp3d-ask-text">${a.text}</p>
-        <div class="fp3d-ask-buttons">
-          <button class="fp3d-btn" @click=${() => a.answer(false)}>${t("cancel")}</button>
-          <button class="fp3d-btn fp3d-primary" autofocus @click=${() => a.answer(true)}>${t("action_confirm_ok")}</button>
-        </div>
-      </div>`;
+  /** Asks first for devices marked so ("ask before switching"). */
+  private async confirmFor(id: string): Promise<boolean> {
+    return !this.confirmSet.has(id) || (await this.ask(translate(this.hass, "confirm_switch", { name: entityName(this.hass, id) })));
   }
 
   /** What a tap does by the device's kind (no own action). */
@@ -5654,8 +5634,7 @@ export class Fp3dView3d extends LitElement {
       return;
     }
     if (kind && TOGGLE_KINDS.has(kind)) {
-      if (this.confirmSet.has(entityId) && !confirm(translate(this.hass, "confirm_switch", { name: entityName(this.hass, entityId) }))) return;
-      void toggleEntity(this.hass, entityId);
+      void this.confirmFor(entityId).then((yes) => yes && toggleEntity(this.hass, entityId));
     } else openMoreInfo(this, entityId);
   }
 
@@ -5687,10 +5666,9 @@ export class Fp3dView3d extends LitElement {
       openMoreInfo(this, drive);
       return;
     }
-    if (this.confirmSet.has(drive) && !confirm(translate(this.hass, "confirm_switch", { name: entityName(this.hass, drive) }))) return;
     // a pulse switch turns itself off again: it is only ever switched on; buttons are pressed
     const [domain] = drive.split(".");
-    void this.hass.callService(domain, domain === "switch" ? "turn_on" : "press", { entity_id: drive });
+    void this.confirmFor(drive).then((yes) => yes && this.hass.callService(domain, domain === "switch" ? "turn_on" : "press", { entity_id: drive }));
   }
 
   /** The look shown: the chosen one, by the sun for "auto" (Day above the horizon, Neon below), by the HA theme for "theme". */
@@ -5850,7 +5828,7 @@ export class Fp3dView3d extends LitElement {
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderWires()} ${this.clean ? nothing : this.renderLegend()}
-      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderAsk()} ${this.renderSettings()} ${this.renderNote()}
+      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderSettings()} ${this.renderNote()}
       ${this.clean ? nothing : this.renderProHint()} ${this.renderMenu()} ${this.renderEye()}
       ${this.renderMic()}
       ${this.pivotMark && !this._walk ? html`<span class="fp3d-pivot" aria-hidden="true"></span>` : nothing}
@@ -6998,21 +6976,6 @@ export class Fp3dView3d extends LitElement {
         font-size: 12px;
       }
       /* a module's sheet and the ⚙ settings: a glass box in the middle, over a dim backdrop */
-      .fp3d-ask {
-        z-index: 9;
-        width: min(360px, calc(100% - 24px));
-      }
-      .fp3d-ask-text {
-        margin: 0;
-        font-size: 1rem;
-        line-height: 1.4;
-        white-space: pre-line;
-      }
-      .fp3d-ask-buttons {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-      }
       .fp3d-sheet-backdrop {
         position: absolute;
         inset: 0;
