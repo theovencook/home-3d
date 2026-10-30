@@ -52,6 +52,8 @@ const plan2dConfig = { ...common, entryPoints: ["src/plan2d/entry.ts"], outfile:
 const voiceConfig = { ...common, entryPoints: ["src/voice/entry.ts"], outfile: `${out}/home-3d-voice.js` };
 // the locating setup assistant only loads when an admin opens it
 const locateConfig = { ...common, entryPoints: ["src/locate/entry.ts"], outfile: `${out}/home-3d-locate.js` };
+// the Settings page (#139) only loads when someone opens its tab; its labels come from the main bundle (`t`)
+const settingsConfig = { ...common, entryPoints: ["src/settings/entry.ts"], outfile: `${out}/home-3d-settings.js` };
 // The main bundle loads the 3D bundle with a hash of its content in the URL, so a new 3D bundle is
 // never taken from the browser cache (the integration version only changes after a restart).
 // the frontend knows its own version, to notice a backend that still runs an older one
@@ -65,7 +67,7 @@ const buildId = (() => {
   for (const file of [...inputs("src"), ...inputs("lang"), "package-lock.json", "build.mjs"]) if (existsSync(file)) h.update(file).update(readFileSync(file));
   return h.digest("hex").slice(0, 12);
 })();
-// `hashes`: the content hash of each bundle it loads, by name (viewer, editor, cardEditor, timeTravel, fun, voice, locate, plan2d)
+// `hashes`: the content hash of each bundle it loads, by name (viewer, editor, cardEditor, timeTravel, fun, voice, locate, plan2d, settings)
 const mainConfig = (hashes) => ({
   ...common,
   entryPoints: ["src/main.ts"],
@@ -79,13 +81,14 @@ const mainConfig = (hashes) => ({
     __FP3D_VOICE_HASH__: JSON.stringify(hashes.voice),
     __FP3D_LOCATE_HASH__: JSON.stringify(hashes.locate),
     __FP3D_PLAN2D_HASH__: JSON.stringify(hashes.plan2d),
+    __FP3D_SETTINGS_HASH__: JSON.stringify(hashes.settings),
     __FP3D_VERSION__: JSON.stringify(version),
     __FP3D_BUILD__: JSON.stringify(buildId),
     __FP3D_LANG_HASH__: JSON.stringify(langHash),
   },
 });
 // the bundles the main bundle loads by hash (the keys of mainConfig's `hashes`)
-const HASHED = ["viewer", "editor", "cardEditor", "timeTravel", "fun", "voice", "locate", "plan2d"];
+const HASHED = ["viewer", "editor", "cardEditor", "timeTravel", "fun", "voice", "locate", "plan2d", "settings"];
 const hashOf = (file) => createHash("sha256").update(readFileSync(file)).digest("hex").slice(0, 12);
 
 // Self-hosted fonts (SIL OFL): latin subset of the variable weight axis, shipped with their licences.
@@ -113,12 +116,12 @@ function copyFonts() {
 // with a reason in this comment, and keep new strings' growth in the bundle that uses them.
 // #139: home-3d.js was already at 683.7 KB on integration (over its 680 KB) before the Settings tab; raised to 695 KB
 // for the tab, its loader and the "All settings" links (the page itself and its texts are a bundle of their own).
-const BUDGET = { "home-3d.js": 695 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 975 * 1024, "home-3d-card-editor.js": 160 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024 };
+const BUDGET = { "home-3d.js": 695 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 975 * 1024, "home-3d-card-editor.js": 160 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 120 * 1024 };
 
 copyFonts();
 if (watch) {
   // in watch mode the hash is not tracked; a dev reload fetches the bundle anyway
-  for (const c of [viewerConfig, itemsConfig("dev"), editorConfig("dev", "dev", "dev"), cardEditorConfig, timeTravelConfig, funConfig, voiceConfig, locateConfig, plan2dConfig, mainConfig(Object.fromEntries(HASHED.map((name) => [name, "dev"])))]) await (await context(c)).watch();
+  for (const c of [viewerConfig, itemsConfig("dev"), editorConfig("dev", "dev", "dev"), cardEditorConfig, timeTravelConfig, funConfig, voiceConfig, locateConfig, plan2dConfig, settingsConfig, mainConfig(Object.fromEntries(HASHED.map((name) => [name, "dev"])))]) await (await context(c)).watch();
 } else {
   await build(viewerConfig);
   await build(locateConfig);
@@ -131,6 +134,7 @@ if (watch) {
   await build(funConfig);
   await build(voiceConfig);
   await build(plan2dConfig);
+  await build(settingsConfig);
   await build(
     mainConfig({
       viewer: hashOf(viewerConfig.outfile),
@@ -141,6 +145,7 @@ if (watch) {
       voice: hashOf(voiceConfig.outfile),
       locate: hashOf(locateConfig.outfile),
       plan2d: hashOf(plan2dConfig.outfile),
+      settings: hashOf(settingsConfig.outfile),
     }),
   );
   writeFileSync(`${out}/build.json`, `${JSON.stringify({ build: buildId, version })}
@@ -178,6 +183,16 @@ if (watch) {
     if (german.some((s) => text.includes(JSON.stringify(s).slice(1, -1)))) {
       over = true;
       console.log(`GERMAN ${file}: holds the German table – import i18n.ts (English), never i18n-de.ts`);
+    }
+  }
+  // the Settings page borrows the main bundle's texts (#139): a settings bundle that imports i18n.ts carries the
+  // whole English table a second time
+  {
+    const { englishTable } = await import("./src/i18n.ts");
+    const text = readFileSync(`${out}/home-3d-settings.js`, "utf8");
+    if (text.includes(JSON.stringify(englishTable().no_building_admin).slice(1, -1))) {
+      over = true;
+      console.log("ENGLISH home-3d-settings.js: holds the main texts – take them from the panel (t), never import i18n.ts");
     }
   }
   for (const [file, limit] of Object.entries(BUDGET)) {

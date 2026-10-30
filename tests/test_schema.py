@@ -85,6 +85,15 @@ def test_length_units_follow_home_assistant_unless_set() -> None:
     assert SETTINGS_SCHEMA({**base, "person_look": "pin"})["person_look"] == "pin"
 
 
+def test_easter_eggs_are_one_house_wide_switch_on_by_default() -> None:
+    """The easter eggs switch (#139) belongs to the plan: on unless switched off, and only a boolean."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    assert SETTINGS_SCHEMA(base)["easter_eggs"] is True
+    assert SETTINGS_SCHEMA({**base, "easter_eggs": False})["easter_eggs"] is False
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "easter_eggs": "sometimes"})
+
+
 def test_furniture_block() -> None:
     """Furniture blocks: items with the same group id move together; none by default."""
     item = {"id": "f1", "type": "kitchen", "x": 0, "z": 0, "rotation": 0, "w": 0.6, "d": 0.6, "h": 0.9, "variant": None}

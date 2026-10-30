@@ -5,6 +5,8 @@ import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues } from "
 import { PHONE_MEDIA } from "./phone.ts";
 import { BuildingController } from "./building-controller.ts";
 import { loadEditor } from "./load-editor.ts";
+import { loadSettings } from "./load-settings.ts";
+import { loadLocate } from "./load-locate.ts";
 import "./components/room-panel.ts";
 import "./components/view3d.ts";
 import "./components/home-switcher.ts";
@@ -40,7 +42,13 @@ import { tell } from "./ask.ts";
 /** The corners of the clock, as arrows in the view menu (the full name is the button's title). */
 const CLOCK_ARROW: Record<Exclude<ClockPos, "off">, string> = { tl: "↖", tr: "↗", bl: "↙", br: "↘" };
 
-type Mode = "view" | "editor" | "extensions";
+type Mode = "view" | "editor" | "extensions" | "settings";
+
+/** "#settings/<section>/<id>" (#139): the Settings page's own address; the page checks the names. */
+function settingsAddress(hash: string): { section: string | null; id: string | null } | null {
+  const m = /^#settings(?:\/([a-z_]+))?(?:\/([^/?#]+))?\/?$/.exec(hash);
+  return m ? { section: m[1] ?? null, id: m[2] ? decodeURIComponent(m[2]) : null } : null;
+}
 
 /** What counts as someone using a wall tablet: its idle return waits again (#92). */
 const TOUCHES = ["pointerdown", "keydown", "wheel"] as const;
@@ -107,6 +115,9 @@ export class Floorplan3dPanel extends LitElement {
     _voiceHere: { state: true },
     _screen: { state: true },
     _tablet: { state: true },
+    _settingsReady: { state: true },
+    _settingsError: { state: true },
+    _settingsAt: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -173,6 +184,13 @@ export class Floorplan3dPanel extends LitElement {
    * settings, and back to the whole house after a quiet spell. "?tablet" in the address or a tick for this HA user.
    */
   private declare _tablet: boolean;
+  /** The Settings page's bundle is loaded (#139), or why it failed. */
+  private declare _settingsReady: boolean;
+  private declare _settingsError: string | null;
+  /** The section and setting the Settings page opens at (a deep link, a "Settings" link elsewhere). */
+  private declare _settingsAt: { section: string | null; id: string | null };
+  /** The 3D view as it was when the view tab was left: the Settings page's "start view" takes it. */
+  private lastView: StartView | null = null;
 
   private readonly data = new BuildingController(this);
   /** The editor's undo history (#66): kept here, as the editor element goes whenever another tab opens. */
@@ -198,6 +216,27 @@ export class Floorplan3dPanel extends LitElement {
     this._editorError = null;
     this._floorId = null;
     this._roomId = null;
+    this.readPrefs();
+    this._furnish = false;
+    this._selFurniture = null;
+    this._selDevice = null;
+    this._cameraWall = false;
+    this._optsOpen = false;
+    this._pinHover = false;
+    this._micProbe = false;
+    this._tablet = false;
+    this._settingsReady = !!customElements.get("fp3d-settings-page");
+    this._settingsError = null;
+    const address = settingsAddress(location.hash);
+    this._settingsAt = address ?? { section: null, id: null };
+    if (address) this._mode = "settings";
+  }
+
+  /**
+   * This device's view preferences (`home3d.<key>`), read when the panel starts and again after the Settings page
+   * changed one or reset them (#139).
+   */
+  private readPrefs(): void {
     // the wall view stays as it was last set on this device (#309)
     this._wallMode = prefs.get("walls") === "cut" ? "cut" : "auto";
     this._explode = prefs.get("explode") !== "0";
@@ -218,9 +257,6 @@ export class Floorplan3dPanel extends LitElement {
     this._clock = clock === "tl" || clock === "tr" || clock === "bl" || clock === "br" ? clock : "off";
     const accent = prefs.get("accent");
     this._accent = accent && /^#[0-9a-f]{6}$/i.test(accent) ? accent : null;
-    this._furnish = false;
-    this._selFurniture = null;
-    this._selDevice = null;
     const stack = prefs.get("floor_stack");
     this._floorStack = stack === "stacked" || stack === "single" ? stack : "dim";
     this._roomNames = prefs.get("room_names") !== "0";
@@ -228,17 +264,12 @@ export class Floorplan3dPanel extends LitElement {
     this._keepView = prefs.get("keep_view") === "1";
     this._angleLock = prefs.get("angle_lock") === "1";
     this._trail = prefs.get("trail") === "1";
-    this._cameraWall = false;
     this._clean = prefs.get("clean") === "1";
     this._navWrap = prefs.get("nav_wrap") === "1";
-    this._optsOpen = false;
-    this._pinHover = false;
     this._weather = prefs.get("weather") !== "0";
     this._director = directorOnHere();
-    this._micProbe = false;
     this._voiceHere = voiceOnHere();
     this._screen = screenName();
-    this._tablet = false;
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -320,11 +351,70 @@ export class Floorplan3dPanel extends LitElement {
 
   private setMode(mode: Mode): void {
     if (mode === this._mode || (this._tablet && mode !== "view")) return;
+    // the view as it stands is what the Settings page's "start view" takes (#139)
+    if (this._mode === "view") this.lastView = this.view3d()?.currentView() ?? this.lastView;
     this.tt.stop();
     this._editorError = null;
     this._optsOpen = false;
+    this._showOpen = false;
     if (mode === "view") void this.data.flush();
+    // the Settings page keeps its address (#settings/…); leaving it clears it
+    if (this._mode === "settings" && mode !== "settings") this.setAddress("");
+    if (mode === "settings") this.setAddress(this.settingsLink(this._settingsAt.section, this._settingsAt.id));
     this._mode = mode;
+  }
+
+  private settingsLink(section: string | null, id: string | null): string {
+    return `#settings${section ? `/${section}${id ? `/${encodeURIComponent(id)}` : ""}` : ""}`;
+  }
+
+  /** The page's address part, without a new history entry (the back button leaves the panel as before). */
+  private setAddress(hash: string): void {
+    try {
+      if (location.hash !== hash) history.replaceState(history.state, "", `${location.pathname}${location.search}${hash}`);
+    } catch {
+      // a sandboxed frame: the address just doesn't follow
+    }
+  }
+
+  /**
+   * Opens the Settings page at a section and setting (#139): the editor's ⚙ menu, the view's popovers, the tool panels
+   * and the Extensions page link here. Not in locked tablet mode.
+   */
+  private openSettings(section: string | null = null, id: string | null = null): void {
+    if (this._tablet) return;
+    this._settingsAt = { section, id };
+    if (this._mode === "settings") this.setAddress(this.settingsLink(section, id));
+    else this.setMode("settings");
+  }
+
+  private readonly onOpenSettings = (e: Event) => {
+    const d = (e as CustomEvent<{ section?: string | null; id?: string | null }>).detail ?? {};
+    e.stopPropagation();
+    this.openSettings(d.section ?? null, d.id ?? null);
+  };
+
+  /** A link to #settings/… typed or clicked while the panel is open. */
+  private readonly onHash = () => {
+    const at = settingsAddress(location.hash);
+    if (at) this.openSettings(at.section, at.id);
+  };
+
+  /** A button on the Settings page that leaves it or opens something of the panel's. */
+  private settingsAction(e: CustomEvent<{ action: string }>): void {
+    const { action } = e.detail;
+    if (action === "extensions") this.setMode("extensions");
+    else if (action === "editor") this.setMode("editor");
+    else if (action === "mic_probe") void loadVoice().then(() => (this._micProbe = true)).catch(() => undefined);
+    else if (action === "locate" && this.hass && this.data.building) {
+      const b = this.data.building;
+      void loadLocate().then((m) =>
+        m.openLocateSetup(this.hass, b, () => this.hass, (look) => {
+          const cur = this.data.building;
+          if (cur) this.editPlan({ ...cur, settings: { ...cur.settings, person_look: look === "figure" ? null : look } });
+        }),
+      );
+    }
   }
 
   private onRoomTap(e: CustomEvent<{ floorId: string; roomId: string | null }>): void {
@@ -636,11 +726,15 @@ export class Floorplan3dPanel extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener("keydown", this.onKey);
+    window.addEventListener("hashchange", this.onHash);
+    this.addEventListener("open-settings", this.onOpenSettings);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     window.removeEventListener("keydown", this.onKey);
+    window.removeEventListener("hashchange", this.onHash);
+    this.removeEventListener("open-settings", this.onOpenSettings);
     this.listenTouches(false);
     this.tt.stop();
     this.locateLab?.();
@@ -663,15 +757,18 @@ export class Floorplan3dPanel extends LitElement {
                 @home-reload=${() => void this.data.reopen()}
                 @home-open=${(e: CustomEvent<{ home: string | null }>) => this.data.setHome(e.detail.home ?? undefined)}
               ></fp3d-home-switcher>` : nothing}
-          ${this.canEdit
-            ? html`<div class="fp3d-seg" role="tablist">
-                <button role="tab" aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
-                <button role="tab" aria-pressed=${this._mode === "editor"} @click=${() => this.setMode("editor")}>${this.t("editor")}</button>
-                <button role="tab" class="fp3d-tab-ext" aria-pressed=${this._mode === "extensions"} @click=${() => this.setMode("extensions")}>
-                  ✦ ${this.t("ext_tab")}
-                </button>
-              </div>`
-            : nothing}
+          <div class="fp3d-seg" role="tablist">
+            <button role="tab" aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
+            ${this.canEdit
+              ? html`<button role="tab" aria-pressed=${this._mode === "editor"} @click=${() => this.setMode("editor")}>${this.t("editor")}</button>
+                  <button role="tab" class="fp3d-tab-ext" aria-pressed=${this._mode === "extensions"} @click=${() => this.setMode("extensions")}>
+                    ✦ ${this.t("ext_tab")}
+                  </button>`
+              : nothing}
+            <button role="tab" class="fp3d-tab-settings" aria-pressed=${this._mode === "settings"} title=${this.t("settings")} @click=${() => this.openSettings()}>
+              ⚙ <span class="fp3d-tab-word">${this.t("settings")}</span>
+            </button>
+          </div>
           <span class="fp3d-grow"></span>
           ${this._mode === "view" && b?.floors.some((f) => f.rooms.length)
             ? html`<button
@@ -872,7 +969,9 @@ export class Floorplan3dPanel extends LitElement {
             ? this.renderEditor(b)
             : this._mode === "extensions" && this.canEdit
               ? this.renderExtensions()
-              : this.renderView(b)
+              : this._mode === "settings" && !this._tablet
+                ? this.renderSettings(b)
+                : this.renderView(b)
           : nothing}
       </div>
     `;
@@ -971,6 +1070,39 @@ export class Floorplan3dPanel extends LitElement {
       @packs-changed=${() => void this.data.reloadPacks()}
     ></fp3d-extensions>`;
   }
+
+  /** The Settings page (#139): its own bundle, loaded the first time the tab opens. */
+  private renderSettings(b: Building) {
+    if (!this._settingsReady) {
+      if (this._settingsError) return html`<div class="fp3d-empty"><p>${this.t("load_error")}: ${this._settingsError}</p></div>`;
+      loadSettings().then(
+        () => (this._settingsReady = true),
+        (err: unknown) => (this._settingsError = String(err)),
+      );
+      return html`<div class="fp3d-empty"><p>${this.t("loading")}</p></div>`;
+    }
+    return html`<fp3d-settings-page
+      class="fp3d-body"
+      .hass=${this.hass}
+      .building=${b}
+      .canEdit=${this.data.canEdit}
+      .packs=${this.data.packs}
+      .t=${this.translator}
+      .section=${this._settingsAt.section}
+      .focusId=${this._settingsAt.id}
+      .saveState=${this.data.saveState}
+      .homeName=${this.data.homeName ?? ""}
+      .lastView=${this.lastView}
+      .loadEditor=${loadEditor}
+      @settings-edit=${(e: CustomEvent<{ building: Building; key: string | null }>) => this.editPlan(e.detail.building, e.detail.key)}
+      @device-change=${() => this.readPrefs()}
+      @settings-action=${this.settingsAction}
+      @settings-nav=${(e: CustomEvent<{ section: string; id: string | null }>) => this.setAddress(this.settingsLink(e.detail.section, e.detail.id))}
+    ></fp3d-settings-page>`;
+  }
+
+  /** The main texts for the Settings page's bundle (it has no table of its own beyond its new texts). */
+  private readonly translator = (key: string, vars?: Record<string, string | number>) => translate(this.hass, key as I18nKey, vars);
 
   private renderEditor(b: Building) {
     // the library (#44) is only loaded for the editor and the extensions page
@@ -1523,8 +1655,11 @@ export class Floorplan3dPanel extends LitElement {
         border-color: var(--fp3d-accent);
         color: var(--fp3d-accent-text);
       }
-      /* phones: version and grow move with it */
+      /* phones: version and grow move with it; the Settings tab keeps only its gear */
       @media (max-width: 700px) {
+        .fp3d-tab-word {
+          display: none;
+        }
         .fp3d-version {
           order: 4;
         }

@@ -1041,6 +1041,9 @@ SETTINGS_SCHEMA = vol.Schema(
                 extra=vol.ALLOW_EXTRA,
             ),
         ),
+        # easter eggs (#139): one house-wide switch for every surprise (the Halloween ghost and later ones); off hides
+        # them on every screen, cards and wall tablets included
+        vol.Optional("easter_eggs", default=True): bool,
         vol.Optional("halloween", default=None): vol.Any(
             None, vol.Schema({vol.Optional("ghost", default=True): bool}, extra=vol.ALLOW_EXTRA)
         ),

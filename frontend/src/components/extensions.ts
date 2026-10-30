@@ -365,7 +365,7 @@ export class Extensions extends LitElement {
               <b>✓ ${this.t("fun_name_pets")}</b>
               <span class="fp3d-sub">${this.t("fun_feature_pets")}</span>
               ${this.isEditor && this.building
-                ? html`<label class="fp3d-check"><input type="checkbox" .checked=${on} @change=${(e: Event) => set((p) => (p.on = (e.target as HTMLInputElement).checked))} /> ${this.t("pets_show")}</label>
+                ? html`${this.settingsLink("pets.on", on ? "✓" : "–", this.t("pets_show"))}
                     ${list.map(
                       (pet) => html`<div class="fp3d-pet-row">
                         <select
@@ -439,23 +439,27 @@ export class Extensions extends LitElement {
     </section>`;
   }
 
-  /** Fun pack "Halloween": decorations in the furniture library, and the ghost to switch on and off. */
+  /**
+   * A switch that moved to the Settings page (#139: the ghost and the pets sit under "Easter eggs & fun" there, beside
+   * the house-wide easter eggs switch): its state, and a link that opens it there.
+   */
+  private settingsLink(id: string, state: string, label: string) {
+    return html`<button
+      class="fp3d-link fp3d-ext-setting"
+      @click=${() => this.dispatchEvent(new CustomEvent("open-settings", { detail: { section: "fun", id }, bubbles: true, composed: true }))}
+    >
+      ${state} ${label} · ⚙ ${this.t("settings")} ›
+    </button>`;
+  }
+
+  /** Fun pack "Halloween": decorations in the furniture library, and the ghost (switched in Settings). */
   private renderHalloween(unlocked: boolean) {
     const ghost = this.building?.settings.halloween?.ghost !== false;
     if (!unlocked) return nothing;
     return html`<div class="fp3d-ext-feature fp3d-ext-on">
       <b>✓ 🎃 ${this.t("fun_name_halloween")}</b>
       <span class="fp3d-sub">${this.t("fun_feature_halloween")}</span>
-      ${this.isEditor && this.building
-        ? html`<label class="fp3d-check"
-            ><input
-              type="checkbox"
-              .checked=${ghost}
-              @change=${(e: Event) => this.editBuilding((b) => (b.settings.halloween = { ...(b.settings.halloween ?? {}), ghost: (e.target as HTMLInputElement).checked }))}
-            />
-            ${this.t("halloween_ghost")}</label
-          >`
-        : nothing}
+      ${this.isEditor && this.building ? this.settingsLink("halloween.ghost", ghost && this.building.settings.easter_eggs !== false ? "✓" : "–", this.t("halloween_ghost")) : nothing}
       <span class="fp3d-sub">${this.t("halloween_deco_hint")}</span>
     </div>`;
   }
@@ -750,6 +754,17 @@ export class Extensions extends LitElement {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
         gap: 10px;
+      }
+      .fp3d-ext-setting {
+        justify-self: start;
+        min-height: 36px;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--fp3d-accent);
+        font: inherit;
+        cursor: pointer;
+        text-align: left;
       }
       .fp3d-pet-row {
         display: flex;

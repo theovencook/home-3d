@@ -4562,7 +4562,8 @@ export class Fp3dView3d extends LitElement {
   /** Fun pack "Halloween": while it is unlocked and the ghost switched on, it floats through the house now and then. */
   private async syncGhost(): Promise<void> {
     const b = this.building;
-    const on = !!b && hasFeature("fun_halloween") && b.settings.halloween?.ghost !== false && this.ghostOn !== false;
+    // the house-wide easter eggs switch (#139) wins over everything: cards and wall tablets follow it too
+    const on = !!b && b.settings.easter_eggs !== false && hasFeature("fun_halloween") && b.settings.halloween?.ghost !== false && this.ghostOn !== false;
     if (!this.viewer || this.plan2d || !on) {
       this.ghost?.dispose();
       this.ghost = null;

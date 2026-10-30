@@ -852,6 +852,8 @@ export interface BuildingSettings {
   person_look?: "figure" | "pin" | "off" | null;
   /** Fun pack "Halloween": the ghost that floats through the house now and then (on unless switched off). */
   halloween?: { ghost?: boolean } | null;
+  /** Easter eggs (#139): one house-wide switch for every surprise (the Halloween ghost and later ones), on unless false. */
+  easter_eggs?: boolean;
   /** Plan lock: rooms, walls, doors, windows and outdoor areas cannot be moved by accident. */
   lock_plan?: boolean;
   /** False for a sample or template home (#61): the editor never offers to add rooms from this install's areas. */

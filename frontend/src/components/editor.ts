@@ -287,6 +287,8 @@ const turnBy = (a: number, d: number): number => {
 
 /** Topics of the ⚙ settings menu (everything that belongs to the whole plan). */
 type SettingsTopic = "house" | "weather" | "director" | "voice" | "locate" | "favorites" | "backdrop" | "terrain" | "backup" | "editors";
+/** The parts of the editor the Settings page shows on their own (#139; the same names as its registry's EmbedTopic). */
+export type EditorTopic = "favorites" | "own_buttons" | "media_presets" | "director_triggers" | "editors" | "tablet_users" | "backup" | "backdrop_picture" | "energy_balance" | "hologram" | "presence";
 
 /** Wall view side bar: what stands or hangs at a wall, by kind. */
 const WALL_CATS: Record<string, string[]> = {
@@ -543,6 +545,7 @@ export class Fp3dEditor extends LitElement {
     canEdit: { attribute: false },
     home: { attribute: false },
     history: { attribute: false },
+    topic: { attribute: false },
   };
 
   /** Home Assistant as handed in; `hass` reads it through `hassWatch` while rendering (#130). */
@@ -567,6 +570,11 @@ export class Fp3dEditor extends LitElement {
   declare home: string | null | undefined;
   /** The undo history (#66): the panel's, so it outlives this element when another tab opens; else its own. */
   declare history: UndoHistory;
+  /**
+   * One part of the editor shown on its own on the Settings page (#139: favourites, own buttons, backup …), without
+   * the plan, the tools, the keyboard shortcuts or the library; null: the whole editor.
+   */
+  declare topic: EditorTopic | null;
   declare narrow: boolean;
   /** Imported furniture packs (from the panel's controller). */
   declare packs: FurniturePack[] | undefined;
@@ -1002,6 +1010,7 @@ export class Fp3dEditor extends LitElement {
     this._canUndo = false;
     this._canRedo = false;
     this.history = new UndoHistory();
+    this.topic = null;
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -1086,7 +1095,7 @@ export class Fp3dEditor extends LitElement {
     setPlanRecipes(this._doc?.recipes);
     if (changed.has("_doc") || changed.has("packs")) this.fetchPlacedRecipes();
     // a plan or library from the backend: which placed items have an update now (#48)
-    if ((changed.has("building") || changed.has("packs")) && this.isEditor) this.refreshLibUpdates();
+    if ((changed.has("building") || changed.has("packs")) && this.isEditor && !this.topic) this.refreshLibUpdates();
   }
 
   private recipesAsked = new Set<string>();
@@ -1109,7 +1118,8 @@ export class Fp3dEditor extends LitElement {
   }
 
   protected firstUpdated(): void {
-    const stage = this.renderRoot.querySelector(".fp3d-canvas-wrap") as HTMLElement;
+    const stage = this.renderRoot.querySelector(".fp3d-canvas-wrap") as HTMLElement | null;
+    if (!stage) return;
     this.resizeObserver = new ResizeObserver(() => {
       this._size = { w: stage.clientWidth, h: stage.clientHeight };
       // a plan nobody has moved since it was fitted stays fitted (the 3D half opening beside the roof tool)
@@ -1440,6 +1450,8 @@ export class Fp3dEditor extends LitElement {
     if (selectionMoved(changed, this)) for (const side of this.renderRoot.querySelectorAll<HTMLElement>(".fp3d-side")) side.scrollTop = 0;
     // the settings dialog shows its section unfolded (its summary is hidden there)
     if (this._settingsDialog) for (const d of this.renderRoot.querySelectorAll<HTMLDetailsElement>(".fp3d-dialog details")) d.open = true;
+    // so does a part on the Settings page (#139)
+    if (this.topic) for (const d of this.renderRoot.querySelectorAll<HTMLDetailsElement>(".fp3d-embed details")) if (!d.open) d.open = true;
     // the item preview is placed in window coordinates; with the 3D view beside the plan an ancestor becomes its
     // containing block (a transform or filter), so "fixed" no longer means the window: measure and correct once
     const preview = this._preview ? this.renderRoot.querySelector<HTMLElement>(".fp3d-preview") : null;
@@ -3200,6 +3212,8 @@ export class Fp3dEditor extends LitElement {
   // ------------------------------------------------------------------ keyboard
 
   private readonly onKey = (e: KeyboardEvent) => {
+    // a part on the Settings page has no plan to work the keys on
+    if (this.topic) return;
     this.shiftHeld = e.shiftKey;
     const path = e.composedPath();
     if (path.some((el) => el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
@@ -7009,7 +7023,20 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+  /** A part of the editor on the Settings page (#139): drawn as in the editor, around it only its form. */
+  private renderTopic(topic: EditorTopic): TemplateResult {
+    const doc = this._doc;
+    if (!doc) return html``;
+    let body: unknown = nothing;
+    if (topic === "director_triggers") {
+      const placed = [...new Set(doc.floors.flatMap((f) => f.placements.map((p) => p.entity_id)))];
+      body = this.renderDirectorTriggers(doc.settings.director ?? {}, placed);
+    }
+    return html`<div class="fp3d-embed">${body}</div>`;
+  }
+
   protected render(): TemplateResult {
+    if (this.topic) return this.renderTopic(this.topic);
     const floor = this.floor;
     const walls = floor ? generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }, floor.walls ?? []) : null;
     return html`
@@ -15235,6 +15262,20 @@ export class Fp3dEditor extends LitElement {
       :host {
         display: block;
         height: 100%;
+      }
+      /* a part on the Settings page (#139): its row already names it */
+      .fp3d-embed summary,
+      .fp3d-embed > .fp3d-wide > h4.fp3d-lib-head:first-child,
+      .fp3d-embed > .fp3d-wide > h4.fp3d-lib-head:first-child + .fp3d-sub,
+      .fp3d-embed > section > h3:first-child,
+      .fp3d-embed > section > h3:first-child + .fp3d-sub {
+        display: none;
+      }
+      .fp3d-embed details.fp3d-section {
+        border: 0;
+        padding: 0;
+        margin: 0;
+        background: none;
       }
       .fp3d-editor {
         position: relative;
