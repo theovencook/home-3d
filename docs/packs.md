@@ -517,7 +517,7 @@ The settings, pins, previous releases and last check results are kept in `.stora
 ## Packs that ship with Home 3D
 
 Our own library comes with the integration in `custom_components/home_3d/bundled_packs/`, one folder per pack
-(`theovencook.core` and `theovencook.ikea-uk`). Home Assistant reads these folders from its own disk when the integration starts, so
+(`theovencook.core`, `theovencook.ikea-uk`, `theovencook.makers` and `theovencook.devices`). Home Assistant reads these folders from its own disk when the integration starts, so
 they are there on a fresh install without network access and nothing has to be imported. They are checked like an
 imported pack; a bundled pack that does not check is logged and left out.
 
@@ -551,6 +551,24 @@ custom_components/home_3d/bundled_packs/theovencook.core/
 in the folder of its `group`; `frontend/src/core-pack.test.ts` checks that each item shows in the library under that
 section. Adding an item does not touch `pack.json`; its `release` goes up once per Home 3D release that changes the
 pack, so installs holding an older imported copy pick up the bundled one.
+
+### The Makers and Smart-home devices packs
+
+Two themed packs sit beside the core so it stays under the 1000-item limit and people can tell the collections apart.
+They are laid out like the core (`<pack>/<group>/<item id>.json`, MIT, loaded from disk, offline):
+
+| Pack | Name in the library | What goes in it |
+|---|---|---|
+| `theovencook.makers` | Makers | 3D printers (FDM and resin), wash and cure stations, maker and workshop kit |
+| `theovencook.devices` | Smart-home devices | sensors, switches, thermostats, doorbells, boilers, meters, alarms, smart speakers, radiators and other device models |
+
+Printers in the makers pack work like any other printer item: an item whose id contains `3d_printer` and is
+`electric` shows the progress ring, chamber light (a part with `glow`) and camera of the Home Assistant device it is
+linked to (see "3D printers" above), whichever pack it comes from. Desk and table lamps and fires are furniture, not
+devices, and do not go in the devices pack.
+
+The library has a row of pack chips ("All packs", then one per installed pack) above the filter chips, so the library
+can be narrowed to one pack; the search also finds an item by its pack's name ("makers", "devices").
 
 ### The IKEA UK pack
 

@@ -8,7 +8,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 ### Library and packs
 
 - **Pack format v2:** a pack is a folder (`pack.json` plus one JSON file per item, no code), checked like before. A pack holds up to 1000 items.
-- **Bundled packs:** `theovencook.core` (furniture, lamps, media, office and network gear, kitchen and bath, heating and energy, decor, plants, outdoor, vehicles and architecture) and `theovencook.ikea-uk` (IKEA UK models, searchable by their IKEA name) come with the integration.
+- **Bundled packs:** `theovencook.core` (furniture, lamps, media, office and network gear, kitchen and bath, heating and energy, decor, plants, outdoor, vehicles and architecture) and `theovencook.ikea-uk` (IKEA UK models, searchable by their IKEA name) come with the integration, next to two themed packs: `theovencook.makers` (3D printers and workshop kit) and `theovencook.devices` (smart-home devices). The library can be narrowed to one pack.
 - **Library vocabulary:** items sort into rooms and kinds, and the search knows UK words as well as US ones.
 - **Install a pack from a GitHub URL:** a repository, or a pack folder inside one (`.../tree/main/theovencook.core`), installs without a file upload. Only data is fetched; code, pictures and links are refused.
 - **Updates, pin and roll back:** packs installed from GitHub are checked daily, weekly or monthly (or on demand). A newer release changes nothing in the house until you update the items one by one, or switch on auto-update. A pack can be pinned to its release or rolled back to the previous one; placed items show an update badge.

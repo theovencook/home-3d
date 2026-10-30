@@ -416,6 +416,8 @@ export interface LibraryFilter {
   electric: boolean;
   light: boolean;
   outdoor: boolean;
+  /** Only the items of this pack (its id); null or left out: every pack (#109). */
+  pack?: string | null;
 }
 
 /**
@@ -434,6 +436,7 @@ function wordMatcher(w: string): (hay: string) => boolean {
 export function filterEntries(entries: readonly LibraryEntry[], f: LibraryFilter): LibraryEntry[] {
   const words = fold(f.query).split(/\s+/).filter(Boolean).map(wordMatcher);
   return entries.filter((e) => {
+    if (f.pack && e.pack !== f.pack) return false;
     if (f.room && e.rooms.length && !e.rooms.includes(f.room)) return false;
     if (f.electric && !e.electric) return false;
     if (f.light && !e.light) return false;
