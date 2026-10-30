@@ -519,7 +519,7 @@ column, centred in its U; gear deeper than the rack's mounting depth does not go
 of its lowest U; loose gear stands on its 4 mm tray, side by side from the left, its front at the shelf's front.
 
 Any item may give its estimated typical power draw in `watts` (a number, 0 to 100,000). The rack sheet adds up the
-watts of a rack's gear, shelves' loose gear included; when electric gear has no `watts` the total reads "at least".
+watts of a rack's gear, shelves' loose gear included; when electric gear has no `watts` the total is shown as a minimum ("≥ 93 W").
 
 The bundled `theovencook.it` pack has six starters: `rack_switch_24_1u`, `rack_patch_panel_24_1u`, `rack_blank_1u`,
 `rack_switch_8_half_1u` (half width), `rack_pdu_vertical_0u` (0U, 980 mm: for floor cabinets) and `rack_shelf_2u`.

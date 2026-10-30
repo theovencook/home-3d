@@ -397,7 +397,7 @@ export class RackSheet extends LitElement {
           <h3>${this.heading || t("rack_edit")}</h3>
           ${this.renderTotals()}
           ${this.hasRear
-            ? html`<div class="fp3d-rack-faces" role="group" aria-label=${t("rack_face")}>
+            ? html`<div class="fp3d-rack-faces" role="group">
                 ${(["front", "rear"] as const).map((f) => html`<button class="fp3d-btn" aria-pressed=${this.shownFace === f} @click=${() => this.setFace(f)}>${t(`rack_face_${f}`)}</button>`)}
               </div>`
             : nothing}
@@ -412,7 +412,7 @@ export class RackSheet extends LitElement {
                     html`<button
                       class="fp3d-rack-lane"
                       style="grid-row: ${this.row(p, 1)}; grid-column: ${c}"
-                      aria-label=${t(lane ? "rack_lane_right" : "rack_lane_left", { n: label(p) })}
+                      aria-label=${`${lane ? "▶" : "◀"} ${t("rack_unit", { n: label(p) })}`}
                       @pointerenter=${() => this.hoverLane(p, lane)}
                       @click=${() => this.tapLane(p, lane)}
                     ></button>`,
@@ -463,8 +463,7 @@ export class RackSheet extends LitElement {
     const sum = rackTotals(this.space, this.slots, this.gearOf, this.looseOf);
     return html`<p class="fp3d-rack-totals">
       <span>${t("rack_totals", { used: sum.used, free: sum.free })}</span>
-      ${this.hasRear && sum.rear ? html`<span>${t("rack_face_used", { front: sum.front, rear: sum.rear })}</span>` : nothing}
-      <span title=${sum.unknown ? t("rack_watts_unknown", { n: sum.unknown }) : ""}>${t(sum.unknown ? "rack_watts_about" : "rack_watts", { w: sum.watts })}</span>
+      <span>${sum.unknown ? t("rack_watts_about", { w: sum.watts }) : `${sum.watts} W`}</span>
     </p>`;
   }
 
@@ -500,7 +499,7 @@ export class RackSheet extends LitElement {
     const shelf = s.on ? this.slots.find((o) => o.id === s.on) : null;
     return html`<section class="fp3d-rack-chosen-box">
       <h4>${s.name || this.nameOf(s.type)}</h4>
-      <p class="fp3d-sub">${shelf ? t("rack_on", { name: shelf.name || this.nameOf(shelf.type) }) : t("rack_at", { u: where })}${of && of.gear.depth === "full" ? html` · ${t("rack_full_depth")}` : s.face === "rear" ? html` · ${t("rack_rear_mounted")}` : nothing}</p>
+      <p class="fp3d-sub">${shelf ? `⤒ ${shelf.name || this.nameOf(shelf.type)}` : t("rack_at", { u: where })}${of && of.gear.depth === "full" ? html` · ${t("rack_full_depth")}` : s.face === "rear" && this.hasRear ? html` · ${t("rack_face_rear")}` : nothing}</p>
       ${this.editable
         ? html`<label class="fp3d-field"
               >${t("furn_name")}
@@ -512,10 +511,10 @@ export class RackSheet extends LitElement {
                 : html`<button class="fp3d-btn" title=${t("rack_up")} @click=${() => this.nudge(1)}>▲</button>
                     <button class="fp3d-btn" title=${t("rack_down")} @click=${() => this.nudge(-1)}>▼</button>
                     ${cols > 1
-                      ? html`<button class="fp3d-btn" title=${t("rack_left")} ?disabled=${(s.col ?? 0) <= 0} @click=${() => this.nudgeCol(-1)}>◀</button>
-                          <button class="fp3d-btn" title=${t("rack_right")} ?disabled=${(s.col ?? 0) >= cols - 1} @click=${() => this.nudgeCol(1)}>▶</button>`
+                      ? html`<button class="fp3d-btn" ?disabled=${(s.col ?? 0) <= 0} @click=${() => this.nudgeCol(-1)}>◀</button>
+                          <button class="fp3d-btn" ?disabled=${(s.col ?? 0) >= cols - 1} @click=${() => this.nudgeCol(1)}>▶</button>`
                       : nothing}
-                    ${this.hasRear && of && of.gear.depth !== "full" ? html`<button class="fp3d-btn" @click=${() => this.flipFace()}>${t(s.face === "rear" ? "rack_to_front" : "rack_to_rear")}</button>` : nothing}
+                    ${this.hasRear && of && of.gear.depth !== "full" ? html`<button class="fp3d-btn" @click=${() => this.flipFace()}>⇄ ${t(s.face === "rear" ? "rack_face_front" : "rack_face_rear")}</button>` : nothing}
                     <button class="fp3d-btn" aria-pressed=${!!this.pick && "move" in this.pick} @click=${() => this.startMove()}>${t("rack_move")}</button>`}
               <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteSelected()}>${t("delete")}</button>
             </div>
