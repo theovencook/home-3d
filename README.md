@@ -23,24 +23,44 @@ Home 3D is derived from [NeonPlan 3D](https://github.com/Mastershort/neonplan3d)
 copied at commit 0a947aa). Thanks to Mastershort for the original work. Home 3D is not affiliated with or endorsed by
 Mastershort; see [NOTICE](NOTICE).
 
-## Installation
+## Quick start
 
-Requires Home Assistant 2025.1 or newer.
-
-### HACS (custom repository)
+You need Home Assistant 2025.1 or newer and [HACS](https://hacs.xyz). Home 3D is a custom repository, so it is not in the default HACS list.
 
 1. In HACS, open the menu (⋮) → **Custom repositories**.
 2. Add `https://github.com/theovencook/home-3d` with the type **Integration**.
 3. Install **Home 3D** and restart Home Assistant.
 4. Go to *Settings → Devices & services → Add integration → Home 3D*.
-5. Open **Home 3D** in the sidebar, switch to **Editor** and draw your first floor.
+5. Open **Home 3D** in the sidebar.
+
+No manual HACS setup? Copy `custom_components/home_3d` into your `config/custom_components/` folder, restart, and add the integration under *Settings → Devices & services*.
 
 To keep Home 3D out of the sidebar for everyone, open the integration's **Configure** and turn off **Show in sidebar**. It takes effect at once; the panel link (`/home_3d`) and the dashboard card keep working. Each user can also hide the entry in Home Assistant's own sidebar settings.
 
-### Manual
+### Your first 10 minutes
 
-1. Copy `custom_components/home_3d` into your Home Assistant `config/custom_components/` folder.
-2. Restart Home Assistant and add the integration under *Settings → Devices & services*.
+A one-click sample home to explore is coming soon; until then you start from an empty plan.
+
+1. **Draw one floor (about 3 minutes).** Switch to **Editor**, then draw the outer walls and split them into rooms. Doors and windows go on the walls. Name each room. Press **?** to see the keyboard shortcuts and what the plan symbols mean.
+2. **Add furniture (2 minutes).** Open the library, search for a sofa, a lamp or a radiator, and drop it in a room. The search understands UK and US words. Select an item to move, turn or resize it.
+3. **Link a device (2 minutes).** Select a lamp, cover, sensor or camera and pick its Home Assistant entity in the item panel. Lights glow in 3D when they are on, and a tap toggles them.
+4. **Look around (1 minute).** Switch back to the live view. Drag to orbit, scroll or pinch to zoom, tap an item to use it, and hold or double-tap for the item's other actions.
+5. **Try the 2D plan and the dashboard card (2 minutes).** The **2D** button shows the flat plan, which suits a wall tablet (`?view=2d` opens it directly). To put the plan on a dashboard, add the card from the previous section.
+
+Home 3D keeps restore points of the plan, so you can go back to an earlier version, and can make a full backup of the plan, its pictures and the packs. Take one before big changes.
+
+### Supported versions
+
+- Home Assistant 2025.1.0 or newer (the same minimum is set in `hacs.json`).
+- A browser with WebGL 2: current Chrome, Edge, Firefox, Safari, and the Home Assistant Companion app on Android and iOS.
+- Only the 3D view needs WebGL. The 2D plan and the editor's plan drawing work without it.
+
+### Tablets and phones
+
+- **Wall tablets** should use the 2D plan or set the quality to **Tablet** (in the view settings, or `quality` on the card). That level is the lightest: moving decorations rest after 30 seconds without a touch, and shadows and weather are reduced. **Auto** picks it for Fire tablets it recognises, such as the Fire HD 10.
+- **Locked tablet mode:** add `?tablet` to the panel address (for example in a kiosk browser's start URL) and the panel shows only the home name, the floors and the View menu: no editor, no view settings. `?tablet=0` turns it off again. You can also tick users for tablet mode in the settings. After a quiet spell the tablet returns to the whole house; `?idle=<seconds>` changes the wait and `?idle=0` disables it.
+- **WebGL:** the 3D view needs hardware WebGL. If a tablet shows a blank 3D view, check that the browser is up to date and that hardware acceleration is on (Android System WebView and Fully Kiosk Browser use the system's WebView, so update that). Old or very cheap tablets can run out of graphics memory; use the 2D plan there.
+- **Phones** can view and control the house. Drawing works best on a computer or a tablet.
 
 ## Dashboard card
 

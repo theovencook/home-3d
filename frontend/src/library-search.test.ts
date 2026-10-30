@@ -151,7 +151,9 @@ test("catalogue: 'tv', 'fridge' and 'plant' put the thing itself first (#78)", (
 test("catalogue: a short word leads with names starting with it, and 'raspberry pi' finds the PiKVM box (#78)", () => {
   const pi = searchLibrary(catalogue, { ...none, query: "pi" }).hits;
   assert.ok(pi.length > 0);
-  assert.ok(pi.slice(0, 5).every((e) => e.label.toLowerCase().split(/[^a-z0-9]+/).some((w) => w.startsWith("pi"))), top(pi, 5));
+  const leads = (e: LibraryEntry) => e.label.toLowerCase().split(/[^a-z0-9]+/).some((w) => w.startsWith("pi"));
+  const named = pi.filter(leads).length;
+  assert.ok(named >= 3 && pi.slice(0, named).every(leads), top(pi, named + 1)); // names with a pi word first, tag matches (the KVM box) after
   assert.ok(labels(catalogue, "raspberry pi").some((l) => /kvm/i.test(l)));
 });
 
@@ -172,4 +174,49 @@ test("catalogue: 'smoke' puts the smoke and smoke/CO alarms (#79) before the smo
   const lamp = at(/smoked glass/i);
   assert.ok(alarm >= 0 && co >= 0, top(hits, 8));
   assert.ok(lamp < 0 || (alarm < lamp && co < lamp), top(hits, 8));
+});
+
+// ---------------------------------------------------------------------------------- IT devices (#118)
+
+test("everyday IT words find the item: pi, zigbee stick, coordinator (#118)", () => {
+  const entries = indexOf([
+    pack(
+      item("rpi", "Raspberry Pi board", { group: "tech" }),
+      item("stick", "Zigbee USB stick", { group: "tech" }),
+      item("dongle", "USB dongle", { group: "tech", tags: ["zigbee dongle"] }),
+      item("sofa", "Pie dish", { group: "kitchen" }),
+    ),
+  ]);
+  assert.ok(labels(entries, "pi").includes("Raspberry Pi board"));
+  assert.ok(labels(entries, "rpi").includes("Raspberry Pi board"), "rpi = raspberry pi");
+  assert.ok(labels(entries, "coordinator").includes("Zigbee USB stick"), "a zigbee stick is a coordinator");
+  assert.ok(labels(entries, "zigbee stick").includes("USB dongle"), "stick = dongle");
+  assert.ok(labels(entries, "zigbee coordinator").includes("USB dongle"));
+  assert.ok(!labels(entries, "coordinator").includes("Pie dish"));
+});
+
+test("catalogue: the IT devices are found by the words people type (#118)", () => {
+  const find = (query: string, label: RegExp) => assert.ok(searchLibrary(catalogue, { ...none, query }).hits.some((e) => label.test(e.label)), `"${query}" finds ${label}`);
+  const first = searchLibrary(catalogue, { ...none, query: "pi" }).hits[0];
+  assert.ok(hasWord(first, "pi"), `"pi" starts with a Raspberry Pi, not ${first.label}`);
+  find("pi case", /Pi.*case/i);
+  find("raspberry pi 5", /Raspberry Pi/i);
+  find("esp32", /ESP32/i);
+  find("d1 mini", /D1 mini/i);
+  find("zigbee stick", /ZBDongle-E/i);
+  find("zigbee stick", /ZBT-1/i);
+  find("coordinator", /SLZB-06/i);
+  find("coordinator", /ZBT-2/i);
+  find("thread dongle", /ZBT-2/i);
+  find("skyconnect", /ZBT-1/i);
+  find("home assistant green", /Green/i);
+  find("hue bridge", /Hue/i);
+  find("sure petcare", /Sure Petcare/i);
+  find("nuc", /NUC/i);
+  find("mini pc", /Beelink/i);
+  find("mini pc", /ThinkCentre/i);
+  find("5 bay nas", /5-bay/i);
+  find("unifi u7", /Wi-Fi 7/i);
+  find("cloud gateway", /Cloud Gateway/i);
+  find("dream router", /Dream Router/i);
 });

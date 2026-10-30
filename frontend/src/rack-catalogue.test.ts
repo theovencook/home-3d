@@ -31,3 +31,36 @@ test("every catalogue rack is in the pack as the tool writes it, and reads as a 
     assert.ok(at.top <= item.size[2] && Math.abs(at.unit - 0.04445) < 1e-9, entry.id);
   }
 });
+
+test("the catalogue has about 27 racks, each id once, and docs/rack-frames.md lists every one with its source (#116)", () => {
+  assert.ok(RACKS.length >= 27, `${RACKS.length} racks`);
+  const ids = RACKS.map((r) => r.id);
+  assert.equal(new Set(ids).size, ids.length);
+  const doc = readFileSync(new URL("../../docs/rack-frames.md", import.meta.url), "utf8");
+  for (const id of ids) assert.ok(doc.includes(`\`${id}\``), `docs/rack-frames.md lacks ${id}`);
+  // a family has one entry per U count, and a variant names it
+  const seen = new Set<string>();
+  for (const r of RACKS) {
+    assert.equal(r.variant, `${r.rack_frame.u}U`, r.id);
+    assert.ok(!seen.has(`${r.family}/${r.variant}`), `${r.id}: family and variant repeat`);
+    seen.add(`${r.family}/${r.variant}`);
+  }
+});
+
+test("the catalogue covers each kind of rack the ticket lists (#116)", () => {
+  const has = (form: string, width: number, u: number, size?: (s: [number, number, number]) => boolean) =>
+    RACKS.some((r) => r.rack_frame.form === form && (r.rack_frame.width ?? 19) === width && r.rack_frame.u === u && (!size || size(r.size)));
+  for (const u of [4, 6, 8]) assert.ok(has("frame4", 10, u), `10-inch desktop ${u}U`);
+  assert.ok(has("wall_frame", 10, 6));
+  for (const u of [6, 9]) assert.ok(has("wall_cabinet", 10, u));
+  for (const u of [6, 9, 12]) assert.ok(has("frame2", 19, u), `19-inch desktop frame ${u}U`);
+  for (const u of [6, 12]) assert.ok(has("wall_frame", 19, u));
+  for (const u of [4, 6, 9, 12, 15]) assert.ok(has("wall_cabinet", 19, u, (s) => s[1] <= 0.45), `wall cabinet ${u}U`);
+  for (const u of [9, 15]) assert.ok(has("wall_cabinet", 19, u, (s) => s[1] > 0.45), `deep wall cabinet ${u}U`);
+  for (const u of [18, 22, 27, 32, 42]) assert.ok(has("cabinet", 19, u), `floor cabinet ${u}U`);
+  assert.ok(has("cabinet", 19, 42, (s) => s[0] >= 0.8), "wide 42U");
+  assert.ok(has("cabinet", 19, 47, (s) => s[0] >= 0.8 && s[1] >= 1.2), "deep 47U");
+  for (const u of [22, 42]) assert.ok(has("frame4", 19, u, (s) => s[2] > 1), `open frame ${u}U`);
+  for (const u of [25, 42]) assert.ok(has("frame2", 19, u, (s) => s[2] > 1), `relay rack ${u}U`);
+  assert.ok(has("cabinet", 19, 12, (s) => s[2] < 1), "12U AV console");
+});

@@ -142,6 +142,10 @@ export const SYNONYMS: Synonyms[] = [
   { words: ["bicycle", "bike", "cycle", "push bike"], kinds: ["vehicle"] },
   { words: ["tv", "television", "telly"], kinds: ["media"] },
   { words: ["plant", "houseplant", "house plant", "pot plant", "indoor plant"], kinds: ["plant"] },
+  // IT devices (#118): a Pi is a Raspberry Pi; a Zigbee stick, dongle and coordinator are the same thing
+  { words: ["raspberry pi", "pi", "rpi", "raspi"], kinds: ["tech", "network"] },
+  { words: ["zigbee stick", "zigbee dongle", "zigbee usb stick", "zigbee coordinator", "zigbee adapter", "coordinator", "usb stick"], kinds: ["tech", "network"] },
+  { words: ["mini pc", "nuc", "micro pc", "small form factor pc"], kinds: ["tech", "network"] },
   { words: ["smoke detector", "smoke alarm", "smoke sensor", "fire alarm", "fire detector"], kinds: ["tech"] },
 ];
 
