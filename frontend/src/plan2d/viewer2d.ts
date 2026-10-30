@@ -279,6 +279,8 @@ export class Plan2dViewer implements ViewerSurface {
   setFloorInfo(): void {}
   setFloorStack(): void {}
   setFridgeDoors(): void {}
+  /** Rack LEDs are a 3D thing (#119): the 2D plan opens the front view, which shows them. */
+  setRackLeds(): void {}
   setFurnishMode(): void {}
   setFurnishTypes(): void {}
   setHideRoof(): void {}

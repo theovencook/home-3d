@@ -24,6 +24,8 @@ export interface HassEntityEntry {
   hidden_by?: string | null;
   disabled_by?: string | null;
   entity_category?: "config" | "diagnostic" | null;
+  /** The integration that made it ("unifi", "nut" …). */
+  platform?: string | null;
   /** The integration's key for the entity (e.g. "current_room"). */
   translation_key?: string | null;
   /** Decimals set for a sensor in Home Assistant (null = default). */

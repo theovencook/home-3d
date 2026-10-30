@@ -50,6 +50,7 @@ export type ViewerSurface = Pick<
   | "setPools"
   | "setProjections"
   | "setQuality"
+  | "setRackLeds"
   | "setRobots"
   | "setRoofWindows"
   | "setRoomGlow"

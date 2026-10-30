@@ -110,3 +110,22 @@ test("each piece is drawn from its item's parts, front parts last, in colours of
   // its accent LEDs are in the accent colour
   assert.match(body, /fp3d-el-part" [^>]*fill="#2bb3e0"/);
 });
+
+test("linked gear shows its status LED in the front view, in the status colour; unlinked gear none (#119)", () => {
+  const slots: RackSlot[] = [
+    { id: "a", type: SWITCH, u: 2, entity: "binary_sensor.switch_status" },
+    { id: "b", type: PATCH, u: 4 },
+    { id: "c", type: SWITCH, u: 6, entity: "binary_sensor.other" },
+  ];
+  const status = new Map([["a", "online" as const], ["c", "offline" as const]]);
+  const { svg } = rackElevation(cabinet(slots, { statusOf: (s) => status.get(s.id) ?? null }));
+  const leds = [...svg.matchAll(/<rect class="fp3d-el-led fp3d-el-led-(\w+)"[^>]*data-slot="([^"]+)"[^>]*fill="([^"]+)"/g)].map(([, st, id, fill]) => [id, st, fill]);
+  assert.deepEqual(leds, [
+    ["a", "online", "#2ecc71"],
+    ["c", "offline", "#ff3b30"],
+  ]);
+  // the LED is inside its gear's group, so a tap on it is a tap on the gear
+  assert.match(svg, /<g class="fp3d-el-gear" data-slot="a"[^>]*>(?:(?!<\/g>)[\s\S])*fp3d-el-led/);
+  // without statuses nothing changes
+  assert.doesNotMatch(rackElevation(cabinet(slots)).svg, /fp3d-el-led/);
+});

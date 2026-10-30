@@ -60,3 +60,52 @@ test("a sheet whose rack is gone shows nothing (#115)", () => {
   el.showRackView("nope", rackDraw(el.building.floors[0], "rack"));
   assert.equal(flat(el.renderRackView()), "");
 });
+
+// ------------------------------------------------------------------------------------------------ #119
+
+const st = (entity_id: string, state: string, attributes: Record<string, unknown> = {}) => ({ entity_id, state, attributes });
+
+function linked(): Record<string, any> {
+  const el = viewer();
+  const rack = el.building.floors[0].furniture[0];
+  rack.rack.slots = [
+    { id: "s1", type: "pack:theovencook.it:rack_switch_24_1u", u: 2, name: "Core switch", entity: "binary_sensor.switch_status", links: ["sensor.switch_temperature"] },
+    { id: "s2", type: "pack:theovencook.it:rack_switch_24_1u", u: 4, name: "Spare switch" },
+  ];
+  el.hass = {
+    ...el.hass,
+    states: { "binary_sensor.switch_status": st("binary_sensor.switch_status", "on", { device_class: "connectivity", friendly_name: "Switch status" }), "sensor.switch_temperature": st("sensor.switch_temperature", "41", { unit_of_measurement: "°C", friendly_name: "Switch temperature" }) },
+  };
+  return el;
+}
+
+test("the front view shows linked gear's status LED and follows its state (#119)", () => {
+  const el = linked();
+  el.showRackView("rack", rackDraw(el.building.floors[0], "rack"));
+  assert.match(el.rackViewOf().svg, /fp3d-el-led-online[^>]*data-slot="s1"/);
+  assert.doesNotMatch(el.rackViewOf().svg, /data-slot="s2"[^>]*fp3d-el-led|fp3d-el-led[^>]*data-slot="s2"/);
+  el.hass = { ...el.hass, states: { ...el.hass.states, "binary_sensor.switch_status": st("binary_sensor.switch_status", "off", { device_class: "connectivity" }) } };
+  assert.match(el.rackViewOf().svg, /fp3d-el-led-offline[^>]*data-slot="s1"/);
+});
+
+test("tapping gear (in 3D or in the front view) shows its details: status and linked entities to open (#119)", () => {
+  const el = linked();
+  el.showRackView("rack", rackDraw(el.building.floors[0], "rack"), "s1");
+  const sheet = flat(el.renderRackView());
+  assert.match(sheet, /fp3d-rack-detail/);
+  assert.match(sheet, /Core switch/);
+  assert.match(sheet, /Online/);
+  assert.match(sheet, /Switch status/);
+  assert.match(sheet, /Switch temperature/);
+  assert.match(sheet, /41/);
+  // read-only: no pickers in the viewer, whoever looks
+  assert.doesNotMatch(sheet, /fp3d-entity-picker|<select|<input/);
+  // a tap on a linked entity opens HA's more-info
+  const sent: string[] = [];
+  el.dispatchEvent = (e: CustomEvent) => (sent.push(`${e.type}:${e.detail?.entityId}`), true);
+  el.openRackEntity("sensor.switch_temperature");
+  assert.deepEqual(sent, ["hass-more-info:sensor.switch_temperature"]);
+  // a tap on other gear in the drawing chooses it; unlinked gear says so
+  el.tapRackDrawing("s2");
+  assert.match(flat(el.renderRackView()), /Spare switch[\s\S]*Not linked/);
+});

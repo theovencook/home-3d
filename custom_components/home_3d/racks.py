@@ -7,8 +7,9 @@ for: gear that overlaps other gear, sticks out of the rack, is no gear or is mad
 are frontend/src/rack.ts's (the depth check stays in the editor: it only changes how the gear looks). They read the
 plan's recipe copies, so they hold for whatever the plan shows; gear whose recipe is gone is not checked.
 
-Room for later tickets: a slot may carry more fields (a column and a face for half-width and rear gear, #114; links
-to Home Assistant, #119): the schema keeps unknown slot fields, like the rest of the plan's schema.
+A slot may carry a column and a face (#114) and links to Home Assistant (#119: `entity`, its status entity, and
+`links`, further entities of the device; frontend/src/rack-links.ts). The schema keeps unknown slot fields, like the
+rest of the plan's schema.
 """
 
 from __future__ import annotations
@@ -21,9 +22,20 @@ import voluptuous as vol
 
 # at most this many pieces of gear in one rack
 RACK_MAX_SLOTS = 60
+# at most this many further entities linked to one piece of gear (#119)
+RACK_MAX_LINKS = 16
 _MAX_U = 60
 
 _SLOT_ID = vol.All(str, vol.Length(min=1, max=64), vol.Match(r"^[A-Za-z0-9_\-.]+$"))
+
+
+_ENTITY_ID = vol.All(str, vol.Length(max=255), vol.Match(r"^[a-z0-9_]+\.[a-z0-9_]+$"))
+
+
+def _unique(values: list[str]) -> list[str]:
+    if len(set(values)) != len(values):
+        raise vol.Invalid("each entity is linked once")
+    return values
 
 
 def _position(value: Any) -> int:
@@ -47,6 +59,9 @@ RACK_SLOT_SCHEMA = vol.Schema(
         vol.Optional("col"): vol.All(_position, vol.Range(min=0, max=2)),
         vol.Optional("face"): vol.Any(None, vol.In(["front", "rear"])),
         vol.Optional("on"): vol.Any(None, _SLOT_ID),
+        # #119: its status entity (its LED) and further entities of the same device
+        vol.Optional("entity"): vol.Any(None, _ENTITY_ID),
+        vol.Optional("links"): vol.Any(None, vol.All([_ENTITY_ID], vol.Length(max=RACK_MAX_LINKS), _unique)),
     },
     extra=vol.ALLOW_EXTRA,
 )

@@ -3,8 +3,8 @@
 // recipes are copied into the plan like any placed item's (#2). These are the placement rules, pure (no DOM, no
 // three.js); the backend refuses saves that break them (custom_components/home_3d/racks.py, same rules).
 //
-// Room for later tickets: a slot's `col` (half / third width, #114), `face` (front / rear, #114) and links (#119) are
-// optional fields on RackSlot; every rule here treats a slot as taking the full width on both faces until then.
+// A slot's `col` / `face` / `on` (#114) and its Home Assistant links `entity` / `links` (#119, rack-links.ts) are
+// optional fields on RackSlot.
 
 import type { PackItem } from "./packs.ts";
 import { RACK_MAX_U, RACK_OPENING, RACK_UNIT, RACK_WIDTHS, type RackLayout, type RackProblem, type RackWidth } from "./rack-frame.ts";
@@ -63,6 +63,13 @@ export interface RackSlot {
    * is the shelf's (kept in step when the shelf moves); loose gear on one shelf stands side by side in slot order.
    */
   on?: string | null;
+  /**
+   * Its status entity in Home Assistant (#119): what its status LED shows (rack-links.ts) and what a hold opens.
+   * None = no status of its own (the LED follows `links`, or there is none).
+   */
+  entity?: string | null;
+  /** Further entities of the device (#119): its load, temperature, battery …, shown with its details and on the rack card (#120). */
+  links?: string[] | null;
 }
 
 /** The faces of a 4-post rack (#114). */
@@ -410,6 +417,42 @@ export function rackContents(at: RackLayout, slots: readonly RackSlot[], itemOf:
     shelf.x0 += w;
   }
   return out;
+}
+
+/** Where a piece's status LED shows (#119): rack-local metres like RackPiece, its centre, and its edge length. */
+export interface RackLedSpot {
+  x: number;
+  y: number;
+  z: number;
+  size: number;
+}
+
+/**
+ * A piece's status LED (#119): a small square on its front panel near the top left (as you face that panel; rear
+ * gear faces the rack's back), standing just proud of it so it is never hidden in the panel. One U or bigger, it
+ * keeps the same size; on a small piece (loose gear) it shrinks with it.
+ */
+export function rackLedSpot(p: RackPiece): RackLedSpot {
+  const size = Math.min(0.01, p.h / 3, p.w / 6);
+  const inset = Math.min(0.025, p.w / 5) + size / 2;
+  const y = p.y + p.h - Math.min(0.012, p.h / 4) - size / 2;
+  const proud = 0.0015 + size / 2;
+  return p.back ? { x: p.x + p.w / 2 - inset, y, z: p.z - p.d / 2 - proud, size } : { x: p.x - p.w / 2 + inset, y, z: p.z + p.d / 2 + proud, size };
+}
+
+/**
+ * The gear a point in the rack (rack-local metres, as rackContents gives) lies on (#119: a tap in 3D): the piece
+ * whose box, grown by a few millimetres, holds it; loose gear before the shelf it stands on (the smallest box wins).
+ */
+export function rackSlotAt(pieces: readonly RackPiece[], at: readonly [number, number, number]): string | null {
+  const [x, y, z] = at;
+  const grow = 0.006;
+  let best: RackPiece | null = null;
+  for (const p of pieces) {
+    if (Math.abs(x - p.x) > p.w / 2 + grow || Math.abs(z - p.z) > p.d / 2 + grow || y < p.y - grow || y > p.y + p.h + grow) continue;
+    if (!best || p.w * p.h * p.d < best.w * best.h * best.d) best = p;
+  }
+  return best?.slot.id ?? null;
 }
 
 /** A piece of gear that does not fit where it is (#114: the rack frame changed, a pack update made it bigger). */

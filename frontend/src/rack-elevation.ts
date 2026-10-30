@@ -4,7 +4,9 @@
 // no three.js.
 
 import type { PackItem, PackPart } from "./packs.ts";
-import { RACK_CABINET_FORMS, RACK_UNIT, rackLayout, type RackFrame } from "./rack-frame.ts";
+import type { Furniture } from "./model.ts";
+import { RACK_CABINET_FORMS, RACK_UNIT, rackLayout, readRackFrame, type RackFrame } from "./rack-frame.ts";
+import { RACK_STATUS_COLOURS, type RackStatus } from "./rack-links.ts";
 import { rackContents, readRackGear, type RackPiece, type RackSlot } from "./rack.ts";
 
 type Pt = [number, number];
@@ -50,6 +52,8 @@ export interface ElevationInput {
   face?: RackFace;
   /** The drawing's accessible name (the rack's name). */
   title?: string;
+  /** A linked slot's status (#119, rack-links.ts slotStatus): its LED; null or none = no LED. */
+  statusOf?: (slot: RackSlot) => RackStatus | null;
 }
 
 export interface RackElevation {
@@ -67,7 +71,14 @@ export interface RackElevation {
 }
 
 /** Draws a tapped rack's front view with the names and title the view chooses (the 2D bundle owns the drawing code). */
-export type RackDraw = (nameOf: ElevationInput["nameOf"], title: string) => RackElevation;
+export type RackDraw = (nameOf: ElevationInput["nameOf"], title: string, statusOf?: ElevationInput["statusOf"]) => RackElevation;
+
+/** How to draw a placed rack's front view (#115; #119 adds the LEDs): null when the item is no rack. */
+export function rackDrawOf(f: Pick<Furniture, "type" | "w" | "d" | "h" | "rack">, itemOf: (type: string) => PackItem | undefined): RackDraw | null {
+  const frame = readRackFrame(itemOf(f.type));
+  if (!frame) return null;
+  return (nameOf, title, statusOf) => rackElevation({ frame, size: [f.w, f.d, f.h], slots: f.rack?.slots ?? [], itemOf, nameOf, title, statusOf });
+}
 
 /** One U is at least this tall, and a panel at least this wide, on screen: a 14 px name fits on a 1U row. */
 const U_PX = 24;
@@ -76,6 +87,9 @@ const PAD = 8;
 /** Room for the U numbers left and right of the rack. */
 const GUTTER = 30;
 const NAME_PX = 14;
+/** A status LED (#119): its edge, and its gap from the gear's right edge. */
+const LED_PX = 9;
+const LED_GAP = 7;
 const NUMBER_PX = 13;
 /** A rough width of one character of the name at NAME_PX (system sans), to shorten long names. */
 const CHAR_PX = 7.6;
@@ -161,14 +175,22 @@ export function rackElevation(input: ElevationInput): RackElevation {
     const order = [...p.item.parts].sort((a, b) => (face === "front" ? reach(a) - reach(b) : reach(b) - reach(a)));
     const parts = order.map((q) => part(q, p, X, Y, scale, face)).join("");
     const full = nameOf(p.slot, p.item);
-    const name = short(full, fw - 20);
+    // its status LED (#119): at the right end of its panel, halfway up (the name sits on the left and keeps clear of it)
+    const status = input.statusOf?.(p.slot) ?? null;
+    const size = Math.min(LED_PX, fh - 4, fw / 4);
+    const lit = !!status && size >= 3;
+    const name = short(full, fw - 20 - (lit ? LED_GAP + size + 4 : 0));
     const ty = px(Y(p.y + p.h / 2) + NAME_PX * 0.36);
     const tag =
       fh >= NAME_PX + 4
         ? `<rect class="fp3d-el-tag" x="${px(X(x0) + 6)}" y="${px(ty - NAME_PX)}" width="${px(Math.min(fw - 12, name.length * CHAR_PX + 8))}" height="${NAME_PX + 5}" rx="3" fill="${BG}" fill-opacity="0.75"/><text x="${px(X(x0) + 10)}" y="${ty}" font-size="${NAME_PX}" fill="${TEXT}">${esc(name)}</text>`
         : "";
+    const led =
+      status && lit
+        ? `<rect class="fp3d-el-led fp3d-el-led-${status}" data-slot="${esc(p.slot.id)}" x="${px(X(x0) + fw - LED_GAP - size)}" y="${px(Y(p.y + p.h / 2) - size / 2)}" width="${px(size)}" height="${px(size)}" rx="2" fill="${RACK_STATUS_COLOURS[status]}" stroke="${BG}"/>`
+        : "";
     out.push(
-      `<g class="fp3d-el-gear" data-slot="${esc(p.slot.id)}"><rect class="fp3d-el-face" x="${X(x0)}" y="${Y(p.y + p.h)}" width="${px(fw)}" height="${px(fh)}" fill="${ROLE.dark}" stroke="${LINE}"/>${parts}${tag}<title>${esc(full)}</title></g>`,
+      `<g class="fp3d-el-gear" data-slot="${esc(p.slot.id)}"><rect class="fp3d-el-face" x="${X(x0)}" y="${Y(p.y + p.h)}" width="${px(fw)}" height="${px(fh)}" fill="${ROLE.dark}" stroke="${LINE}"/>${parts}${tag}${led}<title>${esc(full)}</title></g>`,
     );
   }
   const label = esc(input.title ?? "Rack");

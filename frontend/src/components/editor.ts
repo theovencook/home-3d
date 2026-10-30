@@ -179,7 +179,9 @@ import "./rack-sheet.ts";
 import { rackLayout, readRackFrame } from "../rack-frame.ts";
 import { packGearOf, packLooseOf, rackMisfits, rackSpace, readRackGear, type RackSlot } from "../rack.ts";
 import { rackElevation, type RackElevation } from "../rack-elevation.ts";
-import type { RackGearChoice } from "./rack-sheet.ts";
+import type { RackGearChoice, RackLinker } from "./rack-sheet.ts";
+import { slotStatus } from "../rack-links.ts";
+import { fromDevice, rackDeviceOptions, suggestRackLinks } from "../rack-suggest.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
 import { detectCameraModel, isCameraModel, setCameraLook } from "../camera-models.ts";
@@ -6470,7 +6472,10 @@ export class Fp3dEditor extends LitElement {
     if (!frame) return null;
     const lang = this.hass?.language ?? "en";
     const slots = f.rack?.slots ?? [];
-    const key = JSON.stringify([f.type, f.w, f.d, f.h, f.name ?? "", lang, slots, slots.map((s) => !!packItem(s.type))]);
+    // linked gear's LEDs (#119): redrawn only when a colour changes
+    const hass = this.hass;
+    const status = slots.map((s) => (hass ? slotStatus(hass, s) : null));
+    const key = JSON.stringify([f.type, f.w, f.d, f.h, f.name ?? "", lang, slots, slots.map((s) => !!packItem(s.type)), status]);
     if (this.elevationMemo?.key === key) return this.elevationMemo.el;
     const el = rackElevation({
       frame,
@@ -6479,6 +6484,7 @@ export class Fp3dEditor extends LitElement {
       itemOf: packItem,
       nameOf: (s, item) => s.name || packItemName(item, lang),
       title: f.name || furnitureName(this.hass, f.type),
+      statusOf: (s) => status[slots.indexOf(s)] ?? null,
     });
     this.elevationMemo = { key, el };
     return el;
@@ -6541,6 +6547,29 @@ export class Fp3dEditor extends LitElement {
       looseOf,
       nameOf: (type: string) => furnitureName(this.hass, type),
       editable: this.isEditor,
+      linker: this.rackLinker(),
+    };
+  }
+
+  /** Any entity: the rack sheet's pickers (one function, so its options are memoised). */
+  private readonly anyEntity = () => true;
+  private rackDevicesMemo: { entities: unknown; devices: unknown; count: number; options: { id: string; label: string }[] } | null = null;
+
+  /** What the rack sheet links gear with (#119): HA's entities and devices, a device's status and values, suggestions. */
+  private rackLinker(): RackLinker | null {
+    const hass = this.hass;
+    if (!hass) return null;
+    const count = Object.keys(hass.states).length;
+    const memo = this.rackDevicesMemo;
+    if (!memo || memo.entities !== hass.entities || memo.devices !== hass.devices || memo.count !== count)
+      this.rackDevicesMemo = { entities: hass.entities, devices: hass.devices, count, options: rackDeviceOptions(hass) };
+    return {
+      entities: this.entityOptions(this.anyEntity),
+      devices: this.rackDevicesMemo!.options,
+      fromDevice: (device) => fromDevice(hass, device),
+      suggest: (slot) => suggestRackLinks(hass, slot),
+      label: (id) => entityName(hass, id),
+      status: (slot) => slotStatus(hass, slot),
     };
   }
 
@@ -6615,6 +6644,7 @@ export class Fp3dEditor extends LitElement {
       .looseOf=${p.looseOf}
       .nameOf=${p.nameOf}
       .editable=${p.editable}
+      .linker=${p.linker}
       .t=${(key: string, vars?: Record<string, string | number>) => this.t(key as I18nKey, vars)}
       @rack-change=${(e: Event) => this.onRackChange(e)}
       @rack-close=${() => (this._rackSheet = null)}

@@ -81,3 +81,13 @@ test("a room's chosen motion sensor and a radiator's temperature are watched for
   assert.ok(ids.includes("binary_sensor.hall_pir"));
   assert.ok(ids.includes("sensor.rad_temp"));
 });
+
+test("rack gear's linked entities are watched, so its status LEDs follow them (#119)", () => {
+  const { hass, b, openings, furniture } = setup();
+  b.floors[0].furniture = [
+    { id: "r", type: "pack:t:rack", x: 1, z: 1, rotation: 0, w: 0.6, d: 0.45, h: 0.5, variant: null, rack: { slots: [{ id: "a", type: "pack:t:sw", u: 1, entity: "binary_sensor.switch_status", links: ["sensor.switch_temperature"] }] } },
+  ];
+  const ids = watchedEntities(hass, b, { openings, furniture, heat: false, warnings: [], weatherEntityId: null });
+  assert.ok(ids.includes("binary_sensor.switch_status"));
+  assert.ok(ids.includes("sensor.switch_temperature"));
+});

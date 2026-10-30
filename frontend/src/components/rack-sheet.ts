@@ -9,7 +9,9 @@
 // why and shown red. The rules are rack.ts's. The sheet keeps no plan: every change goes out as "rack-change" {slots},
 // and "rack-close" asks to close it. Someone who can't edit sees the rack and nothing to change it with.
 //
-// Room for later tickets: links per slot (#119) go in the chosen-gear panel.
+// Links to Home Assistant (#119): the chosen gear's panel picks the HA device behind it (its status entity and useful
+// values come along, rack-suggest.ts), its status entity and further links by hand, and offers more from the same
+// device. Linked gear shows its status LED in the grid. Someone who can't edit sees the links, nothing to change.
 
 import { css, html, LitElement, nothing } from "lit";
 import {
@@ -29,7 +31,9 @@ import {
   type RackSlot,
   type RackSpace,
 } from "../rack.ts";
+import { RACK_MAX_LINKS, RACK_STATUS_COLOURS, type RackStatus } from "../rack-links.ts";
 import { controls, tokens } from "../styles.ts";
+import type { PickerOption } from "./entity-picker.ts";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -37,6 +41,19 @@ type Translate = (key: string, vars?: Record<string, string | number>) => string
 export interface RackGearChoice {
   type: string;
   name: string;
+}
+
+/** What the sheet needs from Home Assistant to link gear (#119); the editor builds it (rack-suggest.ts). */
+export interface RackLinker {
+  /** Every entity and every HA device a piece of gear can be, for the searchable pickers. */
+  entities: PickerOption[];
+  devices: PickerOption[];
+  /** What gear links when it is said to be this HA device. */
+  fromDevice(device: string): { entity: string | null; links: string[]; name: string | null };
+  /** More entities for the gear, from the devices of what it links. */
+  suggest(slot: RackSlot): string[];
+  label(id: string): string;
+  status(slot: RackSlot): RackStatus | null;
 }
 
 /** What is picked: new gear to add, or chosen gear to move to a tapped U. */
@@ -93,6 +110,7 @@ export class RackSheet extends LitElement {
     looseOf: { attribute: false },
     nameOf: { attribute: false },
     editable: { type: Boolean },
+    linker: { attribute: false },
     t: { attribute: false },
     selected: { state: true },
     pick: { state: true },
@@ -113,6 +131,8 @@ export class RackSheet extends LitElement {
   declare looseOf: LooseOf;
   declare nameOf: (type: string) => string;
   declare editable: boolean;
+  /** Linking to Home Assistant (#119); null: no links shown (no hass). */
+  declare linker: RackLinker | null;
   declare t: Translate;
   declare selected: string | null;
   declare pick: Pick | null;
@@ -132,6 +152,7 @@ export class RackSheet extends LitElement {
     this.looseOf = () => null;
     this.nameOf = (type) => type;
     this.editable = false;
+    this.linker = null;
     this.t = (key) => key;
     this.selected = null;
     this.pick = null;
@@ -295,6 +316,35 @@ export class RackSheet extends LitElement {
     if (!this.editable || !this.selected) return;
     const clean = name.trim().slice(0, 60);
     this.send(this.slots.map((s) => (s.id === this.selected ? { ...s, name: clean || null } : s)));
+  }
+
+  /** Change the chosen gear's links (#119): one change, one undo step. */
+  private relink(patch: (s: RackSlot) => Partial<RackSlot>): void {
+    if (!this.editable || !this.selected) return;
+    this.send(this.slots.map((s) => (s.id === this.selected ? { ...s, ...patch(s) } : s)));
+  }
+
+  /** The chosen gear is this HA device: its status entity and useful values; its name when it has none of its own. */
+  linkDevice(device: string): void {
+    if (!this.editable || !this.linker || !device) return;
+    const got = this.linker.fromDevice(device);
+    this.relink((s) => ({ entity: got.entity, links: got.links.slice(0, RACK_MAX_LINKS), ...(!s.name && got.name ? { name: got.name.slice(0, 60) } : {}) }));
+  }
+
+  /** The chosen gear's status entity (null: none); it leaves the further links if it was one. */
+  setStatusEntity(id: string | null): void {
+    this.relink((s) => ({ entity: id || null, links: (s.links ?? []).filter((l) => l !== id) }));
+  }
+
+  addLink(id: string): void {
+    const s = this.slots.find((o) => o.id === this.selected);
+    const links = s?.links ?? [];
+    if (!s || !id || id === s.entity || links.includes(id) || links.length >= RACK_MAX_LINKS) return;
+    this.relink(() => ({ links: [...links, id] }));
+  }
+
+  removeLink(id: string): void {
+    this.relink((s) => ({ links: (s.links ?? []).filter((l) => l !== id) }));
   }
 
   deleteSelected(): void {
@@ -479,7 +529,9 @@ export class RackSheet extends LitElement {
     const name = s.name || this.nameOf(s.type);
     if (of && of.gear.u < 1)
       return html`<button class="${cls(s.id)} fp3d-rack-pdu" style=${place} data-slot=${s.id} title=${name} aria-label=${name} aria-pressed=${s.id === this.selected} @click=${() => this.tapSlot(s.id)}></button>`;
-    const label = html`<span>${name}</span>${n > 1 ? html`<small>${n}U</small>` : nothing}`;
+    const st = this.linker?.status(s) ?? null;
+    const led = st ? html`<i class="fp3d-rack-led fp3d-rack-led-${st}" style="background:${RACK_STATUS_COLOURS[st]}"></i>` : nothing;
+    const label = html`<span>${name}</span>${n > 1 ? html`<small>${n}U</small>` : nothing}${led}`;
     if (!of?.gear.shelf)
       return html`<button class=${cls(s.id)} style=${place} data-slot=${s.id} aria-pressed=${s.id === this.selected} @click=${() => this.tapSlot(s.id)}>${label}</button>`;
     const on = this.slots.filter((o) => o.on === s.id);
@@ -521,7 +573,49 @@ export class RackSheet extends LitElement {
             ${this.pick && "move" in this.pick ? html`<p class="fp3d-sub">${t("rack_move_hint")}</p>` : nothing}
             ${of?.gear.shelf ? this.renderShelf() : nothing}`
         : nothing}
+      ${this.renderLinks(s)}
     </section>`;
+  }
+
+  /** The chosen gear's links to Home Assistant (#119): pickers for editors, the list for everyone. */
+  private renderLinks(s: RackSlot) {
+    const k = this.linker;
+    if (!k) return nothing;
+    const t = this.t;
+    const links = s.links ?? [];
+    const picker = (options: PickerOption[], value: string | null, fixed: PickerOption[], onPick: (v: string) => void) =>
+      html`<fp3d-entity-picker
+        .options=${options}
+        .fixed=${fixed}
+        .value=${value}
+        .placeholder=${t("entity_search")}
+        @change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          onPick(e.detail.value);
+        }}
+      ></fp3d-entity-picker>`;
+    const none = { id: "none", label: t("entity_none") };
+    if (!this.editable)
+      return s.entity || links.length
+        ? html`<h4>${t("rack_links")}</h4>
+            <ul class="fp3d-rack-links">
+              ${[s.entity, ...links].filter((id): id is string => !!id).map((id) => html`<li>${k.label(id)}</li>`)}
+            </ul>`
+        : nothing;
+    const suggested = k.suggest(s).filter((id) => id !== s.entity && !links.includes(id));
+    return html`<h4>${t("rack_links")}</h4>
+      <label class="fp3d-field">${t("rack_ha_device")} ${picker(k.devices, null, [], (v) => this.linkDevice(v))}</label>
+      <label class="fp3d-field">${t("rack_status_from")} ${picker(k.entities, s.entity ?? "none", [none], (v) => this.setStatusEntity(v === "none" ? null : v))}</label>
+      ${links.length
+        ? html`<ul class="fp3d-rack-links">
+            ${links.map((id) => html`<li><span>${k.label(id)}</span><button class="fp3d-btn" aria-label=${t("delete")} @click=${() => this.removeLink(id)}>✕</button></li>`)}
+          </ul>`
+        : nothing}
+      ${links.length < RACK_MAX_LINKS ? html`<label class="fp3d-field">${t("rack_link_add")} ${picker(k.entities, null, [], (v) => this.addLink(v))}</label>` : nothing}
+      ${suggested.length && links.length < RACK_MAX_LINKS
+        ? html`<p class="fp3d-sub">${t("rack_suggested")}</p>
+            <div class="fp3d-rack-list">${suggested.map((id) => html`<button class="fp3d-btn fp3d-rack-choice" @click=${() => this.addLink(id)}>+ ${k.label(id)}</button>`)}</div>`
+        : nothing}`;
   }
 
   /** Loose gear the chosen shelf can take. */
@@ -732,6 +826,27 @@ export class RackSheet extends LitElement {
       }
       .fp3d-rack-gear small {
         color: var(--fp3d-muted);
+      }
+      .fp3d-rack-led {
+        display: inline-block;
+        flex: none;
+        width: 8px;
+        height: 8px;
+        margin-left: auto;
+        border-radius: 2px;
+      }
+      .fp3d-rack-links {
+        list-style: none;
+        margin: 0 0 6px;
+        padding: 0;
+        display: grid;
+        gap: 4px;
+      }
+      .fp3d-rack-links li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
       }
       .fp3d-rack-gear.fp3d-rack-chosen {
         border-color: var(--fp3d-accent);

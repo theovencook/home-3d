@@ -125,6 +125,33 @@ def test_slots_of_the_wrong_shape_are_refused(slots: list[dict]) -> None:
         BUILDING_SCHEMA(_building(_rack(*slots)))
 
 
+def test_a_slot_keeps_its_home_assistant_links() -> None:
+    """#119: a status entity and further entities of the same device."""
+    slot = _slot("s1", SWITCH_24, 1, entity="binary_sensor.switch_status", links=["sensor.switch_temperature"])
+    building = BUILDING_SCHEMA(_building(_rack(slot)))
+    kept = building["floors"][0]["furniture"][0]["rack"]["slots"][0]
+    assert kept["entity"] == "binary_sensor.switch_status"
+    assert kept["links"] == ["sensor.switch_temperature"]
+    # no links at all is fine
+    BUILDING_SCHEMA(_building(_rack(_slot("s1", SWITCH_24, 1, entity=None, links=None))))
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"entity": "not an entity"},
+        {"entity": 5},
+        {"links": "sensor.a"},
+        {"links": ["sensor.a", "nope"]},
+        {"links": ["sensor.a", "sensor.a"]},
+        {"links": [f"sensor.s{i}" for i in range(racks.RACK_MAX_LINKS + 1)]},
+    ],
+)
+def test_links_of_the_wrong_shape_are_refused(extra: dict) -> None:
+    with pytest.raises(vol.Invalid):
+        BUILDING_SCHEMA(_building(_rack(_slot("s1", SWITCH_24, 1, **extra))))
+
+
 # ------------------------------------------------------------------------------------------------ the placement rules
 
 _GEAR = {

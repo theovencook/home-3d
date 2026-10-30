@@ -137,6 +137,7 @@ import { pinIn2d } from "../plan2d/pins.ts";
 import type { ViewerSurface } from "../viewer-surface.ts";
 import { loadFun } from "../load-fun.ts";
 import { detectionKind, scaleGlow, buildMarkers, cameraMotionSensors, openMoreInfo, setCameraSensors, stateText, toggleEntity } from "../markers.ts";
+import { RACK_STATUS_COLOURS, rackLedStates, slotEntities, slotStatus } from "../rack-links.ts";
 import { activeSections, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
 import { centroid, furnitureFootprint, gangEntities, gangsOf, GANG_TYPES, TECH_TYPES, isLamp, setTerrain, poolFloorY, LAMP_MODEL, LIFT_SPOTS, outdoorGround, pointInPolygon, poolWaterY, spotDepth, surfaceHeight, zonesOf, type Building, type Floor, type Furniture, type Pet, type StartView } from "../model.ts";
 
@@ -580,8 +581,8 @@ export class Fp3dView3d extends LitElement {
   private declare _sheet: { id: string; floorId: string | null; roomId: string | null } | null;
   /** The ⚙ settings over the view are open. */
   private declare _settingsOpen: boolean;
-  /** The rack whose front view is open (#115; its furniture id and its drawing, from a tap in the 2D plan). */
-  private declare _rackView: { id: string; draw: RackDraw } | null;
+  /** The rack whose front view is open (#115; its furniture id and its drawing, from a tap in 2D or 3D) and the gear whose details show (#119). */
+  private declare _rackView: { id: string; draw: RackDraw; slot: string | null } | null;
   /** That front view, by what it was drawn from: built on the tap, not per render (#115). */
   private rackViewMemo: { key: string; draw: RackDraw; view: RackView } | null = null;
   /** An own action asking first (#6): its question, and the answer to give. */
@@ -956,7 +957,7 @@ export class Fp3dView3d extends LitElement {
           floor.rooms.length === 1 ? translate(this.hass, "floor_rooms_one") : translate(this.hass, "floor_rooms", { n: floor.rooms.length }),
         onBack: () => this.fire("back", {}),
         onDeviceTap: (id, x, y) => this.onDeviceTap(id, x, y),
-        onRackTap: (id, draw) => this.showRackView(id, draw),
+        onRackTap: (id, draw, slot) => this.showRackView(id, draw, slot),
         onDeviceHold: (id, x, y) => this.onDeviceHold(id, x, y),
         onDeviceDoubleTap: (id) => !this.ro && this.taps.doubleTap(id),
         onRoomDoubleTap: (floorId, roomId) => this.onRoomDoubleTap(floorId, roomId),
@@ -1278,6 +1279,8 @@ export class Fp3dView3d extends LitElement {
     v.setPickTargets(furniture.targets, this.openingTargets());
     v.setScreens(furniture.screens);
     v.setFridgeDoors(fridgeDoors(hass, b.floors));
+    // linked rack gear's status LEDs (#119): only colours change in 3D, never the racks' geometry
+    v.setRackLeds(rackLedStates(hass, b.floors));
     v.setAwnings(awningStates(hass, b.floors));
     v.setProjections(this.projectedCameras(hass, b));
     v.setRobots(this.robotInfos(hass, b));
@@ -5178,36 +5181,72 @@ export class Fp3dView3d extends LitElement {
 
   // ------------------------------------------------------------------------------------------ racks (#115)
 
-  /** Show a rack's front view (a tap on it in the 2D plan; the 2D bundle draws it, so the main bundle stays small). */
-  private showRackView(furnitureId: string, draw: RackDraw): void {
-    this._rackView = { id: furnitureId, draw };
+  /** Show a rack's front view (a tap on it in 2D or 3D; the 2D / 3D bundle draws it, so the main bundle stays small), on a tapped gear's details (#119). */
+  private showRackView(furnitureId: string, draw: RackDraw, slot: string | null = null): void {
+    this._rackView = { id: furnitureId, draw, slot };
   }
 
   private closeRackView(): void {
     this._rackView = null;
   }
 
-  /** The open rack's front view; null when none is open or the rack is gone. Drawn once per rack, name and language. */
+  /** The open rack: its item, or undefined when none is open or it is gone. */
+  private rackViewItem(): Furniture | undefined {
+    const open = this._rackView;
+    return open ? this.building?.floors.flatMap((fl) => fl.furniture).find((o) => o.id === open.id) : undefined;
+  }
+
+  /** The open rack's front view; null when none is open or the rack is gone. Drawn once per rack, name, language and LED colours. */
   private rackViewOf(): RackView | null {
     const open = this._rackView;
-    const f = open ? this.building?.floors.flatMap((fl) => fl.furniture).find((o) => o.id === open.id) : undefined;
+    const f = this.rackViewItem();
     if (!open || !f) return null;
     const lang = this.hass?.language ?? "en";
     const name = f.name || furnitureName(this.hass, f.type);
-    const key = JSON.stringify([open.id, name, lang]);
+    // the LEDs (#119): a state change redraws the open view only when a colour changes
+    const status = new Map((f.rack?.slots ?? []).map((s) => [s.id, this.hass ? slotStatus(this.hass, s) : null]));
+    const key = JSON.stringify([open.id, name, lang, [...status]]);
     if (this.rackViewMemo?.key !== key || this.rackViewMemo.draw !== open.draw) {
-      const el = open.draw((s, item) => s.name || packItemName(item, lang), name);
+      const el = open.draw((s, item) => s.name || packItemName(item, lang), name, (s) => status.get(s.id) ?? null);
       this.rackViewMemo = { key, draw: open.draw, view: { ...el, name } };
     }
     return this.rackViewMemo.view;
   }
 
-  /** The rack's front view over the plan: readable on a wall tablet, scrolls when the rack is tall. */
+  /** A tap in the front view on gear (its slot id, from the drawing's data-slot): its details (#119). */
+  private tapRackDrawing(slot: string | null): void {
+    if (this._rackView && slot) this._rackView = { ...this._rackView, slot };
+  }
+
+  /** HA's more-info for one of the gear's entities (#119). */
+  private openRackEntity(id: string): void {
+    openMoreInfo(this, id);
+  }
+
+  /** The chosen gear's details (#119): its status and its linked entities with their states, each opening more-info. Read-only for everyone. */
+  private renderRackDetail(hass: HomeAssistant, f: Furniture) {
+    const slot = f.rack?.slots.find((s) => s.id === this._rackView?.slot);
+    if (!slot) return nothing;
+    const t = (k: I18nKey) => translate(hass, k);
+    const status = slotStatus(hass, slot);
+    const ids = slotEntities(slot);
+    const name = slot.name || furnitureName(hass, slot.type);
+    return html`<section class="fp3d-rack-detail">
+      <b>${status ? html`<i class="fp3d-rack-led" style="background:${RACK_STATUS_COLOURS[status]}"></i>` : nothing}${name}${status ? html` · ${t(`rack_status_${status}`)}` : nothing}</b>
+      ${ids.length
+        ? ids.map((id) => html`<button class="fp3d-rack-entity" @click=${() => this.openRackEntity(id)}><span>${entityName(hass, id)}</span><span>${stateText(hass, hass.states[id])}</span></button>`)
+        : html`<p>${t("rack_unlinked")}</p>`}
+    </section>`;
+  }
+
+  /** The rack's front view over the plan: readable on a wall tablet, scrolls when the rack is tall; tap gear for its details (#119). */
   private renderRackView() {
     const hass = this.hass;
     const view = hass ? this.rackViewOf() : null;
-    if (!hass || !view) return nothing;
+    const f = this.rackViewItem();
+    if (!hass || !view || !f) return nothing;
     const close = () => this.closeRackView();
+    const tap = (e: Event) => this.tapRackDrawing((e.target as Element | null)?.closest?.("[data-slot]")?.getAttribute("data-slot") ?? null);
     return html`<div class="fp3d-sheet-backdrop" @click=${close}></div>
       <div class="fp3d-sheet fp3d-rack-view" role="dialog" aria-label=${view.name}>
         <header>
@@ -5215,7 +5254,8 @@ export class Fp3dView3d extends LitElement {
           <button class="fp3d-sheet-x" aria-label=${translate(hass, "close")} @click=${close}>✕</button>
         </header>
         <p class="fp3d-rack-view-used">${translate(hass, "rack_front_view")} · ${translate(hass, "rack_used", { used: view.used, u: view.u })}</p>
-        <div class="fp3d-rack-view-box">${unsafeHTML(view.svg)}</div>
+        ${this.renderRackDetail(hass, f)}
+        <div class="fp3d-rack-view-box" @click=${tap}>${unsafeHTML(view.svg)}</div>
       </div>`;
   }
 
@@ -7128,6 +7168,38 @@ export class Fp3dView3d extends LitElement {
       .fp3d-rack-view-box {
         overflow: auto;
         min-height: 0;
+      }
+      .fp3d-rack-detail {
+        display: grid;
+        gap: 4px;
+        margin: 0 0 8px;
+      }
+      .fp3d-rack-detail p {
+        margin: 0;
+        opacity: 0.75;
+      }
+      .fp3d-rack-led {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        margin-right: 6px;
+      }
+      .fp3d-rack-entity {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 6px 8px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--fp3d-s-chrome, rgba(255, 255, 255, 0.06));
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-rack-view-box .fp3d-el-gear {
+        cursor: pointer;
       }
       .fp3d-rack-view-box svg {
         display: block;

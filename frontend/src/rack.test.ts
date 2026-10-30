@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { PackItem } from "./packs.ts";
 import { rackLayout, readRackFrame } from "./rack-frame.ts";
-import { addSlot, SHELF_TRAY, packGearOf, packLooseOf, rackMisfits, rackSpace, rackTotals, rackContents, rackGearProblems, readRackGear, RACK_GEAR_DEPTHS, RACK_GEAR_WIDTHS, RACK_MAX_SLOTS, moveSlot, removeSlot, type GearOf, type LooseOf, type RackSlot, type RackSpace } from "./rack.ts";
+import { addSlot, SHELF_TRAY, packGearOf, packLooseOf, rackMisfits, rackSpace, rackTotals, rackContents, rackGearProblems, readRackGear, rackLedSpot, rackSlotAt, RACK_GEAR_DEPTHS, RACK_GEAR_WIDTHS, RACK_MAX_SLOTS, moveSlot, removeSlot, type GearOf, type LooseOf, type RackSlot, type RackSpace } from "./rack.ts";
 
 /** A 9U 19" rack 0.4 m deep. */
 const SPACE: RackSpace = { u: 9, width: 19, mountDepth: 0.4 };
@@ -345,4 +345,36 @@ test("gear is drawn in its column, on its face (rear gear turned round), PDUs in
   // 2-post: no rear rails, rear gear is not drawn
   const two = rackLayout({ ...readRackFrame(CABINET)!, form: "frame2", door: "none" }, 0.52, 0.3, 0.5);
   assert.deepEqual(rackContents(two, [at("r", "sw", 2, { face: "rear" })], (t) => items[t]), []);
+});
+
+// ---------------------------------------------------------------------------- #119: LEDs and taps on gear
+
+test("a piece's status LED sits on its front panel near the top left, just proud of it (#119)", () => {
+  const at = rackLayout(readRackFrame(CABINET)!, 0.6, 0.45, 0.5);
+  const [p] = rackContents(at, [slot("a", "t", 3)], () => SWITCH);
+  const led = rackLedSpot(p);
+  assert.ok(led.x < p.x && led.x > p.x - p.w / 2, "left half");
+  assert.ok(led.y > p.y + p.h / 2 && led.y < p.y + p.h, "upper half");
+  assert.ok(led.z > p.z + p.d / 2 && led.z < p.z + p.d / 2 + 0.01, "just in front of the panel");
+  assert.ok(led.size > 0.004 && led.size < p.h / 2);
+});
+
+test("rear-face gear has its LED on its own front, at the rack's back (#119)", () => {
+  const at = rackLayout(readRackFrame(CABINET)!, 0.6, 0.45, 0.5);
+  const [p] = rackContents(at, [{ ...slot("a", "t", 3), face: "rear" }], () => SWITCH);
+  assert.equal(p.back, true);
+  const led = rackLedSpot(p);
+  assert.ok(led.z < p.z - p.d / 2, "behind the piece, facing the rear");
+  assert.ok(led.x > p.x, "its own left, seen from the back");
+});
+
+test("which gear a point in the rack hits: the piece around it, loose gear before its shelf, null between (#119)", () => {
+  const at = rackLayout(readRackFrame(CABINET)!, 0.6, 0.45, 0.5);
+  const slots = [slot("a", "t", 2), slot("b", "t", 5)];
+  const pieces = rackContents(at, slots, () => SWITCH);
+  const [a, b] = pieces;
+  assert.equal(rackSlotAt(pieces, [a.x, a.y + a.h / 2, a.z + a.d / 2]), "a");
+  assert.equal(rackSlotAt(pieces, [b.x + b.w / 3, b.y + 0.002, b.z]), "b");
+  // in the empty U between them
+  assert.equal(rackSlotAt(pieces, [a.x, at.units[3].y0 + 0.02, a.z + a.d / 2]), null);
 });
