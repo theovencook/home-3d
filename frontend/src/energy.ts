@@ -143,6 +143,8 @@ export interface EnergyPrefs {
     stat_energy_to?: string;
     flow_from?: { stat_energy_from: string }[];
     flow_to?: { stat_energy_to: string }[];
+    /** Solar sources: the forecast integrations' config entries (#144). */
+    config_entry_solar_forecast?: string[] | null;
   }[];
 }
 

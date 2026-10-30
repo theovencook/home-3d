@@ -42,7 +42,7 @@ import { effectSettings, itemShade, motionRooms, tempShade } from "../room-effec
 import { alertEntities, alertSources, alertText, alertTint, findAlerts, isOutage, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg, mdiIcon } from "../icons.ts";
 import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
-import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, fieldLevels, fieldPowers, findConsumers, flowDots, isLoad, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type FlowKind, type StatRow } from "../energy.ts";
+import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, type EnergyPrefs, fieldLevels, fieldPowers, findConsumers, flowDots, isLoad, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type SolarDay, type FlowKind, type StatRow } from "../energy.ts";
 import { fieldFace, fieldSize, roofFaces, roofWindowRoom } from "../solar.ts";
 import { type CustomButton, type EntityRef, DEFAULT_HOLOGRAM, lockAlong, type PoolPipe, type RoofWindow, type SolarField, uid } from "../model.ts";
 
@@ -88,6 +88,11 @@ interface HoloCard {
   /** A battery of this plant (the nearest one on its floor). */
   battery: { soc: number | null; w: number | null } | null;
 }
+
+/** How long a tapped solar card stays grown on a touch screen (#144). */
+const HOLO_BIG_MS = 20000;
+/** How long the grown solar card's forecast and statistics are kept before it fetches them again. */
+const SOLAR_MORE_MS = 300000;
 
 /** How far back a rack card's sparklines reach (#120). */
 const RACK_SPARK_MS = 6 * 3600000;
@@ -174,6 +179,7 @@ import { cheapRate } from "../cheap-rate.ts";
 import { askConfirm } from "../ask.ts";
 import "./ask-dialog.ts";
 import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
+import { forecastCurvePath, forecastSplit, solarMoreRows, solarPrefsInfo, type SolarForecast, type SolarPrefsInfo } from "../solar-more.ts";
 import { isPhoneWidth, NO_FIT_MARGIN, PHONE_FIT_MARGIN, PHONE_MEDIA, thumbsCompact } from "../phone.ts";
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
@@ -283,6 +289,8 @@ export class Fp3dView3d extends LitElement {
     _wallboxW: { state: true },
     _plants: { state: true },
     _holoOn: { state: true },
+    _holoBig: { state: true },
+    _solarMore: { state: true },
     _flows: { state: true },
     _holoShow: { state: true },
     _swipe: { state: true },
@@ -455,6 +463,16 @@ export class Fp3dView3d extends LitElement {
   /** The hologram is on screen (then the energy bar keeps only its switch). */
   private declare _holoOn: boolean;
   private holoTimer: ReturnType<typeof setInterval> | undefined;
+  /** The solar card has grown (#144): hovered, or tapped on a touch screen. */
+  private declare _holoBig: boolean;
+  /** What the grown solar card adds (fetched only when it grows, kept for a few minutes). */
+  private declare _solarMore: { at: number; prefs: SolarPrefsInfo; forecast: SolarForecast | null; change: Map<string, number> | null } | null;
+  private solarMoreLoading = false;
+  /** The pointer type of the last press on the solar card (a touch opens it, a mouse click folds it). */
+  private holoPress = "";
+  /** A mouse click folded the hovered card: it stays small until the pointer leaves. */
+  private holoHoverOff = false;
+  private holoBigTimer: ReturnType<typeof setTimeout> | undefined;
   /** Which hologram cards are folded to their big number. */
   private holoFolded = new Set<number>();
   /** Media cards folded by the user, by player (positions shift as players start and stop). */
@@ -745,6 +763,8 @@ export class Fp3dView3d extends LitElement {
     this._wallboxW = null;
     this._plants = [];
     this._holoOn = false;
+    this._holoBig = false;
+    this._solarMore = null;
     this._swipe = null;
     this._menu = null;
     this._through = null;
@@ -895,6 +915,8 @@ export class Fp3dView3d extends LitElement {
     this.trailTimer = undefined;
     clearInterval(this.holoTimer);
     this.holoTimer = undefined;
+    clearTimeout(this.holoBigTimer);
+    this.holoBigTimer = undefined;
     clearInterval(this.householdTimer);
     this.householdTimer = undefined;
     clearTimeout(this.fridgeTimer);
@@ -2213,7 +2235,8 @@ export class Fp3dView3d extends LitElement {
     // the card's size is read now and then, not every frame
     let size = this.holoSizes.get(index);
     const now = performance.now();
-    if (!size || now - size.at > 2000) {
+    // the grown solar card (#144) overlays its neighbours: they keep stepping round its small size
+    if (!size || (now - size.at > 2000 && !(main && this._holoBig))) {
       size = { w: el.offsetWidth || 184, h: el.offsetHeight || 90, at: now };
       this.holoSizes.set(index, size);
     }
@@ -2691,26 +2714,112 @@ export class Fp3dView3d extends LitElement {
     return Object.keys(rows).length ? solarDayFromStats(rows, new Date(this.now())) : null;
   }
 
+  /** Grow or shrink the solar card (#144); `timed`: a tap on a touch screen, it shrinks again by itself. */
+  private growHolo(on: boolean, index: number, timed = false): void {
+    clearTimeout(this.holoBigTimer);
+    this.holoBigTimer = undefined;
+    if (on && !this._holoBig) {
+      // the neighbours keep stepping round the small card: its size is taken before it grows
+      const el = this.renderRoot?.querySelector<HTMLElement>(`.fp3d-holo[data-holo="${index}"]`);
+      if (el?.offsetWidth) this.holoSizes.set(index, { w: el.offsetWidth, h: el.offsetHeight, at: performance.now() });
+      void this.loadSolarMore();
+    }
+    if (on !== this._holoBig) this._holoBig = on;
+    if (on && timed) this.holoBigTimer = setTimeout(() => this.growHolo(false, index), HOLO_BIG_MS);
+  }
+
+  /** The energy dashboard's forecast and today's production and export, fetched when the solar card grows (cached). */
+  private async loadSolarMore(): Promise<void> {
+    const hass = this.hass;
+    if (!hass || this.replay || this.solarMoreLoading || (this._solarMore && Date.now() - this._solarMore.at < SOLAR_MORE_MS)) return;
+    this.solarMoreLoading = true;
+    try {
+      const prefs = solarPrefsInfo(await hass.callWS<EnergyPrefs>({ type: "energy/get_prefs" }).catch(() => null));
+      const ids = [...prefs.solar, ...prefs.export];
+      const [forecast, change] = await Promise.all([
+        prefs.forecast.length ? hass.callWS<SolarForecast>({ type: "energy/solar_forecast" }).catch(() => null) : null,
+        ids.length ? fetchTodayChange(hass, ids) : null,
+      ]);
+      this._solarMore = { at: Date.now(), prefs, forecast, change };
+    } finally {
+      this.solarMoreLoading = false;
+    }
+  }
+
+  /** What the grown solar card shows beyond the live figures: today's yield, the forecast and the extra rows. */
+  private solarMore(day: SolarDay | null) {
+    const m = this.replay ? null : this._solarMore;
+    const sum = (ids: string[]) => (m?.change && ids.length ? ids.reduce((s, id) => s + (m.change!.get(id) ?? 0), 0) : null);
+    const forecast = m ? forecastSplit(m.forecast, m.prefs.forecast, new Date(this.now())) : null;
+    const produced = (m ? sum(m.prefs.solar) : null) ?? day?.kwh ?? null;
+    return { forecast, produced, rows: solarMoreRows({ forecast, produced, exported: m ? sum(m.prefs.export) : null }) };
+  }
+
   private renderHoloCard(card: HoloCard, index: number, e: EnergySummary) {
     const hass = this.hass;
     const t = (k: Parameters<typeof translate>[1]) => translate(hass, k);
-    const open = !this.holoFolded.has(index);
     const day = this.dayOf(card);
     const main = card.kind === "main";
+    // the solar card grown (#144): the whole card, whether folded or not, and what the energy dashboard adds
+    const grown = main && this._holoBig;
+    const open = grown || !this.holoFolded.has(index);
+    const more = grown && e.solar !== null ? this.solarMore(day) : null;
     // self-sufficiency right now (D590): without a grid reading it is unknown, not 100 %
     const autarky = main && e.grid !== null && e.consumption !== null && e.consumption > 0 ? Math.round(Math.min(100, Math.max(0, (1 - Math.max(0, e.grid) / e.consumption) * 100))) : null;
-    const curve = day && day.curve.length > 1 ? solarCurvePath(day.curve, day.peak) : null;
+    const fcHours = more?.forecast?.hours ?? null;
+    const peak = Math.max(day?.peak ?? 0, ...(fcHours ?? [0]));
+    const curve = day && day.curve.length > 1 ? solarCurvePath(day.curve, peak) : null;
+    const fcPath = fcHours && peak > 0 ? forecastCurvePath(fcHours, peak) : null;
     const nowAt = new Date(this.now());
     const nowX = ((nowAt.getHours() + nowAt.getMinutes() / 60) / 24) * 220;
-    const toggle = () => {
+    const fold = () => {
       if (this.holoFolded.has(index)) this.holoFolded.delete(index);
       else this.holoFolded.add(index);
       this.requestUpdate();
     };
+    // the solar card: a mouse grows it while it hovers and a click folds it as before; a touch (or the keyboard)
+    // grows it, a second touch or a while later shrinks it (#144)
+    const toggle = () => {
+      if (!main) return fold();
+      const press = this.holoPress;
+      this.holoPress = "";
+      if (press !== "mouse") return this.growHolo(!this._holoBig, index, true);
+      fold();
+      if (this._holoBig) {
+        this.holoHoverOff = true;
+        this.growHolo(false, index);
+      }
+    };
+    const enter = (ev: PointerEvent) => {
+      if (main && ev.pointerType === "mouse" && !this.holoHoverOff) this.growHolo(true, index);
+    };
+    const leave = (ev: PointerEvent) => {
+      if (!main || ev.pointerType !== "mouse") return;
+      this.holoHoverOff = false;
+      this.growHolo(false, index);
+    };
+    const key = (ev: KeyboardEvent) => {
+      if (!main || (ev.key !== "Enter" && ev.key !== " ")) return;
+      ev.preventDefault();
+      toggle();
+    };
     const big = main ? (e.solar ?? e.consumption ?? 0) : (card.w ?? 0);
     const bat = main ? (e.battery !== null || e.soc !== null ? { soc: e.soc, w: e.battery } : null) : card.battery;
     return html`<svg class="fp3d-holo-link" data-holo=${index} hidden aria-hidden="true"><line x1="0" y1="0" x2="0" y2="0" /><circle cx="0" cy="0" r="3" /></svg>
-      <div class="fp3d-holo ${open ? "" : "fp3d-holo-min"} ${this._low ? "fp3d-holo-plain" : ""}" data-holo=${index} hidden role="button" tabindex="0" aria-label=${card.name} @click=${toggle}>
+      <div
+        class="fp3d-holo ${open ? "" : "fp3d-holo-min"} ${grown ? "fp3d-holo-grown" : ""} ${this._low ? "fp3d-holo-plain" : ""}"
+        data-holo=${index}
+        hidden
+        role="button"
+        tabindex="0"
+        aria-label=${card.name}
+        aria-expanded=${main ? String(grown) : nothing}
+        @click=${toggle}
+        @keydown=${key}
+        @pointerdown=${(ev: PointerEvent) => (this.holoPress = ev.pointerType)}
+        @pointerenter=${enter}
+        @pointerleave=${leave}
+      >
       <div class="fp3d-holo-sheen"></div>
       <div class="fp3d-holo-scan"></div>
       <div class="fp3d-holo-body">
@@ -2722,16 +2831,33 @@ export class Fp3dView3d extends LitElement {
                 : nothing}
               ${day
                 ? html`<div class="fp3d-holo-sub">${t("holo_today")} <b>${formatNumber(hass, day.kwh, 1)} kWh</b> · ${t("holo_peak")} <b>${formatPower(hass, day.peak)}</b></div>`
-                : nothing}
-              ${curve
+                : more?.produced != null
+                  ? html`<div class="fp3d-holo-sub">${t("holo_today")} <b>${formatNumber(hass, more.produced, 1)} kWh</b></div>`
+                  : nothing}
+              ${curve || fcPath
                 ? svg`<svg class="fp3d-holo-curve" viewBox="0 0 220 44" width="208" height="38">
                     <defs><linearGradient id="fp3dHoloG${index}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#ffd75a" stop-opacity=".5"/><stop offset="1" stop-color="#ffd75a" stop-opacity="0"/></linearGradient></defs>
-                    <path d="${curve.area}" fill="url(#fp3dHoloG${index})"/>
-                    <path d="${curve.line}" fill="none" stroke="#ffe27a" stroke-width="2"/>
-                    <circle cx="${curve.endX}" cy="${curve.endY}" r="3.5" fill="#fff" stroke="#ffd75a" stroke-width="2"/>
+                    ${fcPath ? svg`<path class="fp3d-holo-fc" d="${fcPath}" fill="none" stroke="#aee9ff" stroke-width="1.5" stroke-dasharray="3 3"/>` : nothing}
+                    ${curve
+                      ? svg`<path d="${curve.area}" fill="url(#fp3dHoloG${index})"/>
+                          <path d="${curve.line}" fill="none" stroke="#ffe27a" stroke-width="2"/>
+                          <circle cx="${curve.endX}" cy="${curve.endY}" r="3.5" fill="#fff" stroke="#ffd75a" stroke-width="2"/>`
+                      : nothing}
                     <line x1="0" y1="43.5" x2="220" y2="43.5" stroke="rgba(160,240,255,.35)"/>
                     <line x1="${nowX}" y1="2" x2="${nowX}" y2="43" stroke="rgba(160,240,255,.18)" stroke-dasharray="2 3"/>
                   </svg>`
+                : nothing}
+              ${fcPath ? html`<div class="fp3d-holo-legend"><span class="fp3d-holo-legend-act">${t("holo_actual")}</span><span class="fp3d-holo-legend-fc">${t("holo_forecast")}</span></div>` : nothing}
+              ${more?.rows.length
+                ? html`<div class="fp3d-holo-more">
+                    ${more.rows.map((r) =>
+                      r.key === "self_use"
+                        ? html`<div class="fp3d-holo-more-row"><span>${t("holo_self_use")}</span><b>${formatNumber(hass, r.self, 1)} kWh</b></div>
+                            <div class="fp3d-holo-more-row"><span>${t("holo_exported")}</span><b>${formatNumber(hass, r.exported, 1)} kWh</b></div>
+                            <div class="fp3d-holo-split" title="${r.share} %"><div style="width:${r.share}%"></div></div>`
+                        : html`<div class="fp3d-holo-more-row"><span>${t(r.key === "forecast_rest" ? "holo_fc_rest" : "holo_fc_tomorrow")}</span><b>${formatNumber(hass, r.kwh, 1)} kWh</b></div>`,
+                    )}
+                  </div>`
                 : nothing}
               <div class="fp3d-holo-grid">
                 ${bat
@@ -8257,6 +8383,74 @@ export class Fp3dView3d extends LitElement {
       }
       .fp3d-holo-min {
         width: 150px;
+      }
+      /* the solar card grown (#144): wider and above its neighbours, from its corner at the anchor line */
+      .fp3d-holo-grown {
+        width: 264px;
+        z-index: 6;
+      }
+      .fp3d-holo-grown .fp3d-holo-body {
+        animation: fp3d-holo-grow 160ms ease-out;
+        transform-origin: 0 100%;
+      }
+      @keyframes fp3d-holo-grow {
+        from {
+          opacity: 0.4;
+          transform: scale(0.92);
+        }
+      }
+      .fp3d-holo-plain.fp3d-holo-grown .fp3d-holo-body {
+        animation: none;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .fp3d-holo-grown .fp3d-holo-body {
+          animation: none;
+        }
+      }
+      .fp3d-holo-legend {
+        display: flex;
+        gap: 12px;
+        margin: -4px 0 6px;
+        font-size: 10px;
+        color: #aee9ff;
+      }
+      .fp3d-holo-legend-act::before,
+      .fp3d-holo-legend-fc::before {
+        content: "";
+        display: inline-block;
+        width: 12px;
+        margin-right: 4px;
+        vertical-align: middle;
+        border-top: 2px solid #ffe27a;
+      }
+      .fp3d-holo-legend-fc::before {
+        border-top: 2px dashed #aee9ff;
+      }
+      .fp3d-holo-more {
+        margin: 0 0 8px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(160, 240, 255, 0.22);
+      }
+      .fp3d-holo-more-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        color: #aee9ff;
+      }
+      .fp3d-holo-more-row b {
+        color: #fff;
+        font-variant-numeric: tabular-nums;
+      }
+      .fp3d-holo-split {
+        height: 4px;
+        margin: 3px 0 2px;
+        border-radius: 2px;
+        background: #4ff6ff;
+        overflow: hidden;
+      }
+      .fp3d-holo-split div {
+        height: 100%;
+        background: #5dffb0;
       }
       .fp3d-holo-sheen {
         position: absolute;
