@@ -67,7 +67,7 @@ import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } fr
 import { ISSUES_URL } from "./extensions.ts";
 import { beforeSelectionChange, deepActive, releaseTyping, selectionMoved, takesTyping } from "../focus-release.ts";
 import { escapeStep } from "../editor-keys.ts";
-import { furniturePanel, typeOptionLabels, type FurnitureField } from "../item-panel.ts";
+import { furniturePanel, retypePatch, typeOptionLabels, type FurnitureField } from "../item-panel.ts";
 import { moveToFloor } from "../item-floor.ts";
 import { clipboardKey, copyItems, pasteItems, withKeys, type ItemClip } from "../clipboard.ts";
 import { TypedCommit } from "../typed-commit.ts";
@@ -5494,6 +5494,12 @@ export class Fp3dEditor extends LitElement {
       const item = floor.furniture.find((f) => f.id === id);
       if (item) Object.assign(item, patch);
     });
+  }
+
+  /** Another type from the item panel (#132): with the new type's size unless the item was resized by hand. */
+  private retypeFurniture(type: string): void {
+    const f = this.furnitureItem;
+    if (f) this.updateFurniture(retypePatch(f, type));
   }
 
   private mirrorFurniture(): void {
@@ -12544,7 +12550,7 @@ export class Fp3dEditor extends LitElement {
       case "type":
         return html`<label class="fp3d-field fp3d-wide"
           >${this.t("furniture_type")}
-          <select ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ type: (e.target as HTMLSelectElement).value })}>
+          <select ?disabled=${!admin} @change=${(e: Event) => this.retypeFurniture((e.target as HTMLSelectElement).value)}>
             ${this.typeChoices(f.type).map((t) => html`<option value=${t} ?selected=${t === f.type}>${this.t(`furn_${t}` as I18nKey)}</option>`)}
             ${(this.packs ?? [])
               .filter((pack) => pack.items.length)

@@ -5,6 +5,8 @@
  * the Name box no longer sits where the library's search box was (a search typed there renamed the item).
  */
 
+import { furnitureSize } from "./packs.ts";
+
 export type FurnitureField = "x" | "z" | "w" | "d" | "h" | "rotation" | "mirror" | "strip" | "mount" | "name" | "show_name" | "aliases" | "type" | "floor";
 
 export interface FurnitureFieldNeeds {
@@ -64,4 +66,20 @@ export function typeOptionLabels(items: readonly TypeOptionItem[], language: str
     if (variant && byVariant.get(variants[i])! < 2) return `${names[i]} · ${variant}`;
     return `${names[i]} · ${it.size.map((m) => Math.round(m * 100)).join(" × ")} cm`;
   });
+}
+
+/** The size an item still has from its type (within 5 mm), i.e. nobody resized it. */
+function hasTypeSize(f: { type: string; w: number; d: number; h: number }): boolean {
+  const [w, d, h] = furnitureSize(f.type);
+  return Math.abs(f.w - w) < 0.005 && Math.abs(f.d - d) < 0.005 && Math.abs(f.h - h) < 0.005;
+}
+
+/**
+ * What picking another type in the item panel changes (#132): the type, and the new type's size unless the item was
+ * resized by hand (its size is no longer its old type's), so a sofa turned into a bed is bed-sized.
+ */
+export function retypePatch(f: { type: string; w: number; d: number; h: number }, type: string): { type: string; w?: number; d?: number; h?: number } {
+  if (type === f.type || !hasTypeSize(f)) return { type };
+  const [w, d, h] = furnitureSize(type);
+  return { type, w, d, h };
 }

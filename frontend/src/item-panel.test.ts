@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { furnitureFields, furniturePanel, typeOptionLabels } from "./item-panel.ts";
+import { furnitureFields, furniturePanel, retypePatch, typeOptionLabels } from "./item-panel.ts";
 
 test("the Name box sits below the position fields, not where the library's search box was (#70)", () => {
   const order = furnitureFields({ mirror: true, strip: false, lift: true });
@@ -54,4 +54,11 @@ test("the Type list tells same-named items apart by their variant, else their si
     "en",
   );
   assert.deepEqual(labels, ["Home battery · 9.5 kWh", "Home battery · 5.2 kWh", "Inverter", "Box · 30 × 30 × 30 cm", "Box · 50 × 30 × 30 cm"]);
+});
+
+test("a new type brings its own size unless the item was resized (#132)", () => {
+  const sofa = { type: "sofa", w: 2.2, d: 0.9, h: 0.82 };
+  assert.deepEqual(retypePatch(sofa, "bed"), { type: "bed", w: 1.6, d: 2.05, h: 0.9 });
+  // made 2.5 m long by hand: the size stays, only the type changes
+  assert.deepEqual(retypePatch({ ...sofa, w: 2.5 }, "bed"), { type: "bed" });
 });
