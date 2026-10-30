@@ -34,6 +34,8 @@ import { screenName, setScreenName, setVoiceHere, setVoicePipeline, voiceOnHere,
 import { doorbellCamera, doorbellEntities, directorOnHere, HOLD_DEFAULT, HOLD_MAX, HOLD_MIN, setDirectorHere, type DirectorSettings } from "../director.ts";
 import { deviceSensors, energySummary, flowSegments, gridPoint, powerSensorFor, proposeEnergySensors, type EnergyPrefs, type FlowSegment, proposeMeters } from "../energy.ts";
 import { energySensorFor } from "../wire-ends.ts";
+import { restoreAlert } from "../alerts.ts";
+import { ignoredAlerts } from "./ignored-alerts.ts";
 import { CLIMATE_ATTRS, isPulseDrive, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
 import { ACTION_TYPES, GESTURES, actionTypeChoosable, parseActionData, performActionLocked, withGesture, type ActionType, type Gesture, type ItemAction, type ItemActions } from "../item-actions.ts";
 import { activeSections, sectionFloor, dormerParent, effectiveDormer, proposeDormer, sectionGeometry, floorOutline, polygonBox, headroomLines, ridgeHeight, sectionAbove, sectionCutsBelow, roofSectionsFromRooms, sectionFrame, sectionTurn, turnSectionAbout, wallTopUnder } from "../roof-sections.ts";
@@ -15194,6 +15196,7 @@ export class Fp3dEditor extends LitElement {
           ><input type="checkbox" .checked=${!!s.alert_unavailable} @change=${(ev: Event) => set({ alert_unavailable: (ev.target as HTMLInputElement).checked })} />
           ${this.t("alert_unavailable")}</label
         >
+        ${ignoredAlerts(this.hass, s.alert_ignored, !this.isEditor, (a) => set({ alert_ignored: restoreAlert(s.alert_ignored, a) }))}
         ${this.hass
           ? html`<p class="fp3d-sub fp3d-wide"><b>${this.t("effects")}</b> · ${this.t("effects_hint")}</p>
               ${effectFields(this.hass, s.effects, !this.isEditor, (effects) => set({ effects }), "fp3d-field")}`

@@ -598,3 +598,31 @@ def test_tablet_users_and_idle_return_are_kept_and_checked() -> None:
         SETTINGS_SCHEMA({**base, "tablet_idle": -1})
     with pytest.raises(vol.Invalid):
         SETTINGS_SCHEMA({**base, "tablet_idle": 100000})
+
+
+def test_dismissed_warnings_are_kept_and_checked() -> None:
+    """Warnings dismissed for now or for good from the 3D view's banner (#138)."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    out = SETTINGS_SCHEMA(base)
+    assert out["alert_snoozed"] == []
+    assert out["alert_ignored"] == []
+    snoozed = [{"kind": "smoke", "entity": "binary_sensor.sample_smoke", "at": 1761800000000}]
+    ignored = [
+        {"kind": "contact_unavailable", "entity": "binary_sensor.sample_window"},
+        {"kind": "pool_ph", "entity": "sensor.sample_ph"},
+    ]
+    out = SETTINGS_SCHEMA({**base, "alert_snoozed": snoozed, "alert_ignored": ignored})
+    assert out["alert_snoozed"] == snoozed
+    assert out["alert_ignored"] == ignored
+    # a safety warning is never ignored for good: such an entry is dropped, the others stay
+    smoke = {"kind": "smoke", "entity": "binary_sensor.sample_smoke"}
+    out = SETTINGS_SCHEMA(
+        {**base, "alert_ignored": [smoke, *ignored, {"kind": "alarm", "entity": "alarm_control_panel.sample"}]}
+    )
+    assert out["alert_ignored"] == ignored
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "alert_snoozed": [{"kind": "smoke", "entity": "binary_sensor.sample_smoke"}]})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "alert_ignored": [{"kind": "", "entity": "binary_sensor.sample_window"}]})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "alert_ignored": [{"kind": "window_rain", "entity": "x" * 300}]})

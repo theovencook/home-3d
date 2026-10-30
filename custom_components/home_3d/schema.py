@@ -39,6 +39,17 @@ _MODULE_DATA = vol.Any(None, vol.All({vol.All(str, vol.Length(min=1, max=64)): d
 
 # a camera to open with: angles, distance and (optional) the point it looks at; for a floor or a room the
 # point's height is counted from that floor
+# a warning's kind as the 3D view's banner names it (#138): the house's own or a module's
+ALERT_KIND = vol.All(str, vol.Length(min=1, max=64))
+# warnings about life and property: they can be dismissed for now, never ignored for good (alerts.ts SAFETY_ALERTS)
+SAFETY_ALERTS = frozenset({"smoke", "co", "gas", "water", "alarm", "alarm_pending"})
+
+
+def _drop_safety_alerts(entries: list[dict]) -> list[dict]:
+    """An ignored warning of a safety kind is dropped: smoke, CO, gas, water and the alarm always warn again."""
+    return [e for e in entries if e["kind"] not in SAFETY_ALERTS]
+
+
 START_VIEW_SCHEMA = vol.Schema(
     {
         # the camera may have turned round several times: the angle counts once round (#416)
@@ -925,6 +936,29 @@ SETTINGS_SCHEMA = vol.Schema(
         # warnings name the device after the room
         vol.Optional("alert_names", default=True): bool,
         vol.Optional("alert_unavailable", default=False): bool,
+        # warnings dismissed from the 3D view's banner (#138): "for now" while the same activation stands (began at or
+        # before `at`; an editor's 3D view tidies spent ones), "for good" for one entity and kind (never a safety kind)
+        vol.Optional("alert_snoozed", default=list): vol.All(
+            [
+                vol.Schema(
+                    {
+                        vol.Required("kind"): ALERT_KIND,
+                        vol.Required("entity"): vol.All(str, vol.Length(min=1, max=255)),
+                        vol.Required("at"): vol.All(vol.Coerce(int), vol.Range(min=0)),
+                    }
+                )
+            ],
+            vol.Length(max=200),
+        ),
+        vol.Optional("alert_ignored", default=list): vol.All(
+            [
+                vol.Schema(
+                    {vol.Required("kind"): ALERT_KIND, vol.Required("entity"): vol.All(str, vol.Length(min=1, max=255))}
+                )
+            ],
+            vol.Length(max=200),
+            _drop_safety_alerts,
+        ),
         # live room effects (#10): seconds motion lights a room, the temperatures radiators and cylinders shade between
         vol.Optional("effects", default=None): vol.Any(
             None,

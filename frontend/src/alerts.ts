@@ -4,7 +4,7 @@
 
 import { areaEntities, entityName, openingState, type OpeningEntities } from "./devices.ts";
 import { translate } from "./i18n.ts";
-import type { Building } from "./model.ts";
+import type { Building, BuildingSettings } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
 import { stationRain, weatherEntity } from "./weather.ts";
 import { hasFeature } from "./features.ts";
@@ -32,6 +32,23 @@ export interface Alert {
   color?: [number, number, number];
   /** Shows at the top only, no room pulses (a pool's warning: the pool is outside). */
   quiet?: boolean;
+  /**
+   * When this activation of the warning began (ms, Home Assistant's `last_changed`), #138: a "for now" dismissal from
+   * before it does not hide it. Unset where no entity time tells it (a module's warning, a voltage reading).
+   */
+  since?: number;
+}
+
+/** An entity's `last_changed` in ms (undefined when Home Assistant does not say). */
+function changedAt(hass: HomeAssistant, id: string | null | undefined): number | undefined {
+  const t = id ? Date.parse(hass.states[id]?.last_changed ?? "") : NaN;
+  return Number.isFinite(t) ? t : undefined;
+}
+
+/** The latest of some entities' `last_changed`. */
+function latestChange(hass: HomeAssistant, ids: (string | null | undefined)[]): number | undefined {
+  const ts = ids.map((id) => changedAt(hass, id)).filter((t): t is number => t !== undefined);
+  return ts.length ? Math.max(...ts) : undefined;
 }
 
 /** Entities the warnings come from; found once per registry. */
@@ -92,7 +109,7 @@ export function findAlerts(hass: HomeAssistant, building: Building, sources: Ale
     for (const id of r.sensors) {
       const st = hass.states[id];
       if (st?.state !== "on") continue;
-      out.push({ kind: CLASS_KIND[String(st.attributes.device_class)], entity: id, roomId: r.roomId, floorId: r.floorId });
+      out.push({ kind: CLASS_KIND[String(st.attributes.device_class)], entity: id, roomId: r.roomId, floorId: r.floorId, since: changedAt(hass, id) });
     }
   }
   // a weather station of its own answers first; without one the weather entity's condition counts
@@ -106,11 +123,18 @@ export function findAlerts(hass: HomeAssistant, building: Building, sources: Ale
         if (!link) continue;
         const s = openingState(hass, link, "window");
         if (s.open < 0.5 && s.tilt < 0.5 && s.open2 < 0.5 && s.tilt2 < 0.5) continue;
-        out.push({ kind: "window_rain", entity: link.contact ?? link.tilt ?? link.contact2 ?? o.id, roomId: o.room_id, floorId: floor.id });
+        // since the window's sensors last changed (opened, tilted); the rain's own changes do not count: a rain rate or
+        // a weather condition moves all the time
+        const since = latestChange(hass, [link.contact, link.tilt, link.contact2, link.tilt2]);
+        out.push({ kind: "window_rain", entity: link.contact ?? link.tilt ?? link.contact2 ?? o.id, roomId: o.room_id, floorId: floor.id, since });
       }
     }
   }
-  if (sources.outage && isOutage(hass.states[sources.outage])) out.push({ kind: "power_outage", entity: sources.outage, roomId: null, floorId: null });
+  if (sources.outage && isOutage(hass.states[sources.outage])) {
+    // a reported state (on battery, off) began at its last change; a voltage reading changes all the time: no time
+    const numeric = Number.isFinite(Number(hass.states[sources.outage]?.state));
+    out.push({ kind: "power_outage", entity: sources.outage, roomId: null, floorId: null, since: numeric ? undefined : changedAt(hass, sources.outage) });
+  }
   // a window or door contact that has been unavailable for a while (switched on in ⚙ House): the opening would look
   // shut although nobody knows – an empty battery, out of radio reach
   if (building.settings.alert_unavailable) {
@@ -127,7 +151,7 @@ export function findAlerts(hass: HomeAssistant, building: Building, sources: Ale
           const since = Date.parse(st.last_changed ?? "");
           if (Number.isFinite(since) && now - since < UNAVAILABLE_AFTER) continue;
           seen.add(id);
-          out.push({ kind: "contact_unavailable", entity: id, roomId: o.room_id, floorId: floor.id });
+          out.push({ kind: "contact_unavailable", entity: id, roomId: o.room_id, floorId: floor.id, since: Number.isFinite(since) ? since : undefined });
         }
       }
     }
@@ -136,12 +160,12 @@ export function findAlerts(hass: HomeAssistant, building: Building, sources: Ale
   for (const fr of sources.fridges ?? []) {
     const f = building.floors.find((x) => x.id === fr.floorId)?.furniture.find((m) => m.id === fr.furnitureId);
     const door = f ? fridgeOpenTooLong(f, hass) : null;
-    if (door) out.push({ kind: "fridge_door", entity: door, roomId: fr.roomId, floorId: fr.floorId });
+    if (door) out.push({ kind: "fridge_door", entity: door, roomId: fr.roomId, floorId: fr.floorId, since: changedAt(hass, door) });
   }
   for (const id of sources.alarms) {
     const state = hass.states[id]?.state;
-    if (state === "triggered") out.push({ kind: "alarm", entity: id, roomId: null, floorId: null });
-    else if (state === "pending") out.push({ kind: "alarm_pending", entity: id, roomId: null, floorId: null });
+    if (state === "triggered") out.push({ kind: "alarm", entity: id, roomId: null, floorId: null, since: changedAt(hass, id) });
+    else if (state === "pending") out.push({ kind: "alarm_pending", entity: id, roomId: null, floorId: null, since: changedAt(hass, id) });
   }
   return out;
 }
@@ -183,4 +207,90 @@ export function alertText(hass: HomeAssistant | undefined, building: Building, a
   // without the device name: "Gäste-WC · Fenster offen bei Regen" (the room already says where, #374)
   if (building.settings.alert_names === false) return `${room.name} · ${translate(hass, `alert_short_${a.kind}` as Parameters<typeof translate>[1])}`;
   return `${room.name} · ${text}`;
+}
+
+// ---------------------------------------------------------------- dismissed warnings (#138)
+
+/** A warning by its kind and entity, as the plan keeps a dismissed one. */
+export interface AlertRef {
+  kind: string;
+  entity: string;
+}
+
+/** A warning dismissed "for now" at `at` (ms): it hides that warning only while its activation began at or before then. */
+export interface AlertSnooze extends AlertRef {
+  at: number;
+}
+
+/** Warnings about life and property: they may be dismissed "for now" only, never ignored for good. */
+export const SAFETY_ALERTS: ReadonlySet<string> = new Set(["smoke", "co", "gas", "water", "alarm", "alarm_pending"]);
+
+/** The house's own kinds of warning (the rest come from modules). */
+export const HOUSE_ALERTS: ReadonlySet<string> = new Set<AlertKind>(["smoke", "gas", "co", "water", "alarm", "alarm_pending", "window_rain", "power_outage", "fridge_door", "contact_unavailable"]);
+
+/** Whether a warning of this kind may be ignored for good (all but the safety ones). */
+export function mayIgnoreAlert(kind: string): boolean {
+  return !SAFETY_ALERTS.has(kind);
+}
+
+export const alertKey = (a: AlertRef): string => `${a.kind}:${a.entity}`;
+
+/** One "for now" dismissal: its warning plus the moment. */
+export const snoozeKey = (s: AlertSnooze): string => `${alertKey(s)}@${s.at}`;
+
+/** Whether a "for now" dismissal still covers this warning: the same activation (it began at or before the dismissal). */
+function snoozeCovers(s: AlertSnooze, a: AlertRef & { since?: number }): boolean {
+  return a.since === undefined || a.since <= s.at;
+}
+
+/**
+ * The warnings the banner and the rooms show: without the ones dismissed for now – only while it is the same activation,
+ * so a warning that cleared and fired again shows whether or not anyone saw it clear – and without the ones ignored for
+ * good (never a safety warning, whatever the plan says). Needs no memory: every screen decides the same from the plan
+ * and Home Assistant's states.
+ */
+export function shownAlerts<A extends AlertRef & { since?: number }>(alerts: A[], settings: Pick<BuildingSettings, "alert_snoozed" | "alert_ignored">): A[] {
+  const snoozed = settings.alert_snoozed ?? [];
+  const ignored = settings.alert_ignored ?? [];
+  if (!snoozed.length && !ignored.length) return alerts;
+  const byKey = new Map(snoozed.map((x) => [alertKey(x), x] as const));
+  const gone = new Set(ignored.filter((r) => mayIgnoreAlert(r.kind)).map(alertKey));
+  return alerts.filter((a) => {
+    const key = alertKey(a);
+    if (gone.has(key)) return false;
+    const s = byKey.get(key);
+    return !s || !snoozeCovers(s, a);
+  });
+}
+
+/**
+ * The "for now" dismissals that no longer hide anything: their warning is gone, or it is a later activation. Only
+ * tidying – the plan keeps fewer entries; showing a fired-again warning does not depend on it.
+ */
+export function clearedSnoozes(snoozed: readonly AlertSnooze[] | undefined, active: readonly (AlertRef & { since?: number })[]): AlertSnooze[] {
+  if (!snoozed?.length) return [];
+  const on = new Map(active.map((a) => [alertKey(a), a] as const));
+  return snoozed.filter((s) => {
+    const a = on.get(alertKey(s));
+    return !a || !snoozeCovers(s, a);
+  });
+}
+
+/**
+ * The plan's dismissal lists after "dismiss for now" or "for good" on a warning (a safety warning: for now only). A
+ * "for now" is stamped no earlier than the warning's own start, so a screen whose clock runs behind Home Assistant's
+ * still hides the warning it dismissed.
+ */
+export function dismissAlert(settings: Pick<BuildingSettings, "alert_snoozed" | "alert_ignored">, a: AlertRef & { since?: number }, forGood: boolean, now: number): Pick<BuildingSettings, "alert_snoozed" | "alert_ignored"> {
+  const ref = { kind: a.kind, entity: a.entity };
+  const key = alertKey(ref);
+  const snoozed = (settings.alert_snoozed ?? []).filter((s) => alertKey(s) !== key);
+  const ignored = (settings.alert_ignored ?? []).filter((r) => alertKey(r) !== key);
+  if (forGood && mayIgnoreAlert(a.kind)) return { alert_snoozed: snoozed, alert_ignored: [...ignored, ref] };
+  return { alert_snoozed: [...snoozed, { ...ref, at: Math.max(now, a.since ?? 0) }], alert_ignored: ignored };
+}
+
+/** The ignored list without one warning (undo of "for good"). */
+export function restoreAlert(ignored: readonly AlertRef[] | undefined, a: AlertRef): AlertRef[] {
+  return (ignored ?? []).filter((r) => alertKey(r) !== alertKey(a));
 }
