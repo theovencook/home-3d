@@ -7,7 +7,7 @@ import { join, relative, sep } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { buildIndex, cardsOf, filterEntries, KINDS } from "./library-index.ts";
-import type { FurniturePack, PackItem } from "./packs.ts";
+import { packName, type FurniturePack, type PackItem } from "./packs.ts";
 
 const BUNDLED = fileURLToPath(new URL("../../custom_components/home_3d/bundled_packs", import.meta.url));
 
@@ -108,4 +108,36 @@ test("theovencook.ikea-uk ships with Home 3D: every item has its IKEA name, and 
   assert.ok(find("kallax").some((t) => t.startsWith("pack:theovencook.ikea-uk:")));
   // colourways are search words: an IKEA name with its colour finds the item
   assert.ok(find("kallax black-brown").some((t) => t.startsWith("pack:theovencook.ikea-uk:kallax_")));
+});
+
+test("theovencook.makers and theovencook.devices ship with Home 3D beside the core (#109)", () => {
+  for (const [id, name] of [["theovencook.makers", "Makers"], ["theovencook.devices", "Smart-home devices"]] as const) {
+    const bundled = packs.find((p) => p.pack.id === id);
+    assert.ok(bundled, `bundled_packs/${id}`);
+    assert.equal(bundled.pack.name, name);
+    assert.equal(bundled.pack.licence, "MIT");
+    assert.ok(bundled.pack.items.length >= 1, `${id} starts with an item`);
+  }
+});
+
+test("every bundled pack stays under the item limit and shows under its own name in the library", () => {
+  for (const { pack } of packs) {
+    assert.ok(pack.items.length <= 1000, `${pack.id} has ${pack.items.length} items`);
+    const entries = buildIndex({ packs: [pack], basics: [], language: "en", basicName: (t) => t, basicNameEn: (t) => t, kindName: (k) => k, size: () => [1, 1, 1] });
+    const label = packName(pack as FurniturePack, "en");
+    assert.ok(entries.length && entries.every((e) => e.packLabel === label), `${pack.id} entries carry the pack name`);
+    // the pack name finds its items
+    assert.equal(filterEntries(entries, { query: label.split(" ")[0], room: null, electric: false, light: false, outdoor: false }).length, entries.length, pack.id);
+  }
+});
+
+test("the library can be narrowed to one pack (#109)", () => {
+  const entries = packs.flatMap(({ pack }) => buildIndex({ packs: [pack], basics: [], language: "en", basicName: (t) => t, basicNameEn: (t) => t, kindName: (k) => k, size: () => [1, 1, 1] }));
+  const none = { query: "", room: null, electric: false, light: false, outdoor: false };
+  const makers = filterEntries(entries, { ...none, pack: "theovencook.makers" });
+  assert.ok(makers.length >= 1 && makers.every((e) => e.pack === "theovencook.makers"));
+  assert.equal(filterEntries(entries, { ...none, pack: null }).length, entries.length);
+  assert.equal(filterEntries(entries, none).length, entries.length, "no pack filter: everything");
+  // the query still applies inside the pack
+  assert.ok(filterEntries(entries, { ...none, pack: "theovencook.makers", query: "sofa" }).length === 0);
 });

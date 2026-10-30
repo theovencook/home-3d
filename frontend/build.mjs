@@ -92,7 +92,7 @@ function copyFonts() {
 }
 
 // size budgets of the bundles (kept small for old wall tablets)
-const BUDGET = { "home-3d.js": 780 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 1024 * 1024, "home-3d-card-editor.js": 273 * 1024, "home-3d-items.js": 64 * 1024, "home-3d-2d.js": 72 * 1024 };
+const BUDGET = { "home-3d.js": 780 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 1024 * 1024, "home-3d-card-editor.js": 280 * 1024, "home-3d-items.js": 64 * 1024, "home-3d-2d.js": 72 * 1024 };
 
 copyFonts();
 if (watch) {

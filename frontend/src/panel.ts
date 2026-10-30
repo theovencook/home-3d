@@ -15,7 +15,8 @@ import type { HomeAssistant } from "./types.ts";
 import type { MarkerMode } from "./components/view3d.ts";
 import type { HeatMode } from "./heatmap.ts";
 import { lookOf, THEMES, type Look } from "./themes.ts";
-import { shownAccent, textOn } from "./ha-theme.ts";
+import { lightChrome } from "./scheme.ts";
+import { followLook, shownAccent, shownLook, textOn } from "./ha-theme.ts";
 import { keepInRoom, snapToWall } from "./geometry/snap.ts";
 import { furnitureName } from "./furniture-names.ts";
 import { confirmEntities, defaultHeight, entityName, kindOf } from "./devices.ts";
@@ -30,6 +31,7 @@ import { TimeTravel } from "./load-timetravel.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
 import type { Feature } from "./features.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
+import { UndoHistory } from "./undo-history.ts";
 
 /** The corners of the clock, as arrows in the view menu (the full name is the button's title). */
 const CLOCK_ARROW: Record<Exclude<ClockPos, "off">, string> = { tl: "↖", tr: "↗", bl: "↙", br: "↘" };
@@ -160,6 +162,8 @@ export class Floorplan3dPanel extends LitElement {
   private declare _screen: string;
 
   private readonly data = new BuildingController(this);
+  /** The editor's undo history (#66): kept here, as the editor element goes whenever another tab opens. */
+  private readonly undoHistory = new UndoHistory();
   private locateLab: (() => void) | null = null;
   /** Time travel (Pro): the last 24 hours replayed, read-only. */
   private readonly tt = new TimeTravel(this);
@@ -287,8 +291,15 @@ export class Floorplan3dPanel extends LitElement {
     prefs.set("quality", quality);
   }
 
-  /** Change one furniture item of the building (furnishing in 3D) and save. */
-  private editFurniture(id: string, change: (f: Building["floors"][number]["furniture"][number], floor: Building["floors"][number]) => void): void {
+  /** A change made here or on the Extensions page: saved, and one more step of the editor's undo history (#66). */
+  private editPlan(next: Building, mergeKey: string | null = null): void {
+    const b = this.data.building;
+    if (b) this.undoHistory.record(b, next, this.data.homeId, mergeKey);
+    this.data.edit(next);
+  }
+
+  /** Change one furniture item of the building (furnishing in 3D) and save; `mergeKey` joins a run of moves. */
+  private editFurniture(id: string, change: (f: Building["floors"][number]["furniture"][number], floor: Building["floors"][number]) => void, mergeKey: string | null = null): void {
     const b = this.data.building;
     if (!b) return;
     const next = structuredClone(b);
@@ -296,11 +307,11 @@ export class Floorplan3dPanel extends LitElement {
       const f = floor.furniture.find((m) => m.id === id);
       if (f) change(f, floor);
     }
-    this.data.edit(next);
+    this.editPlan(next, mergeKey);
   }
 
   /** Change one placed device (furnishing in 3D) and save. */
-  private editDevice(entityId: string, change: (p: Building["floors"][number]["placements"][number], floor: Building["floors"][number]) => void): void {
+  private editDevice(entityId: string, change: (p: Building["floors"][number]["placements"][number], floor: Building["floors"][number]) => void, mergeKey: string | null = null): void {
     const b = this.data.building;
     if (!b) return;
     const next = structuredClone(b);
@@ -308,7 +319,7 @@ export class Floorplan3dPanel extends LitElement {
       const p = floor.placements.find((x) => x.entity_id === entityId);
       if (p) change(p, floor);
     }
-    this.data.edit(next);
+    this.editPlan(next, mergeKey);
   }
 
   private moveDevice(e: CustomEvent<{ id: string; x: number; z: number }>): void {
@@ -317,7 +328,7 @@ export class Floorplan3dPanel extends LitElement {
     this.editDevice(id, (p, floor) => {
       const [nx, nz] = keepInRoom(floor, p.x, p.z, x, z);
       Object.assign(p, { x: nx, z: nz });
-    });
+    }, `move:${id}`);
   }
 
   /** Cameras turn in finer steps than lamps (their wedge shows where they look). */
@@ -336,7 +347,7 @@ export class Floorplan3dPanel extends LitElement {
     if (!id || !b) return;
     const next = structuredClone(b);
     for (const floor of next.floors) floor.placements = floor.placements.filter((p) => p.entity_id !== id);
-    this.data.edit(next);
+    this.editPlan(next);
     this._selDevice = null;
   }
 
@@ -413,7 +424,7 @@ export class Floorplan3dPanel extends LitElement {
       // … and near a wall it turns its back to it and sits flush, as in the editor
       const snap = snapToWall(floor, f, wall);
       if (snap) Object.assign(f, snap);
-    });
+    }, `move:${id}`);
   }
 
   /** Width, depth and height of the selected item, editable in the furnish bar. */
@@ -468,7 +479,7 @@ export class Floorplan3dPanel extends LitElement {
     if (!id || !b) return;
     const next = structuredClone(b);
     for (const floor of next.floors) floor.furniture = floor.furniture.filter((m) => m.id !== id);
-    this.data.edit(next);
+    this.editPlan(next);
     this._selFurniture = null;
   }
 
@@ -478,11 +489,29 @@ export class Floorplan3dPanel extends LitElement {
     if (!b) return;
     const view = reset ? null : this.view3d()?.currentView();
     if (!reset && !view) return;
-    this.data.edit({ ...b, settings: { ...b.settings, start_view: view ?? null } });
+    this.editPlan({ ...b, settings: { ...b.settings, start_view: view ?? null } });
   }
 
   private view3d() {
-    return this.renderRoot.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; proHint(f: Feature): void; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void }) | null;
+    return this.renderRoot.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; proHint(f: Feature): void; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; openSettings(): void }) | null;
+  }
+
+  /** A follow toggle in the view settings (#87): Home Assistant's theme or the sun; it names the look it shows now. */
+  private renderFollow(follow: "theme" | "auto", label: "follow_ha" | "follow_sun") {
+    const on = this._theme === follow;
+    const now = this.t(`theme_${shownLook(follow, this.hass)}`);
+    return html`<button
+      class="fp3d-chip fp3d-follow"
+      role="switch"
+      aria-checked=${on}
+      @click=${() => {
+        this._theme = followLook(this._theme, follow, !on, this.hass);
+        prefs.set("theme", this._theme);
+      }}
+    >
+      <span class="fp3d-follow-box" aria-hidden="true">${on ? "✓" : ""}</span>${this.t(label)}
+      <small>${this.t("follow_now", { look: now })}</small>
+    </button>`;
   }
 
   /** Time travel on or off; without the Pro add-on its hint shows. `at`: a start moment from a link. */
@@ -504,6 +533,8 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   protected updated(): void {
+    // the viewer's chrome goes light with the Day look (#85); the editor and the extensions page stay dark (deferred)
+    this.toggleAttribute("light", this._mode === "view" && lightChrome(shownLook(this._theme, this.hass)));
     // lab: the locating recorder box for admins (feasibility test, not a feature yet)
     if (!this.locateLab && this.hass?.user?.is_admin && this.data.building && labOn()) {
       this.locateLab = mountLocateLab(() => ({ hass: this.hass, building: this.data.building }));
@@ -576,17 +607,22 @@ export class Floorplan3dPanel extends LitElement {
                   aria-label=${this.t("view_options")}
                   @click=${() => (this._optsOpen = !this._optsOpen)}
                 >
-                  ⚙
+                  ⚙ <span class="fp3d-opts-label">${this.t("view_btn")}</span>
                 </button>
                 ${this._optsOpen ? html`<div class="fp3d-opts-veil" @click=${() => (this._optsOpen = false)}></div>` : nothing}
                 <div class="fp3d-view-opts ${this._optsOpen ? "fp3d-opts-open" : ""}">
+                <section class="fp3d-opt-group">
+                <h3>${this.t("quality")}</h3>
                 <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("quality")}>
                 ${(["auto", "low", "high"] as Quality[]).map(
                   (q) => html`<button aria-pressed=${this._quality === q} @click=${() => this.setQuality(q)}>${this.t(`quality_${q}`)}</button>`,
                 )}
               </div>
+              </section>
+              <section class="fp3d-opt-group">
+              <h3>${this.t("theme")}</h3>
               <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("theme")}>
-                ${["theme" as const, ...THEMES, "auto" as const].map(
+                ${THEMES.map(
                   (t) =>
                     html`<button
                       aria-pressed=${this._theme === t}
@@ -623,6 +659,15 @@ export class Floorplan3dPanel extends LitElement {
                     : nothing}
                 </label>
               </div>
+              ${this.renderFollow("theme", "follow_ha")}
+              </section>
+              <section class="fp3d-opt-group">
+              <h3>${this.t("view_group_lighting")}</h3>
+              ${this.renderFollow("auto", "follow_sun")}
+              <button class="fp3d-chip fp3d-opt-more" @click=${() => this.view3d()?.openSettings()}>${this.t("sun_and_lights")}</button>
+              </section>
+              <section class="fp3d-opt-group">
+              <h3>${this.t("clock")}</h3>
               <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("clock")} title=${this.t("clock")}>
                 <span class="fp3d-seg-label" aria-hidden="true">🕐</span>
                 ${(["off", "tl", "tr", "bl", "br"] as ClockPos[]).map(
@@ -635,6 +680,9 @@ export class Floorplan3dPanel extends LitElement {
                     </button>`,
                 )}
               </div>
+              </section>
+              <section class="fp3d-opt-group">
+              <h3>${this.t("markers")}</h3>
               <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("markers")}>
                 ${(["none", "room", "important", "all"] as MarkerMode[]).map(
                   (m) =>
@@ -650,6 +698,9 @@ export class Floorplan3dPanel extends LitElement {
                     </button>`,
                 )}
               </div>
+              </section>
+              <section class="fp3d-opt-group">
+              <h3>${this.t("view_group_size")}</h3>
               <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("pin_size")} title=${this.t("pin_size")}>
                 ${(["small", "normal", "large"] as const).map(
                   (k) =>
@@ -664,6 +715,9 @@ export class Floorplan3dPanel extends LitElement {
                     </button>`,
                 )}
               </div>
+              </section>
+              <section class="fp3d-opt-group">
+              <h3>${this.t("view_group_controls")}</h3>
               <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("controls_side")} title=${this.t("controls_side")}>
                 ${([false, true] as const).map(
                   (right) =>
@@ -728,6 +782,7 @@ export class Floorplan3dPanel extends LitElement {
                   ${this.t("fps")}
                 </button>
               </div>
+              </section>
               </div>`
             : nothing}
           ${this._mode === "editor" && saveState !== "idle"
@@ -815,7 +870,7 @@ export class Floorplan3dPanel extends LitElement {
       .canEdit=${this.data.canEdit}
       .packs=${this.data.packs}
       .building=${this.data.building}
-      @building-edit=${(e: CustomEvent<Building>) => this.data.edit(e.detail)}
+      @building-edit=${(e: CustomEvent<Building>) => this.editPlan(e.detail)}
       @packs-changed=${() => void this.data.reloadPacks()}
     ></fp3d-extensions>`;
   }
@@ -830,6 +885,7 @@ export class Floorplan3dPanel extends LitElement {
       .hass=${this.hass}
       .canEdit=${this.data.canEdit}
       .home=${this.data.homeId}
+      .history=${this.undoHistory}
       .building=${b}
       .narrow=${this.narrow}
       .packs=${this.data.packs}
@@ -1285,17 +1341,22 @@ export class Floorplan3dPanel extends LitElement {
       }
       /* the view options (quality, look, symbols, side) fold behind ⚙ on every screen: a tidy header */
       .fp3d-opts-btn {
-        display: grid;
-        place-items: center;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         order: 3;
-        width: 36px;
         height: 36px;
+        padding: 0 12px;
+        font: inherit;
+        font-weight: 600;
         border: 1px solid var(--fp3d-line);
         border-radius: 10px;
         background: transparent;
         color: var(--fp3d-text);
-        font-size: 17px;
         cursor: pointer;
+      }
+      .fp3d-opts-label {
+        font-size: 13.5px;
       }
       .fp3d-opts-btn[aria-expanded="true"] {
         color: var(--fp3d-accent);
@@ -1307,9 +1368,55 @@ export class Floorplan3dPanel extends LitElement {
       .fp3d-view-opts.fp3d-opts-open {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 10px 16px;
         order: 5;
         width: 100%;
+        align-items: flex-start;
+      }
+      /* one labelled group per kind of setting (#87) */
+      .fp3d-opt-group {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        position: relative;
+        padding-top: 16px;
+      }
+      .fp3d-opt-group h3 {
+        position: absolute;
+        top: 0;
+        left: 4px;
+        margin: 0;
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--fp3d-muted);
+        white-space: nowrap;
+      }
+      .fp3d-follow {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .fp3d-follow small {
+        color: var(--fp3d-muted);
+        font-size: 11.5px;
+      }
+      .fp3d-follow-box {
+        display: inline-grid;
+        place-items: center;
+        width: 16px;
+        height: 16px;
+        border-radius: 5px;
+        border: 1.5px solid var(--fp3d-muted);
+        font-size: 11px;
+        line-height: 1;
+      }
+      .fp3d-follow[aria-checked="true"] .fp3d-follow-box {
+        background: var(--fp3d-accent);
+        border-color: var(--fp3d-accent);
+        color: var(--fp3d-accent-text);
       }
       /* phones: version and grow move with it */
       @media (max-width: 700px) {

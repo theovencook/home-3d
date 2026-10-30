@@ -27,6 +27,8 @@ import {
 import { LIGHTS, MOUNTS } from "../item-format.ts";
 import { load3d } from "../load3d.ts";
 import type { PackPart } from "../packs.ts";
+import { askConfirm } from "../ask.ts";
+import "../components/ask-dialog.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
 import { llmBrief } from "./llm-brief.ts";
@@ -164,8 +166,13 @@ export class ItemEditor extends LitElement {
   }
 
   /** Leave the current draft: asks first when it has changes. */
-  private leave(): boolean {
-    return !this._dirty || !this._draft || confirm(this.t("ie_discard", { name: this.itemName(this._draft) }));
+  private async leave(): Promise<boolean> {
+    return !this._dirty || !this._draft || (await this.ask(this.t("ie_discard", { name: this.itemName(this._draft) }), this.t("ie_discard_ok"), true));
+  }
+
+  /** A yes / no question in the app's own dialog (#59). */
+  private ask(text: string, ok: string, danger: boolean, cancel = this.t("ie_cancel")): Promise<boolean> {
+    return askConfirm(text, { ok, cancel, danger });
   }
 
   private pick(item: CustomItem | null): void {
@@ -188,8 +195,8 @@ export class ItemEditor extends LitElement {
     this._msg = null;
   }
 
-  private close(): void {
-    if (!this.leave()) return;
+  private async close(): Promise<void> {
+    if (!(await this.leave())) return;
     this.remove();
   }
 
@@ -265,7 +272,7 @@ export class ItemEditor extends LitElement {
       this.pick(this._items[0] ?? null);
       return;
     }
-    if (!confirm(this.t("ie_delete_confirm", { name: this.itemName(draft) }))) return;
+    if (!(await this.ask(this.t("ie_delete_confirm", { name: this.itemName(draft) }), this.t("ie_delete"), true))) return;
     try {
       await removeCustomItem(this.hass, this._savedId);
       this._items = this._items.filter((i) => i.id !== this._savedId);
@@ -291,14 +298,14 @@ export class ItemEditor extends LitElement {
     const input = e.target as HTMLInputElement;
     const files = [...(input.files ?? [])];
     input.value = "";
-    if (!files.length || !this.leave()) return;
+    if (!files.length || !(await this.leave())) return;
     await this.importTexts(await Promise.all(files.map(async (f) => ({ name: f.name, text: await f.text() }))));
   }
 
   /** An item pasted in (an LLM's answer as it came); the box closes once it is imported. */
   private async importPasted(): Promise<void> {
     const text = this._paste?.trim();
-    if (!text || this._busy || !this.leave()) return;
+    if (!text || this._busy || !(await this.leave())) return;
     this._busy = true;
     try {
       if (await this.importTexts([{ name: this.t("ie_paste"), text }])) this._paste = null;
@@ -321,7 +328,7 @@ export class ItemEditor extends LitElement {
       let item = first.item;
       const clash = this._items.find((i) => i.id === item.id);
       // the same id: replace it (an updated copy of the same item) or keep both under a free id
-      if (clash && !confirm(this.t("ie_import_replace", { name: this.itemName(clash) }))) {
+      if (clash && !(await this.ask(this.t("ie_import_replace", { name: this.itemName(clash) }), this.t("ie_replace"), true, this.t("ie_keep_both")))) {
         item = { ...item, id: freeId(item.id, this._items.map((i) => i.id)) };
       }
       try {
@@ -364,7 +371,7 @@ export class ItemEditor extends LitElement {
   private renderList() {
     return html`<nav class="ie-list">
       <p class="ie-sub">${this.t("ie_intro")}</p>
-      <button class="fp3d-btn fp3d-primary" @click=${() => this.leave() && this.startNew()}>+ ${this.t("ie_new")}</button>
+      <button class="fp3d-btn fp3d-primary" @click=${async () => (await this.leave()) && this.startNew()}>+ ${this.t("ie_new")}</button>
       <label class="fp3d-btn ie-file">
         ${this.t("ie_import")}
         <input type="file" accept=".json,application/json" multiple hidden @change=${(e: Event) => this.importFiles(e)} />
@@ -382,7 +389,7 @@ export class ItemEditor extends LitElement {
       <ul>
         ${this._items.map(
           (item) => html`<li>
-            <button class="ie-pick ${item.id === this._savedId ? "on" : ""}" @click=${() => item.id !== this._savedId && this.leave() && this.pick(item)}>
+            <button class="ie-pick ${item.id === this._savedId ? "on" : ""}" @click=${async () => item.id !== this._savedId && (await this.leave()) && this.pick(item)}>
               ${this.itemName(item)}
             </button>
           </li>`,

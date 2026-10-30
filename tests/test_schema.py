@@ -557,3 +557,15 @@ def test_live_room_effects_are_kept_and_checked() -> None:
         SETTINGS_SCHEMA({**base, "effects": {"motion_seconds": -5}})
     with pytest.raises(vol.Invalid):
         SETTINGS_SCHEMA({**base, "effects": {"radiator_hot": 500}})
+
+
+def test_unplaced_hidden_entities_are_kept_and_checked() -> None:
+    """Entities hidden from the editor's unplaced list (#83)."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    assert SETTINGS_SCHEMA(base)["unplaced_hidden"] == []
+    hidden = ["switch.sample_plug", "sensor.sample_power"]
+    assert SETTINGS_SCHEMA({**base, "unplaced_hidden": hidden})["unplaced_hidden"] == hidden
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "unplaced_hidden": "switch.sample_plug"})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "unplaced_hidden": ["x" * 300]})
