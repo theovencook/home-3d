@@ -111,7 +111,9 @@ function copyFonts() {
 // for editors). #134 moved the German table out of the bundles into lang/de.json; the main, editor and card-editor
 // budgets were then set just above their new sizes (668.3 / 961.8 / 154.2 KB) so growth shows again: raise one only
 // with a reason in this comment, and keep new strings' growth in the bundle that uses them.
-const BUDGET = { "home-3d.js": 680 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 975 * 1024, "home-3d-card-editor.js": 160 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024 };
+// #139: home-3d.js was already at 683.7 KB on integration (over its 680 KB) before the Settings tab; raised to 695 KB
+// for the tab, its loader and the "All settings" links (the page itself and its texts are a bundle of their own).
+const BUDGET = { "home-3d.js": 695 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 975 * 1024, "home-3d-card-editor.js": 160 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024 };
 
 copyFonts();
 if (watch) {
