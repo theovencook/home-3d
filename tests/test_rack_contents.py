@@ -152,6 +152,37 @@ def test_links_of_the_wrong_shape_are_refused(extra: dict) -> None:
         BUILDING_SCHEMA(_building(_rack(_slot("s1", SWITCH_24, 1, **extra))))
 
 
+def _carded(card: dict | None) -> dict:
+    item = _rack(_slot("s1", SWITCH_24, 1))
+    item["rack"]["card"] = card
+    return item
+
+
+def test_a_rack_keeps_its_card_values() -> None:
+    """#120: the editor's pick of values for the rack card (entities or the rack's own figures)."""
+    card = {"metrics": ["sensor.ups_load", "@hottest", "@online"]}
+    building = BUILDING_SCHEMA(_building(_carded(card)))
+    assert building["floors"][0]["furniture"][0]["rack"]["card"] == card
+    # no pick (the default set), an empty pick (no card) and no card settings are all fine
+    for kept in ({"metrics": None}, {"metrics": []}, {}, None):
+        BUILDING_SCHEMA(_building(_carded(kept)))
+
+
+@pytest.mark.parametrize(
+    "card",
+    [
+        {"metrics": "sensor.a"},
+        {"metrics": ["nope"]},
+        {"metrics": ["@everything"]},
+        {"metrics": ["sensor.a", "sensor.a"]},
+        {"metrics": [f"sensor.s{i}" for i in range(racks.RACK_CARD_MAX + 1)]},
+    ],
+)
+def test_card_values_of_the_wrong_shape_are_refused(card: dict) -> None:
+    with pytest.raises(vol.Invalid):
+        BUILDING_SCHEMA(_building(_carded(card)))
+
+
 # ------------------------------------------------------------------------------------------------ the placement rules
 
 _GEAR = {

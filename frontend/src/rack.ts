@@ -79,6 +79,8 @@ export type RackFace = (typeof RACK_FACES)[number];
 /** What a placed rack carries (Furniture.rack). */
 export interface RackContents {
   slots: RackSlot[];
+  /** The rack card (#120): the editor's pick of values (rack-card.ts); missing / null = the default set, [] = no card. */
+  card?: { metrics?: string[] | null } | null;
 }
 
 /** The room a rack offers gear: its U count, its width and how deep gear may be (rack-frame.ts rackLayout). */

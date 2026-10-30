@@ -26,7 +26,7 @@ import { SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, labOn, released } from "../features.ts";
 import { loadLocate } from "../load-locate.ts";
 import { BIN_SHAPES, BIN_SIZE, binColors, binShape, householdCountry, isPackPlant, MAILBOX_SHAPES, MAILBOX_SIZE, mailboxShape, WASTE_KINDS, wasteColors } from "../household.ts";
-import { cameraMotionSensors, cameraOwnSensors, detectionKind, setCameraSensors } from "../markers.ts";
+import { cameraMotionSensors, cameraOwnSensors, detectionKind, setCameraSensors, stateText } from "../markers.ts";
 import { backdropImage } from "../backdrop.ts";
 import { screenName, setScreenName, setVoiceHere, setVoicePipeline, voiceOnHere, voicePipeline } from "../load-voice.ts";
 import { doorbellCamera, doorbellEntities, directorOnHere, HOLD_DEFAULT, HOLD_MAX, HOLD_MIN, setDirectorHere, type DirectorSettings } from "../director.ts";
@@ -182,6 +182,7 @@ import { rackElevation, type RackElevation } from "../rack-elevation.ts";
 import type { RackGearChoice, RackLinker } from "./rack-sheet.ts";
 import { slotStatus } from "../rack-links.ts";
 import { fromDevice, rackDeviceOptions, suggestRackLinks } from "../rack-suggest.ts";
+import { defaultRackMetrics, RACK_CARD_MAX, RACK_HOTTEST, RACK_ONLINE, rackMetricOptions, toggleRackMetric } from "../rack-card.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
 import { detectCameraModel, isCameraModel, setCameraLook } from "../camera-models.ts";
@@ -6619,6 +6620,69 @@ export class Fp3dEditor extends LitElement {
       : nothing}`;
   }
 
+  /** The values a rack's card shows now (#120): the editors' pick, else the default set. */
+  private rackCardPicked(f: Furniture): string[] {
+    return f.rack?.card?.metrics ?? defaultRackMetrics(this.hass, f.rack?.slots ?? []);
+  }
+
+  /** Ticks or unticks a value on the chosen rack's card (one undo step); the first change starts from the default set. */
+  private toggleRackCardMetric(key: string): void {
+    const f = this.furnitureItem;
+    if (!f?.rack || !this.isEditor) return;
+    const metrics = toggleRackMetric(f.rack.card?.metrics, defaultRackMetrics(this.hass, f.rack.slots), key);
+    this.change((_, floor) => {
+      const item = floor.furniture.find((o) => o.id === f.id);
+      if (item?.rack) item.rack = { ...item.rack, card: { ...item.rack.card, metrics } };
+    });
+  }
+
+  /** The chosen rack's card goes back to the default set (one undo step). */
+  private resetRackCard(): void {
+    const f = this.furnitureItem;
+    if (!f?.rack?.card || !this.isEditor) return;
+    this.change((_, floor) => {
+      const item = floor.furniture.find((o) => o.id === f.id);
+      if (item?.rack) {
+        const { card: _card, ...rest } = item.rack;
+        item.rack = rest;
+      }
+    });
+  }
+
+  /**
+   * The rack card's values (#120): what the rack's linked gear offers, grouped by device and kind, ticked when on the
+   * card (at most RACK_CARD_MAX; the default set until an editor changes it).
+   */
+  private renderRackCardForm(f: Furniture) {
+    const hass = this.hass;
+    const slots = f.rack?.slots ?? [];
+    if (!hass || !slots.length) return nothing;
+    const groups = rackMetricOptions(hass, slots, (s) => s.name || furnitureName(hass, s.type ?? ""));
+    if (!groups.length) return nothing;
+    const picked = this.rackCardPicked(f);
+    const full = picked.length >= RACK_CARD_MAX;
+    const ro = !this.isEditor;
+    const label = (key: string, kind: string) =>
+      key === RACK_HOTTEST ? this.t("rack_card_hottest") : key === RACK_ONLINE ? this.t("rack_card_online") : kind === "other" ? entityName(hass, key) : this.t(`rack_kind_${kind}` as I18nKey);
+    return html`<details class="fp3d-rack-elev fp3d-rack-card-pick">
+      <summary>${this.t("rack_card_values", { n: picked.length, max: RACK_CARD_MAX })}</summary>
+      <p class="fp3d-sub">${this.t("rack_card_values_hint")}</p>
+      ${groups.map(
+        (g) => html`<fieldset class="fp3d-rack-card-group">
+          <legend>${g.name ?? this.t("rack_card_rack")}</legend>
+          ${g.options.map((o) => {
+            const on = picked.includes(o.key);
+            return html`<label class="fp3d-check"
+              ><input type="checkbox" .checked=${on} ?disabled=${ro || (!on && full)} @change=${() => this.toggleRackCardMetric(o.key)} />
+              <span>${label(o.key, o.kind)}${o.key.startsWith("@") ? nothing : html` <small>${o.kind === "other" ? "" : entityName(hass, o.key)} · ${stateText(hass, hass.states[o.key])}</small>`}</span></label
+            >`;
+          })}
+        </fieldset>`,
+      )}
+      ${f.rack?.card && !ro ? html`<button class="fp3d-btn" @click=${() => this.resetRackCard()}>${this.t("rack_card_default")}</button>` : nothing}
+    </details>`;
+  }
+
   /** The sheet changed the rack's gear: one undo step on the placed rack. */
   private onRackChange(e: Event): void {
     const id = this._rackSheet;
@@ -12256,6 +12320,7 @@ export class Fp3dEditor extends LitElement {
         : nothing}
       ${this.rackOf(f) ? this.renderRackFrameForm(f) : nothing}
       ${this.renderRackElevation(f)}
+      ${this.renderRackCardForm(f)}
       ${!admin && this.rackOf(f) ? html`<div class="fp3d-actions"><button class="fp3d-btn" @click=${() => this.openRackSheet()}>▤ ${this.t("rack_edit")}</button></div>` : nothing}
       ${admin
         ? html`<div class="fp3d-actions">
@@ -15533,6 +15598,24 @@ export class Fp3dEditor extends LitElement {
         font-size: 13px;
         color: var(--fp3d-muted, #9aa6ba);
         margin: 6px 0;
+      }
+      /* the rack card's values (#120): one group per device, the value's kind, its entity and state */
+      .fp3d-rack-card-group {
+        border: 0;
+        margin: 4px 0 8px;
+        padding: 0;
+        display: grid;
+        gap: 4px;
+      }
+      .fp3d-rack-card-group legend {
+        padding: 0;
+        margin-bottom: 2px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--fp3d-text, #e6edf7);
+      }
+      .fp3d-rack-card-group small {
+        opacity: 0.75;
       }
       .fp3d-rack-elev-box {
         max-height: 60vh;

@@ -163,3 +163,59 @@ test("the sheet links gear to HA: devices and entities to pick, a device's statu
   // the same lists while nothing in HA changes (no new arrays per render)
   assert.equal(ed.rackSheetProps().linker.entities, linker.entities);
 });
+
+test("the rack card's values: the default set ticked, editors add and remove values (one undo step each), reset to default (#120)", async () => {
+  const ed = await editor();
+  const st = (entity_id: string, state: string, attributes: Record<string, unknown> = {}) => ({ entity_id, state, attributes });
+  ed.hass = {
+    ...ed.hass,
+    states: {
+      ...ed.hass.states,
+      "binary_sensor.switch_status": st("binary_sensor.switch_status", "on", { device_class: "connectivity" }),
+      "sensor.switch_temperature": st("sensor.switch_temperature", "40", { device_class: "temperature", unit_of_measurement: "°C" }),
+      "sensor.switch_cpu_utilization": st("sensor.switch_cpu_utilization", "7", { unit_of_measurement: "%" }),
+    },
+  };
+  const placed = () => ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "rack");
+  ed.selectItem("furniture", "rack");
+  // nothing linked yet: no card section
+  ed.onRackChange(new CustomEvent("rack-change", { detail: { slots: [{ id: "s1", type: SWITCH, u: 3 }] } }));
+  ed._rackSheet = null;
+  assert.doesNotMatch(flat(ed.renderFurnitureForm(ed.furnitureItem)), /fp3d-rack-card-pick/);
+  ed._rackSheet = "rack";
+  ed.onRackChange(new CustomEvent("rack-change", { detail: { slots: [{ id: "s1", type: SWITCH, u: 3, name: "Core switch", entity: "binary_sensor.switch_status", links: ["sensor.switch_temperature", "sensor.switch_cpu_utilization"] }] } }));
+  ed._rackSheet = null;
+  const form = flat(ed.renderFurnitureForm(ed.furnitureItem));
+  assert.match(form, /fp3d-rack-card-pick/);
+  assert.match(form, /Card values · 2\/8/);
+  assert.match(form, /Core switch/);
+  // the default set is ticked: devices online and the hottest; the CPU is offered, not ticked
+  assert.deepEqual(ed.rackCardPicked(placed()), ["@hottest", "@online"]);
+  ed.toggleRackCardMetric("sensor.switch_cpu_utilization");
+  assert.deepEqual(placed().rack.card, { metrics: ["@hottest", "@online", "sensor.switch_cpu_utilization"] });
+  ed.toggleRackCardMetric("@hottest");
+  assert.deepEqual(placed().rack.card.metrics, ["@online", "sensor.switch_cpu_utilization"]);
+  // the gear's changes keep the pick
+  ed._rackSheet = "rack";
+  ed.onRackChange(new CustomEvent("rack-change", { detail: { slots: placed().rack.slots } }));
+  ed._rackSheet = null;
+  assert.deepEqual(placed().rack.card.metrics, ["@online", "sensor.switch_cpu_utilization"]);
+  // undo: the sheet's step, then the untick
+  ed.undo();
+  ed.undo();
+  assert.deepEqual(placed().rack.card.metrics, ["@hottest", "@online", "sensor.switch_cpu_utilization"]);
+  ed.resetRackCard();
+  assert.equal(placed().rack.card, undefined);
+  assert.deepEqual(ed.rackCardPicked(placed()), ["@hottest", "@online"]);
+});
+
+test("someone who can't edit sees the rack card's values but can't change them (#120)", async () => {
+  const ed = await editor();
+  ed.hass = { ...ed.hass, states: { ...ed.hass.states, "sensor.switch_temperature": { entity_id: "sensor.switch_temperature", state: "40", attributes: { device_class: "temperature" } } } };
+  ed.selectItem("furniture", "rack");
+  ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "rack").rack = { slots: [{ id: "s1", type: SWITCH, u: 3, links: ["sensor.switch_temperature"] }] };
+  ed.canEdit = false;
+  assert.match(flat(ed.renderFurnitureForm(ed.furnitureItem)), /fp3d-rack-card-pick[\s\S]*disabled/);
+  ed.toggleRackCardMetric("@hottest");
+  assert.equal(ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "rack").rack.card, undefined);
+});

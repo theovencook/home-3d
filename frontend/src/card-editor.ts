@@ -37,6 +37,7 @@ const DEFAULTS: Partial<CardConfig> = {
   motion_trail: false,
   time_travel: false,
   household_card: true,
+  rack_cards: true,
   weather: true,
   idle_return: 0,
   controls_hidden: false,
@@ -127,7 +128,7 @@ export class Floorplan3dCardEditor extends LitElement {
     </label>`;
   }
 
-  private toggle(key: "explode" | "roof_fade" | "roof" | "camera_wall" | "energy" | "room_panel" | "stats" | "fullscreen_button" | "room_names" | "alerts" | "alert_jump" | "director" | "voice" | "scenes" | "idle_orbit" | "motion_trail" | "time_travel" | "household_card" | "weather", label: I18nKey, hint?: I18nKey) {
+  private toggle(key: "explode" | "roof_fade" | "roof" | "camera_wall" | "energy" | "room_panel" | "stats" | "fullscreen_button" | "room_names" | "alerts" | "alert_jump" | "director" | "voice" | "scenes" | "idle_orbit" | "motion_trail" | "time_travel" | "household_card" | "rack_cards" | "weather", label: I18nKey, hint?: I18nKey) {
     const on = this.value[key];
     return html`<label class="toggle">
       <input type="checkbox" .checked=${on} @change=${(e: Event) => this.set(key, (e.target as HTMLInputElement).checked)} />
@@ -284,6 +285,7 @@ export class Floorplan3dCardEditor extends LitElement {
       ${this.toggle("motion_trail", "card_motion_trail", "card_motion_trail_hint")} ${this.toggle("camera_wall", "card_camera_wall", "card_camera_wall_hint")}
       ${this.toggle("time_travel", "card_time_travel", "card_time_travel_hint")}
       ${!UNRELEASED.includes("household") || labOn() ? this.toggle("household_card", "card_household", "card_household_hint") : nothing}
+      ${this.toggle("rack_cards", "card_rack_cards", "card_rack_cards_hint")}
       ${this.toggle("weather", "card_weather", "card_weather_hint")}
       ${v.weather !== false
         ? html`<div class="grid">

@@ -64,7 +64,9 @@ function waterText(hass: HomeAssistant, v: number, unit: string): string {
 }
 
 interface HoloCard {
-  kind: "main" | "plant" | "device" | "media" | "car" | "module" | "bin";
+  kind: "main" | "plant" | "device" | "media" | "car" | "module" | "bin" | "rack";
+  /** Racks (#120): the rack's chosen live values and its gear's names (slot id -> name). */
+  rack?: { id: string; values: RackCardValue[]; names: Record<string, string> };
   /**
    * Haushalt Pro: the tag of a waste bin that goes out – its colour and when ("Tomorrow") – or of bins standing
    * together (one line each, in pickup order), a mailbox with post or a thirsty plant (a round symbol from afar).
@@ -86,6 +88,9 @@ interface HoloCard {
   /** A battery of this plant (the nearest one on its floor). */
   battery: { soc: number | null; w: number | null } | null;
 }
+
+/** How far back a rack card's sparklines reach (#120). */
+const RACK_SPARK_MS = 6 * 3600000;
 
 /** How long a detection pin stays after its sensor dropped back. */
 const DETECT_LINGER_MS = 120000;
@@ -138,6 +143,7 @@ import type { ViewerSurface } from "../viewer-surface.ts";
 import { loadFun } from "../load-fun.ts";
 import { detectionKind, scaleGlow, buildMarkers, cameraMotionSensors, openMoreInfo, setCameraSensors, stateText, toggleEntity } from "../markers.ts";
 import { RACK_STATUS_COLOURS, rackLedStates, slotEntities, slotStatus } from "../rack-links.ts";
+import { fetchRackSpark, RACK_HOTTEST, RACK_ONLINE, rackCardValues, rackSpark, type RackCardValue } from "../rack-card.ts";
 import { activeSections, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
 import { centroid, furnitureFootprint, gangEntities, gangsOf, GANG_TYPES, TECH_TYPES, isLamp, setTerrain, poolFloorY, LAMP_MODEL, LIFT_SPOTS, outdoorGround, pointInPolygon, poolWaterY, spotDepth, surfaceHeight, zonesOf, type Building, type Floor, type Furniture, type Pet, type StartView } from "../model.ts";
 
@@ -329,6 +335,8 @@ export class Fp3dView3d extends LitElement {
     _binInfo: { state: true },
     _gangMenu: { state: true },
     householdCard: { attribute: false },
+    rackCards: { attribute: false },
+    _rackRows: { state: true },
     _sceneFired: { state: true },
     replay: { attribute: false },
     _info: { state: true },
@@ -542,6 +550,14 @@ export class Fp3dView3d extends LitElement {
   private binInfoTimer: ReturnType<typeof setTimeout> | undefined;
   /** The glass card "Today in the household" (Haushalt Pro; the dashboard card can switch it off). */
   declare householdCard: boolean;
+  /** Racks (#120): a glass card over every rack with linked gear (the dashboard card can switch them off). */
+  declare rackCards: boolean;
+  /** Rack cards unfolded by the user, by rack furniture id (folded they show a few values). */
+  private rackOpen = new Set<string>();
+  /** The unfolded rack cards' sparklines: the recorder's five-minute means of the last hours, by entity. */
+  private declare _rackRows: Record<string, StatRow[]> | null;
+  private rackSparkKey = "";
+  private rackSparkAt = 0;
   private alertSrc: AlertSources | null = null;
   private alertTimer: ReturnType<typeof setInterval> | undefined;
   /** When the next room motion lit goes dark again (#10). */
@@ -780,6 +796,8 @@ export class Fp3dView3d extends LitElement {
     this._binInfo = null;
     this._gangMenu = null;
     this.householdCard = true;
+    this.rackCards = true;
+    this._rackRows = null;
     this.scenes = true;
     this._sceneFired = null;
     this.dimmed = false;
@@ -1561,6 +1579,11 @@ export class Fp3dView3d extends LitElement {
         }
       }
     }
+    // racks (#120): a glass card over every rack with linked gear, its chosen values
+    for (const { anchor, card } of this.rackHolos(hass, b)) {
+      anchors.push(anchor);
+      cards.push(card);
+    }
     // Pool Pro: living water (light colour, moving with the filter pump, warm shimmer while heating, the cover)
     // and a glass card over every pool with links
     // the modules' water (Pool Pro: living water, the cover) and their glass cards
@@ -1622,6 +1645,7 @@ export class Fp3dView3d extends LitElement {
     const wireAnchors = wires.map((w) => ({ p: [w.x, b.floors.find((f) => f.id === w.floorId)!.elevation + 0.03, w.z] as [number, number, number], n: [0, 1, 0] as [number, number, number], floorId: w.floorId, size: 1, roof: false, views: "all" as const, plan: true }));
     v.setAnchors([...anchors.filter((_, i) => keep[i]), ...wireAnchors]);
     if (JSON.stringify(shownCards) !== JSON.stringify(this._holos)) this._holos = shownCards;
+    this.watchRackSpark();
     // the modules live with their production (at night, and without Pro, they rest)
     v.setSolarLevels(powers && !this.dimmed ? fieldLevels(b, powers) : new Map());
     // the energy cables (Energie Pro) and the pool's pipes share the viewer's flow layer
@@ -2208,15 +2232,16 @@ export class Fp3dView3d extends LitElement {
   private renderHologram() {
     const e = this._energy;
     // Haushalt Pro's tags (bins, post, a thirsty plant) are no energy holograms: they show on their own
-    const tagsOnly = () => this._holos.map((card, i) => (card.kind === "bin" ? this.renderBinCard(card, i) : nothing));
+    // so are the rack cards (#120): they have their own switch in the dashboard card
+    const tagsOnly = () => this._holos.map((card, i) => (card.kind === "bin" ? this.renderBinCard(card, i) : card.kind === "rack" ? this.renderRackCard(card, i) : nothing));
     // a module with a card or a label of its own needs no Pro add-on for them
-    const fromModule = this._holos.some((c) => c.kind === "module" || c.tag);
+    const fromModule = this._holos.some((c) => c.kind === "module" || c.tag || c.kind === "rack");
     // the editor keeps the energy bar off but asks for the holograms in its energy tool
     if (!(fromModule || hasFeature("energy_pro") || hasFeature("sound") || hasFeature("auto_pro") || hasFeature("pool") || hasFeature("household")) || (this.roomId && !(this.building?.settings.roof.hologram ?? DEFAULT_HOLOGRAM).device_room) || !(this.showEnergy || this.holograms) || !this.holoVisible()) return hasFeature("household") || fromModule ? tagsOnly() : nothing;
     // the plants' cards belong to the house view – with a single floor that floor is the house view (#255)
     const house = this.floorId === null || (this.building?.floors.length ?? 0) <= 1;
     const plants = !!e && (e.solar !== null || e.grid !== null || e.battery !== null) && house;
-    return this._holos.map((card, i) => (card.kind === "module" ? this.renderModuleCard(card, i) : card.kind === "bin" ? this.renderBinCard(card, i) : card.kind === "car" ? this.renderCarCard(card, i) : card.kind === "media" ? this.renderMediaCard(card, i) : card.kind === "device" ? this.renderDeviceCard(card, i) : plants ? this.renderHoloCard(card, i, e!) : nothing));
+    return this._holos.map((card, i) => (card.kind === "module" ? this.renderModuleCard(card, i) : card.kind === "bin" ? this.renderBinCard(card, i) : card.kind === "rack" ? this.renderRackCard(card, i) : card.kind === "car" ? this.renderCarCard(card, i) : card.kind === "media" ? this.renderMediaCard(card, i) : card.kind === "device" ? this.renderDeviceCard(card, i) : plants ? this.renderHoloCard(card, i, e!) : nothing));
   }
 
   /** Haushalt Pro: a waste bin's small hologram – when it goes out, in the bin's colour. */
@@ -2457,6 +2482,126 @@ export class Fp3dView3d extends LitElement {
           : nothing}
       </div>
     </div>`;
+  }
+
+  /** Racks (#120): the card of every rack with linked gear and something to show, hung over the rack's top. */
+  private rackHolos(hass: HomeAssistant, b: Building): { anchor: Parameters<FloorplanViewer["setAnchors"]>[0][number]; card: HoloCard }[] {
+    const out: { anchor: Parameters<FloorplanViewer["setAnchors"]>[0][number]; card: HoloCard }[] = [];
+    if (!this.rackCards) return out;
+    const size = (b.settings.roof.hologram ?? DEFAULT_HOLOGRAM).size * 0.7;
+    for (const floor of b.floors)
+      for (const f of floor.furniture) {
+        const slots = f.rack?.slots;
+        if (!slots?.length) continue;
+        const values = rackCardValues(hass, slots, f.rack?.card?.metrics);
+        if (!values.length) continue;
+        const top = floor.elevation + mountBase(floor, f) + f.h;
+        const names = Object.fromEntries(slots.map((s) => [s.id, s.name || furnitureName(hass, s.type)]));
+        out.push({
+          anchor: { p: [f.x, top + 0.15, f.z], n: [0, 1, 0], floorId: floor.id, size, roof: false, views: "all", room: roomAt(floor, f.x, f.z) },
+          card: { kind: "rack", name: f.name || furnitureName(hass, f.type), w: null, dayIds: [], battery: null, rack: { id: f.id, values, names } },
+        });
+      }
+    return out;
+  }
+
+  /** Folds or unfolds a rack card; unfolded it shows every value with its sparkline (fetched now). */
+  private toggleRackCard(id: string): void {
+    if (!this.rackOpen.delete(id)) this.rackOpen.add(id);
+    this.watchRackSpark();
+    this.requestUpdate();
+  }
+
+  /** The statistics the unfolded rack cards' sparklines need. */
+  private rackSparkIds(): string[] {
+    const ids = this._holos.filter((c) => c.rack && this.rackOpen.has(c.rack.id)).flatMap((c) => c.rack!.values.flatMap((v) => v.ids));
+    return [...new Set(ids)];
+  }
+
+  /**
+   * The rack cards' sparklines: fetched when a card unfolds and then at most every five minutes (on a Home Assistant
+   * update), never per frame; time travel reads the replayed statistics.
+   */
+  private watchRackSpark(): void {
+    const ids = this.rackSparkIds();
+    const r = this.replay;
+    const key = r ? `tt|${ids.join(",")}|${Math.floor(r.t / 300000)}` : ids.join(",");
+    if (key === this.rackSparkKey && (r || Date.now() - this.rackSparkAt < 300000)) return;
+    this.rackSparkKey = key;
+    if (!ids.length) {
+      this._rackRows = null;
+      return;
+    }
+    if (r) {
+      this._rackRows = r.stats(ids, r.t - RACK_SPARK_MS, r.t + 1);
+      return;
+    }
+    if (!this.hass || globalThis.document?.hidden) return;
+    this.rackSparkAt = Date.now();
+    void fetchRackSpark(this.hass, ids, RACK_SPARK_MS).then((rows) => {
+      if (this.rackSparkKey === key) this._rackRows = rows;
+    });
+  }
+
+  /** A rack card value as text: "2/3" online, a runtime in minutes or hours, else the number with its unit. */
+  private rackValueText(v: RackCardValue): string {
+    const hass = this.hass;
+    if (v.key === RACK_ONLINE) return v.text;
+    if (v.value === null) return v.key === RACK_HOTTEST ? "–" : stateText(hass, hass.states[v.key]);
+    if (v.kind === "runtime" && /^(s|min|h)$/.test(v.unit)) {
+      const min = v.value * (v.unit === "s" ? 1 / 60 : v.unit === "h" ? 60 : 1);
+      return min < 120 ? `${Math.round(min)} min` : `${formatNumber(hass, min / 60, 1)} h`;
+    }
+    const digits = Number.isInteger(v.value) ? 0 : Math.abs(v.value) < 10 ? 2 : 1;
+    return `${formatNumber(hass, v.value, digits)}${v.unit ? ` ${v.unit}` : ""}`;
+  }
+
+  /** A rack card value's name: what it is ("Load", "Hottest") or, for anything else, the entity's own name. */
+  private rackValueLabel(v: RackCardValue): string {
+    const hass = this.hass;
+    if (v.key === RACK_HOTTEST) return translate(hass, "rack_card_hottest");
+    if (v.key === RACK_ONLINE) return translate(hass, "rack_card_online");
+    return v.kind === "other" ? entityName(hass, v.key) : translate(hass, `rack_kind_${v.kind}` as I18nKey);
+  }
+
+  /**
+   * Racks (#120): a rack's glass card, in the energy cards' look. Folded it shows the devices online and the first few
+   * values; a tap unfolds every value with the device it comes from and its sparkline (the last hours).
+   */
+  private renderRackCard(card: HoloCard, index: number) {
+    const r = card.rack!;
+    const open = this.rackOpen.has(r.id);
+    const online = r.values.find((v) => v.key === RACK_ONLINE);
+    const allOn = !!online && online.value === online.of;
+    const values = r.values.filter((v) => v !== online);
+    const toggle = () => this.toggleRackCard(r.id);
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      toggle();
+    };
+    const spark = (v: RackCardValue) => {
+      const series = rackSpark(this._rackRows, v);
+      return series.length > 1 ? sparkLine(series, v.kind === "temperature" ? "#ffb86b" : v.kind === "battery" ? "#4dff80" : "#7fe8ff") : nothing;
+    };
+    return html`<svg class="fp3d-holo-link" data-holo=${index} hidden aria-hidden="true"><line x1="0" y1="0" x2="0" y2="0" /><circle cx="0" cy="0" r="3" /></svg>
+      <div class="fp3d-holo fp3d-holo-dev fp3d-holo-rack ${open ? "" : "fp3d-holo-min"} ${this._low ? "fp3d-holo-plain" : ""}" data-holo=${index} hidden role="button" tabindex="0" aria-expanded=${open ? "true" : "false"} aria-label=${card.name} @click=${toggle} @keydown=${key}>
+        <div class="fp3d-holo-sheen"></div>
+        <div class="fp3d-holo-scan"></div>
+        <div class="fp3d-holo-body">
+          <div class="fp3d-holo-head"><span>▤ ${card.name}</span>${online ? html`<span class="fp3d-holo-live" style="color:${allOn ? RACK_STATUS_COLOURS.online : RACK_STATUS_COLOURS.warning}" title=${this.rackValueLabel(online)}>● ${online.text}</span>` : nothing}</div>
+          ${open
+            ? html`<div class="fp3d-rack-card-grid">
+                ${values.map(
+                  (v) => html`<div class="fp3d-rack-card-row">
+                    <span>${this.rackValueLabel(v)}${v.slot ? html`<small>${r.names[v.slot] ?? ""}</small>` : nothing}</span><b>${this.rackValueText(v)}</b>
+                    ${spark(v)}
+                  </div>`,
+                )}
+              </div>`
+            : html`<div class="fp3d-holo-cells">${values.slice(0, 4).map((v) => html`<div><small>${this.rackValueLabel(v)}</small><b>${this.rackValueText(v)}</b></div>`)}</div>`}
+        </div>
+      </div>`;
   }
 
   /** A device's card: its power now, today's consumption and the day curve from its sensor's statistics. */
@@ -7948,6 +8093,54 @@ export class Fp3dView3d extends LitElement {
       .fp3d-holo-dev {
         width: 184px;
         padding: 10px 12px 9px;
+      }
+      /* racks (#120): one row per value (name and device left, value right, the sparkline below) */
+      .fp3d-holo-rack {
+        cursor: pointer;
+      }
+      .fp3d-holo-rack:not(.fp3d-holo-min) {
+        width: 268px;
+      }
+      .fp3d-rack-card-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        margin-top: 7px;
+      }
+      .fp3d-rack-card-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: baseline;
+        column-gap: 4px;
+        min-width: 0;
+        padding: 3px 5px 2px;
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(160, 240, 255, 0.16);
+        font-size: 11px;
+        color: #aee9ff;
+      }
+      .fp3d-rack-card-row span {
+        display: grid;
+        min-width: 0;
+      }
+      .fp3d-rack-card-row small {
+        font-size: 10px;
+        opacity: 0.7;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .fp3d-rack-card-row b {
+        color: #fff;
+        font-size: 12.5px;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .fp3d-rack-card-row .fp3d-holo-spark {
+        grid-column: 1 / -1;
+        height: 16px;
+        margin-top: 2px;
       }
       /* tablet level: no blur and no sheen, the glass is painted */
       .fp3d-holo-plain {
