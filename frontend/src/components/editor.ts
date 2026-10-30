@@ -1,6 +1,6 @@
 // 2D editor: floors, rooms (rectangles and free shapes), snapping, undo, background template.
 
-import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
+import { css, html, LitElement, nothing, svg, type PropertyDeclaration, type PropertyValues, type TemplateResult } from "lit";
 import { linesField } from "./lines-field.ts";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { ref } from "lit/directives/ref.js";
@@ -53,8 +53,14 @@ import { type CarLinks, type Background, OUTDOOR_TOP, sidelightLayout, DEFAULT_W
 } from "../model.ts";
 import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { edgeReach, generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
+import { edgeStartCorner, openingTap } from "../geometry/openings.ts";
 import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } from "../i18n.ts";
 import { ISSUES_URL } from "./extensions.ts";
+import { beforeSelectionChange, deepActive, releaseTyping, selectionMoved, takesTyping } from "../focus-release.ts";
+import { escapeStep } from "../editor-keys.ts";
+import { furniturePanel, type FurnitureField } from "../item-panel.ts";
+import { TypedCommit } from "../typed-commit.ts";
+import { typedValue } from "./typed-value.ts";
 import { iconPath } from "../icons.ts";
 import { moduleAreaFields, moduleFurnitureFields, moduleHelp, moduleRoomFields, modulePipeRules, syncModules, type ModuleField, type ModuleHost, type PipeRules } from "../modules.ts";
 import { pipePlanner } from "../pipe-planner.ts";
@@ -440,6 +446,8 @@ export class Fp3dEditor extends LitElement {
     _wallView3d: { state: true },
     _ctx: { state: true },
     _fixedHint: { state: true },
+    _openingNote: { state: true },
+    _openingHover: { state: true },
     _phoneHint: { state: true },
     _floorMenu: { state: true },
     _openingPreset: { state: true },
@@ -643,6 +651,12 @@ export class Fp3dEditor extends LitElement {
   private declare _ctx: { x: number; y: number; kind: FixKind; id: string } | null;
   /** A drag on a fixed item was turned into panning: the hint line says why. */
   private declare _fixedHint: boolean;
+  /** Doors & windows mode: why the last tap added nothing (it would overlap another opening), shown in the hint bar (#62). */
+  private declare _openingNote: string | null;
+  /** Doors & windows mode: what a tap where the mouse rests would do (#62). */
+  private declare _openingHover: string | null;
+  /** The opening panel's height before its kind was changed, kept as its minimum so nothing jumps (#63). */
+  private openingFormMin: { id: string; h: number } | null = null;
   /** The one-time "draw on a PC or tablet" hint on phones (shown by CSS on narrow screens only). */
   private declare _phoneHint: boolean;
   /** A one-time invitation for admins to switch on the usage reports (while they are off and it was not closed). */
@@ -728,6 +742,8 @@ export class Fp3dEditor extends LitElement {
     this._cableId = null;
     this._expanded = new Set();
     this._notice = null;
+    this._openingNote = null;
+    this._openingHover = null;
     this._history = null;
     this._spots = null;
     this._outdoorId = null;
@@ -865,6 +881,16 @@ export class Fp3dEditor extends LitElement {
     window.removeEventListener("keydown", this.onKey);
     window.removeEventListener("keyup", this.onShift);
     this.resizeObserver?.disconnect();
+  }
+
+  /**
+   * Every property set passes here, straight after the new value is in. A new plan selection releases the box with
+   * the cursor (#56): its shortcuts work again, the next search doesn't rename the item, and what was typed is saved
+   * on the item it was typed for.
+   */
+  requestUpdate(name?: PropertyKey, oldValue?: unknown, ...rest: [PropertyDeclaration?, boolean?, unknown?]): void {
+    if (typeof name === "string") beforeSelectionChange(this, name, oldValue, this.renderRoot as ShadowRoot | undefined);
+    super.requestUpdate(name, oldValue, ...rest);
   }
 
   protected willUpdate(changed: PropertyValues): void {
@@ -1240,7 +1266,9 @@ export class Fp3dEditor extends LitElement {
     }
   }
 
-  protected updated(): void {
+  protected updated(changed: PropertyValues): void {
+    // another item (room, door, floor …) opens its panel at the top: the fields are where they always are (#71)
+    if (selectionMoved(changed, this)) for (const side of this.renderRoot.querySelectorAll<HTMLElement>(".fp3d-side")) side.scrollTop = 0;
     // the settings dialog shows its section unfolded (its summary is hidden there)
     if (this._settingsDialog) for (const d of this.renderRoot.querySelectorAll<HTMLDetailsElement>(".fp3d-dialog details")) d.open = true;
     // the item preview is placed in window coordinates; with the 3D view beside the plan an ancestor becomes its
@@ -1748,7 +1776,11 @@ export class Fp3dEditor extends LitElement {
       return;
     }
     if (this._tool === "opening") {
-      if (!this.placeOpening(this._openingPreset, local)) this.drag = { kind: "pan", last: local };
+      this._openingNote = null;
+      // a press on an existing opening selects it (and drags it along its wall) before anything is added (#62)
+      const openingEl = target.closest("[data-opening]");
+      if (openingEl) this.pressOpening(openingEl.getAttribute("data-opening")!, local);
+      else if (!this.placeOpening(this._openingPreset, local)) this.drag = { kind: "pan", last: local };
       return;
     }
     if (this.isEditor && (this._tool === "select" || this._tool === "furniture") && (e.shiftKey || this._multiMode)) {
@@ -1773,9 +1805,7 @@ export class Fp3dEditor extends LitElement {
     }
     const openingEl = target.closest("[data-opening]");
     if (openingEl) {
-      const id = openingEl.getAttribute("data-opening")!;
-      this.selectItem("opening", id);
-      this.drag = this.isEditor ? { kind: "opening", id, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+      this.pressOpening(openingEl.getAttribute("data-opening")!, local);
       return;
     }
     const resizeEl = target.closest("[data-resize]");
@@ -1938,6 +1968,7 @@ export class Fp3dEditor extends LitElement {
     const drag = this.drag;
     if (!drag) {
       if (this._tool !== "select" && this._tool !== "furniture" && this.floor) this._cursor = this.snap(world, undefined, e.altKey);
+      if (this._tool === "opening" && e.pointerType !== "touch") this.hoverOpening(e.target as Element, local);
       return;
     }
     switch (drag.kind) {
@@ -2912,7 +2943,11 @@ export class Fp3dEditor extends LitElement {
   private readonly onKey = (e: KeyboardEvent) => {
     this.shiftHeld = e.shiftKey;
     const path = e.composedPath();
-    if (path.some((el) => el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) return;
+    if (path.some((el) => el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
+      // Escape in one of the editor's boxes lets go of it (what was typed is kept): the shortcuts work again (#70)
+      if (e.key === "Escape" && path.includes(this)) this.escape();
+      return;
+    }
     if (!this.isConnected || !this.offsetParent) return;
     const mod = e.ctrlKey || e.metaKey;
     // the wall view has its own keys: Delete there must never reach what is chosen in the plan behind it
@@ -2956,24 +2991,35 @@ export class Fp3dEditor extends LitElement {
     } else if (e.key === "Enter" && this.drawingPoints) {
       this.closeDraft();
     } else if (e.key === "Escape") {
-      if (this._ctx) {
-        this._ctx = null;
-        return;
-      }
-      if (this._pipeDraft) {
-        this._pipeDraft = null;
-        return;
-      }
-      if (this._pipeMode) {
-        this._pipeMode = false;
-        return;
-      }
-      if (this._draft.length) this._draft = [];
-      else if (this._tool !== "select") this._tool = "select";
+      this.escape();
+    }
+  };
+
+  /** One step back per Escape (#70): the box with the cursor, a menu, a pipe or outline, the item, the tool, the room. */
+  private escape(): void {
+    const step = escapeStep({
+      typing: takesTyping(deepActive(this.renderRoot as ShadowRoot)),
+      menu: !!this._ctx,
+      pipeDraft: !!this._pipeDraft,
+      pipeMode: this._pipeMode,
+      drawing: this._draft.length > 0,
+      item: !!(this._furnitureId || this._openingId || this._deviceId || this._outdoorId || this._wallId),
+      tool: this._tool,
+      room: !!this._roomId,
+    });
+    if (step === "release") releaseTyping(this.renderRoot as ShadowRoot);
+    else if (step === "close_menu") this._ctx = null;
+    else if (step === "cancel_pipe") this._pipeDraft = null;
+    else if (step === "end_pipe_mode") this._pipeMode = false;
+    else {
+      if (step === "clear_draft") this._draft = [];
+      // back to the library (furnishing) or to the item's room, the tool stays
+      else if (step === "deselect_item") this.selectItem("room", this._roomId);
+      else if (step === "select_tool") this._tool = "select";
       else this.selectItem("room", null);
       this._cursor = null;
     }
-  };
+  }
 
   // ------------------------------------------------------------------ actions
 
@@ -4649,10 +4695,23 @@ export class Fp3dEditor extends LitElement {
     return round(Math.min(len, len + after - half, Math.max(0, half - before, offset)));
   }
 
-  /** Add a door or window on the room edge nearest to a screen point. */
-  private placeOpening(preset: OpeningPreset, screen: [number, number]): boolean {
+  /** A press on an opening: select it, and (for editors) start dragging it along its wall. */
+  private pressOpening(id: string, local: [number, number]): void {
+    this.selectItem("opening", id);
+    this.drag = this.isEditor ? { kind: "opening", id, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+  }
+
+  /**
+   * What a tap at a screen point does in Doors & windows mode (#62): add a new opening of `preset` on the nearest
+   * wall, select the existing one it lands on, or nothing because the new one would overlap another (`blocked`).
+   * Null: no wall near enough. Nothing is changed here.
+   */
+  private planOpening(
+    preset: OpeningPreset,
+    screen: [number, number],
+  ): { add: Opening } | { select: Opening } | { blocked: Opening } | null {
     const floor = this.floor;
-    if (!floor || !this.isEditor) return false;
+    if (!floor || !this.isEditor) return null;
     let best: { room: Room; edge: number; d: number; wall?: string; roomId?: string } | null = null;
     for (const w of floor.walls ?? []) {
       const host = openingHost({ room_id: "", edge: 0, wall: w.id }, floor.rooms, floor.walls ?? []);
@@ -4679,7 +4738,7 @@ export class Fp3dEditor extends LitElement {
         if (d < SNAP_PX * 2.2 && (!best || score < best.d)) best = { room, edge: i, d: score };
       }
     }
-    if (!best) return false;
+    if (!best) return null;
     const { room, edge, wall } = best;
     const a = room.points[edge];
     const b = room.points[(edge + 1) % room.points.length];
@@ -4687,16 +4746,24 @@ export class Fp3dEditor extends LitElement {
     const defaults = OPENING_PRESETS[preset];
     const type: OpeningType = defaults.type;
     const width = round(Math.min(defaults.width, Math.max(0.3, len - 0.1)));
+    const tap = this.toWorld(...screen);
+    const offset = this.offsetOnEdge(room, edge, tap, width, false);
+    // never on top of another door or window (#62): a tap inside one selects it, a tap beside it says why not
+    const span: [Vec2, Vec2] = [pointOnRoomEdge(room, edge, offset - width / 2), pointOnRoomEdge(room, edge, offset + width / 2)];
+    const clash = openingTap(tap, span, floor.openings, floor.rooms, floor.walls ?? []);
+    if (clash) return clash;
     const opening: Opening = {
       id: uid("opening"),
       room_id: best.roomId ?? room.id,
       edge,
       ...(wall ? { wall } : {}),
-      offset: this.offsetOnEdge(room, edge, this.toWorld(...screen), width, false),
+      offset,
       width,
       type,
       sill: defaults.sill,
       height: defaults.height,
+      // a front door or glass wall keeps its look; a plain door stays automatic (front style in an outer wall)
+      ...("style" in defaults && preset !== "door" ? { style: defaults.style } : {}),
       hinge: "left",
       leaves: defaults.leaves,
       swing: "in",
@@ -4705,11 +4772,56 @@ export class Fp3dEditor extends LitElement {
       contact2: null,
       tilt: null,
     };
-    this.change((_, f) => f.openings.push(opening));
-    // the tool stays: six doors and windows in a row without going back to the menu (Esc or "Select" ends it)
-    this.selectItem("opening", opening.id);
+    return { add: opening };
+  }
+
+  /** Doors & windows mode with a mouse: keep the hint bar saying what a tap at the pointer would do (#62). */
+  private hoverOpening(target: Element, local: [number, number]): void {
+    const id = target?.closest?.("[data-opening]")?.getAttribute("data-opening");
+    const on = id ? this.floor?.openings.find((o) => o.id === id) : undefined;
+    const plan = on ? { select: on } : this.planOpening(this._openingPreset, local);
+    const text = plan ? this.openingHint(plan) : null;
+    if (text !== this._openingHover) this._openingHover = text;
+  }
+
+  /** A tap in Doors & windows mode: add a door or window on the nearest wall, or select the one tapped (#62). */
+  private placeOpening(preset: OpeningPreset, screen: [number, number]): boolean {
+    const plan = this.planOpening(preset, screen);
+    if (!plan) return false;
+    if ("select" in plan) this.pressOpening(plan.select.id, screen);
+    else if ("blocked" in plan) this._openingNote = this.openingHint(plan);
+    else {
+      const opening = plan.add;
+      this.change((_, f) => f.openings.push(opening));
+      // the tool stays: six doors and windows in a row without going back to the menu (Esc or "Select" ends it)
+      this.selectItem("opening", opening.id);
+    }
     return true;
   }
+
+  /** The hint bar under the plan: what the current tool does, or what a tap will do right now. */
+  private hintText(): string {
+    const floor = this.floor;
+    if (!floor) return this.t("hint_empty");
+    if (this._wallPick) return this.t("hint_wall_pick");
+    if (this._fixedHint) return this.t("fixed_drag_hint");
+    if (this._tool === "outdoor" && this._outdoorFree) return this.t("hint_outdoor_free");
+    if (this._tool === "pool" && this._jointPlace) return this.t("hint_joint_place");
+    if (this._tool === "pool" && this._pipeMode) return this.t(!this.poolArea ? "hint_pipe_pool" : this._pipeDraft ? "hint_pipe_next" : "hint_pipe_start");
+    if (this._tool === "pool" && released("pool")) return this.t("hint_pool_tech");
+    // the kind the next tap adds is always named: it is never inherited silently (#63)
+    if (this._tool === "opening") return this._openingNote ?? this._openingHover ?? this.t("hint_opening", { kind: this.t(`preset_${this._openingPreset}` as I18nKey) });
+    return this.t(`hint_${this._tool}` as I18nKey);
+  }
+
+  /** The hint bar's sentence for what a tap does in Doors & windows mode (#62). */
+  private openingHint(plan: { add: Opening } | { select: Opening } | { blocked: Opening }): string {
+    const kind = (o: Opening) => this.t(`preset_${openingPreset(o)}` as I18nKey);
+    if ("add" in plan) return this.t("hint_opening_add", { kind: kind(plan.add) });
+    if ("select" in plan) return this.t("hint_opening_select", { kind: kind(plan.select) });
+    return this.t("opening_overlap", { kind: kind(plan.blocked) });
+  }
+
 
   /** Turns an opening into another kind (door, double door, window, terrace door, garage door). */
   private setOpeningPreset(o: Opening, preset: OpeningPreset): void {
@@ -5481,6 +5593,8 @@ export class Fp3dEditor extends LitElement {
     this._tool = tool;
     this._draft = [];
     this._cursor = null;
+    this._openingNote = null;
+    this._openingHover = null;
     this._pipeMode = false;
     this._pipeDraft = null;
     // the pool tool works on a pool: the selected one, else the first of the floor
@@ -5772,6 +5886,7 @@ export class Fp3dEditor extends LitElement {
               @pointercancel=${this.onPointerUp}
               @pointerleave=${() => {
                 if (!this.drag) this._cursor = null;
+                this._openingHover = null;
               }}
               @wheel=${this.onWheel}
               @contextmenu=${this.onContextMenu}
@@ -5789,7 +5904,7 @@ export class Fp3dEditor extends LitElement {
               ${this._tool === "roof" ? svg`${this.renderRoofSections()}${this.renderRoofWindows()}` : this._tool === "energy" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}${this.renderCables()}${this.renderEnergyMarkers()}` : this._tool === "pool" && floor && this.pipeRules ? this.renderPoolPlan(floor) : nothing} ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             ${this.renderContext()}
-            <p class="fp3d-hint ${this._fixedHint ? "fp3d-hint-fixed" : ""}">${!floor ? this.t("hint_empty") : this._wallPick ? this.t("hint_wall_pick") : this._fixedHint ? this.t("fixed_drag_hint") : this._tool === "outdoor" && this._outdoorFree ? this.t("hint_outdoor_free") : this._tool === "pool" && this._jointPlace ? this.t("hint_joint_place") : this._tool === "pool" && this._pipeMode ? this.t(!this.poolArea ? "hint_pipe_pool" : this._pipeDraft ? "hint_pipe_next" : "hint_pipe_start") : this._tool === "pool" && released("pool") ? this.t("hint_pool_tech") : this.t(`hint_${this._tool}` as I18nKey)}</p>
+            <p class="fp3d-hint ${this._fixedHint || (this._tool === "opening" && this._openingNote) ? "fp3d-hint-fixed" : ""}">${this.hintText()}</p>
           </div>
           ${this._split && !this.narrow
             ? html`<div class="fp3d-split-handle" title=${this.t("split_handle_hint")} @pointerdown=${this.onSplitDown}></div>`
@@ -10040,10 +10155,18 @@ export class Fp3dEditor extends LitElement {
       // a wide invisible band along the opening, so a door is easy to tap again (#312)
       const h0 = q(p0, (across[0] - across[1]) / 2);
       const h1 = q(p1, (across[0] - across[1]) / 2);
+      // the selected one: a ring around its gap, a little past both ends, so it stands out on any wall (#63)
+      let ring: unknown = nothing;
+      if (sel) {
+        const r0: Vec2 = [p0[0] - ux * 0.08, p0[1] - uz * 0.08];
+        const r1: Vec2 = [p1[0] + ux * 0.08, p1[1] + uz * 0.08];
+        const pts = [q(r0, across[0] + 0.1), q(r1, across[0] + 0.1), q(r1, -across[1] - 0.1), q(r0, -across[1] - 0.1)];
+        ring = svg`<polygon class="fp3d-open-ring" points=${pts.map((p) => p.join(",")).join(" ")} />`;
+      }
       return svg`<g data-opening=${o.id} class=${cls}>
         <line class="fp3d-open-hit" x1=${h0[0]} y1=${h0[1]} x2=${h1[0]} y2=${h1[1]} />
         <polygon class="fp3d-open-gap" points=${gap.map((p) => p.join(",")).join(" ")} />
-        ${symbol}
+        ${symbol} ${ring}
       </g>`;
     })}</g>`;
   }
@@ -10224,24 +10347,57 @@ export class Fp3dEditor extends LitElement {
   /** A length field: a number field in metres, a text field in feet and inches (8' 2", 98in, 2.5m all work). */
   private len(label: string, value: number, onChange: (v: number) => void, step = 0.01, min?: number) {
     if (this.unit !== "imperial") return this.num(label, value, onChange, step, min);
+    const on = this.typedEvents((text) => {
+      const v = parseLength(text, "imperial");
+      // the value it already has saves nothing (no empty undo step when Enter is followed by a change event)
+      if (v !== null && Math.abs(v - value) > 1e-9) onChange(min !== undefined ? Math.max(min, v) : v);
+    });
+    // rubbish typed shows the old value again once the box is left (typedValue)
     return html`<label class="fp3d-field"
       >${unitLabel(label, "imperial")}
       <input
         type="text"
         inputmode="text"
         spellcheck="false"
-        .value=${formatImperial(value)}
+        .value=${typedValue(this.typed, formatImperial(value))}
         ?disabled=${!this.isEditor}
-        @change=${(e: Event) => {
-          const input = e.target as HTMLInputElement;
-          const v = parseLength(input.value, "imperial");
-          if (v !== null) onChange(min !== undefined ? Math.max(min, v) : v);
-          else input.value = formatImperial(value);
-        }}
+        @focus=${on.focus}
+        @input=${on.input}
+        @change=${on.change}
+        @keydown=${on.keydown}
+        @blur=${on.blur}
     /></label>`;
   }
 
+  /** Typed numbers are saved on Enter, on leaving the box and after a pause in typing (#69). */
+  private readonly typed = new TypedCommit();
+
+  /** The listeners of a typed number box; `save` gets the text (and ignores what isn't a number). */
+  private typedEvents(save: (text: string) => void) {
+    const box = (e: Event) => e.target as HTMLInputElement;
+    return {
+      focus: (e: Event) => this.typed.focus(box(e)),
+      input: (e: Event) => this.typed.input(box(e), box(e).value, save),
+      change: (e: Event) => this.typed.change(box(e), box(e).value, save),
+      keydown: (e: KeyboardEvent) => {
+        if (e.key !== "Enter") return;
+        this.typed.enter(box(e), box(e).value, save);
+        this.requestUpdate();
+      },
+      blur: (e: Event) => {
+        this.typed.blur(box(e));
+        // the plan's value shows again (-90° typed reads 270°)
+        this.requestUpdate();
+      },
+    };
+  }
+
   private num(label: string, value: number, onChange: (v: number) => void, step = 0.01, min?: number) {
+    const on = this.typedEvents((text) => {
+      const v = parseFloat(text.replace(",", "."));
+      // the value it already shows saves nothing (no empty undo step when Enter is followed by a change event)
+      if (Number.isFinite(v) && v !== round(value)) onChange(v);
+    });
     return html`<label class="fp3d-field"
       >${label}
       <input
@@ -10249,12 +10405,13 @@ export class Fp3dEditor extends LitElement {
         inputmode="decimal"
         step=${step}
         min=${min ?? nothing}
-        .value=${String(round(value))}
+        .value=${typedValue(this.typed, String(round(value)))}
         ?disabled=${!this.isEditor}
-        @change=${(e: Event) => {
-          const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
-          if (Number.isFinite(v)) onChange(v);
-        }}
+        @focus=${on.focus}
+        @input=${on.input}
+        @change=${on.change}
+        @keydown=${on.keydown}
+        @blur=${on.blur}
     /></label>`;
   }
 
@@ -10382,7 +10539,12 @@ export class Fp3dEditor extends LitElement {
     if (this._tool === "pool") return this.renderPoolPanel(floor);
     // furnishing: the library and the selected item come first
     if (this._tool === "furniture" && floor && admin) {
-      return html`${this.furnitureItem ? this.renderFurnitureForm(this.furnitureItem) : nothing} ${this.renderFurnitureLibrary()}`;
+      // a way back to the library: the item panel takes its place while an item is chosen (#70)
+      return html`${this.furnitureItem
+          ? html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", this._roomId)}>‹ ${this.t("back_to_library")}</button>
+              ${this.renderFurnitureForm(this.furnitureItem)}`
+          : nothing}
+        ${this.renderFurnitureLibrary()}`;
     }
     // a selected item shows only its own form, with a way back to the floor and room
     const item =
@@ -10403,12 +10565,20 @@ export class Fp3dEditor extends LitElement {
       return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", this._roomId)}>‹ ${this.t(room ? "back_to_room" : "back_to_floor", { room: room?.name ?? "" })}</button>
         ${item}`;
     }
+    // Doors & windows mode with nothing selected: the kind the next tap adds, chosen up front (#63)
+    const nextKind =
+      this._tool === "opening" && admin && floor
+        ? html`<section>
+            <h3>${this.t("opening_next_kind")}</h3>
+            ${this.renderOpeningKinds(this._openingPreset, (p) => this.pickOpeningKind(p))}
+          </section>`
+        : nothing;
     if (room && this._tool !== "measure") {
-      return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", null)}>‹ ${this.t("back_to_floor")}</button>
+      return html`${nextKind}<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", null)}>‹ ${this.t("back_to_floor")}</button>
         ${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}`;
     }
     return html`
-      ${admin ? nothing : html`<p class="fp3d-note">${this.t("read_only")}</p>`}
+      ${nextKind} ${admin ? nothing : html`<p class="fp3d-note">${this.t("read_only")}</p>`}
       <section>
         <h3>${floor ? this.t("floor_settings_of", { floor: floor.name }) : this.t("floors")}</h3>
         ${floors.length ? nothing : html`<p class="fp3d-sub">${this.t("floor_none_hint")}</p>`}
@@ -10852,6 +11022,29 @@ export class Fp3dEditor extends LitElement {
     >`;
   }
 
+  /** The door and window kinds as a fixed grid of chips: none moves when another is picked (#63). */
+  private renderOpeningKinds(active: OpeningPreset, pick: (p: OpeningPreset, ev: Event) => void) {
+    return html`<div class="fp3d-presets" role="group" aria-label=${this.t("opening_type")}>
+      ${(Object.keys(OPENING_PRESETS) as OpeningPreset[]).map(
+        (p) => html`<button class="fp3d-chip" aria-pressed=${p === active} @click=${(ev: Event) => pick(p, ev)}>${this.t(`preset_${p}` as I18nKey)}</button>`,
+      )}
+    </div>`;
+  }
+
+  /** The kind the next tap in Doors & windows mode adds, picked before placing (#63). */
+  private pickOpeningKind(preset: OpeningPreset): void {
+    this._openingPreset = preset;
+  }
+
+  /** "Centre from east corner (m)": the position field names the corner it measures from (#63). */
+  private openingPositionLabel(o: Opening): string {
+    const floor = this.floor;
+    const host = floor ? openingHost(o, floor.rooms, floor.walls ?? []) : null;
+    if (!host) return this.t("opening_position");
+    const corner = edgeStartCorner(host.room, host.edge, this._doc.settings.north ?? 0);
+    return this.t("opening_position_from", { corner: this.t(`compass_${corner}` as I18nKey) });
+  }
+
   private renderOpeningForm(o: Opening) {
     const admin = this.isEditor;
     const window = o.type === "window";
@@ -10927,14 +11120,19 @@ export class Fp3dEditor extends LitElement {
     };
     const preset = openingPreset(o);
     const door = o.type === "door";
-    return html`<section>
+    const minH = this.openingFormMin?.id === o.id ? this.openingFormMin.h : 0;
+    return html`<section style=${minH ? `min-height:${Math.round(minH)}px` : ""}>
       <div class="fp3d-h3row"><h3>${this.t(`preset_${preset}` as I18nKey)}</h3>${this.fixButton("opening", o.id)}</div>
       ${admin
-        ? html`<div class="fp3d-presets" role="group" aria-label=${this.t("opening_type")}>
-            ${(Object.keys(OPENING_PRESETS) as OpeningPreset[]).map(
-              (p) => html`<button class="fp3d-chip" aria-pressed=${p === preset} @click=${() => this.setOpeningPreset(o, p)}>${this.t(`preset_${p}` as I18nKey)}</button>`,
-            )}
-          </div>`
+        ? this.renderOpeningKinds(preset, (p, ev) => {
+            // the panel below the chips changes with the kind: keep it at least as tall as it was, so the chips
+            // (and the scroll position) stay where they are for the next tap (#63)
+            const section = (ev.currentTarget as Element | null)?.closest?.("section") as HTMLElement | null;
+            const h = section?.getBoundingClientRect().height ?? 0;
+            const prev = this.openingFormMin?.id === o.id ? this.openingFormMin.h : 0;
+            this.openingFormMin = { id: o.id, h: Math.max(prev, h) };
+            this.setOpeningPreset(o, p);
+          })
         : nothing}
       ${admin && !garage
         ? html`<div class="fp3d-actions">
@@ -10950,7 +11148,7 @@ export class Fp3dEditor extends LitElement {
         : nothing}
       <div class="fp3d-form">
         ${this.len(this.t("width"), o.width, (v) => this.updateOpening({ width: Math.max(0.3, v) }), 0.01, 0.3)}
-        ${this.len(this.t("opening_position"), o.offset, (v) => this.updateOpening({ offset: Math.max(0, v) }), 0.01, 0)}
+        ${this.len(this.openingPositionLabel(o), o.offset, (v) => this.updateOpening({ offset: Math.max(0, v) }), 0.01, 0)}
         ${window ? this.len(this.t("sill"), o.sill, (v) => this.updateOpening({ sill: Math.max(0, v) }), 0.01, 0) : nothing}
         ${this.len(this.t("opening_height"), o.height, (v) => this.updateOpening({ height: Math.max(0.3, v) }), 0.01, 0.3)}
         ${window && this.isEditor
@@ -11077,72 +11275,19 @@ export class Fp3dEditor extends LitElement {
   private renderFurnitureForm(f: Furniture) {
     if (this.selection().length > 1) return this.renderBlockForm();
     const admin = this.isEditor;
+    const panel = furniturePanel({ mirror: !isLamp(f.type), strip: f.type === "led_strip", lift: canLift(f) && !!this.floor });
     return html`<section>
-      <div class="fp3d-h3row"><h3>${f.name || this.t("furniture")}</h3>${this.fixButton("furniture", f.id)}</div>
+      <div class="fp3d-pos-head">
+        <div class="fp3d-h3row"><h3>${f.name || this.t("furniture")}</h3>${this.fixButton("furniture", f.id)}</div>
+        <div class="fp3d-form">${panel.head.map((field) => this.furnitureField(f, field))}</div>
+      </div>
       ${f.group
         ? html`<p class="fp3d-sub fp3d-block-note">▣ ${this.t("block_part")} <button class="fp3d-link" @click=${() => {
             this._single = false;
             this.requestUpdate();
           }}>${this.t("block_select")}</button></p>`
         : nothing}
-      <div class="fp3d-form">
-        <label class="fp3d-field fp3d-wide"
-          >${this.t("furn_name")}
-          <input type="text" maxlength="60" .value=${f.name ?? ""} ?disabled=${!admin} placeholder=${this.t(`furn_${f.type}` as I18nKey) === `furn_${f.type}` ? "" : this.t(`furn_${f.type}` as I18nKey)} @change=${(e: Event) => this.updateFurniture({ name: (e.target as HTMLInputElement).value.trim() || null })} />
-        </label>
-        <label class="fp3d-field fp3d-wide" title=${this.t("aliases_hint")}
-          >${this.t("aliases")}
-          <input type="text" maxlength="240" .value=${(f.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.t("aliases_placeholder")} @change=${(e: Event) => this.updateFurniture({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
-        /></label>
-        ${f.name
-          ? html`<label class="fp3d-check fp3d-wide"
-              ><input type="checkbox" .checked=${!!f.show_name} ?disabled=${!admin} @change=${(ev: Event) => this.updateFurniture({ show_name: (ev.target as HTMLInputElement).checked || undefined })} />
-              ${this.t("show_name")}</label
-            >`
-          : nothing}
-        <label class="fp3d-field fp3d-wide"
-          >${this.t("furniture_type")}
-          <select ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ type: (e.target as HTMLSelectElement).value })}>
-            ${this.typeChoices(f.type).map((t) => html`<option value=${t} ?selected=${t === f.type}>${this.t(`furn_${t}` as I18nKey)}</option>`)}
-            ${(this.packs ?? [])
-              .filter((pack) => pack.items.length)
-              .map(
-              (pack) => html`<optgroup label=${packName(pack, (this.hass?.language ?? "de"))}>
-                ${pack.items.map((it) => {
-                  const t = packType(pack.id, it.id);
-                  return html`<option value=${t} ?selected=${t === f.type}>${packItemName(it, this.hass?.language ?? "en")}</option>`;
-                })}
-              </optgroup>`,
-            )}
-            ${f.type.startsWith("pack:") && !(this.packs ?? []).some((p) => f.type.startsWith(`pack:${p.id}:`))
-              ? html`<option value=${f.type} selected>${furnitureName(this.hass, f.type)}</option>`
-              : nothing}
-          </select></label
-        >
-        ${this.len(this.t("x"), f.x, (v) => this.updateFurniture({ x: v }))} ${this.len(this.t("z"), f.z, (v) => this.updateFurniture({ z: v }))}
-        ${this.len(this.t("width"), f.w, (v) => this.updateFurniture({ w: Math.max(0.01, v) }), 0.01, 0.01)}
-        ${this.len(this.t("depth"), f.d, (v) => this.updateFurniture({ d: Math.max(0.01, v) }), 0.01, 0.01)}
-        ${this.len(this.t("height_m"), f.h, (v) => this.updateFurniture({ h: Math.max(0.005, v) }), 0.01, 0)}
-        ${this.num(this.t("rotation"), f.rotation, (v) => this.updateFurniture({ rotation: ((v % 360) + 360) % 360 }), 1)}
-        ${isLamp(f.type)
-          ? nothing
-          : html`<label class="fp3d-check" title=${this.t("furn_mirror_hint")}
-              ><input type="checkbox" .checked=${!!f.mirror} ?disabled=${!admin} @change=${(ev: Event) => this.updateFurniture({ mirror: (ev.target as HTMLInputElement).checked })} />
-              ${this.t("furn_mirror")}</label
-            >`}
-        ${f.type === "led_strip"
-          ? html`${this.num(this.t("strip_tilt"), f.tilt ?? 0, (v) => this.updateFurniture({ tilt: Math.max(-90, Math.min(90, Math.round(v))) }), 5)}
-              ${f.upright ? nothing : html`<span title=${this.t("strip_rise_hint")}>${this.num(this.t("strip_rise"), f.rise ?? 0, (v) => this.updateFurniture({ rise: Math.max(-80, Math.min(80, Math.round(v))) || undefined }), 5)}</span>`}
-              <label class="fp3d-check" title=${this.t("strip_upright_hint")}
-                ><input type="checkbox" .checked=${!!f.upright} ?disabled=${!admin} @change=${(ev: Event) => this.updateFurniture({ upright: (ev.target as HTMLInputElement).checked })} />
-                ${this.t("strip_upright")}</label
-              >`
-          : nothing}
-        ${canLift(f) && this.floor
-          ? html`${this.len(this.t("mount_height"), f.mount_y ?? mountBase(this.floor, f), (v) => this.updateFurniture({ mount_y: Math.min(MAX_MOUNT_Y, Math.max(0, v)) }), 0.01, 0)}
-              ${f.mount_y != null ? html`<button class="fp3d-btn fp3d-field-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ mount_y: null })}>${this.t("height_auto")}</button>` : nothing}`
-          : nothing}
-      </div>
+      <div class="fp3d-form">${panel.body.map((field) => this.furnitureField(f, field))}</div>
       ${this.renderColourRoles(f)}
       ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
       ${f.type === "stairs" ? this.renderStairOptions(f) : nothing}
@@ -11199,6 +11344,76 @@ export class Fp3dEditor extends LitElement {
           ${this.renderMultiToggle()}`
         : nothing}
     </section>`;
+  }
+
+  /** One field (or a few that belong together) of the item panel, in the order of furnitureFields (#70). */
+  private furnitureField(f: Furniture, field: FurnitureField) {
+    const admin = this.isEditor;
+    switch (field) {
+      case "x":
+        return this.len(this.t("x"), f.x, (v) => this.updateFurniture({ x: v }));
+      case "z":
+        return this.len(this.t("z"), f.z, (v) => this.updateFurniture({ z: v }));
+      case "rotation":
+        return this.num(this.t("rotation"), f.rotation, (v) => this.updateFurniture({ rotation: ((v % 360) + 360) % 360 }), 1);
+      case "w":
+        return this.len(this.t("width"), f.w, (v) => this.updateFurniture({ w: Math.max(0.01, v) }), 0.01, 0.01);
+      case "d":
+        return this.len(this.t("depth"), f.d, (v) => this.updateFurniture({ d: Math.max(0.01, v) }), 0.01, 0.01);
+      case "h":
+        return this.len(this.t("height_m"), f.h, (v) => this.updateFurniture({ h: Math.max(0.005, v) }), 0.01, 0);
+      case "mount":
+        return html`${this.len(this.t("mount_height"), f.mount_y ?? mountBase(this.floor!, f), (v) => this.updateFurniture({ mount_y: Math.min(MAX_MOUNT_Y, Math.max(0, v)) }), 0.01, 0)}
+          ${f.mount_y != null ? html`<button class="fp3d-btn fp3d-field-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ mount_y: null })}>${this.t("height_auto")}</button>` : nothing}`;
+      case "mirror":
+        return html`<label class="fp3d-check" title=${this.t("furn_mirror_hint")}
+          ><input type="checkbox" .checked=${!!f.mirror} ?disabled=${!admin} @change=${(ev: Event) => this.updateFurniture({ mirror: (ev.target as HTMLInputElement).checked })} />
+          ${this.t("furn_mirror")}</label
+        >`;
+      case "strip":
+        return html`${this.num(this.t("strip_tilt"), f.tilt ?? 0, (v) => this.updateFurniture({ tilt: Math.max(-90, Math.min(90, Math.round(v))) }), 5)}
+          ${f.upright ? nothing : html`<span title=${this.t("strip_rise_hint")}>${this.num(this.t("strip_rise"), f.rise ?? 0, (v) => this.updateFurniture({ rise: Math.max(-80, Math.min(80, Math.round(v))) || undefined }), 5)}</span>`}
+          <label class="fp3d-check" title=${this.t("strip_upright_hint")}
+            ><input type="checkbox" .checked=${!!f.upright} ?disabled=${!admin} @change=${(ev: Event) => this.updateFurniture({ upright: (ev.target as HTMLInputElement).checked })} />
+            ${this.t("strip_upright")}</label
+          >`;
+      case "name":
+        return html`<label class="fp3d-field fp3d-wide"
+          >${this.t("furn_name")}
+          <input type="text" maxlength="60" .value=${f.name ?? ""} ?disabled=${!admin} placeholder=${this.t(`furn_${f.type}` as I18nKey) === `furn_${f.type}` ? "" : this.t(`furn_${f.type}` as I18nKey)} @change=${(e: Event) => this.updateFurniture({ name: (e.target as HTMLInputElement).value.trim() || null })} />
+        </label>`;
+      case "show_name":
+        // always there (greyed out until the item has a name), so naming an item moves no row (#71)
+        return html`<label class="fp3d-check fp3d-wide"
+          ><input type="checkbox" .checked=${!!f.show_name && !!f.name} ?disabled=${!admin || !f.name} @change=${(ev: Event) => this.updateFurniture({ show_name: (ev.target as HTMLInputElement).checked || undefined })} />
+          ${this.t("show_name")}</label
+        >`;
+      case "aliases":
+        return html`<label class="fp3d-field fp3d-wide" title=${this.t("aliases_hint")}
+          >${this.t("aliases")}
+          <input type="text" maxlength="240" .value=${(f.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.t("aliases_placeholder")} @change=${(e: Event) => this.updateFurniture({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
+        /></label>`;
+      case "type":
+        return html`<label class="fp3d-field fp3d-wide"
+          >${this.t("furniture_type")}
+          <select ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ type: (e.target as HTMLSelectElement).value })}>
+            ${this.typeChoices(f.type).map((t) => html`<option value=${t} ?selected=${t === f.type}>${this.t(`furn_${t}` as I18nKey)}</option>`)}
+            ${(this.packs ?? [])
+              .filter((pack) => pack.items.length)
+              .map(
+                (pack) => html`<optgroup label=${packName(pack, this.hass?.language ?? "de")}>
+                  ${pack.items.map((it) => {
+                    const t = packType(pack.id, it.id);
+                    return html`<option value=${t} ?selected=${t === f.type}>${packItemName(it, this.hass?.language ?? "en")}</option>`;
+                  })}
+                </optgroup>`,
+              )}
+            ${f.type.startsWith("pack:") && !(this.packs ?? []).some((p) => f.type.startsWith(`pack:${p.id}:`))
+              ? html`<option value=${f.type} selected>${furnitureName(this.hass, f.type)}</option>`
+              : nothing}
+          </select></label
+        >`;
+    }
   }
 
   private setEnergy(patch: Partial<Building["energy"]>): void {
@@ -15774,6 +15989,22 @@ export class Fp3dEditor extends LitElement {
         letter-spacing: 0.06em;
         text-transform: uppercase;
       }
+      /* the item's title and position fields stay at the top while the panel scrolls (#71); -12px = the side
+         bar's top padding, so nothing shows above it */
+      .fp3d-pos-head {
+        position: sticky;
+        top: -12px;
+        z-index: 3;
+        background: var(--fp3d-chrome-solid);
+        padding: 4px 0 10px;
+        border-bottom: 1px solid var(--fp3d-line);
+      }
+      .fp3d-pos-head h3 {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
       .fp3d-h3row {
         display: flex;
         align-items: center;
@@ -16046,10 +16277,17 @@ export class Fp3dEditor extends LitElement {
         margin-bottom: 12px;
       }
       .fp3d-presets {
-        display: flex;
-        flex-wrap: wrap;
+        /* a fixed grid: the chips keep their places whichever kind is picked (#63) */
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 6px;
         margin-bottom: 10px;
+      }
+      .fp3d-presets .fp3d-chip {
+        min-height: 40px;
+        padding: 3px 4px;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
       }
       .fp3d-resize {
         cursor: nwse-resize;
@@ -16275,7 +16513,14 @@ export class Fp3dEditor extends LitElement {
         stroke-width: 2;
       }
       .fp3d-open-sel .fp3d-open-gap {
-        fill: rgba(55, 224, 255, 0.25);
+        fill: rgba(55, 224, 255, 0.35);
+      }
+      .fp3d-open-ring {
+        fill: none;
+        stroke: var(--fp3d-accent);
+        stroke-width: 2;
+        stroke-dasharray: 5 3;
+        pointer-events: none;
       }
       .fp3d-open-sel path,
       .fp3d-open-sel line {
