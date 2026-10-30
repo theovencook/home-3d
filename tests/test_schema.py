@@ -157,6 +157,18 @@ def test_household_fields_are_kept_and_checked() -> None:
             FURNITURE_SCHEMA({**base, **bad})
 
 
+def test_bin_kerb_spot_is_kept_and_checked() -> None:
+    """A bin's kerb spot (#142) is a plan point or null; anything else is refused."""
+    base = {"id": "b1", "type": "waste_bin", "x": 1, "z": 1, "rotation": 0, "w": 0.6, "d": 0.7, "h": 1.1}
+    base["variant"] = None
+    assert FURNITURE_SCHEMA({**base, "bin_kerb": {"x": 4.5, "z": -2}})["bin_kerb"] == {"x": 4.5, "z": -2.0}
+    assert FURNITURE_SCHEMA({**base, "bin_kerb": None})["bin_kerb"] is None
+    assert "bin_kerb" not in FURNITURE_SCHEMA(base)
+    for bad in ({"x": 1}, {"x": 1, "z": 2, "y": 0}, {"x": 5000, "z": 0}, [1, 2]):
+        with pytest.raises(vol.Invalid):
+            FURNITURE_SCHEMA({**base, "bin_kerb": bad})
+
+
 def test_colour_role_overrides_are_kept_and_checked() -> None:
     """An item keeps its own colour per role (#12); an unknown role or a colour that is not #rrggbb is refused."""
     base = {"id": "s1", "type": "sofa", "x": 1, "z": 1, "rotation": 0, "w": 2, "d": 0.9, "h": 0.85, "variant": None}

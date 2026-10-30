@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applianceIdle, binColors, binDue, binGlows, binNext, binOut, binOutToggleable, binTagsShown, FinishedMemory, fridgeOpenTooLong, groupTags, householdEntities, isFinishedState, mailboxBase, mailboxPost, nextFridgeCheck, pickupsOf, plantThirsty, remainingMinutes, remainingText, sensorDays, serviceDue, servicesDue, wasteCalendars, wasteColors, wasteMatches, type HouseholdTag } from "./household.ts";
+import { applianceIdle, binColors, binDue, binGlows, binNext, binOut, binOutToggleable, binKerb, binPlace, binTagsShown, FinishedMemory, fridgeOpenTooLong, groupTags, householdEntities, isFinishedState, mailboxBase, mailboxPost, nextFridgeCheck, pickupsOf, plantThirsty, remainingMinutes, remainingText, sensorDays, serviceDue, servicesDue, wasteCalendars, wasteColors, wasteMatches, type HouseholdTag } from "./household.ts";
 import type { Furniture } from "./model.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 
@@ -304,4 +304,24 @@ test("pack plants are plants by their name, not only by the palette's leaf colou
   assert.equal(isPackPlant(packType("deco", "humidifier")), false);
   assert.equal(isPackPlant(packType("deco", "tv_stand")), false);
   setPacks([]);
+});
+
+test("a bin with a kerb spot stands there while it is out and asks to go out while it glows (#142)", () => {
+  const bin = { x: 1, z: 2, bin_kerb: { x: 6, z: -3 } };
+  // due, not out yet: stays home, the cue points at the kerb
+  assert.deepEqual(binPlace(bin, true, false), { at: [1, 2], kerb: false, cue: [6, -3] });
+  // marked out: drawn at the kerb, no cue (glowing or not)
+  assert.deepEqual(binPlace(bin, true, true), { at: [6, -3], kerb: true, cue: null });
+  assert.deepEqual(binPlace(bin, false, true), { at: [6, -3], kerb: true, cue: null });
+  // marked back in, outside the window: home, no cue
+  assert.deepEqual(binPlace(bin, false, false), { at: [1, 2], kerb: false, cue: null });
+});
+
+test("a bin without a kerb spot behaves as before: never moves, no cue (#142)", () => {
+  for (const kerb of [undefined, null, { x: Number.NaN, z: 1 }]) {
+    const bin = { x: 1, z: 2, bin_kerb: kerb };
+    for (const glow of [true, false]) for (const out of [true, false]) assert.deepEqual(binPlace(bin, glow, out), { at: [1, 2], kerb: false, cue: null });
+  }
+  assert.deepEqual(binKerb({ bin_kerb: { x: 0, z: 0 } }), [0, 0]);
+  assert.equal(binKerb({}), null);
 });

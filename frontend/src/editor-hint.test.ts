@@ -33,6 +33,7 @@ test("in Select, the hint explains what can be done with the selected thing (#96
 
 test("temporary states win over the tool hint (#96)", () => {
   assert.equal(hintKey({ ...base, wallPick: true }), "hint_wall_pick");
+  assert.equal(hintKey({ ...base, kerbPick: true, selected: "furniture" }), "hint_kerb_pick");
   assert.equal(hintKey({ ...base, fixedHint: true, selected: "furniture" }), "fixed_drag_hint");
   assert.equal(hintKey({ ...base, tool: "outdoor", outdoorFree: true }), "hint_outdoor_free");
   assert.equal(hintKey({ ...base, tool: "pool", jointPlace: true }), "hint_joint_place");

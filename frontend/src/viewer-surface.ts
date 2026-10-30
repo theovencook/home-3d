@@ -26,6 +26,8 @@ export type ViewerSurface = Pick<
   | "setAngleLock"
   | "setAutoOrbit"
   | "setAwnings"
+  | "setBinCues"
+  | "setBinSpots"
   | "setBuilding"
   | "setDevices"
   | "setExplode"
