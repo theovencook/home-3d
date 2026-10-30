@@ -170,8 +170,7 @@ import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { effectFields } from "./effect-fields.ts";
 import { itemTempSource, roomLiveSensors, shadeKind, type LiveKind } from "../room-effects.ts";
-import { energyRole, furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, migratePlanTypes, mountBase, packDisplay, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
-import { isPrinter } from "../printer.ts";
+import { energyRole, furnitureSize, isElectric, isPackType, isRobotVacuum, migratePlanTypes, mountBase, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
 import { isCameraItem, isThermostatItem, isTvLike, linkFilter } from "../furniture-links.ts";
 import { hiddenUnplaced, setUnplacedHidden, suggestLinks, unplacedByArea, type LinkSuggestion } from "../unplaced.ts";
 
