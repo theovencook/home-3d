@@ -842,6 +842,11 @@ export interface BuildingSettings {
   lock_plan?: boolean;
   /** False for a sample or template home (#61): the editor never offers to add rooms from this install's areas. */
   area_import?: boolean;
+  /**
+   * A sample or demo home (#100): linked entities this Home Assistant does not have (or reports unavailable) show a
+   * fixed demo state (some lights on, heating on, solar producing, power flowing). Real entities always win.
+   */
+  demo?: boolean;
   /** Entities left out of the editor's "Unplaced entities" list on purpose (#83); unhidden from its Hidden view. */
   unplaced_hidden?: string[];
   /** Home Assistant user ids whose panel opens in locked tablet mode (#92, wall displays). */

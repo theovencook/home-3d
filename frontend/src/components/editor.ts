@@ -12647,7 +12647,23 @@ export class Fp3dEditor extends LitElement {
         ? html`<div class="fp3d-actions fp3d-wide"><button class="fp3d-btn" @click=${() => void answer(setEditors(hass, null))}>${this.t("editors_reset")}</button></div>`
         : nothing}
       ${list ? this.renderTabletUsers(list.users) : nothing}
+      ${this.renderDemoSwitch()}
     </div>`;
+  }
+
+  /** A sample / demo home (#100): its devices that this Home Assistant lacks show fixed demo states; switchable. */
+  private renderDemoSwitch() {
+    const demo = this._doc.settings.demo;
+    if (demo === undefined) return nothing;
+    return html`<h4 class="fp3d-wide">${this.t("demo_states")}</h4>
+      <label class="fp3d-check fp3d-wide"
+        ><input type="checkbox" .checked=${demo} @change=${(e: Event) => this.setDemo((e.target as HTMLInputElement).checked)} /> ${this.t("demo_states")}</label
+      >
+      <p class="fp3d-sub fp3d-wide">${this.t("demo_states_hint")}</p>`;
+  }
+
+  private setDemo(on: boolean): void {
+    this.change((d) => (d.settings.demo = on));
   }
 
   /** Wall tablets (#92): users whose panel opens locked (no editor, no view settings), and its idle return. */

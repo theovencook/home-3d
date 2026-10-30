@@ -18,6 +18,7 @@ import { loadCardEditor } from "./load-card-editor.ts";
 import type { WallMode } from "./viewer/viewer3d.ts";
 import { hasFeature, type Feature } from "./features.ts";
 import { TimeTravel } from "./load-timetravel.ts";
+import { withDemo } from "./demo.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
 
 type HeatMode = NonNullable<CardConfig["heatmap"]>;
@@ -358,6 +359,8 @@ clearTimeout(this.cleanTimer);
     // the bar of switches at the bottom (the back button belongs to it)
     const bar = !!b && !this._clean && (canGoBack || ((!!c?.controls || !!c?.time_travel) && !(this._roomId && c.room_panel !== false)));
     const tt = this.tt.active;
+    // a sample / demo home: devices this Home Assistant lacks show fixed demo states (#100)
+    const hass = withDemo(this.tt.hass(this.hass), b);
     const eye = c?.controls_hidden !== undefined || (c?.controls_hide_after ?? 0) > 0;
     const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
     // the card's own accent, else (while the look follows the HA theme) the theme's primary colour (#38)
@@ -366,7 +369,7 @@ clearTimeout(this.cleanTimer);
       <div class="fp3d-card-body ${tt ? "fp3d-tt" : ""}" style="height:${size}">
         ${b && b.floors.some((f) => f.rooms.length)
           ? html`<fp3d-view3d
-              .hass=${this.tt.hass(this.hass)}
+              .hass=${hass}
               .canEdit=${this.data.canEdit}
               .home=${this.data.homeId}
               .replay=${this.tt.session?.replay ?? null}
@@ -450,7 +453,7 @@ clearTimeout(this.cleanTimer);
           ? html`<fp3d-room-panel
               @camera-look=${(e: CustomEvent<{ entity: string }>) => this.view3d()?.lookThrough(e.detail.entity)}
               class="fp3d-card-panel"
-              .hass=${this.tt.hass(this.hass)}
+              .hass=${hass}
               ?readOnly=${tt}
               ?noLook=${flat}
               .room=${b.floors.flatMap((f) => zonesOf(f)).find((r) => r.id === this._roomId) ?? null}
