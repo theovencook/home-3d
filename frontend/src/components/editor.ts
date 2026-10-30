@@ -401,6 +401,7 @@ export class Fp3dEditor extends LitElement {
     _splitRatio: { state: true },
     _backupBusy: { state: true },
     _wall3d: { state: true },
+    _solarDim: { state: true },
     _sidePinned: { state: true },
     _sideMin: { state: true },
     _sideOpen: { state: true },
@@ -511,6 +512,8 @@ export class Fp3dEditor extends LitElement {
   private declare _backupBusy: boolean;
   /** Walls in the 3D pane: full height ("auto") or cut at the cut height (shows wall units and shelves). */
   private declare _wall3d: WallMode;
+  /** Energy tool: roof solar fields drawn faint over the floor plan (the selected one stays full), per device (#89). */
+  private declare _solarDim: boolean;
   /** Sidebar beside the 3D pane: pinned open always, or folded to a strip while nothing is selected. */
   private declare _sidePinned: boolean;
   /** The sidebar folded to a narrow strip beside the plan (more room to move furniture); remembered per browser. */
@@ -825,6 +828,12 @@ export class Fp3dEditor extends LitElement {
       if (localStorage.getItem("home3d.walls3d") === "auto") this._wall3d = "auto";
     } catch {
       // no storage: the default
+    }
+    this._solarDim = true;
+    try {
+      if (localStorage.getItem("home3d.solarDim") === "off") this._solarDim = false;
+    } catch {
+      // no storage: dimmed
     }
     this._doc3d = this._doc;
     this._sideOpen = false;
@@ -3368,6 +3377,16 @@ export class Fp3dEditor extends LitElement {
     return { u: (p[0] - face.o[0]) * face.eu[0] + (p[1] - face.o[2]) * face.eu[2], s: Number.NaN };
   }
 
+  /** Draw roof solar fields faint over the plan (or at full strength); remembered on this device (#89). */
+  private setSolarDim(on: boolean): void {
+    this._solarDim = on;
+    try {
+      localStorage.setItem("home3d.solarDim", on ? "on" : "off");
+    } catch {
+      // no storage: this session only
+    }
+  }
+
   /** Solar fields over the plan: every module as a small rectangle; the selected field highlighted. */
   private renderSolarFields() {
     const fields = this._doc.settings.roof.solar ?? [];
@@ -3377,6 +3396,8 @@ export class Fp3dEditor extends LitElement {
       const face = fieldFace(this._doc, f, faces);
       if (!face || (face.wall && face.wall.floorId !== this._floorId)) return nothing;
       const sel = f.id === this._solarId;
+      // a field on the roof lies over every floor's plan: faint unless chosen, so the rooms under it stay readable
+      const dim = this._solarDim && !sel && !face.wall && !face.unbounded;
       let handle: unknown = nothing;
       if (sel && face.unbounded && this.isEditor && !f.locked) {
         const [cx, cz] = fieldCenter(face, f);
@@ -3392,7 +3413,7 @@ export class Fp3dEditor extends LitElement {
         </g>`;
       }
       // the selected field also shows its switched-off modules (dashed), so they can be switched on again
-      return svg`<g data-solar=${f.id} class=${`fp3d-solar${sel ? " fp3d-solar-sel" : ""}${sel && this._solarPick ? " fp3d-solar-pick" : ""}`}>${fieldModules(face, f, sel).map(
+      return svg`<g data-solar=${f.id} class=${`fp3d-solar${sel ? " fp3d-solar-sel" : ""}${dim ? " fp3d-solar-dim" : ""}${sel && this._solarPick ? " fp3d-solar-pick" : ""}`}>${fieldModules(face, f, sel).map(
         (m) => {
           // on a wall the modules stand upright: in the plan a strip just outside the wall
           // as deep as the modules stand off the wall (tilted ones further), at least 30 cm to grab
@@ -3851,6 +3872,12 @@ export class Fp3dEditor extends LitElement {
       ${this.renderRoofFloors()}
       <h3>☀ ${this.t("solar_fields")}</h3>
       <p class="fp3d-sub">${this.t(roofList.length ? "solar_hint" : "solar_no_roof")}</p>
+      ${fields.length
+        ? html`<label class="fp3d-check fp3d-solar-dim-toggle"
+            ><input type="checkbox" .checked=${this._solarDim} @change=${(e: Event) => this.setSolarDim((e.target as HTMLInputElement).checked)} />
+            ${this.t("solar_dim")}</label
+          >`
+        : nothing}
       ${fields.length
         ? html`<div class="fp3d-room-list">
             ${fields.map((f, i) => {
@@ -16054,6 +16081,12 @@ export class Fp3dEditor extends LitElement {
         stroke: #9fb8ff;
         stroke-width: 1.5;
         cursor: move;
+      }
+      /* roof fields over the floor plan (#89): an outline only, so the rooms under them stay readable */
+      .fp3d-solar-dim polygon {
+        fill: color-mix(in srgb, #1b3a8f 18%, transparent);
+        stroke: color-mix(in srgb, #9fb8ff 45%, transparent);
+        stroke-width: 1;
       }
       .fp3d-solar-sel polygon {
         fill: color-mix(in srgb, #1b3a8f 80%, transparent);

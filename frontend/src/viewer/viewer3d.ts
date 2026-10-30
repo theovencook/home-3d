@@ -87,6 +87,7 @@ import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
 import { circlePath, cleaningPath, stepRobot, type RobotInfo, type RobotMotion } from "./robot.ts";
 import { decorDelay, lowEndDevice, petDelay } from "./pace.ts";
 import { flowSpeed } from "./flow-style.ts";
+import { HALO_SIZE, haloSize } from "./halo-size.ts";
 
 export type { RobotInfo } from "./robot.ts";
 
@@ -2563,7 +2564,7 @@ export class FloorplanViewer {
       lamps: themed(new MeshBasicMaterial({ vertexColors: true }), this.themeUniform),
       halos: new PointsMaterial({
         map: this.haloTexture,
-        size: 0.9,
+        size: HALO_SIZE,
         sizeAttenuation: true,
         vertexColors: true,
         transparent: true,
@@ -5065,6 +5066,9 @@ export class FloorplanViewer {
     this.sunFx.showShadow(this.floorId === null && this.shadowSig !== "");
     // the realistic look: lit twins for new surfaces; the tablet level redraws its shadows only when more than the camera moved
     if (this.realism.active) this.realism.realize(this.scene, !!this.realPlan(), this.renderer, floorsMoving || openingsMoving || roofMoving || robotsMoving || fansTurning);
+    // lamp glows keep a visible size when zoomed out (#89): one number per floor material, no rebuild
+    const halo = haloSize(this.controls.view.radius, this.size.h);
+    for (const fv of this.floors) fv.materials.halos.size = halo;
     this.renderer.render(this.scene, this.camera);
     this.disposeRetired();
     // labels are placed only when the view or something on it moved (style writes cost layout)

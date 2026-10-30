@@ -575,8 +575,8 @@ const CSS = `
   fill: var(--p2d-out);
   stroke: none;
 }
-.fp3d-p2d-out-lawn { fill: rgba(70, 170, 90, 0.12); }
-.fp3d-p2d-out-hedge { fill: rgba(70, 170, 90, 0.3); }
+.fp3d-p2d-out-lawn { fill: rgba(70, 170, 90, 0.2); }
+.fp3d-p2d-out-hedge { fill: rgba(70, 170, 90, 0.36); }
 .fp3d-p2d-room {
   fill: var(--p2d-room);
   stroke: var(--p2d-room-line);
