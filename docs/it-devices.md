@@ -1,6 +1,7 @@
 # IT devices checklist (#118)
 
-Everyday, non-rack IT devices in `theovencook.it` (rack-mount gear is a separate ticket). Sizes are W x D x H in mm,
+Everyday, non-rack IT devices in `theovencook.it` (rack-mount gear is a separate ticket; UniFi's own devices moved to
+the UniFi pack, see `docs/unifi/existing.md`). Sizes are W x D x H in mm,
 checked against maker pages on 30 October 2026 where the Status column says `maker`. We model each device
 ourselves from simple shapes; no maker pictures or 3D files are used.
 
@@ -40,9 +41,6 @@ estimated.
 | `wifi_access_point_u7_pro` | UniFi U7 Pro | 206 x 206 x 46 | maker | https://techspecs.ui.com/unifi/wifi/u7-pro |
 | `wifi_access_point_u7_wall` | UniFi U7 Pro Wall | 103 x 36 x 150 | maker | https://techspecs.ui.com/unifi/wifi/u7-pro-wall lists 150 x 103 x 36; which side is up is our assumption |
 | `wifi_access_point_in_wall` | UniFi U6 In-Wall | 96 x 31.2 x 139.7 | maker | https://techspecs.ui.com/unifi/wifi/u6-iw lists 139.7 x 96 x 31.2; which side is up is our assumption |
-| `unifi_cloud_gateway_ultra` | UniFi Cloud Gateway Ultra / Max | 141.8 x 127.6 x 30 | maker | https://techspecs.ui.com/unifi/cloud-gateways/ucg-ultra ; the Max page gave the same figure |
-| `unifi_cloud_gateway_fiber` | UniFi Cloud Gateway Fiber | 212.8 x 127.6 x 30 | maker | https://techspecs.ui.com/unifi/cloud-gateways/ucg-fiber |
-| `unifi_dream_router_7` | UniFi Dream Router 7 | 110 x 110 x 184.1 | maker | https://techspecs.ui.com/unifi/cloud-gateways/udr7 |
 
 Colours of the UniFi gear are not on the maker pages; white is our assumption. The existing items (routers, mesh node,
 switches, 6-bay NAS tower, UPS) are untouched. The existing large ceiling AP (210 x 45) is left as it is.

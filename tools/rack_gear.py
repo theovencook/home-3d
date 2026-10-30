@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Writes the bundled rack-mount gear (#117) into the IT & network pack.
 
-    python tools/rack_gear.py            write theovencook.it/network/rack_*.json for every item below
+    python tools/rack_gear.py            write theovencook.it/network/rack_*.json (UniFi gear: theovencook.unifi/network/) for every item below
     python tools/rack_gear.py --check    exit 1 when a file differs from what this would write
 
 Edit the catalogue (the `CATALOGUE` list at the end), not the JSON. Sizes and sources are in docs/rack-gear.md.
@@ -20,6 +20,15 @@ import sys
 from pathlib import Path
 
 NETWORK = Path(__file__).resolve().parent.parent / "custom_components/home_3d/bundled_packs/theovencook.it/network"
+# UniFi's own rack gear lives in the UniFi pack (#145)
+UNIFI_NETWORK = NETWORK.parent.parent / "theovencook.unifi/network"
+
+
+def path_of(id: str) -> Path:
+    """Where an item's file is written: the UniFi pack for UniFi gear, the IT & network pack for the rest."""
+    return (UNIFI_NETWORK if id.startswith("rack_unifi_") else NETWORK) / f"{id}.json"
+
+
 U = 44.45
 PANEL = 482.6  # 19 inch panel width
 GEAR_H = {1: 43.7, 2: 88.1, 3: 132.55, 4: 177.0}  # a box is built 0.8 mm short of its U
@@ -493,7 +502,7 @@ def main(argv: list[str]) -> int:
     check = "--check" in argv
     bad = 0
     for id, item in items.items():
-        path = NETWORK / f"{id}.json"
+        path = path_of(id)
         text = text_of(item)
         if check:
             if not path.exists() or path.read_text(encoding="utf8") != text:
@@ -501,7 +510,7 @@ def main(argv: list[str]) -> int:
                 bad += 1
         else:
             path.write_text(text, encoding="utf8", newline="\n")
-            print(f"network/{id}.json ({len(item['parts'])} parts)")
+            print(f"{path.parent.parent.name}/network/{id}.json ({len(item['parts'])} parts)")
     return 1 if bad else 0
 
 
