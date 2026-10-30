@@ -109,6 +109,7 @@ import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from 
 import { furnitureName } from "../furniture-names.ts";
 import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
+import { holdTarget } from "../hold.ts";
 import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packMotion, packName, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
@@ -3869,7 +3870,7 @@ export class Fp3dView3d extends LitElement {
     </nav>`;
   }
 
-  /** Long press: the quick menu at the device, or the details for devices without one. */
+  /** Long press: Home Assistant's more-info of the device, like other HA cards (#82); an own hold action wins. */
   private onDeviceHold(entityId: string, x: number, y: number): void {
     const own = this.ro ? null : gestureAction(this.actionOwners.get(entityId), "hold");
     if (own) return this.runOwnAction(own, this.actionOwners.get(entityId)!, x, y);
@@ -3900,9 +3901,11 @@ export class Fp3dView3d extends LitElement {
           }
         }
     }
-    const kind = kindOf(entityId);
-    if (kind === "light" || kind === "cover" || kind === "switch" || kind === "fan" || kind === "lock" || kind === "camera") this._menu = { entity: entityId, x, y };
-    else openMoreInfo(this, entityId);
+    // every device opens its more-info (a light, a switch, a lock and a camera too: their quick menu stays on the
+    // tap where a tap opens it, a cover's and a camera's); pins without one entity behind them do what a tap does
+    const target = holdTarget(entityId);
+    if (target) openMoreInfo(this, target);
+    else this.onDeviceTap(entityId, x, y);
   }
 
   /** Swipe up or down on a lamp (brightness) or a blind (position). */
