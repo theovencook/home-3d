@@ -14,7 +14,7 @@ import { clipConvex, netRoomArea } from "../geometry/area.ts";
 import { areaText, formatImperial, lengthText, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 import { closeGaps, straightenEdges, suggestedThickness } from "../geometry/gaps.ts";
 import { clampIntoRoom, keepInRoom, sharedEdge, snapToWall } from "../geometry/snap.ts";
-import { altPick, itemsAt, minHitPx, nextPick } from "../geometry/pick.ts";
+import { altPick, firmHit, itemsAt, minHitPx, nextPick } from "../geometry/pick.ts";
 import { itemsByRoom } from "../item-list.ts";
 import "./item-list-view.ts";
 import type { ItemRow } from "./item-list-view.ts";
@@ -67,7 +67,7 @@ import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } fr
 import { ISSUES_URL } from "./extensions.ts";
 import { beforeSelectionChange, deepActive, releaseTyping, selectionMoved, takesTyping } from "../focus-release.ts";
 import { escapeStep } from "../editor-keys.ts";
-import { furniturePanel, type FurnitureField } from "../item-panel.ts";
+import { furniturePanel, retypePatch, typeOptionLabels, type FurnitureField } from "../item-panel.ts";
 import { moveToFloor } from "../item-floor.ts";
 import { clipboardKey, copyItems, pasteItems, withKeys, type ItemClip } from "../clipboard.ts";
 import { TypedCommit } from "../typed-commit.ts";
@@ -195,7 +195,7 @@ import { furnitureName } from "../furniture-names.ts";
 import { effectFields } from "./effect-fields.ts";
 import { itemTempSource, roomLiveSensors, shadeKind, type LiveKind } from "../room-effects.ts";
 import { energyRole, furnitureSize, isElectric, isPackType, isRobotVacuum, migratePlanTypes, mountBase, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
-import { isCameraItem, isThermostatItem, isTvLike, linkFilter } from "../furniture-links.ts";
+import { isThermostatItem, linkField, linkFilter } from "../furniture-links.ts";
 import { hiddenUnplaced, setUnplacedHidden, suggestLinks, unplacedByArea, type LinkSuggestion } from "../unplaced.ts";
 
 /** Drag-and-drop type of an entity dragged from the unplaced list onto the plan (#83). */
@@ -1986,7 +1986,9 @@ export class Fp3dEditor extends LitElement {
       return;
     }
     const openingEl = target.closest("[data-opening]");
-    if (openingEl) {
+    // a door's or window's wide invisible tap band gives way to an item pressed on its shape: a radiator under the
+    // window, 2 px deep on screen, was out of reach (#132); the opening's drawn gap still wins
+    if (openingEl && !(target.getAttribute("class") === "fp3d-open-hit" && this.firmItemAt(world, e.pointerType))) {
       this.pressOpening(openingEl.getAttribute("data-opening")!, local);
       return;
     }
@@ -3171,6 +3173,8 @@ export class Fp3dEditor extends LitElement {
       return;
     }
     if (!this.isConnected || !this.offsetParent) return;
+    // an entity picker with its list open has the keyboard, even when a press beside its box took the focus (#132)
+    if (this.pickerOpen()) return;
     // '?' shows the help (#95); while it is open no key edits the plan behind it, and Esc closes it first
     if (isHelpKey(e)) {
       e.preventDefault();
@@ -3242,6 +3246,12 @@ export class Fp3dEditor extends LitElement {
       this.escape();
     }
   };
+
+  /** Whether one of the side panel's entity pickers shows its list (#132). */
+  private pickerOpen(): boolean {
+    const pickers = (this.renderRoot as ShadowRoot | undefined)?.querySelectorAll?.("fp3d-entity-picker") ?? [];
+    return [...pickers].some((p) => (p as unknown as { open?: boolean }).open);
+  }
 
   /** One step back per Escape (#70): the box with the cursor, a menu, a pipe or outline, the item, the tool, the room. */
   private escape(): void {
@@ -4867,6 +4877,12 @@ export class Fp3dEditor extends LitElement {
     return itemsAt(this.floor.furniture, world, this._view.scale, minHitPx(pointerType), hidden.length ? (f) => hidden.includes(f.id) : undefined);
   }
 
+  /** Whether a shown item is pressed on its shape (a thin one's grown depth included, #132). */
+  private firmItemAt(world: Vec2, pointerType: string): boolean {
+    const hidden = this._hiddenItems;
+    return (this.floor?.furniture ?? []).some((f) => !hidden.includes(f.id) && firmHit(f, world, this._view.scale, minHitPx(pointerType)));
+  }
+
   /** Hide an item in this editor's plan, or show it again (#75); a hidden selected item is let go. */
   private toggleItemHidden(id: string): void {
     const hidden = this._hiddenItems;
@@ -5232,6 +5248,18 @@ export class Fp3dEditor extends LitElement {
     /></label>`;
   }
 
+  private typeLabelMemo = new WeakMap<FurniturePack, { lang: string; labels: string[] }>();
+
+  /** A pack's lines in the Type list, same-named items told apart (#132); kept per pack and language. */
+  private typeLabels(pack: FurniturePack): string[] {
+    const lang = this.hass?.language ?? "en";
+    const kept = this.typeLabelMemo.get(pack);
+    if (kept && kept.lang === lang) return kept.labels;
+    const labels = typeOptionLabels(pack.items, lang);
+    this.typeLabelMemo.set(pack, { lang, labels });
+    return labels;
+  }
+
   /**
    * The built-in types offered in a furniture item's type list: what the library offers (#530 – devices of the energy
    * tool, Pool Pro parts not released yet and the stairwell are no furniture to switch to), plus the item's own type.
@@ -5474,6 +5502,12 @@ export class Fp3dEditor extends LitElement {
       const item = floor.furniture.find((f) => f.id === id);
       if (item) Object.assign(item, patch);
     });
+  }
+
+  /** Another type from the item panel (#132): with the new type's size unless the item was resized by hand. */
+  private retypeFurniture(type: string): void {
+    const f = this.furnitureItem;
+    if (f) this.updateFurniture(retypePatch(f, type));
   }
 
   private mirrorFurniture(): void {
@@ -12051,7 +12085,22 @@ export class Fp3dEditor extends LitElement {
       <p class="fp3d-sub fp3d-wide">${this.t("energy_wire_sensor_hint")}</p>`;
   }
 
-  private entitySelect(label: string, value: string | null, auto: string | null | undefined, options: { id: string; label: string }[], onChange: (v: string | null) => void) {
+  /** The HA area of what the side panel edits (#132): the room an item stands in, else the chosen room's. */
+  private pickerArea(): string | null {
+    const f = this.furnitureItem;
+    const roomId = f ? (this.roomAt([f.x, f.z]) ?? this._roomId) : this._roomId;
+    return (roomId && this.floor?.rooms.find((r) => r.id === roomId)?.area_id) || null;
+  }
+
+  /** `domains`: the link's likely entity domains, best first (#132); with the room's area they lead the list. */
+  private entitySelect(
+    label: string,
+    value: string | null,
+    auto: string | null | undefined,
+    options: { id: string; label: string }[],
+    onChange: (v: string | null) => void,
+    domains: readonly string[] = [],
+  ) {
     const autoLabel =
       auto === undefined ? null : auto ? this.t("entity_auto", { name: entityName(this.hass, auto) }) : this.t("entity_auto_none");
     // searchable picker: the fixed choices (automatic, none) first, then the entities filtered as you type
@@ -12063,6 +12112,7 @@ export class Fp3dEditor extends LitElement {
         .options=${options}
         .fixed=${fixed}
         .value=${current}
+        .prefer=${{ area: this.pickerArea(), domains }}
         .placeholder=${this.t("entity_search")}
         ?disabled=${!this.isEditor}
         @change=${(e: CustomEvent<{ value: string }>) => {
@@ -12508,15 +12558,15 @@ export class Fp3dEditor extends LitElement {
       case "type":
         return html`<label class="fp3d-field fp3d-wide"
           >${this.t("furniture_type")}
-          <select ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ type: (e.target as HTMLSelectElement).value })}>
+          <select ?disabled=${!admin} @change=${(e: Event) => this.retypeFurniture((e.target as HTMLSelectElement).value)}>
             ${this.typeChoices(f.type).map((t) => html`<option value=${t} ?selected=${t === f.type}>${this.t(`furn_${t}` as I18nKey)}</option>`)}
             ${(this.packs ?? [])
               .filter((pack) => pack.items.length)
               .map(
                 (pack) => html`<optgroup label=${packName(pack, this.hass?.language ?? "de")}>
-                  ${pack.items.map((it) => {
-                    const t = packType(pack.id, it.id);
-                    return html`<option value=${t} ?selected=${t === f.type}>${packItemName(it, this.hass?.language ?? "en")}</option>`;
+                  ${this.typeLabels(pack).map((label, i) => {
+                    const t = packType(pack.id, pack.items[i].id);
+                    return html`<option value=${t} ?selected=${t === f.type}>${label}</option>`;
                   })}
                 </optgroup>`,
               )}
@@ -13642,20 +13692,17 @@ export class Fp3dEditor extends LitElement {
         return furnitureEntities(hass, probe).get(f.id)?.[key] ?? null;
       });
     const media = isMediaFurniture(f.type);
-    // a pack item with only a status light (a 3D printer's panel, a wallbox's LED) links like any device:
-    // "Device", with media players, switches and status sensors to choose from
-    const tvLike = isTvLike(f.type);
     const lamp = isLamp(f.type);
     const heating = isThermostatItem(f.type);
+    // the field's label and likely domains from the item's kind, family and tags (#132)
+    const field = linkField(f.type);
     const entities = this.entityOptions(linkFilter(hass, f.type), f.type);
     const power = this.entityOptions((id) => this.isPowerSensor(id));
     const doorSensors = f.type === "fridge_smart" ? this.entityOptions((id) => id.startsWith("binary_sensor.")) : [];
     return html`<div class="fp3d-form fp3d-links">
         ${f.type === "grid_point"
           ? html`<p class="fp3d-sub fp3d-wide">${this.t("grid_point_hint")}</p>`
-          : this.entitySelect(this.t(lamp ? "furn_entity_light" : packMotion(f.type) ? "motor_cover" : tvLike ? "furn_entity_tv" : f.type === "awning" ? "awning_cover" : heating || f.type === "ac_unit" ? "furn_entity_climate" : isRobotVacuum(f.type) ? "furn_entity_vacuum" : isCameraItem(f.type) ? "furn_entity_camera" : "furn_entity"), f.entity ?? null, autoPick("entity"), entities, (v) =>
-              this.updateFurniture({ entity: v }),
-            )}
+          : this.entitySelect(this.t(field.label), f.entity ?? null, autoPick("entity"), entities, (v) => this.updateFurniture({ entity: v }), field.domains)}
         ${f.type === "lamp_fan"
           ? html`${this.entitySelect(this.t("fan_entity"), f.fan ?? null, undefined, this.entityOptions((id) => id.startsWith("fan.")), (v) => this.updateFurniture({ fan: v && v !== "none" ? v : null }))}
               <p class="fp3d-sub fp3d-wide">${this.t("fan_hint")}</p>`

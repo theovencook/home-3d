@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { EntityOptionCache } from "./entity-options.ts";
+import { EntityOptionCache, rankOptions } from "./entity-options.ts";
 import type { HomeAssistant } from "./types.ts";
 
 const st = (id: string, name: string) => ({ entity_id: id, state: "on", attributes: { friendly_name: name } });
@@ -17,8 +17,8 @@ test("an entity list is sorted by name and carries the entity's area (#130)", ()
   const cache = new EntityOptionCache();
   const hass = hassOf([["light.b", "Bulb"], ["light.a", "Ceiling"], ["switch.x", "Kettle"]], "kitchen");
   assert.deepEqual(cache.get(hass, "lights", (id) => id.startsWith("light.")), [
-    { id: "light.b", label: "Bulb · Kitchen" },
-    { id: "light.a", label: "Ceiling · Kitchen" },
+    { id: "light.b", label: "Bulb · Kitchen", area: "kitchen" },
+    { id: "light.a", label: "Ceiling · Kitchen", area: "kitchen" },
   ]);
 });
 
@@ -63,4 +63,26 @@ test("without a key the filter function itself is the key (a module's field keep
   const first = cache.get(hass, f, f);
   assert.equal(cache.get(hass, f, f), first);
   assert.deepEqual(cache.get(hass, (id: string) => id.startsWith("light."), (id) => id.startsWith("light.")).map((o) => o.id), ["light.a"]);
+});
+
+test("likely entities come first: the room's area, then the link's own domain, else by name (#132)", () => {
+  const options = [
+    { id: "sensor.attic_temp", label: "Attic temperature" },
+    { id: "switch.boiler_plug", label: "Boiler plug", area: "utility" },
+    { id: "climate.hall", label: "Hall thermostat", area: "hall" },
+    { id: "climate.lounge", label: "Lounge thermostat", area: "lounge" },
+    { id: "sensor.lounge_temp", label: "Lounge temperature", area: "lounge" },
+  ];
+  const ids = (list: readonly { id: string }[]) => list.map((o) => o.id);
+  assert.deepEqual(ids(rankOptions(options, { area: "lounge", domains: ["climate"] })), [
+    "climate.lounge",
+    "sensor.lounge_temp",
+    "climate.hall",
+    "sensor.attic_temp",
+    "switch.boiler_plug",
+  ]);
+  // nothing to go by: the list as it was (and the same list, not a copy)
+  assert.equal(rankOptions(options, {}), options);
+  // a cached list is never changed in place (#130)
+  assert.equal(options[0].id, "sensor.attic_temp");
 });

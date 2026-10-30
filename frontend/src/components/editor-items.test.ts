@@ -61,3 +61,13 @@ test("deleting from the list removes that item (#75)", async () => {
   await ed.deleteFromList("a");
   assert.deepEqual(ed._doc.floors[0].furniture.map((f: Furniture) => f.id), ["b"]);
 });
+
+test("changing an item's type in the panel takes the new type's size, one undo step (#132)", async () => {
+  const ed = await makeEditor([square("r", 0, 0, 4, 4)], [{ id: "s", type: "sofa", x: 2, z: 2, rotation: 0, w: 2.2, d: 0.9, h: 0.82, variant: null }]);
+  ed.selectItem("furniture", "s");
+  ed.retypeFurniture("bed");
+  const f = ed._doc.floors[0].furniture[0];
+  assert.deepEqual([f.type, f.w, f.d, f.h], ["bed", 1.6, 2.05, 0.9]);
+  ed.undo();
+  assert.equal(ed._doc.floors[0].furniture[0].type, "sofa");
+});

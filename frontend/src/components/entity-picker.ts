@@ -1,24 +1,32 @@
 // A searchable entity picker: a text field that filters the options by name, area or id as you type,
 // with a short result list below it. Replaces plain <select> elements, which are unusable with
-// thousands of entities. Fixed choices (automatic, none) come first.
+// thousands of entities. Fixed choices (automatic, none) come first, then the likely entities (#132: the room's area,
+// the link's domain), then the rest by name.
 
-import { css, html, LitElement, nothing } from "lit";
+import { css, html, LitElement, nothing, type PropertyValues } from "lit";
+import { rankOptions, type OptionPreference } from "../entity-options.ts";
 import { tokens } from "../styles.ts";
 
 export interface PickerOption {
   id: string;
   label: string;
+  /** The entity's area, for ranking (#132). */
+  area?: string;
 }
 
 const MAX_SHOWN = 40;
 
 export class EntityPicker extends LitElement {
+  /** Labelable (#132): a click on the field's label text focuses the box instead of leaving the keys to the plan. */
+  static formAssociated = true;
+
   static properties = {
     options: { attribute: false },
     fixed: { attribute: false },
     value: { attribute: false },
     disabled: { type: Boolean },
     placeholder: { attribute: false },
+    prefer: { attribute: false },
     _query: { state: true },
     _open: { state: true },
     _cursor: { state: true },
@@ -32,10 +40,14 @@ export class EntityPicker extends LitElement {
   declare value: string | null;
   declare disabled: boolean;
   declare placeholder: string;
+  /** Which entities are likely (#132): the room's area, the link's domains. */
+  declare prefer: OptionPreference;
   private declare _query: string;
   private declare _open: boolean;
   private declare _cursor: number;
   private blurTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The ranked options, kept while the options and the preference stay (made only while the list is open). */
+  private ranked: { options: PickerOption[]; prefer: string; list: readonly PickerOption[] } | null = null;
 
   constructor() {
     super();
@@ -44,9 +56,19 @@ export class EntityPicker extends LitElement {
     this.value = null;
     this.disabled = false;
     this.placeholder = "";
+    this.prefer = {};
     this._query = "";
     this._open = false;
     this._cursor = 0;
+    this.addEventListener("click", (e) => {
+      // the label's click lands on the picker itself: give the box the focus
+      if (e.composedPath()[0] === this) (this.renderRoot?.querySelector?.("input") as HTMLInputElement | null)?.focus();
+    });
+  }
+
+  /** Whether the list is open: the editor's shortcuts leave the keyboard to the picker meanwhile (#132). */
+  get open(): boolean {
+    return this._open;
   }
 
   private get current(): PickerOption | undefined {
@@ -61,8 +83,25 @@ export class EntityPicker extends LitElement {
       return words.every((w) => text.includes(w));
     };
     const fixed = this.fixed.filter((o) => !q || match(o));
-    const rest = q ? this.options.filter(match) : this.options;
+    const all = this.rankedOptions();
+    const rest = q ? all.filter(match) : all;
     return [...fixed, ...rest.slice(0, MAX_SHOWN)];
+  }
+
+  private rankedOptions(): readonly PickerOption[] {
+    const key = `${this.prefer.area ?? ""}|${(this.prefer.domains ?? []).join(",")}`;
+    const r = this.ranked;
+    if (r && r.options === this.options && r.prefer === key) return r.list;
+    const list = rankOptions(this.options, this.prefer);
+    this.ranked = { options: this.options, prefer: key, list };
+    return list;
+  }
+
+  /** After typing: the highlight goes to the first matching entity (fixed choices only when no entity matches). */
+  private onQuery(): void {
+    const hits = this.hits;
+    const first = this._query.trim() ? hits.findIndex((o) => o.id.includes(".")) : -1;
+    this._cursor = Math.max(0, first);
   }
 
   /** How many matching entities the list leaves out (it shows the first MAX_SHOWN). */
@@ -71,6 +110,18 @@ export class EntityPicker extends LitElement {
     const words = q.split(/\s+/).filter(Boolean);
     const all = q ? this.options.filter((o) => words.every((w) => `${o.label} ${o.id}`.toLowerCase().includes(w))).length : this.options.length;
     return Math.max(0, all - MAX_SHOWN);
+  }
+
+  private openList(): void {
+    clearTimeout(this.blurTimer);
+    this._open = true;
+    this._query = "";
+    this._cursor = 0;
+  }
+
+  protected updated(changed: PropertyValues): void {
+    // the highlighted row stays in view while the arrows move it
+    if (this._open && changed.has("_cursor")) (this.renderRoot?.querySelector?.("li.cursor") as HTMLElement | null)?.scrollIntoView?.({ block: "nearest" });
   }
 
   private choose(id: string): void {
@@ -101,7 +152,10 @@ export class EntityPicker extends LitElement {
   protected render() {
     const current = this.current;
     const hits = this._open ? this.hits : [];
-    return html`<div class="wrap">
+    const picked = this.value && this.value.includes(".") ? this.value : null;
+    // a press anywhere in the picker but its box (the list's padding or scrollbar, a note row) keeps the box focused,
+    // so the typed keys stay here instead of reaching the plan's shortcuts (#132)
+    return html`<div class="wrap" @mousedown=${(e: Event) => (e.target as Element)?.localName !== "input" && e.preventDefault()}>
       <input
         type="text"
         role="combobox"
@@ -109,19 +163,18 @@ export class EntityPicker extends LitElement {
         ?disabled=${this.disabled}
         placeholder=${current ? current.label : this.placeholder}
         .value=${this._open ? this._query : (current?.label ?? "")}
-        @focus=${() => {
-          clearTimeout(this.blurTimer);
-          this._open = true;
-          this._query = "";
-          this._cursor = 0;
+        @focus=${() => this.openList()}
+        @click=${() => {
+          // a second click on the box (it kept the focus after a pick) opens the list again (#132)
+          if (!this._open) this.openList();
         }}
         @blur=${() => {
           this.blurTimer = setTimeout(() => (this._open = false), 150);
         }}
         @input=${(e: Event) => {
           this._query = (e.target as HTMLInputElement).value;
-          this._cursor = 0;
           this._open = true;
+          this.onQuery();
         }}
         @keydown=${this.onKey}
       />
@@ -142,6 +195,7 @@ export class EntityPicker extends LitElement {
             ${this.leftOut > 0 ? html`<li class="empty">… +${this.leftOut} · ${this.placeholder}</li>` : nothing}
           </ul>`
         : nothing}
+      ${picked ? html`<small class="picked" title=${picked}>${picked}</small>` : nothing}
     </div>`;
   }
 
@@ -208,6 +262,15 @@ export class EntityPicker extends LitElement {
       }
       li.chosen {
         color: var(--fp3d-accent);
+      }
+      .picked {
+        display: block;
+        margin-top: 2px;
+        color: var(--fp3d-muted);
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       li.empty {
         color: var(--fp3d-muted);

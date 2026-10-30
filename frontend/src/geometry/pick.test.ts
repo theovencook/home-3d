@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Furniture } from "../model.ts";
-import { altPick, itemsAt, minHitPx } from "./pick.ts";
+import { altPick, firmHit, itemsAt, minHitPx } from "./pick.ts";
 
 const item = (id: string, x: number, z: number, w: number, d: number, rotation = 0): Furniture => ({ id, type: "box", x, z, rotation, w, d, h: 0.5, variant: null });
 
@@ -52,4 +52,18 @@ test("Alt on a stack grabs the selected item and keeps the next one for a click 
   assert.deepEqual(altPick([], ["sb"], "sb"), { grab: null, next: null });
   // a single item: nothing to cycle to
   assert.deepEqual(altPick(["sb"], ["sb"], "sb"), { grab: "sb", next: null });
+});
+
+test("a thin item (a TRV radiator 2 px deep on screen) is pressed through its grown depth, even over a bed in front (#132)", () => {
+  // 1.12 x 0.1 m radiator against a wall at 20 px/m: 22 x 2 px; a bed right in front of it
+  const radiator = item("trv", 2, 0.05, 1.12, 0.1);
+  const bed = item("bed", 2, 1.13, 1.6, 2.05);
+  // 6 px into the bed, along the radiator's length: the radiator, then the bed under the press
+  assert.deepEqual(itemsAt([bed, radiator], [2.2, 0.05 + 6 / 20], 20, 24), ["trv", "bed"]);
+  assert.equal(firmHit(radiator, [2.2, 0.05 + 6 / 20], 20, 24), true);
+  // beyond its length the grown depth does not count as its own shape
+  assert.equal(firmHit(radiator, [2 + 0.56 + 6 / 20, 0.05], 20, 24), false);
+  // a tiny item (thin both ways) keeps #72's order: the bigger item pressed comes first
+  const thermostat = item("t", 2, 1.5, 0.09, 0.03);
+  assert.deepEqual(itemsAt([bed, thermostat], [2 + 8 / 20, 1.5], 20, 24), ["bed", "t"]);
 });

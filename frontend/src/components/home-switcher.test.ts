@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { setAskHost, type AskAnswer, type AskRequest } from "../ask.ts";
 import type { HomeAssistant } from "../types.ts";
-import { Fp3dHomeSwitcher, homeActions, homeChip, homeOptionLabel } from "./home-switcher.ts";
+import { Fp3dHomeSwitcher, homeActions, homeChip, homeOptionLabel, menuKey, menuRows } from "./home-switcher.ts";
 
 const HOMES = [
   { id: "home", name: "Home", revision: 1, floors: 1, rooms: 3, furniture: 10 },
@@ -32,7 +32,7 @@ function backend() {
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-/** A switcher showing `home`, with its list loaded and a stand-in for its <select>. */
+/** A switcher showing `home`, with its list loaded; `select.value = x; el.chosen(...)` picks x from its menu. */
 async function switcher(hass: HomeAssistant, home: string) {
   const el = new Fp3dHomeSwitcher() as unknown as Record<string, any>;
   el.hass = hass;
@@ -40,23 +40,72 @@ async function switcher(hass: HomeAssistant, home: string) {
   el.willUpdate(new Map());
   await tick();
   const select = { value: home };
-  Object.defineProperty(el, "renderRoot", { value: { querySelector: () => select } });
+  el.chosen = (e: { target: { value: string } }) => el.pick(e.target.value);
   return { el, select };
 }
 
-test("after a switch the list names the home the view loaded, not the one picked before (#57)", async () => {
+/** Every string and value of a lit template, flattened into one text. */
+function flat(v: unknown): string {
+  if (v == null || typeof v === "symbol" || typeof v === "function") return "";
+  if (Array.isArray(v)) return v.map(flat).join("");
+  if (typeof v === "object" && "strings" in (v as object)) {
+    const t = v as { strings: readonly string[]; values: unknown[] };
+    return t.strings.map((s, i) => s + (i < t.values.length ? flat(t.values[i]) : "")).join("");
+  }
+  return String(v);
+}
+
+test("after a switch the menu button names the home the view loaded, not the one picked before (#57)", async () => {
   const { hass } = backend();
   const { el, select } = await switcher(hass, "home");
   select.value = "flat";
   el.chosen({ target: select });
   await tick();
-  // the view is still loading: the list keeps naming the loaded home
-  el.updated(new Map());
-  assert.equal(select.value, "home");
+  // the view is still loading: the button keeps naming the loaded home
+  assert.match(flat(el.render()), /class="pick"[^>]*>\s*Home · /);
   // the view has loaded the other home
   el.home = "flat";
-  el.updated(new Map([["home", "home"]]));
-  assert.equal(select.value, "flat");
+  assert.match(flat(el.render()), /class="pick"[^>]*>\s*Flat/);
+});
+
+const key = (k: string) => ({ key: k, preventDefault() {} });
+
+test("the home menu works from the keyboard: arrows move without switching, Enter picks, Esc closes (#132)", async () => {
+  const { hass } = backend();
+  const { el } = await switcher(hass, "home");
+  const opened = heard(el, "home-open");
+  // a native select switched home on every arrow press (Chrome, Edge on Windows); here Down only opens the menu
+  el.onKey(key("ArrowDown"));
+  assert.equal(el._open, true);
+  assert.equal(el.rows()[el._cursor].value, "home", "the menu opens on the shown home");
+  el.onKey(key("ArrowDown"));
+  assert.equal(el.rows()[el._cursor].value, "flat");
+  assert.deepEqual(opened, [], "moving through the menu opens nothing");
+  el.onKey(key("Enter"));
+  assert.equal(el._open, false);
+  assert.deepEqual(opened, [{ home: "flat" }]);
+  el.onKey(key("Enter"));
+  assert.equal(el._open, true, "Enter on the closed button opens the menu");
+  el.onKey(key("Escape"));
+  assert.equal(el._open, false);
+  assert.equal(opened.length, 1);
+});
+
+test("arrow keys skip the separator and stop at both ends of the menu (#132)", () => {
+  const t = (k: string) => k;
+  const rows = menuRows(HOMES, "home", "home", t);
+  assert.deepEqual(
+    rows.map((r) => r.kind),
+    ["home", "home", "sep", "action", "action", "action", "action", "action"],
+  );
+  assert.deepEqual(menuKey({ open: true, cursor: 1 }, rows, "ArrowDown"), { open: true, cursor: 3 });
+  assert.deepEqual(menuKey({ open: true, cursor: 3 }, rows, "ArrowUp"), { open: true, cursor: 1 });
+  assert.deepEqual(menuKey({ open: true, cursor: 0 }, rows, "ArrowUp"), { open: true, cursor: 0 });
+  assert.deepEqual(menuKey({ open: true, cursor: 7 }, rows, "End"), { open: true, cursor: 7 });
+  assert.deepEqual(menuKey({ open: true, cursor: 3 }, rows, "Home"), { open: true, cursor: 0 });
+  assert.deepEqual(menuKey({ open: true, cursor: 3 }, rows, " "), { open: false, cursor: 3, pick: "new" });
+  assert.deepEqual(menuKey({ open: true, cursor: 3 }, rows, "Tab"), { open: false, cursor: 3 });
+  assert.equal(menuKey({ open: false, cursor: 0 }, rows, "x"), null, "other keys are not the menu's");
 });
 
 test("picking the home that is already shown reloads it (#57)", async () => {

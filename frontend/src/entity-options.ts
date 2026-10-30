@@ -8,6 +8,33 @@ import type { HomeAssistant } from "./types.ts";
 export interface EntityOption {
   id: string;
   label: string;
+  /** The entity's area (its own, else its device's): lets a picker put the open room's entities first (#132). */
+  area?: string;
+}
+
+/** What makes an entity a likely pick (#132): the area of the room being edited, the link's domains, best first. */
+export interface OptionPreference {
+  area?: string | null;
+  domains?: readonly string[];
+}
+
+/**
+ * The options with the likely ones first (#132): an entity in the room's area scores 2, one of the link's first
+ * domain 1 (a later listed domain less), so "climate in this room" leads, then the room's other entities, then the
+ * domain elsewhere; the rest keeps its order (by name). Returns a new list (never sorts a cached one in place), or
+ * the same list when there is nothing to go by.
+ */
+export function rankOptions<T extends EntityOption>(options: readonly T[], prefer: OptionPreference): readonly T[] {
+  const domains = prefer.domains ?? [];
+  if (!prefer.area && !domains.length) return options;
+  const score = (o: T): number => {
+    const i = domains.indexOf(o.id.slice(0, o.id.indexOf(".")));
+    return (prefer.area && o.area === prefer.area ? 2 : 0) + (i < 0 ? 0 : 1 / (i + 1));
+  };
+  return options
+    .map((o, i) => ({ o, i, s: score(o) }))
+    .sort((a, b) => b.s - a.s || a.i - b.i)
+    .map((x) => x.o);
 }
 
 type Filter = (id: string) => boolean;
@@ -15,16 +42,16 @@ type Filter = (id: string) => boolean;
 /** Every entity the filter accepts, labelled "name · area" and sorted by that label. */
 export function entityOptionList(hass: HomeAssistant | undefined, filter: Filter): EntityOption[] {
   if (!hass) return [];
-  const areaName = (id: string) => {
+  const areaOf = (id: string): string | null => {
     const entry = hass.entities?.[id];
-    const area = entry?.area_id ?? (entry?.device_id ? hass.devices?.[entry.device_id]?.area_id : null);
-    return area ? hass.areas?.[area]?.name : undefined;
+    return entry?.area_id ?? (entry?.device_id ? hass.devices?.[entry.device_id]?.area_id : null) ?? null;
   };
   return Object.keys(hass.states ?? {})
     .filter(filter)
     .map((id) => {
-      const area = areaName(id);
-      return { id, label: `${entityName(hass, id)}${area ? ` · ${area}` : ""}` };
+      const area = areaOf(id);
+      const name = area ? hass.areas?.[area]?.name : undefined;
+      return { id, label: `${entityName(hass, id)}${name ? ` · ${name}` : ""}`, ...(area ? { area } : {}) };
     })
     .sort((a, b) => a.label.localeCompare(b.label));
 }
