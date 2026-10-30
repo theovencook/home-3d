@@ -1,0 +1,116 @@
+{
+  "id": "evap_cooler_tower",
+  "name": {
+    "en": "Evaporative cooler"
+  },
+  "size": [
+    0.3,
+    0.3,
+    0.85
+  ],
+  "group": "heating",
+  "room": [
+    "living",
+    "bedroom",
+    "office",
+    "kids",
+    "conservatory"
+  ],
+  "tags": [
+    "cooling",
+    "evaporative cooler",
+    "air cooler",
+    "swamp cooler",
+    "humidifier",
+    "fan",
+    "climate",
+    "typical 45 W"
+  ],
+  "family": "evaporative_cooler",
+  "variant": {
+    "en": "Tower 7 l"
+  },
+  "electric": true,
+  "parts": [
+    {
+      "shape": "rbox",
+      "x": 0.0,
+      "z": 0.0,
+      "w": 1.0,
+      "d": 1.0,
+      "y": 0.0471,
+      "h": 0.9529,
+      "color": "white",
+      "round": 0.15
+    },
+    {
+      "shape": "box",
+      "x": 0.0,
+      "z": 0.5,
+      "w": 0.7,
+      "d": 0.0267,
+      "y": 0.55,
+      "h": 0.35,
+      "color": "dark"
+    },
+    {
+      "shape": "box",
+      "x": 0.0,
+      "z": 0.5,
+      "w": 0.5,
+      "d": 0.0267,
+      "y": 0.15,
+      "h": 0.3,
+      "color": "#7fd0ff"
+    },
+    {
+      "shape": "cyl",
+      "x": -0.35,
+      "z": -0.35,
+      "w": 0.1333,
+      "d": 0.1333,
+      "y": 0.0,
+      "h": 0.0471,
+      "color": "dark"
+    },
+    {
+      "shape": "cyl",
+      "x": -0.35,
+      "z": 0.35,
+      "w": 0.1333,
+      "d": 0.1333,
+      "y": 0.0,
+      "h": 0.0471,
+      "color": "dark"
+    },
+    {
+      "shape": "cyl",
+      "x": 0.35,
+      "z": -0.35,
+      "w": 0.1333,
+      "d": 0.1333,
+      "y": 0.0,
+      "h": 0.0471,
+      "color": "dark"
+    },
+    {
+      "shape": "cyl",
+      "x": 0.35,
+      "z": 0.35,
+      "w": 0.1333,
+      "d": 0.1333,
+      "y": 0.0,
+      "h": 0.0471,
+      "color": "dark"
+    }
+  ],
+  "symbol": [
+    {
+      "shape": "rect",
+      "x": 0,
+      "z": 0,
+      "w": 1,
+      "d": 1
+    }
+  ]
+}
