@@ -105,6 +105,7 @@ const GRID_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" s
 const GRID_OFF_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/><path d="M3 3l18 18"/></svg>';
 import { STAGE, type Look, type Theme } from "../themes.ts";
 import { shownLook } from "../ha-theme.ts";
+import { lightChrome } from "../scheme.ts";
 import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { fetchImage, saveBuilding } from "../api.ts";
@@ -1002,6 +1003,8 @@ export class Fp3dView3d extends LitElement {
   }
 
   protected updated(changed: PropertyValues): void {
+    // the chrome goes light with the Day look (#85): the shared tokens read the attribute, nested parts inherit it
+    if (changed.has("hass") || changed.has("theme")) this.toggleAttribute("light", lightChrome(this.effectiveTheme()));
     if (changed.has("plan2d") && changed.get("plan2d") !== undefined) this.switchViewer();
     if (changed.has("hass") && this.live?.el) this.live.el.hass = this.hass;
     if (changed.has("hass")) this.watchAsk();
@@ -1059,6 +1062,14 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("keepRoof")) v.setKeepRoof(this.keepRoof);
     if (changed.has("hideRoof")) v.setHideRoof(this.hideRoof);
     if (changed.has("floorStack")) v.setFloorStack(this.floorStack);
+    // a look that follows HA's theme or the sun changes with hass alone (#85: a theme switch moves no watched entity,
+    // so waiting for syncDevices left the scene neon under a Day sky); setTheme ignores a look it already shows
+    if (changed.has("hass") && !changed.has("theme") && (this.theme === "theme" || this.theme === "auto")) {
+      const look = this.effectiveTheme();
+      v.setTheme(look);
+      // the floor pictures beside the view are drawn in the look too
+      if (look !== shownLook(this.theme, changed.get("hass") as HomeAssistant | undefined)) this.scheduleThumbs();
+    }
     if (changed.has("theme")) {
       v.setTheme(this.effectiveTheme());
       // the realistic look's sky and the fog colour follow at once
@@ -6075,7 +6086,7 @@ export class Fp3dView3d extends LitElement {
         gap: 2px;
         padding: 6px;
         border-radius: 14px;
-        background: rgba(10, 18, 34, 0.72);
+        background: var(--fp3d-s-chrome, rgba(10, 18, 34, 0.72));
         border: 1px solid rgba(110, 220, 255, 0.28);
         backdrop-filter: blur(8px);
         box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
@@ -6711,7 +6722,7 @@ export class Fp3dView3d extends LitElement {
         padding: 0;
         border-radius: 50%;
         border: 1px solid rgba(160, 240, 255, 0.35);
-        background: rgba(8, 16, 34, 0.7);
+        background: var(--fp3d-s-chrome, rgba(8, 16, 34, 0.7));
         color: var(--fp3d-text);
         cursor: pointer;
         z-index: 4;
@@ -6771,7 +6782,7 @@ export class Fp3dView3d extends LitElement {
         padding: 0;
         border-radius: 50%;
         border: 1px solid rgba(160, 240, 255, 0.35);
-        background: rgba(8, 16, 34, 0.7);
+        background: var(--fp3d-s-chrome, rgba(8, 16, 34, 0.7));
         color: var(--fp3d-text);
         cursor: pointer;
         z-index: 4;
@@ -6787,7 +6798,7 @@ export class Fp3dView3d extends LitElement {
         max-width: min(420px, calc(100% - 80px));
         padding: 6px 12px;
         border-radius: 14px;
-        background: rgba(8, 16, 34, 0.85);
+        background: var(--fp3d-s-chrome, rgba(8, 16, 34, 0.85));
         border: 1px solid rgba(160, 240, 255, 0.35);
         color: var(--fp3d-text);
         font-size: 14px;

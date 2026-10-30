@@ -14,7 +14,8 @@ import type { HomeAssistant } from "./types.ts";
 import type { MarkerMode } from "./components/view3d.ts";
 import type { HeatMode } from "./heatmap.ts";
 import { lookOf, THEMES, type Look } from "./themes.ts";
-import { shownAccent, textOn } from "./ha-theme.ts";
+import { lightChrome } from "./scheme.ts";
+import { shownAccent, shownLook, textOn } from "./ha-theme.ts";
 import { keepInRoom, snapToWall } from "./geometry/snap.ts";
 import { furnitureName } from "./furniture-names.ts";
 import { confirmEntities, defaultHeight, entityName, kindOf } from "./devices.ts";
@@ -502,6 +503,8 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   protected updated(): void {
+    // the viewer's chrome goes light with the Day look (#85); the editor and the extensions page stay dark (deferred)
+    this.toggleAttribute("light", this._mode === "view" && lightChrome(shownLook(this._theme, this.hass)));
     // lab: the locating recorder box for admins (feasibility test, not a feature yet)
     if (!this.locateLab && this.hass?.user?.is_admin && this.data.building && labOn()) {
       this.locateLab = mountLocateLab(() => ({ hass: this.hass, building: this.data.building }));
