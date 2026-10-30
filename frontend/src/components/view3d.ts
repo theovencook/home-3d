@@ -219,6 +219,7 @@ export class Fp3dView3d extends LitElement {
     hass: { attribute: false },
     building: { attribute: false },
     canEdit: { attribute: false },
+    noSettings: { attribute: false },
     home: { attribute: false },
     floorId: { attribute: false },
     roomId: { attribute: false },
@@ -330,6 +331,8 @@ export class Fp3dView3d extends LitElement {
   declare building: Building | null;
   /** On the editors list (#7): may change the plan's settings from the view. Unset: admins may (a backend before #7). */
   declare canEdit: boolean | undefined;
+  /** Locked tablet mode (#92): the central menu offers no view settings. */
+  declare noSettings: boolean;
   /** The home shown (#53): its pictures are fetched and its settings saved there; unset: the active home. */
   declare home: string | null | undefined;
   /** Time travel: the replayed moment (hass is then the past, read-only); null = live. */
@@ -742,6 +745,7 @@ export class Fp3dView3d extends LitElement {
     this.plan2d = false;
     this.clean = false;
     this.cleanButton = false;
+    this.noSettings = false;
     this.roomLabels = true;
     this.floorStack = "dim";
     this._low = false;
@@ -4384,10 +4388,12 @@ export class Fp3dView3d extends LitElement {
       <div class="fp3d-central" role="dialog" aria-label=${t("central")}>
         <div class="fp3d-central-top">
           <b>${floor ? floor.name : t("central_house")}</b>
-          <button class="fp3d-btn fp3d-central-gear" title=${t("view_settings")} aria-label=${t("view_settings")} @click=${() => {
-            this._central = false;
-            this._settingsOpen = true;
-          }}>⚙ ${t("view_settings")}</button>
+          ${this.noSettings
+            ? nothing
+            : html`<button class="fp3d-btn fp3d-central-gear" title=${t("view_settings")} aria-label=${t("view_settings")} @click=${() => {
+                this._central = false;
+                this._settingsOpen = true;
+              }}>⚙ ${t("view_settings")}</button>`}
         </div>
         ${sheets.length
           ? html`<div class="fp3d-central-favs">
