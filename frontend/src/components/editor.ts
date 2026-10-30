@@ -190,6 +190,7 @@ import { hiddenUnplaced, setUnplacedHidden, suggestLinks, unplacedByArea, type L
 /** Drag-and-drop type of an entity dragged from the unplaced list onto the plan (#83). */
 const ENTITY_DRAG = "application/x-home3d-entity";
 import { setIntervalPart } from "../show-when.ts";
+import { UndoHistory } from "../undo-history.ts";
 
 /** Items that can be fixed against moving. */
 type ResizeNote = ResizeNoteOf<Building>;
@@ -246,7 +247,6 @@ interface Guides {
 /** Drags that change the document live (restored when cancelled, recorded in the history when done). */
 const EDIT_DRAGS = new Set(["vertex", "room", "device", "pet", "opening", "furniture", "furnset", "rotate", "resize", "outdoor", "roofmove", "roofcorner", "roofvertex", "outvertex", "outbox", "pipept", "poolport", "pooldev", "pooljoint", "solarmove", "solarturn", "cablept", "holopt", "bgmove", "bgscale", "bgrotate"]);
 
-const HISTORY = 100;
 /** The editor's item clipboard (#74): in memory, shared by every editor on the page, kept while the Editor tab is closed. */
 let clipboard: ItemClip | null = null;
 /** An angle turned on by `d` degrees, kept between -180 and 180. */
@@ -506,6 +506,7 @@ export class Fp3dEditor extends LitElement {
     _canRedo: { state: true },
     canEdit: { attribute: false },
     home: { attribute: false },
+    history: { attribute: false },
   };
 
   declare hass: HomeAssistant;
@@ -514,6 +515,8 @@ export class Fp3dEditor extends LitElement {
   declare canEdit: boolean | undefined;
   /** The home being edited (#53): pictures, restore points and backups go there; unset: the active home. */
   declare home: string | null | undefined;
+  /** The undo history (#66): the panel's, so it outlives this element when another tab opens; else its own. */
+  declare history: UndoHistory;
   declare narrow: boolean;
   /** Imported furniture packs (from the panel's controller). */
   declare packs: FurniturePack[] | undefined;
@@ -755,9 +758,9 @@ export class Fp3dEditor extends LitElement {
   private declare _canUndo: boolean;
   private declare _canRedo: boolean;
 
-  private past: string[] = [];
-  private future: string[] = [];
   private drag: Drag | null = null;
+  /** Set while a change that may join the last undo step runs (arrow nudges, #66). */
+  private mergeKey: string | null = null;
   private pointers = new Map<number, [number, number]>();
   private pinch: { dist: number; mid: [number, number] } | null = null;
   private fitted = false;
@@ -917,6 +920,7 @@ export class Fp3dEditor extends LitElement {
     this._images = {};
     this._canUndo = false;
     this._canRedo = false;
+    this.history = new UndoHistory();
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -961,6 +965,10 @@ export class Fp3dEditor extends LitElement {
     // entering or leaving the roof tool: the 3D half frames the whole house (or the floor) again
     if (changed.has("_tool") && (this.houseTool || changed.get("_tool") === "roof" || changed.get("_tool") === "energy")) this.reframe3d = true;
     if (changed.has("building") && this.building !== this._doc) {
+      // the plan this panel's history leads up to keeps its steps (the tab was left and opened again, #66); a plan
+      // from anywhere else (another home, the server, someone else's edit) starts a fresh history
+      this.history.adopt(this.building, this.home);
+      this.showHistory();
       this._doc = this.building;
       this._doc3d = this.building;
       // the first plan: the floor chosen in the house settings (D418), else the first of the list
@@ -1381,15 +1389,11 @@ export class Fp3dEditor extends LitElement {
 
   /** Replace the document; `base` (the state before the change) goes into the undo history. */
   private setDoc(next: Building, base: Building | null = this._doc): void {
-    if (base) {
-      this.past.push(JSON.stringify(base));
-      if (this.past.length > HISTORY) this.past.shift();
-      this.future = [];
-    }
+    if (base) this.history.push(base, this.mergeKey);
+    this.history.track(next);
     this._doc = next;
     setCameraSensors(next);
-    this._canUndo = this.past.length > 0;
-    this._canRedo = this.future.length > 0;
+    this.showHistory();
     this.dispatchEvent(new CustomEvent("building-changed", { detail: { building: next }, bubbles: true, composed: true }));
   }
 
@@ -1404,17 +1408,19 @@ export class Fp3dEditor extends LitElement {
   }
 
   private undo(): void {
-    const prev = this.past.pop();
-    if (!prev) return;
-    this.future.push(JSON.stringify(this._doc));
-    this.restore(JSON.parse(prev));
+    const prev = this.history.undo(this._doc);
+    if (prev) this.restore(prev);
   }
 
   private redo(): void {
-    const next = this.future.pop();
-    if (!next) return;
-    this.past.push(JSON.stringify(this._doc));
-    this.restore(JSON.parse(next));
+    const next = this.history.redo(this._doc);
+    if (next) this.restore(next);
+  }
+
+  /** The undo / redo buttons follow the history. */
+  private showHistory(): void {
+    this._canUndo = this.history.canUndo;
+    this._canRedo = this.history.canRedo;
   }
 
   private restore(doc: Building): void {
@@ -1422,8 +1428,7 @@ export class Fp3dEditor extends LitElement {
     if (!doc.floors.some((f) => f.id === this._floorId)) this._floorId = doc.floors[0]?.id ?? null;
     if (!this.floor?.rooms.some((r) => r.id === this._roomId)) this._roomId = null;
     this._vertex = null;
-    this._canUndo = this.past.length > 0;
-    this._canRedo = this.future.length > 0;
+    this.showHistory();
     this.dispatchEvent(new CustomEvent("building-changed", { detail: { building: doc }, bubbles: true, composed: true }));
   }
 
@@ -2695,11 +2700,8 @@ export class Fp3dEditor extends LitElement {
   }
 
   private pushHistory(base: Building): void {
-    this.past.push(JSON.stringify(base));
-    if (this.past.length > HISTORY) this.past.shift();
-    this.future = [];
-    this._canUndo = true;
-    this._canRedo = false;
+    this.history.push(base);
+    this.showHistory();
   }
 
   private restoreLive(base: Building): void {
@@ -3163,8 +3165,21 @@ export class Fp3dEditor extends LitElement {
 
   // ------------------------------------------------------------------ actions
 
-  /** Moves the selected item by (dx, dz) metres; false when nothing movable is selected. */
+  /**
+   * Moves the selected item by (dx, dz) metres; false when nothing movable is selected. Nudges of the same selection
+   * in quick succession are one undo step (#66).
+   */
   private nudge(dx: number, dz: number): boolean {
+    const key = ["nudge", this._furnitureId ? this.selection().join(",") : "", this._deviceId, this._openingId, this._wallId, this._outdoorId, this._roomId, this._vertex].join("|");
+    this.mergeKey = key;
+    try {
+      return this.nudgeBy(dx, dz);
+    } finally {
+      this.mergeKey = null;
+    }
+  }
+
+  private nudgeBy(dx: number, dz: number): boolean {
     const floor = this.floor;
     if (!floor || !this.isEditor) return false;
     const fix = this.selectedFix;
