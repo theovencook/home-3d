@@ -4,16 +4,16 @@
   "size": [0.09, 0.09, 0.17],
   "group": "media",
   "room": ["office", "hobby", "living", "bedroom"],
-  "tags": ["shure", "mv6", "gaming mic", "usb mic", "podcast mic", "microphone", "streaming", "audio"],
+  "tags": ["shure", "mv6", "gaming mic", "usb mic", "microphone", "streaming", "audio"],
   "family": "shure_usb",
   "variant": {"en": "MV6"},
   "electric": true,
   "watts": 2.5,
   "mount": "surface",
   "parts": [
-    {"shape": "cyl", "x": 0.0, "z": 0.0, "w": 0.9, "d": 0.9, "y": 0.0, "h": 0.0882, "color": "dark"},
-    {"shape": "box", "x": 0.0, "z": 0.0, "w": 0.2222, "d": 0.2222, "y": 0.0882, "h": 0.3, "color": "metal"},
-    {"shape": "rbox", "x": 0.0, "z": 0.0, "w": 0.5, "d": 0.5556, "y": 0.3, "h": 0.7, "color": "dark", "round": 0.45},
-    {"shape": "box", "x": 0.0, "z": 0.2778, "w": 0.4, "d": 0.0444, "y": 0.55, "h": 0.35, "color": "#1c1f24"}
+    {"shape": "cyl", "x": 0.0, "z": 0.0, "w": 1.0, "d": 1.0, "y": 0.0, "h": 0.0882, "color": "dark"},
+    {"shape": "box", "x": 0.0, "z": 0.0, "w": 0.2222, "d": 0.2222, "y": 0.0882, "h": 0.1765, "color": "metal"},
+    {"shape": "cyl", "x": 0.0, "z": 0.0, "w": 0.5667, "d": 0.5667, "y": 0.2647, "h": 0.7353, "color": "dark"},
+    {"shape": "cyl", "x": 0.0, "z": 0.0, "w": 0.5667, "d": 0.5667, "y": 0.8824, "h": 0.1176, "color": "#2b2f36"}
   ]
 }
