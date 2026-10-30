@@ -120,6 +120,27 @@ export const controls = css`
     cursor: pointer;
   }
   /* colour per role (#12): a swatch beside the presets; a role following the look shows a faded swatch */
+  .fp3d-paint {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .fp3d-swatch {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+  }
+  .fp3d-swatch[aria-pressed="true"] {
+    border-color: var(--fp3d-accent, #37e0ff);
+    box-shadow: 0 0 0 2px var(--fp3d-accent, #37e0ff);
+  }
+  .fp3d-paint-hex {
+    width: 5.5em;
+  }
   .fp3d-colour-pick {
     display: grid;
     grid-template-columns: 44px 1fr;

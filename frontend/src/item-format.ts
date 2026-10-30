@@ -6,7 +6,7 @@
 export const PART_SHAPES = ["box", "cyl", "loft", "sphere", "lathe", "rbox"] as const;
 
 /** The colour roles, in the order the item panel lists them (colour-roles.ts). */
-export const COLOUR_ROLES = ["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent"] as const;
+export const COLOUR_ROLES = ["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent", "paint"] as const;
 
 /** Where an item sits. */
 export const MOUNTS = ["floor", "surface", "wall", "ceiling"] as const;

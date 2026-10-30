@@ -175,7 +175,7 @@ All measures of a part are **fractions of the item's size**:
   - `lathe`: a `profile` turned around the part's upright axis (vases, lamp bases, bowls, planters).
   - `rbox`: a box with rounded edges (cushions, mattresses, appliances, soft seats); `round` sets how round.
 - `color`: `#rrggbb` or a role of the built-in palette (`body`, `fabric`, `cushion`, `wood`, `white`, `metal`,
-  `dark`, `glass`, `plant`, `pot`, `accent`). Roles follow the look of the plan, so prefer them. In the realistic
+  `dark`, `glass`, `plant`, `pot`, `accent`, `paint`). Roles follow the look of the plan, so prefer them. `paint` is the body of a vehicle: the item panel offers ten base car colours and a hex value for it (the catalogue is in [vehicles.md](vehicles.md)). In the realistic
   look each role also has a material (`fabric` and `cushion` fabric, `metal` metal, `glass` glass, `white` gloss, the
   rest matt), which an editor can change per placed item in the item panel (matt, gloss, fabric, glass, metal or
   rattan weave); a `#rrggbb` part is matt.
