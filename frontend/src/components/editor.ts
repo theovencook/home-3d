@@ -55,6 +55,7 @@ import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { edgeReach, generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { edgeStartCorner, openingTap } from "../geometry/openings.ts";
 import { nameNewRoom, roomNameSuggestions } from "../room-naming.ts";
+import { wallSummary } from "../geometry/room-walls.ts";
 import { carryRectResize, strandedBy, type ResizeNote as ResizeNoteOf } from "../geometry/room-resize.ts";
 import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } from "../i18n.ts";
 import { ISSUES_URL } from "./extensions.ts";
@@ -459,6 +460,7 @@ export class Fp3dEditor extends LitElement {
     _packages: { state: true },
     _rectSize: { state: true },
     _rectName: { state: true },
+    _wallsOpen: { state: true },
     _tool: { state: true },
     _toolMenu: { state: true },
     _settingsMenu: { state: true },
@@ -683,6 +685,8 @@ export class Fp3dEditor extends LitElement {
   private declare _rectSize: [number, number];
   /** Name typed for the next "Rectangle by size" room (#65); empty = "Room N". */
   private declare _rectName: string;
+  /** The room panel's Walls section is unfolded (#67; per browser, `home3d.wallsOpen`). */
+  private declare _wallsOpen: boolean;
   private declare _spots: { type: FurnitureType; rows: number; cols: number; entity: string | null } | null;
   private declare _tool: Tool;
   /** The toolbar menu open (its group), and which tool's choices are unfolded in it. */
@@ -818,8 +822,10 @@ export class Fp3dEditor extends LitElement {
     this._backupBusy = false;
     // the 3D pane's wall view stays as it was last set on this device (#309)
     this._wall3d = "cut";
+    this._wallsOpen = false;
     try {
       if (localStorage.getItem("home3d.walls3d") === "auto") this._wall3d = "auto";
+      this._wallsOpen = localStorage.getItem("home3d.wallsOpen") === "1";
     } catch {
       // no storage: the default
     }
@@ -6375,8 +6381,13 @@ export class Fp3dEditor extends LitElement {
         list[edge] = v;
         r.wall_thickness = list.every((t) => t === null) ? undefined : list;
       });
-    return html`<div class="fp3d-edge-box">
-      <h4>${this.t("wall_heights")}</h4>
+    const sum = wallSummary(room);
+    const special = [sum.open ? this.t("walls_open_n", { n: sum.open }) : "", sum.sloping ? this.t("walls_sloping_n", { n: sum.sloping }) : ""].filter(Boolean).join(", ");
+    return html`<details class="fp3d-edge-box" ?open=${this._wallsOpen} @toggle=${(e: Event) => this.setWallsOpen((e.target as HTMLDetailsElement).open)}>
+      <summary>
+        <h4>${this.t("walls_section", { n: sum.walls })}</h4>
+        ${special ? html`<span class="fp3d-sub">${special}</span>` : nothing}
+      </summary>
       ${room.points.flatMap((a, i) => {
         const b = room.points[(i + 1) % n];
         const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -6436,7 +6447,17 @@ export class Fp3dEditor extends LitElement {
         });
       })}
       <p class="fp3d-sub">${this.t("room_wall_hint")}</p>
-    </div>`;
+    </details>`;
+  }
+
+  private setWallsOpen(open: boolean): void {
+    if (this._wallsOpen === open) return;
+    this._wallsOpen = open;
+    try {
+      localStorage.setItem("home3d.wallsOpen", open ? "1" : "0");
+    } catch {
+      // no storage (private mode): open for this visit only
+    }
   }
 
 
@@ -10870,6 +10891,7 @@ export class Fp3dEditor extends LitElement {
             ${this.len(this.t("depth"), b.z1 - b.z0, (v) => this.setRect("d", v), 0.01, 0.05)}`
           : nothing}
       </div>
+      ${this.renderEdgeHeights(room)}
       <div class="fp3d-form">
         <label class="fp3d-field" title=${this.t("room_ceiling_hint")}
           >${unitLabel(this.t("room_ceiling"), this.unit)}
@@ -10894,7 +10916,7 @@ export class Fp3dEditor extends LitElement {
       </div>
       <p class="fp3d-sub" title=${this.t("room_area_net_hint")}>${this.t("room_area_net", { a: this.area(polygonArea(room.points)), n: this.area(netRoomArea(room, this.floor!, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior })) })}</p>
       <p class="fp3d-sub fp3d-room-id">${this.t("room_id")} <code title=${this.t("license_copy")} @click=${() => void navigator.clipboard?.writeText(room.id).catch(() => undefined)}>${room.id}</code></p>
-      ${this.renderEdgeHeights(room)} ${this.renderRoomClimate(room)} ${this.renderRoomLive(room)} ${this.renderRoomOpenings(room)}
+      ${this.renderRoomClimate(room)} ${this.renderRoomLive(room)} ${this.renderRoomOpenings(room)}
       <details class="fp3d-points" ?open=${!rect}>
         <summary>${this.t("points")} (${room.points.length})</summary>
         ${room.points.map(
@@ -15764,6 +15786,19 @@ export class Fp3dEditor extends LitElement {
         border: 1px solid color-mix(in srgb, var(--fp3d-accent) 45%, transparent);
         border-radius: 12px;
         background: color-mix(in srgb, var(--fp3d-accent) 6%, transparent);
+      }
+      .fp3d-edge-box > summary {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 4px 10px;
+        cursor: pointer;
+      }
+      .fp3d-edge-box > summary h4 {
+        display: inline;
+      }
+      .fp3d-edge-box[open] > summary {
+        margin-bottom: 6px;
       }
       .fp3d-edge-box h4 {
         margin: 0 0 4px;
