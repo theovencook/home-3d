@@ -428,8 +428,8 @@ those cannot show, or for places without a wall or a roof to cut:
 ### Racks
 
 An item with a `rack_frame` is an empty 19-inch or 10-inch rack. Its `parts` draw the frame like any other item;
-the spec says how many rack units (U) it has and where they sit, so Home 3D can mark them and (in a later release)
-fit rack-mount gear into them. It places, moves and rotates like any other item.
+the spec says how many rack units (U) it has and where they sit, so Home 3D can mark them and fit rack-mount gear
+into them (see "Rack-mount gear" below). It places, moves and rotates like any other item.
 
 ```json
 {
@@ -478,6 +478,41 @@ The bundled racks in `theovencook.it` (`network/rack_*.json`) are written by `no
 in `frontend/src/rack-catalogue.ts`, which draws each frame from its spec (`rackFrameParts` in
 `frontend/src/rack-frame.ts`); a test fails while a file differs. To add a bundled rack, add it to that list and run
 the tool. The catalogue (30 racks) and where each size comes from are in [rack-frames.md](rack-frames.md). Other packs may draw their racks any way they like.
+
+### Rack-mount gear
+
+An item with a `rack` spec is rack-mount gear: a switch, a patch panel, a blanking plate. It can still be placed on
+its own like any item, and it can go into a rack: in the editor, choose a placed rack and press **Edit rack**. The
+sheet shows the rack's U positions numbered down both sides; pick gear from the list and tap the lowest U it should
+take. Tap gear in the rack to move it a U up or down, move it to another U, rename or delete it. Gear that would
+overlap other gear, stick out of the rack or not fit is refused, with the U and the gear in the way in red.
+
+```json
+{
+  "id": "switch_24_1u",
+  "name": {"en": "Switch 24-port 1U"},
+  "size": [0.4826, 0.25, 0.0437],
+  "rack": {"u": 1},
+  "parts": [{"shape": "box", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "dark"}]
+}
+```
+
+| Field | Value | Default |
+| --- | --- | --- |
+| `u` | Height in rack units, a whole number from 0 to 60 (0: a vertical PDU in the side lane, placed from a later release). | required |
+| `width` | `full`, `half` or `third` of the rack's width (half and third are placed side by side from a later release; until then they take the whole U). | `full` |
+| `depth` | `half` (on the front rails) or `full` (blocks the rear face too, from a later release). | `half` |
+| `inch` | The rack width it is made for: `19` or `10`. It only goes into racks of that width. | `19` |
+
+Draw gear with its front at +z and its `size` the real box: across the ears (482.6 mm for 19-inch gear), its depth
+and its height (a 1U box is 43.7 mm). In a rack it is drawn at its own size on the front rails, centred in its U;
+gear deeper than the rack's mounting depth does not go in. The bundled `theovencook.it` pack has three starters:
+`rack_switch_24_1u`, `rack_patch_panel_24_1u` and `rack_blank_1u`.
+
+The gear is saved on the placed rack (`rack.slots`: each slot's `id`, `type`, `u` = its lowest rail position counted
+from the bottom, 1 = the lowest U whatever the rack's numbering, and an optional `name`), and the plan keeps a copy
+of each gear's recipe like any placed item's, so a rack shows its gear without the pack. Home Assistant refuses an
+editor's save that breaks the rules above (`invalid_rack`).
 
 ## What the loader checks
 

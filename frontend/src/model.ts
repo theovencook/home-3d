@@ -1,6 +1,7 @@
 // Data model shared by editor, 3D view and backend (see custom_components/home_3d/schema.py).
 // Units are metres; x grows to the right, z grows downwards (as in the 2D editor).
 
+import type { RackContents } from "./rack.ts";
 import { packItem, type PlanRecipe } from "./packs.ts";
 import type { LampModel } from "./viewer/viewer3d.ts";
 import type { ItemActions } from "./item-actions.ts";
@@ -201,6 +202,8 @@ export interface Furniture {
   materials?: RoleMaterials | null;
   /** Seasonal and conditional items (#15): when it shows in 3D (null = always). */
   show_when?: ShowWhen | null;
+  /** A rack (a pack item with a `rack_frame`, #113): the gear in its U positions (rules in rack.ts). */
+  rack?: RackContents | null;
   /** Fixed against moving by accident. */
   locked?: boolean | null;
   /** Furniture block: items with the same group id are selected, moved and turned together (a kitchen, a wall unit). */

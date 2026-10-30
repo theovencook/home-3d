@@ -96,11 +96,12 @@ async function send(sent: Batch): Promise<void> {
   );
 }
 
-/** The pack item types a plan shows: its furniture and the vehicles of its parking spots (recipes.py used_pack_types). */
+/** The pack item types a plan shows: its furniture, the vehicles of its parking spots and the gear in its racks (#113)
+ * (recipes.py used_pack_types). */
 export function packTypesIn(building: Pick<Building, "floors">): string[] {
   const used = new Set<string>();
   for (const floor of building.floors)
     for (const f of floor.furniture)
-      for (const type of [f.type, f.vehicle, ...(f.types ?? []).map((t) => t.vehicle)]) if (type && isPackType(type)) used.add(type);
+      for (const type of [f.type, f.vehicle, ...(f.types ?? []).map((t) => t.vehicle), ...(f.rack?.slots ?? []).map((s) => s.type)]) if (type && isPackType(type)) used.add(type);
   return [...used];
 }

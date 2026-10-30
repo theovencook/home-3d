@@ -43,6 +43,7 @@ from .packs import (
     verify_pack,
     verify_source,
 )
+from .racks import RackError
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
 from .storage import FloorplanData, Home, HomesError, complete
 from .timetravel import ws_timetravel_history
@@ -195,7 +196,12 @@ async def ws_save_building(
     if not connection.user.is_admin and performed_actions(msg["building"]) - performed_actions(home.building):
         connection.send_error(msg["id"], "unauthorized", "Only an admin adds or changes an item's perform action")
         return
-    revision = await home.async_save_building(msg["building"], msg.get("recipe_bases"))
+    try:
+        revision = await home.async_save_building(msg["building"], msg.get("recipe_bases"), check_racks=True)
+    except RackError as err:
+        # rack gear where it does not fit (#113): the editor refuses it too, so only an outdated or foreign client
+        connection.send_error(msg["id"], "invalid_rack", str(err))
+        return
     # the plan's recipe copies as stored (#2): an open editor keeps them with its plan
     connection.send_result(
         msg["id"], {"revision": revision, "home_id": home.id, "recipes": home.building.get("recipes", {})}

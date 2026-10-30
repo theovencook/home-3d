@@ -73,11 +73,12 @@ def recipes_validator(value: Any) -> dict[str, dict[str, Any]]:
 
 
 def placed_types(building: dict[str, Any]) -> Iterator[str]:
-    """The furniture types a building shows, once per placed item: its own type and the vehicles of a parking spot
-    (frontend pack-recipes.ts packTypesIn walks the same way)."""
+    """The furniture types a building shows, once per placed item: its own type, the vehicles of a parking spot and
+    the gear in a rack (#113) (frontend pack-recipes.ts packTypesIn walks the same way)."""
     for floor in building.get("floors", []):
         for item in floor.get("furniture", []):
             types = {item.get("type"), item.get("vehicle"), *(t.get("vehicle") for t in item.get("types") or [])}
+            types.update(s.get("type") for s in ((item.get("rack") or {}).get("slots") or []))
             yield from (type_ for type_ in types if isinstance(type_, str))
 
 

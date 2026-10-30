@@ -198,6 +198,25 @@ RACK_FRAME_SCHEMA = vol.Schema(
 )
 
 
+# Rack-mount gear (#113): an item that fits into a rack's U positions. frontend/src/rack.ts reads the same spec (a test
+# compares these lists). Half / third width, the rear face and 0U side-lane gear are placed from #114 on.
+RACK_GEAR_WIDTHS = ["full", "half", "third"]
+RACK_GEAR_DEPTHS = ["half", "full"]
+
+RACK_GEAR_SCHEMA = vol.Schema(
+    {
+        # height in rack units (0 = a vertical PDU in the side lane)
+        vol.Required("u"): vol.All(_whole, vol.Range(min=0, max=RACK_MAX_U)),
+        # how much of the rack's width it takes (default full)
+        vol.Optional("width"): vol.In(RACK_GEAR_WIDTHS),
+        # half depth sits on the front rails, full depth blocks the rear face too (default half)
+        vol.Optional("depth"): vol.In(RACK_GEAR_DEPTHS),
+        # the rack standard it is made for: 19 or 10 inch (default 19)
+        vol.Optional("inch"): vol.All(_whole, vol.In(RACK_WIDTHS)),
+    }
+)
+
+
 def _rack_fits(item: dict[str, Any]) -> dict[str, Any]:
     """A rack frame fits its item: its panels across the width, its U space in the height, its mounting depth in the
     depth; wall racks hang on a wall, the others stand; only cabinets have a door."""
@@ -254,6 +273,8 @@ _ITEM_FIELDS = vol.Schema(
         vol.Optional("ikea"): vol.All(str, vol.Length(min=1, max=40)),
         # an empty rack that gear can be fitted into (#112)
         vol.Optional("rack_frame"): RACK_FRAME_SCHEMA,
+        # rack-mount gear that fits into a rack (#113)
+        vol.Optional("rack"): RACK_GEAR_SCHEMA,
     }
 )
 ITEM_SCHEMA = vol.All(_ITEM_FIELDS, _rack_fits)
