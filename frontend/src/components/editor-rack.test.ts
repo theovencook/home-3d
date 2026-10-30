@@ -90,6 +90,19 @@ test("a rack's item panel shows its front view with the gear in it; other items 
   assert.equal(ed.rackElevationOf(ed.furnitureItem), el);
 });
 
+test("the front view in the item panel is one picture with a tooltip per piece of gear, not the drawing's hundreds of elements (#130)", async () => {
+  const ed = await editor();
+  ed.selectItem("furniture", "rack");
+  ed.openRackSheet();
+  ed.onRackChange(new CustomEvent("rack-change", { detail: { slots: [{ id: "s1", type: SWITCH, u: 3, name: "Core switch" }] } }));
+  ed._rackSheet = null;
+  const form = flat(ed.renderFurnitureForm(ed.furnitureItem));
+  assert.match(form, /<img[^>]*fp3d-rack-elev-img/);
+  assert.match(form, /data:image\/svg\+xml/);
+  assert.doesNotMatch(form, /<svg[^>]*fp3d-elevation/);
+  assert.match(form, /title="?Core switch/);
+});
+
 // ------------------------------------------------------------------------------------------------ #114
 
 const PACK114 = {
