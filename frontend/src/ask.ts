@@ -12,6 +12,8 @@ export interface AskRequest {
   ok: string;
   cancel?: string;
   input?: string;
+  /** A long text under the question (a brief to read or copy, #84): shown read-only, scrolling, selectable. */
+  detail?: string;
   /** The OK button deletes or overwrites something: drawn as a warning. */
   danger?: boolean;
 }
@@ -91,4 +93,9 @@ export async function askText(text: string, value: string, labels: { ok: string;
 /** A message with only an OK button; resolves once it is closed. */
 export async function tell(text: string, labels: { ok: string }): Promise<void> {
   await send({ text, ok: labels.ok });
+}
+
+/** A long text to read (and select) under a short line; true when the action button (`ok`, e.g. Copy) was pressed. */
+export async function showText(text: string, detail: string, labels: { ok: string; cancel: string }): Promise<boolean> {
+  return (await send({ text, detail, ...labels })).ok;
 }
