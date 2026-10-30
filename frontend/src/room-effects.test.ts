@@ -140,7 +140,7 @@ test("a radiator with a temperature entity shades with it", () => {
 
 test("a hot-water cylinder shows its tank temperature", () => {
   const { hass, b, item } = heating();
-  const cyl = "pack:theovencook.core:hot_water_cylinder_200";
+  const cyl = "pack:theovencook.devices:hot_water_cylinder_200";
   // its water heater's temperature
   const wh = itemShade(hass, b, item(cyl, { entity: "water_heater.tank" }));
   assert.equal(wh?.celsius, 48);

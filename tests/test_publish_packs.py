@@ -197,9 +197,28 @@ def test_the_real_bundled_packs_publish(tmp_path: Path) -> None:
     publish_packs.publish(tmp_path, BUNDLED)
 
     published = {p.name for p in tmp_path.iterdir() if (p / "pack.json").exists()}
-    assert {"theovencook.core", "theovencook.ikea-uk", "theovencook.makers", "theovencook.devices"} <= published
+    assert {"theovencook.living", "theovencook.ikea-uk", "theovencook.makers", "theovencook.devices"} <= published
+    assert "theovencook.core" not in published
     readme = (tmp_path / "README.md").read_text(encoding="utf-8")
-    assert "tree/main/theovencook.core" in readme
+    assert "tree/main/theovencook.living" in readme
     assert "tree/main/theovencook.ikea-uk" in readme
     assert "tree/main/theovencook.makers" in readme
     assert "tree/main/theovencook.devices" in readme
+
+
+def test_a_retired_pack_folder_is_replaced_by_a_readme_pointing_at_its_successors(tmp_path: Path) -> None:
+    """A pack all of whose items moved away (#111) leaves the repository as a folder with only a README."""
+    source, target = tmp_path / "source", tmp_path / "packs"
+    _pack(source, "test.new")
+    old = _pack(target, "test.old")  # published earlier, now retired
+    assert (old / "pack.json").exists()
+    moves = tmp_path / "moved_items.json"
+    moves.write_text(json.dumps({"moved": {"pack:test.old:cube_chair": "pack:test.new:cube_chair"}}), encoding="utf-8")
+
+    publish_packs.publish(target, source, moves_file=moves)
+
+    assert sorted(p.name for p in old.iterdir()) == ["README.md"]
+    readme = (old / "README.md").read_text(encoding="utf-8")
+    assert "tree/main/test.new" in readme
+    assert "retired" in readme.lower()
+    assert (target / "test.new" / "pack.json").exists()

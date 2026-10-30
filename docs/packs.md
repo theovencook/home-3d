@@ -14,7 +14,7 @@ of the page.
 ## A pack is a folder
 
 ```
-theovencook.core/
+theovencook.living/
 ├── pack.json                 the pack: id, name, publisher, licence
 ├── LICENSE                   optional, not read
 ├── README.md                 optional, not read
@@ -44,7 +44,7 @@ in the importer and every folder with a `pack.json` in it is imported as its own
 {
   "format": "home3d-pack",
   "version": 2,
-  "id": "theovencook.core",
+  "id": "theovencook.living",
   "name": "Home 3D core",
   "publisher": "theovencook",
   "licence": "MIT",
@@ -69,9 +69,9 @@ part of v2 and make a v2 pack fail.
 
 ## Item ids
 
-An item's full id is the pack id, a slash and the item id: `theovencook.core/bar_stool`. The item id is unique
+An item's full id is the pack id, a slash and the item id: `theovencook.living/bar_stool`. The item id is unique
 within its pack (1 to 40 characters: lower-case letters, digits, `_`, `.`, `-`), so the full id is unique across
-packs. In a saved plan, an item from a pack is stored with the furniture type `pack:theovencook.core:bar_stool`.
+packs. In a saved plan, an item from a pack is stored with the furniture type `pack:theovencook.living:bar_stool`.
 
 ## Placed items keep their recipe
 
@@ -81,8 +81,8 @@ copy per item, however often it is placed:
 ```json
 {
   "recipes": {
-    "pack:theovencook.core:bar_stool": {
-      "pack": "theovencook.core",
+    "pack:theovencook.living:bar_stool": {
+      "pack": "theovencook.living",
       "item": "bar_stool",
       "release": 1,
       "hash": "sha256:<hash of the recipe>",
@@ -191,7 +191,7 @@ All measures of a part are **fractions of the item's size**:
 - `glow` (optional, lamps): the part shines in the colour and brightness of the linked light. On a 3D printer it is
   the chamber light (see [3D printers](#3d-printers)). On an item with a `screen` that is no lamp it is Ambilight:
   LED strips round the back of a TV that shine in the screen's colour whenever the screen is lit
-  (`theovencook.core/tv_ambilight_55`). On a speaker without a screen it is the light ring, lit while it plays.
+  (`theovencook.living/tv_ambilight_55`). On a speaker without a screen it is the light ring, lit while it plays.
 - `screen` (optional): the part is a screen (TV, monitor). The item can then be linked to a media player and its
   front (+z) shows the colour and picture of the running app, like the built-in TVs.
 - `profile` (`lathe` only, required there): see [Round shapes](#round-shapes).
@@ -351,7 +351,7 @@ status sensor; Home 3D finds the rest on the same device, whatever integration m
 - its `glow` parts shine while the printer's light (its chamber light) is on, in that light's colour;
 - a tap opens the printer's camera when its device has one (an own tap action set in the editor still wins).
 
-`theovencook.core/3d_printer` is one; see its file for a model to start from.
+`theovencook.makers/3d_printer` is one; see its file for a model to start from.
 
 ### Camera models
 
@@ -364,7 +364,7 @@ A tag with a number in it names the model as Home Assistant's device registry re
 `rlc-810a`. A camera whose device reports that model (with or without UniFi's `UVC` prefix, or a longer name that
 starts with it, like `G5 Turret Ultra` for `g5 turret`) shows it as the model *the device reports*, and a camera placed
 from now on gets that look straight away. Cameras already in the plan keep their look until one is chosen. The
-UniFi cameras in `theovencook.core/tech/` (`unifi_g3_flex`, `unifi_g4_pro`, `unifi_g4_dome`, …) are examples.
+UniFi cameras in `theovencook.office/tech/` (`unifi_g3_flex`, `unifi_g4_pro`, `unifi_g4_dome`, …) are examples.
 
 ### Energy devices
 
@@ -387,7 +387,7 @@ own meter (a circuit monitor's channel placed in the plan) names that circuit's 
 it keeps its own watts and its own branch, but the circuit's cable and the house total count those watts only once. Plans made before this
 existed keep counting such a plug twice until its circuit is set on the item, and the editor says so under every device that has a power
 sensor but no circuit. A hot-water cylinder whose id starts with `hot_water_cylinder`
-also takes a `water_heater` entity. `theovencook.core` has one of each in `energy/` and `heating/`.
+also takes a `water_heater` entity. `theovencook.devices` has one of each in `energy/` and `heating/`.
 
 ### Smart-home devices
 
@@ -413,7 +413,7 @@ position sensor and the other direction are set like a curtain's.
 ### Architecture items and openings
 
 Doors, windows, garage doors and roof windows that cut a wall or a roof are **openings** and **roof windows** of the
-plan, not library items; they follow contacts and covers. The architecture items in `theovencook.core` are for what
+plan, not library items; they follow contacts and covers. The architecture items in `theovencook.household` are for what
 those cannot show, or for places without a wall or a roof to cut:
 
 | Item | In a wall or roof of the plan | The library item |
@@ -445,7 +445,7 @@ The size limits keep a pack within one websocket message. A larger collection is
 ## Checking and importing
 
 1. Write the pack folder.
-2. Check it: `python tools/fp3dpack.py validate path/to/theovencook.core` (needs the Python package `voluptuous`).
+2. Check it: `python tools/fp3dpack.py validate path/to/theovencook.living` (needs the Python package `voluptuous`).
    It runs the same checks as Home Assistant and prints the pack's id, item count, release and licence.
 3. Import it in Home Assistant: **Extensions** → **Import a pack folder …**, then pick the pack folder (or a
    repository folder that holds several packs).
@@ -460,7 +460,7 @@ An editor can also paste a GitHub URL into **Extensions** → **Install from Git
 
 - a repository with the pack at its root: `https://github.com/<owner>/<repo>` (the default branch);
 - a pack folder inside a repository: `https://github.com/<owner>/<repo>/tree/<branch or tag>/<folder>`, for example
-  `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.core`;
+  `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.living`;
 - a release: `https://github.com/<owner>/<repo>/releases/tag/<tag>`.
 
 Home Assistant fetches the pack, not the browser, and only from `api.github.com` (the repository, the commit and its
@@ -481,12 +481,12 @@ The installed pack keeps where it came from in `source.origin`, so an update che
 ```json
 {
   "type": "github",
-  "url": "https://github.com/theovencook/home-3d-packs/tree/main/theovencook.core",
+  "url": "https://github.com/theovencook/home-3d-packs/tree/main/theovencook.living",
   "owner": "theovencook",
   "repo": "home-3d-packs",
   "ref": "main",
   "default_branch": false,
-  "folder": "theovencook.core",
+  "folder": "theovencook.living",
   "commit": "<the 40-character commit id the files came from>",
   "release": 1,
   "fetched_at": 1793232000.0
@@ -530,26 +530,26 @@ The settings, pins, previous releases and last check results are kept in `.stora
 ## Packs that ship with Home 3D
 
 Our own library comes with the integration in `custom_components/home_3d/bundled_packs/`, one folder per pack
-(`theovencook.core`, `theovencook.ikea-uk`, `theovencook.makers` and `theovencook.devices`). Home Assistant reads these folders from its own disk when the integration starts, so
+(`theovencook.living`, `theovencook.bedroom`, `theovencook.kitchen-bath`, `theovencook.office`, `theovencook.it`, `theovencook.decor`, `theovencook.outdoor`, `theovencook.household`, `theovencook.devices`, `theovencook.makers` and `theovencook.ikea-uk`; the former `theovencook.core` was split into the themed ones and retired, #111). Home Assistant reads these folders from its own disk when the integration starts, so
 they are there on a fresh install without network access and nothing has to be imported. They are checked like an
 imported pack; a bundled pack that does not check is logged and left out.
 
 - A bundled pack shows under **Extensions** with "Comes with Home 3D" and cannot be removed. It is not part of a
   backup: the next version of Home 3D brings it again.
 - An imported pack with the same id and at least the same `release` takes the bundled one's place, whether it was
-  imported from files or installed from a GitHub URL (for example a newer `theovencook.core` from
-  `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.core`). An older copy is kept but the bundled
+  imported from files or installed from a GitHub URL (for example a newer `theovencook.living` from
+  `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.living`). An older copy is kept but the bundled
   one is shown. Removing the copy brings the bundled one back.
 
-### Adding an item to theovencook.core
+### Adding an item to a bundled pack
 
-Every item is one file, in the folder of its library section: `theovencook.core/<group>/<item id>.json`, where
+Every item is one file, in the folder of its library section: `<pack id>/<group>/<item id>.json` (pick the pack from the table below), where
 `<group>` is one of the `group` values above (`sofa`, `seating`, `table`, `storage`, `bed`, `kitchen`, `lamp`,
 `tech`, `pets`, …) and the item's `group` field says the same. There is no index to edit: the folder is read as it
-is. Every core item has an English name.
+is. Every bundled item has an English name.
 
 ```
-custom_components/home_3d/bundled_packs/theovencook.core/
+custom_components/home_3d/bundled_packs/theovencook.living/
 ├── pack.json
 ├── LICENSE
 ├── sofa/
@@ -593,13 +593,22 @@ new type (the item id may change too):
 - `tests/test_moved_items.py` checks that every entry leads to an item a bundled pack has, and that no bundled pack
   still offers an old id.
 
-### The Makers and Smart-home devices packs
+### The themed bundled packs
 
-Two themed packs sit beside the core so it stays under the 1000-item limit and people can tell the collections apart.
-They are laid out like the core (`<pack>/<group>/<item id>.json`, MIT, loaded from disk, offline):
+The former core pack (847 items) was split by part of the home (#111) so every pack stays under the 1000-item limit
+and people can tell the collections apart. Items kept their ids; `moved_items.json` holds one entry per item. The packs
+are laid out alike (`<pack>/<group>/<item id>.json`, MIT, loaded from disk, offline):
 
 | Pack | Name in the library | What goes in it |
 |---|---|---|
+| `theovencook.living` | Living | sofa, seating, table, lamp, media |
+| `theovencook.bedroom` | Bedroom & kids | bed, kids, storage |
+| `theovencook.kitchen-bath` | Kitchen & bath | kitchen, appliance, bath |
+| `theovencook.office` | Office & tech | office, tech (cameras, computers; not 3D printers) |
+| `theovencook.it` | IT & network | racks, switches, routers, NAS, access points, UPS |
+| `theovencook.decor` | Decor & plants | deco, frame, candle, vase, tray, cushion, throw, plant |
+| `theovencook.outdoor` | Garden & outdoor | outdoor, sport, vehicle |
+| `theovencook.household` | Household & building | household, architecture, pets |
 | `theovencook.makers` | Makers | 3D printers (FDM and resin), wash and cure stations, maker and workshop kit |
 | `theovencook.devices` | Smart-home devices | sensors, switches, thermostats, doorbells, boilers, meters, alarms, smart speakers, radiators and other device models |
 
@@ -642,12 +651,14 @@ use, and the packs repository is a generated copy so other installs can add or u
    in the checkout without a higher `release`. Otherwise it copies each pack folder
    over its copy in the checkout (files removed from a pack are removed there too) and writes `README.md` (the
    packs, their install URLs, licence), `NOTICE` (with the IKEA trademark note while the IKEA UK pack is in) and
-   `LICENSE`. Git data and folders of other packs in the checkout are not touched.
+   `LICENSE`. A pack that was retired (all its items are in `moved_items.json` and its folder is gone, like the former
+   core pack) has its folder in the checkout replaced by a README pointing at the packs its items went to. Git data
+   and folders of other packs in the checkout are not touched.
 3. Commit and push the checkout. Every pack that changed needs a higher `release` in its `pack.json` (raise it in
    this repository; the script names the packs that need one): the update check compares each pack's own
    `release`, so a pack whose release did not move shows no update.
 4. Tag a release in the packs repository (`vYYYY.MM.DD`, for example `v2026.10.29`) so a version can be named in a URL:
-   `https://github.com/theovencook/home-3d-packs/tree/v2026.10.29/theovencook.core`.
+   `https://github.com/theovencook/home-3d-packs/tree/v2026.10.29/theovencook.living`.
 
 After pushing, `python tools/check_pack_urls.py` fetches every pack by its folder URL from real GitHub with the
 code Home Assistant uses and runs the update check against an older commit (needs the network and Home

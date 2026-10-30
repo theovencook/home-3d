@@ -57,25 +57,25 @@ test("the brief covers every shape, colour role, mount, light, section and room 
   for (const id of ids) assert.ok(brief.includes(`"${id}"`), `the brief names "${id}"`);
 });
 
-const CORE = new URL("../../../custom_components/home_3d/bundled_packs/theovencook.core/", import.meta.url);
+const BUNDLED = new URL("../../../custom_components/home_3d/bundled_packs/", import.meta.url);
 
 /** The JSON blocks of a text (between ```json fences). */
 function jsonBlocks(text: string): unknown[] {
   return [...text.matchAll(/```json\n([\s\S]*?)\n```/g)].map((m) => JSON.parse(m[1]));
 }
 
-test("the brief shows real items of the core pack as examples, as their files hold them", () => {
+test("the brief shows real bundled items as examples, as their files hold them", () => {
   const examples = jsonBlocks(llmBrief({ kinds: KINDS, rooms: ROOMS })) as { id: string }[];
   assert.deepEqual(
     examples.map((e) => e.id),
     ["round_side_table_40", "vase"],
   );
   for (const [example, file] of [
-    [examples[0], "table/round_side_table_40.json"],
-    [examples[1], "vase/vase.json"],
+    [examples[0], "theovencook.living/table/round_side_table_40.json"],
+    [examples[1], "theovencook.decor/vase/vase.json"],
   ] as const) {
     // a family of variants is a pack's business, not an LLM's
-    const { family: _f, variant: _v, ...item } = JSON.parse(readFileSync(new URL(file, CORE), "utf8"));
+    const { family: _f, variant: _v, ...item } = JSON.parse(readFileSync(new URL(file, BUNDLED), "utf8"));
     assert.deepEqual(example, item, file);
   }
 });

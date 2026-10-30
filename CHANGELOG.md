@@ -7,6 +7,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ### Library and packs
 
+- **The core pack is split and retired:** its 847 items moved into themed packs (Living, Bedroom & kids, Kitchen & bath, Office & tech, IT & network, Decor & plants, Garden & outdoor, Household & building, plus the Smart-home devices and Makers packs). Item ids are unchanged; plans migrate on load through `moved_items.json`.
 - **Pack format v2:** a pack is a folder (`pack.json` plus one JSON file per item, no code), checked like before. A pack holds up to 1000 items.
 - **Bundled packs:** `theovencook.core` (furniture, lamps, media, office and network gear, kitchen and bath, heating and energy, decor, plants, outdoor, vehicles and architecture) and `theovencook.ikea-uk` (IKEA UK models, searchable by their IKEA name) come with the integration, next to two themed packs: `theovencook.makers` (3D printers and workshop kit) and `theovencook.devices` (smart-home devices). The library can be narrowed to one pack.
 - **Library vocabulary:** items sort into rooms and kinds, and the search knows UK words as well as US ones.
@@ -16,6 +17,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - **The library loads light:** the pack list sends an index of every item; the recipes come on demand and are kept in the browser.
 - **Saves keep recipe copies:** a pack update that happened on the server while an editor was open is no longer undone by that editor's next save.
 - **Pack install and update robustness:** clearer errors for a missing release, a bad size or a repository that does not exist.
+- **Smart-home models, batch 2:** 16 radiators in eight common styles (column, vertical, cast iron, towel rail, single panel, low-level, flat tube, smart electric) that link a thermostat, 8 smart speakers (Google Home and Nest Audio, Echo Dot, Echo, Echo Studio, Echo Pop, HomePod, HomePod mini) that link a media player, 35 desk and table lamps that glow with their light, and 13 fires (ethanol, electric, fire pits, chiminea) that glow with their switch or light.
 - **Items can move between bundled packs:** plans, backups, restore points, imported plans and pins follow an item to its new pack, and its old id keeps working.
 - `tools/publish_packs.py` and `tools/check_pack_urls.py` publish the bundled packs to a pack repository and check that they install by URL.
 

@@ -148,7 +148,7 @@ test("the items of a v2 pack (a folder with a licence) show in the library under
   const pack: FurniturePack = {
     format: "home3d-pack",
     version: 2,
-    id: "theovencook.core",
+    id: "theovencook.living",
     name: "Home 3D core",
     publisher: "theovencook",
     licence: "MIT",
@@ -159,8 +159,8 @@ test("the items of a v2 pack (a folder with a licence) show in the library under
   assert.deepEqual(
     entries.map((e) => [e.type, e.label, e.kind, e.packLabel]),
     [
-      ["pack:theovencook.core:stool", "Bar stool", "seating", "Home 3D core"],
-      ["pack:theovencook.core:side_table", "Side table", "table", "Home 3D core"],
+      ["pack:theovencook.living:stool", "Bar stool", "seating", "Home 3D core"],
+      ["pack:theovencook.living:side_table", "Side table", "table", "Home 3D core"],
     ],
   );
 });

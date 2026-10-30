@@ -374,16 +374,16 @@ async def test_the_origin_comes_back_from_a_backup_and_a_forged_one_is_dropped(
 async def test_a_url_install_of_a_bundled_pack_follows_the_import_rule(
     hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """theovencook.core from the packs repository: an older copy leaves the bundled one in place (listed first), a
+    """theovencook.living from the packs repository: an older copy leaves the bundled one in place (listed first), a
     copy with at least its release takes its place with its origin, removing that copy brings the bundled one back."""
-    core = packs.read_folder(packs.BUNDLED_DIR / "theovencook.core")
+    core = packs.read_folder(packs.BUNDLED_DIR / "theovencook.living")
     meta = json.loads(core["pack.json"])
-    url = f"https://github.com/{OWNER}/{REPO}/tree/main/theovencook.core"
+    url = f"https://github.com/{OWNER}/{REPO}/tree/main/theovencook.living"
 
     def repo_at(release: int) -> None:
         aioclient_mock.clear_requests()
         files = {**core, "pack.json": json.dumps({**meta, "release": release, "name": f"Core release {release}"})}
-        _mock_repo(aioclient_mock, {f"theovencook.core/{p}": t for p, t in files.items()}, ref="main")
+        _mock_repo(aioclient_mock, {f"theovencook.living/{p}": t for p, t in files.items()}, ref="main")
 
     client = await _client(hass, hass_ws_client)
     data = hass.data[DOMAIN]
@@ -393,17 +393,19 @@ async def test_a_url_install_of_a_bundled_pack_follows_the_import_rule(
     repo_at(bundled_release - 1)
     assert (await _install(client, url))["success"]
     listed = await _all_listed(client)
-    assert listed[0]["id"] == "theovencook.core" and listed[0]["bundled"] is True
-    assert [p["id"] for p in listed].count("theovencook.core") == 1
+    living = next(p for p in listed if p["id"] == "theovencook.living")
+    assert living["bundled"] is True
+    assert [p["id"] for p in listed].count("theovencook.living") == 1
 
     repo_at(bundled_release)
     assert (await _install(client, url))["success"]
-    cores = [p for p in await _all_listed(client) if p["id"] == "theovencook.core"]
+    cores = [p for p in await _all_listed(client) if p["id"] == "theovencook.living"]
     assert [(p["name"], p.get("bundled", False)) for p in cores] == [(f"Core release {bundled_release}", False)]
-    assert cores[0]["source"]["origin"]["folder"] == "theovencook.core"
+    assert cores[0]["source"]["origin"]["folder"] == "theovencook.living"
     assert cores[0]["source"]["origin"]["release"] == bundled_release
 
-    await client.send_json_auto_id({"type": "home_3d/packs/remove", "pack_id": "theovencook.core"})
+    await client.send_json_auto_id({"type": "home_3d/packs/remove", "pack_id": "theovencook.living"})
     assert (await client.receive_json())["success"]
     listed = await _all_listed(client)
-    assert listed[0]["id"] == "theovencook.core" and listed[0]["bundled"] is True
+    living = next(p for p in listed if p["id"] == "theovencook.living")
+    assert living["bundled"] is True

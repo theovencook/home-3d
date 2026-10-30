@@ -9,18 +9,17 @@ import type { HomeAssistant } from "./types.ts";
 import type { PackItem } from "./packs.ts";
 
 const BUNDLED = fileURLToPath(new URL("../../custom_components/home_3d/bundled_packs", import.meta.url));
-const CORE = `${BUNDLED}/theovencook.core`;
 const MAKERS = `${BUNDLED}/theovencook.makers`;
 
-test("theovencook.core has a 3D printer that links to a device and has a chamber light", () => {
-  const item = JSON.parse(readFileSync(`${CORE}/tech/3d_printer.json`, "utf8")) as PackItem;
+test("theovencook.makers has a 3D printer that links to a device and has a chamber light", () => {
+  const item = JSON.parse(readFileSync(`${MAKERS}/tech/3d_printer.json`, "utf8")) as PackItem;
   assert.equal(item.name.en, "3D printer");
   assert.ok(item.electric, "links to the printer's entities");
   assert.ok(item.parts.some((p) => p.glow), "a chamber light part");
-  assert.ok(isPrinter("pack:theovencook.core:3d_printer"));
+  assert.ok(isPrinter("pack:theovencook.makers:3d_printer"));
 });
 
-test("printers in the makers pack get the live state too, not only core (#109)", () => {
+test("printers in the makers pack get the live state too, not only the first one (#109)", () => {
   const files = readdirSync(MAKERS, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".json") && f !== "pack.json");
   const printers = files.map((f) => JSON.parse(readFileSync(`${MAKERS}/${f}`, "utf8")) as PackItem).filter((i) => i.id.includes("3d_printer"));
   assert.ok(printers.length >= 1, "the makers pack has a printer");
@@ -28,7 +27,8 @@ test("printers in the makers pack get the live state too, not only core (#109)",
     const type = `pack:theovencook.makers:${item.id}`;
     assert.ok(isPrinter(type), type);
     assert.ok(item.electric, `${item.id} links to the printer's entities`);
-    assert.ok(item.parts.some((p) => p.glow), `${item.id} has a chamber light part`);
+    // the open-frame mini has no chamber to light
+    if (!item.id.endsWith("_mini")) assert.ok(item.parts.some((p) => p.glow), `${item.id} has a chamber light part`);
     // linked to a Bambu-style device, the item's type shows the ring and the chamber light
     const faces = printerFaces(printerState(bambu("running", "42", "on"), "sensor.workshop_printer_print_status"));
     assert.deepEqual(faces.map((f) => f.part).sort(), ["chamber", "progress"]);

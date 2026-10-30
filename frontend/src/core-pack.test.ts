@@ -38,11 +38,14 @@ const packs = readdirSync(BUNDLED)
   .filter((dir) => statSync(dir).isDirectory())
   .map(readPack);
 
-test("theovencook.core ships with Home 3D", () => {
-  const core = packs.find((p) => p.pack.id === "theovencook.core");
-  assert.ok(core, "bundled_packs/theovencook.core");
-  assert.equal(core.pack.licence, "MIT");
-  assert.ok(core.pack.items.length >= 5);
+test("the core pack is split into themed packs (#111): none is left, each ships MIT with items", () => {
+  assert.equal(packs.find((p) => p.pack.id === "theovencook.core"), undefined);
+  for (const id of ["living", "bedroom", "kitchen-bath", "office", "it", "decor", "outdoor", "household"]) {
+    const found = packs.find((p) => p.pack.id === `theovencook.${id}`);
+    assert.ok(found, `bundled_packs/theovencook.${id}`);
+    assert.equal(found.pack.licence, "MIT");
+    assert.ok(found.pack.items.length >= 5, id);
+  }
 });
 
 test("every bundled item shows in the library under the category its folder names", () => {
@@ -60,10 +63,9 @@ test("every bundled item shows in the library under the category its folder name
   }
 });
 
-test("theovencook.core shows off every part shape: at least one item draws with each", () => {
-  const core = packs.find((p) => p.pack.id === "theovencook.core")!;
-  const used = new Set(core.pack.items.flatMap((item) => item.parts.map((part) => part.shape)));
-  for (const shape of ["box", "cyl", "loft", "sphere", "lathe", "rbox"]) assert.ok(used.has(shape as never), `no core item uses a ${shape}`);
+test("the bundled packs show off every part shape: at least one item draws with each", () => {
+  const used = new Set(packs.flatMap((p) => p.pack.items).flatMap((item) => item.parts.map((part) => part.shape)));
+  for (const shape of ["box", "cyl", "loft", "sphere", "lathe", "rbox"]) assert.ok(used.has(shape as never), `no bundled item uses a ${shape}`);
 });
 
 test("every bundled lamp is linked as a light and has parts that glow with it", () => {
@@ -76,9 +78,9 @@ test("every bundled lamp is linked as a light and has parts that glow with it", 
   }
 });
 
-test("theovencook.core has an item for every part of the energy flow, and each is electric (#22)", async () => {
+test("theovencook.devices has an item for every part of the energy flow, and each is electric (#22)", async () => {
   const { energyRole, setPacks, packType } = await import("./packs.ts");
-  const core = packs.find((p) => p.pack.id === "theovencook.core")!;
+  const core = packs.find((p) => p.pack.id === "theovencook.devices")!;
   setPacks([core.pack]);
   const roles = new Map<string, string[]>();
   for (const item of core.pack.items) {
@@ -87,7 +89,7 @@ test("theovencook.core has an item for every part of the energy flow, and each i
     assert.ok(item.electric, `${item.id} links a power sensor`);
     roles.set(role, [...(roles.get(role) ?? []), item.id]);
   }
-  for (const role of ["meter", "inverter", "home_battery", "wallbox", "solar"]) assert.ok(roles.get(role)?.length, `no core item is a ${role}`);
+  for (const role of ["meter", "inverter", "home_battery", "wallbox", "solar"]) assert.ok(roles.get(role)?.length, `no devices item is a ${role}`);
   setPacks([]);
 });
 
@@ -110,7 +112,7 @@ test("theovencook.ikea-uk ships with Home 3D: every item has its IKEA name, and 
   assert.ok(find("kallax black-brown").some((t) => t.startsWith("pack:theovencook.ikea-uk:kallax_")));
 });
 
-test("theovencook.makers and theovencook.devices ship with Home 3D beside the core (#109)", () => {
+test("theovencook.makers and theovencook.devices ship with Home 3D beside the others (#109)", () => {
   for (const [id, name] of [["theovencook.makers", "Makers"], ["theovencook.devices", "Smart-home devices"]] as const) {
     const bundled = packs.find((p) => p.pack.id === id);
     assert.ok(bundled, `bundled_packs/${id}`);
@@ -140,4 +142,41 @@ test("the library can be narrowed to one pack (#109)", () => {
   assert.equal(filterEntries(entries, none).length, entries.length, "no pack filter: everything");
   // the query still applies inside the pack
   assert.ok(filterEntries(entries, { ...none, pack: "theovencook.makers", query: "sofa" }).length === 0);
+});
+
+test("smart-home models batch 2 (#80): radiators take a thermostat, speakers a media player, lamps and fires glow", async () => {
+  const { setPacks, packType, isThermostatItem } = await import("./packs.ts");
+  const { mainLinkAccepts } = await import("./furniture-links.ts");
+  const devices = packs.find((p) => p.pack.id === "theovencook.devices")!;
+  const living = packs.find((p) => p.pack.id === "theovencook.living")!;
+  setPacks([devices.pack, living.pack]);
+  const hass = { states: {} } as never;
+  const byId = (pk: typeof devices, id: string) => pk.pack.items.find((i) => i.id === id)!;
+  // radiators in common styles each link a climate entity and no light
+  const styles = ["radiator_column", "radiator_vertical", "radiator_cast_iron", "towel_rail", "radiator_single_panel", "radiator_low", "radiator_flat_tube", "radiator_electric"];
+  for (const family of styles) {
+    const items = devices.pack.items.filter((i) => i.family === family);
+    assert.ok(items.length >= 2, `${family} has two sizes`);
+    for (const item of items) {
+      const type = packType(devices.pack.id, item.id);
+      assert.ok(isThermostatItem(type), `${item.id} is run by a thermostat`);
+      assert.ok(mainLinkAccepts(hass, type, "climate.sample_room"), `${item.id} takes a climate entity`);
+      assert.ok(!mainLinkAccepts(hass, type, "light.sample_room"), `${item.id} takes no light`);
+    }
+  }
+  // speakers take a media player
+  for (const id of ["google_home", "nest_audio", "echo_dot", "echo", "echo_studio", "echo_pop", "homepod", "homepod_mini"]) {
+    const item = byId(devices, id);
+    assert.equal(item.group ?? "media", "media");
+    assert.ok(item.electric && item.parts.some((p) => p.glow), `${id} has a light ring`);
+    assert.ok(mainLinkAccepts(hass, packType(devices.pack.id, id), "media_player.sample_speaker"), `${id} takes a media player`);
+  }
+  // about 30 new desk and table lamps, each with a light and glowing parts, and fires that glow
+  const lamps = living.pack.items.filter((i) => (i.tags ?? []).includes("desk lamp") && i.light === "table");
+  assert.ok(lamps.length >= 30, `${lamps.length} desk and table lamps`);
+  assert.equal(new Set(lamps.map((l) => l.id)).size, lamps.length);
+  const fires = living.pack.items.filter((i) => (i.tags ?? []).some((t) => /fire pit|ethanol fire|electric fire|chiminea|electric stove/.test(t)));
+  assert.ok(fires.length >= 10, `${fires.length} fires`);
+  for (const f of fires) assert.ok(f.light && f.parts.some((p) => p.glow), `${f.id} glows with its light or switch`);
+  setPacks([]);
 });
