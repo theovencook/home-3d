@@ -58,6 +58,8 @@ import { ISSUES_URL } from "./extensions.ts";
 import { beforeSelectionChange, deepActive, releaseTyping, selectionMoved, takesTyping } from "../focus-release.ts";
 import { escapeStep } from "../editor-keys.ts";
 import { furniturePanel, type FurnitureField } from "../item-panel.ts";
+import { TypedCommit } from "../typed-commit.ts";
+import { typedValue } from "./typed-value.ts";
 import { iconPath } from "../icons.ts";
 import { moduleAreaFields, moduleFurnitureFields, moduleHelp, moduleRoomFields, modulePipeRules, syncModules, type ModuleField, type ModuleHost, type PipeRules } from "../modules.ts";
 import { pipePlanner } from "../pipe-planner.ts";
@@ -10254,24 +10256,57 @@ export class Fp3dEditor extends LitElement {
   /** A length field: a number field in metres, a text field in feet and inches (8' 2", 98in, 2.5m all work). */
   private len(label: string, value: number, onChange: (v: number) => void, step = 0.01, min?: number) {
     if (this.unit !== "imperial") return this.num(label, value, onChange, step, min);
+    const on = this.typedEvents((text) => {
+      const v = parseLength(text, "imperial");
+      // the value it already has saves nothing (no empty undo step when Enter is followed by a change event)
+      if (v !== null && Math.abs(v - value) > 1e-9) onChange(min !== undefined ? Math.max(min, v) : v);
+    });
+    // rubbish typed shows the old value again once the box is left (typedValue)
     return html`<label class="fp3d-field"
       >${unitLabel(label, "imperial")}
       <input
         type="text"
         inputmode="text"
         spellcheck="false"
-        .value=${formatImperial(value)}
+        .value=${typedValue(this.typed, formatImperial(value))}
         ?disabled=${!this.isEditor}
-        @change=${(e: Event) => {
-          const input = e.target as HTMLInputElement;
-          const v = parseLength(input.value, "imperial");
-          if (v !== null) onChange(min !== undefined ? Math.max(min, v) : v);
-          else input.value = formatImperial(value);
-        }}
+        @focus=${on.focus}
+        @input=${on.input}
+        @change=${on.change}
+        @keydown=${on.keydown}
+        @blur=${on.blur}
     /></label>`;
   }
 
+  /** Typed numbers are saved on Enter, on leaving the box and after a pause in typing (#69). */
+  private readonly typed = new TypedCommit();
+
+  /** The listeners of a typed number box; `save` gets the text (and ignores what isn't a number). */
+  private typedEvents(save: (text: string) => void) {
+    const box = (e: Event) => e.target as HTMLInputElement;
+    return {
+      focus: (e: Event) => this.typed.focus(box(e)),
+      input: (e: Event) => this.typed.input(box(e), box(e).value, save),
+      change: (e: Event) => this.typed.change(box(e), box(e).value, save),
+      keydown: (e: KeyboardEvent) => {
+        if (e.key !== "Enter") return;
+        this.typed.enter(box(e), box(e).value, save);
+        this.requestUpdate();
+      },
+      blur: (e: Event) => {
+        this.typed.blur(box(e));
+        // the plan's value shows again (-90° typed reads 270°)
+        this.requestUpdate();
+      },
+    };
+  }
+
   private num(label: string, value: number, onChange: (v: number) => void, step = 0.01, min?: number) {
+    const on = this.typedEvents((text) => {
+      const v = parseFloat(text.replace(",", "."));
+      // the value it already shows saves nothing (no empty undo step when Enter is followed by a change event)
+      if (Number.isFinite(v) && v !== round(value)) onChange(v);
+    });
     return html`<label class="fp3d-field"
       >${label}
       <input
@@ -10279,12 +10314,13 @@ export class Fp3dEditor extends LitElement {
         inputmode="decimal"
         step=${step}
         min=${min ?? nothing}
-        .value=${String(round(value))}
+        .value=${typedValue(this.typed, String(round(value)))}
         ?disabled=${!this.isEditor}
-        @change=${(e: Event) => {
-          const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
-          if (Number.isFinite(v)) onChange(v);
-        }}
+        @focus=${on.focus}
+        @input=${on.input}
+        @change=${on.change}
+        @keydown=${on.keydown}
+        @blur=${on.blur}
     /></label>`;
   }
 
