@@ -1,6 +1,6 @@
 // 2D editor: floors, rooms (rectangles and free shapes), snapping, undo, background template.
 
-import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
+import { css, html, LitElement, nothing, svg, type PropertyDeclaration, type PropertyValues, type TemplateResult } from "lit";
 import { linesField } from "./lines-field.ts";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { ref } from "lit/directives/ref.js";
@@ -55,6 +55,7 @@ import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { edgeReach, generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } from "../i18n.ts";
 import { ISSUES_URL } from "./extensions.ts";
+import { beforeSelectionChange } from "../focus-release.ts";
 import { iconPath } from "../icons.ts";
 import { moduleAreaFields, moduleFurnitureFields, moduleHelp, moduleRoomFields, modulePipeRules, syncModules, type ModuleField, type ModuleHost, type PipeRules } from "../modules.ts";
 import { pipePlanner } from "../pipe-planner.ts";
@@ -865,6 +866,16 @@ export class Fp3dEditor extends LitElement {
     window.removeEventListener("keydown", this.onKey);
     window.removeEventListener("keyup", this.onShift);
     this.resizeObserver?.disconnect();
+  }
+
+  /**
+   * Every property set passes here, straight after the new value is in. A new plan selection releases the box with
+   * the cursor (#56): its shortcuts work again, the next search doesn't rename the item, and what was typed is saved
+   * on the item it was typed for.
+   */
+  requestUpdate(name?: PropertyKey, oldValue?: unknown, ...rest: [PropertyDeclaration?, boolean?, unknown?]): void {
+    if (typeof name === "string") beforeSelectionChange(this, name, oldValue, this.renderRoot as ShadowRoot | undefined);
+    super.requestUpdate(name, oldValue, ...rest);
   }
 
   protected willUpdate(changed: PropertyValues): void {
