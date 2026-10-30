@@ -7804,6 +7804,24 @@ export class Fp3dView3d extends LitElement {
       .fp3d-holo-plain .fp3d-holo-scan {
         display: none;
       }
+      /* Day (#86): the cyan glass vanished on the pale sky; the cards become dark glass with a deep cyan rim */
+      :host([light]) .fp3d-holo:not(.fp3d-holo-bin) {
+        background: linear-gradient(140deg, rgba(22, 58, 100, 0.9) 0%, rgba(12, 34, 70, 0.92) 55%, rgba(8, 24, 52, 0.94) 100%);
+        border-color: rgba(11, 122, 153, 0.85);
+        box-shadow:
+          0 6px 22px rgba(20, 40, 80, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.25);
+        text-shadow: none;
+      }
+      :host([light]) .fp3d-holo-link line {
+        stroke: rgba(11, 122, 153, 0.9);
+        filter: none;
+      }
+      :host([light]) .fp3d-holo-link circle {
+        fill: #ffffff;
+        stroke: #0b7a99;
+        filter: none;
+      }
       /* the thin line from the solar field up to the card, with a dot on the field */
       .fp3d-holo-link {
         position: absolute;
