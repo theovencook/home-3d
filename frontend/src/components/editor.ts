@@ -54,6 +54,7 @@ import { type CarLinks, type Background, OUTDOOR_TOP, sidelightLayout, DEFAULT_W
 import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { edgeReach, generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { edgeStartCorner, openingTap } from "../geometry/openings.ts";
+import { nameNewRoom, roomNameSuggestions } from "../room-naming.ts";
 import { carryRectResize, strandedBy, type ResizeNote as ResizeNoteOf } from "../geometry/room-resize.ts";
 import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } from "../i18n.ts";
 import { ISSUES_URL } from "./extensions.ts";
@@ -457,6 +458,7 @@ export class Fp3dEditor extends LitElement {
     _measureLen: { state: true },
     _packages: { state: true },
     _rectSize: { state: true },
+    _rectName: { state: true },
     _tool: { state: true },
     _toolMenu: { state: true },
     _settingsMenu: { state: true },
@@ -679,6 +681,8 @@ export class Fp3dEditor extends LitElement {
   /** The package list of the selected room is open. */
   private declare _packages: boolean;
   private declare _rectSize: [number, number];
+  /** Name typed for the next "Rectangle by size" room (#65); empty = "Room N". */
+  private declare _rectName: string;
   private declare _spots: { type: FurnitureType; rows: number; cols: number; entity: string | null } | null;
   private declare _tool: Tool;
   /** The toolbar menu open (its group), and which tool's choices are unfolded in it. */
@@ -840,6 +844,7 @@ export class Fp3dEditor extends LitElement {
     this._measureLen = 3;
     this._packages = false;
     this._rectSize = [4, 3];
+    this._rectName = "";
     this._tool = "select";
     this._toolMenu = null;
     this._settingsMenu = false;
@@ -2726,8 +2731,26 @@ export class Fp3dEditor extends LitElement {
     const start = this._draft[0] ?? [0, 0];
     const [w, d] = this._rectSize;
     if (!(w > 0.1 && d > 0.1)) return;
-    this.addRoom([start, step(start, w, "right"), step(step(start, w, "right"), d, "down"), step(start, d, "down")]);
+    const floor = this.floor;
+    const fallback = this.t("new_room", { n: (floor?.rooms.length ?? 0) + 1 });
+    const named = nameNewRoom(this._rectName, Object.values(this.hass?.areas ?? {}), this.usedAreas(), fallback);
+    this.addRoom([start, step(start, w, "right"), step(step(start, w, "right"), d, "down"), step(start, d, "down")], named);
     this._draft = [];
+    this._rectName = "";
+  }
+
+  /** Type the start corner of the next room (#65): moves a tapped start and any walls typed from it. */
+  private setRectStart(axis: 0 | 1, value: number): void {
+    if (!Number.isFinite(value)) return;
+    const start: Vec2 = this._draft[0] ?? [0, 0];
+    const delta = round(value - start[axis]);
+    const shift = (p: Vec2): Vec2 => (axis === 0 ? [round(p[0] + delta), p[1]] : [p[0], round(p[1] + delta)]);
+    this._draft = this._draft.length ? this._draft.map(shift) : [shift(start)];
+  }
+
+  /** Areas some room or outdoor area of the home already stands for. */
+  private usedAreas(): Set<string | null> {
+    return new Set(this._doc.floors.flatMap((f) => [...f.rooms.map((r) => r.area_id), ...(f.outdoor ?? []).map((a) => a.area_id ?? null)]));
   }
 
   private renderMeasureForm() {
@@ -2782,6 +2805,23 @@ export class Fp3dEditor extends LitElement {
             ${draft.length >= 3 ? html`<p class="fp3d-sub">${this.t("measure_gap", { gap: len(gap) })}</p>` : nothing}`}
       <h4 class="fp3d-lib-head">${this.t("rect_by_size")}</h4>
       <div class="fp3d-form">
+        <label class="fp3d-field fp3d-wide"
+          >${this.t("room_name")}
+          <input
+            list="fp3d-room-names"
+            .value=${this._rectName}
+            placeholder=${this.t("new_room", { n: (this.floor?.rooms.length ?? 0) + 1 })}
+            @change=${(e: Event) => (this._rectName = (e.target as HTMLInputElement).value)}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key !== "Enter") return;
+              this._rectName = (e.target as HTMLInputElement).value;
+              this.rectBySize();
+            }}
+          /><datalist id="fp3d-room-names">
+            ${roomNameSuggestions(Object.values(this.hass?.areas ?? {}), this.usedAreas(), this.floor?.ha_floor ?? null).map((n) => html`<option value=${n}></option>`)}
+          </datalist></label
+        >
+        ${this.len(this.t("x"), first?.[0] ?? 0, (v) => this.setRectStart(0, v))} ${this.len(this.t("z"), first?.[1] ?? 0, (v) => this.setRectStart(1, v))}
         ${this.len(this.t("width"), this._rectSize[0], (v) => (this._rectSize = [Math.max(0.1, v), this._rectSize[1]]), 0.01, 0.1)}
         ${this.len(this.t("depth"), this._rectSize[1], (v) => (this._rectSize = [this._rectSize[0], Math.max(0.1, v)]), 0.01, 0.1)}
         <button class="fp3d-btn fp3d-wide" @click=${() => this.rectBySize()}>${this.t("rect_add")}</button>
@@ -2932,13 +2972,12 @@ export class Fp3dEditor extends LitElement {
     this.selectItem("outdoor", copy.id);
   }
 
-  private addRoom(points: Vec2[]): void {
+  private addRoom(points: Vec2[], named?: { name: string; area_id: string | null }): void {
     if (!this.floor) return;
     const id = uid("room");
     const n = this.floor.rooms.length + 1;
-    this.change((_, floor) =>
-      floor.rooms.push({ id, name: this.t("new_room", { n }), area_id: null, points: points.map(([x, z]) => [round(x), round(z)]), floor_material: "wood" }),
-    );
+    const { name, area_id } = named ?? { name: this.t("new_room", { n }), area_id: null };
+    this.change((_, floor) => floor.rooms.push({ id, name, area_id, points: points.map(([x, z]) => [round(x), round(z)]), floor_material: "wood" }));
     this._roomId = id;
     this._vertex = null;
     // the tool stays: one room after the other (Esc or "Select" ends it)
@@ -3115,7 +3154,7 @@ export class Fp3dEditor extends LitElement {
   private unplacedAreas(floor: Floor): HassArea[] {
     if (!floor.ha_floor) return [];
     // an area that an outdoor area stands for (the garden) is placed too
-    const used = new Set(this._doc.floors.flatMap((f) => [...f.rooms.map((r) => r.area_id), ...(f.outdoor ?? []).map((a) => a.area_id ?? null)]));
+    const used = this.usedAreas();
     return Object.values(this.hass?.areas ?? {})
       .filter((a) => a.floor_id === floor.ha_floor && !used.has(a.area_id))
       .sort((a, b) => a.name.localeCompare(b.name));
