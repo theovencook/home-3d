@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Building, type Furniture, type Opening, type Room } from "../model.ts";
 import type { DeviceMarker, FlowPiece } from "../viewer/viewer3d.ts";
-import { anchorSpots, fitInside, fitView, floorPictures, flowLines, planItems, planMarkers, planOpenings, shownFloor, zoomView } from "./scene.ts";
+import { anchorSpots, rackDraw, fitInside, fitView, floorPictures, flowLines, planItems, planMarkers, planOpenings, shownFloor, zoomView } from "./scene.ts";
 
 const rect = (id: string, x0: number, z0: number, x1: number, z1: number): Room => ({ id, name: id, area_id: null, points: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]] }) as Room;
 const item = (id: string, type: string, extra: Partial<Furniture> = {}): Furniture => ({ id, type, x: 1, z: 1, rotation: 0, w: 1, d: 0.5, h: 1, variant: null, ...extra }) as Furniture;
@@ -172,4 +172,23 @@ test("a rack with gear is tappable in the plan to show its front view; an empty 
   assert.equal(full.pick, "rack:full");
   assert.equal(empty.pick, null);
   assert.equal(linked.pick, "switch.rack_fan");
+});
+
+test("a tapped rack is drawn from the plan: its gear with the view's names and title; an item that is no rack draws nothing (#115)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { setPacks } = await import("../packs.ts");
+  const net = new URL("../../../custom_components/home_3d/bundled_packs/theovencook.it/network/", import.meta.url);
+  const read = (id: string) => JSON.parse(readFileSync(new URL(`${id}.json`, net), "utf8"));
+  setPacks([{ id: "t.it", name: "IT", publisher: "t", items: [read("rack_wall_cabinet_9u"), read("rack_switch_24_1u")] }]);
+  const rack = item("rack", "pack:t.it:rack_wall_cabinet_9u", { w: 0.6, d: 0.45, h: 0.5, rack: { slots: [{ id: "s", type: "pack:t.it:rack_switch_24_1u", u: 1 }] } });
+  const floor = { ...newFloor("g", "Ground", 0), furniture: [rack, item("sofa", "sofa")] };
+  const draw = rackDraw(floor, "rack");
+  assert.ok(draw);
+  const el = draw(() => "Switch", "Hall rack");
+  assert.equal(el.pieces, 1);
+  assert.equal(el.u, 9);
+  assert.match(el.svg, /aria-label="Hall rack"/);
+  assert.match(el.svg, />Switch</);
+  assert.equal(rackDraw(floor, "sofa"), null);
+  assert.equal(rackDraw(floor, "gone"), null);
 });

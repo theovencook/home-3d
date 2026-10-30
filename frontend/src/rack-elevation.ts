@@ -60,10 +60,14 @@ export interface RackElevation {
   /** Pixels per metre, and the margin above and below the rack. */
   scale: number;
   pad: number;
-  /** Gear drawn, and the U it takes. */
+  /** Gear drawn, the U it takes, and the rack's U. */
   pieces: number;
   used: number;
+  u: number;
 }
+
+/** Draws a tapped rack's front view with the names and title the view chooses (the 2D bundle owns the drawing code). */
+export type RackDraw = (nameOf: ElevationInput["nameOf"], title: string) => RackElevation;
 
 /** One U is at least this tall, and a panel at least this wide, on screen: a 14 px name fits on a 1U row. */
 const U_PX = 24;
@@ -172,7 +176,7 @@ export function rackElevation(input: ElevationInput): RackElevation {
   }
   const label = esc(input.title ?? "Rack");
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${label}" class="fp3d-elevation" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="${FONT}">${out.join("")}</svg>`;
-  return { svg, width, height, scale, pad: PAD, pieces: shown.length, used };
+  return { svg, width, height, scale, pad: PAD, pieces: shown.length, used, u: frame.u };
 }
 
 /** How far forward a part reaches (fraction of the item's depth; the front is +0.5). */

@@ -14,7 +14,7 @@ import { lowEndDevice } from "../viewer/pace.ts";
 import type { DeviceMarker, FlowPiece, ScreenState, Theme, ViewerOptions } from "../viewer/viewer3d.ts";
 import type { ViewerSurface } from "../viewer-surface.ts";
 import { Gestures } from "./gestures.ts";
-import { anchorSpots, rackOfPick, fitInside, floorPictures, flowLines, planBounds, planItems, planMarkers, planOpenings, shownFloor, zoomView, type PlanOpening, type PlanView } from "./scene.ts";
+import { anchorSpots, rackDraw, rackOfPick, fitInside, floorPictures, flowLines, planBounds, planItems, planMarkers, planOpenings, shownFloor, zoomView, type PlanOpening, type PlanView } from "./scene.ts";
 
 type View = ReturnType<ViewerSurface["getView"]>;
 type Anchors = Parameters<ViewerSurface["setAnchors"]>[0];
@@ -506,7 +506,9 @@ export class Plan2dViewer implements ViewerSurface {
   private onTap(x: number, y: number, target: string | null): void {
     const rack = rackOfPick(target);
     if (rack) {
-      this.options.onRackTap?.(rack);
+      const floor = this.floor();
+      const draw = floor && rackDraw(floor, rack);
+      if (draw) this.options.onRackTap?.(rack, draw);
       return;
     }
     if (target) {

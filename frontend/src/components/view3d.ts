@@ -109,11 +109,10 @@ import { shownLook } from "../ha-theme.ts";
 import { lightChrome } from "../scheme.ts";
 import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
 import { furnitureName } from "../furniture-names.ts";
-import { rackElevation, type RackElevation } from "../rack-elevation.ts";
-import { readRackFrame } from "../rack-frame.ts";
+import type { RackDraw, RackElevation } from "../rack-elevation.ts";
 
-/** A rack's front view as the sheet shows it: the drawing, the rack's name and its U count (#115). */
-type RackView = RackElevation & { name: string; u: number };
+/** A rack's front view as the sheet shows it: the drawing and the rack's name (#115). */
+type RackView = RackElevation & { name: string };
 import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { holdTarget } from "../hold.ts";
@@ -581,10 +580,10 @@ export class Fp3dView3d extends LitElement {
   private declare _sheet: { id: string; floorId: string | null; roomId: string | null } | null;
   /** The ⚙ settings over the view are open. */
   private declare _settingsOpen: boolean;
-  /** The rack whose front view is open (#115; its furniture id, from a tap in the 2D plan). */
-  private declare _rackView: string | null;
+  /** The rack whose front view is open (#115; its furniture id and its drawing, from a tap in the 2D plan). */
+  private declare _rackView: { id: string; draw: RackDraw } | null;
   /** That front view, by what it was drawn from: built on the tap, not per render (#115). */
-  private rackViewMemo: { key: string; view: RackView } | null = null;
+  private rackViewMemo: { key: string; draw: RackDraw; view: RackView } | null = null;
   /** An own action asking first (#6): its question, and the answer to give. */
   /** Items with own tap, hold or double-tap actions, by the id a tap on them reports (#6). */
   private actionOwners = new Map<string, ActionOwner>();
@@ -957,7 +956,7 @@ export class Fp3dView3d extends LitElement {
           floor.rooms.length === 1 ? translate(this.hass, "floor_rooms_one") : translate(this.hass, "floor_rooms", { n: floor.rooms.length }),
         onBack: () => this.fire("back", {}),
         onDeviceTap: (id, x, y) => this.onDeviceTap(id, x, y),
-        onRackTap: (id) => this.showRackView(id),
+        onRackTap: (id, draw) => this.showRackView(id, draw),
         onDeviceHold: (id, x, y) => this.onDeviceHold(id, x, y),
         onDeviceDoubleTap: (id) => !this.ro && this.taps.doubleTap(id),
         onRoomDoubleTap: (floorId, roomId) => this.onRoomDoubleTap(floorId, roomId),
@@ -5179,28 +5178,26 @@ export class Fp3dView3d extends LitElement {
 
   // ------------------------------------------------------------------------------------------ racks (#115)
 
-  /** Show a rack's front view (a tap on it in the 2D plan). */
-  private showRackView(furnitureId: string): void {
-    this._rackView = furnitureId;
+  /** Show a rack's front view (a tap on it in the 2D plan; the 2D bundle draws it, so the main bundle stays small). */
+  private showRackView(furnitureId: string, draw: RackDraw): void {
+    this._rackView = { id: furnitureId, draw };
   }
 
   private closeRackView(): void {
     this._rackView = null;
   }
 
-  /** The open rack, its frame and its front view; null when none is open or the rack is gone. */
+  /** The open rack's front view; null when none is open or the rack is gone. Drawn once per rack, name and language. */
   private rackViewOf(): RackView | null {
-    const id = this._rackView;
-    const f = id ? this.building?.floors.flatMap((fl) => fl.furniture).find((o) => o.id === id) : undefined;
-    const frame = f ? readRackFrame(packItem(f.type)) : null;
-    if (!f || !frame) return null;
+    const open = this._rackView;
+    const f = open ? this.building?.floors.flatMap((fl) => fl.furniture).find((o) => o.id === open.id) : undefined;
+    if (!open || !f) return null;
     const lang = this.hass?.language ?? "en";
-    const slots = f.rack?.slots ?? [];
     const name = f.name || furnitureName(this.hass, f.type);
-    const key = JSON.stringify([f.id, f.type, f.w, f.d, f.h, name, lang, slots, slots.map((s) => !!packItem(s.type))]);
-    if (this.rackViewMemo?.key !== key) {
-      const el = rackElevation({ frame, size: [f.w, f.d, f.h], slots, itemOf: packItem, nameOf: (s, item) => s.name || packItemName(item, lang), title: name });
-      this.rackViewMemo = { key, view: { ...el, name, u: frame.u } };
+    const key = JSON.stringify([open.id, name, lang]);
+    if (this.rackViewMemo?.key !== key || this.rackViewMemo.draw !== open.draw) {
+      const el = open.draw((s, item) => s.name || packItemName(item, lang), name);
+      this.rackViewMemo = { key, draw: open.draw, view: { ...el, name } };
     }
     return this.rackViewMemo.view;
   }

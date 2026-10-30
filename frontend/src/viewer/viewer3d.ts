@@ -5,6 +5,7 @@
 // flight into it). Each floor is a group with its own materials so its height and opacity can be
 // animated independently.
 
+import type { RackDraw } from "../rack-elevation.ts";
 import {
   AdditiveBlending,
   RingGeometry,
@@ -111,8 +112,8 @@ export interface ViewerOptions {
   onDeviceTap?: (entityId: string, x: number, y: number) => void;
   /** Double tap on a room of the opened floor (without it, a double tap goes one level back). */
   onRoomDoubleTap?: (floorId: string, roomId: string) => void;
-  /** A tap on a rack with gear in the 2D plan (its furniture id): the view shows its front view (#115). */
-  onRackTap?: (furnitureId: string) => void;
+  /** A tap on a rack with gear in the 2D plan (its furniture id, and how to draw its front view, #115). */
+  onRackTap?: (furnitureId: string, draw: RackDraw) => void;
   /** Long press on a device marker. */
   onDeviceHold?: (entityId: string, x: number, y: number) => void;
   /** A double tap on a device or item: true when it had an own double-tap action (#6), else the view goes back. */

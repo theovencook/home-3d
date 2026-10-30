@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Furniture } from "../model.ts";
 import { setPacks, type FurniturePack, type PackItem } from "../packs.ts";
+import { rackDraw } from "../plan2d/scene.ts";
 
 for (const k of ["VIEWER", "EDITOR", "LOCATE", "ITEMS", "LANG", "PLAN2D", "FUN", "VOICE", "TIMETRAVEL", "CARD_EDITOR"]) (globalThis as Record<string, unknown>)[`__FP3D_${k}_HASH__`] = "test";
 (globalThis as Record<string, unknown>).__FP3D_VERSION__ = "test";
@@ -40,7 +41,7 @@ function viewer(): Record<string, any> {
 test("a rack tapped in the plan opens a sheet with its front view; closing it hides the sheet (#115)", () => {
   const el = viewer();
   assert.equal(flat(el.renderRackView()), "");
-  el.showRackView("rack");
+  el.showRackView("rack", rackDraw(el.building.floors[0], "rack"));
   const sheet = flat(el.renderRackView());
   assert.match(sheet, /role="dialog"/);
   assert.match(sheet, /Hall rack/);
@@ -53,8 +54,9 @@ test("a rack tapped in the plan opens a sheet with its front view; closing it hi
   assert.equal(flat(el.renderRackView()), "");
 });
 
-test("a tap naming a rack that is gone shows nothing (#115)", () => {
+test("a sheet whose rack is gone shows nothing (#115)", () => {
   const el = viewer();
-  el.showRackView("nope");
+  // the rack was deleted while its sheet was open
+  el.showRackView("nope", rackDraw(el.building.floors[0], "rack"));
   assert.equal(flat(el.renderRackView()), "");
 });

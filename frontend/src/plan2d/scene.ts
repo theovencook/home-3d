@@ -7,6 +7,7 @@ import { generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall, 
 import { isFrontDoor, openingStyle, sidelightLayout, signedArea, type Building, type Floor, type Furniture, type Vec2 } from "../model.ts";
 import { packItem } from "../packs.ts";
 import { readRackFrame } from "../rack-frame.ts";
+import { rackElevation, type RackDraw } from "../rack-elevation.ts";
 import type { OpeningState } from "../viewer/openings.ts";
 import type { DeviceMarker, FlowPiece } from "../viewer/viewer3d.ts";
 
@@ -27,6 +28,14 @@ export const RACK_PICK = "rack:";
 
 /** The rack a plan pick names, or null for any other pick. */
 export const rackOfPick = (pick: string | null): string | null => (pick?.startsWith(RACK_PICK) ? pick.slice(RACK_PICK.length) : null);
+
+/** How to draw a tapped rack's front view (#115): null when the item is gone or no rack. */
+export function rackDraw(floor: Floor, furnitureId: string): RackDraw | null {
+  const f = floor.furniture.find((o) => o.id === furnitureId);
+  const frame = f ? readRackFrame(packItem(f.type)) : null;
+  if (!f || !frame) return null;
+  return (nameOf, title) => rackElevation({ frame, size: [f.w, f.d, f.h], slots: f.rack?.slots ?? [], itemOf: packItem, nameOf, title });
+}
 
 /** A furniture item as the plan draws it. */
 export interface PlanItem {
