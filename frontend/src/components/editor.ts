@@ -58,6 +58,7 @@ import { ISSUES_URL } from "./extensions.ts";
 import { beforeSelectionChange, deepActive, releaseTyping, selectionMoved, takesTyping } from "../focus-release.ts";
 import { escapeStep } from "../editor-keys.ts";
 import { furniturePanel, type FurnitureField } from "../item-panel.ts";
+import { moveToFloor } from "../item-floor.ts";
 import { TypedCommit } from "../typed-commit.ts";
 import { typedValue } from "./typed-value.ts";
 import { iconPath } from "../icons.ts";
@@ -5042,6 +5043,32 @@ export class Fp3dEditor extends LitElement {
     this.selectItem("furniture", copy.id);
   }
 
+  /**
+   * The item panel's floor dropdown (#73): the chosen item (its block, the multi selection) goes to another floor
+   * with its links, in one undo step, and the editor follows it there, still chosen. Fixed items stay put.
+   */
+  private moveSelectionToFloor(to: string): void {
+    const from = this._floorId;
+    const ids = this._furnitureId ? this.selection() : [];
+    if (!from || to === from || !ids.length || !this.isEditor) return;
+    if (ids.some((id) => this.isFixedItem("furniture", id))) {
+      this._fixedHint = true;
+      return;
+    }
+    const [first, multi, single] = [this._furnitureId!, this._multi.length > 1, this._single];
+    let moved: string[] = [];
+    this.change((doc) => (moved = moveToFloor(doc, from, ids, to)));
+    if (!moved.length) return;
+    this._floorId = to;
+    this._vertex = null;
+    this._draft = [];
+    if (multi) this.setMulti(moved);
+    else this.selectItem("furniture", first);
+    this._single = single;
+    const item = this.furnitureItem;
+    this._roomId = item ? this.roomAt([item.x, item.z]) : null;
+  }
+
   // ------------------------------------------------------------------ furniture blocks and multi selection
 
   /** The furniture moved together: the multi selection, else the selected item's block (unless one part is edited alone), else the item. */
@@ -9960,6 +9987,7 @@ export class Fp3dEditor extends LitElement {
           }}>${m.name || furnitureName(this.hass, m.type)}</button>`,
         )}
       </div>
+      ${this._doc.floors.length > 1 ? html`<div class="fp3d-form">${this.renderItemFloor()}</div>` : nothing}
       <div class="fp3d-actions">
         ${block
           ? html`<button class="fp3d-btn" @click=${() => this.ungroupSelection()}>${this.t("block_break")}</button>`
@@ -11148,7 +11176,7 @@ export class Fp3dEditor extends LitElement {
   private renderFurnitureForm(f: Furniture) {
     if (this.selection().length > 1) return this.renderBlockForm();
     const admin = this.isEditor;
-    const panel = furniturePanel({ mirror: !isLamp(f.type), strip: f.type === "led_strip", lift: canLift(f) && !!this.floor });
+    const panel = furniturePanel({ mirror: !isLamp(f.type), strip: f.type === "led_strip", lift: canLift(f) && !!this.floor, floors: this._doc.floors.length > 1 });
     return html`<section>
       <div class="fp3d-pos-head">
         <div class="fp3d-h3row"><h3>${f.name || this.t("furniture")}</h3>${this.fixButton("furniture", f.id)}</div>
@@ -11286,7 +11314,19 @@ export class Fp3dEditor extends LitElement {
               : nothing}
           </select></label
         >`;
+      case "floor":
+        return this.renderItemFloor();
     }
+  }
+
+  /** The floor the chosen item (block, multi selection) stands on: picking another moves it there (#73). */
+  private renderItemFloor() {
+    return html`<label class="fp3d-field fp3d-wide" title=${this.t("item_floor_hint")}
+      >${this.t("floor")}
+      <select ?disabled=${!this.isEditor} @change=${(e: Event) => this.moveSelectionToFloor((e.target as HTMLSelectElement).value)}>
+        ${[...this._doc.floors].reverse().map((fl) => html`<option value=${fl.id} ?selected=${fl.id === this._floorId}>${fl.name}</option>`)}
+      </select></label
+    >`;
   }
 
   private setEnergy(patch: Partial<Building["energy"]>): void {
