@@ -6,7 +6,7 @@ import { linesField } from "./lines-field.ts";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { ref } from "lit/directives/ref.js";
 import { live } from "lit/directives/live.js";
-import { fetchImage, listHistory, restoreSnapshot, storeImage, takeSnapshot, type Snapshot, getVoiceSettings, setVoiceSentences, type SentenceMode } from "../api.ts";
+import { fetchImage, listHistory, restoreSnapshot, storeImage, takeSnapshot, type Snapshot } from "../api.ts";
 import { download, exportFile, parseExport } from "../transfer.ts";
 import { carEntities, type CarEntities, areaEntities, autoPlace, hiddenInHa, CLIMATE_CLASSES, defaultHeight, entityName, entityAreaId, furnitureEntities, groupByDevice, hasScreen, isMediaFurniture, isPlaceable, isRoomClimateSensor, kindOf, openingEntities, otherAreaEntities, pictureRuleMatches, roomClimateSensors, unassignedEntities, windowPosition, type ClimateKey } from "../devices.ts";
 import { furnitureSymbol } from "./furniture2d.ts";
@@ -23,19 +23,14 @@ import { cornerPoint, nearestOnPath, onWall, pipePath, type P3 } from "../geomet
 import { connectionsAt, laidPipe, nearestOnOutline, planConnection, poolNodeAt, runLead, runsOnWall, splitPipe, type Connection, type ConnectVia, type WallRun } from "../pool-runs.ts";
 import { devicePorts, FILTER_VALVES, jointPortAt, jointPorts, nodePart, poolPortFlow, portFlow, splitNode, type PortName } from "../pool-ports.ts";
 import { holeInRoom } from "../geometry/holes.ts";
-import { weatherEntity, isRainSource } from "../weather.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, labOn, released } from "../features.ts";
 import { loadLocate } from "../load-locate.ts";
 import { BIN_SHAPES, BIN_SIZE, binColors, binShape, householdCountry, isPackPlant, MAILBOX_SHAPES, MAILBOX_SIZE, mailboxShape, WASTE_KINDS, wasteColors } from "../household.ts";
 import { cameraMotionSensors, cameraOwnSensors, detectionKind, setCameraSensors, stateText } from "../markers.ts";
-import { backdropImage } from "../backdrop.ts";
-import { screenName, setScreenName, setVoiceHere, setVoicePipeline, voiceOnHere, voicePipeline } from "../load-voice.ts";
-import { doorbellCamera, doorbellEntities, directorOnHere, HOLD_DEFAULT, HOLD_MAX, HOLD_MIN, setDirectorHere, type DirectorSettings } from "../director.ts";
+import type { DirectorSettings } from "../director.ts";
 import { deviceSensors, energySummary, flowSegments, gridPoint, powerSensorFor, proposeEnergySensors, type EnergyPrefs, type FlowSegment, proposeMeters } from "../energy.ts";
 import { energySensorFor } from "../wire-ends.ts";
-import { restoreAlert } from "../alerts.ts";
-import { ignoredAlerts } from "./ignored-alerts.ts";
 import { CLIMATE_ATTRS, isPulseDrive, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
 import { ACTION_TYPES, GESTURES, actionTypeChoosable, parseActionData, performActionLocked, withGesture, type ActionType, type Gesture, type ItemAction, type ItemActions } from "../item-actions.ts";
 import { activeSections, sectionFloor, dormerParent, effectiveDormer, proposeDormer, sectionGeometry, floorOutline, polygonBox, headroomLines, ridgeHeight, sectionAbove, sectionCutsBelow, roofSectionsFromRooms, sectionFrame, sectionTurn, turnSectionAbout, wallTopUnder } from "../roof-sections.ts";
@@ -43,7 +38,7 @@ import { bestFace, clampField, faceAt, faceCompass, fieldFace, fieldModules, GRO
 import type { SurfaceGrab, SurfaceRay } from "../viewer/viewer3d.ts";
 import { storedImageIds } from "../transfer.ts";
 import { fromWall, furnitureOnWall, openingsOnWall, roomEdgeFrame, slideAlong, toWall, type WallFrame } from "../geometry/wall-frame.ts";
-import { type CarLinks, type Background, OUTDOOR_TOP, sidelightLayout, DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS,
+import { type CarLinks, type Background, OUTDOOR_TOP, sidelightLayout,
   normalizeBuilding,
   syncCameraLooks,
   furnitureFootprint,
@@ -76,7 +71,7 @@ import { clipboardKey, copyItems, pasteItems, withKeys, type ItemClip } from "..
 import { TypedCommit } from "../typed-commit.ts";
 import { typedValue } from "./typed-value.ts";
 import { iconPath } from "../icons.ts";
-import { moduleAreaFields, moduleFurnitureFields, moduleHelp, moduleRoomFields, modulePipeRules, syncModules, type ModuleField, type ModuleHost, type PipeRules } from "../modules.ts";
+import { moduleAreaFields, moduleFurnitureFields, moduleRoomFields, modulePipeRules, type ModuleField, type ModuleHost, type PipeRules } from "../modules.ts";
 import { pipePlanner } from "../pipe-planner.ts";
 import {
   bounds,
@@ -171,7 +166,6 @@ import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
 import { fetchBackup, fetchPackUpdates, getEditors, restoreBackup, setEditors, updatePlacedItems, type BackupFile, type BackupHome } from "../api.ts";
 import { libraryUpdates } from "../pack-updates.ts";
 import { lastAdmin, pickEditor, pickTabletUser, type EditorUser } from "../editors.ts";
-import { TABLET_IDLE_DEFAULT } from "../kiosk.ts";
 import { load3d } from "../load3d.ts";
 import { ensureRecipes, packTypesIn } from "../pack-recipes.ts";
 import "./ask-dialog.ts";
@@ -195,7 +189,6 @@ import { MATERIALS, ownMaterial, setRoleMaterial, usualMaterial, type Material }
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { movePet, staticPetsOn } from "../pet-place.ts";
 import { furnitureName } from "../furniture-names.ts";
-import { effectFields } from "./effect-fields.ts";
 import { itemTempSource, roomLiveSensors, shadeKind, type LiveKind } from "../room-effects.ts";
 import { energyRole, furnitureSize, isElectric, isPackType, isRobotVacuum, migratePlanTypes, mountBase, packInfo, packItem, packItemName, packMotion, packName, packType, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
 import { isThermostatItem, linkField, linkFilter } from "../furniture-links.ts";
@@ -286,7 +279,8 @@ const turnBy = (a: number, d: number): number => {
 };
 
 /** Topics of the ⚙ settings menu (everything that belongs to the whole plan). */
-type SettingsTopic = "house" | "weather" | "director" | "voice" | "locate" | "favorites" | "backdrop" | "terrain" | "backup" | "editors";
+/** The parts of the editor the Settings page shows on their own (#139; the same names as its registry's EmbedTopic). */
+export type EditorTopic = "favorites" | "own_buttons" | "media_presets" | "director_triggers" | "editors" | "tablet_users" | "backup" | "backdrop_picture" | "energy_balance" | "hologram" | "presence";
 
 /** Wall view side bar: what stands or hangs at a wall, by kind. */
 const WALL_CATS: Record<string, string[]> = {
@@ -522,7 +516,6 @@ export class Fp3dEditor extends LitElement {
     _toolMenu: { state: true },
     _settingsMenu: { state: true },
     _sideWidth: { state: true },
-    _settingsDialog: { state: true },
     _toolOpen: { state: true },
     _viewMenu: { state: true },
     _draft: { state: true },
@@ -543,6 +536,7 @@ export class Fp3dEditor extends LitElement {
     canEdit: { attribute: false },
     home: { attribute: false },
     history: { attribute: false },
+    topic: { attribute: false },
   };
 
   /** Home Assistant as handed in; `hass` reads it through `hassWatch` while rendering (#130). */
@@ -567,6 +561,11 @@ export class Fp3dEditor extends LitElement {
   declare home: string | null | undefined;
   /** The undo history (#66): the panel's, so it outlives this element when another tab opens; else its own. */
   declare history: UndoHistory;
+  /**
+   * One part of the editor shown on its own on the Settings page (#139: favourites, own buttons, backup …), without
+   * the plan, the tools, the keyboard shortcuts or the library; null: the whole editor.
+   */
+  declare topic: EditorTopic | null;
   declare narrow: boolean;
   /** Imported furniture packs (from the panel's controller). */
   declare packs: FurniturePack[] | undefined;
@@ -802,7 +801,6 @@ export class Fp3dEditor extends LitElement {
   private declare _sideWidth: number;
   /** What the last module import said (the ⚙ Module dialog). */
   private sideDrag: { x: number; width: number } | null = null;
-  private declare _settingsDialog: SettingsTopic | null;
   private declare _toolOpen: Tool | null;
   /** The view menu of the toolbar (fit, 3D beside, wall view, lock) is open. */
   private declare _viewMenu: boolean;
@@ -982,7 +980,6 @@ export class Fp3dEditor extends LitElement {
       // no storage: the default width
     }
     this._sideWidth = Math.min(640, Math.max(280, width));
-    this._settingsDialog = null;
     this._toolOpen = null;
     this._viewMenu = false;
     this._draft = [];
@@ -1002,6 +999,7 @@ export class Fp3dEditor extends LitElement {
     this._canUndo = false;
     this._canRedo = false;
     this.history = new UndoHistory();
+    this.topic = null;
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -1086,7 +1084,7 @@ export class Fp3dEditor extends LitElement {
     setPlanRecipes(this._doc?.recipes);
     if (changed.has("_doc") || changed.has("packs")) this.fetchPlacedRecipes();
     // a plan or library from the backend: which placed items have an update now (#48)
-    if ((changed.has("building") || changed.has("packs")) && this.isEditor) this.refreshLibUpdates();
+    if ((changed.has("building") || changed.has("packs")) && this.isEditor && !this.topic) this.refreshLibUpdates();
   }
 
   private recipesAsked = new Set<string>();
@@ -1109,7 +1107,8 @@ export class Fp3dEditor extends LitElement {
   }
 
   protected firstUpdated(): void {
-    const stage = this.renderRoot.querySelector(".fp3d-canvas-wrap") as HTMLElement;
+    const stage = this.renderRoot.querySelector(".fp3d-canvas-wrap") as HTMLElement | null;
+    if (!stage) return;
     this.resizeObserver = new ResizeObserver(() => {
       this._size = { w: stage.clientWidth, h: stage.clientHeight };
       // a plan nobody has moved since it was fitted stays fitted (the 3D half opening beside the roof tool)
@@ -1438,8 +1437,8 @@ export class Fp3dEditor extends LitElement {
   protected updated(changed: PropertyValues): void {
     // another item (room, door, floor …) opens its panel at the top: the fields are where they always are (#71)
     if (selectionMoved(changed, this)) for (const side of this.renderRoot.querySelectorAll<HTMLElement>(".fp3d-side")) side.scrollTop = 0;
-    // the settings dialog shows its section unfolded (its summary is hidden there)
-    if (this._settingsDialog) for (const d of this.renderRoot.querySelectorAll<HTMLDetailsElement>(".fp3d-dialog details")) d.open = true;
+    // a part on the Settings page (#139) shows its section unfolded (its summary is hidden there)
+    if (this.topic) for (const d of this.renderRoot.querySelectorAll<HTMLDetailsElement>(".fp3d-embed details")) if (!d.open) d.open = true;
     // the item preview is placed in window coordinates; with the 3D view beside the plan an ancestor becomes its
     // containing block (a transform or filter), so "fixed" no longer means the window: measure and correct once
     const preview = this._preview ? this.renderRoot.querySelector<HTMLElement>(".fp3d-preview") : null;
@@ -3200,6 +3199,8 @@ export class Fp3dEditor extends LitElement {
   // ------------------------------------------------------------------ keyboard
 
   private readonly onKey = (e: KeyboardEvent) => {
+    // a part on the Settings page has no plan to work the keys on
+    if (this.topic) return;
     this.shiftHeld = e.shiftKey;
     const path = e.composedPath();
     if (path.some((el) => el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
@@ -4442,7 +4443,8 @@ export class Fp3dEditor extends LitElement {
       return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("furniture", null)}>‹ ${this.t("tool_energy")}</button>
         ${this.renderFurnitureForm(device)}`;
     const pro = hasFeature("energy_pro");
-    return html`${this.renderEnergyChecklist()}${this.renderSolarList()}${this.renderEnergyDevices()}${this.renderEnergyBalance()}${pro ? this.renderCableSettings() : nothing}${pro ? this.renderHologramSettings() : nothing}`;
+    return html`${this.renderEnergyChecklist()}${this.renderSolarList()}${this.renderEnergyDevices()}${pro ? this.renderCableSettings() : nothing}
+      ${this.renderSettingsLink("energy", null, "settings_moved_energy")}`;
   }
 
   /**
@@ -6582,24 +6584,24 @@ export class Fp3dEditor extends LitElement {
   }
 
   /**
-   * ⚙ Settings: everything that belongs to the whole plan, not to a floor, a room or an item – the house, weather
-   * and warnings, the live director, voice control, favourites, the background, the ground, the backup and the
-   * modules. One button in the toolbar opens the list; a topic opens as a dialog over the plan.
+   * ⚙ Settings: everything that belongs to the whole plan, not to a floor, a room or an item. Each topic opens the
+   * Settings page (#139) at its section; locating keeps its own assistant (a bundle of its own).
    */
   private renderSettingsMenu(closeTools: () => void) {
     const admin = this.isEditor;
     const open = this._settingsMenu;
-    const all: { key: SettingsTopic; icon: string; label: string; admin: boolean }[] = [
-      { key: "house", icon: "🏠", label: this.t("settings_house"), admin: true },
-      { key: "weather", icon: "🌦", label: this.t("settings_weather"), admin: true },
-      { key: "director", icon: "🎬", label: this.t("card_director"), admin: true },
-      { key: "voice", icon: "🎙", label: this.t("voice"), admin: false },
-      ...(released("locate") && this.isHaAdmin ? [{ key: "locate" as const, icon: "📡", label: this.t("locate"), admin: true }] : []),
-      { key: "favorites", icon: "⭐", label: this.t("favorites"), admin: true },
-      { key: "backdrop", icon: "🖼", label: this.t("backdrop"), admin: true },
-      { key: "terrain", icon: "⛰", label: this.t("terrain"), admin: true },
-      { key: "backup", icon: "💾", label: this.t("backup"), admin: true },
-      ...(this.isHaAdmin ? [{ key: "editors" as const, icon: "👥", label: this.t("editors_title"), admin: true }] : []),
+    const all: { key: string; section: string | null; id?: string; icon: string; label: string; admin: boolean }[] = [
+      { key: "all", section: null, icon: "⚙", label: this.t("all_settings"), admin: false },
+      { key: "house", section: "general", icon: "🏠", label: this.t("settings_house"), admin: true },
+      { key: "weather", section: "scene", id: "weather_entity", icon: "🌦", label: this.t("settings_weather"), admin: true },
+      { key: "director", section: "cameras", id: "director.doorbell", icon: "🎬", label: this.t("card_director"), admin: true },
+      { key: "voice", section: "voice", icon: "🎙", label: this.t("voice"), admin: false },
+      ...(released("locate") && this.isHaAdmin ? [{ key: "locate", section: null, icon: "📡", label: this.t("locate"), admin: true }] : []),
+      { key: "favorites", section: "favourites", icon: "⭐", label: this.t("favorites"), admin: true },
+      { key: "backdrop", section: "scene", id: "backdrop.kind", icon: "🖼", label: this.t("backdrop"), admin: true },
+      { key: "terrain", section: "scene", id: "terrain.level", icon: "⛰", label: this.t("terrain"), admin: true },
+      { key: "backup", section: "backup", icon: "💾", label: this.t("backup"), admin: true },
+      ...(this.isHaAdmin ? [{ key: "editors", section: "access", icon: "👥", label: this.t("editors_title"), admin: true }] : []),
     ];
     const topics = all.filter((t) => admin || !t.admin);
     const toggle = () => {
@@ -6620,14 +6622,11 @@ export class Fp3dEditor extends LitElement {
                     class="fp3d-menu-item"
                     @click=${() => {
                       this._settingsMenu = false;
-                      // locating has its own assistant (a bundle of its own), not a dialog
                       if (t.key === "locate") {
                         if (this.hass) void loadLocate().then((m) => m.openLocateSetup(this.hass!, this._doc, () => this.hass, (look) => this.setSettings({ person_look: look === "figure" ? null : look })));
                         return;
                       }
-                      this._settingsDialog = t.key;
-                      // the modules' sentences for the voice list: loaded here as well (the editor is its own bundle), once per opening
-                      if (t.key === "voice" && this.hass) void syncModules(this.hass, this.packs ?? []).then(() => this.requestUpdate());
+                      this.openSettings(t.section, t.id ?? null);
                     }}
                   >
                     ${t.icon} ${t.label}
@@ -6639,50 +6638,19 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
-  /** The dialog of a settings topic: its section, as it stood in the side bar before, over the plan. */
-  private renderSettingsDialog() {
-    const topic = this._settingsDialog;
-    if (!topic) return nothing;
-    const close = () => (this._settingsDialog = null);
-    const titles: Record<SettingsTopic, string> = {
-      house: this.t("settings_house"),
-      weather: this.t("settings_weather"),
-      director: this.t("card_director"),
-      voice: this.t("voice"),
-      locate: this.t("locate"),
-      favorites: this.t("favorites"),
-      backdrop: this.t("backdrop"),
-      terrain: this.t("terrain"),
-      backup: this.t("backup"),
-      editors: this.t("editors_title"),
-    };
-    const body =
-      topic === "house"
-        ? this.renderHouseSettings()
-        : topic === "weather"
-          ? this.renderWeatherSettings()
-          : topic === "director"
-            ? this.renderDirector()
-            : topic === "voice"
-              ? this.renderVoice()
-              : topic === "favorites"
-                ? this.renderFavorites()
-                : topic === "backdrop"
-                  ? this.renderBackdrop()
-                  : topic === "terrain"
-                    ? this.renderTerrain()
-                    : topic === "editors"
-                      ? this.renderEditors()
-                      : this.renderBackup();
-    return html`<div class="fp3d-dialog-veil" @click=${(e: Event) => e.target === e.currentTarget && close()}>
-      <div class="fp3d-dialog" role="dialog" aria-label=${titles[topic]} tabindex="-1" @keydown=${(e: KeyboardEvent) => e.key === "Escape" && close()}>
-        <div class="fp3d-dialog-head">
-          <h3>${titles[topic]}</h3>
-          <button class="fp3d-btn" aria-label=${this.t("close")} @click=${close}>✕</button>
-        </div>
-        <div class="fp3d-dialog-body">${body}</div>
-      </div>
-    </div>`;
+  /**
+   * Where a house-wide setting went (#139): a line in a tool panel or item form that opens the Settings page at it.
+   * `text` says what is there; `icon` leads it (a lock's state).
+   */
+  private renderSettingsLink(section: string, id: string | null, text: I18nKey, icon = "⚙") {
+    return html`<button class="fp3d-settings-link fp3d-wide" @click=${() => this.openSettings(section, id)}>
+      <span>${icon} ${this.t(text)}</span><b>${this.t("settings")} ›</b>
+    </button>`;
+  }
+
+  /** Opens the Settings page (#139) at a section and setting; the panel listens. */
+  private openSettings(section: string | null, id: string | null = null): void {
+    this.dispatchEvent(new CustomEvent("open-settings", { detail: { section, id }, bubbles: true, composed: true }));
   }
 
   /** The hint bar under the plan (#96): the current tool, the selection, or on a new plan the next step. */
@@ -7009,11 +6977,34 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+  /** A part of the editor on the Settings page (#139): drawn as in the editor, around it only its form. */
+  private renderTopic(topic: EditorTopic): TemplateResult {
+    const doc = this._doc;
+    if (!doc) return html``;
+    let body: unknown = nothing;
+    if (topic === "director_triggers") {
+      const placed = [...new Set(doc.floors.flatMap((f) => f.placements.map((p) => p.entity_id)))];
+      body = this.renderDirectorTriggers(doc.settings.director ?? {}, placed);
+    } else if (topic === "favorites") body = this.renderFavorites();
+    else if (topic === "own_buttons") body = this.renderOwnButtons();
+    else if (topic === "media_presets") body = this.renderMediaPresets();
+    else if (topic === "editors") body = this.renderEditors();
+    else if (topic === "tablet_users") {
+      this.askEditors();
+      body = this.editorsList ? html`<div class="fp3d-form">${this.renderTabletUsers(this.editorsList.users)}</div>` : html`<p class="fp3d-sub">${this.t("loading")}</p>`;
+    } else if (topic === "backup") body = this.renderBackup();
+    else if (topic === "energy_balance") body = this.renderEnergyBalance();
+    else if (topic === "hologram") body = this.renderHologramSettings();
+    else if (topic === "presence") body = this.renderPresenceSettings();
+    return html`<div class="fp3d-embed">${body}</div>`;
+  }
+
   protected render(): TemplateResult {
+    if (this.topic) return this.renderTopic(this.topic);
     const floor = this.floor;
     const walls = floor ? generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }, floor.walls ?? []) : null;
     return html`
-      ${this.renderPreview()} ${this.renderWallView()} ${this.renderPartCard()} ${this.renderSettingsDialog()} ${this.renderHelp()} ${this.renderRackSheet()}
+      ${this.renderPreview()} ${this.renderWallView()} ${this.renderPartCard()} ${this.renderHelp()} ${this.renderRackSheet()}
       <div class="fp3d-editor ${this.narrow ? "fp3d-narrow" : ""}" style=${`--fp3d-side-w:${this._sideWidth}px`}>
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
@@ -11814,11 +11805,7 @@ export class Fp3dEditor extends LitElement {
           ? nothing
           : html`${admin ? html`<button class="fp3d-btn fp3d-primary" @click=${() => this.addFloor()}>${this.t("first_floor_add")}</button>` : nothing}
               <p class="fp3d-sub">${this.t("floor_none_hint")}</p>`}
-        ${admin && floor
-          ? html`<button class="fp3d-btn" aria-pressed=${!!this._doc.settings.lock_plan} title=${this.t("lock_plan_hint")} @click=${() => this.toggleLockPlan()}>
-              ${this.t(this._doc.settings.lock_plan ? "plan_unlock" : "plan_lock")}
-            </button>`
-          : nothing}
+        ${admin && floor ? this.renderSettingsLink("general", "lock_plan", this._doc.settings.lock_plan ? "plan_locked" : "plan_lock", this._doc.settings.lock_plan ? "🔒" : "🔓") : nothing}
         ${floor
           ? html`<div class="fp3d-form">
               <label class="fp3d-field fp3d-wide"
@@ -12899,7 +12886,6 @@ export class Fp3dEditor extends LitElement {
             })}
           </div>`
         : nothing}
-      ${this.renderOwnButtons()} ${this.renderMediaPresets()}
     </details>`;
   }
 
@@ -13138,62 +13124,6 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
-  /**
-   * Kamera-Cockpit: the live director – which events a screen shows by itself (each off until switched on), and the
-   * switch for this device (a card has its own option).
-   */
-  private renderDirector() {
-    const hass = this.hass;
-    const d: DirectorSettings = this._doc.settings.director ?? {};
-    const set = (patch: Partial<DirectorSettings>) => this.change((doc) => (doc.settings.director = { ...(doc.settings.director ?? {}), ...patch }));
-    const pro = hasFeature("camera_cockpit");
-    const here = directorOnHere();
-    const placed = [...new Set(this._doc.floors.flatMap((f) => f.placements.map((p) => p.entity_id)))];
-    const bells = hass ? doorbellEntities(hass) : [];
-    const bell = hass ? (d.doorbell_entity ?? bells[0] ?? null) : null;
-    const autoCam = hass && bell ? doorbellCamera(hass, bell, placed) : null;
-    const check = (label: I18nKey, on: boolean, change: (on: boolean) => void, disabled = !pro) =>
-      html`<label class="fp3d-check fp3d-wide"
-        ><input type="checkbox" .checked=${on} ?disabled=${disabled} @change=${(e: Event) => change((e.target as HTMLInputElement).checked)} /> ${this.t(label)}</label
-      >`;
-    return html`<details class="fp3d-section">
-      <summary>🎬 ${this.t("director")}</summary>
-      <p class="fp3d-sub">${this.t("director_hint")}</p>
-      ${pro ? nothing : html`<p class="fp3d-sub">🔒 ${this.t("pro_feature_camera_cockpit")}</p>`}
-      <div class="fp3d-form">
-        ${check("director_here", here, (on) => {
-          setDirectorHere(on);
-          this.dispatchEvent(new CustomEvent("director-here", { bubbles: true, composed: true }));
-          this.requestUpdate();
-        })}
-        <p class="fp3d-sub fp3d-wide">${this.t("director_here_hint")}</p>
-        ${check("director_doorbell", !!d.doorbell, (on) => set({ doorbell: on }))}
-        ${d.doorbell && hass
-          ? html`${this.entitySelect(this.t("director_doorbell_entity"), d.doorbell_entity ?? null, bells[0] ?? null, this.entityOptions((id) => id.startsWith("event.") || id.startsWith("binary_sensor.")), (v) =>
-              set({ doorbell_entity: v === "none" ? null : v }),
-            )}
-            ${this.entitySelect(this.t("director_doorbell_camera"), d.doorbell_camera ?? null, autoCam, this.entityOptions((id) => id.startsWith("camera.") && placed.includes(id), placed.join(",")), (v) =>
-              set({ doorbell_camera: v === "none" ? null : v }),
-            )}
-            ${!bells.length && !d.doorbell_entity ? html`<p class="fp3d-sub fp3d-wide">${this.t("director_no_doorbell")}</p>` : nothing}`
-          : nothing}
-        <label class="fp3d-field fp3d-wide"
-          >${this.t("director_motion")}
-          <select ?disabled=${!pro} @change=${(e: Event) => set({ motion: (e.target as HTMLSelectElement).value as DirectorSettings["motion"] })}>
-            ${(["off", "person", "all"] as const).map((m) => html`<option value=${m} ?selected=${(d.motion ?? "off") === m}>${this.t(`director_motion_${m}`)}</option>`)}
-          </select></label
-        >
-        ${check("director_appliances", !!d.appliances, (on) => set({ appliances: on }))}
-        ${check("director_alerts", !!d.alerts, (on) => set({ alerts: on }))}
-        ${this.renderDirectorTriggers(d, placed)}
-        ${check("director_live", !!d.live, (on) => set({ live: on }))}
-        <p class="fp3d-sub fp3d-wide">${this.t("director_live_hint")}</p>
-        ${this.num(this.t("director_hold"), d.hold ?? HOLD_DEFAULT, (v) => set({ hold: Math.min(HOLD_MAX, Math.max(HOLD_MIN, Math.round(v))) }), 5, HOLD_MIN)}
-      </div>
-      <p class="fp3d-sub">${this.t("director_back_hint")}</p>
-    </details>`;
-  }
-
   /** The editors list (#7) as the backend last sent it; null until asked. */
   private editorsList: { users: EditorUser[]; custom: boolean } | null = null;
   private editorsAsked = false;
@@ -13214,10 +13144,7 @@ export class Fp3dEditor extends LitElement {
           this.editorsMsg = this.t(code === "no_admin" ? "editors_no_admin" : "editors_failed");
         })
         .finally(() => this.requestUpdate());
-    if (!this.editorsAsked) {
-      this.editorsAsked = true;
-      void answer(getEditors(hass));
-    }
+    this.askEditors(answer);
     const list = this.editorsList;
     return html`<div class="fp3d-form">
       <p class="fp3d-sub fp3d-wide">${this.t("editors_hint")}</p>
@@ -13238,161 +13165,36 @@ export class Fp3dEditor extends LitElement {
       ${list?.custom
         ? html`<div class="fp3d-actions fp3d-wide"><button class="fp3d-btn" @click=${() => void answer(setEditors(hass, null))}>${this.t("editors_reset")}</button></div>`
         : nothing}
-      ${list ? this.renderTabletUsers(list.users) : nothing}
-      ${this.renderDemoSwitch()}
     </div>`;
   }
 
-  /** A sample / demo home (#100): its devices that this Home Assistant lacks show fixed demo states; switchable. */
-  private renderDemoSwitch() {
-    const demo = this._doc.settings.demo;
-    if (demo === undefined) return nothing;
-    return html`<h4 class="fp3d-wide">${this.t("demo_states")}</h4>
-      <label class="fp3d-check fp3d-wide"
-        ><input type="checkbox" .checked=${demo} @change=${(e: Event) => this.setDemo((e.target as HTMLInputElement).checked)} /> ${this.t("demo_states")}</label
-      >
-      <p class="fp3d-sub fp3d-wide">${this.t("demo_states_hint")}</p>`;
+  /** The users (from the editors list, HA admins only): asked once, answered into `editorsList`. */
+  private askEditors(answer?: (p: Promise<{ users: EditorUser[]; custom: boolean }>) => Promise<void>): void {
+    const hass = this.hass;
+    if (this.editorsAsked || !hass) return;
+    this.editorsAsked = true;
+    const p = getEditors(hass);
+    if (answer) void answer(p);
+    else
+      void p
+        .then((res) => (this.editorsList = res))
+        .catch(() => undefined)
+        .finally(() => this.requestUpdate());
   }
 
-  private setDemo(on: boolean): void {
-    this.change((d) => (d.settings.demo = on));
-  }
-
-  /** Wall tablets (#92): users whose panel opens locked (no editor, no view settings), and its idle return. */
+  /** Wall tablets (#92): users whose panel opens locked (no editor, no settings); the idle return is a row of its own. */
   private renderTabletUsers(users: EditorUser[]) {
     const ticked = this._doc.settings.tablet_users ?? [];
-    return html`<h4 class="fp3d-wide">${this.t("tablet_users")}</h4>
-      <p class="fp3d-sub fp3d-wide">${this.t("tablet_users_hint")}</p>
-      ${users.map(
+    return html`${users.map(
         (u) => html`<label class="fp3d-check fp3d-wide"
           ><input type="checkbox" .checked=${ticked.includes(u.id)} @change=${(e: Event) => this.setTabletUser(u.id, (e.target as HTMLInputElement).checked)} />
           ${u.name || u.id}</label
         >`,
-      )}
-      ${this.num(this.t("tablet_idle"), this._doc.settings.tablet_idle ?? TABLET_IDLE_DEFAULT, (v) => this.setTabletIdle(v), 10, 0)}`;
+      )}`;
   }
 
   private setTabletUser(id: string, on: boolean): void {
     this.change((d) => (d.settings.tablet_users = pickTabletUser(d.settings.tablet_users, id, on)));
-  }
-
-  private setTabletIdle(seconds: number): void {
-    this.change((d) => (d.settings.tablet_idle = Math.min(86400, Math.max(0, Math.round(seconds)))));
-  }
-
-  private voicePipes: { id: string; name: string; stt: boolean }[] | null = null;
-  private voicePipesAsked = false;
-  private voiceSentences: SentenceMode | null = null;
-  /** What became of the last sentence choice (a file the user changed is kept, writing failed). */
-  private voiceSentencesMsg: string | null = null;
-
-  /** The Assist pipeline for this device's voice control: Home Assistant's preferred one, or one chosen here. */
-  private renderVoicePipeline() {
-    const hass = this.hass;
-    if (!hass) return nothing;
-    if (!this.voicePipesAsked) {
-      this.voicePipesAsked = true;
-      getVoiceSettings(hass)
-        .then((res) => {
-          this.voiceSentences = res.sentences;
-          this.requestUpdate();
-        })
-        .catch(() => (this.voiceSentences = "off"));
-      hass
-        .callWS<{ pipelines: { id: string; name: string; stt_engine: string | null }[] }>({ type: "assist_pipeline/pipeline/list" })
-        .then((res) => {
-          this.voicePipes = res.pipelines.map((p) => ({ id: p.id, name: p.name, stt: !!p.stt_engine }));
-          this.requestUpdate();
-        })
-        .catch(() => undefined);
-    }
-    const own = voicePipeline();
-    const modes = ["distinct", "all", "off"] as const;
-    return html`<div class="fp3d-form">
-      <label class="fp3d-field fp3d-wide"
-        >${this.t("voice_sentences")}
-        <select
-          ?disabled=${!this.isHaAdmin || this.voiceSentences === null}
-          @change=${(e: Event) => {
-            const mode = (e.target as HTMLSelectElement).value as SentenceMode;
-            this.voiceSentences = mode;
-            this.voiceSentencesMsg = null;
-            void setVoiceSentences(hass, mode)
-              .then((res) => {
-                if (res.kept?.length) this.voiceSentencesMsg = this.t("voice_sentences_kept", { langs: res.kept.join(", ") });
-                this.requestUpdate();
-              })
-              .catch(() => {
-                this.voiceSentencesMsg = this.t("voice_sentences_failed");
-                this.requestUpdate();
-              });
-          }}
-        >
-          ${modes.map((m) => html`<option value=${m} ?selected=${(this.voiceSentences ?? "off") === m}>${this.t(`voice_sentences_${m}`)}</option>`)}
-        </select></label
-      >
-      ${this.voiceSentencesMsg ? html`<p class="fp3d-sub fp3d-wide fp3d-pack-error">${this.voiceSentencesMsg}</p>` : nothing}
-      <p class="fp3d-sub fp3d-wide">${this.t("voice_sentences_hint")} ${this.t("voice_sentences_file")}</p>
-      <label class="fp3d-field fp3d-wide"
-        >${this.t("voice_pipeline")}
-        <select
-          @change=${(e: Event) => {
-            setVoicePipeline((e.target as HTMLSelectElement).value || null);
-            this.requestUpdate();
-          }}
-        >
-          <option value="" ?selected=${!own}>${this.t("voice_pipeline_preferred")}</option>
-          ${(this.voicePipes ?? []).map((p) => html`<option value=${p.id} ?selected=${own === p.id} ?disabled=${!p.stt}>${p.name}${p.stt ? "" : ` (${this.t("voice_pipeline_no_stt")})`}</option>`)}
-        </select></label
-      >
-    </div>`;
-  }
-
-  /** Voice control: the microphone button on this device (a card has its own option), and the microphone test. */
-  private renderVoice() {
-    const here = voiceOnHere();
-    const examples = [...this.t("voice_examples").split("|"), ...moduleHelp(this.hass?.language ?? "en")];
-    return html`<details class="fp3d-section">
-      <summary>🎙️ ${this.t("voice")}</summary>
-      <p class="fp3d-sub">${this.t("voice_hint")}</p>
-      <p class="fp3d-sub"><b>${this.t("voice_understands")}</b></p>
-      <ul class="fp3d-voice-list">
-        ${examples.map((e) => html`<li>${e}</li>`)}
-      </ul>
-      <div class="fp3d-form">
-        <label class="fp3d-check fp3d-wide"
-          ><input
-            type="checkbox"
-            .checked=${here}
-            @change=${(e: Event) => {
-              setVoiceHere((e.target as HTMLInputElement).checked);
-              this.dispatchEvent(new CustomEvent("voice-here", { bubbles: true, composed: true }));
-              this.requestUpdate();
-            }}
-          />
-          ${this.t("voice_here")}</label
-        >
-        <label class="fp3d-wide"
-          >${this.t("screen_name")}
-          <input
-            type="text"
-            .value=${screenName()}
-            placeholder=${this.t("screen_name_placeholder")}
-            @change=${(e: Event) => {
-              setScreenName((e.target as HTMLInputElement).value);
-              this.dispatchEvent(new CustomEvent("voice-here", { bubbles: true, composed: true }));
-            }}
-          />
-        </label>
-      </div>
-      <p class="fp3d-sub">${this.t("screen_name_hint")}</p>
-      ${this.renderVoicePipeline()}
-      <p class="fp3d-sub">${this.t("voice_needs")}</p>
-      <div class="fp3d-actions">
-        <button class="fp3d-btn" @click=${() => this.dispatchEvent(new CustomEvent("mic-probe", { bubbles: true, composed: true }))}>${this.t("director_mic_test")}</button>
-      </div>
-      <p class="fp3d-sub">${this.t("director_mic_hint")}</p>
-    </details>`;
   }
 
   private renderPresenceSettings() {
@@ -13553,14 +13355,6 @@ export class Fp3dEditor extends LitElement {
     this.updateFurniture({ colors: setRoleColour(f.colors, "paint", hex) });
   }
 
-  /** Awning: its fall, the valance, a position sensor, its run time and the other direction (with the cover above). */
-  /** Haushalt Pro: the house's household settings (the hours the bins glow – for all bins). */
-  private setHousehold(patch: NonNullable<Building["settings"]["household"]>): void {
-    const next = structuredClone(this._doc);
-    next.settings.household = { ...(next.settings.household ?? {}), ...patch };
-    this.setDoc(next);
-  }
-
   /**
    * Waste bin and mailbox: shape and colours for everyone; the waste calendar and the post sensors with Haushalt Pro
    * (a teaser while it is locked).
@@ -13605,9 +13399,6 @@ export class Fp3dEditor extends LitElement {
                 >${this.t("bin_match")}
                 <input type="text" .value=${f.bin_match ?? ""} placeholder=${this.t(`bin_kind_${kind}` as I18nKey)} ?disabled=${!admin}
                   @change=${(e: Event) => this.updateFurniture({ bin_match: (e.target as HTMLInputElement).value.trim() || null })} /></label>
-              ${this.num(this.t("bin_from"), this._doc.settings.household?.bin_from ?? 14, (v) => this.setHousehold({ bin_from: Math.max(0, Math.min(24, v)) }), 0.5)}
-              ${this.num(this.t("bin_until"), this._doc.settings.household?.bin_until ?? 12, (v) => this.setHousehold({ bin_until: Math.max(0, Math.min(24, v)) }), 0.5)}
-              <p class="fp3d-sub fp3d-wide">${this.t("bin_hint")}</p>
               ${this.entitySelect(this.t("bin_out"), f.bin_out ?? null, undefined, this.entityOptions((id) => /^(input_boolean|switch|binary_sensor)\./.test(id)), (v) => this.updateFurniture({ bin_out: v === "none" ? null : v }))}
               <p class="fp3d-sub fp3d-wide">${this.t("bin_out_hint")}</p>
               <div class="fp3d-field fp3d-wide">
@@ -13620,19 +13411,7 @@ export class Fp3dEditor extends LitElement {
                 </div>
               </div>
               <p class="fp3d-sub fp3d-wide">${this.t(this._kerbPick ? "hint_kerb_pick" : "bin_kerb_hint")}</p>
-              <label class="fp3d-check fp3d-wide"
-                ><input type="checkbox" .checked=${!!this._doc.settings.household?.bin_next_only} ?disabled=${!admin} @change=${(e: Event) => this.setHousehold({ bin_next_only: (e.target as HTMLInputElement).checked || null })} />
-                ${this.t("bin_next_only")}</label
-              >
-              <label class="fp3d-field"
-                >${this.t("bin_days")}
-                <input type="number" inputmode="numeric" min="0" max="60" step="1" placeholder=${this.t("bin_days_always")} .value=${this._doc.settings.household?.bin_days == null ? "" : String(this._doc.settings.household.bin_days)} ?disabled=${!admin}
-                  @change=${(e: Event) => {
-                    const v = parseInt((e.target as HTMLInputElement).value, 10);
-                    this.setHousehold({ bin_days: Number.isFinite(v) ? Math.max(0, Math.min(60, v)) : null });
-                  }}
-              /></label>
-              <p class="fp3d-sub fp3d-wide">${this.t("bin_tags_hint")}</p>`
+              ${this.renderSettingsLink("household", "household.bin_from", "settings_moved_bins")}`
           : teaser}
       </div>`;
     }
@@ -13694,6 +13473,7 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+  /** Awning: its fall, the valance, a position sensor, its run time and the other direction (with the cover above). */
   private renderAwningFields(f: Furniture) {
     const admin = this.isEditor;
     const sensors = this.entityOptions((id) => id.startsWith("sensor.") || id.startsWith("input_number.") || id.startsWith("number."));
@@ -15012,109 +14792,10 @@ export class Fp3dEditor extends LitElement {
     </details>`;
   }
 
-  /** The ground around the house: its height, a hillside, the earth around cellars. */
-  /** The background behind the 3D house: the look's own sky, one colour, a gradient or a picture. */
-  private renderBackdrop() {
-    const bd = this._doc.settings.backdrop ?? {};
-    const set = (patch: Partial<NonNullable<Building["settings"]["backdrop"]>>) => this.change((d) => (d.settings.backdrop = { ...(d.settings.backdrop ?? {}), ...patch }));
-    const kind = bd.kind ?? "";
-    const colour = (label: I18nKey, value: string | null | undefined, fallback: string, key: "color" | "color2") =>
-      html`<label class="fp3d-field"
-        >${this.t(label)}
-        <input type="color" .value=${value ?? fallback} @change=${(e: Event) => set({ [key]: (e.target as HTMLInputElement).value })} />
-      </label>`;
-    return html`<details class="fp3d-section">
-      <summary>🖼 ${this.t("backdrop")}</summary>
-      <div class="fp3d-form">
-        <label class="fp3d-field fp3d-wide"
-          >${this.t("backdrop_kind")}
-          <select @change=${(e: Event) => set({ kind: (((e.target as HTMLSelectElement).value || null) as "color" | "gradient" | "image" | null) })}>
-            ${(["", "color", "gradient", "image"] as const).map((k) => html`<option value=${k} ?selected=${kind === k}>${this.t(`backdrop_${k || "look"}` as I18nKey)}</option>`)}
-          </select></label
-        >
-        ${kind === "color" || kind === "gradient" ? colour(kind === "gradient" ? "backdrop_top" : "backdrop_color", bd.color, "#0b1426", "color") : nothing}
-        ${kind === "gradient" ? colour("backdrop_bottom", bd.color2, "#03060c", "color2") : nothing}
-        ${kind === "image"
-          ? html`<label class="fp3d-field fp3d-wide"
-                >${this.t("backdrop_image_url")}
-                <input type="text" placeholder="/local/hintergrund.jpg" .value=${bd.image ?? ""} @change=${(e: Event) => set({ image: (e.target as HTMLInputElement).value.trim() || null })}
-              /></label>
-              <label class="fp3d-field fp3d-wide"
-                >${this.t("backdrop_dim")} (${Math.round((bd.dim ?? 0.45) * 100)} %)
-                <input type="range" min="0" max="90" .value=${String(Math.round((bd.dim ?? 0.45) * 100))} @change=${(e: Event) => set({ dim: Number((e.target as HTMLInputElement).value) / 100 })}
-              /></label>
-              ${bd.image && !backdropImage(bd.image) ? html`<p class="fp3d-sub fp3d-wide fp3d-pack-error">${this.t("backdrop_image_bad")}</p>` : nothing}`
-          : nothing}
-      </div>
-      <p class="fp3d-sub">${this.t("backdrop_hint")}</p>
-    </details>`;
-  }
-
-  private renderTerrain() {
-    const t = this._doc.settings.terrain ?? {};
-    const set = (patch: Partial<NonNullable<Building["settings"]["terrain"]>>) => {
-      const next = structuredClone(this._doc);
-      next.settings.terrain = { ...(next.settings.terrain ?? {}), ...patch };
-      this.setDoc(next);
-    };
-    const low = this._doc.floors.some((f) => f.elevation < -0.3);
-    return html`<details class="fp3d-section">
-      <summary>⛰ ${this.t("terrain")}</summary>
-      <p class="fp3d-sub">${this.t("terrain_hint")}</p>
-      <div class="fp3d-form">
-        ${this.len(this.t("terrain_level"), t.level ?? -0.2, (v) => set({ level: Math.max(-20, Math.min(20, v)) }), 0.05)}
-        <label class="fp3d-check fp3d-wide" title=${this.t("terrain_earth_hint")}
-          ><input type="checkbox" .checked=${t.earth !== false} @change=${(ev: Event) => set({ earth: (ev.target as HTMLInputElement).checked })} />
-          ${this.t("terrain_earth")}</label
-        >
-      </div>
-      <p class="fp3d-sub">${this.t(low ? "terrain_cellar_hint" : "terrain_no_cellar_hint")}</p>
-      ${t.level != null
-        ? html`<div class="fp3d-actions"><button class="fp3d-btn" @click=${() => set({ level: null })}>${this.t("terrain_reset")}</button></div>`
-        : nothing}
-    </details>`;
-  }
-
   private setSettings(patch: Partial<Building["settings"]>): void {
     const next = structuredClone(this._doc);
     Object.assign(next.settings, patch);
     this.setDoc(next);
-  }
-
-  /** ⚙ House: wall thicknesses, grid, units, north. */
-  private renderHouseSettings() {
-    const s = this._doc.settings;
-    const set = (patch: Partial<Building["settings"]>) => this.setSettings(patch);
-    return html`<details class="fp3d-section">
-      <summary>${this.t("settings_house")}</summary>
-      <div class="fp3d-form">
-        ${this.len(this.t("wall_exterior"), s.wall_exterior, (v) => set({ wall_exterior: Math.min(1, Math.max(0.02, v)) }), 0.01, 0.02)}
-        ${this.len(this.t("wall_interior"), s.wall_interior, (v) => set({ wall_interior: Math.min(1, Math.max(0.02, v)) }), 0.01, 0.02)}
-        ${this.len(this.t("grid"), s.grid, (v) => set({ grid: Math.min(1, Math.max(0.01, v)) }), 0.01, 0.01)}
-        <label class="fp3d-field" title=${this.t("units_hint")}
-          >${this.t("units")}
-          <select @change=${(e: Event) => {
-            const v = (e.target as HTMLSelectElement).value;
-            set({ units: v === "metric" || v === "imperial" ? v : null });
-          }}>
-            <option value="auto" ?selected=${!s.units}>${this.t("units_auto", { unit: this.t(lengthUnit(this.hass, null) === "imperial" ? "units_imperial" : "units_metric") })}</option>
-            <option value="metric" ?selected=${s.units === "metric"}>${this.t("units_metric")}</option>
-            <option value="imperial" ?selected=${s.units === "imperial"}>${this.t("units_imperial")}</option>
-          </select></label
-        >
-        ${this.num(this.t("north"), s.north, (v) => set({ north: ((Math.round(v) % 360) + 360) % 360 }), 1)}
-        <label class="fp3d-field fp3d-wide" title=${this.t("editor_floor_hint")}
-          >${this.t("editor_floor")}
-          <select @change=${(e: Event) => set({ editor_floor: (e.target as HTMLSelectElement).value || null })}>
-            <option value="" ?selected=${!s.editor_floor}>${this.t("editor_floor_auto")}</option>
-            ${this._doc.floors.map((f) => html`<option value=${f.id} ?selected=${s.editor_floor === f.id}>${f.name}</option>`)}
-          </select></label
-        >
-        ${this.entitySelect(this.t("hh_notes"), s.household?.notes ?? null, undefined, this.entityOptions((id) => /^(input_text|text|sensor)\./.test(id)), (v) => this.setHousehold({ notes: v === "none" ? null : v }))}
-        <p class="fp3d-sub fp3d-wide">${this.t("hh_notes_hint")}</p>
-      </div>
-      <p class="fp3d-sub">${this.t("north_hint")}</p>
-    </details>`;
   }
 
   /** The roof's basics – its kind, ridge, pitch and overhang – in the roof tool (sections and windows live there too). */
@@ -15155,79 +14836,6 @@ export class Fp3dEditor extends LitElement {
     </section>`;
   }
 
-  /** ⚙ Weather & warnings: the weather entity and its effects, the rain warning, warning names, outage, sun patches. */
-  private renderWeatherSettings() {
-    const s = this._doc.settings;
-    const set = (patch: Partial<Building["settings"]>) => this.setSettings(patch);
-    return html`<details class="fp3d-section">
-      <summary>${this.t("settings_weather")}</summary>
-      <div class="fp3d-form">
-        ${this.hass
-          ? this.entitySelect(this.t("weather_entity"), s.weather_entity ?? null, weatherEntity(this.hass, null), this.entityOptions((id) => id.startsWith("weather.")), (v) => set({ weather_entity: v }))
-          : nothing}
-        <div class="fp3d-sub fp3d-wide">${this.t("weather_effects")}</div>
-        ${WEATHER_EFFECTS.map((effect) => {
-          const current = s.weather_effects ?? DEFAULT_WEATHER_EFFECTS;
-          return html`<label class="fp3d-check"
-            ><input
-              type="checkbox"
-              .checked=${current.includes(effect)}
-              @change=${(ev: Event) => {
-                const checked = (ev.target as HTMLInputElement).checked;
-                set({ weather_effects: checked ? [...new Set([...current, effect])] : current.filter((x) => x !== effect) });
-              }}
-            />
-            ${this.t(`weather_effect_${effect}` as I18nKey)}</label
-          >`;
-        })}
-        <label class="fp3d-check fp3d-wide"
-          ><input type="checkbox" .checked=${s.rain_warning !== false} @change=${(ev: Event) => set({ rain_warning: (ev.target as HTMLInputElement).checked })} />
-          ${this.t("rain_warning")}</label
-        >
-        ${this.hass
-          ? html`${this.entitySelect(this.t("rain_entity"), s.rain_entity ?? null, undefined, this.entityOptions((id) => isRainSource(this.hass!, id)), (v) => set({ rain_entity: v === "none" ? null : v }))}
-              <p class="fp3d-sub fp3d-wide">${this.t("rain_entity_hint")}</p>`
-          : nothing}
-        <label class="fp3d-check fp3d-wide" title=${this.t("alert_names_hint")}
-          ><input type="checkbox" .checked=${s.alert_names !== false} @change=${(ev: Event) => set({ alert_names: (ev.target as HTMLInputElement).checked })} />
-          ${this.t("alert_names")}</label
-        >
-        <label class="fp3d-check fp3d-wide" title=${this.t("alert_unavailable_hint")}
-          ><input type="checkbox" .checked=${!!s.alert_unavailable} @change=${(ev: Event) => set({ alert_unavailable: (ev.target as HTMLInputElement).checked })} />
-          ${this.t("alert_unavailable")}</label
-        >
-        ${ignoredAlerts(this.hass, s.alert_ignored, !this.isEditor, (a) => set({ alert_ignored: restoreAlert(s.alert_ignored, a) }))}
-        ${this.hass
-          ? html`<p class="fp3d-sub fp3d-wide"><b>${this.t("effects")}</b> · ${this.t("effects_hint")}</p>
-              ${effectFields(this.hass, s.effects, !this.isEditor, (effects) => set({ effects }), "fp3d-field")}`
-          : nothing}
-        ${this.hass
-          ? html`${this.entitySelect(
-                this.t("outage_entity"),
-                s.outage_entity ?? null,
-                undefined,
-                this.entityOptions((id) => /^(binary_sensor|sensor|input_boolean|switch)\./.test(id)),
-                (v) => set({ outage_entity: v === "none" ? null : v }),
-              )}
-              <p class="fp3d-sub fp3d-wide">${this.t("outage_entity_hint")}</p>`
-          : nothing}
-        <label class="fp3d-check fp3d-wide" title=${this.t("sun_patches_hint")}
-          ><input type="checkbox" .checked=${s.sun_patches !== false} @change=${(ev: Event) => set({ sun_patches: (ev.target as HTMLInputElement).checked })} />
-          ${this.t("sun_patches")}</label
-        >
-        <label class="fp3d-check fp3d-wide" title=${this.t("sun_shadow_hint")}
-          ><input type="checkbox" .checked=${s.sun_shadow !== false} @change=${(ev: Event) => set({ sun_shadow: (ev.target as HTMLInputElement).checked })} />
-          ${this.t("sun_shadow")}</label
-        >
-        <label class="fp3d-check fp3d-wide" title=${this.t("window_glow_hint")}
-          ><input type="checkbox" .checked=${s.window_glow !== false} @change=${(ev: Event) => set({ window_glow: (ev.target as HTMLInputElement).checked })} />
-          ${this.t("window_glow")}</label
-        >
-      </div>
-      <p class="fp3d-sub">${this.t("weather_entity_hint")}</p>
-    </details>`;
-  }
-
   static styles = [
     tokens,
     controls,
@@ -15235,6 +14843,50 @@ export class Fp3dEditor extends LitElement {
       :host {
         display: block;
         height: 100%;
+      }
+      /* a house-wide setting's way to the Settings page (#139), in a tool panel or an item form */
+      .fp3d-settings-link {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 4px 10px;
+        width: 100%;
+        min-height: 40px;
+        margin: 6px 0;
+        padding: 8px 12px;
+        border: 1px dashed var(--fp3d-line);
+        border-radius: 10px;
+        background: none;
+        color: var(--fp3d-muted);
+        font: inherit;
+        font-size: 13px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-settings-link b {
+        color: var(--fp3d-accent);
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .fp3d-settings-link:hover {
+        border-color: var(--fp3d-accent);
+      }
+      /* a part on the Settings page (#139): its row already names it */
+      .fp3d-embed summary,
+      .fp3d-embed > .fp3d-wide > h4.fp3d-lib-head:first-child,
+      .fp3d-embed > .fp3d-wide > h4.fp3d-lib-head:first-child + .fp3d-sub,
+      .fp3d-embed > section > h3:first-child,
+      .fp3d-embed > section > h3:first-child + .fp3d-sub,
+      .fp3d-embed > h4:first-child,
+      .fp3d-embed > h4:first-child + .fp3d-sub {
+        display: none;
+      }
+      .fp3d-embed details.fp3d-section {
+        border: 0;
+        padding: 0;
+        margin: 0;
+        background: none;
       }
       .fp3d-editor {
         position: relative;

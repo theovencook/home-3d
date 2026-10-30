@@ -23,14 +23,16 @@ function editor(demo: boolean) {
   return el;
 }
 
-test("a demo home's editor can switch the demo states off and on again; an ordinary home has no such switch (#100)", () => {
+test("the demo states switch moved to the Settings page (#139): offered for every home, switched there", async () => {
   const el = editor(true);
-  assert.match(flat(el.renderDemoSwitch()), /Demo states/);
-  el.setDemo(false);
-  assert.equal(el._doc.settings.demo, false);
+  assert.equal(typeof el.renderDemoSwitch, "undefined");
+  const { settingById } = await import("../settings/registry.ts");
+  const row = settingById("demo")!;
+  const env = { building: demoHome(true), hass: el.hass, prefs: { get: () => null, set: () => undefined } };
+  assert.equal(row.read(env as never), true);
+  const off = row.write!(env as never, false as never) as ReturnType<typeof demoHome>;
+  assert.equal(off.settings.demo, false);
   // switched off it stays offered, so it can come back
-  assert.match(flat(el.renderDemoSwitch()), /Demo states/);
-  el.setDemo(true);
-  assert.equal(el._doc.settings.demo, true);
-  assert.equal(flat(editor(false).renderDemoSwitch()), "");
+  assert.equal(row.read({ ...env, building: off } as never), false);
+  assert.equal(row.read({ ...env, building: demoHome(false) } as never), false);
 });

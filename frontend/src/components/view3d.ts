@@ -4562,7 +4562,8 @@ export class Fp3dView3d extends LitElement {
   /** Fun pack "Halloween": while it is unlocked and the ghost switched on, it floats through the house now and then. */
   private async syncGhost(): Promise<void> {
     const b = this.building;
-    const on = !!b && hasFeature("fun_halloween") && b.settings.halloween?.ghost !== false && this.ghostOn !== false;
+    // the house-wide easter eggs switch (#139) wins over everything: cards and wall tablets follow it too
+    const on = !!b && b.settings.easter_eggs !== false && hasFeature("fun_halloween") && b.settings.halloween?.ghost !== false && this.ghostOn !== false;
     if (!this.viewer || this.plan2d || !on) {
       this.ghost?.dispose();
       this.ghost = null;
@@ -5701,6 +5702,20 @@ export class Fp3dView3d extends LitElement {
         ${effectFields(hass, st.effects, !admin, (effects) => this.setPlanSettings({ effects }))}
         ${modules.map((fields) => html`<div class="fp3d-set-module">${fields.map((f) => this.renderViewField(hass, f, admin))}</div>`)}
         <p class="fp3d-set-note">${t("view_settings_more")}</p>
+        <button
+          class="fp3d-btn"
+          @click=${() => {
+            this._settingsOpen = false;
+            // the panel opens its Settings tab (#139); a dashboard card has no panel around it: go to the panel's page
+            const asked = new CustomEvent("open-settings", { detail: { section: null, id: null }, bubbles: true, composed: true, cancelable: true });
+            if (this.dispatchEvent(asked)) {
+              history.pushState(null, "", "/home_3d#settings");
+              window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+            }
+          }}
+        >
+          ⚙ ${t("all_settings")} ›
+        </button>
       </div>`;
   }
 

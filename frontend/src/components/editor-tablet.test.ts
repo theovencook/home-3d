@@ -9,7 +9,7 @@ for (const name of ["VIEWER", "EDITOR", "LOCATE", "ITEMS", "LANG", "PLAN2D", "FU
 (globalThis as Record<string, unknown>).__FP3D_VERSION__ = "test";
 const { Fp3dEditor } = await import("./editor.ts");
 
-test("ticking a user as a wall tablet and setting its idle return land in the plan's settings and undo (#92)", () => {
+test("ticking a user as a wall tablet lands in the plan's settings and undo (#92; the idle return is a Settings row, #139)", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const el = new Fp3dEditor() as any;
   el.hass = { language: "en", user: { is_admin: true }, states: {}, areas: {} } as unknown as HomeAssistant;
@@ -17,12 +17,8 @@ test("ticking a user as a wall tablet and setting its idle return land in the pl
   el._floorId = null;
   el.setTabletUser("wall", true);
   assert.deepEqual(el._doc.settings.tablet_users, ["wall"]);
-  el.setTabletIdle(45);
-  assert.equal(el._doc.settings.tablet_idle, 45);
   el.setTabletUser("wall", false);
   assert.deepEqual(el._doc.settings.tablet_users, []);
   el.undo();
-  el.undo();
   assert.deepEqual(el._doc.settings.tablet_users, ["wall"]);
-  assert.equal(el._doc.settings.tablet_idle, undefined);
 });
