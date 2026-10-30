@@ -22,7 +22,8 @@ def test_files_match_the_generator() -> None:
     for id, item in ITEMS.items():
         path = gen.OUT / f"{id}.json"
         assert path.read_text(encoding="utf8") == gen.rg.text_of(item), f"{id}: run python tools/unifi_rack_core.py"
-    assert {p.stem for p in gen.OUT.glob("*.json")} == set(ITEMS)
+    # the UniFi network folder is shared with the other UniFi gear (#145): every item of ours is there
+    assert set(ITEMS) <= {p.stem for p in gen.OUT.glob("*.json")}
 
 
 def test_every_item_is_valid_and_light() -> None:
