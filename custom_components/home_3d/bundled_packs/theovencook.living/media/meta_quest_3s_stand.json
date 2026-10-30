@@ -1,0 +1,23 @@
+{
+  "id": "meta_quest_3s_stand",
+  "name": {"en": "Meta Quest 3S on stand"},
+  "size": [0.2, 0.17, 0.26],
+  "group": "media",
+  "room": ["living", "bedroom", "kids", "hobby", "loft", "office"],
+  "tags": ["meta quest 3s", "quest 3s", "meta quest", "oculus", "vr headset", "vr", "gaming", "charging stand"],
+  "family": "meta_quest",
+  "variant": {"en": "On stand"},
+  "electric": true,
+  "mount": "surface",
+  "watts": 10,
+  "parts": [
+    {"shape": "rbox", "x": 0.0, "z": 0.0, "w": 1.0, "d": 1.0, "y": 0.0, "h": 0.0769, "color": "#1c1d20", "round": 0.2, "fix": "h"},
+    {"shape": "box", "x": 0.0, "z": -0.3, "w": 0.15, "d": 0.2353, "y": 0.0769, "h": 0.5, "color": "#1c1d20", "fix": "w"},
+    {"shape": "rbox", "x": 0.0, "z": 0.0, "w": 0.92, "d": 0.5765, "y": 0.45, "h": 0.4, "color": "white", "round": 0.25},
+    {"shape": "box", "x": 0.0, "z": 0.2941, "w": 0.782, "d": 0.0235, "y": 0.5, "h": 0.28, "color": "#16171a"},
+    {"shape": "box", "x": 0.0, "z": -0.2941, "w": 0.552, "d": 0.1176, "y": 0.46, "h": 0.12, "color": "#2b2d31"}
+  ],
+  "symbol": [
+    {"shape": "rect", "x": 0.0, "z": 0.0, "w": 1.0, "d": 1.0}
+  ]
+}
