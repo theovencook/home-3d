@@ -21,7 +21,7 @@ from typing import Any
 
 import voluptuous as vol
 
-from .packs import RACK_PANEL_WIDTH
+from .packs import RACK_PANEL_WIDTH, RACK_SLACK, RACK_UNIT
 
 # at most this many pieces of gear in one rack
 RACK_MAX_SLOTS = 60
@@ -114,20 +114,18 @@ def _rack_items(building: dict[str, Any]) -> Iterator[dict[str, Any]]:
                 yield item
 
 
-_UNIT = 0.04445
 # the clear opening between the rails a shelf gives loose gear, by rack width (rack-frame.ts RACK_OPENING)
 _OPENING = {19: 0.45085, 10: 0.22225}
 _COLUMNS = {"full": 1, "half": 2, "third": 3}
 # 0U gear: a lane down the left (col 0) and one down the right (col 1)
 _LANES = 2
-_SLACK = 0.001
 # a shelf's tray: loose gear stands this high above the bottom of its lowest U (rack.ts SHELF_TRAY)
 SHELF_TRAY = 0.004
 
 
 def _lane_units(height: float) -> int:
     """How many U a 0U item standing in a side lane is long (rack.ts laneUnits)."""
-    return max(1, math.ceil(height / _UNIT - 0.02))
+    return max(1, math.ceil(height / RACK_UNIT - 0.02))
 
 
 def _size(recipe: dict[str, Any]) -> list[float]:
@@ -201,9 +199,9 @@ def _gear_problem(
     if slot.get("face") == "rear" and frame.get("form") == "frame2":
         return "no_rear", n
     width, depth, _ = _size(recipe)
-    if lane and width > space["lane"] + _SLACK:
+    if lane and width > space["lane"] + RACK_SLACK:
         return "no_lane", n
-    if depth > space["mount"] + _SLACK:
+    if depth > space["mount"] + RACK_SLACK:
         return "too_deep", n
     return None, n
 
@@ -243,7 +241,7 @@ def _rack_slot_problems(
         )
         if gear.get("shelf"):
             width = _OPENING.get(frame.get("width", 19), _OPENING[19]) / _columns(gear)
-            shelves[slot["id"]] = {"w": width, "d": _size(recipe)[1], "h": gear["u"] * _UNIT - SHELF_TRAY}
+            shelves[slot["id"]] = {"w": width, "d": _size(recipe)[1], "h": gear["u"] * RACK_UNIT - SHELF_TRAY}
     for me in pieces:
         why = me["why"]
         if why is None and me["gear"] is not None and any(o is not me and _hits(me, o) for o in pieces):
@@ -281,12 +279,12 @@ def _loose_problem(shelf: dict[str, float] | None, recipe: dict[str, Any], besid
     if "rack_frame" in recipe:
         return "not_loose"
     width, depth, height = _size(recipe)
-    if height > shelf["h"] + _SLACK:
+    if height > shelf["h"] + RACK_SLACK:
         return "too_tall"
-    if depth > shelf["d"] + _SLACK:
+    if depth > shelf["d"] + RACK_SLACK:
         return "too_deep"
     used = sum(_size(r)[0] for r in beside if "rack_frame" not in r)
-    if used + width > shelf["w"] + _SLACK:
+    if used + width > shelf["w"] + RACK_SLACK:
         return "shelf_full"
     return None
 

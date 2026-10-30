@@ -177,7 +177,7 @@ import { askConfirm, tell } from "../ask.ts";
 import "./library.ts";
 import "./rack-sheet.ts";
 import { rackLayout, readRackFrame } from "../rack-frame.ts";
-import { packGearOf, packLooseOf, rackMisfits, rackSpace, readRackGear, type RackSlot } from "../rack.ts";
+import { fitsDepth, packGearOf, packLooseOf, rackMisfits, rackSpace, readRackGear, type RackSlot } from "../rack.ts";
 import { rackElevation, type RackElevation } from "../rack-elevation.ts";
 import type { RackGearChoice, RackLinker } from "./rack-sheet.ts";
 import { slotStatus } from "../rack-links.ts";
@@ -390,6 +390,9 @@ function pathLengthOf(p: PoolPipe, nodeAt: (n: string) => { x: number; z: number
 
 /** Arrow keys as plan directions (x right, z down). */
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+/** A pack item for the rack code: its recipe once fetched, else the library listing (size, rack spec, mount). */
+const rackItemOf = (type: string) => packItem(type) ?? packInfo(type);
 
 // furniture without a top to light: no "State from" box
 const NO_STATE_TYPES = new Set(["parking", "stairwell", "rug", "grid_point", "waste_bin", "mailbox", "wall_switch", "wall_socket", "wifi_ap", "water_heater"]);
@@ -6472,7 +6475,7 @@ export class Fp3dEditor extends LitElement {
 
   /** A placed rack's frame and U layout at its placed size; null for any other item. */
   private rackOf(f: Furniture) {
-    const frame = readRackFrame(packItem(f.type) ?? packInfo(f.type));
+    const frame = readRackFrame(rackItemOf(f.type));
     return frame ? { frame, at: rackLayout(frame, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h)) } : null;
   }
 
@@ -6481,7 +6484,7 @@ export class Fp3dEditor extends LitElement {
 
   /** A placed rack's front view with its gear (#115); null for any other item. */
   private rackElevationOf(f: Furniture): RackElevation | null {
-    const frame = readRackFrame(packItem(f.type) ?? packInfo(f.type));
+    const frame = readRackFrame(rackItemOf(f.type));
     if (!frame) return null;
     const lang = this.hass?.language ?? "en";
     const slots = f.rack?.slots ?? [];
@@ -6507,7 +6510,7 @@ export class Fp3dEditor extends LitElement {
   private renderRackElevation(f: Furniture) {
     const el = this.rackElevationOf(f);
     if (!el || !el.pieces) return nothing;
-    const frame = readRackFrame(packItem(f.type) ?? packInfo(f.type));
+    const frame = readRackFrame(rackItemOf(f.type));
     return html`<details class="fp3d-rack-elev" open>
       <summary>${this.t("rack_front_view")} · ${this.t("rack_used", { used: el.used, u: frame?.u ?? 0 })}</summary>
       <div class="fp3d-rack-elev-box">${unsafeHTML(el.svg)}</div>
@@ -6524,8 +6527,7 @@ export class Fp3dEditor extends LitElement {
   private rackRules(f: Furniture) {
     const rack = this.rackOf(f);
     if (!rack) return null;
-    const itemOf = (t: string) => packItem(t) ?? packInfo(t);
-    return { rack, space: rackSpace(rack.frame, rack.at), gearOf: packGearOf(itemOf), looseOf: packLooseOf(itemOf) };
+    return { rack, space: rackSpace(rack.frame, rack.at), gearOf: packGearOf(rackItemOf), looseOf: packLooseOf(rackItemOf) };
   }
 
   /** What the open rack sheet shows (null: none open, or its rack is gone). */
@@ -6543,7 +6545,7 @@ export class Fp3dEditor extends LitElement {
       for (const it of pack.items) {
         const g = readRackGear(it);
         const type = packType(pack.id, it.id);
-        if (g && g.inch === space.width && it.size[1] <= space.mountDepth + 0.001) gear.push({ type, name: packItemName(it, lang) });
+        if (g && g.inch === space.width && fitsDepth(space, it.size[1])) gear.push({ type, name: packItemName(it, lang) });
         else if (!g && !it.rack_frame && it.electric && (it.group === "network" || it.group === "tech") && it.mount !== "ceiling" && it.size[0] <= opening && it.size[1] <= space.mountDepth && it.size[2] <= 0.3)
           loose.push({ type, name: packItemName(it, lang) });
       }
@@ -6589,7 +6591,7 @@ export class Fp3dEditor extends LitElement {
   /** The racks a placed rack can become (#114): every pack's racks that hang where it does (wall or not). */
   private rackFrameChoices(f: Furniture): { type: string; name: string }[] {
     const lang = this.hass?.language ?? "en";
-    const wall = (packItem(f.type) ?? packInfo(f.type))?.mount === "wall";
+    const wall = rackItemOf(f.type)?.mount === "wall";
     const out: { type: string; name: string }[] = [];
     for (const pack of this.packs ?? [])
       for (const it of pack.items) if (readRackFrame(it) && (it.mount === "wall") === wall) out.push({ type: packType(pack.id, it.id), name: packItemName(it, lang) });
@@ -6599,7 +6601,7 @@ export class Fp3dEditor extends LitElement {
   /** Swap the chosen rack for another rack type (#114): its size becomes the new rack's, its gear stays (one undo step). */
   private changeRackFrame(type: string): void {
     const f = this.furnitureItem;
-    const item = packItem(type) ?? packInfo(type);
+    const item = rackItemOf(type);
     if (!f || !this.isEditor || !item || !readRackFrame(item) || !this.rackOf(f)) return;
     const [w, d, h] = item.size;
     this.updateFurniture({ type, w, d, h });

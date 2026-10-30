@@ -189,6 +189,11 @@ export function slotFaces(s: Pick<RackSlot, "face">, gear: RackGear): RackFace[]
   return gear.depth === "full" ? ["front", "rear"] : [s.face === "rear" ? "rear" : "front"];
 }
 
+/** Whether gear this deep (metres) fits between a rack's rails. */
+export function fitsDepth(space: Pick<RackSpace, "mountDepth">, depth: number): boolean {
+  return depth <= space.mountDepth + SLACK;
+}
+
 /** Can `s` go into the rack beside `others` (its own old place not counted)? */
 export function checkSlot(space: RackSpace, others: readonly RackSlot[], s: RackSlot, gearOf: GearOf, looseOf: LooseOf = noLoose): Omit<RackResult, "slots"> {
   if (s.on) return checkLoose(space, others, s, gearOf, looseOf);
@@ -205,7 +210,7 @@ export function checkSlot(space: RackSpace, others: readonly RackSlot[], s: Rack
   if (!Number.isInteger(col) || col < 0 || col >= (lane ? LANES : RACK_COLUMNS[g.width])) return no("outside");
   if (s.face === "rear" && space.rear === false) return no("no_rear");
   if (lane && (of.size?.[0] ?? 0) > (space.lane ?? Infinity) + SLACK) return no("no_lane");
-  if (of.depth > space.mountDepth + SLACK) return no("too_deep");
+  if (!fitsDepth(space, of.depth)) return no("too_deep");
   const taken = new Set(units);
   const faces = slotFaces(s, g);
   const hits = (o: RackSlot): boolean => {
