@@ -1,6 +1,7 @@
 // 2D editor: floors, rooms (rectangles and free shapes), snapping, undo, background template.
 
-import { css, html, LitElement, nothing, svg, type PropertyDeclaration, type PropertyValues, type TemplateResult } from "lit";
+import { css, html, LitElement, nothing, svg, unsafeCSS, type PropertyDeclaration, type PropertyValues, type TemplateResult } from "lit";
+import { PHONE_MEDIA } from "../phone.ts";
 import { linesField } from "./lines-field.ts";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { ref } from "lit/directives/ref.js";
@@ -5532,7 +5533,7 @@ export class Fp3dEditor extends LitElement {
     const admin = this.isEditor;
     const open = this._toolMenu === "floor";
     const close = () => ((this._toolMenu = null), (this._floorMenu = false));
-    return html`<div class="fp3d-seg fp3d-seg-menu">
+    return html`<div class="fp3d-seg fp3d-seg-menu fp3d-seg-floor">
       <div class="fp3d-menu-wrap">
         <button aria-haspopup="menu" aria-expanded=${open} @click=${() => ((this._toolMenu = open ? null : "floor"), (this._floorMenu = false), (this._viewMenu = false))}>
           <span class="fp3d-menu-label">${this.t("floor_label")}</span> ${floor?.name ?? this.t("floors")} <span class="fp3d-caret">▾</span>
@@ -15864,7 +15865,7 @@ export class Fp3dEditor extends LitElement {
       .fp3d-phone-hint {
         display: none;
       }
-      @media (max-width: 600px) {
+      @media ${unsafeCSS(PHONE_MEDIA)} {
         .fp3d-phone-hint {
           position: absolute;
           top: 8px;
@@ -16740,6 +16741,35 @@ export class Fp3dEditor extends LitElement {
         margin: 0;
         font-size: 12.5px;
         color: var(--fp3d-warm);
+      }
+      /* phones (#94): drawing is for a PC or tablet (the banner says so), but the plan keeps a usable height
+         whatever the toolbar wraps to, and the toolbar packs tighter */
+      @media ${unsafeCSS(PHONE_MEDIA)} {
+        .fp3d-editor.fp3d-narrow {
+          grid-template-rows: auto auto;
+        }
+        .fp3d-narrow .fp3d-canvas-wrap {
+          min-height: max(320px, 52vh);
+        }
+        .fp3d-toolbar {
+          gap: 4px 6px;
+          padding: 6px 8px;
+        }
+        .fp3d-toolbar .fp3d-seg > button,
+        .fp3d-toolbar .fp3d-menu-wrap > button {
+          padding: 6px 10px;
+          font-size: 13.5px;
+        }
+        /* the floor menu and ⚙ share the first row; the tools, undo and the view buttons follow */
+        .fp3d-toolbar > * {
+          order: 2;
+        }
+        .fp3d-toolbar > .fp3d-seg-floor {
+          order: 0;
+        }
+        .fp3d-toolbar > .fp3d-seg-settings {
+          order: 1;
+        }
       }
     `,
   ];
