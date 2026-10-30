@@ -55,9 +55,9 @@ import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { edgeReach, generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, languageReady, loadLanguage, translate, type I18nKey } from "../i18n.ts";
 import { ISSUES_URL } from "./extensions.ts";
-import { beforeSelectionChange, deepActive, releaseTyping, takesTyping } from "../focus-release.ts";
+import { beforeSelectionChange, deepActive, releaseTyping, selectionMoved, takesTyping } from "../focus-release.ts";
 import { escapeStep } from "../editor-keys.ts";
-import { furnitureFields, type FurnitureField } from "../item-panel.ts";
+import { furniturePanel, type FurnitureField } from "../item-panel.ts";
 import { iconPath } from "../icons.ts";
 import { moduleAreaFields, moduleFurnitureFields, moduleHelp, moduleRoomFields, modulePipeRules, syncModules, type ModuleField, type ModuleHost, type PipeRules } from "../modules.ts";
 import { pipePlanner } from "../pipe-planner.ts";
@@ -1253,7 +1253,9 @@ export class Fp3dEditor extends LitElement {
     }
   }
 
-  protected updated(): void {
+  protected updated(changed: PropertyValues): void {
+    // another item (room, door, floor …) opens its panel at the top: the fields are where they always are (#71)
+    if (selectionMoved(changed, this)) for (const side of this.renderRoot.querySelectorAll<HTMLElement>(".fp3d-side")) side.scrollTop = 0;
     // the settings dialog shows its section unfolded (its summary is hidden there)
     if (this._settingsDialog) for (const d of this.renderRoot.querySelectorAll<HTMLDetailsElement>(".fp3d-dialog details")) d.open = true;
     // the item preview is placed in window coordinates; with the 3D view beside the plan an ancestor becomes its
@@ -11110,17 +11112,19 @@ export class Fp3dEditor extends LitElement {
   private renderFurnitureForm(f: Furniture) {
     if (this.selection().length > 1) return this.renderBlockForm();
     const admin = this.isEditor;
+    const panel = furniturePanel({ mirror: !isLamp(f.type), strip: f.type === "led_strip", lift: canLift(f) && !!this.floor });
     return html`<section>
-      <div class="fp3d-h3row"><h3>${f.name || this.t("furniture")}</h3>${this.fixButton("furniture", f.id)}</div>
+      <div class="fp3d-pos-head">
+        <div class="fp3d-h3row"><h3>${f.name || this.t("furniture")}</h3>${this.fixButton("furniture", f.id)}</div>
+        <div class="fp3d-form">${panel.head.map((field) => this.furnitureField(f, field))}</div>
+      </div>
       ${f.group
         ? html`<p class="fp3d-sub fp3d-block-note">▣ ${this.t("block_part")} <button class="fp3d-link" @click=${() => {
             this._single = false;
             this.requestUpdate();
           }}>${this.t("block_select")}</button></p>`
         : nothing}
-      <div class="fp3d-form">
-        ${furnitureFields({ mirror: !isLamp(f.type), strip: f.type === "led_strip", lift: canLift(f) && !!this.floor }).map((field) => this.furnitureField(f, field))}
-      </div>
+      <div class="fp3d-form">${panel.body.map((field) => this.furnitureField(f, field))}</div>
       ${this.renderColourRoles(f)}
       ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
       ${f.type === "stairs" ? this.renderStairOptions(f) : nothing}
@@ -11216,12 +11220,11 @@ export class Fp3dEditor extends LitElement {
           <input type="text" maxlength="60" .value=${f.name ?? ""} ?disabled=${!admin} placeholder=${this.t(`furn_${f.type}` as I18nKey) === `furn_${f.type}` ? "" : this.t(`furn_${f.type}` as I18nKey)} @change=${(e: Event) => this.updateFurniture({ name: (e.target as HTMLInputElement).value.trim() || null })} />
         </label>`;
       case "show_name":
-        return f.name
-          ? html`<label class="fp3d-check fp3d-wide"
-              ><input type="checkbox" .checked=${!!f.show_name} ?disabled=${!admin} @change=${(ev: Event) => this.updateFurniture({ show_name: (ev.target as HTMLInputElement).checked || undefined })} />
-              ${this.t("show_name")}</label
-            >`
-          : nothing;
+        // always there (greyed out until the item has a name), so naming an item moves no row (#71)
+        return html`<label class="fp3d-check fp3d-wide"
+          ><input type="checkbox" .checked=${!!f.show_name && !!f.name} ?disabled=${!admin || !f.name} @change=${(ev: Event) => this.updateFurniture({ show_name: (ev.target as HTMLInputElement).checked || undefined })} />
+          ${this.t("show_name")}</label
+        >`;
       case "aliases":
         return html`<label class="fp3d-field fp3d-wide" title=${this.t("aliases_hint")}
           >${this.t("aliases")}
@@ -15822,6 +15825,22 @@ export class Fp3dEditor extends LitElement {
         font-size: 12px;
         letter-spacing: 0.06em;
         text-transform: uppercase;
+      }
+      /* the item's title and position fields stay at the top while the panel scrolls (#71); -12px = the side
+         bar's top padding, so nothing shows above it */
+      .fp3d-pos-head {
+        position: sticky;
+        top: -12px;
+        z-index: 3;
+        background: var(--fp3d-chrome-solid);
+        padding: 4px 0 10px;
+        border-bottom: 1px solid var(--fp3d-line);
+      }
+      .fp3d-pos-head h3 {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
       }
       .fp3d-h3row {
         display: flex;

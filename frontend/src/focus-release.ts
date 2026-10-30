@@ -52,6 +52,14 @@ function same(a: unknown, b: unknown): boolean {
   return a === b;
 }
 
+/** Whether a render's changed properties (old values) moved the selection of `host` (#71: the panel starts at the top). */
+export function selectionMoved(changed: ReadonlyMap<PropertyKey, unknown>, host: object): boolean {
+  for (const [key, old] of changed) {
+    if (typeof key === "string" && SELECTION_KEYS.has(key) && !same(old, (host as Record<string, unknown>)[key])) return true;
+  }
+  return false;
+}
+
 /**
  * Called as a property of `host` has just changed from `oldValue`: when it is part of the selection, the box with
  * the cursor lets go. Its change handler still sees the OLD selection, so a value typed for the previous item is

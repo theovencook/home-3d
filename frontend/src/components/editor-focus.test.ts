@@ -83,3 +83,27 @@ test("Escape while furnishing goes back to the library: the item is let go, the 
   assert.equal(el._roomId, "r");
   assert.equal(el._tool, "furniture");
 });
+
+/** The side bar's scroll boxes as the editor finds them after a render. */
+function withSideBars(el: Record<string, any>) {
+  const sides = [{ scrollTop: 420 }, { scrollTop: 90 }];
+  const root = el.renderRoot as Record<string, unknown>;
+  root.querySelector = () => null;
+  root.querySelectorAll = (sel: string) => (sel === ".fp3d-side" ? sides : []);
+  return sides;
+}
+
+test("another item opens its panel at the top, not where the last one was scrolled to (#71)", () => {
+  const { el } = editor();
+  const sides = withSideBars(el);
+  el.updated(new Map([["_furnitureId", "sofa"]]));
+  assert.deepEqual(sides.map((s) => s.scrollTop), [0, 0]);
+});
+
+test("an edit of the same item keeps the panel where it is (#71)", () => {
+  const { el } = editor();
+  const sides = withSideBars(el);
+  el.updated(new Map([["_doc", el._doc]]));
+  el.updated(new Map([["_multi", []]]));
+  assert.deepEqual(sides.map((s) => s.scrollTop), [420, 90]);
+});
