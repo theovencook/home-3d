@@ -152,7 +152,7 @@ import { pathLength, pipePath, pointAlong, type P3 } from "../geometry/runs.ts";
 import { pipePieces, poolAreas, poolNodeAt, poolWallNormal, underBasin, PIPE_IDLE, type PipePiece } from "../pool-runs.ts";
 import type { PipeTube } from "../viewer/viewer3d.ts";
 import type { PoolPiece } from "../viewer/pool-water.ts";
-import { lowSyncDelay } from "../viewer/pace.ts";
+import { sensorSyncDelay } from "../viewer/pace.ts";
 import { flowWidth } from "../viewer/flow-style.ts";
 import { floorCounts, floorInfoText, locatedPersons, personLook, personsInRooms, personsShown } from "../presence.ts";
 import { controls, tokens } from "../styles.ts";
@@ -683,7 +683,7 @@ export class Fp3dView3d extends LitElement {
   private directorBack: { floorId: string | null; roomId: string | null; view: ReturnType<FloorplanViewer["getView"]> } | null = null;
   /** Haushalt Pro: looks again when an open fridge door reaches its limit. */
   private fridgeTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Tablet level: measured values alone are shown at most every SENSOR_SYNC_MS (the pending sync, the last one). */
+  /** Measured values alone are shown at most every second (2 s on the tablet level, pace.ts): the pending sync, the last one. */
   private sensorTimer: ReturnType<typeof setTimeout> | undefined;
   /** A module asked to be drawn again (its own state changed: a target just set, a simulation ticking). */
   private moduleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1071,39 +1071,45 @@ export class Fp3dView3d extends LitElement {
       if (this.floorId === this.throughFloor) this.throughFloor = null;
       else this._through = null;
     }
-    // packs arrive with the building (or after an import): the viewer rebuilds pack furniture
-    if (this.shownPacks !== packsVersion()) {
-      this.shownPacks = packsVersion();
-      v.setPacks([...getPacks()], getPlanRecipes());
-      if (this.hass) void syncModules(this.hass, getPacks()).then(() => this.syncDevices(true));
-      // vehicles in parking spots come from packs too: look them up again now that the packs are here
-      if (this.hass && this.building) v.setParked(parkedVehicles(this.hass, this.building));
-      // a feature pack may have arrived with them (Energie Pro): the cables and modules follow
-      this.syncDevices(true);
-    }
-    if (changed.has("building") && this.building) {
-      // a new start view (just remembered in the editor) shows right away in the house view
-      const start = JSON.stringify(this.startViewOf());
-      const startChanged = this.shownStartView !== undefined && this.shownStartView !== start;
-      this.shownStartView = start;
-      v.setStartView(this.startViewOf());
-      v.setBuilding(this.viewPlan(this.building));
-      if (startChanged && this.floorId === null) v.resetView();
-    }
-    if (changed.has("building") || changed.has("packs") || changed.has("petsOn")) void this.syncPets();
-    if (changed.has("building") || changed.has("packs") || changed.has("ghostOn")) void this.syncGhost();
-    if (changed.has("startView") && changed.get("startView") !== undefined) {
-      v.setStartView(this.startViewOf());
-      if (this.floorId === null) v.resetView();
-    }
-    if (changed.has("building") || changed.has("theme") || changed.has("floorThumbs") || changed.has("packs")) this.scheduleThumbs();
-    // with symbols only in rooms, opening or closing a room changes which ones show
-    const forced = ["building", "markerMode", "heatMode", "flows", "alerts", "dimmed"].some((k) => changed.has(k)) || (this.markerMode === "room" && changed.has("roomId"));
-    // time travel: a tick moves the clock even when no replayed state changed – the trail and a camera's
-    // detections follow it (one sync per tick at most, and only when they are shown)
-    const ticked = this.replayTicked && !!this.replay;
-    this.replayTicked = false;
-    if (forced || changed.has("hass") || ticked) this.syncDevices(forced, ticked && (this.trail || this.detecting));
+    // new packs, parked cars and the plan itself each rebuild the scene: handed over together (a home switch brings
+    // all three), it is built once (#131)
+    let startChanged = false;
+    let packsNew = false;
+    v.batch(() => {
+      // packs arrive with the building (or after an import): the viewer rebuilds pack furniture
+      if (this.shownPacks !== packsVersion()) {
+        this.shownPacks = packsVersion();
+        v.setPacks([...getPacks()], getPlanRecipes());
+        if (this.hass) void syncModules(this.hass, getPacks()).then(() => this.syncDevices(true));
+        // vehicles in parking spots come from packs too: look them up again now that the packs are here
+        if (this.hass && this.building) v.setParked(parkedVehicles(this.hass, this.building));
+        // a feature pack may have arrived with them (Energie Pro): the cables and modules follow (the sync below)
+        packsNew = true;
+      }
+      if (changed.has("building") && this.building) {
+        // a new start view (just remembered in the editor) shows right away in the house view
+        const start = JSON.stringify(this.startViewOf());
+        startChanged = this.shownStartView !== undefined && this.shownStartView !== start;
+        this.shownStartView = start;
+        v.setStartView(this.startViewOf());
+        v.setBuilding(this.viewPlan(this.building));
+      }
+      if (changed.has("building") || changed.has("packs") || changed.has("petsOn")) void this.syncPets();
+      if (changed.has("building") || changed.has("packs") || changed.has("ghostOn")) void this.syncGhost();
+      if (changed.has("startView") && changed.get("startView") !== undefined) {
+        v.setStartView(this.startViewOf());
+        if (this.floorId === null) v.resetView();
+      }
+      if (changed.has("building") || changed.has("theme") || changed.has("floorThumbs") || changed.has("packs")) this.scheduleThumbs();
+      // with symbols only in rooms, opening or closing a room changes which ones show
+      const forced = ["building", "markerMode", "heatMode", "flows", "alerts", "dimmed"].some((k) => changed.has(k)) || (this.markerMode === "room" && changed.has("roomId"));
+      // time travel: a tick moves the clock even when no replayed state changed – the trail and a camera's
+      // detections follow it (one sync per tick at most, and only when they are shown)
+      const ticked = this.replayTicked && !!this.replay;
+      this.replayTicked = false;
+      if (forced || packsNew || changed.has("hass") || ticked) this.syncDevices(forced || packsNew, ticked && (this.trail || this.detecting));
+    });
+    if (startChanged && this.floorId === null) v.resetView();
     if (changed.has("hass") || changed.has("director")) this.direct();
     if (changed.has("autoOrbit")) v.setAutoOrbit(this.autoOrbit ? 0.06 : 0);
     v.setFitMargin(this._phoneStage ? PHONE_FIT_MARGIN : NO_FIT_MARGIN);
@@ -1212,10 +1218,11 @@ export class Fp3dView3d extends LitElement {
     this.seenSeek = this.replay?.seek ?? 0;
     this.seenT = this.replay?.t ?? 0;
     if (!changed) return;
-    // tablet level: a change of measured values alone is shown at most every 2 s (power sensors tick every second
-    // and each sync redoes markers, light, cables and cards); a switch, door or alarm shows at once
-    if (sensorsOnly && this._low && !this.replay) {
-      const wait = lowSyncDelay(performance.now() - this.lastSync);
+    // a change of measured values alone is shown at most once a second, every 2 s on the tablet level (power sensors
+    // tick several times a second and each sync redoes markers, light, cables and cards, #131); a switch, door or
+    // alarm shows at once
+    if (sensorsOnly && !this.replay) {
+      const wait = sensorSyncDelay(performance.now() - this.lastSync, this._low);
       if (wait > 0) {
         this.sensorTimer ??= setTimeout(() => {
           this.sensorTimer = undefined;
@@ -4047,6 +4054,11 @@ export class Fp3dView3d extends LitElement {
       // a hidden tab draws nothing; the pictures follow once it shows again
       if (document.hidden) {
         this.scheduleThumbs(3000);
+        return;
+      }
+      // a new look still compiling: drawing the pictures now would compile it on the spot (#131)
+      if (this.viewer.compiling()) {
+        this.scheduleThumbs(500);
         return;
       }
       this.thumbsAt = Date.now();

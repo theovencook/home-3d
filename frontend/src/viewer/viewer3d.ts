@@ -75,6 +75,7 @@ export type { PipeTube };
 import { groundUnder, isCooktopZone, mountBase, packItem, packMotion, packsVersion, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "../packs.ts";
 import { withVehicles } from "../parking.ts";
 import { floorKeys } from "./floor-keys.ts";
+import { RebuildBatch } from "./rebuild-batch.ts";
 import { buildRoof, type RoofGeometry, type RoofWindowState } from "./roof.ts";
 import { SunFx } from "./sun-fx.ts";
 import { Realism } from "./realism.ts";
@@ -700,6 +701,21 @@ export class FloorplanViewer {
   private lastWake = performance.now();
   /** The tints and selection last written into each floor's colours (applyHighlight skips floors that stay). */
   private highlighted = new WeakMap<object, string>();
+  /** Scene rebuilds, once per batch of changes (#131). */
+  private readonly rebuilds = new RebuildBatch((incremental) => {
+    this.rebuild(incremental);
+    if (this.fitBuilt) this.fit(0);
+    this.fitBuilt = false;
+    this.invalidate();
+  });
+  /** A look's shaders compiling in the background (#131): no frames until they are ready. */
+  private warming: Promise<void> | null = null;
+  /** A renderer of another quality compiling its shaders before it takes over (#131). */
+  private nextRenderer: WebGLRenderer | null = null;
+  /** Own colours are drawn for the light looks (setLightLook): the scene was built that way. */
+  private lightLook = false;
+  /** The first plan arrived: the view fits it once it is built. */
+  private fitBuilt = false;
   /** Per floor: its light surface as last built and what from (kept while rooms, walls and openings stay, #131). */
   private lightSurfaces = new Map<string, { key: string; surface: LightSurface }>();
   private decorWas = false;
@@ -916,10 +932,15 @@ export class FloorplanViewer {
     if (sig === this.parkedSig) return;
     this.parkedSig = sig;
     this.parked = parked;
-    if (this.building) {
-      this.rebuild();
-      this.invalidate();
-    }
+    if (this.building) this.rebuilds.request(false);
+  }
+
+  /**
+   * Changes that each rebuild the scene (packs, parked cars, a new plan) run together and rebuild it once (#131): a
+   * home switch handed all three over and the scene was built three times.
+   */
+  batch(changes: () => void): void {
+    this.rebuilds.run(changes);
   }
 
   /** Frame statistics are only gathered while something shows them. */
@@ -951,11 +972,30 @@ export class FloorplanViewer {
   }
 
   setQuality(quality: Quality): void {
-    const canvas = this.renderer.domElement;
     const next = this.makeRenderer(quality);
     this.rebuildTier();
     this.applyTierFlags();
-    canvas.replaceWith(next.domElement);
+    // the new context compiles the scene's shaders before it takes over (#131): the old one keeps drawing meanwhile
+    this.nextRenderer?.dispose();
+    this.nextRenderer?.forceContextLoss();
+    this.nextRenderer?.domElement.remove();
+    this.nextRenderer = next;
+    if (this.realism.active) this.realism.setPlan(next, this.realPlan());
+    void compiled(next, this.scene, this.camera).then(() => {
+      if (this.nextRenderer !== next || this.disposed) return;
+      this.nextRenderer = null;
+      this.useRenderer(next);
+    });
+  }
+
+  /** Shaders of a new look or quality still compile in the background (#131): pictures of the view wait for them. */
+  compiling(): boolean {
+    return !!this.warming || !!this.nextRenderer;
+  }
+
+  /** A new renderer (another quality) takes over the canvas. */
+  private useRenderer(next: WebGLRenderer): void {
+    this.renderer.domElement.replaceWith(next.domElement);
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer = next;
@@ -974,10 +1014,7 @@ export class FloorplanViewer {
   setPacks(packs: FurniturePack[], recipes?: Record<string, PlanRecipe>): void {
     setPacks(packs);
     if (recipes) setPlanRecipes(recipes);
-    if (this.building) {
-      this.rebuild();
-      this.invalidate();
-    }
+    if (this.building) this.rebuilds.request(false);
   }
 
   setBuilding(building: Building): void {
@@ -988,9 +1025,8 @@ export class FloorplanViewer {
     setTerrain(building);
     setPlanRecipes(building.recipes);
     // an edit changes one floor, mostly: the others stay as they are (#131)
-    this.rebuild(true);
-    if (first) this.fit(0);
-    this.invalidate();
+    if (first) this.fitBuilt = true;
+    this.rebuilds.request(true);
   }
 
   /** Show one floor (null = the whole house). */
@@ -1516,7 +1552,10 @@ export class FloorplanViewer {
     // waste bins, pack items and items in colours of their own (#12) keep them in the light looks: drawn anew in full colour (#609)
     const light = theme !== "neon";
     setLightLook(light);
-    if (this.building?.floors.some((f) => f.furniture.some(hasOwnColours))) this.rebuild();
+    // only between neon and the light looks (day, blueprint, realistic all draw own colours in full), and only the
+    // floors with such items (#131)
+    if (light !== this.lightLook && this.building?.floors.some((f) => f.furniture.some(hasOwnColours))) this.rebuilds.request(true);
+    this.lightLook = light;
     const blending = lineBlending(theme);
     const lineMats = [...this.floors.map((f) => f.materials.lines), ...(this.roof ? [this.roof.lines] : [])];
     for (const m of lineMats) {
@@ -1527,6 +1566,17 @@ export class FloorplanViewer {
     this.placeGround();
     this.realism.enable(this.scene, theme === "realistic");
     this.applyRealism();
+    // the realistic look's lit surfaces compile in the background; the last picture stays until they are ready (#131)
+    this.warming = null;
+    if (this.realism.active) {
+      this.realism.realize(this.scene, !!this.realPlan(), this.renderer);
+      const warm = compiled(this.renderer, this.scene, this.camera).then(() => {
+        if (this.warming !== warm) return;
+        this.warming = null;
+        this.invalidate();
+      });
+      this.warming = warm;
+    }
     // real shadows replace the drawn patches of sunlight
     for (const fv of this.floors) {
       fv.sunSig = "-";
@@ -2221,6 +2271,9 @@ export class FloorplanViewer {
     this.projections.dispose();
     this.realism.dispose();
     this.disposed = true;
+    this.nextRenderer?.dispose();
+    this.nextRenderer?.forceContextLoss();
+    this.nextRenderer = null;
     cancelAnimationFrame(this.frame);
     clearTimeout(this.flowTimer);
     clearTimeout(this.effectTimer);
@@ -2731,7 +2784,9 @@ export class FloorplanViewer {
     const previous = new Map(this.floors.map((f) => [f.floor.id, { y: f.y, o: f.o }]));
     const previousOpenings = new Map(this.floors.map((f) => [f.floor.id, f.openings]));
     const b = this.building;
-    const keys = b ? floorKeys(b, `${packsVersion()}|${furnitureLook()}|${this.parkedSig}|${this.lowQuality}`) : new Map<string, string>();
+    // the look counts only for floors with items in colours of their own (they draw them differently, #609)
+    const look = furnitureLook();
+    const keys = b ? floorKeys(b, `${packsVersion()}|${this.parkedSig}|${this.lowQuality}`, (f) => (f.furniture.some(hasOwnColours) ? look : "")) : new Map<string, string>();
     const keep = new Map<string, FloorView>();
     if (incremental) for (const fv of this.floors) if (keys.get(fv.floor.id) === fv.key) keep.set(fv.floor.id, fv);
     this.clear(keep);
@@ -5236,6 +5291,8 @@ export class FloorplanViewer {
   private render(now: number): void {
     this.frame = 0;
     if (this.disposed) return;
+    // a new look's shaders still compile: the last frame stays (the next one is asked for when they are ready)
+    if (this.warming) return;
     const dt = this.lastFrame ? Math.min(100, now - this.lastFrame) : 16;
     let orbiting = false;
     if (this.orbitSpeed && !this.controls.active) {
@@ -6090,4 +6147,22 @@ export function pushLampModel(
       break;
     }
   }
+}
+
+/** Longest wait for shaders compiling in the background (#131): a frame is drawn after it anyway. */
+const COMPILE_WAIT_MS = 4000;
+
+/**
+ * The scene's shaders compiled by `renderer` without blocking the page where the browser compiles them in parallel
+ * (KHR_parallel_shader_compile; elsewhere it compiles them at once, as the first frame would have).
+ */
+function compiled(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): Promise<void> {
+  let wait: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    renderer.compileAsync(scene, camera).then(
+      () => undefined,
+      () => undefined,
+    ),
+    new Promise<void>((done) => (wait = setTimeout(done, COMPILE_WAIT_MS))),
+  ]).finally(() => clearTimeout(wait));
 }

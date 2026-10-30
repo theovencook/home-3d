@@ -48,22 +48,20 @@ test("a floor rebuilt after one item moved equals a build from scratch, the othe
   same(again, buildFloorGeometry(floor(moved), 0.24, 0.12));
 });
 
-test("a new look, other packs or a cleared cache model every item again (#131)", () => {
+test("other packs or a cleared cache model every item again; a new look draws as from scratch (#131)", () => {
   setPacks([]);
   clearFurnitureCache();
   const plan = floor(ITEMS);
   buildFloorGeometry(plan, 0.24, 0.12);
-  let s = furnitureCacheStats();
   setLightLook(true);
   const light = buildFloorGeometry(plan, 0.24, 0.12);
-  assert.equal(furnitureCacheStats().misses - s.misses, ITEMS.length, "the light looks draw own colours in full");
   setLightLook(false);
   clearFurnitureCache();
   setLightLook(true);
   same(light, buildFloorGeometry(plan, 0.24, 0.12));
   setLightLook(false);
   buildFloorGeometry(plan, 0.24, 0.12);
-  s = furnitureCacheStats();
+  const s = furnitureCacheStats();
   setPacks([]);
   buildFloorGeometry(plan, 0.24, 0.12);
   assert.equal(furnitureCacheStats().misses - s.misses, ITEMS.length, "packs changed: recipes may have");
@@ -99,4 +97,22 @@ test("the items of floors that are gone are forgotten (#131)", () => {
   keepFurnitureOf(["f"]);
   buildFloorGeometry(plan, 0.24, 0.12);
   assert.equal(furnitureCacheStats().hits - s.hits, ITEMS.length);
+});
+
+test("a look switch models again only the items in colours of their own, and only the first time (#131)", () => {
+  setPacks([]);
+  clearFurnitureCache();
+  const plan = floor(ITEMS);
+  buildFloorGeometry(plan, 0.24, 0.12);
+  const s = furnitureCacheStats();
+  setLightLook(true);
+  buildFloorGeometry(plan, 0.24, 0.12);
+  assert.equal(furnitureCacheStats().misses - s.misses, 1, "the sofa in its own fabric colour");
+  setLightLook(false);
+  buildFloorGeometry(plan, 0.24, 0.12);
+  setLightLook(true);
+  buildFloorGeometry(plan, 0.24, 0.12);
+  setLightLook(false);
+  assert.equal(furnitureCacheStats().misses - s.misses, 1, "back and forth: both looks are kept");
+  assert.equal(furnitureCacheStats().hits - s.hits, 3 * ITEMS.length - 1);
 });

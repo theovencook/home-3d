@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DECOR_REST_MS, LOW_DECOR_MS, SENSOR_SYNC_MS, decorDelay, lowEndDevice, lowSyncDelay } from "./pace.ts";
+import { DECOR_REST_MS, LOW_DECOR_MS, SENSOR_SYNC_MS, SENSOR_SYNC_FULL_MS, decorDelay, lowEndDevice, lowSyncDelay, sensorSyncDelay } from "./pace.ts";
 
 const FIRE_SILK = "Mozilla/5.0 (Linux; Android 9; KFTRWI) AppleWebKit/537.36 (KHTML, like Gecko) Silk/118.3.1 like Chrome/118.0.5993.111 Safari/537.36";
 const FIRE_FULLY = "Mozilla/5.0 (Linux; Android 9; KFTRWI Build/PS7327; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/118.0.5993.111 Safari/537.36";
@@ -45,4 +45,14 @@ test("pets keep walking on the tablet level: about 15 frames a second, 4 while t
   assert.equal(petDelay(false, 0), 0);
   assert.equal(petDelay(true, 0), PET_LOW_MS);
   assert.equal(petDelay(true, 10 * DECOR_REST_MS), PET_REST_MS);
+});
+
+test("measured values alone are paced on every device: once a second, every 2 s on the tablet level (#131)", () => {
+  assert.equal(SENSOR_SYNC_FULL_MS, 1000);
+  assert.equal(sensorSyncDelay(0, false), 1000);
+  assert.equal(sensorSyncDelay(400, false), 600);
+  assert.equal(sensorSyncDelay(1500, false), 0);
+  assert.equal(sensorSyncDelay(0, true), SENSOR_SYNC_MS);
+  assert.equal(sensorSyncDelay(1500, true), 500);
+  assert.equal(sensorSyncDelay(60_000, true), 0);
 });

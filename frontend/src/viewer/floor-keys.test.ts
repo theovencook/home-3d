@@ -49,3 +49,11 @@ test("stairs, rooms, floor heights and the building's settings change every floo
   }
   assert.notEqual(keysOf(b, "packs 2").get("u"), before.get("u"), "what the viewer adds (packs, parked cars)");
 });
+
+test("what the viewer adds for one floor changes only its key (#131: the look for a floor with own colours)", () => {
+  const b = house();
+  const before = keysOf(b);
+  const now = floorKeys(b, "", (f) => (f.id === "g" ? "light" : ""));
+  assert.notEqual(now.get("g"), before.get("g"));
+  assert.equal(now.get("u"), before.get("u"));
+});

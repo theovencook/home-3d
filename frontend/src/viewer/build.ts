@@ -16,7 +16,7 @@ import { furnitureFootprint, GANG_TYPES, isLamp, pointInPolygon, polygonArea, ST
 import { freeWallRoomLeft, generateWalls, locateOpening, openingHost, placeWallPlate, slopeTop, wallContinuation, type Wall } from "../geometry/walls.ts";
 import { clipConvex, isConvex } from "../geometry/area.ts";
 import { holeInRoom, insetHole, mergeHoles } from "../geometry/holes.ts";
-import { furnitureLook, pushFurniture, pushRackGear } from "./furniture.ts";
+import { furnitureLook, hasOwnColours, pushFurniture, pushRackGear } from "./furniture.ts";
 import { mountBase, packItem, packsVersion } from "../packs.ts";
 import { pushOutdoor } from "./outdoor.ts";
 import { pushModules } from "./roof.ts";
@@ -479,11 +479,14 @@ export function buildFloorGeometry(
   const racks: RackGearAt[] = [];
   // an item drawn exactly as in this floor's last build is copied from it instead of modelled again (#131): an edit
   // in the editor's 3D beside moves one item, the other hundreds stay as they were
-  const look = `${packsVersion()}|${furnitureLook()}|${cut}`;
+  const look = `${packsVersion()}|${cut}`;
   const last = furnitureCache.get(floor.id);
   const had = last?.look === look ? last.pieces : null;
   const pieces = new Map<string, FurniturePiece>();
   furnitureCache.set(floor.id, { look, pieces });
+  // only items in colours of their own draw differently in the neon and the light looks
+  const lookOf = furnitureLook();
+  const otherLook = furnitureLook(true);
   for (const item of floor.furniture) {
     if (isLamp(item.type)) continue;
     const start = wallBuf.count;
@@ -500,7 +503,9 @@ export function buildFloorGeometry(
     }
     // a rack's gear is drawn on its own by the viewer (#121)
     const gear = !!f.rack?.slots?.length && !!packItem(f.type)?.rack_frame;
-    const key = `${base}|${JSON.stringify(f)}`;
+    const own = hasOwnColours(f);
+    const drawn = `|${base}|${JSON.stringify(f)}`;
+    const key = `${own ? lookOf : ""}${drawn}`;
     const piece = had?.get(key);
     if (piece) {
       wallBuf.append(piece.solid);
@@ -519,6 +524,9 @@ export function buildFloorGeometry(
       pieces.set(key, { solid: wallBuf.slice(t0), lines: lines.slice(l0 * 2), shadow: shadow.slice(s0) });
     }
     if (piece) pieces.set(key, piece);
+    // the other look's copy stays too: a look switch back and forth models it only once
+    const other = own ? had?.get(`${otherLook}${drawn}`) : undefined;
+    if (other) pieces.set(`${otherLook}${drawn}`, other);
     if (gear) racks.push({ f, base });
     furnitureTris.push({ id: f.id, start, end: wallBuf.count });
   }
@@ -550,8 +558,9 @@ interface FurniturePiece {
 }
 
 /**
- * Per floor: the items of its last build, by what they were drawn from (base height and the item), valid while the
- * packs, the look and the cut height stay (`look`). Only the last build is kept, so it never grows past one copy.
+ * Per floor: the items of its last build, by what they were drawn from (the look for items in colours of their own,
+ * base height and the item), valid while the packs and the cut height stay (`look`). Only the items of the last build
+ * are kept, those in colours of their own also as the other look drew them: never more than two copies.
  */
 const furnitureCache = new Map<string, { look: string; pieces: Map<string, FurniturePiece> }>();
 const cacheStats = { hits: 0, misses: 0 };

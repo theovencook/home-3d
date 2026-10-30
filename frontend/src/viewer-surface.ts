@@ -6,6 +6,8 @@ import type { FloorplanViewer } from "./viewer/viewer3d.ts";
 export type ViewerSurface = Pick<
   FloorplanViewer,
   | "low"
+  | "batch"
+  | "compiling"
   | "dispose"
   | "currentView"
   | "getView"

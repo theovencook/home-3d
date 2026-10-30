@@ -462,9 +462,12 @@ export function setLightLook(on: boolean): void {
   lightLook = on;
 }
 
-/** What else than the item and the packs changes how an item is drawn (#131: a cached model is only reused under the same). */
-export function furnitureLook(): string {
-  return `${lightLook ? "light" : "dark"}|${householdCountry()}`;
+/**
+ * What else than the item and the packs changes how an item in colours of its own is drawn (#131: a cached model is
+ * only reused under the same). `other`: the one of the other looks (neon against the light ones).
+ */
+export function furnitureLook(other = false): string {
+  return `${lightLook !== other ? "light" : "dark"}|${householdCountry()}`;
 }
 
 /**
