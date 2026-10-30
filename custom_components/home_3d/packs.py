@@ -169,6 +169,7 @@ RACK_BOTTOM_RANGE = (0, 2)
 # measures may round to the millimetre
 _RACK_SLACK = 0.001
 
+
 def _whole(value: Any) -> int:
     """A whole number (not true or false, which Python counts as numbers)."""
     if isinstance(value, bool) or not isinstance(value, int):
