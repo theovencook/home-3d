@@ -7,7 +7,7 @@
 
 import { css, html, LitElement, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
-import { KINDS, cardsOf, filterEntries, sizeText, type LibraryCard, type LibraryEntry, type Room, ROOMS } from "../library-index.ts";
+import { KINDS, activeFilters, cardsOf, searchLibrary, sizeText, type LibraryCard, type LibraryChip, type LibraryEntry, type LibraryFilter, type Room, ROOMS } from "../library-index.ts";
 import { updatesOnCard } from "../pack-updates.ts";
 import { tokens } from "../styles.ts";
 import { thumbFor } from "../thumbs.ts";
@@ -212,6 +212,7 @@ export class FurnitureLibrary extends LitElement {
     if (!this.admin) return;
     this._recent = [entry.key, ...this._recent.filter((k) => k !== entry.key)].slice(0, RECENT_MAX);
     save(STORE_RECENT, this._recent);
+    this.resetFilters();
     this.dispatchEvent(new CustomEvent("library-add", { detail: { type: entry.type, mirror: !!entry.mirror }, bubbles: true, composed: true }));
   }
 
@@ -239,22 +240,48 @@ export class FurnitureLibrary extends LitElement {
     this._room = room;
   }
 
-  private get hits(): LibraryEntry[] {
-    return filterEntries(this.entries, { query: this._query, room: this._room, electric: this._electric, light: this._light, outdoor: this._outdoor });
+  /** The filter the cards show: the typed words and the chips. */
+  get filter(): LibraryFilter {
+    return { query: this._query, room: this._room, electric: this._electric, light: this._light, outdoor: this._outdoor };
+  }
+
+  /** The chips that are switched on (shown above the cards with "Clear filters"). */
+  get activeFilters(): LibraryChip[] {
+    return activeFilters(this.filter);
+  }
+
+  /** "Clear filters": every chip off and all rooms; the typed words stay (the search box clears itself). */
+  clearFilters(): void {
+    this.roomTouched = true;
+    this._room = null;
+    this._electric = this._light = this._outdoor = false;
+  }
+
+  /** After an item is chosen: chips off and the room chip back on the open room (it follows the room again). */
+  resetFilters(): void {
+    this.roomTouched = false;
+    this._room = this.roomHint;
+    this._electric = this._light = this._outdoor = false;
   }
 
   render() {
     const t = this.t;
-    const hits = this.hits;
+    const filter = this.filter;
+    const found = searchLibrary(this.entries, filter);
+    const hits = found.hits;
     const searching = this._query.trim().length > 0;
     const byKey = this.byKey;
     const hitKeys = new Set(hits.map((e) => e.key));
     const single = (e: LibraryEntry): LibraryCard => ({ key: e.key, label: e.label, kind: e.kind, rooms: e.rooms, entries: [e] });
     const recent = this._recent.map((k) => byKey.get(k)).filter((e): e is LibraryEntry => !!e && hitKeys.has(e.key));
     const favs = this._fav.map((k) => byKey.get(k)).filter((e): e is LibraryEntry => !!e && hitKeys.has(e.key));
-    const sections = KINDS.map((kind) => ({ kind, cards: cardsOf(hits, kind) })).filter((s) => s.cards.length);
+    // while searching, the room chip ranks instead of hiding (#77): its items by kind, then the rest in one block
+    const sections = KINDS.map((kind) => ({ kind, cards: cardsOf(found.inRoom, kind) })).filter((s) => s.cards.length);
+    const others = found.otherRooms.length ? KINDS.flatMap((kind) => cardsOf(found.otherRooms, kind)) : [];
     // with nothing open among the sections that have hits, the first one opens by itself
     const firstOpen = sections.length && !sections.some((s) => this._open.has(s.kind)) ? sections[0].kind : null;
+    const active = activeFilters(filter);
+    const chipName = (c: LibraryChip) => (c === "room" ? t(`lib_room_${this._room}`) : t(`lib_chip_${c}`));
     return html`<input
         class="fp3d-search"
         type="search"
@@ -274,11 +301,18 @@ export class FurnitureLibrary extends LitElement {
         <button class="fp3d-chip fp3d-chip-f ${this._light ? "on" : ""}" @click=${() => (this._light = !this._light)}>💡 ${t("lib_chip_light")}</button>
         <button class="fp3d-chip fp3d-chip-f ${this._outdoor ? "on" : ""}" @click=${() => (this._outdoor = !this._outdoor)}>🌳 ${t("lib_chip_outdoor")}</button>
       </div>
-      ${this.roomHint && this._room === this.roomHint && !this.roomTouched ? html`<p class="fp3d-lib-hint">${t("lib_hint_room")}</p>` : nothing}
+      ${active.length
+        ? html`<div class="fp3d-lib-active" role="status">
+            <span>${t("lib_filters")} ${active.map(chipName).join(" · ")}${found.hiddenByChips ? html` <span class="fp3d-lib-hidden">(${t("lib_hidden_by_filters", { n: found.hiddenByChips })})</span>` : nothing}</span>
+            <button class="fp3d-lib-clear" @click=${() => this.clearFilters()}>${t("lib_clear_filters")}</button>
+          </div>`
+        : nothing}
+      ${!searching && this.roomHint && this._room === this.roomHint && !this.roomTouched ? html`<p class="fp3d-lib-hint">${t("lib_hint_room")}</p>` : nothing}
       ${!hits.length ? html`<p class="fp3d-lib-hint">${t("furniture_search_none")}</p>` : nothing}
       ${recent.length ? this.section("recent", `🕘 ${t("lib_recent")}`, recent.map(single), searching, true) : nothing}
       ${favs.length ? this.section("fav", `★ ${t("lib_favorites")}`, favs.map(single), searching, true) : nothing}
-      ${sections.map((s) => this.section(s.kind, t(`lib_kind_${s.kind}`), s.cards, searching || s.kind === firstOpen, false))}`;
+      ${sections.map((s) => this.section(s.kind, t(`lib_kind_${s.kind}`), s.cards, searching || s.kind === firstOpen, false))}
+      ${others.length ? this.section("other-rooms", t("lib_other_rooms", { n: found.otherRooms.length }), others, true, true) : nothing}`;
   }
 
   private section(key: string, title: string, cards: LibraryCard[], searching: boolean, special: boolean) {
@@ -407,6 +441,34 @@ export class FurnitureLibrary extends LitElement {
         margin: 2px 0 8px;
         font-size: 12px;
         color: var(--fp3d-muted);
+      }
+      .fp3d-lib-active {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px 8px;
+        margin: 0 0 8px;
+        padding: 5px 8px;
+        font-size: 12px;
+        color: var(--fp3d-text);
+        border: 1px solid var(--fp3d-accent);
+        border-radius: 8px;
+        background: rgba(80, 200, 255, 0.08);
+      }
+      .fp3d-lib-hidden {
+        color: var(--fp3d-muted);
+      }
+      .fp3d-lib-clear {
+        margin-left: auto;
+        padding: 2px 8px;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--fp3d-accent);
+        background: none;
+        border: 1px solid var(--fp3d-accent);
+        border-radius: 999px;
+        cursor: pointer;
       }
       .fp3d-lib-head {
         display: flex;

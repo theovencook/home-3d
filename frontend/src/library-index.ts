@@ -430,18 +430,75 @@ function wordMatcher(w: string): (hay: string) => boolean {
   return (hay) => re.test(hay);
 }
 
-/** The entries a filter leaves: every word of the query somewhere, the room fitting (items for any room always fit). */
-export function filterEntries(entries: readonly LibraryEntry[], f: LibraryFilter): LibraryEntry[] {
-  const words = fold(f.query).split(/\s+/).filter(Boolean).map(wordMatcher);
-  return entries.filter((e) => {
-    if (f.room && e.rooms.length && !e.rooms.includes(f.room)) return false;
-    if (f.electric && !e.electric) return false;
-    if (f.light && !e.light) return false;
-    if (f.outdoor && !e.outdoor) return false;
-    if (!words.length) return true;
+/** Does an entry fit the open room? Items for any room fit every room. */
+function fitsRoom(e: LibraryEntry, room: Room | null): boolean {
+  return !room || !e.rooms.length || e.rooms.includes(room);
+}
+
+/** The three toggle chips (Electric, Lights up, Outdoor): hard filters, with or without a query. */
+function fitsChips(e: LibraryEntry, f: LibraryFilter): boolean {
+  return (!f.electric || e.electric) && (!f.light || e.light) && (!f.outdoor || e.outdoor);
+}
+
+function queryMatcher(query: string): ((e: LibraryEntry) => boolean) | null {
+  const words = fold(query).split(/\s+/).filter(Boolean).map(wordMatcher);
+  if (!words.length) return null;
+  return (e) => {
     const hay = fold(e.search);
     return words.every((match) => match(hay));
-  });
+  };
+}
+
+/**
+ * The entries a filter leaves, in index order: every word of the query somewhere and the toggle chips. The room
+ * chip narrows the library only while nothing is typed: with a query it ranks instead (#77, see `rankEntries`).
+ */
+export function filterEntries(entries: readonly LibraryEntry[], f: LibraryFilter): LibraryEntry[] {
+  const matches = queryMatcher(f.query);
+  return entries.filter((e) => fitsChips(e, f) && (matches ? matches(e) : fitsRoom(e, f.room)));
+}
+
+/**
+ * The order of the hits (stable): the open room's items first. This is the ranking step, kept apart from the
+ * filtering above so a score (fuzzy match, synonyms, tags: #78) can be added here without touching which entries
+ * are found.
+ */
+export function rankEntries(hits: readonly LibraryEntry[], f: LibraryFilter): LibraryEntry[] {
+  if (!f.room) return [...hits];
+  const room = f.room;
+  return [...hits.filter((e) => fitsRoom(e, room)), ...hits.filter((e) => !fitsRoom(e, room))];
+}
+
+export interface LibraryHits {
+  /** Everything found, ranked. */
+  hits: LibraryEntry[];
+  /** The hits for the room chip (all of them without one), in rank order. */
+  inRoom: LibraryEntry[];
+  /** Hits a query found in other rooms ("N more in other rooms"); empty without a query or a room chip. */
+  otherRooms: LibraryEntry[];
+  /** Query matches the toggle chips hide, so a lingering chip is never silent; 0 without a query. */
+  hiddenByChips: number;
+}
+
+export type LibraryChip = "room" | "electric" | "light" | "outdoor";
+
+/** The chips a filter has switched on, for the "Filters: ... · Clear filters" line (#77). */
+export function activeFilters(f: LibraryFilter): LibraryChip[] {
+  const on: LibraryChip[] = [];
+  if (f.room) on.push("room");
+  if (f.electric) on.push("electric");
+  if (f.light) on.push("light");
+  if (f.outdoor) on.push("outdoor");
+  return on;
+}
+
+/** What the library shows for a filter: filter, rank, then split the hits by the room chip. */
+export function searchLibrary(entries: readonly LibraryEntry[], f: LibraryFilter): LibraryHits {
+  const hits = rankEntries(filterEntries(entries, f), f);
+  const inRoom = hits.filter((e) => fitsRoom(e, f.room));
+  const matches = queryMatcher(f.query);
+  const hiddenByChips = matches ? entries.filter((e) => !fitsChips(e, f) && matches(e)).length : 0;
+  return { hits, inRoom, otherRooms: hits.filter((e) => !fitsRoom(e, f.room)), hiddenByChips };
 }
 
 /** Cards of a kind: families folded (two or more variants of one family in one pack), the rest one card each. */
