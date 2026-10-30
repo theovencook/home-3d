@@ -5,12 +5,12 @@
 
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { askConfirm, askText, tell } from "../ask.ts";
-import { createHome, deleteHome, duplicateHome, listHomes, renameHome, setActiveHome, type HomeInfo, type HomesList } from "../api.ts";
+import { createHome, deleteHome, duplicateHome, listHomes, loadSampleHome, renameHome, setActiveHome, type HomeInfo, type HomesList } from "../api.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import type { HomeAssistant } from "../types.ts";
 import "./ask-dialog.ts";
 
-const ACTIONS = ["show", "new", "rename", "duplicate", "delete"] as const;
+const ACTIONS = ["show", "new", "sample", "rename", "duplicate", "delete"] as const;
 type Action = (typeof ACTIONS)[number];
 
 /** The menu's actions: "show" while the open home is not the active one (#58), "delete" while there are two homes. */
@@ -101,6 +101,10 @@ export class Fp3dHomeSwitcher extends LitElement {
     if (action === "new") {
       const name = await named(this.t("home_new_name"));
       const res = name ? await this.run(() => createHome(this.hass, name)) : null;
+      if (res) this.open(res.home.id);
+    } else if (action === "sample") {
+      // a new home of its own (#54), opened in this view only like any new home (#58)
+      const res = await this.run(() => loadSampleHome(this.hass));
       if (res) this.open(res.home.id);
     } else if (!current) {
       return;

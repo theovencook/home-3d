@@ -44,6 +44,7 @@ from .packs import (
     verify_source,
 )
 from .racks import RackError
+from .sample import SAMPLE_NAME, load_sample
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
 from .storage import FloorplanData, Home, HomesError, complete
 from .timetravel import ws_timetravel_history
@@ -95,6 +96,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_editors_set,
         ws_homes_list,
         ws_homes_create,
+        ws_homes_load_sample,
         ws_homes_rename,
         ws_homes_duplicate,
         ws_homes_delete,
@@ -861,6 +863,26 @@ async def ws_homes_create(hass: HomeAssistant, connection: websocket_api.ActiveC
     if (data := _data(hass, connection, msg)) is None:
         return
     home = await data.async_create_home(msg["name"], area_import=msg["area_import"])
+    _send_homes(data, connection, msg, home=home.info())
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/homes/load_sample"})
+@require_editor
+@websocket_api.async_response
+async def ws_homes_load_sample(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Add the sample home (#54) as a new home of its own; no home is overwritten and, like any new home (#58), it
+    does not become the active one. It is a demo home (#100) that never offers this install's areas (#61)."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    taken = {home.name for home in data.homes.values()}
+    name, number = SAMPLE_NAME, 1
+    while name in taken:
+        number += 1
+        name = f"{SAMPLE_NAME} {number}"
+    building = await hass.async_add_executor_job(load_sample)
+    home = await data.async_create_home(name, complete(building), area_import=False, demo=True)
     _send_homes(data, connection, msg, home=home.info())
 
 

@@ -34,6 +34,8 @@ import type { Feature } from "./features.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 import { UndoHistory } from "./undo-history.ts";
 import { showsDemo, withDemo } from "./demo.ts";
+import { loadSampleHome } from "./api.ts";
+import { tell } from "./ask.ts";
 
 /** The corners of the clock, as arrows in the view menu (the full name is the button's title). */
 const CLOCK_ARROW: Record<Exclude<ClockPos, "off">, string> = { tl: "↖", tr: "↗", bl: "↙", br: "↘" };
@@ -304,6 +306,16 @@ export class Floorplan3dPanel extends LitElement {
   /** On the editors list (#7): sees the Editor and Extensions tabs. Everyone else views and controls devices. */
   private get canEdit(): boolean {
     return this.data.canEdit;
+  }
+
+  /** First run (#54): add the sample home as a home of its own and open it here; the displays keep their home (#58). */
+  private async loadSample(): Promise<void> {
+    try {
+      const res = await loadSampleHome(this.hass);
+      this.data.setHome(res.home.id);
+    } catch (err) {
+      await tell(this.t("home_failed", { error: String((err as { message?: string })?.message ?? err) }), { ok: this.t("ask_ok") });
+    }
   }
 
   private setMode(mode: Mode): void {
@@ -1001,6 +1013,7 @@ export class Floorplan3dPanel extends LitElement {
         <p>${this.t(this.canEdit ? "no_building_admin" : "no_building")}</p>
         ${this.canEdit
           ? html`<button class="fp3d-btn fp3d-primary" @click=${() => this.setMode("editor")}>${this.t("open_editor")}</button>
+              <button class="fp3d-btn" @click=${() => void this.loadSample()}>${this.t("home_sample")}</button>
               <p class="fp3d-phone-only">${this.t("phone_hint")}</p>`
           : nothing}
       </div>`;
