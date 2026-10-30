@@ -41,6 +41,52 @@ ${Object.entries(FLOOR_REAL)
   return vec3(-1.0);
 }`;
 
+/** The Day look (#86): surfaces lighten by their neon luminance (so slabs, walls and items keep apart), floors take
+ * their material's colour, lines are dark navy. `daySurface` is the shader's mapping in TypeScript, for tests. */
+export const DAY_LINE: [number, number, number] = [0.04, 0.09, 0.22];
+const DAY = { base: 0.22, gain: 5.8, max: 0.97, hue: 0.12 };
+/** Day floors: the realistic material colours, drawn a little towards the Day look's cool grey. */
+const DAY_FLOOR_TINT = 0xa8b4c6;
+const DAY_FLOOR_MIX = 0.25;
+
+const mixHex = (a: number, b: number, t: number) =>
+  [16, 8, 0].reduce((out, sh) => out | (Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t) << sh), 0);
+
+/** The Day floor colour for a neon floor tint (exactly as built), null for any other colour. */
+export function dayFloor(neon: number): number | null {
+  const k = Object.keys(FLOOR_LOOK).find((m) => FLOOR_LOOK[m].color === neon);
+  return k && FLOOR_REAL[k] !== undefined ? mixHex(FLOOR_REAL[k], DAY_FLOOR_TINT, DAY_FLOOR_MIX) : null;
+}
+
+/** A neon surface colour (0–1) in the Day look: the shader's mapping. */
+export function daySurface(c: [number, number, number]): [number, number, number] {
+  const mx = Math.max(...c);
+  const l = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+  const g = Math.min(DAY.max, Math.max(0, DAY.base + l * DAY.gain));
+  return c.map((v) => g * (1 - DAY.hue) + g * (v / Math.max(mx, 0.001)) * DAY.hue) as [number, number, number];
+}
+
+/** Neon's contrast lift (#88): surfaces brighter than the floors (walls, then items) are lifted a notch, floors and
+ * slabs stay as built, signal colours and lines are left alone. `neonSurface` is the shader's mapping, for tests. */
+const NEON_LIFT = { from: 0.105, gain: 54, max: 0.4 };
+
+export function neonSurface(c: [number, number, number]): [number, number, number] {
+  const mx = Math.max(...c);
+  const mn = Math.min(...c);
+  const sat = mx > 0 ? (mx - mn) / mx : 0;
+  if (mx > 0.45 && sat > 0.45) return c;
+  const l = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+  const k = 1 + Math.min(NEON_LIFT.max, Math.max(0, (l - NEON_LIFT.from) * NEON_LIFT.gain));
+  return c.map((v) => v * k) as [number, number, number];
+}
+
+const DAY_FLOOR_GLSL = `vec3 fp3dDayFloor(vec3 c) {
+${Object.keys(FLOOR_REAL)
+  .map((k) => `  if (distance(c, ${vec3(FLOOR_LOOK[k].color)}) < 0.0002) return ${vec3(dayFloor(FLOOR_LOOK[k].color)!)};`)
+  .join("\n")}
+  return vec3(-1.0);
+}`;
+
 const GLSL = `
 uniform int uTheme;
 uniform vec3 uAccent;
@@ -48,6 +94,7 @@ uniform int uAccentOn;
 // the realistic look: how much a signal colour lights itself (lit lamps, open windows, screens glow in the light)
 float fp3dGlow = 0.0;
 ${FLOOR_GLSL}
+${DAY_FLOOR_GLSL}
 vec3 fp3dThemed(vec3 c, bool line) {
   float mx = max(c.r, max(c.g, c.b));
   float mn = min(c.r, min(c.g, c.b));
@@ -55,7 +102,10 @@ vec3 fp3dThemed(vec3 c, bool line) {
   if (uTheme == 0) {
     // an own accent: every line and every cyan surface takes it, as bright as it was
     if (uAccentOn == 1 && (line || (sat > 0.35 && c.r < c.g * 0.8 && c.b > c.g * 0.85 && c.g > c.b * 0.6))) return uAccent * mx;
-    return c;
+    // a notch more light on walls and items than on the floors (#88); signal colours and lines as built
+    if (line || (mx > 0.45 && sat > 0.45)) return c;
+    float lift = dot(c, vec3(0.299, 0.587, 0.114));
+    return c * (1.0 + clamp((lift - ${NEON_LIFT.from}) * ${NEON_LIFT.gain.toFixed(1)}, 0.0, ${NEON_LIFT.max}));
   }
   // signal colours keep their colour
   if (!line && mx > 0.45 && sat > 0.45) return c;
@@ -81,11 +131,13 @@ vec3 fp3dThemed(vec3 c, bool line) {
     if (line) return vec3(0.8, 0.9, 1.0) * min(1.0, mx * 1.15);
     return mix(vec3(0.04, 0.13, 0.3), vec3(0.2, 0.42, 0.75), clamp(l * 5.0, 0.0, 1.0));
   }
-  // day: light surfaces that keep their shading and some of their hue, dark blue lines (#645: too bright, too flat –
-  // the neon surfaces' dark tones are spread wider, so walls, floors and furniture stand apart)
-  if (line) return vec3(0.05, 0.11, 0.27) * clamp(mx * 1.6, 0.6, 1.0);
-  vec3 g = vec3(clamp(0.28 + l * 3.6, 0.0, 0.92));
-  return mix(g, g * (c / max(mx, 0.001)), 0.3);
+  // day (#86): dark navy lines; floors in their material's colour; other surfaces lighten by their neon luminance,
+  // spread wide so slabs, walls and items stand apart, with a little of their hue
+  if (line) return vec3(${DAY_LINE.join(", ")}) * clamp(mx * 1.6, 0.75, 1.0);
+  vec3 dayFloor = fp3dDayFloor(c);
+  if (dayFloor.r >= 0.0) return dayFloor;
+  vec3 g = vec3(clamp(${DAY.base.toFixed(3)} + l * ${DAY.gain.toFixed(3)}, 0.0, ${DAY.max.toFixed(3)}));
+  return mix(g, g * (c / max(mx, 0.001)), ${DAY.hue.toFixed(3)});
 }
 `;
 

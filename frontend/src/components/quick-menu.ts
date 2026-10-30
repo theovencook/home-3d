@@ -4,6 +4,8 @@
 import { css, html, LitElement, nothing } from "lit";
 import { type CarState, coverTiltButtons, entityName, isUnavailable, kindOf } from "../devices.ts";
 import { hasFeature } from "../features.ts";
+import { askConfirm } from "../ask.ts";
+import "./ask-dialog.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import { openMoreInfo, stateText } from "../markers.ts";
 import { tokens } from "../styles.ts";
@@ -104,8 +106,18 @@ export class Fp3dQuickMenu extends LitElement {
   }
 
   /** Ask before switching when the device is marked so (power and lock buttons; sliders and colours never ask). */
-  private ask(): boolean {
-    return !this.confirmSwitch || confirm(this.t("confirm_switch", { name: entityName(this.hass, this.entity) }));
+  private async ask(): Promise<boolean> {
+    return !this.confirmSwitch || (await this.question(this.t("confirm_switch", { name: entityName(this.hass, this.entity) })));
+  }
+
+  /** Runs `act` once the switch question (if any) is answered yes. */
+  private async guarded(act: () => unknown): Promise<void> {
+    if (await this.ask()) act();
+  }
+
+  /** A yes / no question in the app's own dialog (#59). */
+  private question(text: string): Promise<boolean> {
+    return askConfirm(text, { ok: this.t("action_confirm_ok"), cancel: this.t("cancel") });
   }
 
   private call(domain: string, service: string, data: Record<string, unknown> = {}): void {
@@ -145,7 +157,7 @@ export class Fp3dQuickMenu extends LitElement {
         : [];
     return html`<div class="qm-ring ${swatches.length ? "" : "qm-ring-small"}">
         ${this.ring(swatches)}
-        <button class="qm-power ${on ? "qm-on" : ""}" aria-pressed=${on} @click=${() => this.ask() && this.call("light", "toggle")}>
+        <button class="qm-power ${on ? "qm-on" : ""}" aria-pressed=${on} @click=${() => void this.guarded(() => this.call("light", "toggle"))}>
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0" /></svg>
           <b>${on ? `${pct} %` : this.t("qm_off")}</b>
         </button>
@@ -173,10 +185,10 @@ export class Fp3dQuickMenu extends LitElement {
     const at = (p: number) => pos !== null && Math.abs(pos - p) < 3;
     const ring = [
       // moving asks first when the blind is marked so; stopping never asks
-      slot("▲", this.t("cover_open"), () => this.ask() && this.call("cover", "open_cover"), at(100)),
-      ...(setPos ? [75, 50].map((p) => slot(`${p}`, `${p} %`, () => this.ask() && this.call("cover", "set_cover_position", { position: p }), at(p))) : []),
-      slot("▼", this.t("cover_close"), () => this.ask() && this.call("cover", "close_cover"), at(0)),
-      ...(setPos ? [25].map((p) => slot(`${p}`, `${p} %`, () => this.ask() && this.call("cover", "set_cover_position", { position: p }), at(p))) : []),
+      slot("▲", this.t("cover_open"), () => void this.guarded(() => this.call("cover", "open_cover")), at(100)),
+      ...(setPos ? [75, 50].map((p) => slot(`${p}`, `${p} %`, () => void this.guarded(() => this.call("cover", "set_cover_position", { position: p })), at(p))) : []),
+      slot("▼", this.t("cover_close"), () => void this.guarded(() => this.call("cover", "close_cover")), at(0)),
+      ...(setPos ? [25].map((p) => slot(`${p}`, `${p} %`, () => void this.guarded(() => this.call("cover", "set_cover_position", { position: p })), at(p))) : []),
       slot("■", this.t("cover_stop"), () => this.call("cover", "stop_cover"), moving),
     ];
     // the centre shows the blind: its closed part fills from the top
@@ -187,7 +199,7 @@ export class Fp3dQuickMenu extends LitElement {
           class="qm-power qm-blind ${closed < 100 ? "qm-on" : ""}"
           style="--closed:${closed}%"
           aria-label=${moving ? this.t("cover_stop") : closed > 50 ? this.t("cover_open") : this.t("cover_close")}
-          @click=${() => (moving ? this.call("cover", "stop_cover") : this.ask() && this.call("cover", closed > 50 ? "open_cover" : "close_cover"))}
+          @click=${() => (moving ? this.call("cover", "stop_cover") : void this.guarded(() => this.call("cover", closed > 50 ? "open_cover" : "close_cover")))}
         >
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h16M5 4v15M19 4v15M7 8h10M7 12h10M7 16h10" /></svg>
           <b>${pos !== null ? `${pos} %` : stateText(this.hass, st)}</b>
@@ -250,7 +262,7 @@ export class Fp3dQuickMenu extends LitElement {
               class="qm-swatch qm-slot ${car.locked ? "qm-slot-on" : ""}"
               @click=${() =>
                 car.locked
-                  ? confirm(this.t("car_unlock_confirm")) && (lockIsLock ? svc("lock", "unlock", lockId!) : svc("homeassistant", "turn_off", lockId!))
+                  ? void this.question(this.t("car_unlock_confirm")).then((yes) => yes && (lockIsLock ? svc("lock", "unlock", lockId!) : svc("homeassistant", "turn_off", lockId!)))
                   : lockIsLock
                     ? svc("lock", "lock", lockId!)
                     : svc("homeassistant", "turn_on", lockId!)}
@@ -326,8 +338,8 @@ export class Fp3dQuickMenu extends LitElement {
   private renderDoorLock(st: HassEntity) {
     const locked = st.state === "locked" || st.state === "locking" || st.state === "jammed";
     const name = entityName(this.hass, this.entity);
-    const act = () => {
-      if (!confirm(this.t(locked ? "door_unlock_confirm" : "door_lock_confirm", { name }))) return;
+    const act = async () => {
+      if (!(await this.question(this.t(locked ? "door_unlock_confirm" : "door_lock_confirm", { name })))) return;
       this.call("lock", locked ? "unlock" : "lock");
       this.close();
     };
@@ -344,7 +356,7 @@ export class Fp3dQuickMenu extends LitElement {
       <button
         class="qm-power ${on ? "qm-on" : ""}"
         aria-pressed=${on}
-        @click=${() => this.ask() && (domain === "lock" ? this.call("lock", on ? "lock" : "unlock") : this.call("homeassistant", "toggle"))}
+        @click=${() => void this.guarded(() => (domain === "lock" ? this.call("lock", on ? "lock" : "unlock") : this.call("homeassistant", "toggle")))}
       >
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0" /></svg>
         <b>${stateText(this.hass, st)}</b>

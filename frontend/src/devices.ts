@@ -3,7 +3,7 @@
 
 import type { Furniture, EntityRef, Floor, LampMount, Opening, Placement, RoofWindow, Room, Vec2 } from "./model.ts";
 import { centroid, outdoorZones, pointInPolygon } from "./model.ts";
-import { isRobotVacuum, packMotion, packScreen } from "./packs.ts";
+import { isCameraItem, isRobotVacuum, isThermostatItem, packMotion, packScreen } from "./packs.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 
 export type DeviceKind =
@@ -409,7 +409,7 @@ export function isActive(st: HassEntity | undefined): boolean {
     case "cover":
       return st.state === "open" || st.state === "opening";
     case "climate":
-      return st.attributes.hvac_action === "heating" || st.attributes.hvac_action === "cooling";
+      return climateWorking(st);
     case "media":
       return st.state === "playing";
     case "lock":
@@ -420,6 +420,19 @@ export function isActive(st: HassEntity | undefined): boolean {
     default:
       return false;
   }
+}
+
+/**
+ * A thermostat heats or cools: by its hvac_action, or (many TRVs report none, #81) while it is in heat mode below its
+ * target, in cool mode above it.
+ */
+function climateWorking(st: HassEntity): boolean {
+  const a = st.attributes;
+  if (a.hvac_action !== undefined && a.hvac_action !== null) return a.hvac_action === "heating" || a.hvac_action === "cooling";
+  if (typeof a.temperature !== "number" || typeof a.current_temperature !== "number") return false;
+  if (st.state === "heat") return a.current_temperature < a.temperature;
+  if (st.state === "cool") return a.current_temperature > a.temperature;
+  return false;
 }
 
 /**
@@ -877,6 +890,8 @@ const FURNITURE_NAMES: Record<string, RegExp> = {
   ac_unit: /(klima|air ?con|aircon|airco|split|\bac\b|clim)/i,
   awning: /(markise|awning|sonnensegel|beschattung|store|zonnescherm)/i,
 };
+/** A camera item's camera among the room's (#81). */
+const CAMERA_NAMES = /(cam|doorbell|klingel|tür|door|entry|cctv)/i;
 const MEDIA_FURNITURE = new Set(["tv_board", "tv_wall"]);
 
 /** Whether a screen picture rule matches now: the state or attribute equals the value, or contains it (3+ chars); "*" always. */
@@ -1019,7 +1034,11 @@ export function furnitureEntities(hass: HomeAssistant, floors: readonly Floor[])
     const used = new Set<string>([...floor.furniture.flatMap((f) => [f.entity, f.power]), ...floor.placements.map((p) => p.entity_id)].filter((v): v is string => !!v && v !== "none"));
     for (const f of floor.furniture) {
       const lamp = f.type in LAMP_NAMES;
-      const pattern = lamp ? LAMP_NAMES[f.type] : (FURNITURE_NAMES[f.type] ?? (isRobotVacuum(f.type) ? FURNITURE_NAMES.robot_vacuum : undefined));
+      const heating = isThermostatItem(f.type);
+      const camera = isCameraItem(f.type);
+      const pattern = lamp
+        ? LAMP_NAMES[f.type]
+        : (FURNITURE_NAMES[f.type] ?? (isRobotVacuum(f.type) ? FURNITURE_NAMES.robot_vacuum : heating ? FURNITURE_NAMES.radiator : camera ? CAMERA_NAMES : undefined));
       if (!pattern && f.entity == null && f.power == null) continue;
       // an awning hangs outside: the terrace or garden area it stands over counts as its room (#688)
       const room =
@@ -1037,7 +1056,11 @@ export function furnitureEntities(hass: HomeAssistant, floors: readonly Floor[])
           // vacuums are no device kind of their own: look them up in the room's area directly
           const area = room?.area_id ?? null;
           entity = Object.keys(hass.entities ?? {}).find((id) => id.startsWith("vacuum.") && !used.has(id) && !hiddenInHa(hass, id) && entityAreaId(hass, id) === area) ?? null;
-        } else if (f.type === "radiator" || f.type === "ac_unit") {
+        } else if (camera) {
+          // a camera item (#81): the room's camera whose name fits, else its only one
+          const cams = free.filter((id) => kindOf(id) === "camera");
+          entity = cams.find((id) => pattern.test(name(id))) ?? (cams.length === 1 ? cams[0] : null);
+        } else if (heating || f.type === "ac_unit") {
           const climates = free.filter((id) => kindOf(id) === "climate");
           entity = climates.find((id) => pattern.test(name(id))) ?? climates[0] ?? null;
         } else if (isMediaFurniture(f.type)) {

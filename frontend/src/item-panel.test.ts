@@ -32,3 +32,11 @@ test("every kind of item lists its fields in the same order, with the size first
 test("the show-name row is always there, so naming an item doesn't push the rows below it (#71)", () => {
   for (const needs of KINDS) assert.ok(furniturePanel(needs).body.includes("show_name"));
 });
+
+test("the floor dropdown shows when the home has more than one floor, last, the same for every item (#73)", () => {
+  for (const needs of KINDS) {
+    assert.ok(!furnitureFields(needs).includes("floor"), "one floor: no dropdown");
+    const body = furniturePanel({ ...needs, floors: true }).body;
+    assert.equal(body.at(-1), "floor");
+  }
+});

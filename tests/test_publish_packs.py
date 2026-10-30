@@ -197,7 +197,9 @@ def test_the_real_bundled_packs_publish(tmp_path: Path) -> None:
     publish_packs.publish(tmp_path, BUNDLED)
 
     published = {p.name for p in tmp_path.iterdir() if (p / "pack.json").exists()}
-    assert {"theovencook.core", "theovencook.ikea-uk"} <= published
+    assert {"theovencook.core", "theovencook.ikea-uk", "theovencook.makers", "theovencook.devices"} <= published
     readme = (tmp_path / "README.md").read_text(encoding="utf-8")
     assert "tree/main/theovencook.core" in readme
     assert "tree/main/theovencook.ikea-uk" in readme
+    assert "tree/main/theovencook.makers" in readme
+    assert "tree/main/theovencook.devices" in readme
