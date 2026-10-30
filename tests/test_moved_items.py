@@ -179,6 +179,33 @@ async def test_a_plan_saved_before_a_move_loads_with_the_new_ids(hass: HomeAssis
     assert set(stored["building"]["recipes"]) == {NEW_CHAIR, NEW_LAMP}
 
 
+async def test_rack_gear_that_moved_loads_with_the_new_ids(hass: HomeAssistant, hass_storage, table) -> None:
+    """Gear in a rack is placed by slot type (#113): a slot's type and its recipe copy follow the move like a placed
+    item's, so the rack keeps its gear (racks.py and the 3D view skip a slot whose type has no item)."""
+    _stored_packs(hass_storage)
+    rack = _furniture("r", "network_rack", rack={"slots": [{"id": "s1", "type": OLD_LAMP, "u": 1}]})
+    hass_storage[STORAGE_KEY_BUILDING] = {
+        "version": 1,
+        "minor_version": 2,
+        "key": STORAGE_KEY_BUILDING,
+        "data": {"revision": 4, "building": _building(rack, recipes={OLD_LAMP: _copy("test.old", LAMP)})},
+    }
+    await _setup(hass)
+
+    building = hass.data[DOMAIN].building
+    slots = building["floors"][0]["furniture"][0]["rack"]["slots"]
+    assert slots == [{"id": "s1", "type": NEW_LAMP, "u": 1}]
+    assert set(building["recipes"]) == {NEW_LAMP}
+    stored = hass_storage[STORAGE_KEY_BUILDING]["data"]["building"]
+    assert stored["floors"][0]["furniture"][0]["rack"]["slots"][0]["type"] == NEW_LAMP
+
+
+def test_a_rack_without_moved_gear_is_left_as_it_is() -> None:
+    rack = _furniture("r", "network_rack", rack={"slots": [{"id": "s1", "type": NEW_LAMP, "u": 1}]})
+    plan = _building(rack)
+    assert moves.migrate_building(plan, moves.parse_moves(TABLE)) is plan
+
+
 async def _client(hass: HomeAssistant, hass_ws_client):
     await _setup(hass)
     return await hass_ws_client(hass)

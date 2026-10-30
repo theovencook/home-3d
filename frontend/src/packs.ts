@@ -225,14 +225,16 @@ export function resolvePackType(type: string): string {
 }
 
 /**
- * A plan with every moved item under its new type (#110): placed items, parking spots' vehicles and the plan's
+ * A plan with every moved item under its new type (#110): placed items, parking spots' vehicles, rack gear and the plan's
  * recipe copies with their keys (the backend checks a copy again and gives it its hash). The same object when
  * nothing moved; the backend migrates whatever reaches it as well.
  */
 export function migratePlanTypes(building: Building): Building {
   if (!moved.size) return building;
   const had = (t: string | null | undefined): t is string => !!t && moved.has(t);
-  const furnitureMoved = building.floors.some((fl) => fl.furniture.some((f) => had(f.type) || had(f.vehicle) || (f.types ?? []).some((t) => had(t.vehicle))));
+  // gear in a rack is placed by slot type (#113)
+  const itemMoved = (f: Furniture): boolean => had(f.type) || had(f.vehicle) || (f.types ?? []).some((t) => had(t.vehicle)) || (f.rack?.slots ?? []).some((s) => had(s.type));
+  const furnitureMoved = building.floors.some((fl) => fl.furniture.some(itemMoved));
   const recipes = building.recipes ?? {};
   const recipesMoved = Object.keys(recipes).some(had);
   if (!furnitureMoved && !recipesMoved) return building;
@@ -240,8 +242,14 @@ export function migratePlanTypes(building: Building): Building {
   const floors = building.floors.map((fl) => ({
     ...fl,
     furniture: fl.furniture.map((f) =>
-      had(f.type) || had(f.vehicle) || (f.types ?? []).some((t) => had(t.vehicle))
-        ? { ...f, type: to(f.type), ...(f.vehicle ? { vehicle: to(f.vehicle) } : {}), ...(f.types ? { types: f.types.map((t) => ({ ...t, vehicle: to(t.vehicle) })) } : {}) }
+      itemMoved(f)
+        ? {
+            ...f,
+            type: to(f.type),
+            ...(f.vehicle ? { vehicle: to(f.vehicle) } : {}),
+            ...(f.types ? { types: f.types.map((t) => ({ ...t, vehicle: to(t.vehicle) })) } : {}),
+            ...(f.rack ? { rack: { ...f.rack, slots: f.rack.slots.map((s) => (had(s.type) ? { ...s, type: to(s.type) } : s)) } } : {}),
+          }
         : f,
     ),
   }));
