@@ -153,6 +153,7 @@ import { lastAdmin, pickEditor, type EditorUser } from "../editors.ts";
 import { load3d } from "../load3d.ts";
 import { ensureRecipes, packTypesIn } from "../pack-recipes.ts";
 import "./ask-dialog.ts";
+import { isHelpKey, LEGEND, SHORTCUTS } from "../help.ts";
 import { askConfirm, tell } from "../ask.ts";
 import "./library.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
@@ -177,6 +178,7 @@ const MAX_MOUNT_Y = 10;
 
 /** A paw (24 × 24), the static pets' mark in the plan. */
 const PAW = "M8.3 3.5a2 1.6 0 1 1 0 3.2 2 1.6 0 0 1 0-3.2m7.4 0a2 1.6 0 1 1 0 3.2 2 1.6 0 0 1 0-3.2M4.5 8a1.8 1.5 0 1 1 0 3 1.8 1.5 0 0 1 0-3m15 0a1.8 1.5 0 1 1 0 3 1.8 1.5 0 0 1 0-3M12 10c2.5 0 4.6 1.9 5.3 4.3.6 2 .2 3.7-1.3 4.5-1.4.8-2.6-.2-4-.2s-2.6 1-4 .2c-1.5-.8-1.9-2.5-1.3-4.5C7.4 11.9 9.5 10 12 10";
+
 
 type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "hole" | "wall" | "roof" | "energy" | "pool";
 
@@ -442,6 +444,7 @@ export class Fp3dEditor extends LitElement {
     _wallView3d: { state: true },
     _ctx: { state: true },
     _fixedHint: { state: true },
+    _help: { state: true },
     _phoneHint: { state: true },
     _floorMenu: { state: true },
     _openingPreset: { state: true },
@@ -645,6 +648,8 @@ export class Fp3dEditor extends LitElement {
   private declare _ctx: { x: number; y: number; kind: FixKind; id: string } | null;
   /** A drag on a fixed item was turned into panning: the hint line says why. */
   private declare _fixedHint: boolean;
+  /** The '?' help overlay (#95) is open. */
+  private declare _help: boolean;
   /** The one-time "draw on a PC or tablet" hint on phones (shown by CSS on narrow screens only). */
   private declare _phoneHint: boolean;
   /** A one-time invitation for admins to switch on the usage reports (while they are off and it was not closed). */
@@ -844,6 +849,7 @@ export class Fp3dEditor extends LitElement {
     this._cursor = null;
     this._guides = {};
     this._view = { scale: 50, ox: 40, oy: 40 };
+    this._help = false;
     this._size = { w: 800, h: 600 };
     this._images = {};
     this._canUndo = false;
@@ -2916,6 +2922,16 @@ export class Fp3dEditor extends LitElement {
     const path = e.composedPath();
     if (path.some((el) => el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) return;
     if (!this.isConnected || !this.offsetParent) return;
+    // '?' shows the help (#95); while it is open no key edits the plan behind it, and Esc closes it first
+    if (isHelpKey(e)) {
+      e.preventDefault();
+      this._help = !this._help;
+      return;
+    }
+    if (this._help) {
+      if (e.key === "Escape") this._help = false;
+      return;
+    }
     const mod = e.ctrlKey || e.metaKey;
     // the wall view has its own keys: Delete there must never reach what is chosen in the plan behind it
     // (it took the whole pool with every pipe); only undo and redo still work from here
@@ -5634,6 +5650,7 @@ export class Fp3dEditor extends LitElement {
         <button aria-pressed=${this._split} title=${this.t("split_3d_hint")} @click=${() => (close(), this.toggleSplit())}>${this.t("split_3d")}</button>
         <button aria-pressed=${this._wallPick} title=${this.t("wall_view_open")} @click=${(e: Event) => (close(), this.toggleWallPick(e.currentTarget as HTMLElement))}>${this.t("wall_view")}</button>
         <button title=${this.t("fit_hint")} @click=${() => (close(), this.fit())}>${this.t("fit")}</button>
+        <button class="fp3d-help-btn" aria-pressed=${this._help} aria-label=${this.t("help_open")} title=${this.t("help_open")} @click=${() => (close(), (this._help = !this._help))}>?</button>
       </div>
       ${this.renderSettingsMenu(close)}`;
   }
@@ -5742,11 +5759,50 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+  /** The '?' help (#95): the shortcuts and the plan's marks, both from the tables in help.ts. */
+  private renderHelp() {
+    if (!this._help) return nothing;
+    const close = () => (this._help = false);
+    const mark = (m: (typeof LEGEND)[number]["mark"]) => {
+      const shape =
+        m === "swing"
+          ? svg`<path class="fp3d-help-swing" d="M4 22L4 4A18 18 0 0 1 22 22" />`
+          : m === "track"
+            ? svg`<path class="fp3d-help-track" d="M4 20L4 4M22 20L22 4" />`
+            : m === "guide"
+              ? svg`<line class="fp3d-guide" x1="2" y1="13" x2="24" y2="13" />`
+              : m === "snap"
+                ? svg`<circle class="fp3d-snap" cx="13" cy="13" r="8" />`
+                : m === "ghost"
+                  ? svg`<rect class="fp3d-ghost" x="3" y="5" width="20" height="16" />`
+                  : svg`<rect class="fp3d-help-sel" x="3" y="5" width="20" height="16" rx="2" />`;
+      return html`<svg class="fp3d-help-mark" viewBox="0 0 26 26" aria-hidden="true">${shape}</svg>`;
+    };
+    return html`<div class="fp3d-dialog-veil" @click=${(e: Event) => e.target === e.currentTarget && close()}>
+      <div class="fp3d-dialog fp3d-help-overlay" role="dialog" aria-label=${this.t("help_overlay_title")} tabindex="-1">
+        <div class="fp3d-dialog-head">
+          <h3>${this.t("help_overlay_title")}</h3>
+          <button class="fp3d-btn" aria-label=${this.t("close")} @click=${close}>✕</button>
+        </div>
+        <div class="fp3d-dialog-body">
+          <h4>${this.t("help_shortcuts")}</h4>
+          <dl class="fp3d-help-keys">
+            ${SHORTCUTS.map((k) => html`<dt>${k.keys.map((key, i) => html`${i ? " / " : ""}<kbd>${key}</kbd>`)}</dt><dd>${this.t(k.text)}</dd>`)}
+          </dl>
+          <h4>${this.t("help_legend")}</h4>
+          <ul class="fp3d-help-legend">
+            ${LEGEND.map((l) => html`<li>${mark(l.mark)}<span>${this.t(l.text)}</span></li>`)}
+          </ul>
+        </div>
+      </div>
+    </div>`;
+  }
+
   protected render(): TemplateResult {
     const floor = this.floor;
     const walls = floor ? generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }, floor.walls ?? []) : null;
     return html`
-      ${this.renderPreview()} ${this.renderWallView()} ${this.renderPartCard()} ${this.renderSettingsDialog()}
+      ${this.renderPreview()} ${this.renderWallView()} ${this.renderPartCard()} ${this.renderSettingsDialog()} ${this.renderHelp()}
       <div class="fp3d-editor ${this.narrow ? "fp3d-narrow" : ""}" style=${`--fp3d-side-w:${this._sideWidth}px`}>
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
@@ -9988,8 +10044,9 @@ export class Fp3dEditor extends LitElement {
         const a1 = q(p1, across[0] - 0.04);
         const b0 = q(p0, across[0] + Math.min(2, o.height));
         const b1 = q(p1, across[0] + Math.min(2, o.height));
+        // the tracks only while selected (#95): unexplained dashes looked like stray guides
         symbol = svg`<line x1=${a0[0]} y1=${a0[1]} x2=${a1[0]} y2=${a1[1]} />
-          <path class="fp3d-open-track" d="M${a0[0]} ${a0[1]}L${b0[0]} ${b0[1]}M${a1[0]} ${a1[1]}L${b1[0]} ${b1[1]}" />`;
+          ${sel ? svg`<path class="fp3d-open-track" d="M${a0[0]} ${a0[1]}L${b0[0]} ${b0[1]}M${a1[0]} ${a1[1]}L${b1[0]} ${b1[1]}"><title>${this.t("help_legend_track")}</title></path>` : nothing}`;
       } else if (o.type === "door") {
         // leaves swinging into the room (or out of it) from the hinge side; "left" is seen from the
         // room, so it depends on which way round the outline runs
@@ -10024,7 +10081,10 @@ export class Fp3dEditor extends LitElement {
           const leaf = q(hinge, face + (out ? -leafW : leafW));
           const r = leafW * this._view.scale;
           const cross = (leaf[0] - hx) * (fy - hy) - (leaf[1] - hy) * (fx - hx);
-          return svg`<path d="M${hx} ${hy}L${leaf[0]} ${leaf[1]}A${r} ${r} 0 0 ${cross > 0 ? 1 : 0} ${fx} ${fy}" />`;
+          // the leaf always; its dashed swing only while the door is selected (#95), explained by a tooltip
+          return svg`<line class="fp3d-open-leaf" x1=${hx} y1=${hy} x2=${leaf[0]} y2=${leaf[1]} />${
+            sel ? svg`<path class="fp3d-open-swing" d="M${leaf[0]} ${leaf[1]}A${r} ${r} 0 0 ${cross > 0 ? 1 : 0} ${fx} ${fy}"><title>${this.t("help_legend_swing")}</title></path>` : nothing
+          }`;
         };
         symbol = svg`${paneLines}${
           style === "passage"
@@ -15229,6 +15289,70 @@ export class Fp3dEditor extends LitElement {
       .fp3d-narrow .fp3d-settings-word {
         display: none;
       }
+      .fp3d-help-btn {
+        min-width: 34px;
+        font-weight: 700;
+      }
+      .fp3d-help-overlay h4 {
+        margin: 14px 0 6px;
+        font-size: 13px;
+        color: var(--fp3d-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .fp3d-help-keys {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 6px 14px;
+        margin: 0;
+        align-items: baseline;
+      }
+      .fp3d-help-keys dt {
+        white-space: nowrap;
+        color: var(--fp3d-muted);
+      }
+      .fp3d-help-keys dd {
+        margin: 0;
+      }
+      .fp3d-help-overlay kbd {
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--fp3d-text);
+        padding: 1px 6px;
+        border: 1px solid var(--fp3d-line);
+        border-bottom-width: 2px;
+        border-radius: 5px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .fp3d-help-legend {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 8px;
+      }
+      .fp3d-help-legend li {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .fp3d-help-mark {
+        flex: none;
+        width: 26px;
+        height: 26px;
+        fill: none;
+        stroke-width: 1.6;
+      }
+      .fp3d-help-swing,
+      .fp3d-help-track {
+        stroke: var(--fp3d-warm);
+        stroke-dasharray: 3 3;
+      }
+      .fp3d-help-sel {
+        fill: rgba(55, 224, 255, 0.25);
+        stroke: var(--fp3d-accent);
+      }
       .fp3d-dialog-veil {
         position: fixed;
         inset: 0;
@@ -16262,6 +16386,15 @@ export class Fp3dEditor extends LitElement {
       .fp3d-open-door path {
         stroke: var(--fp3d-warm);
         stroke-dasharray: 3 3;
+      }
+      .fp3d-open .fp3d-open-swing {
+        pointer-events: stroke;
+      }
+      .fp3d-open-door line.fp3d-open-leaf {
+        stroke-width: 2;
+      }
+      .fp3d-open-front line.fp3d-open-leaf {
+        stroke-width: 3;
       }
       .fp3d-open-front path,
       .fp3d-open-door line {
