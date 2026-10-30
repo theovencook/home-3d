@@ -851,7 +851,7 @@ export class Floorplan3dPanel extends LitElement {
             : nothing}
           <span class="fp3d-version" title=${this.t("version_hint", { backend: this.data.backendVersion ?? "?" })}>v${this.data.frontendVersion}</span>
         </header>`}
-        ${this._clean && this._mode === "view" ? nothing : this.renderNotices()}
+        ${this._clean && this._mode === "view" ? this.renderCleanNotice() : this.renderNotices()}
         ${this.data.error && !b ? html`<p class="fp3d-message">${this.t("load_error")}: ${this.data.error}</p>` : nothing}
         ${!b && !this.data.error ? html`<p class="fp3d-message">${this.t("loading")}</p>` : nothing}
         ${b
@@ -884,16 +884,11 @@ export class Floorplan3dPanel extends LitElement {
   private renderNotices() {
     const d = this.data;
     const notices = [];
-    if (d.needsRestart) {
-      // an old bundle in the browser or the companion app: a reload helps, a restart does not
-      if (d.versionGap === "frontend")
-        notices.push(
-          html`<div class="fp3d-notice fp3d-notice-warn">
-            ${this.t("needs_reload", { frontend: d.frontendVersion, backend: d.backendVersion ?? "?" })}
-            <button class="fp3d-btn" @click=${() => location.reload()}>${this.t("reload_page")}</button>
-          </div>`,
-        );
-      else notices.push(html`<div class="fp3d-notice fp3d-notice-warn">${d.backendVersion ? this.t("needs_restart", { version: d.backendVersion, frontend: d.frontendVersion }) : this.t("needs_restart_old")}</div>`);
+    // an old bundle in the browser or the companion app: a reload helps, a restart does not
+    const update = this.renderUpdateNotice();
+    if (update) notices.push(update);
+    if (d.needsRestart && d.versionGap !== "frontend") {
+      notices.push(html`<div class="fp3d-notice fp3d-notice-warn">${d.backendVersion ? this.t("needs_restart", { version: d.backendVersion, frontend: d.frontendVersion }) : this.t("needs_restart_old")}</div>`);
     }
     if (d.saveState === "error" && d.saveError) {
       notices.push(html`<div class="fp3d-notice fp3d-notice-error">${this.t("save_failed_detail", { error: d.saveError })}</div>`);
@@ -909,6 +904,29 @@ export class Floorplan3dPanel extends LitElement {
       );
     }
     return notices.length ? html`<div class="fp3d-notices">${notices}</div>` : nothing;
+  }
+
+  /** The clean view shows only the update notice (#60). */
+  private renderCleanNotice() {
+    const update = this.renderUpdateNotice();
+    return update ? html`<div class="fp3d-notices">${update}</div>` : nothing;
+  }
+
+  /**
+   * "Updated, tap to reload" (#60): this page runs older JavaScript than Home Assistant serves now (a new version, or
+   * the same one rebuilt). It never reloads by itself; the button waits for edits still being saved and does nothing
+   * while the last save failed, so no edit is lost. Shown in the clean view too: wall tablets are never reloaded.
+   */
+  private renderUpdateNotice() {
+    const d = this.data;
+    const state = d.updateNotice;
+    if (!state) return null;
+    // a new version names both (with the companion-app hint); the same version rebuilt just says it was updated
+    const text = d.backendVersion !== d.frontendVersion ? this.t("needs_reload", { frontend: d.frontendVersion, backend: d.backendVersion ?? "?" }) : this.t("update_ready");
+    return html`<div class="fp3d-notice fp3d-notice-warn fp3d-notice-update" role="status">
+      <span>${text}${state === "ready" ? nothing : html` ${this.t(state === "saving" ? "update_saving" : "update_unsaved")}`}</span>
+      <button class="fp3d-btn" ?disabled=${state === "unsaved"} @click=${() => void d.reloadWhenSaved()}>${this.t("reload_page")}</button>
+    </div>`;
   }
 
   /**
