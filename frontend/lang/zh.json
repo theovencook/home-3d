@@ -332,7 +332,6 @@
  "camera_detect_choose": "自行选择检测传感器",
  "camera_detect_choose_hint": "只有勾选的传感器才会用于标记、运动轨迹和实时导播——也可以是其他设备的传感器，例如为 Reolink 摄像头使用 Frigate 的人员传感器。不勾选时，Home 3D 使用摄像头所属设备上的全部传感器。",
  "camera_detect_add": "添加传感器",
- "camera_cone": "在 3D 中显示视场",
  "camera_detect_pins": "显示检测图标（人、车、动物）",
  "camera_detect_pins_hint": "关闭：检测时摄像头上方不显示图标，仅视场变红——在墙面平板上更安静。",
  "state_recording": "正在录制",

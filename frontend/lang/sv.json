@@ -332,7 +332,6 @@
  "camera_detect_choose": "Välj detekteringssensorerna själv",
  "camera_detect_choose_hint": "Bara de ikryssade sensorerna räknas för nålar, rörelsespår och liveregi – även sensorer från en annan enhet, t.ex. Frigates personsensor för en Reolink-kamera. Utan bock tar Home 3D alla sensorer på kamerans enhet.",
  "camera_detect_add": "Lägg till en sensor",
- "camera_cone": "Visa bildvinkeln i 3D",
  "camera_detect_pins": "Visa detekteringssymboler (person, bil, djur)",
  "camera_detect_pins_hint": "Av: en detektering visar inga symboler över kameran, bara synfältet blir rött – lugnare på en väggplatta.",
  "state_recording": "Spelar in",

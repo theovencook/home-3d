@@ -2246,14 +2246,15 @@ function packModel(
  * A security camera into the lamp buffer: on a wall a small body with a lens looking along +z (turned
  * by `rotation`), on the ceiling a dome hanging at the ceiling height `y`.
  */
-export function pushCameraModel(buf: GeoBuffer, model: "camera_wall" | "camera_ceiling", x: number, y: number, z: number, rotation: number): void {
+export function pushCameraModel(buf: GeoBuffer, model: "camera_wall" | "camera_ceiling", x: number, y: number, z: number, rotation: number, alert = false): void {
   const a = rotation * DEG;
   const c = Math.cos(a);
   const s = Math.sin(a);
   const tf: Tf = (lx, lz) => [x + lx * c - lz * s, z + lx * s + lz * c];
   const b = new Builder(buf, new LineBuffer(), tf);
-  const body = 0x1a2640;
-  const bodyTop = 0x243660;
+  // red while the camera sees motion
+  const body = alert ? 0xb81c2c : 0x1a2640;
+  const bodyTop = alert ? 0xf0303f : 0x243660;
   const lens = 0x0b111f;
   if (model === "camera_ceiling") {
     // dome: a flat base and a half-dome below it

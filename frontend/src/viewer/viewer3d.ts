@@ -176,8 +176,6 @@ export interface DeviceMarker {
   /** The text shows on the floor as well (a marker set to "always"); otherwise only in its room or while active. */
   full?: boolean;
   unavailable: boolean;
-  /** Cameras: no field-of-view wedge on the floor (false); default on. */
-  cone?: boolean;
   /** Light cone on the floor for lights that are on. */
   glow: { color: [number, number, number]; level: number } | null;
   /** Power drawn (W) when the device reports it. */
@@ -223,12 +221,13 @@ export interface DeviceMarker {
   variant?: string | null;
   /** Formatted power, e.g. "85 W". */
   powerText?: string;
-  /** A camera drawn in 3D (wall or ceiling); its field of view lies on the floor, red while motion is seen. */
+  /** A camera drawn in 3D (wall or ceiling); it turns red while it sees motion. */
   model?: "camera_wall" | "camera_ceiling";
-  /** A camera shown by a furniture item of its own (#779): its built-in model is not drawn (wedge and look-through stay). */
+  /** A camera shown by a furniture item of its own (#779): its built-in model is not drawn (the look-through stays). */
   ownLook?: boolean;
+  /** Camera: saw motion within the hold time (⚙ effects), drawn red. */
   motion?: boolean;
-  /** Camera: opening angle (degrees) and reach (m) of its field of view; default 90° / 4.5 m (dome: 360° / 3 m). */
+  /** Camera: opening angle (degrees) and reach (m) of its field of view, for its projected picture; default 90° / 4.5 m (dome: 360° / 3 m). */
   fov?: number;
   reach?: number;
   /** Camera: degrees below the horizon it looks (for the look through it). */
@@ -559,8 +558,6 @@ interface FloorView {
   patchSig: string;
   /** Triangle ranges of lamps (entity ids), furniture walls mesh and openings, for tapping. */
   lampTris: { id: string; start: number; end: number }[];
-  /** Triangle range of every camera's field-of-view wedge, by device id (a tap on it hits the camera). */
-  coneTris: { id: string; start: number; end: number }[];
   /** The same lamp ranges, keyed by furniture id (for moving lamps). */
   lampFurnTris: { id: string; start: number; end: number }[];
   frameTris: { id: string; start: number; end: number }[];
@@ -607,6 +604,8 @@ interface FloorView {
 
 /** The floor of a room motion lights (#10). */
 const MOTION_LIGHT = new Color(1, 0.84, 0.5);
+/** A camera that sees motion. */
+const CAMERA_ALERT = new Color(0.95, 0.16, 0.2);
 const ACTIVE_FLOOR = new Color(0x1a2a4d);
 
 export function isLowEnd(): boolean {
@@ -846,6 +845,8 @@ export class FloorplanViewer {
   private roomTint: Map<string, [number, number, number]> | null = null;
   /** Rooms motion lights (#10). */
   private roomGlow: ReadonlySet<string> = new Set();
+  /** Camera looks painted red (paintCameraLooks), per walls geometry: which items, and their own colours by offset. */
+  private cameraPaint = new WeakMap<BufferGeometry, { sig: string; ranges: Map<number, Float32Array> }>();
   private houseRadius = 20;
   private startView: StartView | null = null;
   private keepView = false;
@@ -2265,7 +2266,7 @@ export class FloorplanViewer {
       position: new Vector3(d.x, y, d.z),
       direction: new Vector3(-Math.sin(a) * Math.cos(tilt), -Math.sin(tilt), Math.cos(a) * Math.cos(tilt)),
       fov: Math.min(d.fov ?? (ceiling ? 120 : 90), 140),
-      // as far as the camera's wedge reaches, a good deal further (the wedge is drawn short), at most 30 m
+      // a good deal further than the camera's set reach (the reach is set short), at most 30 m
       reach: Math.min(30, Math.max(8, (d.reach ?? (ceiling ? 3 : 4.5)) * 2.5)),
     };
   }
@@ -3050,7 +3051,6 @@ export class FloorplanViewer {
         patchGlowMesh,
         patchSig: "",
         lampTris: [],
-        coneTris: [],
         lampFurnTris: [],
         frameTris: [],
         glassTris: [],
@@ -3476,6 +3476,7 @@ export class FloorplanViewer {
    * the mesh in place, so colour effects cost no geometry.
    */
   private buildLamps(fv: FloorView): void {
+    this.paintCameraLooks(fv);
     const now = performance.now();
     const flash = (id: string) => {
       const until = this.flashes.get(id);
@@ -3489,7 +3490,7 @@ export class FloorplanViewer {
     const shapeSig =
       this.wallMode +
       (this.lowQuality ? "L" : this.highQuality ? "H" : "M") +
-      lamps.map((d) => `${d.id},${d.lamp ?? d.model},${d.variant},${d.x},${d.z},${d.y},${d.rotation ?? 0},${d.roll ?? 0},${d.upright ? 1 : 0},${d.rise ?? 0},${d.size?.join("/")},${d.base ?? 0},${d.pack ?? ""},${d.mirror ? 1 : 0}${d.colors ? JSON.stringify(d.colors) + this.theme : ""}${d.materials ? JSON.stringify(d.materials) : ""}`).join(";");
+      lamps.map((d) => `${d.id},${d.lamp ?? d.model},${d.variant},${d.x},${d.z},${d.y},${d.rotation ?? 0},${d.roll ?? 0},${d.upright ? 1 : 0},${d.rise ?? 0},${d.size?.join("/")},${d.base ?? 0},${d.pack ?? ""},${d.mirror ? 1 : 0},${d.motion ? 1 : 0}${d.colors ? JSON.stringify(d.colors) + this.theme : ""}${d.materials ? JSON.stringify(d.materials) : ""}`).join(";");
     const glows = lamps.map((d) => this.glowOf(d));
     const colorSig = lamps.map((d, i) => `${flash(d.id)},${glows[i] ? `${glows[i]!.level.toFixed(3)},${glows[i]!.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`).join(";");
     if (shapeSig !== fv.lampShapeSig || !fv.lampMesh.geometry.getAttribute("position")) {
@@ -3509,7 +3510,7 @@ export class FloorplanViewer {
         const [pw, pd, ph] = d.size ?? [0.3, 0.3, 0.3];
         // shades get the sentinel colour and are recoloured below
         if (d.model) {
-          if (!d.ownLook) pushCameraModel(buf, d.model, d.x, d.model === "camera_ceiling" ? H : d.y, d.z, d.rotation ?? 0);
+          if (!d.ownLook) pushCameraModel(buf, d.model, d.x, d.model === "camera_ceiling" ? H : d.y, d.z, d.rotation ?? 0, !!d.motion);
         }
         else if (packed) pushPackLamp(buf, packed, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w: pw, d: pd, h: ph, mirror: d.mirror, colors: d.colors, materials: d.materials }, d.base ?? 0, SHADE_SENTINEL);
         // a ceiling fan's blades turn in a group of their own (syncFans)
@@ -3686,6 +3687,40 @@ export class FloorplanViewer {
     }
   }
 
+  /**
+   * A camera worn by a furniture item (#779) turns red while it sees motion, like the built-in model: the item's
+   * triangles in the walls mesh are recoloured in place, and their own colours put back when the motion has passed.
+   */
+  private paintCameraLooks(fv: FloorView): void {
+    const geo = fv.wallMesh.geometry;
+    const attr = geo.getAttribute("color") as Float32BufferAttribute | undefined;
+    if (!attr) return;
+    const seen = new Set(this.devices.filter((d) => d.model && d.motion && d.floorId === fv.floor.id).map((d) => d.id));
+    const red = new Set(fv.floor.furniture.filter((f) => f.look_of && seen.has(f.look_of)).map((f) => f.id));
+    const sig = [...red].sort().join(",");
+    const kept = this.cameraPaint.get(geo);
+    if ((kept?.sig ?? "") === sig) return;
+    const colors = attr.array as Float32Array;
+    for (const [at, own] of kept?.ranges ?? []) colors.set(own, at);
+    const ranges = new Map<number, Float32Array>();
+    for (const r of fv.geo.furnitureTris) {
+      if (!red.has(r.id)) continue;
+      const a = r.start * 9;
+      const b = r.end * 9;
+      ranges.set(a, colors.slice(a, b));
+      for (let i = a; i < b; i += 3) {
+        // keep the model's shading: dark parts stay darker
+        const lum = (colors[i] + colors[i + 1] + colors[i + 2]) / 3;
+        const k = 0.45 + 0.55 * Math.min(1, lum * 2);
+        colors[i] = CAMERA_ALERT.r * k;
+        colors[i + 1] = CAMERA_ALERT.g * k;
+        colors[i + 2] = CAMERA_ALERT.b * k;
+      }
+    }
+    this.cameraPaint.set(geo, { sig, ranges });
+    attr.needsUpdate = true;
+  }
+
   /** Glow points at lit shades (not at the tablet level) and light cones under spots (level "High"). */
   private buildHalos(fv: FloorView): void {
     if (this.lowQuality) {
@@ -3697,66 +3732,9 @@ export class FloorplanViewer {
     const hp: number[] = [];
     const hc: number[] = [];
     const cones = new GeoBuffer();
-    const coneTris: FloorView["coneTris"] = [];
     for (const d of this.devices) {
-      if (d.model && d.floorId === fv.floor.id) {
-        if (d.model === "camera_ceiling" && this.wallMode === "cut") continue;
-        if (d.cone === false) continue;
-        // the camera's field of view on the floor: a faint wedge, red while it sees motion
-        const a = (d.rotation ?? 0) * DEG;
-        const dir: [number, number] = [-Math.sin(a), Math.cos(a)];
-        const dome = d.model === "camera_ceiling";
-        const reach = d.reach ?? (dome ? 3 : 4.5);
-        const half = ((d.fov ?? (dome ? 360 : 90)) * DEG) / 2;
-        const near = d.motion ? new Color(0.9, 0.12, 0.16) : new Color(0.04, 0.22, 0.28);
-        const far = new Color(0, 0, 0);
-        const n = Math.max(4, Math.round(half / 0.15));
-        const y = 0.015;
-        // the wedge ends at the first wall in each direction: a camera does not see through walls
-        const walls = fv.geo.walls2d;
-        // only the wall the camera hangs on (the nearest) is looked through – a camera just inside an outer wall
-        // looks out through it; any other wall near it, say a garden wall joining at the corner, stops it (#438)
-        const lineDist = (w: (typeof walls)[number]) => {
-          const ex = w.b[0] - w.a[0];
-          const ez = w.b[1] - w.a[1];
-          const l2 = ex * ex + ez * ez || 1;
-          const t = Math.max(0, Math.min(1, ((d.x - w.a[0]) * ex + (d.z - w.a[1]) * ez) / l2));
-          return Math.hypot(d.x - (w.a[0] + ex * t), d.z - (w.a[1] + ez * t));
-        };
-        let mount: (typeof walls)[number] | null = null;
-        for (const w of walls) if (lineDist(w) < 0.45 && (!mount || lineDist(w) < lineDist(mount))) mount = w;
-        const reachAt = (t: number): number => {
-          const rx = dir[0] * Math.cos(t) - dir[1] * Math.sin(t);
-          const rz = dir[1] * Math.cos(t) + dir[0] * Math.sin(t);
-          let best = reach;
-          for (const w of walls) {
-            const ex = w.b[0] - w.a[0];
-            const ez = w.b[1] - w.a[1];
-            const den = rx * ez - rz * ex;
-            if (Math.abs(den) < 1e-9) continue;
-            const s = ((w.a[0] - d.x) * ez - (w.a[1] - d.z) * ex) / den;
-            const u = ((w.a[0] - d.x) * rz - (w.a[1] - d.z) * rx) / den;
-            if (w === mount && s <= 0.45) continue;
-            if (s > 0.02 && s < best && u >= 0 && u <= 1) best = s;
-          }
-          return best;
-        };
-        // every point of the wedge lies on the ground it falls on: the floor in a room, the lawn or the terrain
-        // outside – a camera of a sunken floor (a basement half in the ground) no longer reaches down to that floor's
-        // level outdoors (#802); a camera just inside an outer wall starts on the ground in front of it
-        const groundAt = (x: number, z: number) => y + groundUnder(fv.floor, { x, z });
-        const rim = (t: number) => {
-          const r = reachAt(t);
-          const x = d.x + (dir[0] * Math.cos(t) - dir[1] * Math.sin(t)) * r;
-          const z = d.z + (dir[1] * Math.cos(t) + dir[0] * Math.sin(t)) * r;
-          return [x, groundAt(x, z), z];
-        };
-        const apex = [d.x, Math.max(groundAt(d.x, d.z), dome ? -Infinity : groundAt(d.x + dir[0] * 0.3, d.z + dir[1] * 0.3)), d.z];
-        const start = cones.count;
-        for (let i = 0; i < n; i++) cones.tri(apex, rim(-half + (2 * half * (i + 1)) / n), rim(-half + (2 * half * i) / n), near, far, far);
-        coneTris.push({ id: d.id, start, end: cones.count });
-        continue;
-      }
+      // cameras draw no field of view: they turn red while they see motion (buildLamps)
+      if (d.model) continue;
       const glow = this.glowOf(d);
       if (d.floorId !== fv.floor.id || !d.lamp || !glow) continue;
       if (HANGING.has(d.lamp) && this.wallMode === "cut" && (d.top ?? H) > Math.min(fv.floor.cut_height, H)) continue;
@@ -3833,7 +3811,6 @@ export class FloorplanViewer {
     fv.coneMesh.geometry.dispose();
     fv.coneMesh.geometry = cones.geometry();
     fv.coneMesh.visible = cones.count > 0;
-    fv.coneTris = coneTris;
   }
 
   /** Lit screens of a floor: a bright panel in the app colour and a faint glow around it. */
@@ -4517,15 +4494,14 @@ export class FloorplanViewer {
   private pick(x: number, y: number): { entity: string } | { floorId: string; roomId: string | null; rack?: RackHit } | null {
     const ray = this.rayAt(x, y);
     const floors = this.activeFloors();
-    const meshes = floors.flatMap((f) => [f.lampMesh, f.coneMesh, f.framesMesh, f.glassMesh, f.blindsMesh, f.wallMesh, f.floorMesh, ...rackGearShown(f)].filter((m) => m.visible));
+    const meshes = floors.flatMap((f) => [f.lampMesh, f.framesMesh, f.glassMesh, f.blindsMesh, f.wallMesh, f.floorMesh, ...rackGearShown(f)].filter((m) => m.visible));
     const inRange = (list: { id: string; start: number; end: number }[], tri: number) => list.find((r) => tri >= r.start && tri < r.end)?.id;
     for (const hit of ray.intersectObjects(meshes, false)) {
       if (hit.faceIndex == null) continue;
       const tri = hit.faceIndex;
       const fv = floors.find((f) => f.group === hit.object.parent)!;
-      if (hit.object === fv.lampMesh || hit.object === fv.coneMesh) {
-        // a camera's wedge on the floor is a far bigger target than the camera itself
-        const id = inRange(hit.object === fv.lampMesh ? fv.lampTris : fv.coneTris, tri);
+      if (hit.object === fv.lampMesh) {
+        const id = inRange(fv.lampTris, tri);
         if (id) return { entity: id };
       } else if (hit.object === fv.framesMesh || hit.object === fv.blindsMesh || hit.object === fv.glassMesh) {
         // the part above the cut is folded away with its wall: a tap there is meant for what lies behind

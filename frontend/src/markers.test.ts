@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cameraMotionSensors, detectionKind, buildMarkers, setCameraSensors, stateText } from "./markers.ts";
+import { cameraMotionSensors, cameraRedUntil, detectionKind, buildMarkers, setCameraSensors, stateText } from "./markers.ts";
 import type { Building } from "./model.ts";
 import { emptyBuilding, newFloor } from "./model.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
@@ -109,4 +109,30 @@ test("a camera counts its own device's detection sensors, or exactly the ones ch
   setCameraSensors(b);
   assert.deepEqual(cameraMotionSensors(hass, "camera.einfahrt"), ["binary_sensor.frigate_person"]);
   setCameraSensors(null);
+});
+
+test("a camera stays red for the hold time after its motion passed (#137)", () => {
+  const t0 = Date.parse("2026-10-30T12:00:00Z");
+  const sensor = (state: string, changed: number) =>
+    ({ entity_id: "binary_sensor.drive_motion", state, last_changed: new Date(changed).toISOString(), attributes: { device_class: "motion" } }) as unknown as HassEntity;
+  const hassWith = (s: HassEntity) =>
+    ({
+      states: { "camera.drive": { entity_id: "camera.drive", state: "idle", attributes: {} }, "binary_sensor.drive_motion": s },
+      entities: { "camera.drive": { entity_id: "camera.drive", device_id: "cam" }, "binary_sensor.drive_motion": { entity_id: "binary_sensor.drive_motion", device_id: "cam" } },
+    }) as unknown as HomeAssistant;
+  setCameraSensors(null);
+  // on: red with no end
+  assert.equal(cameraRedUntil(hassWith(sensor("on", t0)), "camera.drive", 30_000, t0 + 90_000), Number.POSITIVE_INFINITY);
+  // off 10 s ago: red for another 20 s
+  assert.equal(cameraRedUntil(hassWith(sensor("off", t0)), "camera.drive", 30_000, t0 + 10_000), t0 + 30_000);
+  // off longer than the hold, or no hold: not red
+  assert.equal(cameraRedUntil(hassWith(sensor("off", t0)), "camera.drive", 30_000, t0 + 31_000), null);
+  assert.equal(cameraRedUntil(hassWith(sensor("off", t0)), "camera.drive", 0, t0 + 1_000), null);
+  // the marker follows, with the plan's own hold time
+  const floor = newFloor("eg", "EG", 0);
+  floor.placements.push({ entity_id: "camera.drive", x: 1, z: 1 } as Building["floors"][number]["placements"][number]);
+  const b = { ...emptyBuilding(), floors: [floor] } as Building;
+  assert.equal(buildMarkers(hassWith(sensor("off", t0)), b, t0 + 20_000)[0].motion, true);
+  b.settings = { ...b.settings, effects: { camera_seconds: 10 } };
+  assert.equal(buildMarkers(hassWith(sensor("off", t0)), b, t0 + 20_000)[0].motion, false);
 });

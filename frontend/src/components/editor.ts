@@ -5305,7 +5305,7 @@ export class Fp3dEditor extends LitElement {
   /** Replace a placed device by a furniture item linked to it, where the pin stood (one undo step). */
   private deviceToFurniture(pl: Placement, type: string): void {
     if (!this.isEditor) return;
-    // a camera keeps its pin with everything set there (field of view, wedge, Kamera-Cockpit): the model is only its
+    // a camera keeps its pin with everything set there (field of view, aim, Kamera-Cockpit): the model is only its
     // look – one item that replaces the last one and moves with the camera (#779); a camera model sets its mount (#9)
     if (pl.entity_id.startsWith("camera.")) {
       this.change((_, f) => setCameraLook(f, pl.entity_id, type));
@@ -5351,7 +5351,7 @@ export class Fp3dEditor extends LitElement {
 
   /**
    * A camera's real shape (#9): the camera models of the packs (the core pack's UniFi cameras), the one its device
-   * reports marked. Only its look: the pin keeps the live view, the wedge and the actions.
+   * reports marked. Only its look: the pin keeps the live view, the aim and the actions.
    */
   private renderCameraModel(pl: Placement) {
     const lang = this.hass?.language ?? "en";
@@ -14302,10 +14302,6 @@ export class Fp3dEditor extends LitElement {
           ? html`${this.num(this.t("camera_fov"), pl.fov ?? (pl.mount === "ceiling" ? 360 : 90), (v) => this.updateDevice({ fov: Math.min(360, Math.max(10, v)) }), 5, 10)}
             ${this.len(this.t("camera_reach"), pl.reach ?? (pl.mount === "ceiling" ? 3 : 4.5), (v) => this.updateDevice({ reach: Math.min(50, Math.max(0.5, v)) }), 0.5, 0.5)}
             ${this.num(this.t("camera_tilt"), pl.tilt ?? (pl.mount === "ceiling" ? 65 : 20), (v) => this.updateDevice({ tilt: Math.min(90, Math.max(0, v)) }), 5, 0)}
-            <label class="fp3d-check fp3d-wide"
-              ><input type="checkbox" .checked=${pl.cone !== false} ?disabled=${!admin} @change=${(ev: Event) => this.updateDevice({ cone: (ev.target as HTMLInputElement).checked ? null : false })} />
-              ${this.t("camera_cone")}</label
-            >
             <label class="fp3d-check fp3d-wide" title=${this.t("camera_detect_pins_hint")}
               ><input type="checkbox" .checked=${pl.detect_pins !== false} ?disabled=${!admin} @change=${(ev: Event) => this.updateDevice({ detect_pins: (ev.target as HTMLInputElement).checked ? null : false })} />
               ${this.t("camera_detect_pins")}</label

@@ -332,7 +332,6 @@
  "camera_detect_choose": "Valitse tunnistusanturit itse",
  "camera_detect_choose_hint": "Vain valitut anturit lasketaan merkkeihin, liikejälkeen ja live-ohjaukseen – myös toisen laitteen anturit, esim. Frigaten henkilöanturi Reolink-kameralle. Ilman valintaa Home 3D käyttää kaikkia kameran laitteen antureita.",
  "camera_detect_add": "Lisää anturi",
- "camera_cone": "Näytä näkökenttä 3D:ssä",
  "camera_detect_pins": "Näytä tunnistussymbolit (henkilö, auto, eläin)",
  "camera_detect_pins_hint": "Pois: tunnistus ei näytä symboleita kameran yläpuolella, vain näkökenttä muuttuu punaiseksi – rauhallisempi seinätabletilla.",
  "state_recording": "Tallentaa",
