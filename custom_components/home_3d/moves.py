@@ -112,7 +112,7 @@ def migrate_building(building: dict[str, Any], moves: Moves) -> dict[str, Any]:
             furniture.append(new)
         floors.append({**floor, "furniture": furniture})
     recipes: dict[str, Any] = {}
-    own = building.get("recipes")
+    own: dict[str, Any] | None = building.get("recipes")
     for type_, entry in (own or {}).items():
         new_type = resolve(type_, moves)
         if new_type == type_:
@@ -120,7 +120,7 @@ def migrate_building(building: dict[str, Any], moves: Moves) -> dict[str, Any]:
             continue
         changed = True
         # a plan that already has a copy under the new type keeps that one
-        if new_type not in own:
+        if new_type not in (own or {}):
             recipes[new_type] = moved_copy(entry, new_type)
     if not changed:
         return building
@@ -145,7 +145,11 @@ def _migrated_item(item: dict[str, Any], moves: Moves) -> dict[str, Any]:
     # gear in a rack is placed by slot type (#113)
     rack = item.get("rack")
     slots = rack.get("slots") if isinstance(rack, dict) else None
-    if isinstance(slots, list) and any(isinstance(s, dict) and s.get("type") in moves for s in slots):
+    if (
+        isinstance(rack, dict)
+        and isinstance(slots, list)
+        and any(isinstance(s, dict) and s.get("type") in moves for s in slots)
+    ):
         changes["rack"] = {
             **rack,
             "slots": [

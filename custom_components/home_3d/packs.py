@@ -332,7 +332,7 @@ def _unknown_value(err: vol.Invalid) -> bool:
     return any(getattr(e, "code", None) == "not_in_list" or "value must be one of" in str(e) for e in found)
 
 
-def _check(schema: vol.Schema, path: str, data: Any) -> dict[str, Any]:
+def _check(schema: vol.Schema | vol.All, path: str, data: Any) -> dict[str, Any]:
     """Data against a schema; raises PackError naming the file (a value this version does not know yet, as a
     newer pack may use, asks for an update)."""
     try:

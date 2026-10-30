@@ -119,8 +119,8 @@ class Home:
         self._moves = moves
         building_key, image_key, history_key = _home_keys(home_id)
         self._building_store = _BuildingStore(hass, STORAGE_VERSION, building_key, minor_version=STORAGE_MINOR_VERSION)
-        self._image_store = Store(hass, STORAGE_VERSION, image_key, **_OFF_LOOP)
-        self._history_store = Store(hass, STORAGE_VERSION, history_key, **_OFF_LOOP)
+        self._image_store: Store[Any] = Store(hass, STORAGE_VERSION, image_key, **_OFF_LOOP)
+        self._history_store: Store[Any] = Store(hass, STORAGE_VERSION, history_key, **_OFF_LOOP)
         self.building: dict[str, Any] = empty_building()
         self.revision = 0
         self._images: dict[str, str] = {}
@@ -271,8 +271,8 @@ class FloorplanData:
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialise the stores."""
         self.hass = hass
-        self._pack_store = Store(hass, STORAGE_VERSION, STORAGE_KEY_PACKS)
-        self._homes_store = Store(hass, STORAGE_VERSION, STORAGE_KEY_HOMES)
+        self._pack_store: Store[Any] = Store(hass, STORAGE_VERSION, STORAGE_KEY_PACKS)
+        self._homes_store: Store[Any] = Store(hass, STORAGE_VERSION, STORAGE_KEY_HOMES)
         self.homes: dict[str, Home] = {}
         self.active_id = FIRST_HOME_ID
         # imported furniture packs (checked payloads, see packs.py)

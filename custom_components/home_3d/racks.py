@@ -168,8 +168,9 @@ def _space(frame: dict[str, Any], item: dict[str, Any], recipe: dict[str, Any]) 
 
     def dim(key: str, i: int) -> float:
         value = item.get(key)
-        ok = isinstance(value, (int, float)) and not isinstance(value, bool)
-        return max(0.05, float(value) if ok else size[i])
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return max(0.05, float(value))
+        return max(0.05, size[i])
 
     w, d = dim("w", 0), dim("d", 1)
     form = frame.get("form", "frame4")

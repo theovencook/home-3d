@@ -53,7 +53,7 @@ from .voice import SENTENCE_MODES, AskBroker, VoiceSettings
 _IMAGE_ID = vol.All(str, vol.Length(min=1, max=64), vol.Match(r"^[A-Za-z0-9_\-.]+$"))
 # a home (#53): commands about one plan take it optionally; without it they work on the active home
 _HOME_ID = vol.All(str, vol.Length(min=1, max=32), vol.Match(r"^[A-Za-z0-9_]+$"))
-_HOME = {vol.Optional("home_id"): _HOME_ID}
+_HOME: dict[Any, Any] = {vol.Optional("home_id"): _HOME_ID}
 _HOME_NAME = vol.All(str, vol.Strip, vol.Length(min=1, max=60))
 
 
