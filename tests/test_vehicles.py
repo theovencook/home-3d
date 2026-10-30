@@ -54,12 +54,25 @@ def test_every_car_is_a_vehicle_for_parking_spots_painted_in_the_paint_role() ->
 
 def test_a_car_has_the_real_outer_size_and_the_checklist_lists_it() -> None:
     puma = _items()["ford_puma"]
-    assert puma["size"] == [1.805, 4.186, 1.537]
+    assert puma["size"] == [1.805, 4.186, 1.55]
     doc = DOC.read_text(encoding="utf-8")
     assert "Ford Puma" in doc and "4186" in doc
     items = _items()
     for i in _car_ids():
         assert items[i]["name"]["en"] in doc, i
+
+
+def test_every_car_has_a_checked_status_and_a_source() -> None:
+    data = _data()
+    ids = _car_ids()
+    assert set(data.CHECKS) == set(ids), "CHECKS lists exactly the cars"
+    doc = DOC.read_text(encoding="utf-8")
+    for i, (status, source) in data.CHECKS.items():
+        assert status in {"verified", "single source", "unverified"}, i
+        assert source.strip(), i
+        if status == "verified":
+            assert "Auto Express" in source and "auto-data.net" in source, i
+        assert f"`{i}` | {status} |" in doc, i
 
 
 def test_the_other_vehicles_are_there_and_use_the_paint_role() -> None:

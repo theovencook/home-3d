@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from vehicles_data import BRANDS, car_id  # noqa: E402
+from vehicles_data import BRANDS, CHECKS, car_id  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "custom_components" / "home_3d" / "bundled_packs" / "theovencook.outdoor" / "vehicle"
@@ -468,9 +468,15 @@ def checklist() -> str:
         "below (length x width without mirrors x height, in mm). No logos, no maker pictures, no 3D files. The body is in the",
         "`paint` colour role: ten base colours and a hex value in the item panel.",
         "",
-        "**Sizes are unverified.** They were written down from memory of the makers' published UK specifications and have not",
-        "yet been compared one by one with the spec pages. Check a row against the maker's page (column Source) before",
-        "relying on it, then change `tools/vehicles_data.py`, run `python tools/gen_vehicles.py` and mark the row verified.",
+        "**Sizes were checked in #135.** The maker sites (ford.co.uk, bmw.co.uk and the rest) refuse automated fetches, so each",
+        "row was compared with two other sources: the Auto Express model page (UK figures) and the generation table on",
+        "auto-data.net. Width is without mirrors; where a source gave it with mirrors, the other source's figure was used.",
+        "Status: **verified** = the two sources agree (length within 20 mm, width within 8 mm, height within 35 mm; the Auto Express",
+        "figure is used and the Source column says where they differ); **single source** = only one source covered that car or",
+        "the other one was for a different body or market (the value shown is the one source's, the Source column says which and",
+        "what the other said); **unverified** = left as written from memory, with the reason. A few cars were swapped for a",
+        "model that is on sale now; the Source column starts the reason with \"Swap\".",
+        f"Totals: {sum(1 for c in CHECKS.values() if c[0] == 'verified')} verified, {sum(1 for c in CHECKS.values() if c[0] == 'single source')} single source, {sum(1 for c in CHECKS.values() if c[0] == 'unverified')} unverified, out of {len(CHECKS)} cars.",
         "Brands with fewer than ten rows (Tesla sells seven different shapes, MG eight) are listed as they are.",
         "",
         "The Nissan Leaf and its colourways, the first bicycles, mopeds and scooters were made by hand earlier and are not part",
@@ -478,9 +484,9 @@ def checklist() -> str:
         "",
     ]
     for brand_id, brand, site, models in BRANDS:
-        rows += [f"## {brand}", "", f"Source: {site} (model spec pages, UK). Status: unverified.", "", "| Model | Body | L x W x H (mm) | Electric | Item id | Status |", "| --- | --- | --- | --- | --- | --- |"]
+        rows += [f"## {brand}", "", f"Maker site: {site}", "", "| Model | Body | L x W x H (mm) | Electric | Item id | Status | Source |", "| --- | --- | --- | --- | --- | --- | --- |"]
         for name, body, length, width, height, ev in models:
-            rows.append(f"| {brand} {name} | {BODY_WORDS[body]} | {length} x {width} x {height} | {'yes' if ev else 'no'} | `{car_id(brand_id, name)}` | unverified |")
+            rows.append(f"| {brand} {name} | {BODY_WORDS[body]} | {length} x {width} x {height} | {'yes' if ev else 'no'} | `{car_id(brand_id, name)}` | {CHECKS[car_id(brand_id, name)][0]} | {CHECKS[car_id(brand_id, name)][1]} |")
         rows.append("")
     rows += [
         "## Other vehicles",
@@ -489,7 +495,8 @@ def checklist() -> str:
         "cargo and kids' balance bikes; cruiser, adventure, touring, trail and maxi-scooter motorbikes; snowmobiles (sport,",
         "touring, utility, mountain); golf carts (2 seat, 4 seat, utility); quad bike and side-by-side; mobility scooters;",
         "kids' and stunt kick scooters; a compact tractor; a touring caravan and two trailers. Sizes are typical, not a",
-        "particular model's. A ride-on mower, the electric and adult kick scooters, the moped and the first bicycles were",
+        "particular model's: none of them names a real product (the \"style\" words in some tags are only search hints), so there",
+        "is no maker page to check them against (#135). A ride-on mower, the electric and adult kick scooters, the moped and the first bicycles were",
         "already in the pack.",
         "",
     ]
