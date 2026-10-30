@@ -23,14 +23,14 @@
     "usb fan",
     "mini fan",
     "personal fan",
-    "desk fan",
-    "typical 5 W"
+    "desk fan"
   ],
   "family": "desk_fan",
   "variant": {
     "en": "USB mini"
   },
   "electric": true,
+  "watts": 5,
   "mount": "surface",
   "parts": [
     {

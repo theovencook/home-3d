@@ -22,14 +22,14 @@
     "air movement",
     "tower fan",
     "oscillating fan",
-    "column fan",
-    "typical 45 W"
+    "column fan"
   ],
   "family": "tower_fan",
   "variant": {
     "en": "Tower 70 cm"
   },
   "electric": true,
+  "watts": 45,
   "parts": [
     {
       "shape": "cyl",

@@ -24,14 +24,14 @@
     "cooling",
     "climate",
     "heat pump",
-    "2.5 kw",
-    "typical 600 W"
+    "2.5 kw"
   ],
   "family": "air_conditioner",
   "variant": {
     "en": "Wall split 2.5 kW"
   },
   "electric": true,
+  "watts": 600,
   "mount": "wall",
   "wall_y": 2.0,
   "parts": [

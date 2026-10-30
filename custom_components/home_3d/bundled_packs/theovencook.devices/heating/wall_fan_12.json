@@ -24,14 +24,14 @@
     "wall fan",
     "wall mounted fan",
     "oscillating fan",
-    "12 inch",
-    "typical 40 W"
+    "12 inch"
   ],
   "family": "wall_fan",
   "variant": {
     "en": "30 cm (12 in)"
   },
   "electric": true,
+  "watts": 40,
   "mount": "wall",
   "wall_y": 1.9,
   "parts": [

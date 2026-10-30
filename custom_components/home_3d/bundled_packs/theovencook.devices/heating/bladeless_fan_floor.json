@@ -23,14 +23,14 @@
     "bladeless fan",
     "air multiplier",
     "ring fan",
-    "pedestal fan",
-    "typical 45 W"
+    "pedestal fan"
   ],
   "family": "bladeless_fan",
   "variant": {
     "en": "Floor ring"
   },
   "electric": true,
+  "watts": 45,
   "parts": [
     {
       "shape": "cyl",

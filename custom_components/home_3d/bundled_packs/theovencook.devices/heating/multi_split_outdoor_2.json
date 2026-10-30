@@ -4,9 +4,9 @@
     "en": "Air conditioning outdoor unit"
   },
   "size": [
-    0.9,
-    0.33,
-    0.7
+    0.85,
+    0.35,
+    0.55
   ],
   "group": "heating",
   "room": [
@@ -20,14 +20,14 @@
     "outdoor unit",
     "condenser",
     "heat pump",
-    "5.0 kw",
-    "typical 1500 W"
+    "5.0 kw"
   ],
   "family": "air_conditioner",
   "variant": {
     "en": "Multi-split outdoor, 2 rooms"
   },
   "electric": true,
+  "watts": 1500,
   "parts": [
     {
       "shape": "box",
@@ -35,8 +35,8 @@
       "z": 0.0,
       "w": 1.0,
       "d": 1.0,
-      "y": 0.0571,
-      "h": 0.9429,
+      "y": 0.0727,
+      "h": 0.9273,
       "color": "white"
     },
     {
@@ -46,15 +46,15 @@
       "w": 0.9,
       "d": 0.8,
       "y": 0.0,
-      "h": 0.0571,
+      "h": 0.0727,
       "color": "dark"
     },
     {
       "shape": "cyl",
       "x": -0.15,
       "z": 0.5,
-      "w": 0.4667,
-      "d": 0.0303,
+      "w": 0.3882,
+      "d": 0.0286,
       "y": 0.2,
       "h": 0.6,
       "color": "dark",
@@ -64,10 +64,10 @@
       "shape": "box",
       "x": 0.4,
       "z": 0.0,
-      "w": 0.0111,
+      "w": 0.0118,
       "d": 0.9,
-      "y": 0.1429,
-      "h": 0.7143,
+      "y": 0.1818,
+      "h": 0.6364,
       "color": "metal"
     }
   ],

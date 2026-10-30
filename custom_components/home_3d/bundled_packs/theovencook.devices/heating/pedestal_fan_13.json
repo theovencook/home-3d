@@ -1,18 +1,18 @@
 {
-  "id": "desk_fan_6",
+  "id": "pedestal_fan_13",
   "name": {
-    "en": "Desk fan"
+    "en": "Pedestal fan"
   },
   "size": [
-    0.2,
-    0.17,
-    0.27
+    0.34,
+    0.34,
+    0.88
   ],
   "group": "heating",
   "room": [
-    "office",
-    "bedroom",
     "living",
+    "bedroom",
+    "office",
     "kids"
   ],
   "tags": [
@@ -20,37 +20,36 @@
     "cooling",
     "summer",
     "air movement",
-    "desk fan",
-    "table fan",
+    "pedestal fan",
+    "stand fan",
     "oscillating fan",
-    "6 inch",
-    "typical 15 W"
+    "13 inch"
   ],
-  "family": "desk_fan",
+  "family": "pedestal_fan",
   "variant": {
-    "en": "15 cm (6 in)"
+    "en": "33 cm (13 in)"
   },
   "electric": true,
-  "mount": "surface",
+  "watts": 29,
   "parts": [
     {
       "shape": "cyl",
       "x": 0.0,
-      "z": -0.2,
-      "w": 0.6,
-      "d": 0.6,
+      "z": 0.0,
+      "w": 0.8,
+      "d": 0.8,
       "y": 0.0,
-      "h": 0.0926,
+      "h": 0.0284,
       "color": "dark"
     },
     {
       "shape": "cyl",
       "x": 0.0,
-      "z": -0.2,
-      "w": 0.15,
-      "d": 0.1765,
-      "y": 0.0926,
-      "h": 0.25,
+      "z": -0.1176,
+      "w": 0.1029,
+      "d": 0.1029,
+      "y": 0.0284,
+      "h": 0.6011,
       "color": "metal"
     },
     {
@@ -59,8 +58,8 @@
       "z": 0.1,
       "w": 0.28,
       "d": 0.16,
-      "y": 0.5255,
-      "h": 0.219,
+      "y": 0.7512,
+      "h": 0.1043,
       "color": "white",
       "axis": "z"
     },
@@ -69,9 +68,9 @@
       "x": 0.0,
       "z": 0.25,
       "w": 1.0,
-      "d": 0.2941,
-      "y": 0.27,
-      "h": 0.73,
+      "d": 0.3,
+      "y": 0.6295,
+      "h": 0.3477,
       "color": "glass",
       "axis": "z",
       "edges": "faint"
@@ -81,9 +80,9 @@
       "x": 0.0,
       "z": 0.45,
       "w": 0.84,
-      "d": 0.0588,
-      "y": 0.3284,
-      "h": 0.6132,
+      "d": 0.0294,
+      "y": 0.6574,
+      "h": 0.2921,
       "color": "white",
       "axis": "z"
     },
@@ -92,9 +91,9 @@
       "x": 0.0,
       "z": 0.46,
       "w": 0.14,
-      "d": 0.1176,
-      "y": 0.5839,
-      "h": 0.1022,
+      "d": 0.0588,
+      "y": 0.7791,
+      "h": 0.0487,
       "color": "metal",
       "axis": "z"
     }
@@ -104,7 +103,7 @@
       "shape": "circle",
       "x": 0,
       "z": 0,
-      "r": 0.45
+      "r": 0.5
     }
   ]
 }

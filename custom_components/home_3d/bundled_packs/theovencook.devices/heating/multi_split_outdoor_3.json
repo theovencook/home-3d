@@ -4,9 +4,9 @@
     "en": "Air conditioning outdoor unit"
   },
   "size": [
-    0.95,
-    0.38,
-    0.85
+    0.97,
+    0.41,
+    0.73
   ],
   "group": "heating",
   "room": [
@@ -20,14 +20,14 @@
     "outdoor unit",
     "condenser",
     "heat pump",
-    "7.4 kw",
-    "typical 2400 W"
+    "5.2 kw"
   ],
   "family": "air_conditioner",
   "variant": {
     "en": "Multi-split outdoor, 3 rooms"
   },
   "electric": true,
+  "watts": 1700,
   "parts": [
     {
       "shape": "box",
@@ -35,8 +35,8 @@
       "z": 0.0,
       "w": 1.0,
       "d": 1.0,
-      "y": 0.0471,
-      "h": 0.9529,
+      "y": 0.0548,
+      "h": 0.9452,
       "color": "white"
     },
     {
@@ -46,17 +46,17 @@
       "w": 0.9,
       "d": 0.8,
       "y": 0.0,
-      "h": 0.0471,
+      "h": 0.0548,
       "color": "dark"
     },
     {
       "shape": "cyl",
       "x": -0.15,
       "z": 0.5,
-      "w": 0.5,
-      "d": 0.0263,
+      "w": 0.4515,
+      "d": 0.0244,
       "y": 0.2,
-      "h": 0.5588,
+      "h": 0.6,
       "color": "dark",
       "axis": "z"
     },
@@ -64,10 +64,10 @@
       "shape": "box",
       "x": 0.4,
       "z": 0.0,
-      "w": 0.0105,
+      "w": 0.0103,
       "d": 0.9,
-      "y": 0.1176,
-      "h": 0.7647,
+      "y": 0.137,
+      "h": 0.726,
       "color": "metal"
     }
   ],

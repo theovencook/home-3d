@@ -23,14 +23,14 @@
     "clip fan",
     "clip on fan",
     "desk fan",
-    "pram fan",
-    "typical 12 W"
+    "pram fan"
   ],
   "family": "desk_fan",
   "variant": {
     "en": "Clip-on"
   },
   "electric": true,
+  "watts": 12,
   "mount": "surface",
   "parts": [
     {

@@ -4,8 +4,8 @@
     "en": "Floor console air conditioner"
   },
   "size": [
-    1.0,
-    0.21,
+    0.75,
+    0.24,
     0.6
   ],
   "group": "heating",
@@ -23,14 +23,14 @@
     "console",
     "cooling",
     "climate",
-    "5.0 kw",
-    "typical 1400 W"
+    "5.0 kw"
   ],
   "family": "air_conditioner",
   "variant": {
     "en": "Floor console 5.0 kW"
   },
   "electric": true,
+  "watts": 1400,
   "parts": [
     {
       "shape": "rbox",
@@ -48,7 +48,7 @@
       "x": 0.0,
       "z": 0.5,
       "w": 0.85,
-      "d": 0.0381,
+      "d": 0.0333,
       "y": 0.82,
       "h": 0.1,
       "color": "dark"
@@ -58,7 +58,7 @@
       "x": 0.0,
       "z": 0.5,
       "w": 0.85,
-      "d": 0.0381,
+      "d": 0.0333,
       "y": 0.2,
       "h": 0.55,
       "color": "#dcdcdc"
@@ -68,7 +68,7 @@
       "x": 0.38,
       "z": 0.5,
       "w": 0.08,
-      "d": 0.0476,
+      "d": 0.0417,
       "y": 0.1,
       "h": 0.04,
       "color": "#7fd0ff"

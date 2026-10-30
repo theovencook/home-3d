@@ -4,9 +4,9 @@
     "en": "Window air conditioner"
   },
   "size": [
-    0.55,
-    0.45,
-    0.38
+    0.5,
+    0.49,
+    0.31
   ],
   "group": "heating",
   "room": [
@@ -23,14 +23,14 @@
     "cooling",
     "climate",
     "window ac",
-    "8000 btu",
-    "typical 700 W"
+    "8000 btu"
   ],
   "family": "window_ac",
   "variant": {
     "en": "8 000 BTU"
   },
   "electric": true,
+  "watts": 700,
   "mount": "wall",
   "wall_y": 0.9,
   "parts": [
@@ -50,7 +50,7 @@
       "x": 0.0,
       "z": 0.5,
       "w": 0.86,
-      "d": 0.0222,
+      "d": 0.0204,
       "y": 0.62,
       "h": 0.28,
       "color": "dark"
@@ -60,7 +60,7 @@
       "x": 0.0,
       "z": 0.5,
       "w": 0.7,
-      "d": 0.0222,
+      "d": 0.0204,
       "y": 0.12,
       "h": 0.4,
       "color": "#dcdcdc"
@@ -70,7 +70,7 @@
       "x": 0.32,
       "z": 0.5,
       "w": 0.14,
-      "d": 0.0222,
+      "d": 0.0204,
       "y": 0.8,
       "h": 0.1,
       "color": "#7fd0ff"

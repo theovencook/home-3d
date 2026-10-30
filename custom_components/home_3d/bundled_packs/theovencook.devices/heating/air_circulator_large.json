@@ -4,9 +4,9 @@
     "en": "Air circulator"
   },
   "size": [
-    0.4,
-    0.38,
-    0.44
+    0.34,
+    0.3,
+    0.38
   ],
   "group": "heating",
   "room": [
@@ -25,14 +25,14 @@
     "air circulator",
     "floor fan",
     "vortex fan",
-    "drum fan",
-    "typical 60 W"
+    "drum fan"
   ],
   "family": "air_circulator",
   "variant": {
-    "en": "Large 30 cm"
+    "en": "Large"
   },
   "electric": true,
+  "watts": 56,
   "parts": [
     {
       "shape": "cyl",
@@ -41,7 +41,7 @@
       "w": 0.5,
       "d": 0.5,
       "y": 0.0,
-      "h": 0.0682,
+      "h": 0.0789,
       "color": "dark"
     },
     {
@@ -50,7 +50,7 @@
       "z": -0.1,
       "w": 0.3,
       "d": 0.3,
-      "y": 0.0682,
+      "y": 0.0789,
       "h": 0.2,
       "color": "white",
       "round": 0.3
@@ -71,7 +71,7 @@
       "x": 0.0,
       "z": 0.4,
       "w": 0.8,
-      "d": 0.0526,
+      "d": 0.0667,
       "y": 0.38,
       "h": 0.52,
       "color": "dark",

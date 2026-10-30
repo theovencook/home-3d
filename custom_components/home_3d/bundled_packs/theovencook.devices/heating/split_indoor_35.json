@@ -24,14 +24,14 @@
     "cooling",
     "climate",
     "heat pump",
-    "3.5 kw",
-    "typical 850 W"
+    "3.5 kw"
   ],
   "family": "air_conditioner",
   "variant": {
     "en": "Wall split 3.5 kW"
   },
   "electric": true,
+  "watts": 850,
   "mount": "wall",
   "wall_y": 2.0,
   "parts": [

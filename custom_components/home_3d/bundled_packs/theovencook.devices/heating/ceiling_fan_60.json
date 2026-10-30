@@ -24,14 +24,14 @@
     "air movement",
     "blades",
     "60 inch",
-    "reversible",
-    "typical 75 W"
+    "reversible"
   ],
   "family": "ceiling_fan",
   "variant": {
     "en": "152 cm (60 in)"
   },
   "electric": true,
+  "watts": 75,
   "mount": "ceiling",
   "parts": [
     {
