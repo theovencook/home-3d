@@ -22,7 +22,7 @@ function plain(model: string): string {
 /**
  * The camera model (pack type) a device's model names: the camera item with that model among its tags, or with the
  * longest tag the model starts with ("G5 Turret Ultra" → the item tagged "g5 turret"). Only tags with a number count
- * as a model name. Null: no camera item knows it.
+ * as a model name, and so do those of UniFi's AI line ("ai pro"). Null: no camera item knows it.
  */
 export function matchCameraModel(model: string | null | undefined, packs: readonly FurniturePack[]): string | null {
   const want = plain(model ?? "");
@@ -33,8 +33,9 @@ export function matchCameraModel(model: string | null | undefined, packs: readon
       if (!isCameraModel(item)) continue;
       for (const tag of item.tags ?? []) {
         const t = plain(tag);
-        // a model has a number in it ("g4 pro", "ai 360"): the words every camera carries ("camera", "unifi") are none
-        if (!/\d/.test(t) || !(want === t || want.startsWith(`${t} `))) continue;
+        // a model has a number in it ("g4 pro", "ai 360") or is one of UniFi's AI line ("ai pro", "ai dslr"): the words
+        // every camera carries ("camera", "unifi") are none
+        if (!(/\d/.test(t) || /^ai \S/.test(t)) || !(want === t || want.startsWith(`${t} `))) continue;
         if (!best || t.length > best.len) best = { type: packType(pack.id, item.id), len: t.length };
       }
     }

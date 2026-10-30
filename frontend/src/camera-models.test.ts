@@ -26,6 +26,8 @@ const PACK: FurniturePack = {
     cam("g4_pro", ["g4 pro"]),
     cam("g5_turret", ["g5 turret"], "ceiling"),
     cam("g4_dome", ["g4 dome"], "ceiling"),
+    cam("ai_dslr", ["ai dslr"]),
+    cam("ai_dslr_long", ["ai dslr long distance"]),
     // a speaker with a model-like tag is no camera
     { id: "speaker", name: { en: "Speaker" }, size: [0.1, 0.1, 0.1], tags: ["g4 instant"], parts: [part] },
   ],
@@ -148,4 +150,11 @@ test("the wedge stays as it was when a model moves the camera to the ceiling or 
   const same = floorWithCamera();
   setCameraLook(same, "camera.drive", "pack:test.cams:g4_pro");
   assert.deepEqual([same.placements[0].reach, same.placements[0].tilt], [undefined, undefined]);
+});
+
+test("UniFi's AI cameras match without a number in their model name (#145)", () => {
+  assert.equal(matchCameraModel("AI DSLR", [PACK]), "pack:test.cams:ai_dslr");
+  assert.equal(matchCameraModel("AI DSLR Long Distance", [PACK]), "pack:test.cams:ai_dslr_long");
+  // a bare "ai" is no model name
+  assert.equal(matchCameraModel("AI", [PACK]), null);
 });
