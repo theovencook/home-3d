@@ -7,6 +7,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ### Library and packs
 
+- **The core pack is split and retired:** its 847 items moved into themed packs (Living, Bedroom & kids, Kitchen & bath, Office & tech, IT & network, Decor & plants, Garden & outdoor, Household & building, plus the Smart-home devices and Makers packs). Item ids are unchanged; plans migrate on load through `moved_items.json`.
 - **Pack format v2:** a pack is a folder (`pack.json` plus one JSON file per item, no code), checked like before. A pack holds up to 1000 items.
 - **Bundled packs:** `theovencook.core` (furniture, lamps, media, office and network gear, kitchen and bath, heating and energy, decor, plants, outdoor, vehicles and architecture) and `theovencook.ikea-uk` (IKEA UK models, searchable by their IKEA name) come with the integration, next to two themed packs: `theovencook.makers` (3D printers and workshop kit) and `theovencook.devices` (smart-home devices). The library can be narrowed to one pack.
 - **Library vocabulary:** items sort into rooms and kinds, and the search knows UK words as well as US ones.

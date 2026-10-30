@@ -129,7 +129,7 @@ async def test_the_bundled_library_lists_light(hass: HomeAssistant, hass_ws_clie
     """The bundled packs hold well over a thousand items: the list carries none of their recipes, so it stays a
     fraction of their size, also with a whole imported copy of the core pack next to them."""
     client = await _client(hass, hass_ws_client)
-    core = packs.read_folder(packs.BUNDLED_DIR / "theovencook.core")
+    core = packs.read_folder(packs.BUNDLED_DIR / "theovencook.living")
     meta = json.loads(core["pack.json"])
     core["pack.json"] = json.dumps({**meta, "release": meta.get("release", 1) + 1})
     assert (await _call(client, type="home_3d/packs/import", files=core))["success"]
@@ -137,7 +137,7 @@ async def test_the_bundled_library_lists_light(hass: HomeAssistant, hass_ws_clie
     await client.send_json_auto_id({"type": "home_3d/packs/list"})
     message = await client.receive_str()
     listed = json.loads(message)["result"]["packs"]
-    assert {p["id"] for p in listed} >= {"theovencook.core", "theovencook.ikea-uk"}
+    assert {p["id"] for p in listed} >= {"theovencook.living", "theovencook.ikea-uk"}
     assert not any("parts" in item or "symbol" in item for pack in listed for item in pack["items"])
     whole = sum(len(json.dumps(p["items"], separators=(",", ":"))) for p in hass.data[DOMAIN].offered_packs)
     assert len(message) < whole / 4, (len(message), whole)

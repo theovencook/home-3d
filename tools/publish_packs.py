@@ -21,10 +21,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 BUNDLED_DIR = ROOT / "custom_components" / "home_3d" / "bundled_packs"
+MOVES_FILE = ROOT / "custom_components" / "home_3d" / "moved_items.json"
 REPO = "theovencook/home-3d-packs"
 BRANCH = "main"
 # the pack whose licence text becomes the licence of the whole repository (else the first pack that has one)
-LICENCE_PACK = "theovencook.core"
+LICENCE_PACK = "theovencook.living"
 
 IKEA_PACK = "theovencook.ikea-uk"
 IKEA_NOTICE = (
@@ -165,8 +166,36 @@ def _copy_pack(folder: Path, destination: Path) -> None:
     shutil.copytree(folder, destination, ignore=shutil.ignore_patterns(".*", "__pycache__"))
 
 
-def publish(target: Path, source: Path = BUNDLED_DIR) -> list[str]:
-    """Copy the packs in `source` into the checkout `target`; returns the published pack ids.
+def _retire(target: Path, published: list[str], moves_file: Path) -> list[str]:
+    """Replace the folder of every pack that items moved out of (moved_items.json) and that is no longer published
+    by a README pointing at the packs its items went to; returns the retired pack ids."""
+    table = json.loads(moves_file.read_text(encoding="utf-8")).get("moved", {})
+    successors: dict[str, set[str]] = {}
+    for old, new in table.items():
+        old_pack, new_pack = old.split(":")[1], new.split(":")[1]
+        successors.setdefault(old_pack, set()).add(new_pack)
+    retired = []
+    for pack_id, new_packs in sorted(successors.items()):
+        if pack_id in published or not (target / pack_id).is_dir():
+            continue
+        shutil.rmtree(target / pack_id)
+        (target / pack_id).mkdir()
+        lines = [
+            f"# {pack_id} (retired)",
+            "",
+            "This pack was split into themed packs and retired. Its items kept their ids; Home 3D moves plans over by",
+            "itself. Install the packs you want instead:",
+            "",
+            *[f"- https://github.com/{REPO}/tree/{BRANCH}/{p}" for p in sorted(new_packs - {pack_id})],
+        ]
+        (target / pack_id / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+        retired.append(pack_id)
+    return retired
+
+
+def publish(target: Path, source: Path = BUNDLED_DIR, moves_file: Path | None = None) -> list[str]:
+    """Copy the packs in `source` into the checkout `target`; returns the published pack ids. With `moves_file`
+    (the moved-items table), packs that were retired are replaced by a README.
     Raises PublishError, with nothing written, if any pack fails the check."""
     checked = _checked(source)
     if not target.is_dir():
@@ -183,6 +212,8 @@ def publish(target: Path, source: Path = BUNDLED_DIR) -> list[str]:
     ]
     if licences:
         shutil.copyfile(licences[0], target / "LICENSE")
+    if moves_file:
+        _retire(target, [pack["id"] for pack in packs], moves_file)
     return [pack["id"] for pack in packs]
 
 
@@ -192,7 +223,7 @@ def main() -> None:
     parser.add_argument("--source", type=Path, default=BUNDLED_DIR, help="folder holding the pack folders")
     args = parser.parse_args()
     try:
-        published = publish(args.target, args.source)
+        published = publish(args.target, args.source, MOVES_FILE)
     except PublishError as err:
         sys.exit(str(err))
     print(f"published {len(published)} packs into {args.target}: {', '.join(published)}")

@@ -2,7 +2,7 @@
 
     python tools/check_pack_urls.py [REPO_URL] [PACK_ID ...]
 
-Defaults to https://github.com/theovencook/home-3d-packs and the packs theovencook.core and theovencook.ikea-uk.
+Defaults to https://github.com/theovencook/home-3d-packs and the packs theovencook.living and theovencook.ikea-uk.
 For each pack it fetches the folder URL (<repo>/tree/main/<pack id>) with custom_components/home_3d/pack_github.py,
 checks the files with the pack schema, and runs the update check against an older commit. It also checks that the
 repository URL alone is refused with the folder URLs. Exits with an error when anything fails. Run it where
@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from custom_components.home_3d import pack_github, packs
 
 DEFAULT_REPO = "https://github.com/theovencook/home-3d-packs"
-DEFAULT_PACKS = ["theovencook.core", "theovencook.ikea-uk"]
+DEFAULT_PACKS = ["theovencook.living", "theovencook.ikea-uk"]
 
 
 async def check(repo: str, pack_ids: list[str]) -> bool:
@@ -54,7 +54,9 @@ async def check(repo: str, pack_ids: list[str]) -> bool:
             ok = False
             print(f"FAIL  {repo}: installed although it holds several packs")
         except packs.PackError as err:
-            good = err.code == "not_a_pack" and all(pack_id in err.detail for pack_id in pack_ids)
+            # the refusal lists at most 10 folders (pack_github.py)
+            shown = sum(pack_id in err.detail for pack_id in pack_ids)
+            good = err.code == "not_a_pack" and shown >= min(10, len(pack_ids))
             ok = ok and good
             print(f"{'ok  ' if good else 'FAIL'}  {repo}: refused ({err.code}), folders listed")
     return ok

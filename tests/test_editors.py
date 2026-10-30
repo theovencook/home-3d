@@ -80,7 +80,7 @@ async def test_someone_not_on_the_list_is_refused_but_can_still_view(
     # what the view needs to show the house and control devices stays open
     for command in (
         {"type": "home_3d/packs/list"},
-        {"type": "home_3d/packs/items", "pack_id": "theovencook.core", "items": ["_simple_chair"]},
+        {"type": "home_3d/packs/items", "pack_id": "theovencook.living", "items": ["_simple_chair"]},
         {"type": "home_3d/building/subscribe"},
     ):
         await viewer.send_json_auto_id(command)

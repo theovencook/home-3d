@@ -64,7 +64,7 @@ test("a 3D printer's progress, chamber light and camera are watched, found on it
     reg[id] = { entity_id: id, device_id: "printer" };
     states[id] = { entity_id: id, state: "on", attributes };
   }
-  b.floors[0].furniture = [{ id: "p", type: "pack:theovencook.core:3d_printer", x: 1, z: 1, rotation: 0, w: 0.4, d: 0.4, h: 0.5, variant: null }];
+  b.floors[0].furniture = [{ id: "p", type: "pack:theovencook.makers:3d_printer", x: 1, z: 1, rotation: 0, w: 0.4, d: 0.4, h: 0.5, variant: null }];
   furniture.set("p", { entity: "sensor.p_status", power: null });
   const ids = watchedEntities(hass, b, { openings, furniture, heat: false, warnings: [], weatherEntityId: null });
   for (const id of ["sensor.p_status", "sensor.p_progress", "light.p_chamber", "camera.p_cam"]) assert.ok(ids.includes(id), id);
