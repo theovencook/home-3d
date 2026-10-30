@@ -29,18 +29,18 @@ Sizes of the AMS add-ons are approximate.
 | Bambu Lab AMS lite | Bambu Lab | add-on | 290 x 230 x 300 (approx.) | #102 | done | `bambu_ams_lite`. Not a printer (no live state).  |
 | Bambu Lab AMS 2 Pro | Bambu Lab | add-on | 360 x 270 x 260 (approx.) | #102 | done | `bambu_ams_2_pro`. Not a printer (no live state).  |
 | Bambu Lab AMS HT | Bambu Lab | add-on | 170 x 300 x 240 (approx.) | #102 | done | `bambu_ams_ht`. Not a printer (no live state). single-spool dryer |
-| Prusa Core One | Prusa | FDM | tbc | #103 | todo | |
-| Prusa Core One L | Prusa | FDM | tbc | #103 | todo | |
-| Prusa MK4S | Prusa | FDM | tbc | #103 | todo | |
-| Prusa MK4 | Prusa | FDM | tbc | #103 | todo | |
-| Prusa MK3S+ | Prusa | FDM | tbc | #103 | todo | |
-| Prusa MINI+ | Prusa | FDM | tbc | #103 | todo | |
-| Prusa XL (1 toolhead) | Prusa | FDM | tbc | #103 | todo | |
-| Prusa XL (5 toolheads) | Prusa | FDM | tbc | #103 | todo | |
-| Prusa Enclosure | Prusa | FDM | tbc | #103 | todo | |
-| Prusa MMU3 | Prusa | FDM | tbc | #103 | todo | |
-| Prusa SL1S Speed | Prusa | resin / wash+cure | tbc | #103 | todo | |
-| Prusa CW1S | Prusa | resin / wash+cure | tbc | #103 | todo | |
+| Prusa Core One | Prusa | FDM | 415 x 470 x 555 | #103 | done | `prusa_core_one_3d_printer` + camera variant. Enclosed CoreXY; 470 deep with the display. Prusa FAQ (help.prusa3d.com) |
+| Prusa Core One L | Prusa | FDM | 469 x 521 x 635 (unverified) | #103 | done | `prusa_core_one_l_3d_printer` + camera variant. Enclosed CoreXY. From the Prusa FAQ page, whose table was jumbled; check |
+| Prusa MK4S | Prusa | FDM | 500 x 550 x 400 | #103 | done | `prusa_mk4s_3d_printer` + camera, MMU3 variants. Prusa FAQ |
+| Prusa MK4 | Prusa | FDM | 500 x 550 x 400 | #103 | done | `prusa_mk4_3d_printer` + camera, MMU3 variants. Same frame as MK4S (Prusa FAQ) |
+| Prusa MK3S+ | Prusa | FDM | 500 x 550 x 400 (approx.) | #103 | done | `prusa_mk3s_plus_3d_printer` + camera, MMU3 variants. Prusa lists the MK3.9/MK4 family only; MK3S+ size assumed equal |
+| Prusa MINI+ | Prusa | FDM | 380 x 330 x 380 | #103 | done | `prusa_mini_3d_printer` + camera variant. Prusa FAQ |
+| Prusa XL (1 toolhead) | Prusa | FDM | 700 x 720 x 900 | #103 | done | `prusa_xl_3d_printer` + camera variant. Open frame; Prusa FAQ |
+| Prusa XL (5 toolheads) | Prusa | FDM | 700 x 720 x 900 | #103 | done | `prusa_xl_5_3d_printer` + camera variant. Same outer size as the single head (Prusa FAQ) |
+| Prusa Enclosure | Prusa | FDM | 530 x 715 x 545 (unverified axis order) | #103 | done | `prusa_enclosure_3d_printer` (holds an MK4S) + camera, MMU3 variants. Prusa product page; 715 deep incl. outside LCD |
+| Prusa MMU3 | Prusa | FDM | 330 x 220 x 150 (approx.) | #103 | done | `prusa_mmu3` add-on, not a printer (no live state). Height from Prusa's +150 mm note; footprint estimated. Printer + MMU3 variants are under each printer |
+| Prusa SL1S Speed | Prusa | resin / wash+cure | 225 x 237 x 400 | #103 | done | `prusa_sl1s_speed_resin_3d_printer`. Prusa FAQ / Tom's Hardware |
+| Prusa CW1S | Prusa | resin / wash+cure | 218 x 232 x 345 | #103 | done | `prusa_cw1s`. Not a printer (no `3d_printer` id). Prusa product page via retailer listings |
 | Creality Ender-3 V3 | Creality | FDM | tbc | #104 | todo | |
 | Creality Ender-3 V3 SE | Creality | FDM | tbc | #104 | todo | |
 | Creality Ender-3 V3 KE | Creality | FDM | tbc | #104 | todo | |
