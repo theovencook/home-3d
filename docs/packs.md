@@ -293,6 +293,7 @@ shapes needs a Home 3D version that knows them.
 - `vehicle`: a vehicle; offered for parking spots.
 - `hole`: stairs. When they reach the floor above, they cut the stairwell opening into that floor, like the built-in
   stairs; the steps rise from the front edge (+z) to the back.
+- `rack_frame`: the item is an empty rack (19 or 10 inch, its height in U); see [Racks](#racks).
 - `light`: the item is a lamp and is linked to a light (or a switch). The value says how the light spreads in the
   room: `ceiling`, `downlight`, `spot`, `panel`, `pendant`, `floor`, `uplight`, `table`, `wall`, `strip`,
   `bollard` or `garden`.
@@ -423,6 +424,60 @@ those cannot show, or for places without a wall or a roof to cut:
 | Up-and-over garage door | A garage door opening with the style **Up-and-over door**: it tilts up into a canopy with its cover | The door's look for a garage drawn from items |
 | Bay window | Draw the room's outline with the bay and put a window on each side | A bay that stands in front of a window opening |
 | Chimney breast, half-wall with cap | A free wall can be low, but has no cap | The breast (plain, with an open fireplace or a mantelpiece) and the capped half-wall |
+
+### Racks
+
+An item with a `rack_frame` is an empty 19-inch or 10-inch rack. Its `parts` draw the frame like any other item;
+the spec says how many rack units (U) it has and where they sit, so Home 3D can mark them and (in a later release)
+fit rack-mount gear into them. It places, moves and rotates like any other item.
+
+```json
+{
+  "id": "wall_cabinet_6u",
+  "name": {"en": "Wall cabinet 19-inch 6U"},
+  "size": [0.6, 0.45, 0.37],
+  "group": "network",
+  "mount": "wall",
+  "wall_y": 1.2,
+  "rack_frame": {"u": 6, "form": "wall_cabinet", "door": "glass"},
+  "parts": [
+    {"shape": "box", "x": 0, "z": -0.02, "w": 1, "d": 0.96, "y": 0, "h": 1, "color": "dark"},
+    {"shape": "box", "x": -0.389, "z": 0.35, "w": 0.026, "d": 0.033, "y": 0.14, "h": 0.72, "color": "metal"},
+    {"shape": "box", "x": 0.389, "z": 0.35, "w": 0.026, "d": 0.033, "y": 0.14, "h": 0.72, "color": "metal"}
+  ]
+}
+```
+
+| Field | Value | Default |
+| --- | --- | --- |
+| `u` | Height in rack units, a whole number from 1 to 60. 1U is 44.45 mm. | required |
+| `form` | `frame2` (2-post relay rack), `frame4` (4-post open frame), `cabinet` (4-post cabinet), `wall_frame` (wall-mounted frame) or `wall_cabinet` (wall-mounted cabinet), as NetBox names them. | required |
+| `width` | `19` or `10` (inches). | `19` |
+| `door` | A cabinet's front door: `none`, `glass`, `mesh` or `solid`. Only a cabinet has one. | `none` |
+| `start_u` | The number of the lowest U, 1 to 100. | `1` |
+| `desc` | `true`: the numbers run from the top down. | `false` |
+| `mount_depth` | Metres from the front rails to the rear rails, 0.05 to 1.5: the deepest gear that fits. | from the item's depth |
+| `bottom` | Metres from the item's bottom to the bottom of its lowest U (a plinth, castors), 0 to 2. | the U space centred in the item's height |
+
+The spec must fit its item, or the pack is refused (`invalid_content`):
+
+- the panels fit the width: 482.6 mm for 19 inches, 254 mm for 10 inches;
+- `bottom` plus `u` x 44.45 mm fit the height, and `mount_depth` the depth;
+- a `wall_frame` or `wall_cabinet` has `"mount": "wall"`; any other form stands on the floor or a desk (`floor` or
+  `surface`).
+
+A form, width or door this version does not know yet asks for an update (`needs_update`).
+
+The rails sit centred across the width, 450.85 mm apart for 19 inches (222.25 mm for 10 inches). Gear goes in from
+the front (+z): the front rails stand 80 mm behind a floor cabinet's front, 60 mm behind a wall cabinet's, 20 mm behind
+a wall frame's and at the front of an open frame; a 2-post rack holds gear on its posts in the middle of its depth. The
+3D view draws a tick on both front rails at every U (a longer one every fifth). A rack resized in the editor keeps its
+number of U and its U height; squeezed below its U space, the units shrink to fit.
+
+The bundled racks in `theovencook.it` (`network/rack_*.json`) are written by `node tools/rack-frames.ts` from the list
+in `frontend/src/rack-catalogue.ts`, which draws each frame from its spec (`rackFrameParts` in
+`frontend/src/rack-frame.ts`); a test fails while a file differs. To add a bundled rack, add it to that list and run
+the tool. Other packs may draw their racks any way they like.
 
 ## What the loader checks
 

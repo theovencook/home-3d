@@ -5,6 +5,7 @@
 
 import { builtinBase, techBase, ELECTRIC_FURNITURE, type Building, FURNITURE_SIZE, LIFT_SPOTS, outdoorGround, pointInPolygon, spotDepth, surfaceHeight, WALL_LAMP_Y, type Floor, type Furniture } from "./model.ts";
 import type { LampModel } from "./viewer/viewer3d.ts";
+import type { RackFrameSpec } from "./rack-frame.ts";
 
 /** A cooking zone of a pack cooktop: a thin disc lying on the item's top. */
 export function isCooktopZone(p: Pick<PackPart, "shape" | "y" | "h" | "axis">): boolean {
@@ -93,6 +94,8 @@ export interface PackItem {
   variant?: Record<string, string>;
   /** The IKEA product name (such as "KALLAX"): the library finds the item by it as well as by its readable name. */
   ikea?: string;
+  /** An empty rack that gear can be fitted into (#112; rules in rack-frame.ts). */
+  rack_frame?: RackFrameSpec;
 }
 
 /**

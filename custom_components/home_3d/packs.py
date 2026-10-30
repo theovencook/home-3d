@@ -151,7 +151,78 @@ SYMBOL_SCHEMA = vol.Any(
     vol.Schema({vol.Required("shape"): "line", "x1": _FRACTION, "z1": _FRACTION, "x2": _FRACTION, "z2": _FRACTION}),
 )
 
-ITEM_SCHEMA = vol.Schema(
+# A rack frame (#112): an empty 19" or 10" rack that rack-mount gear is fitted into later (docs/packs.md, "Racks").
+# The item's parts draw the frame; the spec says where its U positions are. frontend/src/rack-frame.ts reads the same
+# spec with the same rules (a test compares these lists).
+RACK_FORMS = ["frame2", "frame4", "cabinet", "wall_frame", "wall_cabinet"]
+RACK_WALL_FORMS = ["wall_frame", "wall_cabinet"]
+RACK_CABINET_FORMS = ["cabinet", "wall_cabinet"]
+RACK_DOORS = ["none", "glass", "mesh", "solid"]
+RACK_WIDTHS = [19, 10]
+# 1U in metres, and the width across a panel's mounting ears by rack width (19" = 482.6 mm, 10" = 254 mm)
+RACK_UNIT = 0.04445
+RACK_PANEL_WIDTH = {19: 0.4826, 10: 0.254}
+RACK_MAX_U = 60
+RACK_START_U_RANGE = (1, 100)
+RACK_MOUNT_DEPTH_RANGE = (0.05, 1.5)
+RACK_BOTTOM_RANGE = (0, 2)
+# measures may round to the millimetre
+_RACK_SLACK = 0.001
+
+
+def _whole(value: Any) -> int:
+    """A whole number (not true or false, which Python counts as numbers)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise vol.Invalid("expected a whole number")
+    return value
+
+
+RACK_FRAME_SCHEMA = vol.Schema(
+    {
+        # height in rack units
+        vol.Required("u"): vol.All(_whole, vol.Range(min=1, max=RACK_MAX_U)),
+        # 2-post, 4-post open frame, 4-post cabinet, wall-mounted frame, wall-mounted cabinet (NetBox's form factors)
+        vol.Required("form"): vol.In(RACK_FORMS),
+        # 19 or 10 inch (default 19)
+        vol.Optional("width"): vol.All(_whole, vol.In(RACK_WIDTHS)),
+        # a cabinet's front door (default none)
+        vol.Optional("door"): vol.In(RACK_DOORS),
+        # the number of the lowest U (default 1), and whether the numbers run from the top down (default false)
+        vol.Optional("start_u"): vol.All(_whole, vol.Range(min=RACK_START_U_RANGE[0], max=RACK_START_U_RANGE[1])),
+        vol.Optional("desc"): bool,
+        # metres from the front rails to the rear ones: the deepest gear that fits (default: from the item's depth)
+        vol.Optional("mount_depth"): _range(RACK_MOUNT_DEPTH_RANGE),
+        # metres from the item's bottom to the bottom of its lowest U (default: the U space centred in the height)
+        vol.Optional("bottom"): _range(RACK_BOTTOM_RANGE),
+    }
+)
+
+
+def _rack_fits(item: dict[str, Any]) -> dict[str, Any]:
+    """A rack frame fits its item: its panels across the width, its U space in the height, its mounting depth in the
+    depth; wall racks hang on a wall, the others stand; only cabinets have a door."""
+    frame = item.get("rack_frame")
+    if frame is None:
+        return item
+    width, depth, height = item["size"]
+    form = frame["form"]
+    if RACK_PANEL_WIDTH[frame.get("width", 19)] > width + _RACK_SLACK:
+        raise vol.Invalid("the rack's panels are wider than the item", path=["rack_frame", "width"])
+    if frame.get("mount_depth", 0) > depth + _RACK_SLACK:
+        raise vol.Invalid("the mounting depth is deeper than the item", path=["rack_frame", "mount_depth"])
+    space = frame["u"] * RACK_UNIT
+    bottom = frame.get("bottom", max(0.0, (height - space) / 2))
+    if bottom + space > height + _RACK_SLACK:
+        raise vol.Invalid(f"{frame['u']}U do not fit in the item's height", path=["rack_frame", "u"])
+    mount = item.get("mount", "floor")
+    if (form in RACK_WALL_FORMS) != (mount == "wall") or mount == "ceiling":
+        raise vol.Invalid('a wall rack has "mount": "wall", any other stands on the floor or a desk', path=["mount"])
+    if frame.get("door", "none") != "none" and form not in RACK_CABINET_FORMS:
+        raise vol.Invalid("only a cabinet has a door", path=["rack_frame", "door"])
+    return item
+
+
+_ITEM_FIELDS = vol.Schema(
     {
         vol.Required("id"): _ID,
         # names by language ("de", "en", …); "en" or the first one is the fallback
@@ -181,8 +252,11 @@ ITEM_SCHEMA = vol.Schema(
         vol.Optional("variant"): vol.All({vol.All(str, vol.Length(min=2, max=5)): _TEXT}, vol.Length(min=1, max=10)),
         # the IKEA product name ("KALLAX"): the library finds the item by it as well as by its readable name
         vol.Optional("ikea"): vol.All(str, vol.Length(min=1, max=40)),
+        # an empty rack that gear can be fitted into (#112)
+        vol.Optional("rack_frame"): RACK_FRAME_SCHEMA,
     }
 )
+ITEM_SCHEMA = vol.All(_ITEM_FIELDS, _rack_fits)
 
 
 class PackError(Exception):
@@ -269,7 +343,7 @@ RECIPE_FIELDS = ("parts", "symbol")
 # values the check fills in for a missing field (the schema's defaults): left out of the index, the frontend reads a
 # missing field the same way
 _DEFAULTS = {
-    str(key): key.default() for key in ITEM_SCHEMA.schema if isinstance(key, vol.Optional) and callable(key.default)
+    str(key): key.default() for key in _ITEM_FIELDS.schema if isinstance(key, vol.Optional) and callable(key.default)
 }
 
 
