@@ -69,3 +69,56 @@ test("someone who can't edit opens the sheet read-only and its changes are ignor
   ed.onRackChange(new CustomEvent("rack-change", { detail: { slots: [{ id: "s1", type: SWITCH, u: 3 }] } }));
   assert.equal(ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "rack").rack, undefined);
 });
+
+// ------------------------------------------------------------------------------------------------ #114
+
+const PACK114 = {
+  ...PACK,
+  items: [...PACK.items, ...["rack_wall_cabinet_6u", "rack_switch_8_half_1u", "rack_pdu_vertical_0u", "rack_shelf_2u", "unifi_cloud_gateway_ultra", "rack_floor_cabinet_42u"].map(read)],
+} as unknown as FurniturePack;
+const P = (id: string) => `pack:theovencook.it:${id}`;
+
+async function editor114() {
+  setPacks([PACK114]);
+  const ed = await makeEditor([square("r1", 0, 0, 4, 4)], [rack(), router()]);
+  ed.packs = [PACK114];
+  return ed;
+}
+
+test("the sheet offers half-width and 0U gear and a shelf, loose gear for shelves, and knows the rack's rear and lanes (#114)", async () => {
+  const ed = await editor114();
+  ed.selectItem("furniture", "rack");
+  ed.openRackSheet();
+  const props = ed.rackSheetProps();
+  const gear = props.gear.map((g: { type: string }) => g.type);
+  for (const id of ["rack_switch_8_half_1u", "rack_pdu_vertical_0u", "rack_shelf_2u"]) assert.ok(gear.includes(P(id)), id);
+  const loose = props.loose.map((g: { type: string }) => g.type);
+  assert.ok(loose.includes(P("unifi_cloud_gateway_ultra")), "a small gateway stands on a shelf");
+  assert.ok(!loose.includes(P("rack_wall_cabinet_6u")) && !loose.includes(P("rack_switch_24_1u")), "no racks, no rack gear");
+  assert.equal(props.space.rear, true);
+  assert.ok(props.space.lane > 0.05);
+  assert.deepEqual(props.looseOf(P("unifi_cloud_gateway_ultra"))?.size, [0.1418, 0.1276, 0.03]);
+  assert.equal(props.gearOf(P("rack_switch_8_half_1u"))?.watts, 10);
+});
+
+test("changing the rack frame keeps the gear, resizes the rack and warns about what no longer fits (#114)", async () => {
+  const ed = await editor114();
+  ed.selectItem("furniture", "rack");
+  const slots: RackSlot[] = [{ id: "s1", type: SWITCH, u: 2 }, { id: "s2", type: SWITCH, u: 8 }];
+  ed.openRackSheet();
+  ed.onRackChange(new CustomEvent("rack-change", { detail: { slots } }));
+  ed._rackSheet = null;
+  const form = () => flat(ed.renderFurnitureForm(ed.furnitureItem));
+  assert.match(form(), /rack_frame_pick|Rack frame/);
+  const choices = ed.rackFrameChoices(ed.furnitureItem).map((c: { type: string }) => c.type);
+  assert.ok(choices.includes(P("rack_wall_cabinet_6u")));
+  assert.ok(!choices.includes(P("rack_floor_cabinet_42u")), "a wall rack swaps for wall racks");
+  ed.changeRackFrame(P("rack_wall_cabinet_6u"));
+  const placed = ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "rack");
+  assert.equal(placed.type, P("rack_wall_cabinet_6u"));
+  assert.deepEqual([placed.w, placed.d, placed.h], [0.6, 0.45, 0.379]);
+  assert.deepEqual(placed.rack, { slots }, "the gear stays");
+  assert.match(form(), /doesn't fit|no longer fit/i);
+  ed.undo();
+  assert.equal(ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "rack").type, RACK);
+});

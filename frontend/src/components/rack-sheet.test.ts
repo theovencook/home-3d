@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { GearOf, RackSlot } from "../rack.ts";
+import type { GearOf, LooseOf, RackSlot } from "../rack.ts";
 
 const { RackSheet } = (await import("./rack-sheet.ts")) as unknown as { RackSheet: new () => Record<string, any> };
 
@@ -112,4 +112,101 @@ test("someone who can't edit sees the rack but changes nothing (#113)", () => {
   el.deleteSelected();
   assert.equal(changes.length, 0);
   assert.doesNotMatch(flat(el.render()), /rack_add/);
+});
+
+// ------------------------------------------------------------------------------------------------ #114
+
+const gear114: GearOf = (type) =>
+  ({
+    switch: { gear: { u: 1, width: "full", depth: "half", inch: 19 }, depth: 0.25, watts: 20 },
+    ups: { gear: { u: 2, width: "full", depth: "full", inch: 19 }, depth: 0.3, watts: 30 },
+    half: { gear: { u: 1, width: "half", depth: "half", inch: 19 }, depth: 0.2, watts: 10 },
+    pdu: { gear: { u: 0, width: "full", depth: "half", inch: 19 }, depth: 0.05, size: [0.05, 0.05, 0.13], electric: true },
+    shelf: { gear: { u: 2, width: "full", depth: "half", inch: 19, shelf: true }, depth: 0.3, size: [0.4826, 0.3, 0.004] },
+  } as Record<string, ReturnType<GearOf>>)[type] ?? null;
+const loose114: LooseOf = (type) => (type === "hub" ? { size: [0.09, 0.09, 0.026], watts: 3 } : null);
+const NAMES: Record<string, string> = { switch: "Switch", ups: "UPS", half: "Half", pdu: "PDU", shelf: "Shelf", hub: "Hub" };
+
+/** A 6U 4-post rack for the #114 rules; `t` shows its values so the totals can be read. */
+function sheet114(slots: RackSlot[] = []) {
+  const made = sheet(slots);
+  const el = made.el;
+  el.gearOf = gear114;
+  el.looseOf = loose114;
+  el.gear = ["switch", "ups", "half", "pdu", "shelf"].map((type) => ({ type, name: NAMES[type] }));
+  el.loose = [{ type: "hub", name: "Hub" }];
+  el.nameOf = (type: string) => NAMES[type] ?? "?";
+  el.t = (key: string, vars?: Record<string, string | number>) => (vars ? `${key}${JSON.stringify(vars)}` : key);
+  return made;
+}
+
+test("the head sums up U used and free and the estimated watts (#114)", () => {
+  const { el } = sheet114([{ id: "a", type: "switch", u: 1 }, { id: "b", type: "ups", u: 3 }, { id: "p", type: "pdu", u: 1 }]);
+  const out = flat(el.render());
+  assert.match(out, /rack_totals\{"used":3,"free":3\}/);
+  assert.match(out, /rack_watts_about\{"w":50\}/, "the PDU has no watts: the total is at least 50 W");
+});
+
+test("the front / rear toggle shows a face's gear and puts new gear on that face (#114)", () => {
+  const { el, changes } = sheet114([{ id: "a", type: "switch", u: 1 }, { id: "b", type: "ups", u: 3 }]);
+  assert.match(flat(el.render()), /rack_face_rear/);
+  el.setFace("rear");
+  const out = flat(el.render());
+  assert.doesNotMatch(out, /data-slot=a/, "the front switch is not on the rear");
+  assert.match(out, /data-slot=b/, "the full-depth UPS is on both faces");
+  el.pickGear("switch");
+  el.tapUnit(1);
+  assert.equal(changes.at(-1)!.find((s) => s.type === "switch" && s.id !== "a")!.face, "rear");
+  // a 2-post rack has no toggle
+  el.space = { ...el.space, rear: false };
+  el.setFace("front");
+  assert.doesNotMatch(flat(el.render()), /rack_face_rear/);
+});
+
+test("half-width gear goes in the column under the pointer, and the chosen half moves across (#114)", () => {
+  const { el, changes } = sheet114();
+  el.pickGear("half");
+  el.tapUnit(2, 0.8);
+  const right = changes.at(-1)![0];
+  assert.equal(right.col, 1);
+  el.pickGear("half");
+  el.hoverUnit(2, 0.7);
+  assert.equal(el.ghost.ok, false, "the right half is taken");
+  el.tapUnit(2, 0.2);
+  assert.equal(changes.at(-1)!.length, 2, "the left half is free");
+  el.tapSlot(right.id);
+  el.nudgeCol(-1);
+  assert.equal(changes.length, 2, "the left half is taken now: refused");
+  assert.match(flat(el.render()), /grid-column/);
+});
+
+test("0U gear goes in a side lane, left or right (#114)", () => {
+  const { el, changes } = sheet114([{ id: "a", type: "switch", u: 1 }]);
+  el.pickGear("pdu");
+  el.tapLane(1, 1);
+  assert.deepEqual(changes.at(-1)!.find((s) => s.type === "pdu"), { id: changes.at(-1)!.find((s) => s.type === "pdu")!.id, type: "pdu", u: 1, col: 1 });
+  assert.match(flat(el.render()), /fp3d-rack-lane/);
+});
+
+test("a chosen shelf takes loose gear; loose gear can be chosen and deleted (#114)", () => {
+  const { el, changes } = sheet114([{ id: "sh", type: "shelf", u: 2 }]);
+  el.tapSlot("sh");
+  assert.match(flat(el.render()), /rack_on_shelf/);
+  el.putOnShelf("hub");
+  const hub = changes.at(-1)!.find((s) => s.type === "hub")!;
+  assert.equal(hub.on, "sh");
+  assert.equal(hub.u, 2);
+  assert.match(flat(el.render()), new RegExp(`data-slot=${hub.id}`));
+  el.tapSlot(hub.id);
+  el.deleteSelected();
+  assert.deepEqual(changes.at(-1)!.map((s) => s.id), ["sh"]);
+});
+
+test("gear that no longer fits (the rack frame changed) is listed and shown red (#114)", () => {
+  const { el } = sheet114([{ id: "a", type: "switch", u: 1 }, { id: "b", type: "ups", u: 5 }]);
+  el.space = { ...el.space, u: 4 };
+  el.labels = [1, 2, 3, 4];
+  const out = flat(el.render());
+  assert.match(out, /rack_misfits\{"n":1\}/);
+  assert.match(out, /UPS: rack_outside/);
 });

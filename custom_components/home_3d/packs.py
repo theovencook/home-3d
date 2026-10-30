@@ -203,6 +203,17 @@ RACK_FRAME_SCHEMA = vol.Schema(
 RACK_GEAR_WIDTHS = ["full", "half", "third"]
 RACK_GEAR_DEPTHS = ["half", "full"]
 
+# an item's estimated watts (#114), at most this
+MAX_WATTS = 100000
+
+
+def _watts(value: Any) -> float:
+    """A number of watts (not true or false, which Python counts as numbers)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise vol.Invalid("expected a number of watts")
+    return value
+
+
 RACK_GEAR_SCHEMA = vol.Schema(
     {
         # height in rack units (0 = a vertical PDU in the side lane)
@@ -213,8 +224,17 @@ RACK_GEAR_SCHEMA = vol.Schema(
         vol.Optional("depth"): vol.In(RACK_GEAR_DEPTHS),
         # the rack standard it is made for: 19 or 10 inch (default 19)
         vol.Optional("inch"): vol.All(_whole, vol.In(RACK_WIDTHS)),
+        # a shelf: loose gear stands on its top (#114)
+        vol.Optional("shelf"): bool,
     }
 )
+
+
+def _shelf_has_room(gear: dict[str, Any]) -> dict[str, Any]:
+    """A shelf takes at least 1U (loose gear stands in its U space)."""
+    if gear.get("shelf") and gear["u"] < 1:
+        raise vol.Invalid("a shelf takes at least 1U", path=["shelf"])
+    return gear
 
 
 def _rack_fits(item: dict[str, Any]) -> dict[str, Any]:
@@ -274,7 +294,9 @@ _ITEM_FIELDS = vol.Schema(
         # an empty rack that gear can be fitted into (#112)
         vol.Optional("rack_frame"): RACK_FRAME_SCHEMA,
         # rack-mount gear that fits into a rack (#113)
-        vol.Optional("rack"): RACK_GEAR_SCHEMA,
+        vol.Optional("rack"): vol.All(RACK_GEAR_SCHEMA, _shelf_has_room),
+        # its estimated typical power draw: a rack's total adds up its gear's (#114)
+        vol.Optional("watts"): vol.All(_watts, vol.Range(min=0, max=MAX_WATTS)),
     }
 )
 ITEM_SCHEMA = vol.All(_ITEM_FIELDS, _rack_fits)

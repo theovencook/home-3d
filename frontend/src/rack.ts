@@ -7,7 +7,7 @@
 // optional fields on RackSlot; every rule here treats a slot as taking the full width on both faces until then.
 
 import type { PackItem } from "./packs.ts";
-import { RACK_MAX_U, RACK_WIDTHS, type RackLayout, type RackProblem, type RackWidth } from "./rack-frame.ts";
+import { RACK_MAX_U, RACK_OPENING, RACK_UNIT, RACK_WIDTHS, type RackLayout, type RackProblem, type RackWidth } from "./rack-frame.ts";
 
 /** How much of the rack's width the gear takes: all of it, or half / a third on a shared U (#114). */
 export const RACK_GEAR_WIDTHS = ["full", "half", "third"] as const;
@@ -27,6 +27,8 @@ export interface RackGearSpec {
   depth?: RackGearDepth;
   /** The rack standard it is made for: 19 (default) or 10 inch. */
   inch?: RackWidth;
+  /** A shelf (#114): loose gear (a hub, a mini PC) stands on its top. At least 1U. */
+  shelf?: boolean;
 }
 
 /** A checked gear spec with its defaults. */
@@ -35,6 +37,8 @@ export interface RackGear {
   width: RackGearWidth;
   depth: RackGearDepth;
   inch: RackWidth;
+  /** A shelf (readRackGear always fills it; optional so older lookups stay valid). */
+  shelf?: boolean;
 }
 
 /** One piece of gear in a rack (on the placed rack's `rack.slots`). */
@@ -47,7 +51,23 @@ export interface RackSlot {
   u: number;
   /** Its own name ("Core switch"); none = the item's name. */
   name?: string | null;
+  /**
+   * Which column of its U it takes (#114): half-width gear 0 (left) or 1, third-width 0 to 2, full width only 0. For
+   * 0U gear the side lane: 0 left, 1 right. None = 0.
+   */
+  col?: number;
+  /** The face it is mounted on (#114): front (none) or rear. Full-depth gear takes both whichever it names. */
+  face?: RackFace | null;
+  /**
+   * Loose gear (#114: any item without a rack spec, a hub, a mini PC) stands on a shelf: the shelf slot's id. Its `u`
+   * is the shelf's (kept in step when the shelf moves); loose gear on one shelf stands side by side in slot order.
+   */
+  on?: string | null;
 }
+
+/** The faces of a 4-post rack (#114). */
+export const RACK_FACES = ["front", "rear"] as const;
+export type RackFace = (typeof RACK_FACES)[number];
 
 /** What a placed rack carries (Furniture.rack). */
 export interface RackContents {
@@ -59,13 +79,22 @@ export interface RackSpace {
   u: number;
   width: RackWidth;
   mountDepth: number;
+  /** Whether it has rear rails for gear on the rear face (a 2-post rack has none; none = it has). */
+  rear?: boolean;
+  /** How wide the side lanes for 0U gear are, beside the rails (metres; none = wide enough). */
+  lane?: number;
 }
 
 /** The gear spec and the depth (metres) of a slot's type; null when the type is no rack-mount gear. */
-export type GearOf = (type: string) => { gear: RackGear; depth: number } | null;
+export type GearOf = (type: string) => { gear: RackGear; depth: number; size?: readonly [number, number, number]; watts?: number | null; electric?: boolean } | null;
 
 /** Why gear can't go where it was put. */
-export type RackRefusal = "overlap" | "outside" | "too_deep" | "wrong_width" | "not_gear" | "full" | "missing";
+export type RackRefusal = "overlap" | "outside" | "too_deep" | "wrong_width" | "not_gear" | "full" | "missing" | "no_rear" | "no_lane" | "no_shelf" | "shelf_full" | "too_tall" | "not_loose";
+
+/** The size (metres) and estimated watts of an item that can stand on a shelf; null when it can't (a rack, unknown). */
+export type LooseOf = (type: string) => { size: readonly [number, number, number]; watts?: number | null; electric?: boolean } | null;
+
+const noLoose: LooseOf = () => null;
 
 export interface RackResult {
   ok: boolean;
@@ -80,7 +109,7 @@ export interface RackResult {
 
 /** Measures may round to the millimetre. */
 const SLACK = 0.001;
-const FIELDS = new Set(["u", "width", "depth", "inch"]);
+const FIELDS = new Set(["u", "width", "depth", "inch", "shelf"]);
 
 /** The rules of a gear spec (the backend's RACK_GEAR_SCHEMA); none for an item without one. */
 export function rackGearProblems(item: Pick<PackItem, "rack">): RackProblem[] {
@@ -94,6 +123,8 @@ export function rackGearProblems(item: Pick<PackItem, "rack">): RackProblem[] {
   if (g.width !== undefined && !(RACK_GEAR_WIDTHS as readonly unknown[]).includes(g.width)) out.push({ field: "width", why: `one of ${RACK_GEAR_WIDTHS.join(", ")}` });
   if (g.depth !== undefined && !(RACK_GEAR_DEPTHS as readonly unknown[]).includes(g.depth)) out.push({ field: "depth", why: `one of ${RACK_GEAR_DEPTHS.join(", ")}` });
   if (g.inch !== undefined && !(RACK_WIDTHS as readonly unknown[]).includes(g.inch)) out.push({ field: "inch", why: "19 or 10 (inches)" });
+  if (g.shelf !== undefined && typeof g.shelf !== "boolean") out.push({ field: "shelf", why: "true or false" });
+  else if (g.shelf && g.u === 0) out.push({ field: "shelf", why: "a shelf takes at least 1U" });
   return out;
 }
 
@@ -101,7 +132,7 @@ export function rackGearProblems(item: Pick<PackItem, "rack">): RackProblem[] {
 export function readRackGear(item: Pick<PackItem, "rack"> | undefined): RackGear | null {
   const g = item?.rack;
   if (!g || rackGearProblems(item).length) return null;
-  return { u: g.u, width: g.width ?? "full", depth: g.depth ?? "half", inch: g.inch ?? 19 };
+  return { u: g.u, width: g.width ?? "full", depth: g.depth ?? "half", inch: g.inch ?? 19, shelf: g.shelf ?? false };
 }
 
 /** The rail positions gear of `u` units takes from position `at` up. */
@@ -109,60 +140,196 @@ function span(at: number, u: number): number[] {
   return Array.from({ length: Math.max(1, u) }, (_, i) => at + i);
 }
 
+/** How many U a 0U item standing in a side lane is long: its height in U, rounded up (a hair short counts as full). */
+export function laneUnits(height: number): number {
+  return Math.max(1, Math.ceil(height / RACK_UNIT - 0.02));
+}
+
+/** How many U gear takes: its `u`, or for 0U gear its length in the side lane. */
+function gearUnits(of: NonNullable<ReturnType<GearOf>>): number {
+  return of.gear.u >= 1 ? of.gear.u : laneUnits(of.size?.[2] ?? RACK_UNIT);
+}
+
 /** The positions a slot takes (a slot whose type is unknown keeps its one U, so it blocks no more than that). */
 export function slotUnits(s: RackSlot, gearOf: GearOf): number[] {
-  return span(s.u, gearOf(s.type)?.gear.u ?? 1);
+  const of = gearOf(s.type);
+  return span(s.u, of ? gearUnits(of) : 1);
+}
+
+/** How many columns one U has for gear of a width. */
+export const RACK_COLUMNS: Record<RackGearWidth, number> = { full: 1, half: 2, third: 3 };
+/** 0U gear: a lane down the left (col 0) and one down the right (col 1) of the rails. */
+const LANES = 2;
+
+/** The part of the rack's width (0 = left, 1 = right) a slot takes. */
+function across(width: RackGearWidth, col: number): [number, number] {
+  const n = RACK_COLUMNS[width];
+  return [col / n, (col + 1) / n];
+}
+
+/** Do two slots of the same kind (U gear or 0U gear) take some of the same width or lane? */
+function sideBySide(a: RackGear, ac: number, b: RackGear, bc: number): boolean {
+  if (a.u < 1) return ac === bc;
+  const [a0, a1] = across(a.width, ac);
+  const [b0, b1] = across(b.width, bc);
+  return a0 < b1 - 1e-9 && b0 < a1 - 1e-9;
+}
+
+/** The faces a slot takes: both for full-depth gear, else the one it is on. */
+export function slotFaces(s: Pick<RackSlot, "face">, gear: RackGear): RackFace[] {
+  return gear.depth === "full" ? ["front", "rear"] : [s.face === "rear" ? "rear" : "front"];
 }
 
 /** Can `s` go into the rack beside `others` (its own old place not counted)? */
-export function checkSlot(space: RackSpace, others: readonly RackSlot[], s: RackSlot, gearOf: GearOf): Omit<RackResult, "slots"> {
+export function checkSlot(space: RackSpace, others: readonly RackSlot[], s: RackSlot, gearOf: GearOf, looseOf: LooseOf = noLoose): Omit<RackResult, "slots"> {
+  if (s.on) return checkLoose(space, others, s, gearOf, looseOf);
   const of = gearOf(s.type);
-  const units = span(s.u, of?.gear.u ?? 1);
+  const n = of ? gearUnits(of) : 1;
+  const units = span(s.u, n);
   const no = (why: RackRefusal, clash: string[] = []) => ({ ok: false, why, clash, units });
-  if (!of || of.gear.u < 1) return no("not_gear");
-  if (of.gear.inch !== space.width) return no("wrong_width");
-  if (!Number.isInteger(s.u) || s.u < 1 || s.u + of.gear.u - 1 > space.u) return no("outside");
+  if (!of) return no("not_gear");
+  const g = of.gear;
+  const lane = g.u < 1;
+  if (g.inch !== space.width) return no("wrong_width");
+  const col = s.col ?? 0;
+  if (!Number.isInteger(s.u) || s.u < 1 || s.u + n - 1 > space.u) return no("outside");
+  if (!Number.isInteger(col) || col < 0 || col >= (lane ? LANES : RACK_COLUMNS[g.width])) return no("outside");
+  if (s.face === "rear" && space.rear === false) return no("no_rear");
+  if (lane && (of.size?.[0] ?? 0) > (space.lane ?? Infinity) + SLACK) return no("no_lane");
   if (of.depth > space.mountDepth + SLACK) return no("too_deep");
   const taken = new Set(units);
-  const clash = others.filter((o) => o.id !== s.id && slotUnits(o, gearOf).some((u) => taken.has(u))).map((o) => o.id);
+  const faces = slotFaces(s, g);
+  const hits = (o: RackSlot): boolean => {
+    if (o.on) return false;
+    const oo = gearOf(o.type);
+    if (oo) {
+      // 0U gear stands beside the U space: it only meets other 0U gear
+      if (oo.gear.u < 1 !== lane) return false;
+      if (!sideBySide(g, col, oo.gear, o.col ?? 0)) return false;
+      if (!slotFaces(o, oo.gear).some((f) => faces.includes(f))) return false;
+    } else if (lane) return false;
+    return slotUnits(o, gearOf).some((u) => taken.has(u));
+  };
+  const clash = others.filter((o) => o.id !== s.id && hits(o)).map((o) => o.id);
   if (clash.length) return no("overlap", clash);
   return { ok: true, clash: [], units };
 }
 
+/** A shelf's tray: loose gear stands this high above the bottom of the shelf's lowest U (the rest is its room). */
+export const SHELF_TRAY = 0.004;
+
+/** How much room a shelf gives loose gear: across (the opening between the rails, by its width), deep, high. */
+export function shelfRoom(space: Pick<RackSpace, "width">, of: NonNullable<ReturnType<GearOf>>): { w: number; d: number; h: number } {
+  return { w: RACK_OPENING[space.width] / RACK_COLUMNS[of.gear.width], d: of.depth, h: of.gear.u * RACK_UNIT - SHELF_TRAY };
+}
+
+/** Can loose gear `s` stand on the shelf it names? */
+function checkLoose(space: RackSpace, others: readonly RackSlot[], s: RackSlot, gearOf: GearOf, looseOf: LooseOf): Omit<RackResult, "slots"> {
+  const shelf = others.find((o) => o.id === s.on && !o.on);
+  const sh = shelf && gearOf(shelf.type);
+  const units = shelf ? slotUnits(shelf, gearOf) : [s.u];
+  const no = (why: RackRefusal, clash: string[] = []) => ({ ok: false, why, clash, units });
+  if (!shelf || !sh?.gear.shelf) return no("no_shelf");
+  const item = looseOf(s.type);
+  if (!item) return no("not_loose");
+  const room = shelfRoom(space, sh);
+  if (item.size[2] > room.h + SLACK) return no("too_tall");
+  if (item.size[1] > room.d + SLACK) return no("too_deep");
+  const beside = others.filter((o) => o.on === shelf.id && o.id !== s.id);
+  const used = beside.reduce((sum, o) => sum + (looseOf(o.type)?.size[0] ?? 0), 0);
+  if (used + item.size[0] > room.w + SLACK) return no("shelf_full", beside.map((o) => o.id));
+  return { ok: true, clash: [], units };
+}
+
+/** Bottom first; loose gear right after its shelf, in the order it stands. */
 const byU = (a: RackSlot, b: RackSlot): number => a.u - b.u;
 
-/** Put new gear into the rack (refused when it breaks a rule). */
-export function addSlot(space: RackSpace, slots: RackSlot[], s: RackSlot, gearOf: GearOf): RackResult {
-  if (slots.length >= RACK_MAX_SLOTS) return { ok: false, why: "full", clash: [], units: [], slots };
-  const check = checkSlot(space, slots, s, gearOf);
-  return check.ok ? { ...check, slots: [...slots.filter((o) => o.id !== s.id), s].sort(byU) } : { ...check, slots };
+/** Put new gear into the rack, or a slot anew where it says (refused when it breaks a rule). */
+export function addSlot(space: RackSpace, slots: RackSlot[], s: RackSlot, gearOf: GearOf, looseOf: LooseOf = noLoose): RackResult {
+  const replaces = slots.some((o) => o.id === s.id);
+  if (!replaces && slots.length >= RACK_MAX_SLOTS) return { ok: false, why: "full", clash: [], units: [], slots };
+  const check = checkSlot(space, slots, s, gearOf, looseOf);
+  if (!check.ok) return { ...check, slots };
+  const placed = s.on ? { ...s, u: slots.find((o) => o.id === s.on)!.u } : s;
+  return { ...check, slots: [...slots.filter((o) => o.id !== s.id), placed].sort(byU) };
 }
 
-/** Move gear to another lowest position (refused when it breaks a rule there). */
-export function moveSlot(space: RackSpace, slots: RackSlot[], id: string, u: number, gearOf: GearOf): RackResult {
+/** Move gear to another lowest position (refused when it breaks a rule there); a shelf takes its loose gear along. */
+export function moveSlot(space: RackSpace, slots: RackSlot[], id: string, u: number, gearOf: GearOf, looseOf: LooseOf = noLoose): RackResult {
   const old = slots.find((s) => s.id === id);
   if (!old) return { ok: false, why: "missing", clash: [], units: [], slots };
+  if (old.on) return { ok: true, clash: [], units: [old.u], slots };
   const moved = { ...old, u };
-  const check = checkSlot(space, slots, moved, gearOf);
-  return check.ok ? { ...check, slots: slots.map((s) => (s.id === id ? moved : s)).sort(byU) } : { ...check, slots };
+  const check = checkSlot(space, slots, moved, gearOf, looseOf);
+  return check.ok ? { ...check, slots: slots.map((s) => (s.id === id ? moved : s.on === id ? { ...s, u } : s)).sort(byU) } : { ...check, slots };
 }
 
-/** Take gear out of the rack. */
+/** Take gear out of the rack (a shelf with what stands on it). */
 export function removeSlot(slots: RackSlot[], id: string): RackSlot[] {
-  return slots.filter((s) => s.id !== id);
+  return slots.filter((s) => s.id !== id && s.on !== id);
 }
 
 /** The room a laid-out rack offers gear. */
-export function rackSpace(frame: { u: number; width: RackWidth }, at: Pick<RackLayout, "mountDepth">): RackSpace {
-  return { u: frame.u, width: frame.width, mountDepth: at.mountDepth };
+export function rackSpace(frame: { u: number; width: RackWidth }, at: Pick<RackLayout, "mountDepth" | "rear" | "lane">): RackSpace {
+  return { u: frame.u, width: frame.width, mountDepth: at.mountDepth, rear: at.rear !== null, lane: at.lane };
+}
+
+/** What a rack's sheet sums up (#114). */
+export interface RackTotals {
+  /** Rail positions taken on either face, and the rest. */
+  used: number;
+  free: number;
+  /** Rail positions taken on the front and on the rear face (full-depth gear counts on both). */
+  front: number;
+  rear: number;
+  /** Estimated watts of all its gear (shelves' loose gear and 0U PDUs too), from the packs' `watts`. */
+  watts: number;
+  /** How many electric pieces have no watts in their pack (the total is then a low estimate). */
+  unknown: number;
+}
+
+/** U used / free and estimated watts of a rack's gear. */
+export function rackTotals(space: Pick<RackSpace, "u">, slots: readonly RackSlot[], gearOf: GearOf, looseOf: LooseOf = noLoose): RackTotals {
+  const front = new Set<number>();
+  const rear = new Set<number>();
+  let watts = 0;
+  let unknown = 0;
+  for (const s of slots) {
+    const of = s.on ? looseOf(s.type) : gearOf(s.type);
+    if (!of) continue;
+    if (typeof of.watts === "number") watts += of.watts;
+    else if (of.electric) unknown++;
+    if (s.on || !("gear" in of) || of.gear.u < 1) continue;
+    const faces = slotFaces(s, of.gear);
+    for (const u of slotUnits(s, gearOf)) {
+      if (u < 1 || u > space.u) continue;
+      if (faces.includes("front")) front.add(u);
+      if (faces.includes("rear")) rear.add(u);
+    }
+  }
+  const used = new Set([...front, ...rear]).size;
+  return { used, free: Math.max(0, space.u - used), front: front.size, rear: rear.size, watts: Math.round(watts), unknown };
+}
+
+/** An item's estimated watts (pack field `watts`), null when the pack gives none. */
+function wattsOf(item: Pick<PackItem, "watts">): number | null {
+  return typeof item.watts === "number" && item.watts >= 0 ? item.watts : null;
 }
 
 /** The gear lookup over pack items (`itemOf` = packItem in the app): a type is gear when its item has a valid `rack` spec. */
-export function packGearOf(itemOf: (type: string) => Pick<PackItem, "rack" | "size"> | undefined): GearOf {
+export function packGearOf(itemOf: (type: string) => Pick<PackItem, "rack" | "size" | "watts" | "electric"> | undefined): GearOf {
   return (type) => {
     const item = itemOf(type);
     const gear = readRackGear(item);
-    return item && gear ? { gear, depth: item.size[1] } : null;
+    return item && gear ? { gear, depth: item.size[1], size: item.size, watts: wattsOf(item), electric: !!item.electric } : null;
+  };
+}
+
+/** The loose-gear lookup over pack items: anything but a rack can stand on a shelf (#114). */
+export function packLooseOf(itemOf: (type: string) => Pick<PackItem, "rack_frame" | "size" | "watts" | "electric"> | undefined): LooseOf {
+  return (type) => {
+    const item = itemOf(type);
+    return item && !item.rack_frame ? { size: item.size, watts: wattsOf(item), electric: !!item.electric } : null;
   };
 }
 
@@ -180,25 +347,85 @@ export interface RackPiece {
   w: number;
   d: number;
   h: number;
+  /** Turned round, its front to the rack's back (#114: gear on the rear face). */
+  back: boolean;
 }
 
 /**
- * Where a rack's gear is drawn: each slot's item on the front rails at its U, centred in its U space, no wider than
- * the panels and no deeper than the rails allow. Slots whose type is no gear (its recipe missing) or that no longer
- * fit the rack are left out (#114 warns about them).
+ * Where a rack's gear is drawn (#113, #114): each slot's item at its U, in its column (half / third width), its front
+ * panel just proud of the front rails (rear gear: of the rear rails, turned round), centred in its U space, no wider
+ * than its column and no deeper than the rails allow. 0U gear stands in a side lane from its lowest U; a shelf sits
+ * at the bottom of its U and its loose gear stands on it side by side from the left, fronts to the shelf's front.
+ * Slots whose type is no gear (its recipe missing) or that no longer fit the rack are left out (rackMisfits names them).
  */
 export function rackContents(at: RackLayout, slots: readonly RackSlot[], itemOf: (type: string) => PackItem | undefined): RackPiece[] {
   const out: RackPiece[] = [];
+  const shelves = new Map<string, { piece: RackPiece; x0: number; x1: number; top: number }>();
   for (const slot of slots) {
+    if (slot.on) continue;
     const item = itemOf(slot.type);
     const gear = readRackGear(item);
-    if (!item || !gear || gear.u < 1) continue;
+    if (!item || !gear) continue;
+    const back = slot.face === "rear" && gear.depth !== "full";
+    if (back && at.rear === null) continue;
     const low = at.units[slot.u - 1];
-    if (!low || !at.units[slot.u + gear.u - 2]) continue;
+    if (!low) continue;
+    const col = slot.col ?? 0;
+    if (gear.u < 1) {
+      // 0U: in the lane, from its lowest U up to the rack's top at most
+      if (col > 1) continue;
+      const w = Math.min(item.size[0], at.lane);
+      const h = Math.min(item.size[2], at.top - low.y0);
+      const d = Math.min(item.size[1], at.mountDepth);
+      const z = slot.face === "rear" ? (at.rear ?? at.front - at.mountDepth) + d / 2 : at.front - d / 2;
+      out.push({ slot, item, x: (col === 0 ? -1 : 1) * (at.panel / 2 + at.lane / 2), z, y: low.y0, w, d, h, back: slot.face === "rear" });
+      continue;
+    }
+    if (!at.units[slot.u + gear.u - 2]) continue;
+    const n = RACK_COLUMNS[gear.width];
+    if (col >= n) continue;
     const room = gear.u * at.unit;
     const h = Math.min(item.size[2], room);
     const d = Math.min(item.size[1], at.mountDepth + PANEL_PROUD);
-    out.push({ slot, item, x: 0, z: at.front + PANEL_PROUD - d / 2, y: low.y0 + (room - h) / 2, w: Math.min(item.size[0], at.panel), d, h });
+    const z = back ? at.rear! - PANEL_PROUD + d / 2 : at.front + PANEL_PROUD - d / 2;
+    const x = -at.panel / 2 + ((col + 0.5) * at.panel) / n;
+    const piece: RackPiece = { slot, item, x, z, y: gear.shelf ? low.y0 : low.y0 + (room - h) / 2, w: Math.min(item.size[0], at.panel / n), d, h, back };
+    out.push(piece);
+    if (gear.shelf) {
+      const half = at.opening / n / 2;
+      shelves.set(slot.id, { piece, x0: x - half, x1: x + half, top: low.y0 + room });
+    }
+  }
+  for (const slot of slots) {
+    const shelf = slot.on ? shelves.get(slot.on) : undefined;
+    const item = shelf && itemOf(slot.type);
+    if (!shelf || !item || item.rack_frame) continue;
+    const s = shelf.piece;
+    const w = Math.min(item.size[0], shelf.x1 - shelf.x0);
+    const d = Math.min(item.size[1], s.d);
+    const h = Math.min(item.size[2], Math.max(0, shelf.top - s.y - SHELF_TRAY));
+    // fronts to the shelf's front (its back for a rear shelf), side by side from the left
+    const z = s.back ? s.z - s.d / 2 + d / 2 : s.z + s.d / 2 - d / 2;
+    out.push({ slot, item, x: shelf.x0 + w / 2, z, y: s.y + SHELF_TRAY, w, d, h, back: s.back });
+    shelf.x0 += w;
+  }
+  return out;
+}
+
+/** A piece of gear that does not fit where it is (#114: the rack frame changed, a pack update made it bigger). */
+export interface RackMisfit {
+  id: string;
+  why: RackRefusal;
+  clash: string[];
+}
+
+/** Every slot that breaks a rule where it is, in the rack's order; slots whose type is unknown are left alone. */
+export function rackMisfits(space: RackSpace, slots: readonly RackSlot[], gearOf: GearOf, looseOf: LooseOf = noLoose): RackMisfit[] {
+  const out: RackMisfit[] = [];
+  for (const s of slots) {
+    if (!(s.on ? looseOf(s.type) : gearOf(s.type))) continue;
+    const c = checkSlot(space, slots, s, gearOf, looseOf);
+    if (!c.ok) out.push({ id: s.id, why: c.why!, clash: c.clash });
   }
   return out;
 }

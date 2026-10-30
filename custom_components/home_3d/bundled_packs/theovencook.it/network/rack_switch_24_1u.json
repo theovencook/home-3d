@@ -9,6 +9,7 @@
   "family": "rack_switch",
   "variant": {"en": "24-port 1U"},
   "electric": true,
+  "watts": 20,
   "rack": {"u": 1},
   "parts": [
     {"shape": "box", "x": 0, "z": 0, "w": 0.9159, "d": 1, "y": 0, "h": 1, "color": "dark", "edges": "faint"},
