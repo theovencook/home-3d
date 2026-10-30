@@ -72,11 +72,75 @@ export class GeoBuffer {
     if (this.tile) this.tile.push(...tile, ...tile, ...tile);
   }
 
+  /** Triangles in the buffer, the appended copies included. */
   get count(): number {
-    return this.p.length / 9;
+    return this.sealedTris + this.p.length / 9;
+  }
+
+  /**
+   * A copy of the triangles from `fromTri` on (#131: an item's triangles, kept for the next build). Like every index
+   * into `p`, `fromTri` counts from the last `append` (the arrays hold only what was drawn since).
+   */
+  slice(fromTri: number): GeoSlice {
+    const v = fromTri * 3;
+    const part = (a: number[] | null, n: number) => (a ? Float32Array.from(a.slice(v * n)) : null);
+    return { p: part(this.p, 3)!, c: part(this.c, 3)!, f: part(this.f, 1)!, m: part(this.m, 1), uv: part(this.uv, 2), tile: part(this.tile, 2) };
+  }
+
+  /**
+   * Adds triangles copied with `slice` from a buffer made the same way (uvs, tiles). They are not copied into the
+   * arrays: what was drawn so far is put aside with them and `p`, `c` ... start empty again; geometry() joins it all.
+   */
+  append(s: GeoSlice): void {
+    this.seal();
+    this.sealed.push(s);
+    this.sealedTris += s.p.length / 9;
+  }
+
+  private sealed: GeoSlice[] = [];
+  private sealedTris = 0;
+
+  private seal(): void {
+    if (!this.p.length) return;
+    const tail = this.slice(0);
+    this.sealed.push(tail);
+    this.sealedTris += this.p.length / 9;
+    this.p = [];
+    this.c = [];
+    this.f = [];
+    this.m = null;
+    if (this.uv) this.uv = [];
+    if (this.tile) this.tile = [];
+  }
+
+  private joined(): BufferGeometry {
+    this.seal();
+    const parts = this.sealed;
+    const join = (pick: (s: GeoSlice) => Float32Array | null, n: number, fill: number): Float32Array => {
+      const out = new Float32Array(this.sealedTris * 3 * n);
+      let at = 0;
+      for (const s of parts) {
+        const a = pick(s);
+        const len = (s.p.length / 3) * n;
+        if (a) out.set(a, at);
+        else if (fill) out.fill(fill, at, at + len);
+        at += len;
+      }
+      return out;
+    };
+    const g = new BufferGeometry();
+    g.setAttribute("position", new Float32BufferAttribute(join((s) => s.p, 3, 0), 3));
+    g.setAttribute("color", new Float32BufferAttribute(join((s) => s.c, 3, 0), 3));
+    g.setAttribute("fold", new Float32BufferAttribute(join((s) => s.f, 1, 0), 1));
+    if (this.uv) g.setAttribute("uv", new Float32BufferAttribute(join((s) => s.uv, 2, 0.5), 2));
+    if (this.tile) g.setAttribute("tile", new Float32BufferAttribute(join((s) => s.tile, 2, 0), 2));
+    if (parts.some((s) => s.m)) g.setAttribute("fp3dMat", new Float32BufferAttribute(join((s) => s.m, 1, 0), 1));
+    g.computeBoundingSphere();
+    return g;
   }
 
   geometry(): BufferGeometry {
+    if (this.sealed.length) return this.joined();
     const g = new BufferGeometry();
     g.setAttribute("position", new Float32BufferAttribute(this.p, 3));
     g.setAttribute("color", new Float32BufferAttribute(this.c, 3));
@@ -89,10 +153,43 @@ export class GeoBuffer {
   }
 }
 
+/** Triangles copied out of a GeoBuffer (#131), as 32-bit floats like the geometry they end up in. */
+export interface GeoSlice {
+  p: Float32Array;
+  c: Float32Array;
+  f: Float32Array;
+  m: Float32Array | null;
+  uv: Float32Array | null;
+  tile: Float32Array | null;
+}
+
+/** Line segments copied out of a LineBuffer (#131). */
+export interface LineSlice {
+  p: Float32Array;
+  c: Float32Array;
+  f: Float32Array;
+}
+
 export class LineBuffer {
   p: number[] = [];
   c: number[] = [];
   f: number[] = [];
+
+  /** A copy of the segments from vertex `fromVertex` on, counted from the last `append` (#131). */
+  slice(fromVertex: number): LineSlice {
+    return { p: Float32Array.from(this.p.slice(fromVertex * 3)), c: Float32Array.from(this.c.slice(fromVertex * 3)), f: Float32Array.from(this.f.slice(fromVertex)) };
+  }
+
+  /** Adds segments copied with `slice`; like GeoBuffer.append, the arrays start empty again after it. */
+  append(s: LineSlice): void {
+    if (this.p.length) this.sealed.push(this.slice(0));
+    this.p = [];
+    this.c = [];
+    this.f = [];
+    this.sealed.push(s);
+  }
+
+  private sealed: LineSlice[] = [];
 
   seg(a: number[], b: number[], color: Color = EDGE_TOP, fold = ALWAYS): void {
     this.p.push(...a, ...b);
@@ -113,6 +210,22 @@ export class LineBuffer {
 
   geometry(): BufferGeometry {
     const g = new BufferGeometry();
+    if (this.sealed.length) {
+      if (this.p.length) this.append({ p: new Float32Array(0), c: new Float32Array(0), f: new Float32Array(0) });
+      const join = (pick: (s: LineSlice) => Float32Array) => {
+        const out = new Float32Array(this.sealed.reduce((n, s) => n + pick(s).length, 0));
+        let at = 0;
+        for (const s of this.sealed) {
+          out.set(pick(s), at);
+          at += pick(s).length;
+        }
+        return out;
+      };
+      g.setAttribute("position", new Float32BufferAttribute(join((s) => s.p), 3));
+      g.setAttribute("color", new Float32BufferAttribute(join((s) => s.c), 3));
+      g.setAttribute("fold", new Float32BufferAttribute(join((s) => s.f), 1));
+      return g;
+    }
     g.setAttribute("position", new Float32BufferAttribute(this.p, 3));
     g.setAttribute("color", new Float32BufferAttribute(this.c, 3));
     g.setAttribute("fold", new Float32BufferAttribute(this.f, 1));

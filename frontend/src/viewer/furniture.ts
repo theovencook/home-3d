@@ -462,6 +462,11 @@ export function setLightLook(on: boolean): void {
   lightLook = on;
 }
 
+/** What else than the item and the packs changes how an item is drawn (#131: a cached model is only reused under the same). */
+export function furnitureLook(): string {
+  return `${lightLook ? "light" : "dark"}|${householdCountry()}`;
+}
+
 /**
  * The theme's palette with an item's own role colours (#12): toned into the neon look like a waste bin (darker sides,
  * a lighter top), in full in the light looks. Roles without an override keep the theme's colour.

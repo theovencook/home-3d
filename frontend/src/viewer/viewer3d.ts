@@ -56,14 +56,14 @@ import { placeWallPlate } from "../geometry/walls.ts";
 import { buildEarth } from "./earth.ts";
 import { clampIntoRoom } from "../geometry/snap.ts";
 import { activeSections, roofRider, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
-import { buildFloorGeometry, buildRackGear, SLAB, stairHoleParts, type FloorGeometry, type RackGearAt } from "./build.ts";
+import { buildFloorGeometry, buildRackGear, keepFurnitureOf, SLAB, stairHoleParts, type FloorGeometry, type RackGearAt } from "./build.ts";
 import { rackDetailWanted } from "./rack-lod.ts";
 import { OrbitControls, type OrbitView } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { CameraProjections, PROJECTION_LAYER, type ProjectionSurface, type ProjectorPose } from "./projection.ts";
 import type { RoleColours } from "../colour-roles.ts";
 import type { RoleMaterials } from "../role-materials.ts";
-import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, pushRackLeds, setLightLook, hasOwnColours } from "./furniture.ts";
+import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, pushRackLeds, setLightLook, hasOwnColours, furnitureLook } from "./furniture.ts";
 import { pushPipeTube, type PipeTube } from "./pipes.ts";
 // the walk through the house at eye height (lives with the viewer it drives)
 export { FloorMap, WalkCamera, type WalkState } from "./walk.ts";
@@ -72,8 +72,9 @@ export { FloorMap, WalkCamera, type WalkState } from "./walk.ts";
 export const funLib = { Group, Mesh, MeshBasicMaterial, CanvasTexture, Color, PlaneGeometry, BufferGeometry: Geometry, Float32BufferAttribute, DoubleSide };
 
 export type { PipeTube };
-import { groundUnder, isCooktopZone, mountBase, packItem, packMotion, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "../packs.ts";
+import { groundUnder, isCooktopZone, mountBase, packItem, packMotion, packsVersion, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "../packs.ts";
 import { withVehicles } from "../parking.ts";
+import { floorKeys } from "./floor-keys.ts";
 import { buildRoof, type RoofGeometry, type RoofWindowState } from "./roof.ts";
 import { SunFx } from "./sun-fx.ts";
 import { Realism } from "./realism.ts";
@@ -499,6 +500,8 @@ interface RackView {
 
 interface FloorView {
   floor: Floor;
+  /** What the floor was drawn from (floor-keys.ts, #131): a new plan with the same key keeps this view. */
+  key: string;
   /** Position in the stack, ordered by elevation. */
   rank: number;
   group: Group;
@@ -697,6 +700,8 @@ export class FloorplanViewer {
   private lastWake = performance.now();
   /** The tints and selection last written into each floor's colours (applyHighlight skips floors that stay). */
   private highlighted = new WeakMap<object, string>();
+  /** Per floor: its light surface as last built and what from (kept while rooms, walls and openings stay, #131). */
+  private lightSurfaces = new Map<string, { key: string; surface: LightSurface }>();
   private decorWas = false;
   /** A frame asked for by a module's decoration (pets, ghost, fish), at the decorative pace. */
   private decorTimer: ReturnType<typeof setTimeout> | undefined;
@@ -982,7 +987,8 @@ export class FloorplanViewer {
     // this bundle's own copy of the ground (outdoor areas, earth around cellars) and of the plan's recipes (#2)
     setTerrain(building);
     setPlanRecipes(building.recipes);
-    this.rebuild();
+    // an edit changes one floor, mostly: the others stay as they are (#131)
+    this.rebuild(true);
     if (first) this.fit(0);
     this.invalidate();
   }
@@ -2357,11 +2363,13 @@ export class FloorplanViewer {
     }
   }
 
-  private clear(): void {
+  /** Takes the floors down, except those in `keep` (they stay in the scene with their labels, #131). */
+  private clear(keep: ReadonlyMap<string, FloorView> = new Map()): void {
     // robots share one geometry: keep them out of the floor groups while those are disposed
-    for (const r of this.robots.values()) r.group.removeFromParent();
-    for (const f of this.fans.values()) f.group.removeFromParent();
+    for (const r of this.robots.values()) if (!keep.has(r.info.floorId)) r.group.removeFromParent();
+    for (const f of this.fans.values()) if (!keep.has(f.floorId)) f.group.removeFromParent();
     for (const fv of this.floors) {
+      if (keep.get(fv.floor.id) === fv) continue;
       for (const pic of fv.screenPics.values()) {
         (pic.mesh.material as Material).dispose();
         pic.texture?.dispose();
@@ -2378,8 +2386,11 @@ export class FloorplanViewer {
     }
     this.floors = [];
     this.floorMap = new Map();
-    // device pins survive a rebuild; only floor and room labels are recreated
-    for (const el of [...this.labels.children]) if (!(el as HTMLElement).dataset.entity) el.remove();
+    // device pins survive a rebuild; only floor and room labels are recreated (a kept floor keeps its own)
+    for (const el of [...this.labels.children]) {
+      const data = (el as HTMLElement).dataset;
+      if (!data.entity && !(data.floor && keep.has(data.floor))) el.remove();
+    }
   }
 
   private makeDevicePin(entityId: string): HTMLButtonElement {
@@ -2446,10 +2457,17 @@ export class FloorplanViewer {
   /** Light surface of a floor (rebuilt with the floor plan and when the detail level changes). */
   private buildLightSurface(fv: FloorView): void {
     const cell = this.lowQuality ? 0.5 : 0.25;
-    const surface = buildLightSurface(fv.floor, fv.geo.walls2d, fv.geo.wallBuckets, fv.geo.openings, cell, fv.geo.holes, fv.geo.roofUnder);
+    // the surface follows rooms, walls and openings, not the furniture: an item moved keeps it (#131)
+    const f = fv.floor;
+    const key = JSON.stringify([cell, f.elevation, f.height, f.cut_height, f.rooms, f.walls, f.openings, fv.geo.holes, this.building?.settings.roof ?? null, this.building?.settings.wall_exterior, this.building?.settings.wall_interior]);
+    const had = this.lightSurfaces.get(f.id);
+    const raw = had?.key === key ? had.surface : buildLightSurface(fv.floor, fv.geo.walls2d, fv.geo.wallBuckets, fv.geo.openings, cell, fv.geo.holes, fv.geo.roofUnder);
+    this.lightSurfaces.set(f.id, { key, surface: raw });
     // rooms joined by "no wall" form one zone: a lamp lights the open neighbour as if it stood in the same room
     const zones = lightZonesOf(fv.floor, fv.geo.openRooms);
     fv.lightZones = zones.some((z, i) => z !== i) ? zones : null;
+    // the zones are written into a copy: the kept surface stays as built
+    const surface = fv.lightZones ? { ...raw, room: raw.room.slice(), doors: raw.doors.map((d) => ({ ...d })), blockers: raw.blockers.map((w) => ({ ...w })) } : raw;
     if (fv.lightZones) {
       for (let i = 0; i < surface.room.length; i++) {
         const r = surface.room[i];
@@ -2705,14 +2723,28 @@ export class FloorplanViewer {
     };
   }
 
-  private rebuild(): void {
+  /**
+   * Draws the building. `incremental` (a new plan, #131): a floor whose key (floor-keys.ts) stayed keeps its meshes,
+   * labels and lights; only the others are built again. Anything else (packs, parked cars, a look) builds every floor.
+   */
+  private rebuild(incremental = false): void {
     const previous = new Map(this.floors.map((f) => [f.floor.id, { y: f.y, o: f.o }]));
     const previousOpenings = new Map(this.floors.map((f) => [f.floor.id, f.openings]));
-    this.clear();
     const b = this.building;
+    const keys = b ? floorKeys(b, `${packsVersion()}|${furnitureLook()}|${this.parkedSig}|${this.lowQuality}`) : new Map<string, string>();
+    const keep = new Map<string, FloorView>();
+    if (incremental) for (const fv of this.floors) if (keys.get(fv.floor.id) === fv.key) keep.set(fv.floor.id, fv);
+    this.clear(keep);
     if (!b) return;
     const ordered = [...b.floors].sort((p, q) => p.elevation - q.elevation);
     for (const floor of b.floors) {
+      const kept = keep.get(floor.id);
+      if (kept) {
+        kept.floor = floor;
+        kept.rank = ordered.indexOf(floor);
+        this.floors.push(kept);
+        continue;
+      }
       // solar fields in the garden stand on the ground floor, wall fields hang on their floor's walls
       const fields = b.settings.roof?.solar ?? [];
       const garden = groundFloor(b)?.id === floor.id ? fields.filter((f) => f.face === GROUND).map((field) => ({ field, face: groundFace(b, field) })) : [];
@@ -2894,6 +2926,7 @@ export class FloorplanViewer {
       }
       this.floors.push({
         floor,
+        key: keys.get(floor.id) ?? "",
         rank: ordered.indexOf(floor),
         group,
         geo,
@@ -2964,7 +2997,12 @@ export class FloorplanViewer {
       });
     }
     this.floorMap = new Map(this.floors.map((f) => [f.floor.id, f]));
-    for (const fv of this.floors) {
+    // what was kept for floors that are gone (another home) goes with them
+    for (const id of this.lightSurfaces.keys()) if (!this.floorMap.has(id)) this.lightSurfaces.delete(id);
+    keepFurnitureOf(this.floorMap.keys());
+    // a kept floor still has its lamps, lights, doors and cables (the device updates keep them current)
+    const built = this.floors.filter((fv) => keep.get(fv.floor.id) !== fv);
+    for (const fv of built) {
       this.buildFridges(fv);
       this.buildRackLeds(fv);
       this.buildPipes(fv);
@@ -2972,7 +3010,7 @@ export class FloorplanViewer {
     }
     this.labelsDirty = true;
     if (this.floorId && !b.floors.some((f) => f.id === this.floorId)) this.floorId = null;
-    for (const fv of this.floors) {
+    for (const fv of built) {
       this.buildLamps(fv);
       this.buildScreens(fv);
       const prev = previousOpenings.get(fv.floor.id);
