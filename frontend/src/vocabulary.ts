@@ -135,6 +135,14 @@ export const SYNONYMS: Synonyms[] = [
   { words: ["access point", "wi-fi", "wifi"], kinds: ["network"] },
   { words: ["network switch", "ethernet switch"], kinds: ["network"] },
   { words: ["trolley", "cart"] },
+  // everyday words people type (#78)
+  { words: ["single bed", "twin bed", "one person bed"], kinds: ["bed", "kids"] },
+  { words: ["double bed", "queen bed", "king bed"], kinds: ["bed"] },
+  { words: ["car", "automobile", "motor car"], kinds: ["vehicle"] },
+  { words: ["bicycle", "bike", "cycle", "push bike"], kinds: ["vehicle"] },
+  { words: ["tv", "television", "telly"], kinds: ["media"] },
+  { words: ["plant", "houseplant", "house plant", "pot plant", "indoor plant"], kinds: ["plant"] },
+  { words: ["smoke detector", "smoke alarm", "smoke sensor", "fire alarm", "fire detector"], kinds: ["tech"] },
 ];
 
 /** Letters only, no accents (the search's own folding). */

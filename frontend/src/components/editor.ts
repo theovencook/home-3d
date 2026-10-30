@@ -166,7 +166,8 @@ import "./entity-picker.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
 import { fetchBackup, fetchPackUpdates, getEditors, restoreBackup, setEditors, updatePlacedItems, type BackupFile, type BackupHome } from "../api.ts";
 import { libraryUpdates } from "../pack-updates.ts";
-import { lastAdmin, pickEditor, type EditorUser } from "../editors.ts";
+import { lastAdmin, pickEditor, pickTabletUser, type EditorUser } from "../editors.ts";
+import { TABLET_IDLE_DEFAULT } from "../kiosk.ts";
 import { load3d } from "../load3d.ts";
 import { ensureRecipes, packTypesIn } from "../pack-recipes.ts";
 import "./ask-dialog.ts";
@@ -12645,7 +12646,30 @@ export class Fp3dEditor extends LitElement {
       ${list?.custom
         ? html`<div class="fp3d-actions fp3d-wide"><button class="fp3d-btn" @click=${() => void answer(setEditors(hass, null))}>${this.t("editors_reset")}</button></div>`
         : nothing}
+      ${list ? this.renderTabletUsers(list.users) : nothing}
     </div>`;
+  }
+
+  /** Wall tablets (#92): users whose panel opens locked (no editor, no view settings), and its idle return. */
+  private renderTabletUsers(users: EditorUser[]) {
+    const ticked = this._doc.settings.tablet_users ?? [];
+    return html`<h4 class="fp3d-wide">${this.t("tablet_users")}</h4>
+      <p class="fp3d-sub fp3d-wide">${this.t("tablet_users_hint")}</p>
+      ${users.map(
+        (u) => html`<label class="fp3d-check fp3d-wide"
+          ><input type="checkbox" .checked=${ticked.includes(u.id)} @change=${(e: Event) => this.setTabletUser(u.id, (e.target as HTMLInputElement).checked)} />
+          ${u.name || u.id}</label
+        >`,
+      )}
+      ${this.num(this.t("tablet_idle"), this._doc.settings.tablet_idle ?? TABLET_IDLE_DEFAULT, (v) => this.setTabletIdle(v), 10, 0)}`;
+  }
+
+  private setTabletUser(id: string, on: boolean): void {
+    this.change((d) => (d.settings.tablet_users = pickTabletUser(d.settings.tablet_users, id, on)));
+  }
+
+  private setTabletIdle(seconds: number): void {
+    this.change((d) => (d.settings.tablet_idle = Math.min(86400, Math.max(0, Math.round(seconds)))));
   }
 
   private voicePipes: { id: string; name: string; stt: boolean }[] | null = null;

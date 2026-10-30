@@ -4,7 +4,7 @@
  */
 import { isStatusSensor } from "./devices.ts";
 import { isLamp } from "./model.ts";
-import { isCameraItem, isPackHeater, isPackSensor, isPackType, isRobotVacuum, isThermostatItem, packDisplay, packMotion } from "./packs.ts";
+import { isCameraItem, isEntityMarker, isPackHeater, isPackSensor, isPackType, isRobotVacuum, isThermostatItem, packDisplay, packMotion } from "./packs.ts";
 import { isPrinter } from "./printer.ts";
 import { isMediaFurniture } from "./devices.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -20,6 +20,8 @@ export function isTvLike(type: string): boolean {
 
 /** Whether the item's main link may be this entity. */
 export function mainLinkAccepts(hass: HomeAssistant, type: string, id: string): boolean {
+  // a generic sensor or switch marker stands for any device: any entity (#79)
+  if (isEntityMarker(type)) return true;
   // a lamp can follow a light or a plain switch (e.g. a relay that switches the ceiling light)
   if (isLamp(type)) return /^(light|switch|input_boolean)\./.test(id);
   // a media player, or the smart plug an older TV is switched with; a roll-down screen also its motor's cover (#511)

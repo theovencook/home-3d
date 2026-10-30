@@ -28,6 +28,7 @@ import { directorOnHere } from "./director.ts";
 import { loadVoice, micProbeDone, screenName, voiceOnHere } from "./load-voice.ts";
 import type { ClockPos } from "./card-config.ts";
 import { TimeTravel } from "./load-timetravel.ts";
+import { IdleClock, tabletIdleSeconds, tabletMode } from "./kiosk.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
 import type { Feature } from "./features.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
@@ -37,6 +38,9 @@ import { UndoHistory } from "./undo-history.ts";
 const CLOCK_ARROW: Record<Exclude<ClockPos, "off">, string> = { tl: "↖", tr: "↗", bl: "↙", br: "↘" };
 
 type Mode = "view" | "editor" | "extensions";
+
+/** What counts as someone using a wall tablet: its idle return waits again (#92). */
+const TOUCHES = ["pointerdown", "keydown", "wheel"] as const;
 
 /** View preferences belong to the device (a wall tablet wants other settings than a desktop). */
 const prefs = {
@@ -99,6 +103,7 @@ export class Floorplan3dPanel extends LitElement {
     _micProbe: { state: true },
     _voiceHere: { state: true },
     _screen: { state: true },
+    _tablet: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -160,6 +165,11 @@ export class Floorplan3dPanel extends LitElement {
   /** Voice control (the microphone button) on this device. */
   private declare _voiceHere: boolean;
   private declare _screen: string;
+  /**
+   * Locked tablet mode (#92, wall displays): only the home name, the floors and the View menu; no Editor, no view
+   * settings, and back to the whole house after a quiet spell. "?tablet" in the address or a tick for this HA user.
+   */
+  private declare _tablet: boolean;
 
   private readonly data = new BuildingController(this);
   /** The editor's undo history (#66): kept here, as the editor element goes whenever another tab opens. */
@@ -169,6 +179,11 @@ export class Floorplan3dPanel extends LitElement {
   private readonly tt = new TimeTravel(this);
   /** A ?tt= link was looked at (it starts the time travel once). */
   private ttLinked = false;
+  /** The tablet's return to the whole house after no one touched it for a while (#92). */
+  private readonly idle = new IdleClock(() => this.returnHome());
+  private readonly onTouch = () => this.idle.touch();
+  private idleSeconds = 0;
+  private touchesHeard = false;
 
 
   constructor() {
@@ -220,6 +235,7 @@ export class Floorplan3dPanel extends LitElement {
     this._micProbe = false;
     this._voiceHere = voiceOnHere();
     this._screen = screenName();
+    this._tablet = false;
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -234,10 +250,54 @@ export class Floorplan3dPanel extends LitElement {
     // a language beyond German and English: its texts are fetched first, then everything renders
     if (changed.has("hass") && this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language).then(() => this.requestUpdate());
     const b = this.data.building;
+    this.followTablet(b);
     if (b && this._floorId && !b.floors.some((f) => f.id === this._floorId)) {
       this._floorId = null;
       this._roomId = null;
     }
+  }
+
+  /** Tablet mode on or off as the address and this user's tick say; on, the view is all there is (#92). */
+  private followTablet(b: Building | null): void {
+    const search = location.search;
+    const on = tabletMode(search, this.hass?.user?.id, b?.settings.tablet_users);
+    if (on && this._mode !== "view") this.setMode("view");
+    if (on !== this._tablet) {
+      this._tablet = on;
+      this._optsOpen = false;
+    }
+    // armed again only when the spell changes: every hass update renders, and must not restart the wait
+    const seconds = on ? tabletIdleSeconds(search, b?.settings.tablet_idle) : 0;
+    if (seconds !== this.idleSeconds || on !== this.touchesHeard) {
+      this.listenTouches(on);
+      this.idleSeconds = seconds;
+      this.idle.arm(seconds);
+    }
+  }
+
+  /** Touches, keys and the wheel restart the tablet's wait; heard only while tablet mode is on. */
+  private listenTouches(on: boolean): void {
+    if (on === this.touchesHeard) return;
+    this.touchesHeard = on;
+    for (const type of TOUCHES) {
+      if (on) window.addEventListener(type, this.onTouch, { capture: true, passive: true });
+      else window.removeEventListener(type, this.onTouch, { capture: true });
+    }
+    if (!on) {
+      this.idle.stop();
+      this.idleSeconds = 0;
+    }
+  }
+
+  /** The tablet after its quiet spell: the whole house again, menus shut, the camera at the start view (#92). */
+  private returnHome(): void {
+    this.tt.stop();
+    this._roomId = null;
+    this._floorId = null;
+    this._showOpen = false;
+    this._optsOpen = false;
+    this._cameraWall = false;
+    this.view3d()?.resetView();
   }
 
   /** On the editors list (#7): sees the Editor and Extensions tabs. Everyone else views and controls devices. */
@@ -246,7 +306,7 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   private setMode(mode: Mode): void {
-    if (mode === this._mode) return;
+    if (mode === this._mode || (this._tablet && mode !== "view")) return;
     this.tt.stop();
     this._editorError = null;
     this._optsOpen = false;
@@ -493,7 +553,7 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   private view3d() {
-    return this.renderRoot.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; proHint(f: Feature): void; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; openSettings(): void }) | null;
+    return this.renderRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; proHint(f: Feature): void; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; openSettings(): void }) | null;
   }
 
   /** A follow toggle in the view settings (#87): Home Assistant's theme or the sun; it names the look it shows now. */
@@ -568,6 +628,7 @@ export class Floorplan3dPanel extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     window.removeEventListener("keydown", this.onKey);
+    this.listenTouches(false);
     this.tt.stop();
     this.locateLab?.();
     this.locateLab = null;
@@ -580,7 +641,7 @@ export class Floorplan3dPanel extends LitElement {
     return html`
       <div class="fp3d-app ${this._clean && this._mode === "view" ? "fp3d-clean" : ""}" style=${this.accentStyle()}>
         ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.hass} .building=${b} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
-        ${this._clean && this._mode === "view" ? nothing : html`<header class="fp3d-header">
+        ${this._clean && this._mode === "view" ? nothing : this._tablet ? this.renderTabletHeader() : html`<header class="fp3d-header">
           <ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>
           <h1>Home 3D</h1>
           ${this.canEdit && this.hass ? html`<fp3d-home-switcher
@@ -790,7 +851,7 @@ export class Floorplan3dPanel extends LitElement {
             : nothing}
           <span class="fp3d-version" title=${this.t("version_hint", { backend: this.data.backendVersion ?? "?" })}>v${this.data.frontendVersion}</span>
         </header>`}
-        ${this._clean && this._mode === "view" ? nothing : this.renderNotices()}
+        ${this._clean && this._mode === "view" ? this.renderCleanNotice() : this.renderNotices()}
         ${this.data.error && !b ? html`<p class="fp3d-message">${this.t("load_error")}: ${this.data.error}</p>` : nothing}
         ${!b && !this.data.error ? html`<p class="fp3d-message">${this.t("loading")}</p>` : nothing}
         ${b
@@ -802,6 +863,11 @@ export class Floorplan3dPanel extends LitElement {
           : nothing}
       </div>
     `;
+  }
+
+  /** Tablet mode (#92): the home's name and nothing to mis-tap (no menu, switcher, tabs, view settings, version). */
+  private renderTabletHeader() {
+    return html`<header class="fp3d-header fp3d-tablet-head"><h1>${this.data.homeName || "Home 3D"}</h1></header>`;
   }
 
   /** Restart hint, save errors and unsaved edits from an earlier session. */
@@ -818,21 +884,16 @@ export class Floorplan3dPanel extends LitElement {
   private renderNotices() {
     const d = this.data;
     const notices = [];
-    if (d.needsRestart) {
-      // an old bundle in the browser or the companion app: a reload helps, a restart does not
-      if (d.versionGap === "frontend")
-        notices.push(
-          html`<div class="fp3d-notice fp3d-notice-warn">
-            ${this.t("needs_reload", { frontend: d.frontendVersion, backend: d.backendVersion ?? "?" })}
-            <button class="fp3d-btn" @click=${() => location.reload()}>${this.t("reload_page")}</button>
-          </div>`,
-        );
-      else notices.push(html`<div class="fp3d-notice fp3d-notice-warn">${d.backendVersion ? this.t("needs_restart", { version: d.backendVersion, frontend: d.frontendVersion }) : this.t("needs_restart_old")}</div>`);
+    // an old bundle in the browser or the companion app: a reload helps, a restart does not
+    const update = this.renderUpdateNotice();
+    if (update) notices.push(update);
+    if (d.needsRestart && d.versionGap !== "frontend") {
+      notices.push(html`<div class="fp3d-notice fp3d-notice-warn">${d.backendVersion ? this.t("needs_restart", { version: d.backendVersion, frontend: d.frontendVersion }) : this.t("needs_restart_old")}</div>`);
     }
     if (d.saveState === "error" && d.saveError) {
       notices.push(html`<div class="fp3d-notice fp3d-notice-error">${this.t("save_failed_detail", { error: d.saveError })}</div>`);
     }
-    if (d.draft && this.canEdit) {
+    if (d.draft && this.canEdit && !this._tablet) {
       const at = new Date(d.draft.savedAt).toLocaleString(this.hass?.language);
       notices.push(
         html`<div class="fp3d-notice">
@@ -843,6 +904,29 @@ export class Floorplan3dPanel extends LitElement {
       );
     }
     return notices.length ? html`<div class="fp3d-notices">${notices}</div>` : nothing;
+  }
+
+  /** The clean view shows only the update notice (#60). */
+  private renderCleanNotice() {
+    const update = this.renderUpdateNotice();
+    return update ? html`<div class="fp3d-notices">${update}</div>` : nothing;
+  }
+
+  /**
+   * "Updated, tap to reload" (#60): this page runs older JavaScript than Home Assistant serves now (a new version, or
+   * the same one rebuilt). It never reloads by itself; the button waits for edits still being saved and does nothing
+   * while the last save failed, so no edit is lost. Shown in the clean view too: wall tablets are never reloaded.
+   */
+  private renderUpdateNotice() {
+    const d = this.data;
+    const state = d.updateNotice;
+    if (!state) return null;
+    // a new version names both (with the companion-app hint); the same version rebuilt just says it was updated
+    const text = d.backendVersion !== d.frontendVersion ? this.t("needs_reload", { frontend: d.frontendVersion, backend: d.backendVersion ?? "?" }) : this.t("update_ready");
+    return html`<div class="fp3d-notice fp3d-notice-warn fp3d-notice-update" role="status">
+      <span>${text}${state === "ready" ? nothing : html` ${this.t(state === "saving" ? "update_saving" : "update_unsaved")}`}</span>
+      <button class="fp3d-btn" ?disabled=${state === "unsaved"} @click=${() => void d.reloadWhenSaved()}>${this.t("reload_page")}</button>
+    </div>`;
   }
 
   /**
@@ -923,8 +1007,13 @@ export class Floorplan3dPanel extends LitElement {
     const floor = b.floors.find((f) => f.id === this._floorId);
     const roomFloors = floor ? [floor] : b.floors;
     const tt = this.tt.active;
+    // 3D or the 2D plan: beside the View menu, inside it on a tablet (#92)
+    const planView = html`<div class="fp3d-seg" role="group" aria-label=${this.t("plan_view")}>
+      <button aria-pressed=${!this._plan2d} @click=${() => this.setPlan2d(false)}>${this.t("view_3d")}</button>
+      <button aria-pressed=${this._plan2d} @click=${() => this.setPlan2d(true)}>${this.t("view_2d")}</button>
+    </div>`;
     return html`
-      ${this._clean ? nothing : html`<nav class="fp3d-nav ${this._navWrap ? "fp3d-nav-wrap" : ""}" @wheel=${this.onNavWheel}>
+      ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : html`<nav class="fp3d-nav ${this._navWrap ? "fp3d-nav-wrap" : ""}" @wheel=${this.onNavWheel}>
         ${b.floors.length > 1
           ? html`<button class="fp3d-chip" aria-pressed=${this._floorId === null} @click=${() => {
                 this._floorId = null;
@@ -946,7 +1035,7 @@ export class Floorplan3dPanel extends LitElement {
               )}
               <span class="fp3d-sep"></span>`
           : nothing}
-        ${roomFloors.flatMap((f) => [
+        ${(this._tablet ? [] : roomFloors).flatMap((f) => [
           // in the house view the rooms of every floor follow a small floor label; a room without a name has
           // no button (an empty chip would only take space, #370)
           roomFloors.length > 1 && zonesOf(f).some((r) => r.name.trim()) ? html`<span class="fp3d-nav-floor">${f.name}</span>` : nothing,
@@ -967,7 +1056,7 @@ export class Floorplan3dPanel extends LitElement {
             </button>`,
           ),
         ])}
-        <button
+        ${this._tablet ? nothing : html`<button
           class="fp3d-chip fp3d-nav-toggle"
           title=${this.t(this._navWrap ? "nav_row" : "nav_wrap")}
           aria-label=${this.t(this._navWrap ? "nav_row" : "nav_wrap")}
@@ -978,12 +1067,13 @@ export class Floorplan3dPanel extends LitElement {
           }}
         >
           ${this._navWrap ? "\u2194" : "\u2261"}
-        </button>
+        </button>`}
       </nav>`}
       <div class="fp3d-stage-wrap ${this._roomId ? "fp3d-room-open" : ""} ${this._controlsRight ? "fp3d-side-right" : ""} ${tt ? "fp3d-tt" : ""}">
         <fp3d-view3d
           class="fp3d-body"
-          .canEdit=${this.data.canEdit}
+          .canEdit=${this.data.canEdit && !this._tablet}
+          .noSettings=${this._tablet}
           .home=${this.data.homeId}
           .pivotMark=${this._pinHover}
           .hass=${this.tt.hass(this.hass)}
@@ -1056,15 +1146,13 @@ export class Floorplan3dPanel extends LitElement {
           : nothing}
         ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session}></fp3d-time-bar>` : nothing}
         ${this._clean ? nothing : html`<div class="fp3d-overlay">
-          <div class="fp3d-seg" role="group" aria-label=${this.t("plan_view")}>
-            <button aria-pressed=${!this._plan2d} @click=${() => this.setPlan2d(false)}>${this.t("view_3d")}</button>
-            <button aria-pressed=${this._plan2d} @click=${() => this.setPlan2d(true)}>${this.t("view_2d")}</button>
-          </div>
+          ${this._tablet ? nothing : planView}
           <div class="fp3d-show-wrap">
-            <button class="fp3d-chip" aria-haspopup="true" aria-expanded=${this._showOpen} @click=${() => (this._showOpen = !this._showOpen)}>${this.t("show_menu")} <span class="fp3d-caret">▾</span></button>
+            <button class="fp3d-chip" aria-haspopup="true" aria-expanded=${this._showOpen} @click=${() => (this._showOpen = !this._showOpen)}>${this.t(this._tablet ? "view" : "show_menu")} <span class="fp3d-caret">▾</span></button>
             ${this._showOpen
               ? html`<div class="fp3d-show-veil" @click=${() => (this._showOpen = false)}></div>
                   <div class="fp3d-show-panel">
+          ${this._tablet ? planView : nothing}
           ${this._plan2d
             ? nothing
             : html`<div class="fp3d-seg">
@@ -1155,9 +1243,9 @@ export class Floorplan3dPanel extends LitElement {
                   </div>`
               : nothing}
           </div>
-          <button class="fp3d-chip fp3d-tt-chip" aria-pressed=${tt} title=${this.t("tt_hint")} aria-label=${this.t("tt_chip")} @click=${() => this.toggleTimeTravel()}>
+          ${this._tablet ? nothing : html`<button class="fp3d-chip fp3d-tt-chip" aria-pressed=${tt} title=${this.t("tt_hint")} aria-label=${this.t("tt_chip")} @click=${() => this.toggleTimeTravel()}>
             ${hasFeature("time_travel") ? "⏪" : "🔒"} <span class="fp3d-tt-label">${this.t("tt_chip")}</span>
-          </button>
+          </button>`}
           ${this._roomId || (this._floorId && b.floors.length > 1)
             ? html`<button class="fp3d-chip" @click=${() => this.back()}>${this.t("back")}</button>`
             : nothing}

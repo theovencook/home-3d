@@ -1,7 +1,7 @@
 // Loads the building, follows changes made elsewhere and saves edits (debounced).
 
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import { fetchBuilding, listPacks, saveBuilding, subscribeBuilding } from "./api.ts";
+import { fetchBuilding, fetchVersion, listPacks, saveBuilding, subscribeBuilding } from "./api.ts";
 import { normalizeBuilding, type Building } from "./model.ts";
 import { recipeHashes, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -15,6 +15,10 @@ const DRAFT_KEY = "home3d.unsaved";
 /** Version of this frontend, set by the build (see build.mjs). */
 declare const __FP3D_VERSION__: string;
 export const FRONTEND_VERSION = typeof __FP3D_VERSION__ === "string" ? __FP3D_VERSION__ : "dev";
+/** Which build of the frontend this is (#60): a hash of its sources, set by the build; the backend reports the build
+ * whose files it serves now, so a page still running older JavaScript at the same version notices. */
+declare const __FP3D_BUILD__: string;
+export const FRONTEND_BUILD = typeof __FP3D_BUILD__ === "string" ? __FP3D_BUILD__ : "dev";
 
 export interface Draft {
   building: Building;
@@ -55,6 +59,10 @@ export class BuildingController implements ReactiveController {
   saveError: string | null = null;
   /** Integration version the backend runs (differs from the frontend until Home Assistant restarts). */
   backendVersion: string | null = null;
+  /** The frontend build the backend serves now (#60; null from a backend or build that does not say). */
+  backendBuild: string | null = null;
+  /** The frontend running in this page (the tests set another one). */
+  frontend = { version: FRONTEND_VERSION, build: FRONTEND_BUILD };
   /** Unsaved edits from an earlier session, offered for restoring. */
   draft: Draft | null = null;
   /** The library (#44): the offered packs with an index of their items, loaded when an editor first needs it. */
@@ -84,6 +92,8 @@ export class BuildingController implements ReactiveController {
   private pending: Building | null = null;
   private saving: Promise<void> | null = null;
   private connected = false;
+  /** The websocket whose reconnects this view follows (#60). */
+  private watched: HomeAssistant["connection"] | null = null;
 
   constructor(host: ReactiveControllerHost) {
     this.host = host;
@@ -125,6 +135,27 @@ export class BuildingController implements ReactiveController {
     void this.flush();
     void this.unsubscribe?.();
     this.unsubscribe = null;
+    this.watched?.removeEventListener?.("ready", this.onReconnect);
+    this.watched = null;
+  }
+
+  /**
+   * The websocket is back (#60): Home Assistant restarted, often after an update, so the versions are asked for again.
+   * This is the only re-check: no polling, a wall tablet that stays open learns of an update when HA comes back.
+   */
+  private readonly onReconnect = () => void this.checkVersion();
+
+  /** Ask the backend which version and frontend build it has now. */
+  async checkVersion(): Promise<void> {
+    if (!this.hass) return;
+    try {
+      const res = await fetchVersion(this.hass);
+      this.backendVersion = res.version ?? null;
+      this.backendBuild = res.build ?? null;
+      this.host.requestUpdate();
+    } catch {
+      // an older backend without the command: the versions come with the next load of the building
+    }
   }
 
   /** Local edit: shown immediately, saved after a short pause. */
@@ -139,7 +170,7 @@ export class BuildingController implements ReactiveController {
 
   /** This frontend's version, for notices. */
   get frontendVersion(): string {
-    return FRONTEND_VERSION;
+    return this.frontend.version;
   }
 
   /**
@@ -148,15 +179,37 @@ export class BuildingController implements ReactiveController {
    * bundle (a reload helps, not a restart); null when they match or one is unknown.
    */
   get versionGap(): "backend" | "frontend" | null {
-    if (!this.backendVersion || FRONTEND_VERSION === "dev" || this.backendVersion === FRONTEND_VERSION) return null;
-    return compareVersions(this.backendVersion, FRONTEND_VERSION) > 0 ? "frontend" : "backend";
+    const own = this.frontend;
+    if (!this.backendVersion || own.version === "dev") return null;
+    // the same version rebuilt (a deploy without a version bump): the files served are newer than this page (#60)
+    if (this.backendVersion === own.version) return this.backendBuild && own.build !== "dev" && this.backendBuild !== own.build ? "frontend" : null;
+    return compareVersions(this.backendVersion, own.version) > 0 ? "frontend" : "backend";
   }
 
   /** The backend runs another version than this frontend: Home Assistant has to restart. */
   get needsRestart(): boolean {
     // an older backend that does not report its version yet rejects the new fields ("extra keys")
     if (this.saveError && /extra keys not allowed/i.test(this.saveError)) return true;
-    return !!this.backendVersion && FRONTEND_VERSION !== "dev" && this.backendVersion !== FRONTEND_VERSION;
+    return !!this.backendVersion && this.frontend.version !== "dev" && this.backendVersion !== this.frontend.version;
+  }
+
+  /**
+   * The "updated, tap to reload" notice (#60): null without a newer frontend; "ready" when a reload loses nothing;
+   * "saving" while edits are on their way (the reload waits for them); "unsaved" when the last save failed, so a
+   * reload now would drop the edits. The page never reloads by itself.
+   */
+  get updateNotice(): "ready" | "saving" | "unsaved" | null {
+    if (this.versionGap !== "frontend") return null;
+    if (this.saveState === "error") return "unsaved";
+    return this.pending || this.saving ? "saving" : "ready";
+  }
+
+  /** Reload the page once the edits are saved (the notice's button); false when they could not be: no reload then. */
+  async reloadWhenSaved(reload: () => void = () => location.reload()): Promise<boolean> {
+    await this.flush();
+    if (this.pending || this.saveState === "error") return false;
+    reload();
+    return true;
   }
 
   /** Take over the unsaved edits of an earlier session (they are saved right away). */
@@ -217,6 +270,10 @@ export class BuildingController implements ReactiveController {
     // the library is not loaded here: placed items draw from the plan's recipe copies (#2), so a view that only
     // shows the plan (a wall tablet) never fetches it; the editor and the extensions page ask for it (#44)
     await this.reload();
+    if (!this.watched && this.connected && this.hass.connection.addEventListener) {
+      this.watched = this.hass.connection;
+      this.watched.addEventListener!("ready", this.onReconnect);
+    }
     if (!this.unsubscribe && this.connected) {
       try {
         this.unsubscribe = await subscribeBuilding(
@@ -271,6 +328,7 @@ export class BuildingController implements ReactiveController {
       setPlanRecipes(this.building.recipes);
       this.recipeBases = recipeHashes(this.building.recipes);
       this.backendVersion = res.version ?? null;
+      this.backendBuild = res.build ?? null;
       this.canEdit = res.can_edit ?? !!this.hass.user?.is_admin;
       if (this.draft === null && !this.pending) {
         const draft = readDraft();

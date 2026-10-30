@@ -389,6 +389,19 @@ existed keep counting such a plug twice until its circuit is set on the item, an
 sensor but no circuit. A hot-water cylinder whose id starts with `hot_water_cylinder`
 also takes a `water_heater` entity. `theovencook.devices` has one of each in `energy/` and `heating/`.
 
+### Smart-home devices
+
+`theovencook.devices` holds models of smart-home devices. A few `family` values decide what the item's Device field
+offers (the entities of these families are listed by their kind):
+
+| `family` | Device field offers |
+| --- | --- |
+| `entity_marker` | any entity: a sensor or switch marker that stands for a device without a model |
+| `thermostat` (also `radiator_trv`, `radiator_valve`) | `climate` entities |
+| `video_doorbell` (any item tagged `doorbell` or `camera`) | `camera` entities, and the device's switches |
+| `sensor`, `water_meter`, `smoke_alarm` | `sensor` and `binary_sensor` entities |
+| ids ending `gas_boiler`, `combi_boiler`, `heat_pump_indoor` … | `water_heater` and `climate` entities |
+
 ### Roof window blinds
 
 An item whose id starts with `roof_window` and ends with `_blind` (`roof_window_mk04_blind`) and is `electric` has a
