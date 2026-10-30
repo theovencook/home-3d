@@ -80,8 +80,8 @@ Shelves carry loose gear (`shelf: true`, `surface: true`); the starter `rack_she
 | id | U | W x D x H | Watts | Status / source |
 |---|---|---|---|---|
 | `rack_ups_1u_cyberpower` | 1 | 482.6 (body 433) x 389 x 43.7 | 25 | retailer (CP1500PFCRM1U class): https://www.shi.com/product/48671789/CyberPower-PFC-Sinewave-Series-CP1000PFCRM1U |
-| `rack_ups_1u_cyberpower_short` | 1 | 482.6 (433) x 230 x 43.7 | 15 | research notes (CP500 / CP700 class, 230 deep), unverified |
-| `rack_ups_1u_eaton` | 1 | 482.6 (438) x 509 x 43.7 | 25 | retailer (5P1150iR class), unverified |
+| `rack_ups_1u_cyberpower_short` | 1 | 482.6 (433) x 230 x 43.7 | 15 | retailer, verified in #133 (CP500 / CP700 class, about 230 deep: SHI, Computer Alliance, fleetnetwork) |
+| `rack_ups_1u_eaton` | 1 | 482.6 (438) x 509 x 43.7 | 25 | maker, verified in #133 (5P1150iR: 438 x 509 x 43.2, Eaton catalogue page) |
 | `rack_ups_2u_apc` | 2 | 482.6 (432) x 457 x 88.1 | 35 | retailer (SMT1500RMI2U): https://mayflex.com/shop/product/SMT1500RMI2U |
 | `rack_pdu_1u_8way_c13` | 1 | 482.6 x 50 x 43.7 | 2 | generic, unverified |
 | `rack_pdu_1u_8way_uk` | 1 | 482.6 x 50 x 43.7 | 2 | generic, unverified |
@@ -101,6 +101,23 @@ UPS watts are the unit's own draw, not the load it carries.
 | `rack_nas_1u_4bay` | 1 | 478 x 327.5 x 44 | 38 | maker: https://www.synology.com/en-uk/products/RS422+ (38 W in access); drawn on the 482.6 panel |
 | `rack_nas_2u_8bay` | 2 | 482 x 306.6 x 88 | 50 | maker: https://www.synology.com/en-uk/products/RS1221+ (50 W in access) |
 | `rack_nas_2u_12bay` | 2 | 482 x 552 x 88 | 120 | maker: https://www.synology.com/en-uk/products/RS2423+ (120 W in access) |
+
+## Checks from ticket #133 (30 Oct 2026)
+
+Maker pages fetched: UniFi techspecs (USW Pro 24/48 family, UNVR, UNVR Pro: sizes confirmed unchanged; the UDM pages
+list width x height x depth = 442.4 x 43.7 x 285.6, matching the drawn axes). Eaton catalogue page for the 5P1150iR:
+438 x 509 x 43.2 (H x W x D 43.2 x 438 x 509). Dell and Netgate pages for the representative figures below.
+Two or more retailers agree on: CyberPower CP1000PFCRM1U (433 x 389 x 44), the short 1U CyberPower class (about 230 deep;
+SHI, Computer Alliance, fleetnetwork), APC SMT1500RMI2U (432 x 457 x 89 at Mayflex; the UC variant is 477 deep),
+Synology RS422+ (478 x 327.5 x 44), RS1221+ (482 x 306.6 x 88), RS2423+ (482 x 552 x 88). No size changed.
+
+The `generic` rows are typical sizes, not products, so they cannot be "verified"; they stay generic. Real products
+for a sanity check: 1U 24-port switches are about 440 x 180-260 x 44 (TP-Link TL-SG1016 440 x 180 x 44, Netgear
+GS748T 440 x 257 x 43); Netgate 4100/6100 in its 1U rack kit 482.6 x 254 x 44.45; StarTech D-ring manager
+CABLMANAGER2 483 x 88.6 x 43 (our 80 is within range); 1U PDUs 45-96 deep; 24-port Cat6 patch panels 28-85 deep;
+APC AP7541 / AP8841 vertical PDUs 56 x 44; StarTech CABSHELF1U 481 x 177 and its 10"/16" cantilever shelves 249 / 401
+deep; 1U servers: HPE DL360 Gen10 707, Supermicro SYS-510P 650, Dell R650 809 (overall) deep, so our 600 / 400
+servers are on the short side. Not changed because a rack's mounting depth, not the gear, is what limits real racks.
 
 ## Unverified sizes (summary)
 
