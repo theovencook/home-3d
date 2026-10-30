@@ -9,7 +9,7 @@ import { builtinBase, gangsOf, stairPlan, stairsULayout, STAIR_WINDERS, POOL_VAL
 import { isRobotVacuum, mountBase, packItem, packMotion, packMovingPart, packRobotCentre, packRobotPart, packScreen, type PackItem, type PackMotion, type PackPart } from "../packs.ts";
 import { fitParts } from "../pack-scale.ts";
 import { rackLayout, rackMarks, readRackFrame } from "../rack-frame.ts";
-import { rackContents } from "../rack.ts";
+import { rackContents, rackLedSpot } from "../rack.ts";
 import { COLOUR_ROLES, roleColour, type RoleColours } from "../colour-roles.ts";
 import { materialId, roleMaterial, type RoleMaterials } from "../role-materials.ts";
 import { binColors, binShape, householdCountry, mailboxShape, type BinShape, type MailboxShape } from "../household.ts";
@@ -2064,6 +2064,35 @@ function rackModel(b: Builder, item: PackItem, f: Furniture, w: number, d: numbe
   if (!slots?.length) return;
   // rear-face gear is turned round (#114), its front to the rack's back
   for (const g of rackContents(at, slots, packItem)) packModel(g.back ? b.moved(g.x, g.z).rotated(0, 0, 180) : b.moved(g.x, g.z), g.item, g.w, g.d, g.h, base + g.y, null);
+}
+
+/**
+ * The status LEDs of a placed rack's linked gear (#119): a small box in front of each listed slot's panel
+ * (rack.ts rackLedSpot), placed and turned with the rack, drawn white for the viewer to colour in place. Returns the
+ * triangle range of each slot's LED, so a status change rewrites colours and never this geometry.
+ */
+export function pushRackLeds(buf: GeoBuffer, f: Pick<Furniture, "type" | "x" | "z" | "rotation" | "w" | "d" | "h" | "mirror" | "rack">, base: number, slotIds: readonly string[]): Map<string, { start: number; end: number }> {
+  const out = new Map<string, { start: number; end: number }>();
+  const item = packItem(f.type);
+  const frame = item ? readRackFrame(item) : null;
+  const slots = f.rack?.slots;
+  if (!frame || !slots?.length || !slotIds.length) return out;
+  const want = new Set(slotIds);
+  const a = f.rotation * DEG;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const mx = f.mirror ? -1 : 1;
+  const b = new Builder(buf, new LineBuffer(), (x, z) => [f.x + mx * x * c - z * s, f.z + mx * x * s + z * c]);
+  const at = rackLayout(frame, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h));
+  for (const p of rackContents(at, slots, packItem)) {
+    if (!want.has(p.slot.id) || out.has(p.slot.id)) continue;
+    const led = rackLedSpot(p);
+    const r = led.size / 2;
+    const start = buf.count;
+    b.box(led.x - r, led.x + r, base + led.y - r, base + led.y + r, led.z - r, led.z + r, 0xffffff, 0xffffff);
+    out.set(p.slot.id, { start, end: buf.count });
+  }
+  return out;
 }
 
 /**

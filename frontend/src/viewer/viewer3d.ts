@@ -5,7 +5,10 @@
 // flight into it). Each floor is a group with its own materials so its height and opacity can be
 // animated independently.
 
-import type { RackDraw } from "../rack-elevation.ts";
+import { rackDrawOf, type RackDraw } from "../rack-elevation.ts";
+import { RACK_STATUS_COLOURS, slotEntities, type RackStatus } from "../rack-links.ts";
+import { rackContents, rackSlotAt, type RackSlot } from "../rack.ts";
+import { rackLayout, readRackFrame } from "../rack-frame.ts";
 import {
   AdditiveBlending,
   RingGeometry,
@@ -59,7 +62,7 @@ import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { CameraProjections, PROJECTION_LAYER, type ProjectionSurface, type ProjectorPose } from "./projection.ts";
 import type { RoleColours } from "../colour-roles.ts";
 import type { RoleMaterials } from "../role-materials.ts";
-import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, setLightLook, hasOwnColours } from "./furniture.ts";
+import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, pushRackLeds, setLightLook, hasOwnColours } from "./furniture.ts";
 import { pushPipeTube, type PipeTube } from "./pipes.ts";
 // the walk through the house at eye height (lives with the viewer it drives)
 export { FloorMap, WalkCamera, type WalkState } from "./walk.ts";
@@ -99,6 +102,13 @@ const ROBOT_LED: Record<RobotInfo["mode"], number> = { cleaning: 0x37e0ff, retur
 export type { OpeningState } from "./openings.ts";
 
 export type Quality = "auto" | "low" | "high";
+
+/** A tap on a rack with gear in 3D (#119): the rack, and the slot of the gear under the tap (null: none). */
+interface RackHit {
+  id: string;
+  slot: RackSlot | null;
+  f: Furniture;
+}
 export type WallMode = "auto" | "cut";
 
 export interface ViewerOptions {
@@ -112,8 +122,11 @@ export interface ViewerOptions {
   onDeviceTap?: (entityId: string, x: number, y: number) => void;
   /** Double tap on a room of the opened floor (without it, a double tap goes one level back). */
   onRoomDoubleTap?: (floorId: string, roomId: string) => void;
-  /** A tap on a rack with gear in the 2D plan (its furniture id, and how to draw its front view, #115). */
-  onRackTap?: (furnitureId: string, draw: RackDraw) => void;
+  /**
+   * A tap on a rack with gear (its furniture id, and how to draw its front view, #115): in the 2D plan, and in 3D
+   * where `slot` is the gear under the tap (#119; null: the rack itself).
+   */
+  onRackTap?: (furnitureId: string, draw: RackDraw, slot?: string | null) => void;
   /** Long press on a device marker. */
   onDeviceHold?: (entityId: string, x: number, y: number) => void;
   /** A double tap on a device or item: true when it had an own double-tap action (#6), else the view goes back. */
@@ -510,6 +523,12 @@ interface FloorView {
   trailMesh: Mesh;
   /** Doors of smart fridges (they swing open with their sensors). */
   fridgeMesh: Mesh;
+  /** Status LEDs of linked rack gear (#119): built when the racks change, coloured in place on a status change. */
+  rackLedMesh: Mesh;
+  rackLedShape: string;
+  rackLedColor: string;
+  /** Triangle range of each LED, by "<rack id>/<slot id>". */
+  rackLedRanges: Map<string, { start: number; end: number }>;
   /** Pool Pro: the pipes as tubes. */
   pipeMesh: Mesh;
   pipeSig: string;
@@ -1962,6 +1981,56 @@ export class FloorplanViewer {
   }
 
   /**
+   * The status of linked rack gear (#119, rack-links.ts rackLedStates: "<rack id>/<slot id>" → status). Called on
+   * every Home Assistant update the view watches: the LEDs' boxes are only rebuilt when the set of lit slots or the
+   * racks change; a status change rewrites a few vertex colours, the racks' own geometry is never touched.
+   */
+  setRackLeds(leds: Map<string, RackStatus>): void {
+    this.rackLeds = leds;
+    let touched = false;
+    for (const fv of this.floors) if (this.buildRackLeds(fv)) touched = true;
+    if (touched) this.invalidate();
+  }
+
+  private rackLeds = new Map<string, RackStatus>();
+
+  /** The LED boxes of this floor's racks (when the racks or the lit slots changed) and their colours; true when anything changed. */
+  private buildRackLeds(fv: FloorView): boolean {
+    const racks = fv.floor.furniture.filter((f) => f.rack?.slots?.length);
+    if (!racks.length && !fv.rackLedRanges.size) return false;
+    const lit = racks.map((f) => ({ f, ids: f.rack!.slots.filter((s) => this.rackLeds.has(`${f.id}/${s.id}`)).map((s) => s.id) })).filter((r) => r.ids.length);
+    const shape = lit.map(({ f, ids }) => `${f.id}:${f.type}:${f.x},${f.z},${f.rotation},${f.w},${f.d},${f.h},${f.mount_y ?? ""},${f.mirror ? 1 : 0}:${ids.join(",")}:${JSON.stringify(f.rack!.slots)}`).join(";");
+    let changed = false;
+    if (shape !== fv.rackLedShape) {
+      changed = true;
+      fv.rackLedShape = shape;
+      fv.rackLedColor = "";
+      const buf = new GeoBuffer();
+      const ranges = new Map<string, { start: number; end: number }>();
+      for (const { f, ids } of lit) for (const [slot, r] of pushRackLeds(buf, f, mountBase(fv.floor, f), ids)) ranges.set(`${f.id}/${slot}`, r);
+      fv.rackLedRanges = ranges;
+      fv.rackLedMesh.geometry.dispose();
+      fv.rackLedMesh.geometry = buf.geometry();
+      fv.rackLedMesh.visible = buf.count > 0;
+    }
+    if (!fv.rackLedRanges.size) return changed;
+    const keys = [...fv.rackLedRanges.keys()];
+    const color = keys.map((k) => this.rackLeds.get(k) ?? "").join(",");
+    if (color === fv.rackLedColor) return changed;
+    fv.rackLedColor = color;
+    const attr = fv.rackLedMesh.geometry.getAttribute("color") as Float32BufferAttribute;
+    const colors = attr.array as Float32Array;
+    for (const k of keys) {
+      const st = this.rackLeds.get(k);
+      const c = new Color(st ? RACK_STATUS_COLOURS[st] : "#808080");
+      const r = fv.rackLedRanges.get(k)!;
+      for (let v = r.start * 3; v < r.end * 3; v++) colors.set([c.r, c.g, c.b], v * 3);
+    }
+    attr.needsUpdate = true;
+    return true;
+  }
+
+  /**
    * Awnings: how far each is out now and where it is going. A reported position is followed smoothly (a cover that
    * reports while it runs shows the awning run out slowly); without one it runs at its run time while it says
    * opening or closing.
@@ -2661,6 +2730,8 @@ export class FloorplanViewer {
       trailMesh.renderOrder = 7;
       const fridgeMesh = new Mesh(new Geometry(), materials.lamps);
       fridgeMesh.visible = false;
+      const rackLedMesh = new Mesh(new Geometry(), materials.lamps);
+      rackLedMesh.visible = false;
       const pipeMesh = new Mesh(new Geometry(), materials.lamps);
       pipeMesh.visible = false;
       const patchMesh = new Mesh(new Geometry(), materials.patch);
@@ -2728,6 +2799,7 @@ export class FloorplanViewer {
         coneMesh,
         trailMesh,
         fridgeMesh,
+        rackLedMesh,
         pipeMesh,
         patchMesh,
         patchGlowMesh,
@@ -2802,6 +2874,10 @@ export class FloorplanViewer {
         coneMesh,
         trailMesh,
         fridgeMesh,
+        rackLedMesh,
+        rackLedShape: "",
+        rackLedColor: "",
+        rackLedRanges: new Map(),
         pipeMesh,
         pipeSig: "",
         patchMesh,
@@ -2841,6 +2917,7 @@ export class FloorplanViewer {
     this.floorMap = new Map(this.floors.map((f) => [f.floor.id, f]));
     for (const fv of this.floors) {
       this.buildFridges(fv);
+      this.buildRackLeds(fv);
       this.buildPipes(fv);
       this.buildPatches(fv);
     }
@@ -4251,7 +4328,7 @@ export class FloorplanViewer {
     return ray;
   }
 
-  private pick(x: number, y: number): { entity: string } | { floorId: string; roomId: string | null } | null {
+  private pick(x: number, y: number): { entity: string } | { floorId: string; roomId: string | null; rack?: RackHit } | null {
     const ray = this.rayAt(x, y);
     const floors = this.activeFloors();
     const meshes = floors.flatMap((f) => [f.lampMesh, f.coneMesh, f.framesMesh, f.glassMesh, f.blindsMesh, f.wallMesh, f.floorMesh].filter((m) => m.visible));
@@ -4276,8 +4353,12 @@ export class FloorplanViewer {
         if (entity) return { entity };
       } else if (hit.object === fv.wallMesh) {
         const id = inRange(fv.geo.furnitureTris, tri);
+        // a rack's gear (#119): the piece under the tap, before the rack's own device; the rack itself after it
+        const rack = id ? this.rackHit(fv, id, hit.point) : null;
+        if (rack?.slot) return { floorId: fv.floor.id, roomId: null, rack };
         const entity = id ? this.pickFurniture.get(id) : undefined;
         if (entity) return { entity };
+        if (rack) return { floorId: fv.floor.id, roomId: null, rack };
         // an outdoor area acting as a room (#100): its surface lies in the wall mesh; a tap on it opens it
         if (!id && hit.face && hit.face.normal.y > 0.7) {
           const zone = outdoorZones(fv.floor).find((z) => pointInPolygon([hit.point.x, hit.point.z], z.points));
@@ -4309,8 +4390,34 @@ export class FloorplanViewer {
     return null;
   }
 
+  /** The rack with gear a tap on furniture `id` hit, and the slot whose gear lies under the hit point (#119). */
+  private rackHit(fv: FloorView, id: string, point: Vector3): RackHit | null {
+    const f = fv.floor.furniture.find((o) => o.id === id);
+    const slots = f?.rack?.slots;
+    const frame = slots?.length ? readRackFrame(packItem(f!.type)) : null;
+    if (!f || !slots || !frame) return null;
+    // the point in the rack's own coordinates (x across, z to its front, y up from its bottom)
+    const p = fv.group.worldToLocal(point.clone());
+    const a = f.rotation * DEG;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const dx = p.x - f.x;
+    const dz = p.z - f.z;
+    const local: [number, number, number] = [(f.mirror ? -1 : 1) * (dx * c + dz * s), p.y - mountBase(fv.floor, f), -dx * s + dz * c];
+    const at = rackLayout(frame, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h));
+    const slotId = rackSlotAt(rackContents(at, slots, packItem), local);
+    return { id, slot: slotId ? (slots.find((o) => o.id === slotId) ?? null) : null, f };
+  }
+
   private onTap(x: number, y: number): void {
     const hit = this.pick(x, y);
+    // a rack with gear (#119): its front view, opened on the tapped gear's details
+    if (hit && "rack" in hit && hit.rack) {
+      if (this.furnish) return;
+      const draw = rackDrawOf(hit.rack.f, packItem);
+      if (draw) this.options.onRackTap?.(hit.rack.id, draw, hit.rack.slot?.id ?? null);
+      return;
+    }
     if (hit && "entity" in hit && this.furnish) {
       this.selectDevice(hit.entity);
       this.options.onDeviceSelect?.(hit.entity);
@@ -4636,6 +4743,12 @@ export class FloorplanViewer {
   private onHold(x: number, y: number): void {
     const hit = this.pick(x, y);
     if (hit && "entity" in hit) this.options.onDeviceHold?.(hit.entity, x, y);
+    // held gear in a rack (#119): its status entity's more-info (else the first link's); unlinked gear: like a tap
+    else if (hit && "rack" in hit && hit.rack && !this.furnish) {
+      const linked = hit.rack.slot ? slotEntities(hit.rack.slot)[0] : undefined;
+      if (linked) this.options.onDeviceHold?.(linked, x, y);
+      else this.onTap(x, y);
+    }
   }
 
   /** A mostly vertical drag on a lamp or blind becomes a swipe (unless furnishing). */

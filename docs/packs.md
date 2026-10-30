@@ -537,6 +537,8 @@ The gear is saved on the placed rack (`rack.slots`). Each slot has:
 | `col` | Its column: 0 or 1 for half width, 0 to 2 for a third, from the left; for 0U gear its lane, 0 left, 1 right. Default 0. |
 | `face` | `front` (default) or `rear`. A 2-post rack has no rear. Full-depth gear takes both faces whichever it names. |
 | `on` | Loose gear only: the id of the shelf slot it stands on. |
+| `entity` | Its status entity in Home Assistant (optional): what its status LED shows and what a hold opens. |
+| `links` | Further entities of the same device (optional, at most 16, each once): load, battery, temperature … |
 
 The rules: gear takes whole U from its lowest one up; two pieces clash when they share a U, a face and some of the
 width (0U gear only clashes with 0U gear in the same lane and face, loose gear only with the room left on its
@@ -549,6 +551,15 @@ estimated watts). Half- and third-width gear goes into the column under the poin
 lanes either side of the U numbers. Choose a shelf to put loose gear on it. A rack's item panel has a **Rack frame**
 picker: another rack of the same kind (wall or floor) takes the rack's place at its own size, and the gear stays; gear
 that no longer fits is listed with why (in the panel and in the sheet) and is not drawn until it is moved.
+
+**Links to Home Assistant.** Choose gear in the sheet and pick the HA device behind it: its status entity (a
+connectivity or running sensor, a status text such as a UPS's, a tracker) and up to eight useful values come along,
+buttons, switches, updates and per-port entities left out; the gear takes the device's name when it has none of its
+own. Set the status entity and further links by hand, or add more from the same device. Linked gear shows a status
+LED in 3D, in the front view and in the sheet: green online, amber warning (on battery, a problem sensor on, a linked
+entity unavailable, an unknown state), red offline (off, disconnected, unavailable, gone). In the view, tap gear in
+3D or in the front view for its details (status and linked entities with their states, each opening Home
+Assistant's more-info); hold it in 3D for its status entity's more-info. Only editors change links.
 
 The plan keeps a copy of each gear's recipe like any placed item's, so a rack shows its gear without the pack. Home
 Assistant refuses an editor's save that breaks the rules above (`invalid_rack`), except gear left misplaced by a

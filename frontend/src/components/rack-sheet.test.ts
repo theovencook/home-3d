@@ -210,3 +210,72 @@ test("gear that no longer fits (the rack frame changed) is listed and shown red 
   assert.match(out, /rack_misfits\{"n":1\}/);
   assert.match(out, /UPS: rack_outside/);
 });
+
+// ------------------------------------------------------------------------------------------------ #119
+
+/** What the editor hands the sheet for linking: a UPS device with its entities, generic ids. */
+function linker() {
+  return {
+    entities: [
+      { id: "sensor.ups_status", label: "UPS status" },
+      { id: "sensor.ups_load", label: "UPS load" },
+      { id: "sensor.ups_battery", label: "UPS battery" },
+      { id: "sensor.other", label: "Other" },
+    ],
+    devices: [{ id: "dev_ups", label: "Rack UPS" }],
+    fromDevice: (id: string) => (id === "dev_ups" ? { entity: "sensor.ups_status", links: ["sensor.ups_load"], name: "Rack UPS" } : { entity: null, links: [], name: null }),
+    suggest: (s: RackSlot) => ["sensor.ups_load", "sensor.ups_battery"].filter((id) => id !== s.entity && !(s.links ?? []).includes(id)),
+    label: (id: string) => ({ "sensor.ups_status": "UPS status", "sensor.ups_load": "UPS load", "sensor.ups_battery": "UPS battery" })[id] ?? id,
+    status: (s: RackSlot) => (s.entity ? "online" : null),
+  };
+}
+
+test("picking the HA device behind chosen gear links its status and values, and names it when unnamed (#119)", () => {
+  const { el, changes } = sheet();
+  el.linker = linker();
+  el.tapSlot("b");
+  el.linkDevice("dev_ups");
+  assert.equal(changes.length, 1, "one change, one undo step");
+  assert.deepEqual(changes[0].find((s) => s.id === "b"), { id: "b", type: "ups", u: 3, entity: "sensor.ups_status", links: ["sensor.ups_load"], name: "Rack UPS" });
+  // the other gear is untouched
+  assert.deepEqual(changes[0].find((s) => s.id === "a"), { id: "a", type: "switch", u: 1 });
+});
+
+test("a chosen gear's status entity and links are set, added (from suggestions too) and removed (#119)", () => {
+  const { el, changes } = sheet([{ id: "b", type: "ups", u: 3, name: "Mine" }]);
+  el.linker = linker();
+  el.tapSlot("b");
+  el.setStatusEntity("sensor.ups_status");
+  const out = flat(el.render());
+  assert.match(out, /rack_suggested/);
+  assert.match(out, /UPS load/);
+  el.addLink("sensor.ups_load");
+  el.addLink("sensor.ups_load");
+  el.addLink("sensor.ups_status");
+  el.addLink("sensor.ups_battery");
+  assert.deepEqual(el.slots[0], { id: "b", type: "ups", u: 3, name: "Mine", entity: "sensor.ups_status", links: ["sensor.ups_load", "sensor.ups_battery"] });
+  el.removeLink("sensor.ups_load");
+  el.setStatusEntity(null);
+  assert.deepEqual(el.slots[0], { id: "b", type: "ups", u: 3, name: "Mine", entity: null, links: ["sensor.ups_battery"] });
+  // a device picked later keeps the gear's own name
+  el.linkDevice("dev_ups");
+  assert.equal((el.slots as RackSlot[])[0].name, "Mine");
+  assert.equal(changes.length, 6);
+});
+
+test("linked gear shows its LED in the sheet; someone who can't edit sees the links but can't change them (#119)", () => {
+  const { el, changes } = sheet([{ id: "b", type: "ups", u: 3, entity: "sensor.ups_status", links: ["sensor.ups_load"] }]);
+  el.linker = linker();
+  el.editable = false;
+  assert.match(flat(el.render()), /fp3d-rack-led fp3d-rack-led-online/);
+  el.tapSlot("b");
+  const out = flat(el.render());
+  assert.match(out, /UPS status/);
+  assert.match(out, /UPS load/);
+  assert.doesNotMatch(out, /fp3d-entity-picker/);
+  el.linkDevice("dev_ups");
+  el.setStatusEntity("sensor.other");
+  el.addLink("sensor.other");
+  el.removeLink("sensor.ups_load");
+  assert.equal(changes.length, 0);
+});

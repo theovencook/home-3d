@@ -142,3 +142,24 @@ test("changing the rack frame keeps the gear, resizes the rack and warns about w
   ed.undo();
   assert.equal(ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "rack").type, RACK);
 });
+
+test("the sheet links gear to HA: devices and entities to pick, a device's status and values, LED status (#119)", async () => {
+  const ed = await editor();
+  const st = (entity_id: string, state: string, attributes: Record<string, unknown> = {}) => ({ entity_id, state, attributes });
+  ed.hass = {
+    ...ed.hass,
+    states: { ...ed.hass.states, "binary_sensor.switch_status": st("binary_sensor.switch_status", "on", { device_class: "connectivity" }), "sensor.switch_temperature": st("sensor.switch_temperature", "40", { device_class: "temperature" }) },
+    entities: { ...ed.hass.entities, "binary_sensor.switch_status": { entity_id: "binary_sensor.switch_status", device_id: "dev_sw", platform: "unifi" }, "sensor.switch_temperature": { entity_id: "sensor.switch_temperature", device_id: "dev_sw", platform: "unifi" } },
+    devices: { dev_sw: { id: "dev_sw", name: "Core switch" } },
+  };
+  ed.selectItem("furniture", "rack");
+  ed.openRackSheet();
+  const { linker } = ed.rackSheetProps();
+  assert.ok(linker);
+  assert.deepEqual(linker.devices.map((d: { id: string }) => d.id), ["dev_sw"]);
+  assert.ok(linker.entities.some((o: { id: string }) => o.id === "sensor.switch_temperature"));
+  assert.deepEqual(linker.fromDevice("dev_sw"), { entity: "binary_sensor.switch_status", links: ["sensor.switch_temperature"], name: "Core switch" });
+  assert.equal(linker.status({ id: "s", type: SWITCH, u: 1, entity: "binary_sensor.switch_status" }), "online");
+  // the same lists while nothing in HA changes (no new arrays per render)
+  assert.equal(ed.rackSheetProps().linker.entities, linker.entities);
+});

@@ -1,6 +1,7 @@
 // The entities whose state changes redraw the 3D view (markers, cables, openings, warnings, weather …).
 // Shared by the view (it compares them on every update) and the time travel (it fetches their history).
 
+import { slotEntities } from "./rack-links.ts";
 import { carWatched, kindOf, areaEntities, robotRoomSensor, type FurnitureLinks, type OpeningEntities } from "./devices.ts";
 import { powerSensorFor } from "./energy.ts";
 import { hasFeature } from "./features.ts";
@@ -54,6 +55,8 @@ export function watchedEntities(hass: HomeAssistant, b: Building, w: WatchLinks)
   const printers = b.floors.flatMap((f) => f.furniture.filter((m) => isPrinter(m.type)).flatMap((m) => Object.values(printerEntities(hass, w.furniture.get(m.id)?.entity ?? null))));
   // live room effects (#10): the rooms' motion sensors, the temperatures radiators and cylinders shade with
   const live = b.floors.flatMap((f) => [...f.rooms.flatMap((r) => roomLiveSensors(hass, f, r, "motion")), ...f.furniture.map((m) => itemTempSource(hass, m))]);
-  const all = [...placed, ...printers, ...cameraSensors, ...links, ...power, ...furniture, ...states, ...doors, ...robotRooms, ...roofWindowIds, ...solarIds, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.consumption, e.tariff, ...presence, ...lights, ...heat, ...w.warnings, ...parking, ...motion, ...live, ...household, weather, "sun.sun"];
+  // rack gear's status entities and links (#119): its LEDs and details
+  const racks = b.floors.flatMap((f) => f.furniture.flatMap((m) => (m.rack?.slots ?? []).flatMap(slotEntities)));
+  const all = [...placed, ...racks, ...printers, ...cameraSensors, ...links, ...power, ...furniture, ...states, ...doors, ...robotRooms, ...roofWindowIds, ...solarIds, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.consumption, e.tariff, ...presence, ...lights, ...heat, ...w.warnings, ...parking, ...motion, ...live, ...household, weather, "sun.sun"];
   return [...new Set(all.filter((id): id is string => !!id))];
 }
