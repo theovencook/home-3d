@@ -1,9 +1,9 @@
 // Loads the shipped bundles in a headless browser (#178): the panel from custom_components/home_3d/frontend (as
 // built by `npm run build`) with a fake Home Assistant and a plan. It shows the house, walks through it, switches
-// every look and the 2D plan, opens the Extensions tab with the item editor, the Settings tab and the editor, and
-// fails on any console error, page error or failed request. It also measures, as in docs/performance.md: load,
-// background load in view mode (5 hass updates a second) and editor selection; with --speed it fails when a measure
-// is past its limit.
+// every look and the 2D plan, times the renderer's render and deletes the timing wrapper again (#213), opens the
+// Extensions tab with the item editor, the Settings tab and the editor, and fails on any console error, page error
+// or failed request. It also measures, as in docs/performance.md: load, background load in view mode (5 hass updates
+// a second), the renderer's render and editor selection; with --speed it fails when a measure is past its limit.
 //
 //   npm run smoke                     the CI check (SwiftShader, no GPU needed)
 //   npm run speed                     the speed check at 1x
@@ -139,6 +139,10 @@ try {
   // shader that does not compile as a console error
   await run("walk");
   await run("looks");
+  // #213: a timing wrapper around the renderer's render, "restored" with delete, on the first renderer and on the one
+  // a quality change swaps in; a renderer left without render throws on the next frame (a page error)
+  results.renderTrap = [await run("renderTrap", { n: 10 }), await run("renderTrap", { n: 10, quality: "low" })];
+  for (const [i, r] of results.renderTrap.entries()) if (r.after !== "function") problems.push(`renderer ${i + 1} lost its render after a timing wrapper was deleted (#213)`);
   await run("itemEditor");
   await run("tab", "settings");
   await new Promise((r) => setTimeout(r, 500));
@@ -182,6 +186,7 @@ else {
     for (const tag of ["home-3d-panel", "fp3d-view3d"]) if (r[tag]) row(`View mode, 5 updates/s (${label}): ${tag}`, `${r[tag].rendersPerS} renders/s (${r[tag].updatesPerS} updates), ${r[tag].msPerS} ms/s`);
     row(`View mode (${label}): long frames`, `${r.longFramesPerS}/s, ${r.longFrameMsPerS} ms/s`);
   }
+  if (results.renderTrap) row("3D: renderer.render, auto / low quality (median / worst)", results.renderTrap.map((r) => `${r.frames.median} / ${r.frames.worst} ms`).join(", "));
   if (results.select) row("Editor selection, linked / plain (median / worst)", `${results.select.linked.median} / ${results.select.linked.worst} ms, ${results.select.plain.median} / ${results.select.plain.worst} ms`);
   if (results.unknownCalls?.length) console.log(`\nCalls the fake backend has no answer for: ${results.unknownCalls.join(", ")}`);
   for (const p of problems) console.log(`PROBLEM ${p}`);

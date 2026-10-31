@@ -6,6 +6,7 @@ import type { Furniture } from "../model.ts";
 import { DRAFT_TYPE, isPackType, packItem, usePacksQuietly, withPackItem, type FurniturePack, type PackItem } from "../packs.ts";
 import { pushFurniture, pushPackLamp } from "./furniture.ts";
 import { GeoBuffer, LineBuffer } from "./geo.ts";
+import { keepRender } from "./keep-render.ts";
 import { themed, themeIndex } from "./theme.ts";
 import { pushLampModel, type LampModel } from "./viewer3d.ts";
 
@@ -67,7 +68,7 @@ export function itemPicture(item: PackItem, size = 320, yaw = 35, pitch = 25, li
 
 /** Draw a model seen from `dir` (towards the camera) into a square PNG data URL, the model filling it. */
 function picture({ buf, lines }: { buf: GeoBuffer; lines: LineBuffer }, size: number, dir: Vector3, brightness: number, light = false): string {
-  renderer ??= new WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+  renderer ??= keepRender(new WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true }));
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   renderer.setSize(size, size, false);
   renderer.setClearColor(0x000000, 0);
@@ -144,7 +145,7 @@ export function furnitureFront(item: PreviewItem, rotation: number, pxPerM = 160
   const y1 = box.max.y;
   const w = Math.max(1, Math.min(1024, Math.round((x1 - x0) * pxPerM)));
   const h = Math.max(1, Math.min(1024, Math.round((y1 - y0) * pxPerM)));
-  renderer ??= new WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+  renderer ??= keepRender(new WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true }));
   renderer.setPixelRatio(1);
   renderer.setSize(w, h, false);
   renderer.setClearColor(0x000000, 0);

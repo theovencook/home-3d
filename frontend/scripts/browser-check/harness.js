@@ -202,6 +202,51 @@ const check = {
   },
 
   /**
+   * Time the renderer's `render` the way a hand-written live speed check did (#213): wrap it, draw `n` frames, then
+   * "restore" it with `delete`. three.js gives each renderer its own `render` (none on the prototype), so before #213
+   * the delete left the renderer without one and every later frame and floor picture threw "this.renderer.render is
+   * not a function". Then a frame and the floor pictures are drawn; a page error fails the check. `quality`: switch
+   * to it first, so the renderer a quality change swaps in (#131) is tried as well.
+   */
+  async renderTrap({ n = 10, quality } = {}) {
+    const view = panel.shadowRoot.querySelector("fp3d-view3d");
+    if (quality) {
+      panel.setQuality(quality);
+      await panel.updateComplete;
+      await waitFor(() => !view.viewer.busy(), 60000, `the ${quality} quality`);
+      await nextFrame();
+    }
+    const viewer = view.viewer;
+    const rd = viewer.renderer;
+    const orig = rd.render;
+    const times = [];
+    rd.render = function (...a) {
+      const t0 = performance.now();
+      try {
+        return orig.apply(this, a);
+      } finally {
+        times.push(performance.now() - t0);
+      }
+    };
+    for (let i = 0; i < n; i++) {
+      viewer.invalidate();
+      await nextFrame();
+    }
+    // a sloppy script's delete; a strict one would throw now that render cannot be deleted
+    const removed = Reflect.deleteProperty(rd, "render");
+    const after = typeof rd.render;
+    viewer.invalidate();
+    await nextFrame();
+    const thumbs = viewer.floorThumbnails(150, 112).length;
+    if (quality) {
+      panel.setQuality("auto");
+      await panel.updateComplete;
+      await waitFor(() => !view.viewer.busy(), 60000, "the auto quality");
+    }
+    return { frames: stats(times), removed, after, thumbs };
+  },
+
+  /**
    * Every look once (their shaders compile: a broken one logs an error), then back to the first; and the read-only 2D
    * plan, which is a bundle of its own.
    */
