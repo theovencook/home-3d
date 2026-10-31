@@ -98,7 +98,7 @@ import { circlePath, cleaningPath, stepRobot, type RobotInfo, type RobotMotion }
 import { decorDelay, lowEndDevice, petDelay } from "./pace.ts";
 import { flowSpeed } from "./flow-style.ts";
 import { HALO_SIZE, haloSize } from "./halo-size.ts";
-import { fitDistance, refitOnResize, startViewRadius, stillFitted, type FitMargin, type FitView } from "./fit.ts";
+import { fitDistance, plotBox, refitOnResize, startViewRadius, stillFitted, type FitMargin, type FitView } from "./fit.ts";
 
 export type { RobotInfo } from "./robot.ts";
 
@@ -4558,15 +4558,16 @@ export class FloorplanViewer {
 
   private fit(duration: number): void {
     const box = new Box3();
-    for (const fv of this.activeFloors()) {
-      const y0 = fv.floor.elevation + fv.ty;
-      for (const room of fv.floor.rooms) {
-        for (const [x, z] of room.points) {
-          box.expandByPoint(new Vector3(x, y0, z));
-          box.expandByPoint(new Vector3(x, y0 + fv.floor.height, z));
-        }
-      }
-    }
+    // the rooms and the garden around them (#194): the roof and the lawn are not cropped
+    const framed = plotBox(
+      this.activeFloors().map((fv) => ({
+        y0: fv.floor.elevation + fv.ty,
+        height: fv.floor.height,
+        rooms: fv.floor.rooms.map((r) => r.points),
+        outdoor: (fv.floor.outdoor ?? []).map((a) => a.points),
+      })),
+    );
+    if (framed) box.set(new Vector3(...framed.min), new Vector3(...framed.max));
     if (box.isEmpty()) box.set(new Vector3(-4, 0, -4), new Vector3(4, 2.5, 4));
     this.placeGround();
     // the weather falls over the plot and a margin around it

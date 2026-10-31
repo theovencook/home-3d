@@ -55,3 +55,44 @@ export function refitOnResize(fitted: FitView | null, current: FitView, oldAspec
 export function startViewRadius(radius: number, fovDeg: number, aspect: number): number {
   return radius * Math.max(1, fitDistance(1, fovDeg, aspect) / fitDistance(1, fovDeg, 16 / 9));
 }
+
+/** One floor as the framing sees it: its base height, its height and the outlines of its rooms and outdoor areas. */
+export interface FitFloor {
+  y0: number;
+  height: number;
+  rooms: readonly (readonly (readonly [number, number])[])[];
+  outdoor: readonly (readonly (readonly [number, number])[])[];
+}
+
+export interface FitBox {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
+/**
+ * The box the house view frames (#194): the rooms and, with them, the lawn and terrace around the house, so the
+ * roof and the garden are not cropped. A very large plot (a field, a long drive) must not shrink the house to a dot,
+ * so outdoor points are held within `reach` (a share of the house's longest side, at least 4 m) of the rooms.
+ * Null: nothing to frame.
+ */
+export function plotBox(floors: readonly FitFloor[], reach = 0.75): FitBox | null {
+  const lo: [number, number, number] = [Infinity, Infinity, Infinity];
+  const hi: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  const grow = (x: number, y: number, z: number) => {
+    lo[0] = Math.min(lo[0], x); lo[1] = Math.min(lo[1], y); lo[2] = Math.min(lo[2], z);
+    hi[0] = Math.max(hi[0], x); hi[1] = Math.max(hi[1], y); hi[2] = Math.max(hi[2], z);
+  };
+  for (const f of floors) {
+    for (const room of f.rooms) for (const [x, z] of room) { grow(x, f.y0, z); grow(x, f.y0 + f.height, z); }
+  }
+  const house = lo[0] <= hi[0];
+  const slack = house ? Math.max(4, reach * Math.max(hi[0] - lo[0], hi[2] - lo[2])) : 0;
+  const x0 = lo[0] - slack, x1 = hi[0] + slack, z0 = lo[2] - slack, z1 = hi[2] + slack;
+  const gy = house ? lo[1] : 0;
+  for (const f of floors) {
+    for (const area of f.outdoor) {
+      for (const [x, z] of area) grow(house ? Math.min(x1, Math.max(x0, x)) : x, house ? gy : f.y0, house ? Math.min(z1, Math.max(z0, z)) : z);
+    }
+  }
+  return lo[0] <= hi[0] ? { min: lo, max: hi } : null;
+}
