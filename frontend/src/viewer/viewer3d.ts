@@ -50,7 +50,7 @@ import {
   type Material,
 } from "three";
 import type { Building, Floor, Furniture, Room, StartView, Vec2 } from "../model.ts";
-import { recolorLamps, SHADE_SENTINEL, shadeFactors } from "./lamp-colors.ts";
+import { litShade, recolorLamps, SHADE_SENTINEL, shadeFactors, UNLIT_SHADE } from "./lamp-colors.ts";
 import { centroid, GANG_TYPES, outdoorZones, pointInPolygon, openingStyle, setTerrain, WALL_LAMP_Y, zonesOf } from "../model.ts";
 import { placeWallPlate } from "../geometry/walls.ts";
 import { buildEarth } from "./earth.ts";
@@ -439,7 +439,6 @@ const CABLE_HALO = 0.09;
 const LAMP_BODY = 0x2a3a60;
 const FAN_BLADE = 0x22314f;
 const FAN_BLADE_TOP = 0x2f4170;
-const LAMP_SHADE = 0x1d2946;
 /** Lamps that hang from the ceiling (hidden in the cut view). */
 /** LED strips mounted below this height (metres) light upwards instead of down. */
 const LOW_STRIP = 1.0;
@@ -3685,7 +3684,7 @@ export class FloorplanViewer {
       (this.lowQuality ? "L" : this.highQuality ? "H" : "M") +
       lamps.map((d) => `${d.id},${d.lamp ?? d.model},${d.variant},${d.x},${d.z},${d.y},${d.rotation ?? 0},${d.roll ?? 0},${d.upright ? 1 : 0},${d.rise ?? 0},${d.size?.join("/")},${d.base ?? 0},${d.pack ?? ""},${d.mirror ? 1 : 0},${d.motion ? 1 : 0}${d.colors ? JSON.stringify(d.colors) + this.theme : ""}${d.materials ? JSON.stringify(d.materials) : ""}`).join(";");
     const glows = lamps.map((d) => this.glowOf(d));
-    const colorSig = lamps.map((d, i) => `${flash(d.id)},${glows[i] ? `${glows[i]!.level.toFixed(3)},${glows[i]!.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`).join(";");
+    const colorSig = `${this.theme};` + lamps.map((d, i) => `${flash(d.id)},${glows[i] ? `${glows[i]!.level.toFixed(3)},${glows[i]!.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`).join(";");
     if (shapeSig !== fv.lampShapeSig || !fv.lampMesh.geometry.getAttribute("position")) {
       fv.lampShapeSig = shapeSig;
       fv.lampColorSig = "";
@@ -3729,9 +3728,9 @@ export class FloorplanViewer {
       const range = fv.lampRanges.get(d.furnitureId ?? d.id);
       if (!range) return;
       const glow = glows[i];
-      // a lit shade glows in the light's colour, brighter with more brightness; a tap flashes it white
-      const k = glow ? 0.55 + 0.45 * glow.level : 0;
-      const shadeC = glow ? new Color(...(glow.color.map((c) => Math.min(1, c * k)) as [number, number, number])) : new Color(LAMP_SHADE);
+      // a lit shade glows in the light's colour, brighter with more brightness, and an unlit one is dark in every look, so the
+      // pair reads at a glance (#216); a tap flashes it white
+      const shadeC = glow ? new Color(...litShade(glow.color, glow.level)) : new Color(UNLIT_SHADE[this.theme]);
       const f = flash(d.id);
       if (f > 0) shadeC.lerp(new Color(1, 1, 1), 0.7 * f);
       // the model's colours come from hex values: convert the same way (colour management)

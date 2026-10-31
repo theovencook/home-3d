@@ -70,7 +70,7 @@ export class Plan2dViewer implements ViewerSurface {
     this.low = options.quality === "low" || (options.quality !== "high" && lowEndDevice(navigator.userAgent, nav.deviceMemory, navigator.hardwareConcurrency));
     this.root = document.createElement("div");
     this.root.className = "fp3d-p2d";
-    this.root.innerHTML = `<style>${CSS}</style><svg class="fp3d-p2d-svg"><g class="fp3d-p2d-plan"><g></g></g></svg><div class="fp3d-p2d-layer"></div><div class="fp3d-p2d-probe" aria-hidden="true"></div>`;
+    this.root.innerHTML = `<style>${PLAN2D_CSS}</style><svg class="fp3d-p2d-svg"><g class="fp3d-p2d-plan"><g></g></g></svg><div class="fp3d-p2d-layer"></div><div class="fp3d-p2d-probe" aria-hidden="true"></div>`;
     this.plan = this.root.querySelector(".fp3d-p2d-plan")!;
     this.content = this.plan.firstElementChild as SVGGElement;
     this.layer = this.root.querySelector(".fp3d-p2d-layer")!;
@@ -577,7 +577,7 @@ export function createViewer(host: HTMLElement, options?: ViewerOptions): Plan2d
 }
 
 /** The plan's look per theme; the pins use the view's own pin styles. */
-const CSS = `
+export const PLAN2D_CSS = `
 .fp3d-p2d:focus-visible {
   outline: 2px solid var(--fp3d-accent, #37e0ff);
   outline-offset: -3px;
@@ -600,13 +600,14 @@ const CSS = `
   --p2d-out: rgba(91, 124, 255, 0.06);
 }
 .fp3d-p2d[data-theme="blueprint"] {
-  --p2d-wall: #e8f1ff;
+  --p2d-wall: #ffffff;
   --p2d-wall-ext: #ffffff;
-  --p2d-room: rgba(255, 255, 255, 0.05);
-  --p2d-room-line: rgba(255, 255, 255, 0.35);
-  --p2d-item: rgba(235, 244, 255, 0.7);
-  --p2d-item-fill: rgba(255, 255, 255, 0.08);
-  --p2d-gap: #123e7a;
+  --p2d-room: rgba(255, 255, 255, 0.04);
+  --p2d-room-line: rgba(255, 255, 255, 0.9);
+  --p2d-item: rgba(255, 255, 255, 0.95);
+  --p2d-item-fill: rgba(255, 255, 255, 0.06);
+  --p2d-gap: #0a2a58;
+  --p2d-label: #ffffff;
   --p2d-out: rgba(255, 255, 255, 0.05);
 }
 .fp3d-p2d[data-theme="day"] {
@@ -737,7 +738,7 @@ const CSS = `
   color: var(--p2d-label);
   font: 600 12px var(--fp3d-title-font, sans-serif);
   white-space: nowrap;
-  opacity: 0.85;
+  /* full strength: a faded label dropped under 7:1 in some looks (#216) */
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   pointer-events: none;
 }
@@ -745,7 +746,6 @@ const CSS = `
 .fp3d-p2d[data-theme="realistic"] .fp3d-p2d-label { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8); }
 .fp3d-p2d-label small {
   font: 500 11px var(--fp3d-font, sans-serif);
-  opacity: 0.85;
 }
 .fp3d-p2d-pin { pointer-events: auto; }
 .fp3d-p2d-flash { outline: 3px solid var(--fp3d-accent); outline-offset: 3px; }

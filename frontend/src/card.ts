@@ -13,7 +13,7 @@ import type { HomeAssistant } from "./types.ts";
 import { showsPlan2d, type CardConfig, type CardControl } from "./card-config.ts";
 import { nightActive } from "./kiosk.ts";
 import { lookOf } from "./themes.ts";
-import { lightChrome } from "./scheme.ts";
+import { contrastChrome, lightChrome } from "./scheme.ts";
 import { shownAccent, shownLook, textOn } from "./ha-theme.ts";
 import { loadCardEditor } from "./load-card-editor.ts";
 import type { WallMode } from "./viewer/viewer3d.ts";
@@ -374,6 +374,7 @@ clearTimeout(this.cleanTimer);
   protected updated(): void {
     // the card's chrome goes light with the Day look (#85)
     this.toggleAttribute("light", lightChrome(shownLook(lookOf(this._config?.theme), this.hass)));
+    this.toggleAttribute("contrast", contrastChrome(shownLook(lookOf(this._config?.theme), this.hass)));
     // the language its texts are in (#196)
     const lang = uiLanguage(this.hass);
     if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);

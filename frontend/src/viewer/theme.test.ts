@@ -80,3 +80,32 @@ test("Day floors are still told apart after the lightness cap (#194)", () => {
   const seen = new Set(Object.keys(FLOOR_LOOK).map((k) => dayFloor(FLOOR_LOOK[k].color)));
   assert.equal(seen.size, Object.keys(FLOOR_LOOK).length);
 });
+
+// ---- the High contrast look (the Blueprint look) meets 7:1 for edges (#216) ----
+import { BLUEPRINT_LINE, blueprintSurface } from "./theme.ts";
+
+test("High contrast edges are 7:1 on every fill, the lawn, the ground and the sky, by day and by night (#216)", () => {
+  const line = rgbHex(BLUEPRINT_LINE);
+  const fills = [
+    ...Object.keys(FLOOR_LOOK).map((k) => rgbHex(blueprintSurface(unit(FLOOR_LOOK[k].color)))),
+    rgbHex(blueprintSurface(unit(outdoorLook("lawn").color))),
+    rgbHex(blueprintSurface(unit(WALL))),
+    rgbHex(blueprintSurface(unit(ITEM))),
+    ...STAGE.blueprint.night.map((c) => rgbHex(c.map((v) => v / 255))),
+    ...STAGE.blueprint.day.map((c) => rgbHex(c.map((v) => v / 255))),
+  ];
+  for (const f of fills) assert.ok(contrast(line, f) >= 7, `line on ${f}: ${contrast(line, f).toFixed(2)}`);
+});
+
+test("High contrast still tells walls from items from floors (#216)", () => {
+  const wall = rgbHex(blueprintSurface(unit(WALL)));
+  const item = rgbHex(blueprintSurface(unit(ITEM)));
+  const brightest = rgbHex(blueprintSurface([1, 1, 1].map((v) => v * 0.3) as [number, number, number]));
+  assert.notEqual(wall, rgbHex(blueprintSurface([0, 0, 0])));
+  assert.ok(contrast(item, rgbHex(blueprintSurface(unit(FLOOR_LOOK.tiles.color)))) >= 1.05);
+  assert.ok(contrast(brightest, rgbHex(blueprintSurface([0, 0, 0]))) >= 1.5);
+});
+
+test("signal colours keep their colour in High contrast (#216)", () => {
+  assert.equal(rgbHex(blueprintSurface(unit(0xffd36b))), "#ffd36b");
+});
