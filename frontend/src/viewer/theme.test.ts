@@ -42,3 +42,41 @@ test("Neon lifts items a notch above the floor they stand on; signal colours and
   // a lit lamp's yellow is a signal colour
   assert.equal(rgbHex(neonSurface(unit(0xffd36b))), "#ffd36b");
 });
+
+// ---- the contrast standard of the looks (#194, A11Y-5) ----
+// Non-text contrast needs 3:1 (WCAG 1.4.11). The pale Day fills cannot all be 3:1 against each other, so the standard is:
+// every edge line reads on every fill at 3:1 (floors, lawn) or 7:1 (walls, items, ground, sky); a fill that is the only cue (the lawn on the ground) is 3:1; floors stand
+// off the pale walls by 1.5:1 (wall edges carry the rest).
+import { DAY_FLOOR_MAX_LUM, DAY_LAWN, dayLawn } from "./theme.ts";
+import { outdoorLook } from "./outdoor.ts";
+
+const DAY_GROUND = rgbHex(STAGE.day.day[1].map((v) => v / 255));
+const DAY_SKY = rgbHex(STAGE.day.day[0].map((v) => v / 255));
+
+test("Day edge lines read at 3:1 on the floors and the lawn and 7:1 on walls, items, the ground and the sky (#194)", () => {
+  const line = rgbHex(DAY_LINE);
+  const floors = [...Object.keys(FLOOR_LOOK).map((k) => hex(dayFloor(FLOOR_LOOK[k].color)!)), hex(DAY_LAWN)];
+  const others = [rgbHex(daySurface(unit(WALL))), rgbHex(daySurface(unit(ITEM))), DAY_GROUND, DAY_SKY];
+  for (const f of floors) assert.ok(contrast(line, f) >= 3, `line on floor ${f}: ${contrast(line, f).toFixed(2)}`);
+  for (const f of others) assert.ok(contrast(line, f) >= 7, `line on ${f}: ${contrast(line, f).toFixed(2)}`);
+});
+
+test("the Day lawn stands off the Day ground at 3:1 and is told from the neon lawn tint only (#194)", () => {
+  assert.ok(contrast(hex(DAY_LAWN), DAY_GROUND) >= 3, `lawn on ground ${contrast(hex(DAY_LAWN), DAY_GROUND).toFixed(2)}`);
+  assert.equal(dayLawn(outdoorLook("lawn").color), DAY_LAWN);
+  assert.equal(dayLawn(ITEM), null);
+});
+
+test("every Day floor stands off the Day walls by 1.5:1 (#194)", () => {
+  const wall = rgbHex(daySurface(unit(WALL)));
+  for (const k of Object.keys(FLOOR_LOOK)) {
+    const f = hex(dayFloor(FLOOR_LOOK[k].color)!);
+    assert.ok(contrast(f, wall) >= 1.5, `${k} on wall ${contrast(f, wall).toFixed(2)}`);
+  }
+  assert.ok(DAY_FLOOR_MAX_LUM < 0.45);
+});
+
+test("Day floors are still told apart after the lightness cap (#194)", () => {
+  const seen = new Set(Object.keys(FLOOR_LOOK).map((k) => dayFloor(FLOOR_LOOK[k].color)));
+  assert.equal(seen.size, Object.keys(FLOOR_LOOK).length);
+});

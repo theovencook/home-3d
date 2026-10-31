@@ -98,7 +98,7 @@ import { circlePath, cleaningPath, stepRobot, type RobotInfo, type RobotMotion }
 import { decorDelay, lowEndDevice, petDelay } from "./pace.ts";
 import { flowSpeed } from "./flow-style.ts";
 import { HALO_SIZE, haloSize } from "./halo-size.ts";
-import { fitDistance, refitOnResize, startViewRadius, stillFitted, type FitMargin, type FitView } from "./fit.ts";
+import { fitDistance, plotBox, refitOnResize, startViewRadius, stillFitted, type FitMargin, type FitView } from "./fit.ts";
 
 export type { RobotInfo } from "./robot.ts";
 
@@ -1091,6 +1091,19 @@ export class FloorplanViewer {
       this.invalidate();
     });
     this.warming = warm;
+  }
+
+  /** What the canvas is called for a screen reader (#195); set by the host, which knows the language and the room list. */
+  private canvasLabel = "";
+
+  setDescription(label: string): void {
+    this.canvasLabel = label;
+    this.labelCanvas(this.renderer.domElement);
+  }
+
+  private labelCanvas(canvas: HTMLCanvasElement): void {
+    if (this.canvasLabel) canvas.setAttribute("aria-label", this.canvasLabel);
+    else canvas.removeAttribute("aria-label");
   }
 
   /** A new renderer (another quality) takes over the canvas. */
@@ -2483,6 +2496,10 @@ export class FloorplanViewer {
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = SRGBColorSpace;
     renderer.domElement.className = "fp3d-canvas";
+    // reachable and named for the keyboard and screen readers (#195): arrow keys turn it (controls.ts)
+    renderer.domElement.tabIndex = 0;
+    renderer.domElement.setAttribute("role", "application");
+    this.labelCanvas(renderer.domElement);
     this.host.prepend(renderer.domElement);
     return renderer;
   }
@@ -2542,6 +2559,8 @@ export class FloorplanViewer {
         if (this.swipe) this.options.onDeviceSwipe?.(this.swipe.entity, "end", 0, this.swipe.x, this.swipe.y);
         this.swipe = null;
       },
+      // the arrow keys steer the view, except while furnishing: there they nudge the selection (#195)
+      keys: () => !this.furnish,
       grab: (x, y) => this.grabFurniture(x, y),
       drag: (x, y, free) => this.dragFurniture(x, y, free),
       drop: () => this.dropFurniture(),
@@ -4575,15 +4594,16 @@ export class FloorplanViewer {
 
   private fit(duration: number): void {
     const box = new Box3();
-    for (const fv of this.activeFloors()) {
-      const y0 = fv.floor.elevation + fv.ty;
-      for (const room of fv.floor.rooms) {
-        for (const [x, z] of room.points) {
-          box.expandByPoint(new Vector3(x, y0, z));
-          box.expandByPoint(new Vector3(x, y0 + fv.floor.height, z));
-        }
-      }
-    }
+    // the rooms and the garden around them (#194): the roof and the lawn are not cropped
+    const framed = plotBox(
+      this.activeFloors().map((fv) => ({
+        y0: fv.floor.elevation + fv.ty,
+        height: fv.floor.height,
+        rooms: fv.floor.rooms.map((r) => r.points),
+        outdoor: (fv.floor.outdoor ?? []).map((a) => a.points),
+      })),
+    );
+    if (framed) box.set(new Vector3(...framed.min), new Vector3(...framed.max));
     if (box.isEmpty()) box.set(new Vector3(-4, 0, -4), new Vector3(4, 2.5, 4));
     this.placeGround();
     // the weather falls over the plot and a margin around it

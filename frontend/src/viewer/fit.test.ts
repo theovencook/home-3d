@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fitDistance, refitOnResize, startViewRadius } from "./fit.ts";
+import { fitDistance, plotBox, refitOnResize, startViewRadius } from "./fit.ts";
 
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-3, `${a} ≈ ${b}`);
 
@@ -39,4 +39,40 @@ test("a start view saved on a wide screen keeps its width on a portrait phone (#
   near(startViewRadius(10, 60, 1), 10);
   // a 0.5-wide phone stands back until what was wide on the big screen fits across (18.028 / 10 from above)
   near(startViewRadius(10, 60, 0.5), 18.028);
+});
+
+const sq = (x0: number, z0: number, x1: number, z1: number): [number, number][] => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
+
+test("the house view frames the garden with the house, so the lawn and roof are not cropped (#194)", () => {
+  const house = { y0: 0, height: 2.5, rooms: [sq(0, 0, 10, 8)], outdoor: [sq(-3, -3, 14, 12)] };
+  const box = plotBox([house])!;
+  assert.deepEqual(box.min, [-3, 0, -3]);
+  assert.deepEqual(box.max, [14, 2.5, 12]);
+  // the camera stands further back for it than for the rooms alone
+  const rooms = plotBox([{ ...house, outdoor: [] }])!;
+  const diag = (b: { min: number[]; max: number[] }) => Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]);
+  assert.ok(fitDistance(diag(box) / 2, 60, 1.6) > fitDistance(diag(rooms) / 2, 60, 1.6));
+});
+
+test("a huge plot does not shrink the house to a dot (#194)", () => {
+  const field = { y0: 0, height: 2.5, rooms: [sq(0, 0, 10, 8)], outdoor: [sq(-200, -200, 300, 300)] };
+  const box = plotBox([field])!;
+  // held within three quarters of the house's longest side (7.5 m) of the rooms
+  assert.deepEqual(box.min, [-7.5, 0, -7.5]);
+  assert.deepEqual(box.max, [17.5, 2.5, 15.5]);
+});
+
+test("a plot with no rooms and no garden has nothing to frame; a garden alone is framed as it is (#194)", () => {
+  assert.equal(plotBox([]), null);
+  const only = plotBox([{ y0: 0, height: 2.5, rooms: [], outdoor: [sq(0, 0, 5, 5)] }])!;
+  assert.deepEqual(only.min, [0, 0, 0]);
+  assert.deepEqual(only.max, [5, 0, 5]);
+});
+
+test("upper floors still count for the height of the house (#194)", () => {
+  const box = plotBox([
+    { y0: 0, height: 2.5, rooms: [sq(0, 0, 6, 6)], outdoor: [] },
+    { y0: 2.7, height: 2.5, rooms: [sq(0, 0, 6, 6)], outdoor: [] },
+  ])!;
+  assert.equal(box.max[1], 5.2);
 });

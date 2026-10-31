@@ -29,6 +29,7 @@ export type ViewerSurface = Pick<
   | "setBinCues"
   | "setBinSpots"
   | "setBuilding"
+  | "setDescription"
   | "setDevices"
   | "setExplode"
   | "setFloor"

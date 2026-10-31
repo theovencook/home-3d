@@ -49,6 +49,15 @@ const RAD = Math.PI / 180;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const mix3 = (a: readonly number[], b: readonly number[], t: number) => a.map((v, i) => v + (b[i] - v) * t) as [number, number, number];
 
+/**
+ * The sky light left at night (#194): the Realistic look at night was near black, furniture and lamps vanished. With this the
+ * lit floors and walls stay readable by moonlight and street light (the day's strength is unchanged).
+ */
+export const NIGHT_SKY_LIGHT = 0.75;
+
+/** The share of the lawn's daylight colour kept at night (#194; the lawn was almost black at 0.15). */
+export const NIGHT_GROUND = 0.3;
+
 /** The sunlight for a sun.sun position (degrees, azimuth clockwise from north), the cloud cover 0…1 and the plan's north. */
 export function sunLight(sun: { azimuth: number; elevation: number } | null, cloud: number, north: number): SunLight {
   if (!sun) return { dir: [0, 1, 0], sun: 0, color: [1, 1, 1], sky: 1.6, shadow: 0 };
@@ -65,7 +74,7 @@ export function sunLight(sun: { azimuth: number; elevation: number } | null, clo
     dir,
     sun: strength,
     color: mix3([1, 0.62, 0.38], [1, 0.96, 0.9], clamp01(sun.elevation / 20)),
-    sky: 0.35 + day * (0.75 + 0.4 * c),
+    sky: NIGHT_SKY_LIGHT + day * (1.1 - NIGHT_SKY_LIGHT + 0.4 * c),
     shadow: strength > 0 ? 1 - 0.8 * c : 0,
   };
 }
@@ -117,7 +126,7 @@ export function realisticSky(elevation: number | null, weather: SkyWeather | nul
   top = mix3(NIGHT.top, top, day);
   horizon = mix3(NIGHT.horizon, horizon, day);
   const lawn = mix3(LAWN, SNOW, clamp01(w.snow * 1.25));
-  const ground = lawn.map((v) => v * (0.15 + 0.85 * day)) as [number, number, number];
+  const ground = lawn.map((v) => v * (NIGHT_GROUND + (1 - NIGHT_GROUND) * day)) as [number, number, number];
   const round = (c: number[]) => c.map((v) => Math.round(v)) as [number, number, number];
   return { top: round(top), horizon: round(horizon), ground: round(ground) };
 }

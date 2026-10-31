@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deviceTier, realisticSky, shadowPlan, sunLight } from "./realistic.ts";
+import { deviceTier, NIGHT_SKY_LIGHT, realisticSky, shadowPlan, sunLight } from "./realistic.ts";
 
 const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
 const PIXEL = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36";
@@ -95,4 +95,22 @@ test("the sky darkens at night and glows warm at sunset", () => {
   assert.ok(grey.horizon[0] - grey.horizon[2] < 20, String(grey.horizon));
   // without sun.sun or a weather entity: a clear day
   assert.deepEqual(realisticSky(null, null), realisticSky(90, dry));
+});
+
+test("the Realistic look keeps a night minimum: the sky light and the lawn stay readable (#194)", () => {
+  const night = sunLight({ azimuth: 0, elevation: -30 }, 0, 0);
+  const day = sunLight({ azimuth: 0, elevation: 50 }, 0, 0);
+  // night is at least two thirds of the day's sky light, so lit floors and furniture are not black
+  assert.ok(night.sky >= NIGHT_SKY_LIGHT && night.sky >= day.sky * 0.6, `${night.sky} vs ${day.sky}`);
+  // the day itself is unchanged by the floor
+  assert.ok(Math.abs(day.sky - 1.1) < 1e-9, String(day.sky));
+  // a hemisphere-lit wooden floor at night against the night lawn: 3:1 by relative luminance, as the lit floor shows it
+  const lin = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const lum = (rgb: number[]) => 0.2126 * lin(rgb[0] / 255) + 0.7152 * lin(rgb[1] / 255) + 0.0722 * lin(rgb[2] / 255);
+  const wood = [0x8a, 0x5a, 0x36].map((v) => (v / 255) * night.sky);
+  const lawn = realisticSky(-30, null).ground;
+  const lit = 0.2126 * lin(Math.min(1, wood[0])) + 0.7152 * lin(Math.min(1, wood[1])) + 0.0722 * lin(Math.min(1, wood[2]));
+  const ratio = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  assert.ok(ratio(lit, lum(lawn)) >= 1.5, `${ratio(lit, lum(lawn)).toFixed(2)}`);
+  assert.ok(lum(lawn) > lum([13, 17, 10]), "the night lawn is lighter than it was");
 });

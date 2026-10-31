@@ -5,6 +5,7 @@
 import { AdditiveBlending, Color, NormalBlending, Vector3, type Material } from "three";
 import { THEMES, type Theme } from "../themes.ts";
 import { FLOOR_LOOK, FLOOR_REAL } from "./build.ts";
+import { outdoorLook } from "./outdoor.ts";
 
 export type { Theme } from "../themes.ts";
 
@@ -52,10 +53,32 @@ const DAY_FLOOR_MIX = 0.25;
 const mixHex = (a: number, b: number, t: number) =>
   [16, 8, 0].reduce((out, sh) => out | (Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t) << sh), 0);
 
+/**
+ * The lightest a Day floor gets (WCAG relative luminance): the Day walls are pale, so a pale floor (the tiles) melted
+ * into them at 1.1:1 (#194). Under this every floor stands off the walls by at least 1.5:1.
+ */
+export const DAY_FLOOR_MAX_LUM = 0.4;
+/** The Day lawn (#194): a mid green, dark enough to stand off the pale Day ground by 3:1 (the generic mapping made it near-white). */
+export const DAY_LAWN = 0x3f7d4f;
+
+const srgbLin = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+const lumOf = (hex: number) => 0.2126 * srgbLin(((hex >> 16) & 255) / 255) + 0.7152 * srgbLin(((hex >> 8) & 255) / 255) + 0.0722 * srgbLin((hex & 255) / 255);
+/** A colour darkened (towards black) until its relative luminance is at most `max`. */
+function capLuminance(hex: number, max: number): number {
+  let out = hex;
+  for (let i = 0; i < 40 && lumOf(out) > max; i++) out = mixHex(out, 0, 0.03);
+  return out;
+}
+
 /** The Day floor colour for a neon floor tint (exactly as built), null for any other colour. */
 export function dayFloor(neon: number): number | null {
   const k = Object.keys(FLOOR_LOOK).find((m) => FLOOR_LOOK[m].color === neon);
-  return k && FLOOR_REAL[k] !== undefined ? mixHex(FLOOR_REAL[k], DAY_FLOOR_TINT, DAY_FLOOR_MIX) : null;
+  return k && FLOOR_REAL[k] !== undefined ? capLuminance(mixHex(FLOOR_REAL[k], DAY_FLOOR_TINT, DAY_FLOOR_MIX), DAY_FLOOR_MAX_LUM) : null;
+}
+
+/** The Day colour of a lawn (its neon tint, exactly as built), null for any other colour. */
+export function dayLawn(neon: number): number | null {
+  return neon === outdoorLook("lawn").color ? DAY_LAWN : null;
 }
 
 /** A neon surface colour (0–1) in the Day look: the shader's mapping. */
@@ -87,6 +110,11 @@ ${Object.keys(FLOOR_REAL)
   return vec3(-1.0);
 }`;
 
+const DAY_LAWN_GLSL = `vec3 fp3dDayLawn(vec3 c) {
+  if (distance(c, ${vec3(outdoorLook("lawn").color)}) < 0.0002) return ${vec3(DAY_LAWN)};
+  return vec3(-1.0);
+}`;
+
 const GLSL = `
 uniform int uTheme;
 uniform vec3 uAccent;
@@ -95,6 +123,7 @@ uniform int uAccentOn;
 float fp3dGlow = 0.0;
 ${FLOOR_GLSL}
 ${DAY_FLOOR_GLSL}
+${DAY_LAWN_GLSL}
 vec3 fp3dThemed(vec3 c, bool line) {
   float mx = max(c.r, max(c.g, c.b));
   float mn = min(c.r, min(c.g, c.b));
@@ -136,6 +165,8 @@ vec3 fp3dThemed(vec3 c, bool line) {
   if (line) return vec3(${DAY_LINE.join(", ")}) * clamp(mx * 1.6, 0.75, 1.0);
   vec3 dayFloor = fp3dDayFloor(c);
   if (dayFloor.r >= 0.0) return dayFloor;
+  vec3 dayLawn = fp3dDayLawn(c);
+  if (dayLawn.r >= 0.0) return dayLawn;
   vec3 g = vec3(clamp(${DAY.base.toFixed(3)} + l * ${DAY.gain.toFixed(3)}, 0.0, ${DAY.max.toFixed(3)}));
   return mix(g, g * (c / max(mx, 0.001)), ${DAY.hue.toFixed(3)});
 }
