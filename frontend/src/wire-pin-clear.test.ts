@@ -30,8 +30,8 @@ test("the cable dot and its hit area end above the pin for every symbol size, mo
   const m = dot.match(/margin-top:\s*calc\(-(\d+)px \* var\(--fp3d-pin-k, 1\) - (\d+)px\)/);
   assert.ok(m, "the dot is lifted by a calc of the symbol size");
   for (const k of [0.8, 1, 1.25]) {
-    const dotCentre = Number(m[1]) * k + Number(m[2]); // above the pin's centre
-    const dotBottom = dotCentre - (size / 2 + reach); // lowest point a tap on the dot can land
+    const dotCentre: number = Number(m[1]) * k + Number(m[2]); // above the pin's centre
+    const dotBottom: number = dotCentre - (size / 2 + reach); // lowest point a tap on the dot can land
     // a pin is 24k + 8 + 2 high; the coarse-pointer padding adds 2 each side
     const pinTop = (24 * k + 8 + 2 + 4) / 2;
     assert.ok(dotBottom >= pinTop, `k=${k}: the dot's hit area ends ${dotBottom}px above the centre, the pin's top is ${pinTop}px`);

@@ -14,6 +14,7 @@ import { uid, type Furniture, type MarkerShow, MARKER_SHOWS, type OutdoorArea, t
 import type { EntityOption } from "../../entity-options.ts";
 import { round } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
+import { callServiceSafe } from "../../failure.ts";
 
 /** FieldsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class FieldsPart {
@@ -32,7 +33,7 @@ export class FieldsPart {
       consumers: () => [],
       canEdit: () => this.isEditor,
       updateBuilding: (mutate) => this.change((doc) => mutate(doc)),
-      callService: (domain, service, data) => hass.callService(domain, service, data),
+      callService: (domain, service, data) => (callServiceSafe(hass, domain, service, data ?? {}, (error) => this.t("service_failed", { error })), Promise.resolve()),
       newId: (prefix) => uid(prefix),
       refresh: () => {
         // a module changed its own state (a demo started): its fields are made anew

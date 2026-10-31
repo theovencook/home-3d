@@ -2508,8 +2508,7 @@ export class Fp3dView3d extends LitElement {
       this.requestUpdate();
     };
     // a refused command shows as Home Assistant's own notice instead of failing silently (#400)
-    const call = (service: string, data: Record<string, unknown> = {}) =>
-      void Promise.resolve(hass.callService("media_player", service, { entity_id: m.id, ...data })).catch((err: unknown) => this.serviceFailed(`media_player.${service}`, err));
+    const call = (service: string, data: Record<string, unknown> = {}) => safeCall(hass, "media_player", service, { entity_id: m.id, ...data });
     // the buttons act when the finger lifts (#400): while a speaker plays the view redraws all the time and
     // some tablets then drop the click; a click without a pointer (keyboard) still works
     // whichever comes, the lifted finger or the click: the button acts once (some browsers drop one of them)
@@ -4817,7 +4816,7 @@ export class Fp3dView3d extends LitElement {
       }
       this._armed = null;
       // devices that ask before switching are asked about first, once for the whole row (#162)
-      void this.confirmForAll(ids).then((ok) => ok && hass.callService(domain, service, { entity_id: ids }));
+      void this.confirmForAll(ids).then((ok) => ok && safeCall(hass, domain, service, { entity_id: ids }));
     };
     const button = (key: string, label: I18nKey, domain: string, service: string, ids: string[]) =>
       html`<button class="fp3d-btn ${this._armed === key ? "fp3d-central-armed" : ""}" ?disabled=${!ids.length} @click=${() => act(key, domain, service, ids)}>
@@ -4890,7 +4889,7 @@ export class Fp3dView3d extends LitElement {
                   class="fp3d-chip fp3d-own-btn"
                   aria-pressed=${ownButtonOn(hass, btn)}
                   @click=${(e: Event) => {
-                    runButton(hass, e.currentTarget as HTMLElement, btn);
+                    runButton(hass, e.currentTarget as HTMLElement, btn, (error) => translate(hass, "service_failed", { error }));
                     if (btn.action !== "service") this._central = false;
                   }}
                 >
@@ -5381,7 +5380,7 @@ export class Fp3dView3d extends LitElement {
       dimmed: () => this.dimmed,
       canEdit: () => this.mayEdit,
       updateBuilding: (mutate) => this.changePlan(mutate),
-      callService: (domain, service, data) => (this.hass ? this.hass.callService(domain, service, data) : Promise.resolve()),
+      callService: (domain, service, data) => (this.hass ? (safeCall(this.hass, domain, service, data ?? {}), Promise.resolve()) : Promise.resolve()),
       newId: (prefix) => uid(prefix),
       waterLevel: (floorId, areaId) => {
         const floor = this.building?.floors.find((f) => f.id === floorId);
@@ -6105,7 +6104,7 @@ export class Fp3dView3d extends LitElement {
     const hass = this.hass;
     if (!hass) return;
     void runItemAction(action, owner.entity, {
-      callService: (domain, service, data) => hass.callService(domain, service, data),
+      callService: (domain, service, data) => (safeCall(hass, domain, service, data), Promise.resolve()),
       moreInfo: (id) => openMoreInfo(this, id),
       camera: (id) => (this._menu = { entity: id, x, y }),
       navigate: (path) => {
@@ -6237,7 +6236,7 @@ export class Fp3dView3d extends LitElement {
     }
     // a pulse switch turns itself off again: it is only ever switched on; buttons are pressed
     const [domain] = drive.split(".");
-    void this.confirmFor(drive).then((yes) => yes && this.hass.callService(domain, domain === "switch" ? "turn_on" : "press", { entity_id: drive }));
+    void this.confirmFor(drive).then((yes) => yes && safeCall(this.hass, domain, domain === "switch" ? "turn_on" : "press", { entity_id: drive }));
   }
 
   /** The look shown: the chosen one, by the sun for "auto" (Day above the horizon, Neon below), by the HA theme for "theme". */

@@ -2,6 +2,7 @@
 // texts shared by markers and the room panel.
 
 import { defaultHeight, entityName, isActive, isUnavailable, kindOf, lightGlow, tempUnit } from "./devices.ts";
+import { callServiceSafe } from "./failure.ts";
 import { formatNumber, translate, type I18nKey } from "./i18n.ts";
 import { iconSvg, mdiIcon } from "./icons.ts";
 import type { Building } from "./model.ts";
@@ -176,9 +177,10 @@ export function openMoreInfo(from: HTMLElement, entityId: string): void {
 }
 
 /** Toggle an entity with its own domain's toggle service (light.toggle, switch.toggle, …). */
-export function toggleEntity(hass: HomeAssistant, entityId: string): Promise<unknown> {
+export function toggleEntity(hass: HomeAssistant, entityId: string): void {
   const domain = entityId.slice(0, entityId.indexOf("."));
-  return hass.callService(domain, "toggle", { entity_id: entityId });
+  // a refused call shows the same notice as in the room panel (#208)
+  callServiceSafe(hass, domain, "toggle", { entity_id: entityId }, (error) => translate(hass, "service_failed", { error }));
 }
 
 /** A glow made weaker or stronger by the lamp's own factor (#181): many LED strips need not outshine the room. */

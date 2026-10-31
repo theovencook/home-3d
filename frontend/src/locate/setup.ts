@@ -3,6 +3,7 @@
 
 import { css, html, LitElement, nothing } from "lit";
 import type { Building } from "../model.ts";
+import { callServiceSafe } from "../failure.ts";
 import type { HomeAssistant } from "../types.ts";
 import { locateRooms, roomAt, type LocateRoom } from "./graph.ts";
 
@@ -2015,7 +2016,7 @@ export class LocateSetup extends LitElement {
       <p class="hint">${t.helper_android}</p>`;
     if (!helper) return head;
     const watch = helper.option === "Heart Sensor";
-    const pick = (option: string) => void this.hass.callService("select", "select_option", { entity_id: helper.select, option });
+    const pick = (option: string) => callServiceSafe(this.hass, "select", "select_option", { entity_id: helper.select, option }, (error) => error);
     // the key in either byte order: whose is it? (a device of the list, or a Private BLE Device of Home Assistant)
     const flip = (hex: string) => hex.match(/../g)!.reverse().join("");
     const same = (k: string | null | undefined) => !!helper.irk && !!k && (k.toLowerCase() === helper.irk || k.toLowerCase() === flip(helper.irk));
@@ -2079,7 +2080,7 @@ export class LocateSetup extends LitElement {
       ${helper.refresh
         ? html`<p class="end">
             <small>${t.helper_next_hint}</small>
-            <button @click=${() => void this.hass.callService("button", "press", { entity_id: helper.refresh })}>${t.helper_next}</button>
+            <button @click=${() => callServiceSafe(this.hass, "button", "press", { entity_id: helper.refresh }, (error) => error)}>${t.helper_next}</button>
           </p>`
         : nothing}`;
   }

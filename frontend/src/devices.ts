@@ -4,6 +4,7 @@
 import type { Furniture, EntityRef, Floor, LampMount, Opening, Placement, RoofWindow, Room, Vec2 } from "./model.ts";
 import { centroid, outdoorZones, pointInPolygon } from "./model.ts";
 import { isCameraItem, isRobotVacuum, isThermostatItem, packMotion, packScreen } from "./packs.ts";
+import { callServiceSafe } from "./failure.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 
 export type DeviceKind =
@@ -1372,7 +1373,7 @@ export function favoriteCall(entityId: string): [domain: string, service: string
  * Run an own button (D143) from an element inside the dashboard: navigate, more-info, a service, or a
  * DOM event – "ll-custom" is what Home Assistant's fire-dom-event sends, and browser_mod listens for it.
  */
-export function runButton(hass: HomeAssistant, from: HTMLElement, b: { action: string; target?: string | null; data?: Record<string, unknown> | null }): void {
+export function runButton(hass: HomeAssistant, from: HTMLElement, b: { action: string; target?: string | null; data?: Record<string, unknown> | null }, failed: (error: string) => string): void {
   const target = b.target?.trim() ?? "";
   if (b.action === "navigate" && target) {
     history.pushState(null, "", target);
@@ -1381,7 +1382,8 @@ export function runButton(hass: HomeAssistant, from: HTMLElement, b: { action: s
     from.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: target }, bubbles: true, composed: true }));
   } else if (b.action === "service" && target.includes(".")) {
     const [domain, service] = target.split(".", 2);
-    void hass.callService(domain, service, b.data ?? {});
+    // a refused service shows the notice of `failed` instead of failing silently (#208)
+    callServiceSafe(hass, domain, service, b.data ?? {}, failed);
   } else if (b.action === "fire_dom_event") {
     from.dispatchEvent(new CustomEvent("ll-custom", { detail: b.data ?? {}, bubbles: true, composed: true }));
   }

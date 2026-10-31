@@ -660,11 +660,11 @@ test("own buttons call a service or fire the DOM event browser_mod listens for (
   const el = new EventTarget() as unknown as HTMLElement;
   const events: { type: string; detail: unknown }[] = [];
   for (const type of ["ll-custom", "hass-more-info"]) el.addEventListener(type, (e) => events.push({ type, detail: (e as CustomEvent).detail }));
-  runButton(hass, el, { action: "service", target: "script.turn_on", data: { entity_id: "script.party" } });
+  runButton(hass, el, { action: "service", target: "script.turn_on", data: { entity_id: "script.party" } }, (e) => e);
   assert.deepEqual(calls, [["script", "turn_on", { entity_id: "script.party" }]]);
   const popup = { browser_mod: { service: "browser_mod.popup", data: { title: "Rollos" } } };
-  runButton(hass, el, { action: "fire_dom_event", data: popup });
-  runButton(hass, el, { action: "more_info", target: "cover.wohnzimmer" });
+  runButton(hass, el, { action: "fire_dom_event", data: popup }, (e) => e);
+  runButton(hass, el, { action: "more_info", target: "cover.wohnzimmer" }, (e) => e);
   assert.deepEqual(events, [
     { type: "ll-custom", detail: popup },
     { type: "hass-more-info", detail: { entityId: "cover.wohnzimmer" } },
