@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isLamp, newFloor, setTerrain, type Building, type Furniture } from "./model.ts";
-import { isCooktopZone, isPackCooktop, isPackHeater, isPackSensor, furnitureSize, isElectric, mountBase, packAmbilight, packDisplay, packItem, packItemName, packName, packOrigin, packsVersion, packType, setPacks, withPackItem, DRAFT_TYPE, type FurniturePack } from "./packs.ts";
+import { isCooktopZone, isPackCooktop, isPackHeater, isPackSensor, furnitureSize, isElectric, mountBase, packAmbilight, packDisplay, packItem, packItemName, packName, packOrigin, packsVersion, packType, setPacks, usePacksQuietly, withPackItem, DRAFT_TYPE, type FurniturePack } from "./packs.ts";
 
 const pack: FurniturePack = {
   id: "demo.pack",
@@ -175,4 +175,18 @@ test("a core hot-water cylinder takes a water_heater entity like the utility pac
   assert.equal(isPackHeater("pack:theovencook.devices:hot_water_cylinder_200"), true);
   assert.equal(isPackHeater("pack:theovencook.devices:hot_water_cylinder"), true);
   assert.equal(isPackHeater("pack:theovencook.devices:heat_pump_outdoor_unit"), false);
+});
+
+test("a thumbnail takes the packs without changing the pack version (#175)", () => {
+  setPacks([]);
+  const before = packsVersion();
+  const list = [pack];
+  usePacksQuietly(list);
+  assert.equal(packsVersion(), before, "drawing a picture does not rebuild the 3D view");
+  assert.ok(packItem(packType("demo.pack", "tv")), "but the picture can use the item");
+  usePacksQuietly(list);
+  assert.equal(packsVersion(), before);
+  setPacks(list);
+  assert.equal(packsVersion(), before + 1, "a real change still bumps it");
+  setPacks([]);
 });

@@ -198,7 +198,16 @@ let planRecipes: Record<string, PlanRecipe> | undefined;
 let planKey = "";
 let version = 0;
 
-export function setPacks(packs: FurniturePack[]): void {
+/**
+ * Lets a thumbnail draw from `packs` without telling the 3D view anything changed (#175): the registry is brought up to
+ * date but the version stays, so the scene is not rebuilt for a picture. The same list again does nothing.
+ */
+export function usePacksQuietly(packs: FurniturePack[]): void {
+  if (packs === registry) return;
+  setPacks(packs, true);
+}
+
+export function setPacks(packs: FurniturePack[], quiet = false): void {
   // recipes fetched for a pack that is still the same (its hash) stay with the new list
   for (const pack of packs) {
     const before = pack.hash ? registry.find((p) => p.id === pack.id && p.hash === pack.hash) : undefined;
@@ -216,7 +225,7 @@ export function setPacks(packs: FurniturePack[]): void {
     const entry = items.get(type);
     if (entry && !items.has(old)) items.set(old, entry);
   }
-  version++;
+  if (!quiet) version++;
 }
 
 /** The type an item has now: its new type when it moved to another pack (#110), else itself. */
