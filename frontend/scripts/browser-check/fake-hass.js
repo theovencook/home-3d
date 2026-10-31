@@ -51,13 +51,15 @@ export function makeFakeHass(plan, build) {
   const calls = [];
   const unknown = new Set();
   let revision = 1;
+  // the websocket protocol of the backend of this release (#166: const.PROTOCOL, api.ts PROTOCOL)
+  const protocol = 1;
   const answer = (msg) => {
     calls.push(msg.type);
     switch (msg.type) {
       case "home_3d/building/get":
-        return { building: structuredClone(plan), revision, version: build.version, build: build.build, can_edit: true, home_id: "harness", home_name: "Harness home" };
+        return { building: structuredClone(plan), revision, version: build.version, build: build.build, protocol, can_edit: true, home_id: "harness", home_name: "Harness home" };
       case "home_3d/version":
-        return { version: build.version, build: build.build };
+        return { version: build.version, build: build.build, protocol };
       case "home_3d/packs/list":
         return { packs: [] };
       case "home_3d/packs/items":

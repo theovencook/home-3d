@@ -130,10 +130,11 @@ const check = {
     return true;
   },
 
-  /** Click a tab of the panel by its position (0 View, 1 Editor, 2 Extensions) or the Settings button. */
+  /** Click a mode button of the panel by its position (0 View, 1 Editor, 2 Extensions; a group of pressed buttons since
+   * #180) or the Settings button. */
   async tab(which) {
     const root = panel.shadowRoot;
-    const button = which === "settings" ? root.querySelector(".fp3d-tab-settings") : root.querySelectorAll('header [role="tab"]')[which];
+    const button = which === "settings" ? root.querySelector(".fp3d-tab-settings") : root.querySelectorAll("header .fp3d-seg > button:not(.fp3d-tab-settings)")[which];
     if (!button) throw new Error(`no tab ${which}`);
     button.click();
     await panel.updateComplete;
