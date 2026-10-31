@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import time
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
 
 from custom_components.home_3d.const import DOMAIN
 from custom_components.home_3d.locate.engine import Fingerprints
@@ -325,3 +325,58 @@ async def test_a_view_asks_locating_first(hass: HomeAssistant, hass_ws_client) -
     assert res == {"text": "Zu Hause: Torsten Apple Watch (Kitchen).", "rooms": ["kitchen"], "admins_only": False}
     await client.send_json_auto_id({"type": "home_3d/locate/ask", "text": "Zeig die Küche", "language": "de"})
     assert (await client.receive_json())["result"] is None
+
+
+async def test_people_answers_are_withheld_from_non_admins_on_the_server(
+    hass: HomeAssistant, hass_ws_client, hass_read_only_user, hass_read_only_access_token
+) -> None:
+    """With "admins only" on, the server itself gives non-admins no text and no rooms about people (#152)."""
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    service.devices = [dict(WATCH, name="Torsten Apple Watch", person="person.torsten")]
+    service.rooms = ROOMS
+    service.state = {
+        "irk_watch": {"room": "kitchen", "room_name": "Kitchen", "probability": 0.9, "last_seen": time.time()}
+    }
+    service.admins_only = True
+    admin = await hass_ws_client(hass)
+    other = await hass_ws_client(hass, hass_read_only_access_token)
+    for question in ("Who is home?", "Where is torsten?"):
+        await admin.send_json_auto_id({"type": "home_3d/locate/ask", "text": question, "language": "en"})
+        res = (await admin.receive_json())["result"]
+        assert "Kitchen" in res["text"] and res["rooms"] == ["kitchen"], question
+        await other.send_json_auto_id({"type": "home_3d/locate/ask", "text": question, "language": "en"})
+        res = (await other.receive_json())["result"]
+        assert "Kitchen" not in res["text"] and "Torsten" not in res["text"], question
+        assert res["rooms"] == [], question
+    # the same through the ask service and Assist: a user who is no admin, or nobody known, is told nothing
+    ask = {"text": "who is home"}
+    got = await hass.services.async_call(
+        DOMAIN, "ask", ask, blocking=True, return_response=True, context=Context(user_id=hass_read_only_user.id)
+    )
+    assert "Kitchen" not in got["answer"]
+    got = await hass.services.async_call(DOMAIN, "ask", ask, blocking=True, return_response=True)
+    assert "Kitchen" not in got["answer"]
+    # switched off again: everyone gets the answer
+    service.admins_only = False
+    await other.send_json_auto_id({"type": "home_3d/locate/ask", "text": "Who is home?", "language": "en"})
+    assert "Kitchen" in (await other.receive_json())["result"]["text"]
+
+
+async def test_ringing_copes_with_a_missing_notify_service(hass: HomeAssistant) -> None:
+    """A device whose app was removed can't be rung: the answer says so instead of failing (#152)."""
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    service.devices = [dict(WATCH, name="Watch", notify="notify.mobile_app_gone")]
+    service.rooms = ROOMS
+
+    async def ask() -> str:
+        got = await hass.services.async_call(
+            DOMAIN, "ask", {"text": "ring my watch"}, blocking=True, return_response=True
+        )
+        return str(got["answer"])
+
+    assert await ask() == "No app to ring is set for Watch."
+    calls = async_mock_service(hass, "notify", "mobile_app_gone")
+    assert await ask() == "Watch is ringing now."
+    assert len(calls) == 1
