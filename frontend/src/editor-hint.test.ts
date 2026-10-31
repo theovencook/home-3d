@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hintKey, type HintState } from "./editor-hint.ts";
+import { hintKey, touchOnly, touchWording, type HintState } from "./editor-hint.ts";
 import { translate } from "./i18n.ts";
 import type { HomeAssistant } from "./types.ts";
 
@@ -46,4 +46,24 @@ test("temporary states win over the tool hint (#96)", () => {
 test("an armed library card says what the next click places (#76)", () => {
   assert.equal(hintKey({ ...base, placing: true, wallPick: true, selected: "furniture" }), "hint_place");
   assert.equal(hintKey({ ...base, hasFloor: false, placing: true }), "hint_empty");
+});
+
+test("a touch-only device is told by its pointers: coarse and no fine one (#228)", () => {
+  const mm = (coarse: boolean, fine: boolean) => (q: string) => ({ matches: q.includes("coarse") ? coarse : fine });
+  assert.equal(touchOnly(mm(true, false)), true);
+  assert.equal(touchOnly(mm(true, true)), false, "a touch laptop keeps its keyboard hints");
+  assert.equal(touchOnly(mm(false, true)), false);
+  assert.equal(touchOnly(undefined), false);
+});
+
+test("touch hints drop keyboard parts and click / Enter sentences; desktop text stays (#228)", () => {
+  const t = (k: Parameters<typeof translate>[1], p?: Record<string, string | number>) => translate(en, k, p);
+  const keys = /\b(?:Shift|Ctrl|Alt|Esc|Enter|Del|Backspace)\b|arrow keys|\bR turns|\bL fixes|click/i;
+  for (const key of ["hint_select", "hint_sel_furniture", "hint_sel_opening", "hint_sel_device", "hint_polygon", "hint_outdoor_free", "hint_place", "hint_opening", "hint_snapped", "hint_wall", "hint_pipe_next", "hint_kerb_pick", "hint_wall_pick", "fixed_drag_hint", "multi_hint"] as const) {
+    const touch = touchWording(true, key, t, { name: "Sofa", kind: "Door", what: "wall" });
+    assert.ok(touch.length > 0 && !keys.test(touch), `${key}: ${touch}`);
+  }
+  assert.equal(touchWording(false, "hint_select", t), t("hint_select"));
+  assert.match(touchWording(false, "hint_select", t), /arrow keys nudge · Del deletes/);
+  assert.equal(touchWording(true, "hint_select", t), "Tap a room to select · drag corners · “+” on an edge inserts a corner");
 });

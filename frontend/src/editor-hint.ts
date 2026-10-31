@@ -49,3 +49,40 @@ export function hintKey(s: HintState): I18nKey {
   }
   return `hint_${s.tool}`;
 }
+
+/**
+ * A touch-only device (#228): a finger is the only pointer. A laptop with a touch screen has a fine pointer as well and
+ * keeps the keyboard hints. Without matchMedia (tests, old browsers) the answer is no.
+ */
+export function touchOnly(mm: ((q: string) => { matches: boolean }) | undefined = typeof matchMedia === "function" ? (q) => matchMedia(q) : undefined): boolean {
+  if (!mm) return false;
+  return mm("(any-pointer: coarse)").matches && !mm("(any-pointer: fine)").matches;
+}
+
+/** Hint strings that are reworded for touch, not just trimmed (the click / Enter / right-click sentences). */
+export const TOUCH_HINTS: Partial<Record<I18nKey, I18nKey>> = {
+  hint_place: "hint_place_touch",
+  hint_polygon: "hint_polygon_touch",
+  hint_outdoor_free: "hint_outdoor_free_touch",
+  hint_wall_pick: "hint_wall_pick_touch",
+  hint_kerb_pick: "hint_kerb_pick_touch",
+  fixed_drag_hint: "fixed_drag_hint_touch",
+  multi_hint: "multi_hint_touch",
+};
+
+/** A hint for the device in hand: reworded for touch where there is a text for it, else without its key parts. */
+export function touchWording(touch: boolean, key: I18nKey, t: (k: I18nKey, p?: Record<string, string | number>) => string, params?: Record<string, string | number>): string {
+  if (!touch) return t(key, params);
+  const own = TOUCH_HINTS[key];
+  return own ? t(own, params) : withoutKeyboard(t(key, params));
+}
+
+/** A part of a hint that names a key (Shift, Ctrl, Alt, Esc, Enter, Del, arrow keys, "R turns", "L fixes"). */
+const KEY_PART = /\b(?:Shift|Ctrl|Strg|Alt|Esc|Enter|Del|Entf|Supr|Backspace)\b|arrow keys|Pfeiltasten|^[RL]\s/;
+
+/** A hint without the parts that need a keyboard: the " · " separated parts naming a key are dropped. */
+export function withoutKeyboard(text: string): string {
+  const parts = text.split(" · ");
+  const kept = parts.filter((p) => !KEY_PART.test(p.trim()));
+  return kept.length && kept.length < parts.length ? kept.join(" · ") : text;
+}

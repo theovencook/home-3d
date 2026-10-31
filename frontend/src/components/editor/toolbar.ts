@@ -8,7 +8,7 @@ import { loadLocate } from "../../load-locate.ts";
 import type { I18nKey } from "../../i18n.ts";
 import { OUTDOOR_TYPES, type Floor } from "../../model.ts";
 import { LEGEND, SHORTCUTS } from "../../help.ts";
-import { hintKey, type Tool } from "../../editor-hint.ts";
+import { hintKey, touchOnly, touchWording, type Tool } from "../../editor-hint.ts";
 import { uiIcon } from "../../ui-icons.ts";
 import { startChecklist, type StartStep } from "../../start-checklist.ts";
 import { furnitureName } from "../../furniture-names.ts";
@@ -22,12 +22,14 @@ export class ToolbarPart {
     // while a guide holds what is placed or dragged, the bar says which and how to get free of it (#143)
     // (placing and Doors & windows keep their own sentence: it already says what a click does there)
     const snapped = this.drag ? this._guides.lines?.[0]?.label : undefined;
-    if (snapped) return this.t("hint_snapped", { what: snapped });
+    // on a touch-only device the hints say taps, not clicks and keys (#228)
+    const say = (k: I18nKey, p?: Record<string, string | number>) => touchWording(touchOnly(), k, (key, params) => this.t(key, params), p);
+    if (snapped) return say("hint_snapped", { what: snapped });
     const key = this.hintKeyNow();
     // the kind the next tap adds is always named: it is never inherited silently (#63)
-    if (key === "hint_place" && this._placing) return this.t("hint_place", { name: furnitureName(this.hass, this._placing.type) });
-    if (key === "hint_opening") return this._openingNote ?? this._openingHover ?? this.t("hint_opening", { kind: this.t(`preset_${this._openingPreset}` as I18nKey) });
-    return this.t(key);
+    if (key === "hint_place" && this._placing) return say("hint_place", { name: furnitureName(this.hass, this._placing.type) });
+    if (key === "hint_opening") return this._openingNote ?? this._openingHover ?? say("hint_opening", { kind: this.t(`preset_${this._openingPreset}` as I18nKey) });
+    return say(key);
   }
 
   /** Which hint string shows now (editor-hint.ts hintKey, #96). */
@@ -354,7 +356,7 @@ export class ToolbarPart {
     const first = key === "hint_empty" || key === "hint_first_room";
     const warn = this._fixedHint || (this._tool === "opening" && !!this._openingNote);
     // the tooltip names the key that turns snapping off while dragging (#143)
-    return html`<div class="fp3d-hint ${warn ? "fp3d-hint-fixed" : ""} ${first ? "fp3d-hint-first" : ""}" role="status" aria-live="polite" title=${this.t("snap_off_tip")}>
+    return html`<div class="fp3d-hint ${warn ? "fp3d-hint-fixed" : ""} ${first ? "fp3d-hint-first" : ""}" role="status" aria-live="polite" title=${touchOnly() ? nothing : this.t("snap_off_tip")}>
       <span class="fp3d-hint-text" .textContent=${live(this.hintText())}></span>
       <button class="fp3d-hint-help" title=${this.t("help_open")} @click=${() => (this._help = true)}>? ${this.t("hint_help")}</button>
     </div>`;
@@ -386,10 +388,12 @@ export class ToolbarPart {
           <button class="fp3d-btn" aria-label=${this.t("close")} @click=${close}>✕</button>
         </div>
         <div class="fp3d-dialog-body">
-          <h4>${this.t("help_shortcuts")}</h4>
-          <dl class="fp3d-help-keys">
-            ${SHORTCUTS.map((k) => html`<dt>${k.keys.map((key, i) => html`${i ? " / " : ""}<kbd>${key}</kbd>`)}</dt><dd>${this.t(k.text)}</dd>`)}
-          </dl>
+          ${touchOnly()
+            ? nothing
+            : html`<h4>${this.t("help_shortcuts")}</h4>
+                <dl class="fp3d-help-keys">
+                  ${SHORTCUTS.map((k) => html`<dt>${k.keys.map((key, i) => html`${i ? " / " : ""}<kbd>${key}</kbd>`)}</dt><dd>${this.t(k.text)}</dd>`)}
+                </dl>`}
           <h4>${this.t("help_legend")}</h4>
           <ul class="fp3d-help-legend">
             ${LEGEND.map((l) => html`<li>${mark(l.mark)}<span>${this.t(l.text)}</span></li>`)}
