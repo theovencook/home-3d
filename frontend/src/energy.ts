@@ -219,9 +219,20 @@ export function readPower(st: HassEntity | undefined, invert = false): number | 
   if (!st) return null;
   const v = Number(st.state);
   if (!Number.isFinite(v)) return null;
-  const unit = String(st.attributes.unit_of_measurement ?? "W");
-  const w = unit === "kW" ? v * 1000 : unit === "MW" ? v * 1e6 : v;
+  const w = v * wattsPerUnit(st.attributes.unit_of_measurement);
   return invert ? -w : w;
+}
+
+/** How many watts one unit of a power sensor is (mW, W, kW, MW, GW, TW); 1 for a missing or unknown unit. */
+export function wattsPerUnit(unit: unknown): number {
+  switch (typeof unit === "string" ? unit.trim() : "") {
+    case "mW": return 0.001;
+    case "kW": return 1000;
+    case "MW": return 1e6;
+    case "GW": return 1e9;
+    case "TW": return 1e12;
+    default: return 1;
+  }
 }
 
 function isPowerSensor(hass: HomeAssistant, id: string): boolean {
@@ -1075,19 +1086,21 @@ export interface StatRow {
   mean?: number | null;
 }
 
-/** Today's statistics of the solar sensors added up: five-minute means since midnight. */
-export function solarDayFromStats(rows: Record<string, StatRow[]>, now = new Date()): SolarDay {
+/** Today's statistics of the solar sensors added up, in watts: five-minute means since midnight (`units`: unit of each sensor id). */
+export function solarDayFromStats(rows: Record<string, StatRow[]>, now = new Date(), units: Record<string, string | undefined> = {}): SolarDay {
   const midnight = new Date(now);
   midnight.setHours(0, 0, 0, 0);
   const slots = Math.max(1, Math.floor((now.getTime() - midnight.getTime()) / 300000) + 1);
   const curve = new Array<number>(slots).fill(0);
   let last = -1;
-  for (const list of Object.values(rows)) {
+  for (const [id, list] of Object.entries(rows)) {
+    // the means are in the sensor's own unit: a kW sensor must not be added up as watts (#168)
+    const factor = wattsPerUnit(units[id]);
     for (const r of list) {
       const start = typeof r.start === "number" ? r.start : Date.parse(r.start);
       const i = Math.floor((start - midnight.getTime()) / 300000);
       if (i < 0 || i >= slots || typeof r.mean !== "number") continue;
-      curve[i] += Math.max(0, r.mean);
+      curve[i] += Math.max(0, r.mean) * factor;
       last = Math.max(last, i);
     }
   }
@@ -1096,12 +1109,6 @@ export function solarDayFromStats(rows: Record<string, StatRow[]>, now = new Dat
   curve.length = Math.max(last + 1, slots - 3, 1);
   const kwh = curve.reduce((s, w) => s + (w * 5) / 60 / 1000, 0);
   return { kwh, peak: Math.max(0, ...curve), curve };
-}
-
-/** Fetch today's solar statistics (five-minute means) from the recorder. */
-export async function fetchSolarDay(hass: HomeAssistant, ids: string[]): Promise<SolarDay | null> {
-  const rows = await fetchSolarRows(hass, ids);
-  return rows ? solarDayFromStats(rows) : null;
 }
 
 /** Today's five-minute statistics of the given sensors from the recorder (null when the recorder has none). */

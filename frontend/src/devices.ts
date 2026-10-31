@@ -651,18 +651,44 @@ function pair(openings: Opening[], ids: string[], shared = false): Map<string, s
 }
 
 /**
- * Entities of every door and window: set by hand, or (when null) matched automatically with the
- * covers and contact sensors of the room's area, in the order the openings sit on the room outline.
+ * What the contact sensors of every door, window and garage door used to be matched with automatically: the sensors
+ * of the room's area, in the order the openings sit on the room outline. NOT used to draw any more (#203, linking a
+ * sensor is manual); only the one-off migration (opening-links.ts) reads it, to save the pairs a home shows as
+ * explicit links. Openings that already have a contact (or "none") are included: they still take their turn in the
+ * order, as before.
+ */
+export function legacyContactPairs(hass: HomeAssistant, floors: readonly Floor[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const floor of floors) {
+    for (const room of floor.rooms) {
+      const own = floor.openings.filter((o) => o.room_id === room.id).sort((a, b) => a.edge - b.edge || a.offset - b.offset);
+      if (!own.length) continue;
+      const ids = areaEntities(hass, room.area_id);
+      const cls = (id: string) => hass.states[id]?.attributes.device_class as string | undefined;
+      const binary = (ok: (c: string | undefined) => boolean) => ids.filter((id) => kindOf(id) === "binary" && ok(cls(id)));
+      const pairs = [
+        pair(own.filter((o) => o.type === "window"), binary((c) => WINDOW_CONTACTS.has(c!))),
+        pair(own.filter((o) => o.type === "door"), binary((c) => c === "door")),
+        pair(own.filter((o) => o.type === "garage"), binary((c) => c === "garage_door")),
+      ];
+      for (const m of pairs) for (const [openingId, id] of m) out.set(openingId, id);
+    }
+  }
+  return out;
+}
+
+/**
+ * Entities of every door and window: set by hand, or (when null, covers only) matched automatically with the
+ * covers of the room's area. Contact sensors are never matched automatically (#203).
  */
 export function openingEntities(hass: HomeAssistant, floors: readonly Floor[]): Map<string, OpeningEntities> {
   const out = new Map<string, OpeningEntities>();
   const pick = (ref: string | null, auto: string | undefined) => (ref === "none" ? null : (ref ?? auto ?? null));
-  const link = (o: Opening, autoC?: string, autoK?: string): OpeningEntities => {
+  const link = (o: Opening, autoC?: string): OpeningEntities => {
     const cover = pick(o.cover, autoC);
     return {
       cover,
-      // a window with a handle sensor gets no plain contact assigned automatically
-      contact: o.sensor === "handle" && o.contact == null ? null : pick(o.contact, autoK),
+      contact: pick(o.contact, undefined),
       tilt: o.tilt === "none" ? null : o.tilt,
       contact2: o.leaves === 2 && o.contact2 && o.contact2 !== "none" ? o.contact2 : null,
       // a smart lock on a door, or on a terrace door (a window down to the floor, #645)
@@ -688,18 +714,13 @@ export function openingEntities(hass: HomeAssistant, floors: readonly Floor[]): 
       const cls = (id: string) => hass.states[id]?.attributes.device_class as string | undefined;
       const covers = ids.filter((id) => kindOf(id) === "cover" && COVER_CLASSES.has(cls(id)));
       const windows = own.filter((o) => o.type === "window");
-      const doors = own.filter((o) => o.type === "door");
       const garages = own.filter((o) => o.type === "garage");
       // one blind for the whole room (e.g. a group) serves every window; a sensor belongs to one window
       const autoCover = pair(windows, covers, true);
-      const autoWindow = pair(windows, ids.filter((id) => kindOf(id) === "binary" && WINDOW_CONTACTS.has(cls(id)!)));
-      const autoDoor = pair(doors, ids.filter((id) => kindOf(id) === "binary" && cls(id) === "door"));
       const autoGarageCover = pair(garages, ids.filter((id) => kindOf(id) === "cover" && GARAGE_COVERS.has(cls(id) ?? "")));
-      const autoGarageContact = pair(garages, ids.filter((id) => kindOf(id) === "binary" && cls(id) === "garage_door"));
       for (const o of own) {
         const autoC = o.type === "window" ? autoCover : o.type === "garage" ? autoGarageCover : null;
-        const autoK = o.type === "window" ? autoWindow : o.type === "garage" ? autoGarageContact : autoDoor;
-        out.set(o.id, link(o, autoC?.get(o.id), autoK.get(o.id)));
+        out.set(o.id, link(o, autoC?.get(o.id)));
       }
     }
     // an opening in a free wall that stands outside every room (outer walls drawn with the wall tool, rooms

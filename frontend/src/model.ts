@@ -1268,6 +1268,8 @@ export interface Building {
   presence: PresenceLink[];
   /** A copy of the recipe of every pack item type the plan uses, by type (#2; filled in by the backend). */
   recipes?: Record<string, PlanRecipe>;
+  /** Set once the contact sensors that used to be matched with doors and windows automatically are saved as explicit links (#203). */
+  opening_links_saved?: boolean;
 }
 
 export const DEFAULT_ENERGY: EnergySettings = {

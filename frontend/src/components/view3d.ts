@@ -2717,7 +2717,7 @@ export class Fp3dView3d extends LitElement {
   private dayOf(card: HoloCard) {
     if (!this._rows || !card.dayIds.length) return null;
     const rows = Object.fromEntries(card.dayIds.filter((id) => this._rows![id]).map((id) => [id, this._rows![id]]));
-    return Object.keys(rows).length ? solarDayFromStats(rows, new Date(this.now())) : null;
+    return Object.keys(rows).length ? solarDayFromStats(rows, new Date(this.now()), Object.fromEntries(Object.keys(rows).map((id) => [id, this.hass?.states[id]?.attributes.unit_of_measurement as string | undefined]))) : null;
   }
 
   /** Grow or shrink the solar card (#144); `timed`: a tap on a touch screen, it shrinks again by itself. */

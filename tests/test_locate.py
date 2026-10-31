@@ -380,3 +380,38 @@ async def test_ringing_copes_with_a_missing_notify_service(hass: HomeAssistant) 
     calls = async_mock_service(hass, "notify", "mobile_app_gone")
     assert await ask() == "Watch is ringing now."
     assert len(calls) == 1
+
+
+async def test_no_room_sensors_for_people_when_turned_off(hass: HomeAssistant, hass_ws_client) -> None:
+    """#183: person_sensors False creates no sensor for a device of a person (default: it does); things keep theirs."""
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    registry = er.async_get(hass)
+    phone = {**WATCH, "id": "irk_phone", "name": "Phone", "person": "person.sample"}
+    keys = {**WATCH, "id": "irk_keys", "name": "Keys", "key": "ffeeddccbbaa99887766554433221100"}
+
+    def uid(device: str) -> str | None:
+        return registry.async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_locate_{device}")
+
+    assert service.person_sensors is True
+    await service.async_configure({"devices": [phone, keys], "rooms": ROOMS})
+    await hass.async_block_till_done()
+    assert uid("irk_phone") is not None and uid("irk_keys") is not None
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "home_3d/locate/configure", "person_sensors": False})
+    res = await client.receive_json()
+    assert res["success"], res
+    assert res["result"]["person_sensors"] is False
+    await hass.async_block_till_done()
+    assert uid("irk_phone") is None  # the earlier sensor is removed
+    assert uid("irk_keys") is not None
+    assert service._data()["person_sensors"] is False
+
+    await service.async_configure({"devices": [phone, keys, {**phone, "id": "irk_tablet"}]})
+    await hass.async_block_till_done()
+    assert uid("irk_tablet") is None
+
+    await service.async_configure({"person_sensors": True})
+    await hass.async_block_till_done()
+    assert uid("irk_phone") is not None and uid("irk_tablet") is not None
