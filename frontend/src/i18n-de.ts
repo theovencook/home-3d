@@ -1590,6 +1590,8 @@ export const de: Record<I18nKey, string> = {
   opening_position: "Mitte ab Ecke (m)",
   opening_position_from: "Mitte ab {corner}-Ecke (m)",
   opening_next_kind: "Nächstes Element",
+  opening_change_to: "Dieses Element ändern in",
+  rect_too_small: "Der Raum muss mindestens {min} breit und tief sein.",
   sill: "Brüstung (m)",
   terrain: "Gelände",
   terrain_hint: "Wo der Boden um das Haus liegt. Was darunter liegt – ein Keller, der untere Teil eines Souterrains – steckt in 3D in der Erde; Rasen, Wege und Terrassen liegen auf dem Gelände.",

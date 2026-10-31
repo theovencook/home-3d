@@ -108,8 +108,7 @@ test("the overlap message shows in the hint bar until the next press (#62)", () 
 test("the hint bar names the kind the next tap adds, so it is never inherited silently (#63)", () => {
   const el = editor();
   assert.match(el.hintText(), /Door/);
-  el.selectItem("opening", "d1");
-  el.setOpeningPreset(openings(el)[0], "front");
+  el.pickOpeningKind("front");
   assert.match(el.hintText(), /Front door/);
 });
 
@@ -200,4 +199,70 @@ test("a mouse move in Doors & windows mode writes the new hint into the hint bar
   move([3, 2]);
   assert.equal(text.textContent, el.t("hint_opening", { kind: "Door" }));
   assert.equal(el.isUpdatePending, false);
+});
+
+test("a chip on the selected opening converts only that opening; the kind the next tap adds stays (#159)", () => {
+  const el = editor();
+  press(el, [1.5, 0], "d1");
+  assert.equal(el._openingPreset, "door");
+  el.setOpeningPreset(openings(el)[0], "garage");
+  assert.equal(openings(el)[0].type, "garage");
+  assert.equal(el._openingPreset, "door");
+  // so the next tap still adds a plain door, and the garage door is not touched
+  press(el, [4.5, 0]);
+  assert.equal(openings(el)[1].type, "door");
+  assert.equal(openings(el)[0].type, "garage");
+});
+
+test("choosing the next kind while an opening is selected changes nothing in the plan (#159)", () => {
+  const el = editor();
+  press(el, [1.5, 0], "d1");
+  const before = JSON.stringify(openings(el));
+  el.pickOpeningKind("window");
+  assert.equal(JSON.stringify(openings(el)), before);
+  assert.equal(el._openingPreset, "window");
+});
+
+test("with an opening selected in Doors & windows mode the sidebar offers the next-kind chips as well (#159)", () => {
+  const el = editor();
+  press(el, [1.5, 0], "d1");
+  el.hass = { language: "en", areas: {}, states: {}, entities: {}, devices: {}, user: { is_admin: true } };
+  const text = markup(el.renderSide(el.floor));
+  assert.match(text, /Next door or window/);
+  assert.match(text, /Change this opening to/);
+});
+
+test("converting to a wider kind keeps the opening inside a short wall (#159)", () => {
+  const el = editor();
+  el._doc.floors[0].rooms[0].points = [[0, 0], [1.2, 0], [1.2, 4], [0, 4]];
+  el._doc.floors[0].openings[0].offset = 0.6;
+  el.selectItem("opening", "d1");
+  el.setOpeningPreset(openings(el)[0], "garage");
+  const o = openings(el)[0];
+  assert.ok(o.width <= 1.1 + 1e-9, `width ${o.width}`);
+  assert.ok(o.offset - o.width / 2 >= -1e-9 && o.offset + o.width / 2 <= 1.2 + 1e-9, `offset ${o.offset}`);
+});
+
+test("add-by-measure with a too small size says so instead of doing nothing (#159)", () => {
+  const el = editor();
+  el._tool = "measure";
+  el._rectSize = [0.05, 3];
+  el.rectBySize();
+  assert.equal(el._doc.floors[0].rooms.length, 1);
+  assert.match(String(el._notice), /at least/);
+  el._rectSize = [4, 3];
+  el.rectBySize();
+  assert.equal(el._doc.floors[0].rooms.length, 2);
+  assert.equal(el._notice, null);
+});
+
+test("changing tool drops a leftover message and a half-typed room name (#159)", () => {
+  const el = editor();
+  el._notice = "old";
+  el._rectName = "Study";
+  el._draft = [[0, 0]];
+  el.setTool("select");
+  assert.equal(el._notice, null);
+  assert.equal(el._rectName, "");
+  assert.deepEqual(el._draft, []);
 });

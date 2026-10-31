@@ -1588,6 +1588,8 @@ const en = {
   opening_position: "Centre from corner (m)",
   opening_position_from: "Centre from {corner} corner (m)",
   opening_next_kind: "Next door or window",
+  opening_change_to: "Change this opening to",
+  rect_too_small: "The room must be at least {min} wide and deep.",
   sill: "Sill height (m)",
   terrain: "Ground",
   terrain_hint: "Where the ground lies around the house. What lies below it – a cellar, the lower part of a semi-basement – sits in the earth in 3D; lawns, paths and terraces lie on the ground.",

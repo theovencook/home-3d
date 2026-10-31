@@ -2943,7 +2943,11 @@ export class Fp3dEditor extends LitElement {
   private rectBySize(): void {
     const start = this._draft[0] ?? [0, 0];
     const [w, d] = this._rectSize;
-    if (!(w > 0.1 && d > 0.1)) return;
+    if (!(w >= 0.1 && d >= 0.1)) {
+      this._notice = this.t("rect_too_small", { min: this.m(0.1) });
+      return;
+    }
+    this._notice = null;
     const floor = this.floor;
     const fallback = this.t("new_room", { n: (floor?.rooms.length ?? 0) + 1 });
     const named = nameNewRoom(this._rectName, Object.values(this.hass?.areas ?? {}), this.usedAreas(), fallback);
@@ -3017,6 +3021,7 @@ export class Fp3dEditor extends LitElement {
             </div>
             ${draft.length >= 3 ? html`<p class="fp3d-sub">${this.t("measure_gap", { gap: len(gap) })}</p>` : nothing}`}
       <h4 class="fp3d-lib-head">${this.t("rect_by_size")}</h4>
+      ${this._notice ? html`<p class="fp3d-sub fp3d-notice">${this._notice}</p>` : nothing}
       <div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
           >${this.t("room_name")}
@@ -5256,11 +5261,24 @@ export class Fp3dEditor extends LitElement {
 
   /** Turns an opening into another kind (door, double door, window, terrace door, garage door). */
   private setOpeningPreset(o: Opening, preset: OpeningPreset): void {
+    // converting THIS opening never touches the kind the next tap adds (#159): that is pickOpeningKind's job
     const d = OPENING_PRESETS[preset];
-    this._openingPreset = preset;
     const sameWidth = openingPreset(o) === preset;
     const style = "style" in d ? d.style : null;
-    this.updateOpening({ type: d.type, leaves: d.leaves, sill: d.sill, height: d.height, style, ...(sameWidth ? {} : { width: d.width }) });
+    const floor = this.floor;
+    const host = floor ? openingHost(o, floor.rooms, floor.walls ?? []) : null;
+    let size: Partial<Opening> = {};
+    if (!sameWidth) {
+      // the same limit as placing one: no wider than its wall, and still inside it afterwards
+      let width: number = d.width;
+      if (host) {
+        const a = host.room.points[host.edge];
+        const b = host.room.points[(host.edge + 1) % host.room.points.length];
+        width = round(Math.min(d.width, Math.max(0.3, Math.hypot(b[0] - a[0], b[1] - a[1]) - 0.1)));
+      }
+      size = { width, ...(host ? { offset: this.clampOffset(host.room, host.edge, width, o.offset) } : {}) };
+    }
+    this.updateOpening({ type: d.type, leaves: d.leaves, sill: d.sill, height: d.height, style, ...size });
   }
 
   private updateOpening(patch: Partial<Opening>): void {
@@ -6465,6 +6483,8 @@ export class Fp3dEditor extends LitElement {
     if (tool !== "select" && tool !== "furniture") this.cancelPlacing();
     this._draft = [];
     this._cursor = null;
+    this._notice = null;
+    this._rectName = "";
     this._openingNote = null;
     this.openingHoverText = null;
     this._pipeMode = false;
@@ -11815,11 +11835,8 @@ export class Fp3dEditor extends LitElement {
                 : this.freeWall
                   ? this.renderFreeWallForm(this.freeWall)
                   : null;
-    if (item) {
-      return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", this._roomId)}>‹ ${this.t(room ? "back_to_room" : "back_to_floor", { room: room?.name ?? "" })}</button>
-        ${item}`;
-    }
-    // Doors & windows mode with nothing selected: the kind the next tap adds, chosen up front (#63)
+    // Doors & windows mode: the kind the next tap adds, chosen up front (#63); it stays within reach while an
+    // opening is selected, so choosing it never has to go through that opening's own chips (#159)
     const nextKind =
       this._tool === "opening" && admin && floor
         ? html`<section>
@@ -11827,6 +11844,10 @@ export class Fp3dEditor extends LitElement {
             ${this.renderOpeningKinds(this._openingPreset, (p) => this.pickOpeningKind(p))}
           </section>`
         : nothing;
+    if (item) {
+      return html`${nextKind}<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", this._roomId)}>‹ ${this.t(room ? "back_to_room" : "back_to_floor", { room: room?.name ?? "" })}</button>
+        ${item}`;
+    }
     if (room && this._tool !== "measure") {
       return html`${nextKind}<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", null)}>‹ ${this.t("back_to_floor")}</button>
         ${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}`;
@@ -12441,6 +12462,7 @@ export class Fp3dEditor extends LitElement {
     const minH = this.openingFormMin?.id === o.id ? this.openingFormMin.h : 0;
     return html`<section style=${minH ? `min-height:${Math.round(minH)}px` : ""}>
       <div class="fp3d-h3row"><h3>${this.t(`preset_${preset}` as I18nKey)}</h3>${this.fixButton("opening", o.id)}</div>
+      ${admin ? html`<p class="fp3d-sub">${this.t("opening_change_to")}</p>` : nothing}
       ${admin
         ? this.renderOpeningKinds(preset, (p, ev) => {
             // the panel below the chips changes with the kind: keep it at least as tall as it was, so the chips
