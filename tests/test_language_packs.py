@@ -17,8 +17,8 @@ PACK_JSON = {
     "format": "home3d-pack",
     "version": 2,
     "kind": "language",
-    "language": "fr",
-    "id": "community.lang-fr",
+    "language": "uk",
+    "id": "community.lang-uk",
     "name": "Français",
     "publisher": "Community",
     "licence": "CC-BY-4.0",
@@ -33,7 +33,7 @@ def _folder(pack: dict | None = None, strings: dict | None = None, **extra: str)
 
 def test_a_language_pack_folder_checks_like_a_pack() -> None:
     pack = packs.verify_folder(_folder(README="Merci"))
-    assert pack["kind"] == "language" and pack["language"] == "fr"
+    assert pack["kind"] == "language" and pack["language"] == "uk"
     assert pack["strings"] == STRINGS
     assert pack["items"] == [] and pack["release"] == 1
     # a backup carries the files and checks them again on restore
@@ -113,10 +113,10 @@ def test_every_language_ships_as_a_bundled_pack_that_checks() -> None:
 
 
 def test_several_packs_for_one_language_add_up_the_later_one_wins() -> None:
-    first = {**packs.verify_folder(_folder()), "id": "a.fr"}
-    second = {**packs.verify_folder(_folder(strings={"view": "Vue", "floor": "Étage"})), "id": "b.fr"}
-    strings, ids = packs.language_of([first, second], "fr")
-    assert ids == ["a.fr", "b.fr"]
+    first = {**packs.verify_folder(_folder()), "id": "a.uk"}
+    second = {**packs.verify_folder(_folder(strings={"view": "Vue", "floor": "Étage"})), "id": "b.uk"}
+    strings, ids = packs.language_of([first, second], "uk")
+    assert ids == ["a.uk", "b.uk"]
     assert strings == {**STRINGS, "view": "Vue", "floor": "Étage"}
     assert packs.language_of([first], "de") == ({}, [])
 
@@ -167,19 +167,19 @@ async def test_install_list_use_and_remove_a_language_pack(hass: HomeAssistant, 
     imported = await _call(client, type="home_3d/packs/import", files=_folder())
     assert imported["success"], imported
     assert imported["result"] == {
-        "id": "community.lang-fr",
+        "id": "community.lang-uk",
         "name": "Français",
         "publisher": "Community",
         "licence": "CC-BY-4.0",
         "items": 0,
         "kind": "language",
-        "language": "fr",
+        "language": "uk",
         "texts": 3,
     }
     listed = {p["id"]: p for p in (await _call(client, type="home_3d/packs/list"))["result"]["packs"]}
-    assert listed["community.lang-fr"]["texts"] == 3
-    got = (await _call(client, type="home_3d/languages/get", language="fr"))["result"]
-    assert got["strings"] == STRINGS and got["packs"] == ["community.lang-fr"]
+    assert listed["community.lang-uk"]["texts"] == 3
+    got = (await _call(client, type="home_3d/languages/get", language="uk"))["result"]
+    assert got["strings"] == STRINGS and got["packs"] == ["community.lang-uk"]
 
     # a pack for German on top of the bundled one: its keys win, the rest stays German
     de = {**PACK_JSON, "language": "de", "id": "community.lang-de"}
@@ -189,8 +189,8 @@ async def test_install_list_use_and_remove_a_language_pack(hass: HomeAssistant, 
     assert got["packs"] == ["theovencook.lang-de", "community.lang-de"]
     assert got["strings"]["view"] == "Ansicht" and got["strings"]["no_persons"].startswith("In Home")
 
-    assert (await _call(client, type="home_3d/packs/remove", pack_id="community.lang-fr"))["success"]
-    got = (await _call(client, type="home_3d/languages/get", language="fr"))["result"]
+    assert (await _call(client, type="home_3d/packs/remove", pack_id="community.lang-uk"))["success"]
+    got = (await _call(client, type="home_3d/languages/get", language="uk"))["result"]
     assert got["strings"] == {} and got["packs"] == []
 
 
