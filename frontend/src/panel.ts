@@ -521,6 +521,7 @@ export class Floorplan3dPanel extends LitElement {
     const { action } = e.detail;
     if (action === "extensions") this.setMode("extensions");
     else if (action === "editor") this.setMode("editor");
+    else if (action === "kerb") this.openBinKerb();
     else if (action === "mic_probe") void loadVoice().then(() => (this._micProbe = true)).catch(() => undefined);
     else if (action === "locate" && this.hass && this.data.building) {
       const b = this.data.building;
@@ -531,6 +532,23 @@ export class Floorplan3dPanel extends LitElement {
         }),
       );
     }
+  }
+
+  /**
+   * The Settings page's way to a bin's kerb spot (#226): the editor with the first bin selected, where "Set kerb spot"
+   * is at the top of its panel. Without a bin it is the editor alone (add one from the Household items).
+   */
+  private openBinKerb(): void {
+    const bin = this.data.building?.floors.flatMap((f) => f.furniture).find((m) => m.type === "waste_bin");
+    this.setMode("editor");
+    if (!bin) return;
+    void loadEditor().then(async () => {
+      this._editorReady = true;
+      await this.updateComplete;
+      const ed = this.renderRoot.querySelector<HTMLElement & { goToFurniture(id: string): boolean; updateComplete: Promise<unknown> }>("fp3d-editor");
+      await ed?.updateComplete;
+      ed?.goToFurniture(bin.id);
+    }, () => undefined);
   }
 
   /** A change from the 3D view's settings or a module (#149): saved by the controller, which makes it again on a newer

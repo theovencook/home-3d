@@ -2682,7 +2682,7 @@ const en = {
   st_upd_open_btn: "Open Extensions",
   st_bin_from: "Glow from (hour, the day before)",
   st_bin_until: "Glow until (hour, on pickup day)",
-  st_kerb_note: "Each bin's kerb spot and calendar are set on the bin itself in the editor.",
+  st_kerb_note: "Set on each bin itself: select the bin in the editor and press Set kerb spot, at the top of its panel. The calendar is there too.",
   st_embed_loading: "Loading the editor's part …",
   st_embed_failed: "This part could not load: {error}",
   st_accent_default: "Neon cyan",
@@ -2707,6 +2707,7 @@ const en = {
   st_tablet_users_hint: "Ticked users see only the home name, the floors and the View menu: no editor, no settings. A single device works with ?tablet in the address.",
   st_voice_here: "Microphone button on this device",
   st_open_editor: "Open the editor",
+  st_kerb_go: "Go to a bin's kerb spot",
   st_modules: "Module settings",
   st_backdrop_placeholder: "/local/background.jpg",
 

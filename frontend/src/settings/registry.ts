@@ -925,7 +925,7 @@ const HOUSEHOLD: Setting[] = [
     label: "bin_kerb",
     hint: "st_kerb_note",
     keywords: ["bin", "kerb", "street", "calendar"],
-    control: { kind: "action", button: "st_open_editor", action: "editor" },
+    control: { kind: "action", button: "st_kerb_go", action: "kerb" },
     default: null,
     read: () => null,
   },

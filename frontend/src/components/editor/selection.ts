@@ -248,6 +248,17 @@ export class SelectionPart {
     if (kind === "opening" && id) this._roomId = this.floor?.openings.find((o) => o.id === id)?.room_id ?? this._roomId;
   }
 
+  /** Shows an item of any floor and selects it (a link from the Settings page, #226); false when it is not there. */
+  goToFurniture(this: Fp3dEditor, id: string): boolean {
+    const fl = this._doc.floors.find((f) => f.furniture.some((m) => m.id === id));
+    const m = fl?.furniture.find((x) => x.id === id);
+    if (!fl || !m) return false;
+    this._floorId = fl.id;
+    this.selectItem("furniture", id);
+    this.showPoint(m.x, m.z);
+    return true;
+  }
+
   /** Ctrl+C (#74): the chosen items (block, multi selection) go to the editor's clipboard; false when none is chosen. */
   copySelection(this: Fp3dEditor): boolean {
     const floor = this.floor;

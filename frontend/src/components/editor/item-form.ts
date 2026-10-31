@@ -54,6 +54,7 @@ export class ItemFormPart {
         <div class="fp3d-h3row"><h3>${f.name || this.t("furniture")}</h3>${this.fixButton("furniture", f.id)}</div>
         <div class="fp3d-form">${panel.head.map((field) => this.furnitureField(f, field))}</div>
       </div>
+      ${f.type === "waste_bin" ? this.renderBinKerb(f) : nothing}
       ${this.renderLinkBlock(f)}
       ${f.group
         ? html`<p class="fp3d-sub fp3d-block-note">▣ ${this.t("block_part")} <button class="fp3d-link" @click=${() => {
@@ -415,6 +416,26 @@ export class ItemFormPart {
   }
 
   /**
+   * A bin's kerb spot (#226): right under its position, not below the collection fields where it was out of sight on a
+   * laptop screen. The household bins settings link here.
+   */
+  renderBinKerb(this: Fp3dEditor, f: Furniture) {
+    const admin = this.isEditor;
+    return html`<div class="fp3d-form fp3d-links fp3d-bin-kerb">
+      <div class="fp3d-field fp3d-wide">
+        <span>${this.t("bin_kerb")}</span>
+        <div class="fp3d-actions">
+          <button class="fp3d-btn" aria-pressed=${this._kerbPick} ?disabled=${!admin} @click=${() => (this._kerbPick = !this._kerbPick)}>
+            ${this._kerbPick ? "✓ " : ""}${this.t(f.bin_kerb ? "bin_kerb_move" : "bin_kerb_set")}
+          </button>
+          ${f.bin_kerb ? html`<button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ bin_kerb: null })}>${this.t("bin_kerb_clear")}</button>` : nothing}
+        </div>
+      </div>
+      <p class="fp3d-sub fp3d-wide">${this.t(this._kerbPick ? "hint_kerb_pick" : "bin_kerb_hint")}</p>
+    </div>`;
+  }
+
+  /**
    * Waste bin and mailbox: shape and colours for everyone; the waste calendar and the post sensors with Haushalt Pro
    * (a teaser while it is locked).
    */
@@ -457,16 +478,6 @@ export class ItemFormPart {
                   @change=${(e: Event) => this.updateFurniture({ bin_match: (e.target as HTMLInputElement).value.trim() || null })} /></label>
               ${this.entitySelect(this.t("bin_out"), f.bin_out ?? null, undefined, this.entityOptions((id) => /^(input_boolean|switch|binary_sensor)\./.test(id)), (v) => this.updateFurniture({ bin_out: v === "none" ? null : v }))}
               <p class="fp3d-sub fp3d-wide">${this.t("bin_out_hint")}</p>
-              <div class="fp3d-field fp3d-wide">
-                <span>${this.t("bin_kerb")}</span>
-                <div class="fp3d-actions">
-                  <button class="fp3d-btn" aria-pressed=${this._kerbPick} ?disabled=${!admin} @click=${() => (this._kerbPick = !this._kerbPick)}>
-                    ${this._kerbPick ? "✓ " : ""}${this.t(f.bin_kerb ? "bin_kerb_move" : "bin_kerb_set")}
-                  </button>
-                  ${f.bin_kerb ? html`<button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ bin_kerb: null })}>${this.t("bin_kerb_clear")}</button>` : nothing}
-                </div>
-              </div>
-              <p class="fp3d-sub fp3d-wide">${this.t(this._kerbPick ? "hint_kerb_pick" : "bin_kerb_hint")}</p>
               ${this.renderSettingsLink("household", "household.bin_from", "settings_moved_bins")}`}
       </div>`;
     }
