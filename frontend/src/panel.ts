@@ -1334,7 +1334,8 @@ export class Floorplan3dPanel extends LitElement {
       </div>`;
     }
     const floor = b.floors.find((f) => f.id === this._floorId);
-    const roomFloors = floor ? [floor] : b.floors;
+    // "All floors" shows the floor chips only; the rooms come once one floor is picked (#222)
+    const roomFloors = floor ? [floor] : b.floors.length > 1 ? [] : b.floors;
     const tt = this.tt.active;
     // a sample / demo home: devices this Home Assistant lacks show fixed demo states (#100)
     const hass = this.viewHass(this.rawHass!, b);
@@ -1365,12 +1366,10 @@ export class Floorplan3dPanel extends LitElement {
                   ${f.name}
                 </button>`,
               )}
-              <span class="fp3d-sep"></span>`
+              ${roomFloors.length && !this._tablet ? html`<span class="fp3d-sep"></span>` : nothing}`
           : nothing}
         ${(this._tablet ? [] : roomFloors).flatMap((f) => [
-          // in the house view the rooms of every floor follow a small floor label; a room without a name has
-          // no button (an empty chip would only take space, #370)
-          roomFloors.length > 1 && zonesOf(f).some((r) => r.name.trim()) ? html`<span class="fp3d-nav-floor">${f.name}</span>` : nothing,
+          // a room without a name has no button (an empty chip would only take space, #370)
           // the rooms, then the outdoor areas acting as rooms (garden, terrace – #100)
           // several areas of one garden (front and back lawn with the same area and name) share one chip
           ...zonesOf(f)
