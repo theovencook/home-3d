@@ -5327,14 +5327,7 @@ export class Fp3dView3d extends LitElement {
       },
       dimmed: () => this.dimmed,
       canEdit: () => this.mayEdit,
-      updateBuilding: (mutate) => {
-        const cur = this.building;
-        if (!cur || !this.hass || !this.mayEdit) return;
-        const next = structuredClone(cur);
-        mutate(next);
-        this.building = next;
-        saveBuilding(this.hass, next, recipeHashes(next.recipes), this.home).catch((err) => this.serviceFailed("home_3d/building/save", err));
-      },
+      updateBuilding: (mutate) => this.changePlan(mutate),
       callService: (domain, service, data) => (this.hass ? this.hass.callService(domain, service, data) : Promise.resolve()),
       newId: (prefix) => uid(prefix),
       waterLevel: (floorId, areaId) => {
@@ -5543,10 +5536,18 @@ export class Fp3dView3d extends LitElement {
 
   /** Changes the plan's settings from the ⚙ menu and saves them (editors only). */
   private setPlanSettings(patch: Partial<Building["settings"]>): void {
+    this.changePlan((next) => Object.assign(next.settings, patch));
+  }
+
+  /** Change the plan and save it (editors only). The host (panel, card) takes the change as `plan-change` (#149): it
+   * saves it from the revision it shows and makes it again on a newer plan when someone else saved meanwhile. Without
+   * a host that takes it, it is saved here directly. */
+  private changePlan(change: (b: Building) => void): void {
     const cur = this.building;
     if (!cur || !this.hass || !this.mayEdit) return;
+    if (!this.dispatchEvent(new CustomEvent("plan-change", { detail: { change }, cancelable: true }))) return;
     const next = structuredClone(cur);
-    Object.assign(next.settings, patch);
+    change(next);
     this.building = next;
     saveBuilding(this.hass, next, recipeHashes(next.recipes), this.home).catch((err) => this.serviceFailed("home_3d/building/save", err));
   }

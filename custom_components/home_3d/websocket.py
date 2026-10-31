@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from functools import wraps
+from collections.abc import Awaitable, Callable
+from functools import partial, wraps
+import logging
 import time
 from typing import Any
 
@@ -46,9 +47,11 @@ from .packs import (
 from .racks import RackError
 from .sample import SAMPLE_NAME, load_sample
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
-from .storage import FloorplanData, Home, HomesError, complete
+from .storage import FloorplanData, Home, HomesError, RevisionConflict, complete
 from .timetravel import ws_timetravel_history
 from .voice import SENTENCE_MODES, AskBroker, VoiceSettings
+
+_LOGGER = logging.getLogger(__name__)
 
 _IMAGE_ID = vol.All(str, vol.Length(min=1, max=64), vol.Match(r"^[A-Za-z0-9_\-.]+$"))
 # a home (#53): commands about one plan take it optionally; without it they work on the active home
@@ -119,6 +122,10 @@ def require_editor(func: Callable[..., Any]) -> Callable[..., Any]:
     return with_editor
 
 
+class _NeedsAdmin(Exception):
+    """A save that adds or changes an item's perform action, from someone who is no admin (#51)."""
+
+
 def _data(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> FloorplanData | None:
     data: FloorplanData | None = hass.data.get(DOMAIN)
     if data is None:
@@ -185,6 +192,8 @@ async def ws_version(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         vol.Required("building"): BUILDING_SCHEMA,
         # the hashes of the recipe copies the client started from (#45), by pack item type
         vol.Optional("recipe_bases"): vol.All({str: vol.All(str, vol.Length(max=100))}, vol.Length(max=2000)),
+        # the revision the client's plan started from (#149): a save from an out-of-date plan is refused
+        vol.Optional("base_revision"): vol.All(int, vol.Range(min=0)),
     }
 )
 @require_editor
@@ -192,17 +201,32 @@ async def ws_version(hass: HomeAssistant, connection: websocket_api.ActiveConnec
 async def ws_save_building(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Replace the building. A new or changed `perform_action` item action or service/event menu button needs an
-    admin (#51, #151)."""
+    """Replace the building. A new or changed `perform_action` item action or service/event menu button needs
+    an admin (#51, #151). With `base_revision`
+    (#149) a save from a plan that someone else changed since is refused with "conflict" and changes nothing: the
+    client then fetches the current plan (building/get) to merge or offer a reload."""
     if (home := _home(hass, connection, msg)) is None:
         return
-    if not connection.user.is_admin and performed_actions(msg["building"]) - performed_actions(home.building):
-        connection.send_error(
-            msg["id"], "unauthorized", "Only an admin adds or changes a perform action or a service/event button"
-        )
-        return
+
+    def guard(current: dict[str, Any]) -> None:
+        # checked against the plan as it is when the save runs, not as it was when the message came
+        if not connection.user.is_admin and performed_actions(msg["building"]) - performed_actions(current):
+            raise _NeedsAdmin
+
     try:
-        revision = await home.async_save_building(msg["building"], msg.get("recipe_bases"), check_racks=True)
+        revision = await home.async_save_building(
+            msg["building"],
+            msg.get("recipe_bases"),
+            check_racks=True,
+            base_revision=msg.get("base_revision"),
+            guard=guard,
+        )
+    except _NeedsAdmin:
+        connection.send_error(msg["id"], "unauthorized", "Only an admin adds or changes a perform action or a service/event button")
+        return
+    except RevisionConflict as err:
+        connection.send_error(msg["id"], "conflict", str(err))
+        return
     except RackError as err:
         # rack gear where it does not fit (#113): the editor refuses it too, so only an outdated or foreign client
         connection.send_error(msg["id"], "invalid_rack", str(err))
@@ -217,7 +241,8 @@ async def ws_save_building(
 @callback
 def ws_subscribe_building(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Send the new revision (and the home's id) whenever the building changes. Without a home this follows the
-    active home: when another home becomes active, its revision is sent at once."""
+    active home: when another home becomes active, its revision is sent at once. The current revision also comes once
+    right after subscribing (#149), so a view whose websocket reconnects learns whether it is behind."""
     if (home := _home(hass, connection, msg)) is None:
         return
     data: FloorplanData = hass.data[DOMAIN]
@@ -250,6 +275,7 @@ def ws_subscribe_building(hass: HomeAssistant, connection: websocket_api.ActiveC
 
     connection.subscriptions[msg["id"]] = unsubscribe
     connection.send_result(msg["id"])
+    send(home.id, home.revision)
 
 
 @websocket_api.websocket_command(
@@ -330,15 +356,17 @@ async def ws_history_snapshot(
 async def ws_history_restore(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Go back to a restore point; the current state becomes a restore point itself."""
+    """Go back to a restore point; the current state becomes a restore point itself. A picture the restore point
+    names that is no longer kept (#154) stays named in the plan but shows nothing: `missing_pictures` counts them."""
     if (home := _home(hass, connection, msg)) is None:
         return
     building = home.snapshot(msg["snapshot_id"])
     if building is None:
         connection.send_error(msg["id"], "not_found", "Restore point not found")
         return
+    missing = home.missing_images(building)
     revision = await home.async_restore(complete(building))
-    connection.send_result(msg["id"], {"revision": revision})
+    connection.send_result(msg["id"], {"revision": revision, "missing_pictures": len(missing)})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/packs/list"})
@@ -641,8 +669,10 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
     {
         vol.Required("type"): "home_3d/backup/import",
         vol.Optional("building"): dict,
-        vol.Optional("packs", default=[]): [dict],
-        # the custom items (#13); a backup from before them leaves the current ones as they are
+        # the packs: restored onto the installed pack with the same id, or added; packs not in the backup stay, so an
+        # older or trimmed backup without them never removes any (#153)
+        vol.Optional("packs"): [dict],
+        # the custom items (#13), likewise by id; a backup from before them leaves the current ones as they are
         vol.Optional("items"): [dict],
         # every home (#53): restored onto the home with the same id, or added; homes not in the backup stay.
         # Without them (a backup from before #53) `building` replaces the plan of `home_id` (default: the active one)
@@ -654,6 +684,8 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         ],
         vol.Optional("active"): _HOME_ID,
         **_HOME,
+        # only check the backup (#153): the answer says what a restore would skip; nothing changes
+        vol.Optional("check_only", default=False): bool,
     }
 )
 @websocket_api.require_admin
@@ -662,25 +694,31 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
 async def ws_backup_import(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Replace the plans and the packs from a backup. Packs are checked again: only ones whose content
-    validates come back; the rest are reported as skipped. The state before becomes a restore point."""
+    """Restore the plans, the packs and the custom items of a backup. Packs are checked again: only ones whose content
+    validates come back; the rest are reported as skipped. The state before becomes a restore point.
+
+    Non-destructive (#153): the whole message is checked before anything is written; homes, packs and custom items
+    the backup does not name stay as they are; the homes are restored first and the packs and items last, and when a
+    step fails the steps done so far are undone and the answer is the error "restore_failed"."""
     if (data := _data(hass, connection, msg)) is None:
         return
     try:
-        homes = [{**h, "building": BUILDING_SCHEMA(h["building"])} for h in msg.get("homes", [])]
+        homes = [{**h, "building": complete(BUILDING_SCHEMA(h["building"]))} for h in msg.get("homes", [])]
         if not homes and "building" not in msg:
             raise vol.Invalid("a backup has a building or homes")
+        if len({h["id"] for h in homes}) != len(homes):
+            raise vol.Invalid("a backup names each home once")
         # with homes the building at the top is the active home's again (for older versions): not needed
-        building = BUILDING_SCHEMA(msg["building"]) if not homes else None
+        building = complete(BUILDING_SCHEMA(msg["building"])) if not homes else None
     except vol.Invalid as err:
         connection.send_error(msg["id"], "invalid_format", str(err))
         return
     target = None
     if not homes and (target := _home(hass, connection, msg)) is None:
         return
-    packs: list[dict[str, Any]] = []
+    checked: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
-    for entry in msg["packs"]:
+    for entry in msg.get("packs", []):
         source = entry.get("source")
         name = str(entry.get("id") or "?")
         if not isinstance(source, dict):
@@ -696,29 +734,21 @@ async def ws_backup_import(
             source = {k: v for k, v in source.items() if k != "origin"}
             if (origin := checked_origin(entry["source"]["origin"])) is not None:
                 source["origin"] = origin
-        packs.append({**clean, "source": source, "imported_at": time.time()})
-    items: list[dict[str, Any]] | None = None
-    if "items" in msg:
-        items = []
-        for item in msg["items"]:
-            try:
-                items.append(verify_item(item))
-            except PackError as err:
-                skipped.append({"id": str(item.get("id") or "?"), "reason": err.code})
-    await data.async_set_packs(packs)
-    if target is not None and building is not None:
-        await target.async_restore(complete(building))
-    for entry in homes:
-        if (home := data.homes.get(entry["id"])) is not None:
-            if home.name != entry["name"]:
-                await data.async_rename_home(home.id, entry["name"])
-            await home.async_restore(complete(entry["building"]))
-        else:
-            await data.async_create_home(entry["name"], complete(entry["building"]), home_id=entry["id"])
-    if msg.get("active") in data.homes:
-        await data.async_set_active(msg["active"])
-    if items is not None:
-        await data.custom.async_replace(items)
+        checked.append({**clean, "source": source, "imported_at": time.time()})
+    items: list[dict[str, Any]] = []
+    for item in msg.get("items", []):
+        try:
+            items.append(verify_item(item))
+        except PackError as err:
+            skipped.append({"id": str(item.get("id") or "?"), "reason": err.code})
+    if msg["check_only"]:
+        connection.send_result(msg["id"], {"checked": True, "skipped": skipped})
+        return
+    try:
+        await _async_restore_backup(hass, data, target, building, homes, msg.get("active"), checked, items)
+    except _RestoreFailed as err:
+        connection.send_error(msg["id"], "restore_failed", str(err))
+        return
     shown = target or data.active
     result: dict[str, Any] = {
         "revision": shown.revision,
@@ -726,12 +756,80 @@ async def ws_backup_import(
         "home_id": shown.id,
         "homes": data.homes_list(),
         "active": data.active_id,
-        "packs": len(packs),
+        "packs": len(checked),
         "skipped": skipped,
     }
-    if items is not None:
+    if "items" in msg:
         result["items"] = len(items)
     connection.send_result(msg["id"], result)
+
+
+class _RestoreFailed(Exception):
+    """A backup could not be restored (#153); the message says whether everything was put back."""
+
+
+async def _async_restore_backup(
+    hass: HomeAssistant,
+    data: FloorplanData,
+    target: Home | None,
+    building: dict[str, Any] | None,
+    homes: list[dict[str, Any]],
+    active: str | None,
+    packs: list[dict[str, Any]],
+    items: list[dict[str, Any]],
+) -> None:
+    """Write a checked backup (#153): the plans first (each keeps its state before as a restore point), then which
+    home is active, then the packs and the custom items, each onto the one with the same id (the others stay). When a
+    step fails, the steps done are undone in reverse and _RestoreFailed is raised."""
+    undo: list[Callable[[], Awaitable[Any]]] = []
+    restored: list[Home] = []
+    try:
+        if target is not None and building is not None:
+            undo.append(partial(target.async_restore, target.building))
+            await target.async_restore(building)
+            restored.append(target)
+        for entry in homes:
+            if (home := data.homes.get(entry["id"])) is not None:
+                if home.name != entry["name"]:
+                    undo.append(partial(data.async_rename_home, home.id, home.name))
+                    await data.async_rename_home(home.id, entry["name"])
+                undo.append(partial(home.async_restore, home.building))
+                await home.async_restore(entry["building"])
+            else:
+                home = await data.async_create_home(entry["name"], entry["building"], home_id=entry["id"])
+                undo.append(partial(data.async_delete_home, home.id))
+            restored.append(home)
+        if active in data.homes and active != data.active_id:
+            undo.append(partial(data.async_set_active, data.active_id))
+            await data.async_set_active(active)
+        if packs:
+            ids = {p["id"] for p in packs}
+            undo.append(partial(data.async_set_packs, data.packs))
+            await data.async_set_packs([p for p in data.packs if p["id"] not in ids] + packs)
+            # the restored plans take recipe copies of their items from the packs now installed (a plan saved
+            # before #2 has none of its own); a copy a plan has stays
+            for home in restored:
+                await home.async_follow_custom_items()
+        if items:
+            undo.append(partial(data.custom.async_replace, data.custom.items))
+            await data.custom.async_replace([*data.custom.items, *items])
+    except Exception as err:
+        _LOGGER.exception("Restoring a backup failed; undoing the steps done so far")
+        put_back = True
+        for step in reversed(undo):
+            try:
+                await step()
+            except Exception:
+                _LOGGER.exception("Undoing a step of a failed backup restore failed")
+                put_back = False
+        state = (
+            "everything was put back as it was"
+            if put_back
+            else "it is partly restored: every restored home keeps its state before as a restore point"
+        )
+        raise _RestoreFailed(f"Restoring the backup failed ({err}); {state}") from err
+    if packs and (updates := hass.data.get(DATA_PACK_UPDATES)) is not None:
+        await updates.async_forget_uninstalled()
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/voice/subscribe"})

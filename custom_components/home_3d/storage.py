@@ -7,6 +7,7 @@ The packs, the custom items and the list of homes are shared.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 import copy
 import inspect
@@ -22,6 +23,7 @@ import voluptuous as vol
 
 from .const import (
     DEFAULT_HOME_NAME,
+    DEFAULT_RESTORE_PICTURE_DAYS,
     DOMAIN,
     FIRST_HOME_ID,
     HISTORY_INTERVAL,
@@ -72,6 +74,20 @@ if "serialize_in_event_loop" in inspect.signature(Store.__init__).parameters:
     _OFF_LOOP["serialize_in_event_loop"] = False
 
 
+class RevisionConflict(Exception):
+    """A save from a plan that is out of date (#149): the plan changed since the revision the client started from."""
+
+    def __init__(self, base: int, revision: int) -> None:
+        """Keep both revisions."""
+        super().__init__(f"The plan changed since revision {base}; it is at revision {revision} now")
+        self.base = base
+        self.revision = revision
+
+
+def _without_recipes(building: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in building.items() if k != "recipes"}
+
+
 class HomesError(Exception):
     """A change to the homes that cannot be made (`code` for the websocket error)."""
 
@@ -109,20 +125,28 @@ class Home:
         name: str,
         packs: Callable[[], list[dict[str, Any]]],
         moves: Callable[[], Moves] = dict,
+        picture_days: Callable[[], int] = lambda: DEFAULT_RESTORE_PICTURE_DAYS,
     ) -> None:
         """Make the stores; `packs` gives the packs on offer (for the plan's recipe copies), `moves` the items that
-        moved between packs (#110)."""
+        moved between packs (#110), `picture_days` how long the pictures of restore points are kept (#154)."""
         self.hass = hass
         self.id = home_id
         self.name = name
         self._packs = packs
         self._moves = moves
+        self._picture_days = picture_days
         building_key, image_key, history_key = _home_keys(home_id)
         self._building_store = _BuildingStore(hass, STORAGE_VERSION, building_key, minor_version=STORAGE_MINOR_VERSION)
         self._image_store: Store[Any] = Store(hass, STORAGE_VERSION, image_key, **_OFF_LOOP)
         self._history_store: Store[Any] = Store(hass, STORAGE_VERSION, history_key, **_OFF_LOOP)
         self.building: dict[str, Any] = empty_building()
         self.revision = 0
+        # the last revision that changed more than the recipe copies (#149): a save from a plan at this revision or
+        # later is not out of date, as the server's own recipe-only writes merge with it (recipe_bases, #45)
+        self._content_revision = 0
+        # saves, restores and the server's own updates of this home run one at a time (#149), so the revision check,
+        # the plan they start from and the write are one step
+        self._lock = asyncio.Lock()
         self._images: dict[str, str] = {}
         self._history: list[dict[str, Any]] = []
 
@@ -131,11 +155,12 @@ class Home:
         return {"id": self.id, "name": self.name, "revision": self.revision, **_summary(self.building)}
 
     async def async_load(self) -> None:
-        """Load the stores and drop images no floor refers to any more."""
+        """Load the stores and drop the images neither the plan nor a recent restore point uses (#154)."""
         stored = await self._building_store.async_load()
         if stored:
             self.building = complete(stored.get("building") or empty_building())
             self.revision = int(stored.get("revision", 0))
+            self._content_revision = self.revision
             # items that moved to another pack take their new ids (#110), and a plan saved before #2 (or placed
             # while a client did not send recipes) picks up the recipes of its pack items from the installed packs;
             # both are written back once
@@ -148,7 +173,8 @@ class Home:
         self._history = list((history or {}).get("snapshots", []))
         images = await self._image_store.async_load()
         self._images = dict((images or {}).get("images", {}))
-        unused = set(self._images) - image_ids(self.building)
+        used = self._images_in_use()
+        unused = set(self._images) - used if used is not None else set()
         if unused:
             _LOGGER.debug("Removing %d unused background images", len(unused))
             for image_id in unused:
@@ -164,19 +190,57 @@ class Home:
             building = migrate_building(building, self._moves())
             self.building = with_recipes(building, building.get("recipes"), self._packs())
             self.revision = 1
+            self._content_revision = 1
         await self._save_building()
 
     async def async_save_building(
-        self, building: dict[str, Any], recipe_bases: dict[str, str] | None = None, *, check_racks: bool = False
+        self,
+        building: dict[str, Any],
+        recipe_bases: dict[str, str] | None = None,
+        *,
+        check_racks: bool = False,
+        base_revision: int | None = None,
+        guard: Callable[[dict[str, Any]], None] | None = None,
     ) -> int:
         """Store a validated building, bump the revision and notify subscribers.
 
         The state before the save becomes a restore point when the last one is older than
         HISTORY_INTERVAL, so a long editing session leaves a trail without saving every step.
+
+        `base_revision` (#149) is the revision the client's plan started from: when the plan changed since (more than
+        its recipe copies), the save is refused with RevisionConflict and nothing changes. Without it (an older
+        client) the save replaces the plan as before. `guard` sees the current plan first and may raise to refuse.
         """
+        async with self._lock:
+            if base_revision is not None and not self._content_revision <= base_revision <= self.revision:
+                raise RevisionConflict(base_revision, self.revision)
+            if guard is not None:
+                guard(self.building)
+            return await self._async_store(building, recipe_bases, check_racks=check_racks)
+
+    async def async_update_building(self, change: Callable[[dict[str, Any]], dict[str, Any] | None]) -> int:
+        """A change the server makes itself (#149: a pack update, a rollback, a custom item edit): `change` gets the
+        current plan once no other save runs and returns the new one (None: nothing to change), so a save that
+        landed meanwhile is never overwritten. The revision after it."""
+        async with self._lock:
+            building = change(self.building)
+            if building is None:
+                return self.revision
+            return await self._async_store(building, content=None)
+
+    async def _async_store(
+        self,
+        building: dict[str, Any],
+        recipe_bases: dict[str, str] | None = None,
+        *,
+        check_racks: bool = False,
+        content: bool | None = True,
+    ) -> int:
+        """Store a building while the lock is held. `content`: whether more than the recipe copies changed (None:
+        compare)."""
         last = self._history[-1]["saved_at"] if self._history else 0
         if self.building.get("floors") and time.time() - last > HISTORY_INTERVAL:
-            await self.async_snapshot()
+            await self._async_snapshot()
         # items that moved to another pack take their new ids (#110): an imported plan, a backup, a restore point
         moves = self._moves()
         sent, building = building, migrate_building(building, moves)
@@ -188,25 +252,39 @@ class Home:
         # (a pack update) stays
         if check_racks and (problems := new_rack_problems(self.building, building)):
             raise RackError(problems)
+        if content is None:
+            content = _without_recipes(building) != _without_recipes(self.building)
         self.building = building
         self.revision += 1
+        # the revision of this save, also when the write below takes a while
+        revision = self.revision
+        if content:
+            self._content_revision = revision
         await self._save_building()
-        async_dispatcher_send(self.hass, SIGNAL_BUILDING_UPDATED, self.id, self.revision)
-        return self.revision
+        async_dispatcher_send(self.hass, SIGNAL_BUILDING_UPDATED, self.id, revision)
+        return revision
 
     async def async_follow_custom_items(self) -> None:
         """After a custom item changed (#13): placed copies of it follow the change at once (#26)."""
-        building = with_recipes(self.building, self.building.get("recipes"), self._packs())
-        if building.get("recipes") != self.building.get("recipes"):
-            await self.async_save_building(building)
+
+        def follow(current: dict[str, Any]) -> dict[str, Any] | None:
+            building = with_recipes(current, current.get("recipes"), self._packs())
+            return building if building.get("recipes") != current.get("recipes") else None
+
+        await self.async_update_building(follow)
 
     async def async_restore(self, building: dict[str, Any]) -> int:
         """Replace the plan (a restore point or a backup); the state before becomes a restore point."""
-        await self.async_snapshot()
-        return await self.async_save_building(building)
+        async with self._lock:
+            await self._async_snapshot()
+            return await self._async_store(building)
 
     async def async_snapshot(self) -> None:
         """Keep the current building as a restore point."""
+        async with self._lock:
+            await self._async_snapshot()
+
+    async def _async_snapshot(self) -> None:
         self._history.append(
             {
                 "id": uuid.uuid4().hex[:12],
@@ -219,10 +297,39 @@ class Home:
         # copies: the JSON is written in the executor while the loop may change the originals
         await self._history_store.async_save({"snapshots": list(self._history)})
 
+    def _images_in_use(self) -> set[str] | None:
+        """The images the plan uses and those of the restore points made in the last `picture_days` days (#154); a
+        picture only an older restore point names is removed. None (remove nothing) when a restore point cannot be
+        read."""
+        used = image_ids(self.building)
+        since = time.time() - self._picture_days() * 86400
+        try:
+            for point in self._history:
+                if point["saved_at"] >= since:
+                    used |= image_ids(point["building"])
+        except (KeyError, TypeError, AttributeError) as err:
+            _LOGGER.warning("A restore point of home %s cannot be read (%s); keeping every picture", self.id, err)
+            return None
+        return used
+
+    def missing_images(self, building: dict[str, Any]) -> list[str]:
+        """The stored pictures a plan names that this home no longer has (#154: removed after `picture_days`)."""
+        try:
+            return sorted(image_ids(building) - set(self._images))
+        except (KeyError, TypeError, AttributeError):
+            return []
+
     def history(self) -> list[dict[str, Any]]:
-        """Restore points, newest first, without their buildings."""
+        """Restore points, newest first, without their buildings; `missing_pictures`: how many of the pictures a
+        restore point names are gone (#154), so it restores without them."""
         return [
-            {"id": h["id"], "revision": h["revision"], "saved_at": h["saved_at"], **_summary(h["building"])}
+            {
+                "id": h["id"],
+                "revision": h["revision"],
+                "saved_at": h["saved_at"],
+                **_summary(h["building"]),
+                "missing_pictures": len(self.missing_images(h["building"])),
+            }
             for h in reversed(self._history)
         ]
 
@@ -268,9 +375,10 @@ class FloorplanData:
     the panel opens, cards show by default and voice, locating and time travel use.
     """
 
-    def __init__(self, hass: HomeAssistant) -> None:
-        """Initialise the stores."""
+    def __init__(self, hass: HomeAssistant, picture_days: int = DEFAULT_RESTORE_PICTURE_DAYS) -> None:
+        """Initialise the stores; `picture_days`: how long a picture only a restore point uses is kept (#154)."""
         self.hass = hass
+        self.picture_days = picture_days
         self._pack_store: Store[Any] = Store(hass, STORAGE_VERSION, STORAGE_KEY_PACKS)
         self._homes_store: Store[Any] = Store(hass, STORAGE_VERSION, STORAGE_KEY_HOMES)
         self.homes: dict[str, Home] = {}
@@ -307,7 +415,7 @@ class FloorplanData:
             await self._save_homes()
 
     def _new_home(self, home_id: str, name: str) -> Home:
-        return Home(self.hass, home_id, name, lambda: self.offered_packs, lambda: self.moves)
+        return Home(self.hass, home_id, name, lambda: self.offered_packs, lambda: self.moves, lambda: self.picture_days)
 
     async def _save_homes(self) -> None:
         homes = [{"id": h.id, "name": h.name} for h in self.homes.values()]
@@ -373,9 +481,12 @@ class FloorplanData:
         return home
 
     async def async_duplicate_home(self, home_id: str, name: str) -> Home:
-        """A new home with a copy of another's plan and pictures (the restore points stay with the original)."""
+        """A new home with a copy of another's plan and the pictures it uses (the restore points stay with the
+        original, and so do the pictures only they use, #154)."""
         source = self._get(home_id)
-        return await self.async_create_home(name, copy.deepcopy(source.building), source.images)
+        used = image_ids(source.building)
+        images = {k: v for k, v in source.images.items() if k in used}
+        return await self.async_create_home(name, copy.deepcopy(source.building), images)
 
     async def async_delete_home(self, home_id: str) -> None:
         """Remove a home with its stores; the last one stays. If it was active, the first one left becomes so."""
@@ -427,6 +538,10 @@ class FloorplanData:
     ) -> int:
         """Store the active home's building (see Home.async_save_building)."""
         return await self.active.async_save_building(building, recipe_bases)
+
+    async def async_update_building(self, change: Callable[[dict[str, Any]], dict[str, Any] | None]) -> int:
+        """Change the active home's building from the plan it has then (see Home.async_update_building)."""
+        return await self.active.async_update_building(change)
 
     async def async_snapshot(self) -> None:
         """Keep the active home's building as a restore point."""

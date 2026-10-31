@@ -1,7 +1,7 @@
 // Loads the building, follows changes made elsewhere and saves edits (debounced).
 
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import { fetchBuilding, fetchVersion, listPacks, saveBuilding, subscribeBuilding } from "./api.ts";
+import { fetchBuilding, fetchVersion, listPacks, saveBuilding, subscribeBuilding, takeSnapshot } from "./api.ts";
 import { normalizeBuilding, type Building } from "./model.ts";
 import { recipeHashes, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -20,11 +20,19 @@ export const FRONTEND_VERSION = typeof __FP3D_VERSION__ === "string" ? __FP3D_VE
 declare const __FP3D_BUILD__: string;
 export const FRONTEND_BUILD = typeof __FP3D_BUILD__ === "string" ? __FP3D_BUILD__ : "dev";
 
+/** A change to the plan that can be made again on a newer plan (#149): the 3D view's settings and its modules. */
+export type PlanChange = (building: Building) => void;
+
+/** How often a refused save is made again on the newer plan before the edits are kept as a draft instead (#149). */
+const REPLAYS = 3;
+
 export interface Draft {
   building: Building;
   savedAt: number;
   /** The home the edits belong to (#53); offered only while that home is shown. */
   home?: string;
+  /** Kept from a save refused because someone else changed the plan meanwhile (#149). */
+  conflict?: boolean;
 }
 
 /** Unsaved edits of the earlier name (the browser may still hold them). */
@@ -65,6 +73,9 @@ export class BuildingController implements ReactiveController {
   frontend = { version: FRONTEND_VERSION, build: FRONTEND_BUILD };
   /** Unsaved edits from an earlier session, offered for restoring. */
   draft: Draft | null = null;
+  /** The last save was refused because someone else changed the plan meanwhile (#149): the plan now shows their
+   * version, and `draft` holds the edits made here (restoring it keeps theirs as a restore point). */
+  conflict = false;
   /** The library (#44): the offered packs with an index of their items, loaded when an editor first needs it. */
   packs: FurniturePack[] = [];
   /** This user is on the editors list (#7): sees the Editor and Extensions and may change the plan. The backend
@@ -96,6 +107,10 @@ export class BuildingController implements ReactiveController {
   private pendingHome: string | undefined = undefined;
   /** Counts the edits, so a load that was on its way while one was made does not put the older plan back (#150). */
   private edits = 0;
+  /** How `pending` came from the plan shown before it, when only `update()` changes made it (#149); null: edits. */
+  private changes: PlanChange[] | null = [];
+  /** The newest revision another save announced while this view had edits on their way (#149). */
+  private remoteRevision = -1;
   private saving: Promise<void> | null = null;
   private connected = false;
   /** The websocket whose reconnects this view follows (#60). */
@@ -104,6 +119,11 @@ export class BuildingController implements ReactiveController {
   constructor(host: ReactiveControllerHost) {
     this.host = host;
     host.addController(this);
+  }
+
+  /** The home on screen, the one an edit made now belongs to (#150). */
+  private get shown(): string | undefined {
+    return this.homeId ?? this.home;
   }
 
   /** Show another home (#53: a card's `home` changed); unset: the active home. */
@@ -189,11 +209,24 @@ export class BuildingController implements ReactiveController {
     setPlanRecipes(building.recipes);
     this.pending = building;
     // the home on screen is the one this edit was made on (#150)
-    this.pendingHome = this.homeId ?? this.home;
+    this.pendingHome = this.shown;
     this.edits++;
+    this.changes = null;
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => void this.flush(), SAVE_DELAY);
     this.host.requestUpdate();
+  }
+
+  /** A change from the 3D view (#149: its settings, a module): shown and saved at once. When someone else changed the
+   * plan meanwhile, it is made again on their plan, so neither change is lost. */
+  update(change: PlanChange): void {
+    if (!this.building) return;
+    const before = this.pending ? this.changes : [];
+    const next = structuredClone(this.building);
+    change(next);
+    this.edit(next);
+    this.changes = before ? [...before, change] : null;
+    void this.flush();
   }
 
   /** This frontend's version, for notices. */
@@ -240,17 +273,39 @@ export class BuildingController implements ReactiveController {
     return true;
   }
 
-  /** Take over the unsaved edits of an earlier session (they are saved right away), only onto their own home (#150). */
-  restoreDraft(): void {
+  /**
+   * Take over the unsaved edits of an earlier session (they are saved right away), only onto their own home (#150).
+   * After a refused save (#149) the plan someone else saved is kept as a restore point first, as these edits replace
+   * it.
+   */
+  async restoreDraft(): Promise<void> {
     const draft = this.draft;
+    const conflict = this.conflict;
     this.draft = null;
-    if (draft && this.draftFits(draft)) this.edit(normalizeBuilding(draft.building));
-    else this.host.requestUpdate();
+    this.conflict = false;
+    if (!draft || !this.draftFits(draft)) {
+      this.host.requestUpdate();
+      return;
+    }
+    if (conflict && this.hass) {
+      try {
+        await takeSnapshot(this.hass, this.shown);
+      } catch {
+        // an older backend or a lost connection: the edits are still saved, as the button says
+      }
+      // another home was loaded meanwhile: the draft stays stored for its own home, where it is offered again
+      if (!this.draftFits(draft)) {
+        this.host.requestUpdate();
+        return;
+      }
+    }
+    this.edit(normalizeBuilding(draft.building));
   }
 
   /**
    * Whether a draft belongs to the home loaded now (#150): one that names its home only there; one from before homes
-   * had ids (#53) only while this view follows the active home, the one such a session edited.
+   * had ids (#53) only while this view follows the active home, the one such a session edited. A draft kept from a
+   * refused save (#149) is no different.
    */
   draftFits(draft: Draft): boolean {
     return draft.home ? draft.home === this.homeId : this.home === undefined;
@@ -258,6 +313,7 @@ export class BuildingController implements ReactiveController {
 
   discardDraft(): void {
     this.draft = null;
+    this.conflict = false;
     writeDraft(null);
     this.host.requestUpdate();
   }
@@ -268,7 +324,9 @@ export class BuildingController implements ReactiveController {
     const building = this.pending;
     if (!building || !this.hass) return;
     const home = this.pendingHome;
+    const changes = this.changes;
     this.pending = null;
+    this.changes = [];
     // a mount height above what the backend accepts (10 m – "40" typed as centimetres) would refuse every save,
     // also of an edit kept from earlier: it is brought into range here
     for (const f of building.floors) for (const m of f.furniture) if (m.mount_y != null && m.mount_y > 10) m.mount_y = 10;
@@ -276,25 +334,7 @@ export class BuildingController implements ReactiveController {
     this.host.requestUpdate();
     this.saving = (async () => {
       try {
-        // the recipe hashes belong to the home loaded; an edit of a home no longer loaded sends none
-        const bases = home === (this.homeId ?? this.home) ? this.recipeBases : {};
-        const { revision, recipes } = await saveBuilding(this.hass!, building, bases, home);
-        // the copies the backend made for items placed now: the plan keeps them, also when their pack goes (#2);
-        // and the ones it changed meanwhile (an update, a rollback, #45) replace the copies this plan started from
-        if (recipes) adoptRecipes(building, recipes, bases);
-        // the screen and the revisions follow only while the saved home is still the one loaded (#150)
-        if (home === (this.homeId ?? this.home)) {
-          if (recipes) {
-            if (this.building && this.building !== building) adoptRecipes(this.building, recipes, bases);
-            if (this.building) setPlanRecipes(this.building.recipes);
-            this.recipeBases = recipeHashes(recipes);
-          }
-          this.ownRevisions.add(revision);
-          this.revision = revision;
-        }
-        this.saveState = this.pending ? "saving" : "saved";
-        this.saveError = null;
-        writeDraft(null);
+        await this.save(building, changes, home);
       } catch (err) {
         this.saveState = "error";
         this.saveError = errorText(err);
@@ -305,6 +345,114 @@ export class BuildingController implements ReactiveController {
     })();
     await this.saving;
     this.saving = null;
+    // another save landed while this one was on its way: shown now, unless more edits follow (they meet it as a
+    // refused save, #149)
+    if (!this.pending && this.remoteRevision > this.revision) void this.reload();
+  }
+
+  /**
+   * Save `building`, an edit of `home`, from the plan at `revision` (#149). When the backend refuses it because someone
+   * else changed the plan meanwhile, their plan is loaded; edits made only by `update()` changes are made again on it
+   * and saved, any other edits stay as `draft` with `conflict` set, so nothing is lost and nothing of theirs is
+   * overwritten unasked. The revision, the recipe bases and the plan shown are those of the home loaded, so while
+   * `home` is not that one any more (#150) a refused save is only kept as that home's draft.
+   */
+  private async save(building: Building, changes: PlanChange[] | null, home: string | undefined): Promise<void> {
+    for (let attempt = 1; ; attempt++) {
+      const here = home === this.shown;
+      // the recipe hashes belong to the home loaded; an edit of a home no longer loaded sends none (#150)
+      const bases = here ? this.recipeBases : {};
+      let refused: unknown;
+      try {
+        const base = here && this.revision >= 0 ? this.revision : undefined;
+        const { revision, recipes } = await saveBuilding(this.hass!, building, bases, home, base);
+        // the copies the backend made for items placed now: the plan keeps them, also when their pack goes (#2);
+        // and the ones it changed meanwhile (an update, a rollback, #45) replace the copies this plan started from
+        if (recipes) adoptRecipes(building, recipes, bases);
+        // the screen and the revisions follow only while the saved home is still the one loaded (#150)
+        if (home === this.shown) {
+          if (recipes) {
+            if (this.building && this.building !== building) adoptRecipes(this.building, recipes, bases);
+            if (this.building) setPlanRecipes(this.building.recipes);
+            this.recipeBases = recipeHashes(recipes);
+          }
+          this.ownRevisions.add(revision);
+          this.revision = revision;
+        }
+        this.saveState = this.pending ? "saving" : "saved";
+        this.saveError = null;
+        this.forgetDraft(home);
+        return;
+      } catch (err) {
+        if (!isConflict(err)) throw err;
+        refused = err;
+      }
+      // another home is loaded now (#150): their plan of `home` is not on screen to merge into, nor are edits made
+      // since (they belong to the home shown), so the refused edit is kept for its own home, offered there again
+      if (home !== this.shown) {
+        writeDraft({ building, savedAt: Date.now(), ...(home ? { home } : {}), conflict: true });
+        this.saveState = "error";
+        this.saveError = errorText(refused);
+        return;
+      }
+      const loaded = await this.loadTheirs(home);
+      // edits made while their plan was loading belong to the refused ones (they were made on the older plan)
+      const local = this.pending ?? building;
+      const all = this.pending ? (changes && this.changes ? [...changes, ...this.changes] : null) : changes;
+      clearTimeout(this.saveTimer);
+      this.pending = null;
+      this.changes = [];
+      // the newer plan is what was to be saved (an editor showing a restored backup again): nothing to keep
+      if (loaded && this.building && samePlan(local, this.building)) {
+        this.saveState = "saved";
+        return;
+      }
+      if (!loaded || !all || attempt >= REPLAYS || !this.building) {
+        const draft: Draft = { building: local, savedAt: Date.now(), ...(home ? { home } : {}), conflict: true };
+        writeDraft(draft);
+        if (this.draftFits(draft)) {
+          this.conflict = true;
+          this.draft = draft;
+        }
+        this.saveState = "error";
+        this.saveError = null;
+        return;
+      }
+      building = structuredClone(this.building);
+      for (const change of all) change(building);
+      changes = all;
+      this.building = building;
+      setPlanRecipes(building.recipes);
+      this.host.requestUpdate();
+    }
+  }
+
+  /**
+   * After a refused save (#149): load the plan `home` has now and show it with its revision and recipe bases, the
+   * ones the edits are made again on. Not `reload()`: that asks for the home wanted next (#150), which may be another
+   * one by now, and waits for this very save before it shows another home. Whether the plan came and is shown.
+   */
+  private async loadTheirs(home: string | undefined): Promise<boolean> {
+    let res: Awaited<ReturnType<typeof fetchBuilding>>;
+    try {
+      res = await fetchBuilding(this.hass!, home);
+    } catch {
+      return false;
+    }
+    // the home on screen changed while it came: kept as a draft instead
+    if (home !== this.shown || (res.home_id ?? null) !== this.homeId) return false;
+    this.show(res, true);
+    this.error = null;
+    return true;
+  }
+
+  /** Forget the kept edits once `home` saved (#150: not another home's), unless they are on offer after a refused
+   * save (#149). */
+  private forgetDraft(home: string | undefined): void {
+    if (this.conflict) return;
+    const kept = readDraft();
+    if (kept?.home && kept.home !== home) return;
+    writeDraft(null);
   }
 
   private async start(): Promise<void> {
@@ -336,7 +484,10 @@ export class BuildingController implements ReactiveController {
             return;
           }
           if (this.ownRevisions.has(revision) || revision === this.revision) return;
-          if (this.pending || this.saving) return; // our own edits win; they are saved next
+          this.remoteRevision = Math.max(this.remoteRevision, revision);
+          // shown once the edits on their way are saved; a save from the older plan is refused by the backend
+          // and handled there (#149)
+          if (this.pending || this.saving) return;
           void this.reload();
         },
         asked,
@@ -370,44 +521,39 @@ export class BuildingController implements ReactiveController {
     this.host.requestUpdate();
   }
 
-  private async reload(): Promise<void> {
-    if (!this.hass) return;
+  /** Load the shown home's plan; whether it came (false also when another home was asked for meanwhile). */
+  private async reload(): Promise<boolean> {
+    if (!this.hass) return false;
     const asked = this.home;
     const edits = this.edits;
     try {
       const res = await fetchBuilding(this.hass, asked);
       // another home was asked for meanwhile (#150): its own load shows, not this one
-      if (asked !== this.home) return;
+      if (asked !== this.home) return false;
       const id = res.home_id ?? null;
       const moved = id !== this.homeId;
       if (moved) {
         // edits still waiting were made on the home shown until now: saved to it before the other one shows (#150)
         while (this.pending) await this.flush();
-        if (asked !== this.home) return;
+        if (asked !== this.home) return false;
         this.ownRevisions.clear();
-        // a draft on offer belongs to the home it was found for (#150)
+        this.remoteRevision = -1;
+        // a draft on offer belongs to the home it was found for (#150), a refused save's too (#149)
         this.draft = null;
+        this.conflict = false;
       }
-      this.homeId = id;
-      this.homeName = res.home_name ?? null;
-      this.backendVersion = res.version ?? null;
-      this.backendBuild = res.build ?? null;
-      this.canEdit = res.can_edit ?? !!this.hass.user?.is_admin;
       // an edit made while this load was on its way (or still being saved) wins over the plan it brings (#150): put
       // back, the edit would vanish from the screen and the next one would be built without it
-      if (moved || (!this.pending && !this.saving && this.edits === edits)) {
-        this.building = normalizeBuilding(res.building);
-        setPlanRecipes(this.building.recipes);
-        this.recipeBases = recipeHashes(this.building.recipes);
-        this.revision = res.revision;
-      }
+      this.show(res, moved || (!this.pending && !this.saving && this.edits === edits));
       if (this.draft === null && !this.pending) {
         const draft = readDraft();
         this.draft = draft && this.draftFits(draft) ? draft : null;
+        // edits kept from a refused save (#149) are offered as such, also after a page reload or a home switch
+        this.conflict = !!this.draft?.conflict;
       }
       this.error = null;
     } catch (err) {
-      if (asked !== this.home) return;
+      if (asked !== this.home) return false;
       if (this.remembered && asked !== undefined && (err as { code?: string } | null)?.code === "home_not_found") {
         // the home this device remembered is gone (#160): the active home instead
         this.remembered = false;
@@ -416,8 +562,26 @@ export class BuildingController implements ReactiveController {
         return this.reload();
       }
       this.error = errorText(err);
+      this.host.requestUpdate();
+      return false;
     }
     this.host.requestUpdate();
+    return true;
+  }
+
+  /** Take over a loaded home: its name, the versions and rights it reports, and, with `plan`, its plan, revision and
+   * recipe bases. */
+  private show(res: Awaited<ReturnType<typeof fetchBuilding>>, plan: boolean): void {
+    this.homeId = res.home_id ?? null;
+    this.homeName = res.home_name ?? null;
+    this.backendVersion = res.version ?? null;
+    this.backendBuild = res.build ?? null;
+    this.canEdit = res.can_edit ?? !!this.hass?.user?.is_admin;
+    if (!plan) return;
+    this.building = normalizeBuilding(res.building);
+    setPlanRecipes(this.building.recipes);
+    this.recipeBases = recipeHashes(this.building.recipes);
+    this.revision = res.revision;
   }
 }
 
@@ -429,6 +593,16 @@ function adoptRecipes(building: Building, recipes: Record<string, PlanRecipe>, b
   building.recipes = { ...recipes, ...Object.fromEntries(kept) };
 }
 
+
+/** Two plans alike but for their recipe copies (the server's own copies are taken over on load anyway). */
+function samePlan(a: Building, b: Building): boolean {
+  return JSON.stringify({ ...a, recipes: undefined }) === JSON.stringify({ ...b, recipes: undefined });
+}
+
+/** The backend refused a save from a plan someone else changed since (#149). */
+function isConflict(err: unknown): boolean {
+  return !!err && typeof err === "object" && (err as { code?: unknown }).code === "conflict";
+}
 
 function errorText(err: unknown): string {
   if (err && typeof err === "object" && "message" in err) return String((err as { message: unknown }).message);

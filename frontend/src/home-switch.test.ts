@@ -36,7 +36,8 @@ function gate() {
 
 /**
  * A backend with two homes ("home" active, "flat"). `hold.get` / `hold.subscribe` make the next such call wait until
- * the test opens the gate; `failSaves` refuses saves. `subs` counts the subscriptions still running per home.
+ * the test opens the gate; `failSaves` refuses saves. `subs` counts the subscriptions still running per home. A save
+ * from a revision the home is no longer at is refused with "conflict" (#149); `refused` lists those.
  */
 function backend() {
   const homes: Record<string, { building: Building; revision: number }> = {
@@ -48,6 +49,8 @@ function backend() {
     failSaves: false,
     gets: 0,
     saves: [] as { home: string; name: string }[],
+    refused: [] as { home: string; base: unknown }[],
+    snapshots: [] as string[],
     hold: { get: null as ReturnType<typeof gate> | null, save: null as ReturnType<typeof gate> | null, subscribe: null as ReturnType<typeof gate> | null },
     subs: new Map<string, number>(),
     push: new Map<string, (e: unknown) => void>(),
@@ -70,10 +73,18 @@ function backend() {
         state.hold.save = null;
         if (held) await held.opened;
         if (state.failSaves) throw new Error("connection lost");
+        if (msg.base_revision !== undefined && msg.base_revision !== homes[id].revision) {
+          state.refused.push({ home: id, base: msg.base_revision });
+          throw { code: "conflict", message: `The plan changed since revision ${msg.base_revision as number}` };
+        }
         const b = msg.building as Building;
         state.saves.push({ home: id, name: b.floors[0].name });
         homes[id] = { building: structuredClone(b), revision: homes[id].revision + 1 };
         return { revision: homes[id].revision, recipes: {} };
+      }
+      if (msg.type === "home_3d/history/snapshot") {
+        state.snapshots.push(id);
+        return null;
       }
       throw new Error(`unexpected ${msg.type}`);
     },
@@ -293,5 +304,114 @@ test("a subscription that is set up after the view went away is let go of at onc
   again.open();
   await ticks(10);
   assert.equal(state.subs.get("(active)"), 1);
+  done(c);
+});
+
+/** Someone else saves `home` (another device) without this view hearing of it yet. */
+function otherSaves(homes: Record<string, { building: Building; revision: number }>, home: string, name: string): void {
+  homes[home] = { building: plan(name), revision: homes[home].revision + 1 };
+}
+
+const storedDraft = () => JSON.parse(store.get("home3d.unsaved") ?? "null") as Draft | null;
+
+test("a refused save at a home switch is made again on its own home's newer plan and saved there (#149, #150)", async () => {
+  const { hass, state, homes } = backend();
+  const c = await open(hass);
+  otherSaves(homes, "home", "Theirs");
+  state.hold.save = gate();
+  const held = state.hold.save;
+  // a 3D view setting, saved at once from revision 7; the user switches to the flat while it is on its way
+  c.update((b) => void (b.settings.grid = 0.1));
+  await ticks();
+  c.setHome("flat");
+  await ticks();
+  held.open();
+  await ticks(12);
+  // refused at the old home's revision, then made again on that home's plan (not the flat's) and saved there
+  assert.deepEqual(state.refused, [{ home: "home", base: 7 }]);
+  assert.deepEqual(state.saves, [{ home: "home", name: "Theirs" }]);
+  assert.equal(homes.home.revision, 9);
+  assert.equal(homes.home.building.settings.grid, 0.1);
+  assert.equal(homes.flat.revision, 2);
+  assert.equal(homes.flat.building.floors[0].name, "Flat");
+  assert.equal(c.homeId, "flat");
+  assert.equal(c.building?.floors[0].name, "Flat");
+  assert.equal(c.conflict, false);
+  assert.equal(c.draft, null);
+  assert.equal(storedDraft(), null);
+  // the flat's own saves start from the flat's revision
+  c.edit(plan("Flat edited"));
+  await c.flush();
+  assert.deepEqual(state.saves.at(-1), { home: "flat", name: "Flat edited" });
+  assert.equal(state.refused.length, 1);
+  done(c);
+});
+
+test("an edit refused at a home switch stays a draft of its own home and is offered there again (#149, #150)", async () => {
+  const { hass, state, homes } = backend();
+  const c = await open(hass);
+  otherSaves(homes, "home", "Theirs");
+  c.edit(plan("Own edit"));
+  c.setHome("flat");
+  await ticks(12);
+  assert.deepEqual(state.refused, [{ home: "home", base: 7 }]);
+  assert.deepEqual(state.saves, []);
+  // the flat shows, without the old home's conflict on offer; the edit is kept for the home it was made on
+  assert.equal(c.homeId, "flat");
+  assert.equal(c.building?.floors[0].name, "Flat");
+  assert.equal(c.draft, null);
+  assert.equal(c.conflict, false);
+  assert.equal(storedDraft()?.home, "home");
+  assert.equal(storedDraft()?.conflict, true);
+  // a save on the flat keeps the other home's draft; restoring on the flat does nothing
+  c.edit(plan("Flat edited"));
+  await c.flush();
+  assert.deepEqual(state.saves, [{ home: "flat", name: "Flat edited" }]);
+  assert.equal(storedDraft()?.home, "home");
+  await c.restoreDraft();
+  await c.flush();
+  assert.equal(state.saves.length, 1);
+  // back on its own home: offered as a refused save, over their plan; "use mine" keeps theirs as a restore point
+  c.setHome(undefined);
+  await ticks(12);
+  assert.equal(c.homeId, "home");
+  assert.equal(c.building?.floors[0].name, "Theirs");
+  assert.equal((c.draft as Draft | null)?.building.floors[0].name, "Own edit");
+  assert.equal(c.conflict, true);
+  await c.restoreDraft();
+  await c.flush();
+  assert.deepEqual(state.snapshots, ["home"]);
+  assert.deepEqual(state.saves.at(-1), { home: "home", name: "Own edit" });
+  assert.equal(homes.home.revision, 9);
+  assert.equal(storedDraft(), null);
+  done(c);
+});
+
+test("a refused save of the old home that lands after the switch is kept for that home, the new one untouched (#149, #150)", async () => {
+  const { hass, state, homes } = backend();
+  const c = await open(hass);
+  state.hold.save = gate();
+  const held = state.hold.save;
+  c.edit(plan("Own saved late"));
+  const saving = c.flush();
+  await ticks();
+  otherSaves(homes, "home", "Theirs");
+  // the backstop path: the flat is loaded while that save is still on its way
+  c.home = "flat";
+  await (c as unknown as { reload(): Promise<boolean> }).reload();
+  assert.equal(c.homeId, "flat");
+  const gets = state.gets;
+  held.open();
+  await saving;
+  assert.deepEqual(state.refused, [{ home: "home", base: 7 }]);
+  // their plan of the old home is not fetched over the flat, nor anything replayed onto it
+  assert.equal(state.gets, gets);
+  assert.equal(c.building?.floors[0].name, "Flat");
+  assert.equal(c.draft, null);
+  assert.equal(c.conflict, false);
+  assert.equal(c.saveState, "error");
+  assert.equal(storedDraft()?.home, "home");
+  assert.equal(storedDraft()?.building.floors[0].name, "Own saved late");
+  assert.equal(homes.flat.building.floors[0].name, "Flat");
   done(c);
 });

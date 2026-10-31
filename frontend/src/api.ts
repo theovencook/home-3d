@@ -25,18 +25,21 @@ export async function fetchVersion(hass: HomeAssistant): Promise<{ version?: str
 
 /** Save the plan; the backend answers with its revision and the plan's recipe copies as stored (#2). */
 /** `recipeBases`: the hashes of the plan's recipe copies as this editor got them (#45), so the backend keeps a copy
- * changed on the server since instead of the older one sent back unchanged. */
+ * changed on the server since instead of the older one sent back unchanged. `baseRevision` (#149): the revision the
+ * plan started from; when someone else changed the plan since, the save is refused with the error code "conflict". */
 export async function saveBuilding(
   hass: HomeAssistant,
   building: Building,
   recipeBases?: Record<string, string>,
   home?: string | null,
+  baseRevision?: number,
 ): Promise<{ revision: number; recipes?: Record<string, PlanRecipe> }> {
   return hass.callWS<{ revision: number; recipes?: Record<string, PlanRecipe> }>({
     type: "home_3d/building/save",
     ...at(home),
     building,
     ...(recipeBases ? { recipe_bases: recipeBases } : {}),
+    ...(baseRevision !== undefined ? { base_revision: baseRevision } : {}),
   });
 }
 
@@ -93,6 +96,8 @@ export interface Snapshot {
   floors: number;
   rooms: number;
   furniture: number;
+  /** How many stored pictures it names are no longer kept (#154): it restores without them. */
+  missing_pictures?: number;
 }
 
 export async function listHistory(hass: HomeAssistant, home?: string | null): Promise<Snapshot[]> {
@@ -104,9 +109,9 @@ export async function takeSnapshot(hass: HomeAssistant, home?: string | null): P
   await hass.callWS({ type: "home_3d/history/snapshot", ...at(home) });
 }
 
-export async function restoreSnapshot(hass: HomeAssistant, snapshotId: string, home?: string | null): Promise<number> {
-  const res = await hass.callWS<{ revision: number }>({ type: "home_3d/history/restore", ...at(home), snapshot_id: snapshotId });
-  return res.revision;
+/** Go back to a restore point; `missing_pictures` (#154): how many of its pictures were no longer kept. */
+export async function restoreSnapshot(hass: HomeAssistant, snapshotId: string, home?: string | null): Promise<{ revision: number; missing_pictures?: number }> {
+  return hass.callWS<{ revision: number; missing_pictures?: number }>({ type: "home_3d/history/restore", ...at(home), snapshot_id: snapshotId });
 }
 
 /** A home of the install (#53), as the switcher lists it. */
@@ -278,15 +283,29 @@ export function fetchBackup(hass: HomeAssistant): Promise<Pick<BackupFile, "form
  * one); packs and items that fail their check are skipped. With `homes` (#53) every home in the backup is restored
  * (onto the home with its id, or added) and `building` may be null; without, `building` replaces the plan of `home`
  * (default: the active one). */
+/** Restore (a part of) a backup. Packs and custom items left out stay as they are; the ones given are restored onto
+ * the installed ones with the same id (#153). A failure undoes the part and is the error "restore_failed". */
 export function restoreBackup(
   hass: HomeAssistant,
   building: Building | null,
-  packs: FurniturePack[],
+  packs?: FurniturePack[],
   items?: PackItem[],
   homes?: { homes: Omit<BackupHome, "images">[]; active?: string },
   home?: string | null,
 ): Promise<{ revision: number; building: Building; home_id?: string; packs: number; items?: number; skipped: { id: string; reason: string }[] }> {
-  return hass.callWS({ type: "home_3d/backup/import", ...at(home), ...(building ? { building } : {}), packs, ...(items ? { items } : {}), ...(homes ?? {}) });
+  return hass.callWS({ type: "home_3d/backup/import", ...at(home), ...(building ? { building } : {}), ...(packs ? { packs } : {}), ...(items ? { items } : {}), ...(homes ?? {}) });
+}
+
+/** Check (a part of) a backup without restoring anything (#153); throws "invalid_format" for one that would fail. */
+export function checkBackup(
+  hass: HomeAssistant,
+  building: Building | null,
+  packs?: FurniturePack[],
+  items?: PackItem[],
+  homes?: { homes: Omit<BackupHome, "images">[] },
+  home?: string | null,
+): Promise<{ checked: boolean; skipped: { id: string; reason: string }[] }> {
+  return hass.callWS({ type: "home_3d/backup/import", check_only: true, ...at(home), ...(building ? { building } : {}), ...(packs ? { packs } : {}), ...(items ? { items } : {}), ...(homes ?? {}) });
 }
 
 export type SentenceMode = "distinct" | "all" | "off";

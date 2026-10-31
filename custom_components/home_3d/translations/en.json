@@ -36,7 +36,11 @@
         "title": "Home 3D",
         "description": "Where Home 3D appears. The panel link and the dashboard card work either way, and you can still hide the entry for yourself in Home Assistant's own sidebar settings.",
         "data": {
-          "show_in_sidebar": "Show in sidebar"
+          "show_in_sidebar": "Show in sidebar",
+          "restore_picture_days": "Keep pictures of restore points (days)"
+        },
+        "data_description": {
+          "restore_picture_days": "A background or screen picture that only an older restore point still uses is kept this many days after that restore point was made, then removed at the next start. A restore point whose picture has gone restores without it. 0 removes such pictures at once."
         }
       }
     }

@@ -133,8 +133,11 @@ async def test_a_subscription_follows_its_home(hass: HomeAssistant, hass_ws_clie
     second = (await _ok(client, {"type": "home_3d/homes/create", "name": "Flat"}))["home"]["id"]
     watcher = await hass_ws_client(hass)
     await _ok(watcher, {"type": "home_3d/building/subscribe", "home_id": second})
+    # the current revision comes once at the start (#149)
+    assert (await watcher.receive_json())["event"] == {"revision": 0, "home_id": second}
     active = await hass_ws_client(hass)
     await _ok(active, {"type": "home_3d/building/subscribe"})
+    assert (await active.receive_json())["event"]["revision"] == 0
 
     await _ok(client, {"type": "home_3d/building/save", "home_id": second, "building": _named("Flat")})
     assert (await watcher.receive_json())["event"] == {"revision": 1, "home_id": second}

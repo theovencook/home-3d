@@ -25,9 +25,11 @@ from .card_resource import (
     loader_source,
 )
 from .const import (
+    CONF_RESTORE_PICTURE_DAYS,
     CONF_SHOW_IN_SIDEBAR,
     DATA_EDITORS,
     DATA_PACK_UPDATES,
+    DEFAULT_RESTORE_PICTURE_DAYS,
     DEFAULT_SHOW_IN_SIDEBAR,
     DOMAIN,
     MAIN_BUNDLE,
@@ -139,14 +141,17 @@ async def _async_register_panel(hass: HomeAssistant, entry: ConfigEntry, url: st
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Show or hide the sidebar entry without a restart: replace the panel under the same URL."""
+    """Show or hide the sidebar entry without a restart: replace the panel under the same URL. How long the pictures
+    of restore points are kept (#154) counts from the next clean-up, at the next start."""
+    if (data := hass.data.get(DOMAIN)) is not None:
+        data.picture_days = entry.options.get(CONF_RESTORE_PICTURE_DAYS, DEFAULT_RESTORE_PICTURE_DAYS)
     frontend.async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
     await _async_register_panel(hass, entry, await _async_main_url(hass))
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Load the stores and register the frontend (panel and card)."""
-    data = FloorplanData(hass)
+    data = FloorplanData(hass, entry.options.get(CONF_RESTORE_PICTURE_DAYS, DEFAULT_RESTORE_PICTURE_DAYS))
     await data.async_load()
     hass.data[DOMAIN] = data
 
