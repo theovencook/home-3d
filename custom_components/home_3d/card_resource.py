@@ -27,7 +27,9 @@ _LOGGER = logging.getLogger(__name__)
 LOADER_FILE = "home-3d-loader.js"
 LOADER_URL = f"{URL_BASE}/{LOADER_FILE}"
 
-# tries every 5 s for 15 minutes; the first try is awaited, so a dashboard normally waits for the card as before
+# tries every 5 s for 15 minutes; the first try is awaited, so a dashboard normally waits for the card as before. Only
+# a failed import is tried again: a bundle that loaded is never imported a second time under another URL, even when the
+# page's element registry does not know the card (#218: a second copy of the bundle broke the panel)
 _LOADER = """// Home 3D: loads the dashboard card. Served from the integration's own path, never written to disk.
 // While Home Assistant is still starting, the card's script is not served yet: then it tries again (#461).
 const url = "{url}";
@@ -35,15 +37,16 @@ const tag = "home-3d-card";
 const load = async (n) => {{
   try {{
     await import(n ? `${{url}}&retry=${{n}}` : url);
+    return true;
   }} catch (err) {{
-    // not there yet
+    return false; // not there yet
   }}
 }};
-await load(0);
+let loaded = await load(0);
 (async () => {{
-  for (let n = 1; n <= 180 && !customElements.get(tag); n++) {{
+  for (let n = 1; n <= 180 && !loaded && !customElements.get(tag); n++) {{
     await new Promise((done) => setTimeout(done, 5000));
-    if (!customElements.get(tag)) await load(n);
+    if (!customElements.get(tag)) loaded = await load(n);
   }}
 }})();
 """

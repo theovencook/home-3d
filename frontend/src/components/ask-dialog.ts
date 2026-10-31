@@ -3,6 +3,7 @@
 // created on the first question. Every bundle that asks imports it; the tag is defined once (whichever bundle comes
 // first) and all copies of ask.ts share one host through globalThis.
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import { live } from "lit/directives/live.js";
 import { AskQueue, registerAskFactory, type AskAnswer, type AskHost, type AskRequest } from "../ask.ts";
@@ -186,7 +187,7 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
   ];
 }
 
-if (!customElements.get(TAG)) customElements.define(TAG, Fp3dAskDialog);
+defineElement(TAG, Fp3dAskDialog);
 
 // only the first bundle's factory is used, so this one element serves the whole page
 let dialog: Fp3dAskDialog | null = null;

@@ -5,6 +5,7 @@
 // browser (thumbs.ts). Fires "library-add" {type, mirror} and "library-preview" {type, element} (type null = gone; only without card pictures),
 // and "library-update" {types} from the badge of a card whose placed items have an update (#48, editors only).
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import { KINDS, activeFilters, cardsOf, searchLibrary, warmIndex, sizeText, type LibraryCard, type LibraryChip, type LibraryEntry, type LibraryFilter, type Room, ROOMS } from "../library-index.ts";
@@ -764,4 +765,4 @@ export class FurnitureLibrary extends LitElement {
   ];
 }
 
-if (!customElements.get("fp3d-library")) customElements.define("fp3d-library", FurnitureLibrary);
+defineElement("fp3d-library", FurnitureLibrary);

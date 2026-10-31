@@ -13,6 +13,7 @@
 // values come along, rack-suggest.ts), its status entity and further links by hand, and offers more from the same
 // device. Linked gear shows its status LED in the grid. Someone who can't edit sees the links, nothing to change.
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import {
   addSlot,
@@ -943,4 +944,4 @@ export class RackSheet extends LitElement {
   ];
 }
 
-if (!customElements.get("fp3d-rack-sheet")) customElements.define("fp3d-rack-sheet", RackSheet);
+defineElement("fp3d-rack-sheet", RackSheet);

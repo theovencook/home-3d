@@ -5,6 +5,7 @@
 // sidebar is a list that drills into a section. It is a bundle of its own (home-3d-settings.js), loaded when someone
 // opens the Settings tab; it brings no texts table of its own beyond its few new texts (the panel lends `t`).
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import "../components/entity-picker.ts";
 import { entityOptionList } from "../entity-options.ts";
@@ -1072,4 +1073,4 @@ export class SettingsPage extends LitElement {
   ];
 }
 
-if (!customElements.get("fp3d-settings-page")) customElements.define("fp3d-settings-page", SettingsPage);
+defineElement("fp3d-settings-page", SettingsPage);

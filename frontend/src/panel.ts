@@ -1,5 +1,6 @@
 // Sidebar page: 3D view and editor.
 
+import { defineElement } from "./define.ts";
 import { formatImperial, lengthUnit, parseLength, unitLabel } from "./units.ts";
 import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { PHONE_MEDIA } from "./phone.ts";
@@ -2217,4 +2218,4 @@ export class Floorplan3dPanel extends LitElement {
   ];
 }
 
-if (!customElements.get("home-3d-panel")) customElements.define("home-3d-panel", Floorplan3dPanel);
+defineElement("home-3d-panel", Floorplan3dPanel);

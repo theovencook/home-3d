@@ -1,5 +1,6 @@
 // Lovelace card (loaded automatically by the integration, no resource needed).
 
+import { defineElement } from "./define.ts";
 import { zonesOf, type Building } from "./model.ts";
 import { confirmEntities } from "./devices.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
@@ -746,8 +747,7 @@ clearTimeout(this.cleanTimer);
   ];
 }
 
-if (!customElements.get("home-3d-card")) {
-  customElements.define("home-3d-card", Floorplan3dCard);
+if (defineElement("home-3d-card", Floorplan3dCard)) {
   const w = window as Window & { customCards?: unknown[] };
   w.customCards = w.customCards ?? [];
   w.customCards.push({

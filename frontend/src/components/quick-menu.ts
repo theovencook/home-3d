@@ -1,6 +1,7 @@
 // Quick menu at a device (long press in 3D): a ring of colours around a power button for lights,
 // up/stop/down for blinds, on/off for switches, with a slider and a way to the full details.
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import { type CarState, coverTiltButtons, entityName, isUnavailable, kindOf } from "../devices.ts";
 import { askConfirm } from "../ask.ts";
@@ -664,4 +665,4 @@ function kelvinCss(k: number): string {
   return `rgb(${mix(255, 200)},${mix(170, 225)},${mix(80, 255)})`;
 }
 
-if (!customElements.get("fp3d-quick-menu")) customElements.define("fp3d-quick-menu", Fp3dQuickMenu);
+defineElement("fp3d-quick-menu", Fp3dQuickMenu);

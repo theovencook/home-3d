@@ -2,6 +2,7 @@
 // The element (reactive state, fields, getters, the Lit lifecycle, render) lives here; the methods of each editor area
 // live in a module under editor/ and are copied onto this class (editor/parts.ts, #202). Styles: editor/styles/.
 
+import { defineElement } from "../define.ts";
 import { html, LitElement, nothing, svg, type PropertyDeclaration, type PropertyValues, type TemplateResult } from "lit";
 import { shellStyles } from "./editor/styles/shell.ts";
 import { planStyles } from "./editor/styles/plan.ts";
@@ -1227,7 +1228,7 @@ export class Fp3dEditor extends LitElement {
 export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart {}
 mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart]);
 
-if (!customElements.get("fp3d-editor")) customElements.define("fp3d-editor", Fp3dEditor);
+defineElement("fp3d-editor", Fp3dEditor);
 
 // the extensions page is part of this bundle: the panel loads it the same way as the editor
 import "./extensions.ts";

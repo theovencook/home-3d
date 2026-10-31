@@ -1,6 +1,7 @@
 // Room panel: controls for the devices of the room's area (lights, covers, heating, media, switches,
 // scenes and scripts). Shown next to the 3D view when a room is selected.
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
 import { areaEntities, coverTiltButtons, entityName, groupByDevice, isUnavailable, kindOf, roomClimateSensors, roomClimateValue, roomPanelEntities, fromCelsius, tempUnit, type DeviceKind } from "../devices.ts";
 import { askConfirm } from "../ask.ts";
@@ -915,4 +916,4 @@ export class Fp3dRoomPanel extends LitElement {
   ];
 }
 
-if (!customElements.get("fp3d-room-panel")) customElements.define("fp3d-room-panel", Fp3dRoomPanel);
+defineElement("fp3d-room-panel", Fp3dRoomPanel);

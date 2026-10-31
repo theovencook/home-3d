@@ -3,6 +3,7 @@
 // thousands of entities. Fixed choices (automatic, none) come first, then the likely entities (#132: the room's area,
 // the link's domain), then the rest by name.
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { rankOptions, type OptionPreference } from "../entity-options.ts";
 import { tokens } from "../styles.ts";
@@ -326,4 +327,4 @@ export class EntityPicker extends LitElement {
   ];
 }
 
-if (!customElements.get("fp3d-entity-picker")) customElements.define("fp3d-entity-picker", EntityPicker);
+defineElement("fp3d-entity-picker", EntityPicker);

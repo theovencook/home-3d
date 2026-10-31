@@ -4,6 +4,7 @@
 // "while you were away" and the day summary. It lies over the stage; only its own parts take touches.
 // The clock and the playhead follow the replay by writing to the DOM directly – no re-render per tick.
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, svg } from "lit";
 import type { Session } from "../timetravel/entry.ts";
 import { CATEGORY, clusterEvents, groupByHour, type Category, type Cluster, type EventKind, type TTEvent } from "../timetravel/events.ts";
@@ -1168,4 +1169,4 @@ export class Fp3dTimeBar extends LitElement {
   `;
 }
 
-if (!customElements.get("fp3d-time-bar")) customElements.define("fp3d-time-bar", Fp3dTimeBar);
+defineElement("fp3d-time-bar", Fp3dTimeBar);

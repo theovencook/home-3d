@@ -1,6 +1,7 @@
 // The locating setup assistant: scanners into rooms, devices to track, the calibration walk, and a live check.
 // Lab only for now (texts German/English inline; the 18 languages come with the release).
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import type { Building } from "../model.ts";
 import { callServiceSafe } from "../failure.ts";
@@ -2528,4 +2529,4 @@ export class LocateSetup extends LitElement {
   `;
 }
 
-if (!customElements.get("fp3d-locate-setup")) customElements.define("fp3d-locate-setup", LocateSetup);
+defineElement("fp3d-locate-setup", LocateSetup);

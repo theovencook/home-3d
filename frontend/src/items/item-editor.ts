@@ -4,6 +4,7 @@
 // It lives in its own bundle (home-3d-items.js), loaded when an editor opens it; the picture is drawn by the 3D
 // bundle (itemPicture), so nothing of this editor is in that bundle.
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import { removeCustomItem, saveCustomItem } from "../api.ts";
 import { modalFocus } from "../dialog-focus.ts";
@@ -839,4 +840,4 @@ export class ItemEditor extends LitElement {
   ];
 }
 
-if (!customElements.get("fp3d-item-editor")) customElements.define("fp3d-item-editor", ItemEditor);
+defineElement("fp3d-item-editor", ItemEditor);

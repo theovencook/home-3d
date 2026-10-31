@@ -1,6 +1,7 @@
 // Visual editor of the dashboard card: Home Assistant shows it in the card dialog, so nobody has to
 // write YAML. It follows Home Assistant's colours (the dialog is light or dark with the user's theme).
 
+import { defineElement } from "./define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import { fetchBuilding, listHomes, type HomeInfo } from "./api.ts";
 import { labOn, UNRELEASED } from "./features.ts";
@@ -506,4 +507,4 @@ export class Floorplan3dCardEditor extends LitElement {
   `;
 }
 
-if (!customElements.get("home-3d-card-editor")) customElements.define("home-3d-card-editor", Floorplan3dCardEditor);
+defineElement("home-3d-card-editor", Floorplan3dCardEditor);

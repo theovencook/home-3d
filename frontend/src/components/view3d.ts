@@ -1,5 +1,6 @@
 // Lit wrapper around the lazily loaded 3D viewer.
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, svg, unsafeCSS, type PropertyValues } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { linesField } from "./lines-field.ts";
@@ -9237,7 +9238,7 @@ export class Fp3dView3d extends LitElement {
   ];
 }
 
-if (!customElements.get("fp3d-view3d")) customElements.define("fp3d-view3d", Fp3dView3d);
+defineElement("fp3d-view3d", Fp3dView3d);
 
 /** Power as "850 W" or "1,2 kW". */
 /** A water_heater entity on a pack's heater: "Eco · 48 °C" and whether it is on (not off or gone), #645. */

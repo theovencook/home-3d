@@ -79,7 +79,10 @@ async def test_loader_resource_replaces_the_bundle_and_goes_on_removal() -> None
 
 
 def test_loader_file() -> None:
-    """The loader imports the bundle and tries again while the card is missing."""
+    """The loader imports the bundle and tries again while the card is missing, only after a failed import: a bundle
+    that loaded is never imported again under another URL (#218)."""
     text = loader_source(URL)
     assert f'const url = "{URL}";' in text
     assert "customElements.get(tag)" in text
+    assert "let loaded = await load(0);" in text
+    assert "!loaded && !customElements.get(tag)" in text

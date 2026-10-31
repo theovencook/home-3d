@@ -5,6 +5,7 @@
 // Since #132 it is a menu button of its own, not a native <select>: a closed select switched home on every arrow key
 // press (Chrome and Edge on Windows), so the actions below the homes could not be reached from the keyboard.
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { classMap } from "lit/directives/class-map.js";
 import { askText, tell } from "../ask.ts";
@@ -371,4 +372,4 @@ export class Fp3dHomeSwitcher extends LitElement {
   `;
 }
 
-if (!customElements.get("fp3d-home-switcher")) customElements.define("fp3d-home-switcher", Fp3dHomeSwitcher);
+defineElement("fp3d-home-switcher", Fp3dHomeSwitcher);

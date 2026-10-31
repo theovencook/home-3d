@@ -3,6 +3,7 @@
 // records one sentence, lets Assist write it down and shows which room Home 3D would open for it. Nothing is
 // switched: the pipeline ends after speech to text.
 
+import { defineElement } from "../define.ts";
 import { LitElement, css, html, nothing } from "lit";
 import type { Building } from "../model.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -303,4 +304,4 @@ export class MicProbe extends LitElement {
   `;
 }
 
-if (!customElements.get("fp3d-mic-probe")) customElements.define("fp3d-mic-probe", MicProbe);
+defineElement("fp3d-mic-probe", MicProbe);

@@ -57,28 +57,77 @@ async function waitFor(fn, timeout = 60000, what = "condition") {
 
 let fake;
 let panel;
+let host;
+
+// The main bundle's URL. Home Assistant uses one URL for the "extra module" and the panel's module_url, so the panel
+// load finds the module that already ran.
+const BUNDLE = "/static/home-3d.js?v=check";
+
+/**
+ * Home Assistant's page as far as the panel is concerned (#218). Its index page imports the extra modules (our main
+ * bundle) next to its own app script, which installs the scoped custom element registry polyfill first thing and then
+ * defines <home-assistant>: our bundle can run first, against the browser's own registry. Its custom panel host
+ * (ha-panel-custom) then loads module_url with a script tag and creates the panel element by name; when the user goes
+ * to another sidebar page it is detached and empties itself, and coming back fills it again with a NEW panel element.
+ */
+async function loadLikeHomeAssistant() {
+  await import(BUNDLE);
+  await import("/vendor/scoped-custom-element-registry.js");
+  customElements.define("home-assistant", class extends HTMLElement {});
+  customElements.define(
+    "fake-ha-panel-custom",
+    class extends HTMLElement {
+      connectedCallback() {
+        const script = document.createElement("script");
+        script.type = "module";
+        script.src = BUNDLE;
+        script.onload = () => {
+          if (!this.isConnected || this.firstElementChild) return;
+          try {
+            const element = document.createElement("home-3d-panel");
+            Object.assign(element, { panel: { config: {} }, hass: fake.hass, narrow: false, route: { prefix: "/home_3d", path: "" } });
+            this.appendChild(element);
+          } catch (err) {
+            console.error(`the panel element could not be created: ${err.message}`);
+          }
+        };
+        document.body.appendChild(script);
+      }
+      disconnectedCallback() {
+        while (this.lastChild) this.removeChild(this.lastChild);
+      }
+    },
+  );
+  host = document.createElement("fake-ha-panel-custom");
+}
+
+/** Show the panel (again) through the fake panel host; resolves with the panel once its 3D view has built the plan. */
+async function showPanel() {
+  document.body.append(host);
+  panel = await waitFor(() => host.querySelector("home-3d-panel"), 30000, "the panel element");
+  const view = await waitFor(() => panel.shadowRoot?.querySelector("fp3d-view3d"), 60000, "the 3D view element");
+  await waitFor(() => view.viewer && view.shadowRoot?.querySelector("canvas"), 60000, "the 3D viewer");
+  // the plan is built floor by floor and its shaders compile in the background (#131): ready once the viewer is not
+  // busy any more and a frame went by
+  await waitFor(() => view.viewer.busy && !view.viewer.busy(), 60000, "the 3D view to finish building");
+  await nextFrame();
+  return panel;
+}
 
 const check = {
   /** Mount the panel; resolves when the 3D view has built the plan. Times in ms from mounting the panel. */
   async start() {
     const [plan, build] = await Promise.all([fetch("/plan.json").then((r) => r.json()), fetch("/static/build.json").then((r) => r.json())]);
     fake = makeFakeHass(plan, build);
-    await import("/static/home-3d.js");
+    await loadLikeHomeAssistant();
+    // Home Assistant asks its registry (the polyfill's) for our elements: the dashboard card and the loader look the
+    // card up by name (#218)
+    const known = Object.fromEntries(["home-3d-panel", "home-3d-card"].map((tag) => [tag, !!customElements.get(tag)]));
     countUpdates("home-3d-panel");
     // the 3D view is a chunk of its own (#179): it is counted once its code is there
     void customElements.whenDefined("fp3d-view3d").then(() => countUpdates("fp3d-view3d"));
     const t0 = performance.now();
-    panel = document.createElement("home-3d-panel");
-    panel.narrow = false;
-    panel.panel = { config: {} };
-    panel.hass = fake.hass;
-    document.body.append(panel);
-    const view = await waitFor(() => panel.shadowRoot?.querySelector("fp3d-view3d"), 60000, "the 3D view element");
-    await waitFor(() => view.viewer && view.shadowRoot?.querySelector("canvas"), 60000, "the 3D viewer");
-    // the plan is built floor by floor and its shaders compile in the background (#131): ready once the viewer is not
-    // busy any more and a frame went by
-    await waitFor(() => view.viewer.busy && !view.viewer.busy(), 60000, "the 3D view to finish building");
-    await nextFrame();
+    await showPanel();
     const ready = performance.now() - t0;
     // long animation frames are reported a little later
     await sleep(300);
@@ -89,7 +138,23 @@ const check = {
       blocking: +during.reduce((s, f) => s + f.blocking, 0).toFixed(0),
       entities: Object.keys(fake.hass.states).length,
       items: plan.floors.reduce((n, f) => n + (f.furniture?.length ?? 0), 0),
+      known,
     };
+  },
+
+  /**
+   * Leave the panel for another sidebar page and come back without a reload (#218): the panel host is detached and
+   * empties itself, then attached again and creates a new panel element. Resolves once the new panel shows the house.
+   */
+  async reenter({ times = 2 } = {}) {
+    for (let i = 0; i < times; i++) {
+      const old = panel;
+      host.remove();
+      await sleep(300);
+      await showPanel();
+      if (panel === old) throw new Error("the panel host kept the old panel element");
+    }
+    return true;
   },
 
   /**

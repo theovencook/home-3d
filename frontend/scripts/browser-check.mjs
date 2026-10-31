@@ -2,8 +2,11 @@
 // built by `npm run build`) with a fake Home Assistant and a plan. It shows the house, walks through it, switches
 // every look and the 2D plan, times the renderer's render and deletes the timing wrapper again (#213), opens the
 // Extensions tab with the item editor, the Settings tab and the editor, and fails on any console error, page error
-// or failed request. It also measures, as in docs/performance.md: load, background load in view mode (5 hass updates
-// a second), the renderer's render and editor selection; with --speed it fails when a measure is past its limit.
+// or failed request. It loads like Home Assistant's page (#218): the main bundle first, then Home Assistant's scoped
+// custom element registry polyfill, the panel created by name through a fake panel host; at the end it leaves the
+// panel and comes back twice without a reload. It also measures, as in docs/performance.md: load, background load in
+// view mode (5 hass updates a second), the renderer's render and editor selection; with --speed it fails when a
+// measure is past its limit.
 //
 //   npm run smoke                     the CI check (SwiftShader, no GPU needed)
 //   npm run speed                     the speed check at 1x
@@ -66,9 +69,10 @@ function findBrowser() {
   return hit;
 }
 
+const POLYFILL = resolve(here, "../node_modules/@webcomponents/scoped-custom-element-registry/scoped-custom-element-registry.min.js");
 const TYPES = { ".js": "text/javascript", ".json": "application/json", ".html": "text/html", ".woff2": "font/woff2", ".txt": "text/plain" };
 const PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>Home 3D browser check</title>
-<style>html,body{margin:0;height:100%;background:#101418}home-3d-panel{display:block;height:100vh}</style></head>
+<style>html,body{margin:0;height:100%;background:#101418}fake-ha-panel-custom,home-3d-panel{display:block;height:100vh}</style></head>
 <body><script type="module" src="/check/harness.js"></script></body></html>`;
 
 /** Serves the bundles at /static/ (the lazy bundles load next to the main one), the harness and the plan. */
@@ -83,6 +87,8 @@ function serve() {
     if (path === "/") return send(200, PAGE, "text/html");
     if (path === "/favicon.ico") return send(204, "");
     if (path === "/plan.json") return send(200, plan, "application/json");
+    // Home Assistant's own scoped custom element registry polyfill (#218), the version its frontend pins
+    if (path === "/vendor/scoped-custom-element-registry.js") return send(200, readFileSync(POLYFILL), "text/javascript");
     const [root, rest] = path.startsWith("/static/") ? [bundles, path.slice(8)] : path.startsWith("/check/") ? [join(here, "browser-check"), path.slice(7)] : [null, ""];
     const file = root && resolve(root, rest);
     if (!file || !file.startsWith(root) || !existsSync(file) || !statSync(file).isFile()) return send(404, "not found");
@@ -127,6 +133,8 @@ try {
   const run = (name, arg) => page.evaluate((n, a) => window.check[n](a), name, arg);
 
   results.load = await run("start");
+  // #218: Home Assistant's registry (its scoped-registry polyfill) knows our elements, although the bundle ran first
+  for (const [tag, known] of Object.entries(results.load.known)) if (!known) problems.push(`customElements.get("${tag}") is undefined after Home Assistant's polyfill loaded (#218)`);
   results.render = await run("renderInfo");
   if (!results.render) problems.push("the 3D view has no renderer");
   if (speed) {
@@ -166,6 +174,9 @@ try {
   const closed = await run("helpDialog", { step: "closed" });
   if (closed.open || closed.back !== "?") problems.push(`the help overlay did not give the focus back (${JSON.stringify(closed)}, #196)`);
   await run("tab", 0);
+  // #218: leave the panel for another sidebar page and come back, twice, without a reload: a new panel element each
+  // time, which must start (it stayed blank with "Illegal constructor" from the polyfill)
+  await run("reenter", { times: 2 });
   results.unknownCalls = await run("unknownCalls");
 } catch (err) {
   problems.push(`check failed: ${err.message}`);

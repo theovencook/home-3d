@@ -2,6 +2,7 @@
 // items) draw only the rows in view (`listWindow`), and the scroll state lives here, so scrolling re-renders
 // this list only, not the editor and its plan.
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import { listWindow } from "../item-list.ts";
 import { tokens } from "../styles.ts";
@@ -143,4 +144,4 @@ export class ItemListView extends LitElement {
   ];
 }
 
-if (!customElements.get("fp3d-item-list")) customElements.define("fp3d-item-list", ItemListView);
+defineElement("fp3d-item-list", ItemListView);

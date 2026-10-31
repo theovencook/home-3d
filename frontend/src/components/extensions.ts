@@ -1,6 +1,7 @@
 // The "Extensions" page of the panel: the built-in features, the fun extras and the installed furniture packs.
 // It lives in the editor bundle (loaded with it) and is shown to admins only.
 
+import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import {
   checkPacks,
@@ -985,4 +986,4 @@ export class Extensions extends LitElement {
   ];
 }
 
-if (!customElements.get("fp3d-extensions")) customElements.define("fp3d-extensions", Extensions);
+defineElement("fp3d-extensions", Extensions);
