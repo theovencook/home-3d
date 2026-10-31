@@ -356,6 +356,7 @@ class PackUpdates:
     def start(self) -> None:
         """Start the scheduled check, and run a check missed while Home Assistant was down once it has started
         (#47): one was due since the last check, or none has run yet for a pack installed from GitHub."""
+        self.stop()  # a second start never leaves the first one's catch-up listener behind (#190)
         self.schedule()
 
         @callback

@@ -4,14 +4,27 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+from unittest.mock import patch
 
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.home_3d.const import DOMAIN, STORAGE_KEY_BUILDING, STORAGE_KEY_HISTORY, STORAGE_KEY_IMAGES
+from custom_components.home_3d.const import (
+    DATA_EDITORS,
+    DATA_PACK_UPDATES,
+    DOMAIN,
+    SIGNAL_BUILDING_UPDATED,
+    STORAGE_KEY_BUILDING,
+    STORAGE_KEY_HISTORY,
+    STORAGE_KEY_IMAGES,
+)
+from custom_components.home_3d.locate.service import DATA_LOCATE, LocateService
+from custom_components.home_3d.pack_updates import PackUpdates
 
 BUILDING = {
     "version": 1,
@@ -497,7 +510,7 @@ async def test_panel_and_card_are_registered_and_removed(hass: HomeAssistant, mo
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
-    mock_frontend["remove_panel"].assert_called_once_with(hass, "home_3d")
+    mock_frontend["remove_panel"].assert_called_once_with(hass, "home_3d", warn_if_unknown=False)
     mock_frontend["remove_js"].assert_called_once_with(hass, url)
 
 
@@ -603,3 +616,56 @@ async def test_card_and_static_files_work_with_sidebar_entry_off(
     assert (await client.get("/home_3d_static/home-3d.js?v=1")).status == 200
     # the dashboard card's resource loader is still served
     assert (await client.get("/home_3d_static/home-3d-loader.js")).status == 200
+
+
+async def test_a_failed_setup_stops_what_it_started(hass: HomeAssistant, mock_frontend) -> None:
+    """When a later step fails, the timers, listeners and data of the earlier ones are cleaned up (#190)."""
+    await async_setup_component(hass, "http", {})
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    stopped: list[str] = []
+    real_updates_stop, real_locate_stop = PackUpdates.stop, LocateService.stop
+
+    def updates_stop(self) -> None:
+        stopped.append("updates")
+        real_updates_stop(self)
+
+    def locate_stop(self) -> None:
+        stopped.append("locate")
+        real_locate_stop(self)
+
+    with (
+        patch("custom_components.home_3d.async_setup_voice", side_effect=RuntimeError("boom")),
+        patch.object(PackUpdates, "stop", updates_stop),
+        patch.object(LocateService, "stop", locate_stop),
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    assert set(stopped) == {"locate", "updates"}
+    for key in (DOMAIN, DATA_PACK_UPDATES, DATA_EDITORS, DATA_LOCATE):
+        assert key not in hass.data
+
+
+async def test_reload_does_not_double_the_plan_listeners(hass: HomeAssistant, mock_frontend) -> None:
+    """Each reload leaves exactly one listener for plan changes, and the old pack-check timer is gone (#190)."""
+    entry = await _setup(hass)
+    for _ in range(2):
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+    updates = hass.data[DATA_PACK_UPDATES]
+    assert updates._unsub is not None or updates.settings["frequency"] == "off"
+    locate = hass.data[DATA_LOCATE]
+    calls: list[int] = []
+    with patch.object(locate, "set_plan", lambda building: calls.append(1)):
+        async_dispatcher_send(hass, SIGNAL_BUILDING_UPDATED, hass.data[DOMAIN].active_id, 99)
+        await hass.async_block_till_done()
+    assert calls == [1]
+    # and after an unload nothing listens any more
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    with patch.object(locate, "set_plan", lambda building: calls.append(1)):
+        async_dispatcher_send(hass, SIGNAL_BUILDING_UPDATED, "default", 100)
+        await hass.async_block_till_done()
+    assert calls == [1]
+    assert updates._unsub is None and updates._unsub_started is None

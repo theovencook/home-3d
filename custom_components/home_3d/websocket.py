@@ -303,7 +303,6 @@ def ws_subscribe_building(hass: HomeAssistant, connection: websocket_api.ActiveC
     right after subscribing (#149), so a view whose websocket reconnects learns whether it is behind."""
     if (home := _home(hass, connection, msg)) is None:
         return
-    data: FloorplanData = hass.data[DOMAIN]
     named = msg.get("home_id")
     followed = [home.id]
 
@@ -317,6 +316,9 @@ def ws_subscribe_building(hass: HomeAssistant, connection: websocket_api.ActiveC
 
     @callback
     def homes_changed() -> None:
+        # looked up each time: the subscription outlives a reload of the integration (#190)
+        if (data := hass.data.get(DOMAIN)) is None:
+            return
         if named is None and data.active_id != followed[0] and data.active_id in data.homes:
             followed[0] = data.active_id
             send(data.active_id, data.active.revision)

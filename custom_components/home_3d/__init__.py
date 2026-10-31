@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+from functools import partial
 import hashlib
 import logging
 from pathlib import Path
@@ -151,13 +152,19 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Load the stores and register the frontend (panel and card)."""
+    # Everything started here registers its own clean-up with the entry as it starts (#190): when a later step fails,
+    # or the entry is unloaded or reloaded, the same callbacks stop the timers and listeners and drop the data, so
+    # setup and unload cannot drift apart. (A failed setup runs them too.)
     data = FloorplanData(hass, entry.options.get(CONF_RESTORE_PICTURE_DAYS, DEFAULT_RESTORE_PICTURE_DAYS))
     await data.async_load()
     hass.data[DOMAIN] = data
+    entry.async_on_unload(partial(_forget, hass, DOMAIN))
 
     # pack updates (#26): settings, pins, previous releases and the scheduled check; a Home 3D update that brought a
     # newer bundled pack is applied to placed items now when auto-update is on
     updates = PackUpdates(hass, data)
+    entry.async_on_unload(updates.stop)
+    entry.async_on_unload(partial(_forget, hass, DATA_PACK_UPDATES))
     await updates.async_load()
     hass.data[DATA_PACK_UPDATES] = updates
     updates.start()
@@ -167,47 +174,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     editors = Editors(hass)
     await editors.async_load()
     hass.data[DATA_EDITORS] = editors
+    entry.async_on_unload(partial(_forget, hass, DATA_EDITORS))
 
     # locating (who and what is where, from the Bluetooth scanners): idle unless an admin switched it on
     locate = LocateService(hass)
+    entry.async_on_unload(locate.stop)  # before the load, which starts it when it was on
+    entry.async_on_unload(partial(_forget, hass, DATA_LOCATE))
     await locate.async_load()
     hass.data[DATA_LOCATE] = locate
     # with the rooms and doors of the active home's plan, whenever it changes (#169)
     entry.async_on_unload(locate.follow_plan(lambda: data.active.building, lambda: data.active_id))
 
     # Assist asks the house: service, intent and the sentences Assist understands (with the names locating knows)
+    entry.async_on_unload(partial(async_unload_voice, hass))
     await async_setup_voice(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     await _async_register_static(hass)
 
     url = await _async_main_url(hass)
+    entry.async_on_unload(partial(_forget, hass, _MAIN_URL))
+    entry.async_on_unload(partial(_remove_frontend, hass, url))
     frontend.add_extra_js_url(hass, url)
     # and as a dashboard resource, so a dashboard never draws the card before its script is there (#252), through
     # the loader on our own path, which tries again while the bundle is not there yet (#461)
-    async_schedule_card_resource(hass, f"{LOADER_URL}?{url.split('?', 1)[1]}")
+    entry.async_on_unload(async_schedule_card_resource(hass, f"{LOADER_URL}?{url.split('?', 1)[1]}"))
     await _async_register_panel(hass, entry, url)
     # the sidebar option (#8) applies at once: the panel is registered again, the entry is not reloaded
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Remove panel and card."""
-    frontend.async_remove_panel(hass, PANEL_URL_PATH)
+def _forget(hass: HomeAssistant, key: str) -> None:
+    """Drop what setup kept in `hass.data` (an unload callback must return nothing, which `dict.pop` does not)."""
+    hass.data.pop(key, None)
+
+
+def _remove_frontend(hass: HomeAssistant, url: str) -> None:
+    """Take the panel and the script out of the frontend (the reverse of what setup added)."""
+    frontend.async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
     # newer Home Assistant raises when the list was never made (no frontend loaded, as in tests) or the url is gone
     with contextlib.suppress(KeyError, ValueError):
-        frontend.remove_extra_js_url(hass, await _async_main_url(hass))
-    hass.data.pop(_MAIN_URL, None)
-    async_unload_voice(hass)
-    await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if (locate := hass.data.pop(DATA_LOCATE, None)) is not None:
-        locate.stop()
-    if (updates := hass.data.pop(DATA_PACK_UPDATES, None)) is not None:
-        updates.stop()
-    hass.data.pop(DATA_EDITORS, None)
-    hass.data.pop(DOMAIN, None)
-    return True
+        frontend.remove_extra_js_url(hass, url)
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload the platforms; everything else setup started is stopped by the callbacks it registered with the entry
+    (#190), which Home Assistant runs once this returns True."""
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
