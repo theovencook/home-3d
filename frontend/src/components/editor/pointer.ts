@@ -305,12 +305,13 @@ export class PointerPart {
       // a press on an existing opening selects it (and drags it along its wall) before anything is added (#62)
       const openingEl = target.closest("[data-opening]");
       if (openingEl) this.pressOpening(openingEl.getAttribute("data-opening")!, local);
-      else if (!this.placeOpening(this._openingPreset, local, e.altKey)) this.drag = { kind: "pan", last: local };
+      else if (!this.placeOpening(this._openingPreset, local, this.snapOff(e))) this.drag = { kind: "pan", last: local };
       return;
     }
     if (this._placing && this.isEditor && (this._tool === "select" || this._tool === "furniture")) {
-      // an armed library card lands where the plan is clicked (#76); Shift keeps it for the next click
-      this.placeArmed(this.placePoint(world, e.altKey), e.shiftKey);
+      // an armed library card lands where the plan is clicked (#76), snapped to the wall unless Shift is held or the snap
+      // switch is off (#173); Ctrl/Cmd keeps it for the next click
+      this.placeArmed(this.placeTarget(world, this.snapOff(e)), e.ctrlKey || e.metaKey);
       this.drag = null;
       return;
     }
@@ -481,11 +482,11 @@ export class PointerPart {
     const world = this.toWorld(...local);
     const drag = this.drag;
     if (!drag) {
-      if (this._placing) this._placeAt = this.placePoint(world, e.altKey);
+      if (this._placing) this._placeAt = this.placeTarget(world, this.snapOff(e));
       // Doors & windows draws no cursor: a new point there would only render the editor again (#130); its snap
       // guides along the wall come from hoverOpening (#143)
       if (this._tool !== "select" && this._tool !== "furniture" && this._tool !== "opening" && this.floor) this._cursor = this.snap(world, undefined, e.altKey);
-      if (this._tool === "opening" && e.pointerType !== "touch") this.hoverOpening(e.target as Element, local, e.altKey);
+      if (this._tool === "opening" && e.pointerType !== "touch") this.hoverOpening(e.target as Element, local, this.snapOff(e));
       return;
     }
     switch (drag.kind) {
@@ -898,7 +899,7 @@ export class PointerPart {
         if (!o || !host) return;
         // the wall's middle and ends, equal gaps, set distances from a corner, else the grid; Alt: freely (#143)
         drag.peers ??= wallPeers(baseFloor!, o);
-        const offset = this.snapOnEdge(host.room, host.edge, world, o.width, drag.peers, e.altKey);
+        const offset = this.snapOnEdge(host.room, host.edge, world, o.width, drag.peers, this.snapOff(e));
         this.changeFloor((floor) => patchItem(floor.openings.find((x) => x.id === drag.id), { offset }), drag.base);
         break;
       }
@@ -908,17 +909,18 @@ export class PointerPart {
         const baseFloor = drag.base.floors.find((x) => x.id === this._floorId);
         const f = baseFloor?.furniture.find((x) => x.id === drag.id);
         if (!baseFloor || !f) return;
-        const g = e.altKey ? 0.01 : this._doc.settings.grid;
+        const free = this.snapOff(e);
+        const g = free ? 0.01 : this._doc.settings.grid;
         const rx = f.x + world[0] - drag.start[0];
         const rz = f.z + world[1] - drag.start[1];
         // alignment with the room's centre lines and other items' edges and centres first (#143; the lines are
         // gathered once per drag); an axis no guide takes goes on the grid
-        const aligned = e.altKey ? null : snapPoint([rx, rz], halfSize(f), (drag.lines ??= this.alignLinesFor(baseFloor, f.id)), snapTolerance(this._view.scale));
+        const aligned = free ? null : snapPoint([rx, rz], halfSize(f), (drag.lines ??= this.alignLinesFor(baseFloor, f.id)), snapTolerance(this._view.scale));
         let x = aligned?.x ? round(aligned.p[0]) : round(Math.round(rx / g) * g);
         let z = aligned?.z ? round(aligned.p[1]) : round(Math.round(rz / g) * g);
         let rotation = f.rotation;
         // near a wall: turn the back (or a side) to it and sit flush; Alt moves freely
-        const snap = e.altKey ? null : this.snapToWall({ ...f, x, z });
+        const snap = free ? null : this.snapToWall({ ...f, x, z });
         if (snap) ({ x, z, rotation } = snap);
         // a wall that pulled the item off a guide drops that guide
         this.showGuides(aligned?.guides.length ? aligned.guides.filter((q) => Math.abs(q.axis === "x" ? x - aligned.p[0] : z - aligned.p[1]) < 0.002) : []);

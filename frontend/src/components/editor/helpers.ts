@@ -256,3 +256,11 @@ export function numberish(id: string): boolean {
 export function binaryish(id: string): boolean {
   return /^(binary_sensor|input_boolean)\./.test(id);
 }
+
+/** Where an armed library card would land (#173): the snapped point, its turn, the room under the pointer and the wall it sits against. */
+export interface PlaceTarget {
+  at: Vec2;
+  rotation: number;
+  roomId: string | null;
+  wall: { roomId: string; edge: number } | null;
+}

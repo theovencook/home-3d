@@ -86,12 +86,33 @@ export function clampIntoRoom(floor: Floor, f: Pick<Furniture, "x" | "z" | "w" |
 }
 
 export function snapToWall(floor: Floor, f: Furniture, wallInterior: number, reach = WALL_SNAP): { x: number; z: number; rotation: number } | null {
-  const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
+  const hit = wallSnap(floor, f, wallInterior, reach);
+  return hit ? { x: hit.x, z: hit.z, rotation: hit.rotation } : null;
+}
+
+/** A wall snap that also says which wall it took (the room and the edge index). */
+export interface WallHit {
+  x: number;
+  z: number;
+  rotation: number;
+  roomId: string;
+  edge: number;
+}
+
+/**
+ * The snap of `snapToWall` with the wall named. `turn` places a new item (#173): its back goes to the nearest wall
+ * whatever its turn, where a dragged item only snaps to a wall it already faces within 50 degrees. `roomId` fixes
+ * the room (the one under the pointer) when the item's own point may lie elsewhere.
+ */
+export function wallSnap(floor: Floor, f: Furniture, wallInterior: number, reach = WALL_SNAP, opts: { turn?: boolean; roomId?: string | null } = {}): WallHit | null {
+  const room = opts.roomId
+    ? floor.rooms.find((r) => r.id === opts.roomId && r.points.length >= 3)
+    : floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
   if (!room) return null;
   const pts = room.points;
   const sgn = signedArea(pts) >= 0 ? 1 : -1;
   const half = wallInterior / 2;
-  let best: { x: number; z: number; rotation: number; gap: number } | null = null;
+  let best: (WallHit & { gap: number }) | null = null;
   for (let i = 0; i < pts.length; i++) {
     const a = pts[i];
     const b = pts[(i + 1) % pts.length];
@@ -123,16 +144,18 @@ export function snapToWall(floor: Floor, f: Furniture, wallInterior: number, rea
       { rotation: back + 90, extent: f.w / 2 },
       { rotation: back - 90, extent: f.w / 2 },
     ];
-    const pick = options.reduce((p, q) => (diff(q.rotation) < diff(p.rotation) ? q : p));
-    if (diff(pick.rotation) > 50) continue;
+    const pick = opts.turn ? options[0] : options.reduce((p, q) => (diff(q.rotation) < diff(p.rotation) ? q : p));
+    if (!opts.turn && diff(pick.rotation) > 50) continue;
     const gap = dist - pick.extent;
     if (Math.abs(gap) > reach || (best && Math.abs(gap) >= Math.abs(best.gap))) continue;
     best = {
       x: round(f.x - n[0] * gap),
       z: round(f.z - n[1] * gap),
       rotation: ((Math.round(pick.rotation) % 360) + 360) % 360,
+      roomId: room.id,
+      edge: i,
       gap,
     };
   }
-  return best ? { x: best.x, z: best.z, rotation: best.rotation } : null;
+  return best ? { x: best.x, z: best.z, rotation: best.rotation, roomId: best.roomId, edge: best.edge } : null;
 }

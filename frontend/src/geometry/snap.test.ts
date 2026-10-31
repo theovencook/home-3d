@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { newFloor, type Furniture } from "../model.ts";
-import { clampIntoRoom, keepInRoom, snapToWall } from "./snap.ts";
+import { clampIntoRoom, keepInRoom, snapToWall, wallSnap } from "./snap.ts";
 
 const floor = { ...newFloor("f", "F", 0), rooms: [{ id: "r", name: "R", area_id: null, points: [[0, 0], [4, 0], [4, 3], [0, 3]] as [number, number][], floor_material: "wood" }] };
 const sofa = (x: number, z: number, rotation: number): Furniture => ({ id: "s", type: "sofa", x, z, rotation, w: 2, d: 0.9, h: 0.8, variant: null });
@@ -48,4 +48,13 @@ test("clampIntoRoom: a cabinet pushed into the wall stops at the wall face, in a
   assert.deepEqual(clampIntoRoom(floor, { ...cab, z: 2.7, rotation: 180 }, 2, 3.1, 0.12), [2, 2.765]);
   // free in the room: unchanged
   assert.deepEqual(clampIntoRoom(floor, cab, 2, 1.5, 0.12), [2, 1.5]);
+});
+
+test("a new item (turn: true) takes the nearest wall whatever its turn, and names it (#173)", () => {
+  // turned away (180) near the top wall: a dragged item would not snap, a new one turns its back to the wall
+  const away = sofa(2, 0.6, 180);
+  assert.equal(wallSnap(floor, away, 0.12), null, "a dragged item turned away from the wall stays");
+  const hit = wallSnap(floor, { ...away, rotation: 90 }, 0.12, undefined, { turn: true, roomId: "r" })!;
+  assert.deepEqual([hit.x, hit.z, hit.rotation, hit.roomId, hit.edge], [2, 0.45, 0, "r", 0]);
+  assert.equal(wallSnap(floor, away, 0.12, undefined, { turn: true, roomId: "nope" }), null);
 });

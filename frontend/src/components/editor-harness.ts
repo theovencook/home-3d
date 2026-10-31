@@ -23,6 +23,7 @@ export interface PressOptions {
   pointerType?: string;
   altKey?: boolean;
   shiftKey?: boolean;
+  ctrlKey?: boolean;
   id?: number;
 }
 
@@ -56,7 +57,7 @@ export async function makeEditor(rooms: Room[], furniture: Furniture[] = []): Pr
     pointerType: o.pointerType ?? "mouse",
     altKey: !!o.altKey,
     shiftKey: !!o.shiftKey,
-    ctrlKey: false,
+    ctrlKey: !!o.ctrlKey,
     metaKey: false,
     target: o.target ?? planEl(),
     currentTarget: svg,
