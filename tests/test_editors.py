@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 
 from homeassistant.core import HomeAssistant
 
@@ -309,3 +310,43 @@ async def test_backup_import_and_restore_are_admin_only(
         assert result["error"]["code"] == "unauthorized", command
         await admin.send_json_auto_id(command)
         assert (await admin.receive_json())["success"], command
+
+
+async def test_changes_to_the_plan_packs_and_editors_are_logged_with_the_user(
+    hass: HomeAssistant, hass_ws_client, hass_admin_user, hass_read_only_user, hass_read_only_access_token, caplog
+) -> None:
+    """Who changed an action, a pack or the editors is in the log (#188); ordinary saves stay out of it."""
+    await _setup(hass)
+    caplog.set_level(logging.INFO, logger="custom_components.home_3d.websocket")
+    admin, editor = await _non_admin_editor(
+        hass, hass_ws_client, hass_admin_user.id, hass_read_only_user.id, hass_read_only_access_token
+    )
+    mine = lambda needle: [r.getMessage() for r in caplog.records if needle in r.getMessage()]  # noqa: E731
+
+    # the editors list itself
+    assert mine(f"({hass_admin_user.id}) set the editors to 2 user(s)")
+
+    # a plain save is too frequent to log at info
+    await editor.send_json_auto_id({"type": "home_3d/building/save", "building": BUILDING})
+    assert (await editor.receive_json())["success"]
+    assert not mine("home_3d/building/save")
+
+    # an action that runs any Home Assistant action: who, and in which home
+    unlock = {"action": "perform_action", "target": "lock.unlock", "data": {"entity_id": "lock.front"}, "confirm": True}
+    await admin.send_json_auto_id({"type": "home_3d/building/save", "building": _with_tap(unlock)})
+    assert (await admin.receive_json())["success"]
+    assert mine(f"({hass_admin_user.id}) changed the actions or buttons of home")
+
+    # a pack change
+    await editor.send_json_auto_id({"type": "home_3d/packs/remove", "pack_id": "test.starter"})
+    await editor.receive_json()
+    assert mine(f"({hass_read_only_user.id}) home_3d/packs/remove (pack_id test.starter)")
+
+    # a refused attempt is a warning-worthy line too
+    caplog.clear()
+    viewer_user_id = hass_read_only_user.id
+    await admin.send_json_auto_id({"type": "home_3d/editors/set", "editors": [hass_admin_user.id]})
+    assert (await admin.receive_json())["success"]
+    await editor.send_json_auto_id({"type": "home_3d/packs/remove", "pack_id": "test.starter"})
+    assert (await editor.receive_json())["error"]["code"] == "unauthorized"
+    assert mine(f"({viewer_user_id}) was refused home_3d/packs/remove, not an editor")

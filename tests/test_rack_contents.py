@@ -416,6 +416,18 @@ async def test_a_save_that_overlaps_gear_is_refused(hass: HomeAssistant, hass_ws
     assert len(plan["floors"][0]["furniture"][0]["rack"]["slots"]) == 1, "the plan stays as it was"
 
 
+async def test_the_homes_wide_save_passes_the_rack_check_on(hass: HomeAssistant, hass_ws_client) -> None:
+    """FloorplanData.async_save_building (the active home) used to drop `check_racks` (#201)."""
+    client = await _client(hass, hass_ws_client)
+    await _call(client, type="home_3d/building/save", building=_building(_rack(_slot("s1", SWITCH_24, 1))))
+    bad = BUILDING_SCHEMA(_building(_rack(_slot("s1", SWITCH_24, 1), _slot("s2", BLANK, 1))))
+    data = hass.data["home_3d"]
+    with pytest.raises(racks.RackError):
+        await data.async_save_building(bad, check_racks=True)
+    # without the flag the save goes through, as before
+    assert await data.async_save_building(bad) > 1
+
+
 async def test_someone_not_on_the_editors_list_cannot_change_a_racks_gear(
     hass: HomeAssistant, hass_ws_client, hass_read_only_access_token
 ) -> None:

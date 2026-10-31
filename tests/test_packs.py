@@ -320,8 +320,6 @@ def test_a_v2_pack_folder_loads_with_its_items() -> None:
     assert pack["licence"] == "MIT"
     assert pack["version"] == 2
     assert sorted(item["id"] for item in pack["items"]) == ["cube_chair", "side_table", "stool"]
-    # item ids carry the publisher and the pack
-    assert packs.item_ref(pack, pack["items"][0]) == "test.starter/" + pack["items"][0]["id"]
 
 
 def test_a_v2_pack_without_a_licence_is_refused() -> None:

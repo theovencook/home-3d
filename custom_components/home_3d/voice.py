@@ -541,3 +541,4 @@ def async_unload_voice(hass: HomeAssistant) -> None:
     settings: VoiceSettings | None = hass.data.pop(DATA_VOICE, None)
     if settings is not None and settings.unsub is not None:
         settings.unsub()
+        settings.unsub = None

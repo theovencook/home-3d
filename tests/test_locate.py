@@ -186,10 +186,11 @@ async def test_spoken_names_are_matched_tolerantly(hass: HomeAssistant) -> None:
     service.state["w1"] = {"room": "kitchen", "room_name": "Kitchen", "since": now, "last_seen": now}
     service.state["p1"] = {"room": "hall", "room_name": "Hall", "since": now, "last_seen": now}
     service.state["p2"] = {"room": "living", "room_name": "Living", "since": now, "last_seen": now}
-    from custom_components.home_3d.locate.answers import async_answer
+    from custom_components.home_3d.locate.answers import async_locate
 
     async def ask(text: str, user: str | None = None) -> str | None:
-        return await async_answer(hass, service, text, "de", user)
+        located = await async_locate(hass, service, text, "de", user)
+        return located.text if located else None
 
     # speech recognition writes "Thorstens" for "Torsten"
     assert await ask("Wo ist Thorstens Apple Watch?") == "Torsten Apple Watch ist im Raum Kitchen."

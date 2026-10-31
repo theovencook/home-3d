@@ -13,6 +13,7 @@ own path (registered in async_setup, as early as possible); nothing is written i
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 from typing import Any
 
@@ -92,16 +93,17 @@ async def async_ensure_card_resource(hass: HomeAssistant, url: str) -> None:
         _LOGGER.debug("Could not update the dashboard resources", exc_info=True)
 
 
-def async_schedule_card_resource(hass: HomeAssistant, url: str) -> None:
-    """Run once Home Assistant has started (Lovelace and its resources are set up by then)."""
+def async_schedule_card_resource(hass: HomeAssistant, url: str) -> Callable[[], None]:
+    """Run once Home Assistant has started (Lovelace and its resources are set up by then). Returns the function that
+    cancels it, for a setup that is unloaded or reloaded before the start (#190)."""
     if hass.state is CoreState.running:
         hass.async_create_task(async_ensure_card_resource(hass, url))
-        return
+        return lambda: None
 
     async def _started(_event: Event) -> None:
         await async_ensure_card_resource(hass, url)
 
-    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _started)
+    return hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _started)
 
 
 async def async_remove_card_resource(hass: HomeAssistant) -> None:
