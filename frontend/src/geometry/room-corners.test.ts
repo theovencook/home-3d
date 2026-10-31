@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { newFloor, type Floor, type Room, type Vec2 } from "../model.ts";
-import { insertCorner, removeCorner } from "./room-corners.ts";
+import { cornerLoss, insertCorner, removeCorner } from "./room-corners.ts";
 import { generateWalls } from "./walls.ts";
 
 const rect = (x0: number, z0: number, x1: number, z1: number): Vec2[] => [
@@ -150,4 +150,62 @@ test("a corner that cuts a neighbour's wall gives the new part of its per-part l
   // and taking it away again joins those parts
   removeCorner(f, "a", 3);
   assert.deepEqual(f.rooms[0].wall_heights, [[2.5, 2], null, null, null]);
+});
+
+// Removing a real corner (#206): rectangle 0..8 by 0..6, corner 1 = (8, 0). Edges 0 (0,0 -> 8,0) and 1 (8,0 -> 8,6)
+// join into the diagonal (0,0) -> (8,6), 10 m long.
+const opening = (id: string, edge: number, offset: number, width = 0.9): Floor["openings"][number] =>
+  ({ id, room_id: "r", edge, offset, width, type: "door", sill: 0, height: 2 }) as Floor["openings"][number];
+
+test("cornerLoss says what a real corner would cost and which openings still fit on the joined wall (#206)", () => {
+  const f = floorOf(room("r", rect(0, 0, 8, 6), { wall_heights: [2.5, 2.2, null, null], wall_thickness: [0.3, 0.2, null, null] }));
+  // a (edge 0, 1 m), b (edge 0, 7.8 m), d (edge 1, 1.5 m: 9.5 m along, fits), c (edge 1, 3 m: 8 + 3 = 11 m along: too far),
+  // e (edge 2: not on the corner's walls)
+  f.openings = [opening("a", 0, 1), opening("b", 0, 7.8), opening("c", 1, 3), opening("d", 1, 1.5), opening("e", 2, 2)];
+  const loss = cornerLoss(f, "r", 1)!;
+  assert.equal(loss.inLine, false);
+  assert.deepEqual(loss.openings.map((o) => o.id), ["a", "b", "d", "c"]);
+  assert.deepEqual(loss.fit.map((o) => o.id), ["a", "b", "d"], "c would sit 11 m along a 10 m wall");
+  assert.equal(loss.height, true);
+  assert.equal(loss.thickness, true);
+});
+
+test("cornerLoss: a corner in line with its neighbours costs nothing; equal heights and thicknesses are no change (#206)", () => {
+  const inLine = floorOf(room("r", [[0, 0], [4, 0], [8, 0], [8, 6], [0, 6]], { wall_heights: [2.5, 1.7, null, null, null] }));
+  inLine.openings = [opening("a", 0, 1)];
+  assert.deepEqual(cornerLoss(inLine, "r", 1), { inLine: true, openings: [], fit: [], height: false, thickness: false });
+  const same = floorOf(room("r", rect(0, 0, 8, 6), { wall_heights: [2.5, 2.5, null, null] }));
+  const loss = cornerLoss(same, "r", 1)!;
+  assert.equal(loss.height, false);
+  assert.equal(loss.thickness, false);
+  assert.equal(cornerLoss(floorOf(room("t", [[0, 0], [1, 0], [0, 1]])), "t", 0), null, "a triangle keeps its corners");
+});
+
+test("removeCorner drops the openings of a real corner unless they are kept; kept ones sit on the joined wall at their distance along it (#206)", () => {
+  const make = () => {
+    const f = floorOf(room("r", rect(0, 0, 8, 6)));
+    f.openings = [opening("a", 0, 1), opening("d", 1, 1.5), opening("e", 2, 2)];
+    return f;
+  };
+  const dropped = make();
+  removeCorner(dropped, "r", 1);
+  assert.deepEqual(dropped.openings.map((o) => o.id), ["e"], "dropped as before");
+  const f = make();
+  const loss = cornerLoss(f, "r", 1)!;
+  assert.deepEqual(loss.fit.map((o) => o.id), ["a", "d"]);
+  removeCorner(f, "r", 1, loss.fit.map((o) => o.id));
+  assert.deepEqual(f.rooms[0].points, [[0, 0], [8, 6], [0, 6]]);
+  // the diagonal is the new edge 0: a at 1 m from its start, d at 8 + 1.5 = 9.5 m; e (was edge 2) is edge 1 now
+  assert.deepEqual(f.openings.map((o) => [o.id, o.edge, o.offset]), [["a", 0, 1], ["d", 0, 9.5], ["e", 1, 2]]);
+});
+
+test("removing corner 0 keeps the openings that fit on the joined wall too (#206)", () => {
+  // corner 0 = (0, 0): the last edge (0, 6 -> 0, 0) and edge 0 (0, 0 -> 8, 0) join into (0, 6) -> (8, 0), 10 m
+  const f = floorOf(room("r", rect(0, 0, 8, 6)));
+  f.openings = [opening("last", 3, 5), opening("first", 0, 2), opening("far", 0, 7.9)];
+  const loss = cornerLoss(f, "r", 0)!;
+  assert.deepEqual(loss.fit.map((o) => o.id), ["last", "first"]);
+  removeCorner(f, "r", 0, loss.fit.map((o) => o.id));
+  assert.deepEqual(f.rooms[0].points, [[8, 0], [8, 6], [0, 6]]);
+  assert.deepEqual(f.openings.map((o) => [o.id, o.edge, o.offset]), [["last", 2, 5], ["first", 2, 8]]);
 });
