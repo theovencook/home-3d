@@ -25,6 +25,9 @@ const SPECIAL = new Set(["fav", "other-rooms"]);
 /** The sections open until the person has opened or closed one. */
 const DEFAULT_OPEN = ["sofa", "lamp"];
 
+/** What a card picture is kept under: the item and its pack's release, so an updated pack gets its picture drawn again (#192). */
+export const pictureKey = (e: Pick<LibraryEntry, "type" | "packRelease">): string => `${e.type}|${e.packRelease}`;
+
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
 
 function load<T>(key: string, fallback: T): T {
@@ -163,7 +166,18 @@ export class FurnitureLibrary extends LitElement {
       this._fav = this._fav.filter((k) => known.has(k));
       this._recent = this._recent.filter((k) => known.has(k));
       this.queue = [];
+      this.resetPictures(this.entries);
     }
+  }
+
+  /**
+   * Packs changed (#192): pictures of items that are gone, or of a pack release that was replaced, are dropped,
+   * and items that were queued but never drawn are asked for again (they would otherwise stay "wanted" for good).
+   */
+  resetPictures(entries: readonly LibraryEntry[]): void {
+    const known = new Set(entries.map(pictureKey));
+    this._thumbs = new Map([...this._thumbs].filter(([k]) => known.has(k)));
+    this.wanted = new Set([...this.wanted].filter((k) => this._thumbs.has(k)));
   }
 
   disconnectedCallback(): void {
@@ -194,7 +208,7 @@ export class FurnitureLibrary extends LitElement {
         continue;
       }
       const entry = byKey.get(el.dataset.key ?? "");
-      if (!entry || this._thumbs.has(entry.type) || this.wanted.has(entry.type)) continue;
+      if (!entry || this._thumbs.has(pictureKey(entry)) || this.wanted.has(pictureKey(entry))) continue;
       // a card still without its picture: asked again if it is in view; observing it anew reports that after the next
       // layout, where measuring it here forced a layout of every new card on each keystroke (#131)
       this.observer.unobserve(el);
@@ -224,8 +238,9 @@ export class FurnitureLibrary extends LitElement {
 
   /** Asks for an item's picture once; at most two are drawn at a time so the editor stays smooth. */
   private want(entry: LibraryEntry): void {
-    if (this._thumbs.has(entry.type) || this.wanted.has(entry.type)) return;
-    this.wanted.add(entry.type);
+    const pic = pictureKey(entry);
+    if (this._thumbs.has(pic) || this.wanted.has(pic)) return;
+    this.wanted.add(pic);
     this.queue.push(entry);
     this.drain();
   }
@@ -234,16 +249,17 @@ export class FurnitureLibrary extends LitElement {
     while (this.drawing < 2 && this.queue.length) {
       const entry = this.queue.shift()!;
       this.drawing++;
-      const key = `${entry.type}|${entry.packRelease}|${THUMB_PX}|1`;
+      const pic = pictureKey(entry);
+      const key = `${pic}|${THUMB_PX}|1`;
       thumbFor(key, () => (this.thumb ? this.thumb(entry) : Promise.resolve(null)))
         .then((url) => {
           if (url) {
             const next = new Map(this._thumbs);
-            next.set(entry.type, url);
+            next.set(pic, url);
             this._thumbs = next;
-          } else this.wanted.delete(entry.type);
+          } else this.wanted.delete(pic);
         })
-        .catch(() => this.wanted.delete(entry.type))
+        .catch(() => this.wanted.delete(pic))
         .finally(() => {
           this.drawing--;
           this.drain();
@@ -387,7 +403,8 @@ export class FurnitureLibrary extends LitElement {
         : nothing}
       ${!searching && this.roomHint && this._room === this.roomHint && !this.roomTouched ? html`<p class="fp3d-lib-hint">${t("lib_hint_room")}</p>` : nothing}
       ${!hits.length ? html`<p class="fp3d-lib-hint">${t("furniture_search_none")}</p>` : nothing}
-      ${recent.length ? this.section("recent", `🕘 ${t("lib_recent")}`, recent.map(single), searching) : nothing}
+      ${found.cut ? html`<p class="fp3d-lib-hint" role="status">${t("lib_keep_typing", { n: found.cut })}</p>` : nothing}
+      ${recent.length && !searching ? this.section("recent", `🕘 ${t("lib_recent")}`, recent.map(single), searching) : nothing}
       ${favs.length ? this.section("fav", `★ ${t("lib_favorites")}`, favs.map(single), searching) : nothing}
       ${sections.map((s) => this.section(s.kind, t(`lib_kind_${s.kind}`), s.cards, searching))}
       ${others.length ? this.section("other-rooms", t("lib_other_rooms", { n: found.otherRooms.length }), others, searching) : nothing}`;
@@ -434,7 +451,7 @@ export class FurnitureLibrary extends LitElement {
     // a family card shows the variant under the pointer (its picture once drawn, the first one meanwhile)
     const shownKey = this._shown.get(first.key);
     const shown = (shownKey && c.entries.find((e) => e.key === shownKey)) || first;
-    const pic = this._thumbs.get(shown.type) ?? this._thumbs.get(first.type);
+    const pic = this._thumbs.get(pictureKey(shown)) ?? this._thumbs.get(pictureKey(first));
     const badge = first.light ? "💡" : first.electric ? "⚡" : "";
     const updates = updatesOnCard(c.entries.map((e) => e.type), this.updates, this.admin);
     return html`<div class="fp3d-lc ${family ? "fp3d-lc-family" : ""}" title=${shown.ikea ? `${shown.label} (IKEA ${shown.ikea})` : shown.label} @mouseleave=${() => family && this.showVariant(first.key, null, null)}>
@@ -447,7 +464,7 @@ export class FurnitureLibrary extends LitElement {
         @mouseleave=${() => this.preview(null, null)}
         @blur=${() => this.preview(null, null)}
       >
-        ${this.lite ? nothing : html`<span class="fp3d-lc-pic" data-key=${first.key}>${pic ? html`<img src=${pic} alt="" loading="lazy" class=${(this._thumbs.has(shown.type) ? shown : first).mirror ? "fp3d-lc-mirrored" : ""} />` : html`<span class="fp3d-lc-wait"></span>`}</span>`}
+        ${this.lite ? nothing : html`<span class="fp3d-lc-pic" data-key=${first.key}>${pic ? html`<img src=${pic} alt="" loading="lazy" class=${(this._thumbs.has(pictureKey(shown)) ? shown : first).mirror ? "fp3d-lc-mirrored" : ""} />` : html`<span class="fp3d-lc-wait"></span>`}</span>`}
         <span class="fp3d-lc-label">${c.label}${badge ? html` <span class="fp3d-lc-badge">${badge}</span>` : nothing}</span>
         <span class="fp3d-lc-sub">${family ? t("lib_sizes", { n: c.entries.length }) : sizeText(first.size, this.language)}${first.packLabel ? html` · ${first.packLabel}` : html` · ${t("lib_basic")}`}</span>
       </button>

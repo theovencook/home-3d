@@ -469,6 +469,17 @@ function prepare(e: LibraryEntry): Prepared {
   return p;
 }
 
+/** A query this short (letters, after trimming) matches most of the catalogue: it shows only the first SHORT_QUERY_CAP hits (#136). */
+export const SHORT_QUERY = 2;
+/** How many hits a one- or two-letter query shows; "keep typing" shows the rest of the way. */
+export const SHORT_QUERY_CAP = 40;
+
+/** Is this query so short that its results are cut (#136)? Whole words of the vocabulary ("tv", "pc") are not cut. */
+export function isShortQuery(query: string): boolean {
+  const q = fold(query).trim();
+  return q.length > 0 && q.length <= SHORT_QUERY && !/\s/.test(q) && !isVocabularyWord(q);
+}
+
 /**
  * Works out what the search reads of each entry ahead of the first keystroke (#131: folding 1,500 names and tags
  * otherwise landed on the first letter typed); returns how many it prepared now.
@@ -492,7 +503,9 @@ export function warmIndex(entries: readonly LibraryEntry[]): number {
 function wordScore(w: string, match: (hay: string) => boolean, p: Prepared): number {
   if (match(p.label) || match(p.hay)) {
     const whole = w.length <= 3 && isVocabularyWord(w);
-    if (p.labelWords.includes(w)) return 7;
+    // one or two letters that are no word of the vocabulary are the start of something: a name starting with them
+    // is as good as one that has them as a whole word ("a" in "Candle in a jar") and wins on its first letters (#136)
+    if (p.labelWords.includes(w)) return w.length <= SHORT_QUERY && !whole ? 6 : 7;
     if (!whole && p.labelWords.some((lw) => lw.startsWith(w))) return 6;
     if (w.length > 3 && p.label.includes(w)) return 5;
     if (p.tagWords.has(w)) return 4;
@@ -555,8 +568,10 @@ export function rankEntries(hits: readonly LibraryEntry[], f: LibraryFilter): Li
 }
 
 export interface LibraryHits {
-  /** Everything found, ranked. */
+  /** Everything found, ranked (the first SHORT_QUERY_CAP of it for a one- or two-letter query, #136). */
   hits: LibraryEntry[];
+  /** How many hits a one- or two-letter query left out ("keep typing to see more"); 0 otherwise. */
+  cut: number;
   /** The hits for the room chip (all of them without one), in rank order. */
   inRoom: LibraryEntry[];
   /** Hits a query found in other rooms ("N more in other rooms"); empty without a query or a room chip. */
@@ -580,11 +595,13 @@ export function activeFilters(f: LibraryFilter): LibraryChip[] {
 
 /** What the library shows for a filter: filter, rank, then split the hits by the room chip. */
 export function searchLibrary(entries: readonly LibraryEntry[], f: LibraryFilter): LibraryHits {
-  const hits = rankEntries(filterEntries(entries, f), f);
+  const all = rankEntries(filterEntries(entries, f), f);
+  const short = isShortQuery(f.query) && all.length > SHORT_QUERY_CAP;
+  const hits = short ? all.slice(0, SHORT_QUERY_CAP) : all;
   const inRoom = hits.filter((e) => fitsRoom(e, f.room));
   const score = queryScorer(f.query);
   const hiddenByChips = score ? entries.filter((e) => !fitsChips(e, f) && score(e) !== null).length : 0;
-  return { hits, inRoom, otherRooms: hits.filter((e) => !fitsRoom(e, f.room)), hiddenByChips };
+  return { hits, cut: all.length - hits.length, inRoom, otherRooms: hits.filter((e) => !fitsRoom(e, f.room)), hiddenByChips };
 }
 
 /** Cards of a kind: families folded (two or more variants of one family in one pack), the rest one card each. */

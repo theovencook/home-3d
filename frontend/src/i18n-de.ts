@@ -1728,6 +1728,7 @@ export const de: Record<I18nKey, string> = {
   lib_basic: "Basis",
   lib_sizes: "{n} Größen",
   lib_hint_room: "Vorgeschlagen für den offenen Raum – oben umschalten.",
+  lib_keep_typing: "Die besten Treffer. Tipp weiter, um {n} weitere zu sehen.",
   lib_filters: "Filter:",
   lib_clear_filters: "Filter löschen",
   lib_other_rooms: "{n} weitere in anderen Räumen",

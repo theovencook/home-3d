@@ -6,7 +6,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { basicTypes, buildIndex, searchLibrary, warmIndex, type LibraryEntry } from "./library-index.ts";
+import { basicTypes, buildIndex, isShortQuery, searchLibrary, SHORT_QUERY_CAP, warmIndex, type LibraryEntry } from "./library-index.ts";
 import { editDistance } from "./fuzzy.ts";
 import type { FurniturePack, PackItem } from "./packs.ts";
 
@@ -241,4 +241,41 @@ test("catalogue: the car catalogue is found by brand, model and body, and 'car' 
   assert.ok(cars.filter((e) => e.kind === "vehicle").length >= 150, "the catalogue cars are among the hits for car");
   const bikes = searchLibrary(catalogue, { ...none, query: "snowmobile" }).hits;
   assert.ok(bikes.length >= 4 && bikes.slice(0, 4).every((e) => /snowmobile/i.test(e.label)), top(bikes, 5));
+});
+
+// ---------------------------------------------------------------------------------- one and two letters (#136)
+
+test("one or two letters show at most the cap, names starting with them first, and say what was left out (#136)", () => {
+  const many = Array.from({ length: 70 }, (_, i) => item(`s${i}`, i % 2 ? `Cabinet ${i} for sheets` : `Shelf ${i}`, { group: "storage" }));
+  const entries = indexOf([pack(...many, item("a_jar", "Candle in a jar", { group: "deco" }))]);
+  const found = searchLibrary(entries, { ...none, query: "s" });
+  assert.equal(found.hits.length, SHORT_QUERY_CAP);
+  assert.equal(found.cut, 70 - SHORT_QUERY_CAP);
+  assert.ok(found.hits.slice(0, 35).every((e) => /^shelf/i.test(e.label)), "names that start with the letter come first");
+  assert.equal(isShortQuery("s"), true);
+  assert.equal(isShortQuery("sh"), true);
+  assert.equal(isShortQuery("she"), false);
+  // from three letters on nothing is cut
+  const three = searchLibrary(entries, { ...none, query: "she" });
+  assert.equal(three.cut, 0);
+  assert.equal(three.hits.length, 70);
+  // a whole word of the vocabulary is not a start of something
+  assert.equal(isShortQuery("tv"), false);
+});
+
+test("a one-letter word is not read as a whole word ahead of names starting with it (#136)", () => {
+  const entries = indexOf([pack(item("a", "Candle in a jar", { group: "deco" }), item("b", "Armchair", { group: "sofa" }), item("c", "Aloe vera", { group: "plant" }))]);
+  assert.equal(labels(entries, "a")[0].length <= 9, true, "Armchair or Aloe vera, not the jar");
+  assert.equal(labels(entries, "a")[2], "Candle in a jar");
+});
+
+test("catalogue: a short query is cut and leads with names that start with it (#136)", () => {
+  for (const q of ["s", "b", "a", "li", "ba"]) {
+    const found = searchLibrary(catalogue, { ...none, query: q });
+    assert.equal(found.hits.length, SHORT_QUERY_CAP, q);
+    assert.ok(found.cut > 0, q);
+    const starts = (e: LibraryEntry) => e.label.toLowerCase().split(/[^a-z0-9]+/).some((w) => w.startsWith(q));
+    assert.ok(starts(found.hits[0]), `${q}: ${top(found.hits, 3)}`);
+  }
+  assert.equal(searchLibrary(catalogue, { ...none, query: "sof" }).cut, 0);
 });

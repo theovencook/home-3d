@@ -1726,6 +1726,7 @@ const en = {
   lib_basic: "Basic",
   lib_sizes: "{n} sizes",
   lib_hint_room: "Suggested for the open room – switch above.",
+  lib_keep_typing: "Showing the best matches. Keep typing to see {n} more.",
   lib_filters: "Filters:",
   lib_clear_filters: "Clear filters",
   lib_other_rooms: "{n} more in other rooms",
