@@ -109,6 +109,7 @@ export class BuildingController implements ReactiveController {
   /** Show another home (#53: a card's `home` changed); unset: the active home. */
   setHome(home: string | undefined): void {
     if (home === this.home) return;
+    this.remembered = false;
     this.home = home;
     if (!this.hass || !this.connected) return;
     void this.flush().then(async () => {
@@ -120,6 +121,20 @@ export class BuildingController implements ReactiveController {
       await this.start();
     });
   }
+
+  /**
+   * Start on a home this device remembers (#160), before the first load. Unlike a card's `home` it may be gone by
+   * now (deleted elsewhere): then the view follows the active home and `onHomeGone` is told.
+   */
+  openRemembered(home: string): void {
+    if (this.hass && this.connected) this.setHome(home);
+    else this.home = home;
+    this.remembered = true;
+  }
+
+  /** Called when a remembered home (#160) was not found and the view went back to the active home. */
+  onHomeGone: (() => void) | null = null;
+  private remembered = false;
 
   /** Load the shown home afresh (#57: it was picked again in the home switcher); pending edits are saved first. */
   async reopen(): Promise<void> {
@@ -393,6 +408,13 @@ export class BuildingController implements ReactiveController {
       this.error = null;
     } catch (err) {
       if (asked !== this.home) return;
+      if (this.remembered && asked !== undefined && (err as { code?: string } | null)?.code === "home_not_found") {
+        // the home this device remembered is gone (#160): the active home instead
+        this.remembered = false;
+        this.home = undefined;
+        this.onHomeGone?.();
+        return this.reload();
+      }
       this.error = errorText(err);
     }
     this.host.requestUpdate();

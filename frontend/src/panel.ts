@@ -278,6 +278,7 @@ export class Floorplan3dPanel extends LitElement {
 
   protected willUpdate(changed: PropertyValues): void {
     if (changed.has("hass") && this.hass) {
+      if (!this.homeRestored) this.restoreHome();
       this.data.setHass(this.hass);
       this.tt.session?.setLive(this.hass);
     }
@@ -285,7 +286,35 @@ export class Floorplan3dPanel extends LitElement {
     if (changed.has("hass") && this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language).then(() => this.requestUpdate());
     const b = this.data.building;
     this.followTablet(b);
+    // someone not (or no longer) on the editors list has no home switcher to leave a remembered home with (#160)
+    if (b && !this.data.canEdit && this.data.home !== undefined) this.openHome(undefined);
     if (b !== this.seenBuilding) this.dropStaleSelection(b);
+  }
+
+  /** The home this device remembers was looked up (once, when the panel first gets hass). */
+  private homeRestored = false;
+
+  /** Where this device keeps the home its user had open last (#160): per user, so another login starts on the active home. */
+  private get homeKey(): string {
+    return `home.${this.hass?.user?.id ?? ""}`;
+  }
+
+  /**
+   * A reload opens the home this device and user had open last (#160), not the one on the displays: someone trying
+   * things in a test home is not dropped back into the real house. A tablet shows the active home whatever was open.
+   */
+  private restoreHome(): void {
+    this.homeRestored = true;
+    const home = prefs.get(this.homeKey);
+    if (!home || tabletMode(location.search, this.hass?.user?.id, undefined)) return;
+    this.data.onHomeGone = () => prefs.set(this.homeKey, "");
+    this.data.openRemembered(home);
+  }
+
+  /** Show a home in this view (the home switcher, the sample) and remember it on this device (#160); unset: the active home. */
+  private openHome(home: string | undefined): void {
+    prefs.set(this.homeKey, home ?? "");
+    this.data.setHome(home);
   }
 
   /** The plan the selection was last checked against (a new one comes with every edit and every load). */
@@ -322,6 +351,8 @@ export class Floorplan3dPanel extends LitElement {
     const search = location.search;
     const on = tabletMode(search, this.hass?.user?.id, b?.settings.tablet_users);
     if (on && this._mode !== "view") this.setMode("view");
+    // a tablet shows the home on the displays (#160), also when this device remembered another one
+    if (on && this.data.home !== undefined) this.data.setHome(undefined);
     if (on !== this._tablet) {
       this._tablet = on;
       this._optsOpen = false;
@@ -369,7 +400,7 @@ export class Floorplan3dPanel extends LitElement {
   private async loadSample(): Promise<void> {
     try {
       const res = await loadSampleHome(this.hass);
-      this.data.setHome(res.home.id);
+      this.openHome(res.home.id);
     } catch (err) {
       await tell(this.t("home_failed", { error: String((err as { message?: string })?.message ?? err) }), { ok: this.t("ask_ok") });
     }
@@ -784,7 +815,7 @@ export class Floorplan3dPanel extends LitElement {
                 .hass=${this.hass}
                 .home=${this.data.homeId}
                 @home-reload=${() => void this.data.reopen()}
-                @home-open=${(e: CustomEvent<{ home: string | null }>) => this.data.setHome(e.detail.home ?? undefined)}
+                @home-open=${(e: CustomEvent<{ home: string | null }>) => this.openHome(e.detail.home ?? undefined)}
               ></fp3d-home-switcher>` : nothing}
           <div class="fp3d-seg" role="tablist">
             <button role="tab" aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
@@ -1149,6 +1180,7 @@ export class Floorplan3dPanel extends LitElement {
       .hass=${this.hass}
       .canEdit=${this.data.canEdit}
       .home=${this.data.homeId}
+      .homeName=${this.data.homeName}
       .history=${this.undoHistory}
       .building=${b}
       .narrow=${this.narrow}

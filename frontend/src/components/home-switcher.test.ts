@@ -96,12 +96,13 @@ test("arrow keys skip the separator and stop at both ends of the menu (#132)", (
   const rows = menuRows(HOMES, "home", "home", t);
   assert.deepEqual(
     rows.map((r) => r.kind),
-    ["home", "home", "sep", "action", "action", "action", "action", "action"],
+    ["home", "home", "sep", "action", "action", "action", "action", "sep", "danger"],
   );
   assert.deepEqual(menuKey({ open: true, cursor: 1 }, rows, "ArrowDown"), { open: true, cursor: 3 });
   assert.deepEqual(menuKey({ open: true, cursor: 3 }, rows, "ArrowUp"), { open: true, cursor: 1 });
   assert.deepEqual(menuKey({ open: true, cursor: 0 }, rows, "ArrowUp"), { open: true, cursor: 0 });
-  assert.deepEqual(menuKey({ open: true, cursor: 7 }, rows, "End"), { open: true, cursor: 7 });
+  assert.deepEqual(menuKey({ open: true, cursor: 3 }, rows, "End"), { open: true, cursor: 8 });
+  assert.deepEqual(menuKey({ open: true, cursor: 6 }, rows, "ArrowDown"), { open: true, cursor: 8 }, "the second separator is skipped too");
   assert.deepEqual(menuKey({ open: true, cursor: 3 }, rows, "Home"), { open: true, cursor: 0 });
   assert.deepEqual(menuKey({ open: true, cursor: 3 }, rows, " "), { open: false, cursor: 3, pick: "new" });
   assert.deepEqual(menuKey({ open: true, cursor: 3 }, rows, "Tab"), { open: false, cursor: 3 });
@@ -236,15 +237,48 @@ test("cancelling the name dialog creates nothing (#59)", async () => {
   }
 });
 
-test("deleting a home asks first in a warning dialog and deletes only on yes (#59)", async () => {
-  const { el, state, asked } = asking([{ ok: false, value: "" }, { ok: true, value: "" }]);
+test("deleting a home asks in a warning dialog for the home's name and deletes only when it is typed (#59, #160)", async () => {
+  const { el, state, asked } = asking([
+    { ok: false, value: "Home" },
+    { ok: true, value: "" },
+    { ok: true, value: "Flat" },
+    { ok: true, value: "" },
+    { ok: true, value: " home " },
+  ]);
   try {
     await el.act("delete");
-    assert.deepEqual(state.sent, [], "no means nothing is deleted");
+    assert.deepEqual(state.sent, [], "cancel deletes nothing, even with the name typed");
     await el.act("delete");
-    assert.equal(asked[1].danger, true);
+    assert.deepEqual(state.sent, [], "a plain OK is not enough");
+    await el.act("delete");
+    assert.deepEqual(state.sent, [], "another home's name is not this one's");
+    assert.match(asked[3].text, /not the home's name/, "the user is told why nothing happened");
+    await el.act("delete");
+    assert.equal(asked[4].danger, true);
+    assert.equal(asked[4].input, "", "the field starts empty, the name is typed, not offered");
     assert.deepEqual(state.sent, [{ type: "home_3d/homes/delete", home_id: "home" }]);
   } finally {
     setAskHost(null);
   }
+});
+
+test("Delete sits in a block of its own at the end of the menu, apart from Rename and Duplicate (#160)", () => {
+  const rows = menuRows(HOMES, "home", "home", (k) => k);
+  const at = rows.findIndex((r) => r.value === "delete");
+  assert.equal(at, rows.length - 1);
+  assert.equal(rows[at].kind, "danger");
+  assert.equal(rows[at - 1].kind, "sep");
+  assert.ok(!rows.some((r) => r.kind === "action" && r.value === "delete"));
+  // one home: nothing to delete, and no empty block
+  assert.equal(menuRows(HOMES.slice(0, 1), "home", "home", (k) => k).filter((r) => r.kind === "sep").length, 1);
+});
+
+test("the header chip marks the open home as live while it is the one on the displays (#160)", async () => {
+  const { hass } = backend();
+  const { el } = await switcher(hass, "home");
+  assert.match(flat(el.render()), /class="chip live"[^]*live on displays/);
+  el.home = "flat";
+  const other = flat(el.render());
+  assert.match(other, /class="chip off"[^]*not shown on displays/);
+  assert.doesNotMatch(other, /live on displays/);
 });

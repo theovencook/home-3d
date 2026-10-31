@@ -109,3 +109,22 @@ test("the card closes the room of the old home: a new home or start room in its 
   card.willUpdate(new Map());
   assert.equal(card._roomId, null);
 });
+
+test("the HA-areas import says the areas are this Home Assistant's and names the home its rooms go into (#160)", async () => {
+  const ed = await makeEditor([]);
+  ed.hass.areas = { kitchen: { area_id: "kitchen", name: "Kitchen", floor_id: "ground" } };
+  ed._doc.floors[0].ha_floor = "ground";
+  ed.homeName = "Test home";
+  const flatten = (v: unknown): string => {
+    if (v == null || typeof v === "symbol" || typeof v === "function" || typeof v === "boolean") return "";
+    if (Array.isArray(v)) return v.map(flatten).join("");
+    if (typeof v === "object" && "strings" in (v as object)) {
+      const t = v as { strings: readonly string[]; values: unknown[] };
+      return t.strings.map((s, i) => s + (i < t.values.length ? flatten(t.values[i]) : "")).join("");
+    }
+    return String(v);
+  };
+  const side = flatten(ed.renderSide(ed._doc.floors[0]));
+  assert.match(side, /Add rooms from HA areas \(1\)/);
+  assert.match(side, /Uses this Home Assistant's areas; the rooms are added to "Test home"/);
+});
