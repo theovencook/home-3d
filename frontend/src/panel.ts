@@ -285,10 +285,36 @@ export class Floorplan3dPanel extends LitElement {
     if (changed.has("hass") && this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language).then(() => this.requestUpdate());
     const b = this.data.building;
     this.followTablet(b);
-    if (b && this._floorId && !b.floors.some((f) => f.id === this._floorId)) {
+    if (b !== this.seenBuilding) this.dropStaleSelection(b);
+  }
+
+  /** The plan the selection was last checked against (a new one comes with every edit and every load). */
+  private seenBuilding: Building | null = null;
+  /** The home that plan belongs to. */
+  private seenHome: string | null = null;
+
+  /**
+   * Nothing of the selection outlives its home (#150): another home starts with no floor, room, item or device chosen;
+   * in the same home a floor, room or item that is gone is let go of (a single-floor home has no floor to miss).
+   * Runs only when the plan object changes, not on every hass update.
+   */
+  private dropStaleSelection(b: Building | null): void {
+    this.seenBuilding = b;
+    if (!b) return;
+    const home = this.data.homeId;
+    if (this.seenHome !== null && home !== this.seenHome) {
+      this._floorId = null;
+      this._roomId = null;
+      this._selFurniture = null;
+      this._selDevice = null;
+    }
+    this.seenHome = home;
+    if (this._floorId && !b.floors.some((f) => f.id === this._floorId)) {
       this._floorId = null;
       this._roomId = null;
     }
+    if (this._roomId && !b.floors.some((f) => zonesOf(f).some((r) => r.id === this._roomId))) this._roomId = null;
+    if (this._selFurniture && !b.floors.some((f) => f.furniture.some((m) => m.id === this._selFurniture))) this._selFurniture = null;
   }
 
   /** Tablet mode on or off as the address and this user's tick say; on, the view is all there is (#92). */
@@ -1013,7 +1039,7 @@ export class Floorplan3dPanel extends LitElement {
       const at = new Date(d.draft.savedAt).toLocaleString(this.hass?.language);
       notices.push(
         html`<div class="fp3d-notice">
-          <span>${this.t("draft_found", { time: at })}</span>
+          <span>${this.t(d.draft.home ? "draft_found" : "draft_found_old", { time: at })}</span>
           <button class="fp3d-btn fp3d-primary" @click=${() => d.restoreDraft()}>${this.t("draft_restore")}</button>
           <button class="fp3d-btn" @click=${() => d.discardDraft()}>${this.t("draft_discard")}</button>
         </div>`,

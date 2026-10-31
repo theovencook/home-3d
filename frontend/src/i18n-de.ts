@@ -26,6 +26,7 @@ export const de: Record<I18nKey, string> = {
   update_unsaved: "Deine letzten Änderungen sind noch nicht gespeichert. Neu laden geht erst, wenn sie gespeichert sind, sonst gehen sie verloren.",
   needs_restart_old: "Eine neue Version von Home 3D ist installiert, aber Home Assistant läuft noch mit einer älteren. Bitte Home Assistant neu starten – bis dahin schlägt das Speichern fehl.",
   draft_found: "Nicht gespeicherte Änderungen vom {time} gefunden.",
+  draft_found_old: "Nicht gespeicherte Änderungen vom {time} gefunden. Eine ältere Version hat sie ohne ihr Zuhause aufbewahrt: Sie werden für das Zuhause auf den Anzeigen angeboten.",
   draft_restore: "Übernehmen und speichern",
   draft_discard: "Verwerfen",
   walls_auto: "Wände hoch",

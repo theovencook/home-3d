@@ -1,6 +1,6 @@
 // Lovelace card (loaded automatically by the integration, no resource needed).
 
-import { zonesOf } from "./model.ts";
+import { zonesOf, type Building } from "./model.ts";
 import { confirmEntities } from "./devices.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { BuildingController } from "./building-controller.ts";
@@ -263,6 +263,11 @@ clearTimeout(this.cleanTimer);
 
   setConfig(config: CardConfig): void {
     if (config.height !== undefined && !(config.height > 100)) throw new Error("height must be a number of pixels above 100");
+    // another home or start room (the dashboard editor): the room open in the old one closes, the new one opens (#150)
+    if (this._config && ((this._config.home || undefined) !== (config.home || undefined) || this._config.room !== config.room)) {
+      this._roomId = null;
+      this.roomApplied = false;
+    }
     this._config = config;
     // a home of its own (#53), else the active home
     this.data.setHome(config.home || undefined);
@@ -295,7 +300,16 @@ clearTimeout(this.cleanTimer);
       const night = nightActive(this._config?.night, this.hass);
       if (night !== this._night) this._night = night;
     }
+    // a room that is not in the plan shown now (another home became active, or it was removed) closes (#150)
+    const b = this.data.building;
+    if (b !== this.seenBuilding) {
+      this.seenBuilding = b;
+      if (b && this._roomId && !b.floors.some((f) => zonesOf(f).some((r) => r.id === this._roomId))) this._roomId = null;
+    }
   }
+
+  /** The plan the open room was last checked against. */
+  private seenBuilding: Building | null = null;
 
   protected updated(): void {
     // the card's chrome goes light with the Day look (#85)

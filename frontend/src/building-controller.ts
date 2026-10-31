@@ -88,8 +88,14 @@ export class BuildingController implements ReactiveController {
   private recipeBases: Record<string, string> = {};
   private ownRevisions = new Set<number>();
   private unsubscribe: (() => Promise<void>) | null = null;
+  /** The subscription being set up (#150): a home switch or a disconnect waits for it, so none is left running. */
+  private subscribing: Promise<void> | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private pending: Building | null = null;
+  /** The home the pending edit was made on (#150): it is saved there, also when another home is loaded meanwhile. */
+  private pendingHome: string | undefined = undefined;
+  /** Counts the edits, so a load that was on its way while one was made does not put the older plan back (#150). */
+  private edits = 0;
   private saving: Promise<void> | null = null;
   private connected = false;
   /** The websocket whose reconnects this view follows (#60). */
@@ -106,8 +112,11 @@ export class BuildingController implements ReactiveController {
     this.home = home;
     if (!this.hass || !this.connected) return;
     void this.flush().then(async () => {
-      await this.unsubscribe?.();
+      // a subscription still being set up is let go of too (#150): it would follow the old home besides the new one
+      await this.subscribing;
+      const unsubscribe = this.unsubscribe;
       this.unsubscribe = null;
+      await unsubscribe?.();
       await this.start();
     });
   }
@@ -133,8 +142,9 @@ export class BuildingController implements ReactiveController {
   hostDisconnected(): void {
     this.connected = false;
     void this.flush();
-    void this.unsubscribe?.();
+    const unsubscribe = this.unsubscribe;
     this.unsubscribe = null;
+    void unsubscribe?.();
     this.watched?.removeEventListener?.("ready", this.onReconnect);
     this.watched = null;
   }
@@ -163,6 +173,9 @@ export class BuildingController implements ReactiveController {
     this.building = building;
     setPlanRecipes(building.recipes);
     this.pending = building;
+    // the home on screen is the one this edit was made on (#150)
+    this.pendingHome = this.homeId ?? this.home;
+    this.edits++;
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => void this.flush(), SAVE_DELAY);
     this.host.requestUpdate();
@@ -212,11 +225,20 @@ export class BuildingController implements ReactiveController {
     return true;
   }
 
-  /** Take over the unsaved edits of an earlier session (they are saved right away). */
+  /** Take over the unsaved edits of an earlier session (they are saved right away), only onto their own home (#150). */
   restoreDraft(): void {
     const draft = this.draft;
     this.draft = null;
-    if (draft) this.edit(normalizeBuilding(draft.building));
+    if (draft && this.draftFits(draft)) this.edit(normalizeBuilding(draft.building));
+    else this.host.requestUpdate();
+  }
+
+  /**
+   * Whether a draft belongs to the home loaded now (#150): one that names its home only there; one from before homes
+   * had ids (#53) only while this view follows the active home, the one such a session edited.
+   */
+  draftFits(draft: Draft): boolean {
+    return draft.home ? draft.home === this.homeId : this.home === undefined;
   }
 
   discardDraft(): void {
@@ -230,6 +252,7 @@ export class BuildingController implements ReactiveController {
     if (this.saving) await this.saving;
     const building = this.pending;
     if (!building || !this.hass) return;
+    const home = this.pendingHome;
     this.pending = null;
     // a mount height above what the backend accepts (10 m – "40" typed as centimetres) would refuse every save,
     // also of an edit kept from earlier: it is brought into range here
@@ -238,18 +261,22 @@ export class BuildingController implements ReactiveController {
     this.host.requestUpdate();
     this.saving = (async () => {
       try {
-        const bases = this.recipeBases;
-        const { revision, recipes } = await saveBuilding(this.hass!, building, bases, this.homeId ?? this.home);
+        // the recipe hashes belong to the home loaded; an edit of a home no longer loaded sends none
+        const bases = home === (this.homeId ?? this.home) ? this.recipeBases : {};
+        const { revision, recipes } = await saveBuilding(this.hass!, building, bases, home);
         // the copies the backend made for items placed now: the plan keeps them, also when their pack goes (#2);
         // and the ones it changed meanwhile (an update, a rollback, #45) replace the copies this plan started from
-        if (recipes) {
-          adoptRecipes(building, recipes, bases);
-          if (this.building && this.building !== building) adoptRecipes(this.building, recipes, bases);
-          if (this.building) setPlanRecipes(this.building.recipes);
-          this.recipeBases = recipeHashes(recipes);
+        if (recipes) adoptRecipes(building, recipes, bases);
+        // the screen and the revisions follow only while the saved home is still the one loaded (#150)
+        if (home === (this.homeId ?? this.home)) {
+          if (recipes) {
+            if (this.building && this.building !== building) adoptRecipes(this.building, recipes, bases);
+            if (this.building) setPlanRecipes(this.building.recipes);
+            this.recipeBases = recipeHashes(recipes);
+          }
+          this.ownRevisions.add(revision);
+          this.revision = revision;
         }
-        this.ownRevisions.add(revision);
-        this.revision = revision;
         this.saveState = this.pending ? "saving" : "saved";
         this.saveError = null;
         writeDraft(null);
@@ -257,7 +284,7 @@ export class BuildingController implements ReactiveController {
         this.saveState = "error";
         this.saveError = errorText(err);
         // keep the edit: after a restart it can be restored and saved
-        writeDraft({ building, savedAt: Date.now(), ...(this.homeId ? { home: this.homeId } : {}) });
+        writeDraft({ building, savedAt: Date.now(), ...(home ? { home } : {}) });
       }
       this.host.requestUpdate();
     })();
@@ -274,25 +301,36 @@ export class BuildingController implements ReactiveController {
       this.watched = this.hass.connection;
       this.watched.addEventListener!("ready", this.onReconnect);
     }
-    if (!this.unsubscribe && this.connected) {
-      try {
-        this.unsubscribe = await subscribeBuilding(
-          this.hass,
-          (revision, home) => {
-            // another home became active (#53): shown once this view's own edits are saved to the home they belong to
-            if (home && this.homeId && home !== this.homeId) {
-              void this.flush().then(() => this.reload());
-              return;
-            }
-            if (this.ownRevisions.has(revision) || revision === this.revision) return;
-            if (this.pending || this.saving) return; // our own edits win; they are saved next
-            void this.reload();
-          },
-          this.home,
-        );
-      } catch {
-        // older backend or connection loss: changes from elsewhere show after a reload
-      }
+    if (!this.unsubscribe && !this.subscribing && this.connected) {
+      this.subscribing = this.subscribe(this.hass);
+      await this.subscribing;
+      this.subscribing = null;
+    }
+  }
+
+  /** Follow the changes made elsewhere to the home asked for (#150: one subscription, kept only while still wanted). */
+  private async subscribe(hass: HomeAssistant): Promise<void> {
+    const asked = this.home;
+    try {
+      const unsubscribe = await subscribeBuilding(
+        hass,
+        (revision, home) => {
+          // another home became active (#53): shown once this view's own edits are saved to the home they belong to
+          if (home && this.homeId && home !== this.homeId) {
+            void this.flush().then(() => this.reload());
+            return;
+          }
+          if (this.ownRevisions.has(revision) || revision === this.revision) return;
+          if (this.pending || this.saving) return; // our own edits win; they are saved next
+          void this.reload();
+        },
+        asked,
+      );
+      // the view went away, or shows another home now, while this was set up: let go of it at once
+      if (!this.connected || asked !== this.home || this.unsubscribe) await unsubscribe();
+      else this.unsubscribe = unsubscribe;
+    } catch {
+      // older backend or connection loss: changes from elsewhere show after a reload
     }
   }
 
@@ -319,24 +357,42 @@ export class BuildingController implements ReactiveController {
 
   private async reload(): Promise<void> {
     if (!this.hass) return;
+    const asked = this.home;
+    const edits = this.edits;
     try {
-      const res = await fetchBuilding(this.hass, this.home);
-      if ((res.home_id ?? null) !== this.homeId) this.ownRevisions.clear();
-      this.homeId = res.home_id ?? null;
+      const res = await fetchBuilding(this.hass, asked);
+      // another home was asked for meanwhile (#150): its own load shows, not this one
+      if (asked !== this.home) return;
+      const id = res.home_id ?? null;
+      const moved = id !== this.homeId;
+      if (moved) {
+        // edits still waiting were made on the home shown until now: saved to it before the other one shows (#150)
+        while (this.pending) await this.flush();
+        if (asked !== this.home) return;
+        this.ownRevisions.clear();
+        // a draft on offer belongs to the home it was found for (#150)
+        this.draft = null;
+      }
+      this.homeId = id;
       this.homeName = res.home_name ?? null;
-      this.building = normalizeBuilding(res.building);
-      setPlanRecipes(this.building.recipes);
-      this.recipeBases = recipeHashes(this.building.recipes);
       this.backendVersion = res.version ?? null;
       this.backendBuild = res.build ?? null;
       this.canEdit = res.can_edit ?? !!this.hass.user?.is_admin;
+      // an edit made while this load was on its way (or still being saved) wins over the plan it brings (#150): put
+      // back, the edit would vanish from the screen and the next one would be built without it
+      if (moved || (!this.pending && !this.saving && this.edits === edits)) {
+        this.building = normalizeBuilding(res.building);
+        setPlanRecipes(this.building.recipes);
+        this.recipeBases = recipeHashes(this.building.recipes);
+        this.revision = res.revision;
+      }
       if (this.draft === null && !this.pending) {
         const draft = readDraft();
-        this.draft = draft && (!draft.home || draft.home === this.homeId) ? draft : null;
+        this.draft = draft && this.draftFits(draft) ? draft : null;
       }
-      this.revision = res.revision;
       this.error = null;
     } catch (err) {
+      if (asked !== this.home) return;
       this.error = errorText(err);
     }
     this.host.requestUpdate();

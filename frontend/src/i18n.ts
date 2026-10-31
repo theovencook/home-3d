@@ -24,6 +24,7 @@ const en = {
   update_unsaved: "Your last changes are not saved yet. Reloading waits until they are, or they would be lost.",
   needs_restart_old: "A new version of Home 3D is installed, but Home Assistant still runs an older one. Please restart Home Assistant – until then saving fails.",
   draft_found: "Unsaved changes from {time} found.",
+  draft_found_old: "Unsaved changes from {time} found. They were kept by an older version that did not note their home: they are offered for the home shown on displays.",
   draft_restore: "Restore and save",
   draft_discard: "Discard",
   walls_auto: "Tall walls",
