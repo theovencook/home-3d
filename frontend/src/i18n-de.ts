@@ -601,6 +601,7 @@ export const de: Record<I18nKey, string> = {
   preset_add: "Sender oder Playlist",
   media_play_head: "Abspielen",
   own_buttons: "Eigene Knöpfe",
+  own_button_admin: "Einen Button, der einen Dienst aufruft oder ein Ereignis auslöst, darf nur ein Home-Assistant-Administrator hinzufügen oder ändern.",
   own_buttons_hint: "Erscheinen im Zentral-Menü (Stern) unter den Favoriten: eine Dashboard-Seite öffnen, die Details einer Entität zeigen, einen Dienst aufrufen oder ein browser_mod-Popup mit deiner eigenen Karte öffnen.",
   own_button_label: "Beschriftung",
   own_button_action: "Aktion",

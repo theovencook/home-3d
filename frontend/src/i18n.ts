@@ -599,6 +599,7 @@ const en = {
   preset_add: "Station or playlist",
   media_play_head: "Play",
   own_buttons: "Own buttons",
+  own_button_admin: "Only a Home Assistant administrator can add or change a button that calls a service or fires an event.",
   own_buttons_hint: "Shown in the central menu (star) below the favourites: open a dashboard path, show an entity's details, call a service, or open a browser_mod popup with your own card.",
   own_button_label: "Label",
   own_button_action: "Action",

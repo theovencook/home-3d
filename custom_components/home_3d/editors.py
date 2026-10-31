@@ -81,7 +81,7 @@ def can_edit(hass: HomeAssistant, user: User | None) -> bool:
 
 
 def performed_actions(building: dict[str, Any]) -> set[tuple[str, str, str, str]]:
-    """Every `perform_action` item action of a plan, by the item and gesture it sits on (#51).
+    """Every `perform_action` item action and service/event menu button of a plan, by the item and gesture (#51, #151).
 
     Such an action runs any Home Assistant action in the session of whoever taps, an admin too, so only an admin adds
     or changes one. Compared by what it does: the item, gesture, action, its data and whether (and what) it asks first.
@@ -97,4 +97,9 @@ def performed_actions(building: dict[str, Any]) -> set[tuple[str, str, str, str]
                 what = [action.get("target"), action.get("data") or {}, bool(action.get("confirm"))]
                 what.append(action.get("confirm_text") or None)
                 found.add((kind, str(owner_id), gesture, json.dumps(what, sort_keys=True)))
+    # the central menu's own buttons (#151): a service or an event button runs in the session of whoever taps it too
+    for button in (building.get("settings") or {}).get("buttons") or []:
+        if button.get("action") in ("service", "fire_dom_event"):
+            what = [button.get("target"), button.get("data") or {}]
+            found.add(("button", str(button.get("id")), str(button["action"]), json.dumps(what, sort_keys=True)))
     return found

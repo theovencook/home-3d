@@ -13006,8 +13006,12 @@ export class Fp3dEditor extends LitElement {
     const set = (next: CustomButton[]) => this.change((d) => (d.settings.buttons = next.length ? next : undefined));
     const upd = (i: number, patch: Partial<CustomButton>) => set(list.map((b, j) => (j === i ? { ...b, ...patch } : b)));
     const placeholder: Record<ButtonAction, string> = { navigate: "/lovelace/rollos", more_info: "cover.wohnzimmer", service: "script.turn_on", fire_dom_event: "" };
+    // service and event buttons run in the session of whoever taps: only an admin adds or changes one (#151)
+    const privileged = (a: ButtonAction) => a === "service" || a === "fire_dom_event";
+    const lockedBtn = (b: CustomButton) => !this.isHaAdmin && privileged(b.action);
     return html`<h4>${this.t("own_buttons")}</h4>
       <p class="fp3d-sub">${this.t("own_buttons_hint")}</p>
+      ${!this.isHaAdmin ? html`<p class="fp3d-sub">${this.t("own_button_admin")}</p>` : nothing}
       ${list.map(
         (b, i) => html`<div class="fp3d-form fp3d-own-button">
           <label class="fp3d-field"
@@ -13016,15 +13020,15 @@ export class Fp3dEditor extends LitElement {
           /></label>
           <label class="fp3d-field"
             >${this.t("own_button_action")}
-            <select @change=${(e: Event) => upd(i, { action: (e.target as HTMLSelectElement).value as ButtonAction })}>
-              ${BUTTON_ACTIONS.map((a) => html`<option value=${a} ?selected=${a === b.action}>${this.t(`own_action_${a}` as I18nKey)}</option>`)}
+            <select ?disabled=${lockedBtn(b)} @change=${(e: Event) => upd(i, { action: (e.target as HTMLSelectElement).value as ButtonAction })}>
+              ${BUTTON_ACTIONS.filter((a) => this.isHaAdmin || !privileged(a) || a === b.action).map((a) => html`<option value=${a} ?selected=${a === b.action}>${this.t(`own_action_${a}` as I18nKey)}</option>`)}
             </select></label
           >
           ${this.iconInput(b.icon ?? null, (v) => upd(i, { icon: v }))}
           ${b.action !== "fire_dom_event"
             ? html`<label class="fp3d-field fp3d-wide"
                 >${this.t(`own_target_${b.action}` as I18nKey)}
-                <input type="text" .value=${b.target ?? ""} placeholder=${placeholder[b.action]} @change=${(e: Event) => upd(i, { target: (e.target as HTMLInputElement).value.trim() || null })}
+                <input type="text" ?disabled=${lockedBtn(b)} .value=${b.target ?? ""} placeholder=${placeholder[b.action]} @change=${(e: Event) => upd(i, { target: (e.target as HTMLInputElement).value.trim() || null })}
               /></label>`
             : nothing}
           ${b.action === "service" || b.action === "fire_dom_event"
@@ -13033,6 +13037,7 @@ export class Fp3dEditor extends LitElement {
                 <textarea
                   rows="4"
                   spellcheck="false"
+                  ?disabled=${lockedBtn(b)}
                   placeholder=${b.action === "fire_dom_event" ? '{"browser_mod": {"service": "browser_mod.popup", "data": {"title": "Rollos", "content": {"type": "custom:my-cover-card"}}}}' : '{"entity_id": "script.party"}'}
                   .value=${b.data ? JSON.stringify(b.data, null, 1) : ""}
                   @change=${(e: Event) => {
