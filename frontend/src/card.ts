@@ -352,8 +352,8 @@ clearTimeout(this.cleanTimer);
   protected willUpdate(changed: PropertyValues): void {
     if (changed.has("hass") && this.rawHass) {
       this.takeHass(this.rawHass);
-      // a language beyond German and English: its texts are fetched first, then everything renders
-      if (!languageReady(this.rawHass.language)) void loadLanguage(this.rawHass.language).then(() => this.requestUpdate());
+      // a language other than English: its texts are loaded first, then everything renders
+      if (!languageReady(this.rawHass.language)) void loadLanguage(this.rawHass.language, this.rawHass).then(() => this.requestUpdate());
     }
     // a room that is not in the plan shown now (another home became active, or it was removed) closes (#150)
     const b = this.data.building;

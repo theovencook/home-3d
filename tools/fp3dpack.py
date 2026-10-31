@@ -44,8 +44,14 @@ def validate(paths: list[Path]) -> None:
             failed = True
             continue
         licence = pack["licence"] or "no licence (old pack)"
+        # a language pack (#196) holds texts, not items
+        content = (
+            f"{len(pack['strings'])} texts ({pack['language']})"
+            if packs.is_language_pack(pack)
+            else f"{len(pack['items'])} items"
+        )
         print(
-            f'{path}: ok: {pack["id"]} "{pack["name"]}" by {pack["publisher"]}, {len(pack["items"])} items,'
+            f'{path}: ok: {pack["id"]} "{pack["name"]}" by {pack["publisher"]}, {content},'
             f" release {pack['release']}, {licence}"
         )
     if failed:

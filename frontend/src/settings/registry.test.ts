@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { englishTable } from "../i18n.ts";
-import { de } from "../i18n-de.ts";
+import { de } from "../german.fixture.ts";
 import type { Building } from "../model.ts";
 import {
   easterEggsOn,

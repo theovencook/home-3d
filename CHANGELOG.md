@@ -9,6 +9,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 - **Modal dialogs keep the keyboard:** the ask dialog, the editor's help overlay, the wall view, the pool part card, the rack sheet and the item editor are `aria-modal`, take the focus when they open, keep Tab and Shift+Tab inside and give the focus back when they close.
 - **Changes are announced:** one polite live region tells a screen reader about another home, floor or look, an undo or redo, and a follow switch (Home Assistant's theme, the sun) that picking a look turned off.
+- **Languages are packs:** English is built in and the fallback for every text. Any other language comes from a language pack (`"kind": "language"` in `pack.json`, its texts in `strings.json`), checked, installed (folder or GitHub URL), updated, listed and removed like a furniture pack, under **Languages** on the Extensions page. German is the first: it ships as the bundled pack `theovencook.lang-de` and is no longer a file next to the bundles. Pages get a language's texts from Home Assistant (`home_3d/languages/get`) and keep them by their hash. See `docs/languages.md`.
 - **The page names its language:** the panel, the cards and the card editor carry `lang`: Home Assistant's language when its texts are there, else English.
 
 ### Plan format version, contract and failure cases (#165, #166, #167)

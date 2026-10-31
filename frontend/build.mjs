@@ -38,12 +38,11 @@ const viewerConfig = { ...common, entryPoints: ["src/viewer/viewer3d.ts"], outfi
 // the card's visual editor only loads in the dashboard's card dialog
 // the language files (lang/*.json) are fetched with a hash of their content, so a new text is never stale
 const LANGS = ["fr", "es", "nl", "it", "hu", "da", "sv", "nb", "nn", "fi", "cs", "pl", "ro", "sl", "zh", "pt"];
-// German (#134) is written to lang/de.json from src/i18n-de.ts (typed against the English keys) instead of being
-// bundled: the main, editor and card-editor bundles each carried the whole German table (~135 KB) for every user
-const { de } = await import("./src/i18n-de.ts");
-const deJson = `${JSON.stringify(de, null, 1)}\n`;
+// German is a language pack that ships with Home 3D (#196: bundled_languages/theovencook.lang-de, sent by Home
+// Assistant like an installed language pack); no bundle carries it (#134), the check below makes sure
+const de = JSON.parse(readFileSync("../custom_components/home_3d/bundled_languages/theovencook.lang-de/strings.json", "utf8"));
 const langHash = createHash("sha256")
-  .update([deJson, ...LANGS.map((l) => (existsSync(`lang/${l}.json`) ? readFileSync(`lang/${l}.json`) : ""))].join("\n"))
+  .update(LANGS.map((l) => (existsSync(`lang/${l}.json`) ? readFileSync(`lang/${l}.json`) : "")).join("\n"))
   .digest("hex")
   .slice(0, 12);
 const cardEditorConfig = { ...common, entryPoints: ["src/card-editor.ts"], outfile: `${out}/home-3d-card-editor.js`, define: { __FP3D_LANG_HASH__: JSON.stringify(langHash) } };
@@ -123,7 +122,8 @@ function copyFonts() {
   // further languages, fetched by the bundles only when Home Assistant runs in them
   mkdirSync(`${out}/lang`, { recursive: true });
   for (const l of LANGS) if (existsSync(`lang/${l}.json`)) copyFileSync(`lang/${l}.json`, `${out}/lang/${l}.json`);
-  writeFileSync(`${out}/lang/de.json`, deJson);
+  // German came from here before #196: it is a language pack now
+  rmSync(`${out}/lang/de.json`, { force: true });
   for (const [pkg, file, name] of FONTS) {
     const dir = `node_modules/@fontsource-variable/${pkg}`;
     copyFileSync(`${dir}/files/${file}`, `${out}/fonts/${name}`);
@@ -254,7 +254,7 @@ if (watch) {
     const text = readFileSync(`${out}/${file}`, "utf8");
     if (german.some((s) => text.includes(JSON.stringify(s).slice(1, -1)))) {
       over = true;
-      console.log(`GERMAN ${file}: holds the German table – import i18n.ts (English), never i18n-de.ts`);
+      console.log(`GERMAN ${file}: holds the German table – German comes from its language pack, never from a bundle`);
     }
   }
   // the Settings page borrows the main bundle's texts (#139): a settings bundle that imports i18n.ts carries the

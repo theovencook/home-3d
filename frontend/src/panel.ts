@@ -339,8 +339,8 @@ export class Floorplan3dPanel extends LitElement {
 
   protected willUpdate(changed: PropertyValues): void {
     if (changed.has("hass") && this.rawHass) this.takeHass(this.rawHass);
-    // a language beyond German and English: its texts are fetched first, then everything renders
-    if (changed.has("hass") && this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language).then(() => this.requestUpdate());
+    // a language other than English: its texts are loaded first, then everything renders
+    if (changed.has("hass") && this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language, this.hass).then(() => this.requestUpdate());
     const b = this.data.building;
     this.followTablet(b);
     // someone not (or no longer) on the editors list has no home switcher to leave a remembered home with (#160)

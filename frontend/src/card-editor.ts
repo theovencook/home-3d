@@ -80,8 +80,8 @@ export class Floorplan3dCardEditor extends LitElement {
   }
 
   protected willUpdate(): void {
-    // a language beyond German and English: its texts are fetched first, then everything renders
-    if (this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language).then(() => this.requestUpdate());
+    // a language other than English: its texts are loaded first, then everything renders
+    if (this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language, this.hass).then(() => this.requestUpdate());
     // the language its texts are in (#196)
     const lang = uiLanguage(this.hass);
     if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);

@@ -4,7 +4,7 @@ import { cameraMotionSensors, cameraRedUntil, detectionKind, buildMarkers, setCa
 import type { Building } from "./model.ts";
 import { emptyBuilding, newFloor } from "./model.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
-import { de } from "./i18n-de.ts";
+import { de } from "./german.fixture.ts";
 import { useLanguage } from "./i18n.ts";
 
 // these tests read the German texts, which a page fetches (lang/de.json, #134)

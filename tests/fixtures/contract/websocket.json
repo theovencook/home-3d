@@ -1,5 +1,5 @@
 {
-  "protocol": 1,
+  "protocol": 2,
   "plan_version": 2,
   "commands": {
     "home_3d/backup/export": {
@@ -148,6 +148,14 @@
         "item"
       ],
       "optional": []
+    },
+    "home_3d/languages/get": {
+      "required": [
+        "language"
+      ],
+      "optional": [
+        "hash"
+      ]
     },
     "home_3d/locate/ask": {
       "required": [

@@ -360,6 +360,74 @@ _DOC_PATH = re.compile(r"^(?:README|LICEN[CS]E|COPYING|CHANGELOG)(?:\.(?:md|txt)
 # packs are data only: no links in any text
 _LINK = re.compile(r"\b(?:https?|ftp|file|data|javascript|mailto):|\bwww\.", re.IGNORECASE)
 
+# ---------------------------------------------------------------------------- language packs (#196)
+
+# A language pack is a pack folder whose pack.json says "kind": "language" and names the "language"; next to it, one
+# strings.json holds that language's texts: an object of text key -> text. A key the pack lacks shows in English.
+PACK_KINDS = ["furniture", "language"]
+LANGUAGE_KIND = "language"
+STRINGS_FILE = "strings.json"
+# a language's texts are many short strings in one file: it may be larger than an item file
+MAX_STRINGS_SIZE = 400_000
+MAX_STRINGS = 10_000
+MAX_STRING_LENGTH = 2_000
+_STRING_KEY = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
+# a text may not hold a web address ("https://…" with nothing after it, as a hint for a field, is no address)
+_TEXT_LINK = re.compile(r"\b(?:https?|ftp)://[\w-]|\b(?:javascript|data|file|mailto):\S|\bwww\.[\w-]", re.IGNORECASE)
+
+
+def is_language_pack(pack: dict[str, Any]) -> bool:
+    """Whether a checked pack holds a language's texts (#196) rather than furniture."""
+    return pack.get("kind") == LANGUAGE_KIND
+
+
+def verify_strings(path: str, text: str) -> dict[str, str]:
+    """The checked texts of a language pack's strings.json; raises PackError naming the key and the fault."""
+    data = _parse(path, text)
+    if not isinstance(data, dict) or not data:
+        raise PackError("invalid_content", f"{path}: an object of text key -> text, with at least one text")
+    if len(data) > MAX_STRINGS:
+        raise PackError("too_many_items", f"{path}: {len(data)} texts, at most {MAX_STRINGS}")
+    for key, value in data.items():
+        if not _STRING_KEY.match(key):
+            raise PackError("invalid_content", f'{path}: "{key[:60]}" is not a text key (lower case, digits and _)')
+        if not isinstance(value, str) or not value or len(value) > MAX_STRING_LENGTH:
+            raise PackError("invalid_content", f"{path}: {key} must be a text of 1 to {MAX_STRING_LENGTH} characters")
+        if _TEXT_LINK.search(value):
+            raise PackError("not_data", f"{path}: {key}: links are not allowed ({value[:60]})")
+    return data
+
+
+def _verify_language(pack: dict[str, Any], files: dict[str, str]) -> dict[str, Any]:
+    """A language pack's payload: pack.json with "language", and strings.json as its only other file."""
+    if "language" not in pack:
+        raise PackError("invalid_content", f'{PACK_FILE}: a language pack names its "language", e.g. "de"')
+    others = sorted(path for path in files if path not in (PACK_FILE, STRINGS_FILE))
+    if others:
+        raise PackError("not_data", f"{others[0]}: a language pack holds only {PACK_FILE} and {STRINGS_FILE}")
+    if STRINGS_FILE not in files:
+        raise PackError("invalid_content", f"a language pack needs {STRINGS_FILE}")
+    return {**pack, "features": [], "items": [], "strings": verify_strings(STRINGS_FILE, files[STRINGS_FILE])}
+
+
+def strings_hash(strings: dict[str, str]) -> str:
+    """A fingerprint of a language's texts: "sha256:" and the hash of their JSON with sorted keys."""
+    text = json.dumps(strings, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return "sha256:" + hashlib.sha256(text.encode()).hexdigest()
+
+
+def language_of(packs: list[dict[str, Any]], language: str) -> tuple[dict[str, str], list[str]]:
+    """The texts the offered packs have for a language, and the ids of the packs they came from. Several packs for
+    one language add up: a key in a later pack (an installed one comes after the bundled ones) wins."""
+    strings: dict[str, str] = {}
+    ids: list[str] = []
+    for pack in packs:
+        if is_language_pack(pack) and pack.get("language") == language:
+            strings.update(pack.get("strings", {}))
+            ids.append(pack["id"])
+    return strings, ids
+
+
 # a pack id is "publisher.pack"; an item's full id is "publisher.pack/item_id"
 _PACK_ID = vol.All(str, vol.Match(r"^[a-z0-9][a-z0-9_-]{0,29}\.[a-z0-9][a-z0-9_-]{0,29}$"))
 
@@ -375,6 +443,10 @@ PACK_SCHEMA_V2 = vol.Schema(
         # release number of the pack (a newer release of the same id replaces an installed one)
         vol.Optional("release", default=1): vol.All(int, vol.Range(min=1, max=100000)),
         vol.Optional("description", default=""): vol.All(str, vol.Length(max=400)),
+        # what the pack holds (#196): furniture items (the default, left out) or the texts of one language
+        vol.Optional("kind"): vol.In(PACK_KINDS),
+        # the language a language pack is for: a base language code ("de", "fr", "pt"), lower case
+        vol.Optional("language"): vol.All(str, vol.Match(r"^[a-z]{2,3}$")),
     }
 )
 
@@ -409,7 +481,10 @@ def item_index(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def pack_hash(pack: dict[str, Any]) -> str:
-    """A fingerprint of a pack's items: it changes whenever any recipe does (a browser keeps recipes by it)."""
+    """A fingerprint of a pack's items: it changes whenever any recipe does (a browser keeps recipes by it). A
+    language pack's is that of its texts."""
+    if is_language_pack(pack):
+        return strings_hash(pack.get("strings", {}))
     digest = hashlib.sha256()
     for item in pack.get("items", []):
         digest.update(f"{item['id']}={recipe_hash(item)}\n".encode())
@@ -420,7 +495,10 @@ def library_pack(pack: dict[str, Any], *, whole: bool = False) -> dict[str, Any]
     """A pack as `packs/list` sends it: its fields, its hash and the index of its items (`whole`: the items with
     their recipes). The files it was imported from stay on the server (a backup carries them); where it came from
     (#25) is kept."""
-    light = {k: v for k, v in pack.items() if k not in ("items", "source")}
+    light = {k: v for k, v in pack.items() if k not in ("items", "source", "strings")}
+    if is_language_pack(pack):
+        # the texts come with `languages/get`, for the language a page shows (#196); the list only counts them
+        light["texts"] = len(pack.get("strings", {}))
     origin = (pack.get("source") or {}).get("origin")
     if origin is not None:
         light["source"] = {"origin": origin}
@@ -511,8 +589,9 @@ def _data_files(files: dict[str, str]) -> dict[str, str]:
     """The pack.json and item files of a folder, after the checks on names, count and size; raises PackError."""
     kept = {path: files[path] for path in data_paths(list(files))}
     for path, text in kept.items():
-        if len(text) > MAX_FILE_SIZE:
-            raise PackError("too_large", f"{path}: {len(text)} characters, at most {MAX_FILE_SIZE}")
+        limit = MAX_STRINGS_SIZE if path == STRINGS_FILE else MAX_FILE_SIZE
+        if len(text) > limit:
+            raise PackError("too_large", f"{path}: {len(text)} characters, at most {limit}")
     total = sum(len(text) for text in kept.values())
     if total > MAX_FOLDER_SIZE:
         raise PackError("too_large", f"the pack: {total} characters, at most {MAX_FOLDER_SIZE}")
@@ -526,6 +605,12 @@ def verify_folder(files: dict[str, str]) -> dict[str, Any]:
     treats both alike."""
     files = _data_files(files)
     pack = verify_pack_file(files[PACK_FILE])
+    if is_language_pack(pack):
+        return _verify_language(pack, files)
+    if "language" in pack:
+        raise PackError("invalid_content", f'{PACK_FILE}: "language" belongs to a language pack ("kind": "language")')
+    if len(files.get(STRINGS_FILE, "")) > MAX_FILE_SIZE:
+        raise PackError("too_large", f"{STRINGS_FILE}: {len(files[STRINGS_FILE])} characters, at most {MAX_FILE_SIZE}")
     items = [_item_file(path, text) for path, text in sorted(files.items()) if path != PACK_FILE]
     if not items:
         raise PackError("invalid_content", "a pack needs at least one item file")
@@ -552,6 +637,8 @@ def read_folder(folder: Path) -> dict[str, str]:
 # The packs bundled with the integration: one folder per pack (theovencook.core, ...), read from the disk at setup,
 # so they are there on a fresh install without network access. They are checked like an imported pack.
 BUNDLED_DIR = Path(__file__).parent / "bundled_packs"
+# the language packs that ship with Home 3D (#196): German for now, one folder per language
+BUNDLED_LANGUAGES_DIR = Path(__file__).parent / "bundled_languages"
 
 
 def load_bundled(root: Path = BUNDLED_DIR) -> list[dict[str, Any]]:

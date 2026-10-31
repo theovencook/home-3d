@@ -8,6 +8,8 @@ Packs are **data only**: JSON that Home Assistant checks against a schema before
 code, no pictures and no links. The schema and the limits live in `custom_components/home_3d/packs.py`; the same code
 checks a pack on import and in `tools/fp3dpack.py`.
 
+A pack can also hold the texts of a language instead of furniture: see [Languages](languages.md).
+
 This page describes **pack format v2**. Old single-file packs (format `fp3dpack`, version 1) still import; see the end
 of the page.
 
@@ -63,6 +65,8 @@ in the importer and every folder with a `pack.json` in it is imported as its own
 | `licence` | yes | The licence of the pack's content as an [SPDX id](https://spdx.org/licenses/) such as `MIT` or `CC-BY-4.0`. A pack without a licence is refused. `"license"` is read as `"licence"`. |
 | `release` | no | Release number of the pack (1 to 100000, default 1). A newer release of the same pack id replaces the installed one. |
 | `description` | no | Up to 400 characters. |
+| `kind` | no | `"furniture"` (the default) or `"language"` for a [language pack](languages.md). |
+| `language` | language packs only | The language a language pack is for, e.g. `"fr"`. |
 
 No other fields are allowed. The fields of the old signed shop packs (`signature`, `licensee`, `instance`) are not
 part of v2 and make a v2 pack fail.

@@ -1,0 +1,12 @@
+{
+  "format": "home3d-pack",
+  "version": 2,
+  "kind": "language",
+  "language": "de",
+  "id": "theovencook.lang-de",
+  "name": "Deutsch",
+  "publisher": "theovencook",
+  "licence": "MIT",
+  "release": 1,
+  "description": "German texts for Home 3D."
+}

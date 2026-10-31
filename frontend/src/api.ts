@@ -15,7 +15,7 @@ const at = (home?: string | null): { home_id?: string } => (home ? { home_id: ho
  * (BuildingController.speaks) instead of trying it and falling back. contract.test.ts checks every command and field
  * used here against tests/fixtures/contract/websocket.json.
  */
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;
 
 /** `can_edit`: the user is on the editors list (missing from backends before #7). `home_id`: the home loaded (#53;
  * missing from older backends), the one to save back to. */
@@ -212,6 +212,10 @@ export interface ImportedPack {
   /** The licence the pack declares; null for an old single-file pack. */
   licence: string | null;
   items: number;
+  /** A language pack (#196): its language and how many texts it has. */
+  kind?: "language";
+  language?: string;
+  texts?: number;
 }
 
 /**
