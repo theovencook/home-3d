@@ -648,6 +648,12 @@ export class Fp3dQuickMenu extends LitElement {
       .qm-note {
         color: var(--fp3d-muted);
       }
+    @media (pointer: coarse) {
+      .qm-swatch {
+        min-width: 44px;
+        min-height: 44px;
+      }
+    }
     `,
   ];
 }

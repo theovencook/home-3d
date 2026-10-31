@@ -1156,6 +1156,17 @@ export class Fp3dTimeBar extends LitElement {
         top: 64px;
       }
     }
+    @media (pointer: coarse) {
+      .btn,
+      .x {
+        min-width: 44px;
+        min-height: 44px;
+      }
+      .chip,
+      .track {
+        min-height: 44px;
+      }
+    }
   `;
 }
 

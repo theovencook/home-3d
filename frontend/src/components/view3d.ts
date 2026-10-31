@@ -8969,6 +8969,31 @@ export class Fp3dView3d extends LitElement {
           min-height: 44px;
         }
       }
+      /* touch targets of the viewer's small controls: 44 px (#181) */
+      @media (pointer: coarse) {
+        .fp3d-alert-x,
+        .fp3d-eye,
+        .fp3d-find-close,
+        .fp3d-find-icon,
+        .fp3d-sheet-x,
+        .fp3d-person,
+        .fp3d-thumbs-fold,
+        .fp3d-find-btn,
+        .fp3d-central-btn,
+        .fp3d-holo-media-controls button {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .fp3d-walk-btn,
+        .fp3d-sheet-chip,
+        .fp3d-sheet-input,
+        .fp3d-alert-menu button {
+          min-height: 44px;
+        }
+        .fp3d-find input {
+          height: 44px;
+        }
+      }
     `,
   ];
 }

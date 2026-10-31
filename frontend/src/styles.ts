@@ -208,12 +208,22 @@ export const controls = css`
     border-radius: 8px;
     padding: 7px 9px;
   }
-  /* fingers need 40 px */
+  /* fingers need 44 px (#181): buttons, chips, fields and swatches */
   @media (pointer: coarse) {
     .fp3d-seg button,
     .fp3d-chip,
+    .fp3d-btn,
+    .fp3d-field select,
+    .fp3d-field input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
+      min-height: 44px;
+    }
+    .fp3d-seg button,
     .fp3d-btn {
-      min-height: 40px;
+      min-width: 44px;
+    }
+    .fp3d-swatch {
+      width: 44px;
+      height: 44px;
     }
   }
 `;

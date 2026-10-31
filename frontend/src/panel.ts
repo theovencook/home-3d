@@ -2091,6 +2091,28 @@ export class Floorplan3dPanel extends LitElement {
           justify-content: center;
         }
       }
+      /* touch screens, a tablet as much as a phone (#181): 44 px, and room for three rows of floor chips */
+      @media (pointer: coarse), ${unsafeCSS(PHONE_MEDIA)} {
+        .fp3d-opts-btn,
+        .fp3d-quality button,
+        .fp3d-nav .fp3d-nav-toggle {
+          min-width: 44px;
+        }
+        .fp3d-opts-btn {
+          height: 44px;
+        }
+        .fp3d-header .fp3d-seg button,
+        .fp3d-quality button,
+        .fp3d-overlay .fp3d-chip,
+        .fp3d-overlay .fp3d-seg button,
+        .fp3d-show-panel button,
+        .fp3d-nav .fp3d-chip {
+          min-height: 44px;
+        }
+        .fp3d-nav-wrap {
+          max-height: 176px;
+        }
+      }
     `,
   ];
 }

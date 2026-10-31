@@ -805,4 +805,24 @@ export const formStyles = css`
           order: 1;
         }
       }
+
+      /* touch screens (#181): the editor's small buttons and selects reach 44 px */
+      @media (pointer: coarse) {
+        .fp3d-fix,
+        .fp3d-3d-fold,
+        .fp3d-wv-kit .fp3d-wv-pick,
+        .fp3d-outdoor-type select,
+        .fp3d-point .fp3d-btn,
+        .fp3d-seg .fp3d-menu-sub .fp3d-chip,
+        .fp3d-presets .fp3d-chip,
+        .fp3d-settings-link {
+          min-height: 44px;
+        }
+        .fp3d-help-btn,
+        .fp3d-wv-zoom .fp3d-btn,
+        .fp3d-strip-btn {
+          min-width: 44px;
+          min-height: 44px;
+        }
+      }
 `;
