@@ -1214,7 +1214,10 @@ export class FloorplanViewer {
       const base = fv.floor.elevation + fv.ty;
       const [mx, mz] = centroid(room.points);
       const t = own.target ?? { x: mx, y: 0.3, z: mz };
-      this.controls.flyTo({ target: new Vector3(t.x, t.y + base, t.z), radius: own.radius, phi: own.phi, theta: own.theta }, 700, true);
+      // saved on a wide screen: on a portrait one it stands back as a fitted house does, within the controls' reach (#200)
+      const radius = startViewRadius(own.radius, this.camera.fov, this.camera.aspect);
+      this.controls.maxRadius = Math.max(this.controls.maxRadius, radius * 1.5);
+      this.controls.flyTo({ target: new Vector3(t.x, t.y + base, t.z), radius, phi: own.phi, theta: own.theta }, 700, true);
       return;
     }
     const [cx, cz] = centroid(room.points);
