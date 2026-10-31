@@ -46,7 +46,9 @@ test("automatic follows Home Assistant's unit system; the plan's setting wins", 
 
 test("the length fields of the floor panel and the mobile rows follow the unit (#170)", async () => {
   const { readFileSync } = await import("node:fs");
-  const editor = readFileSync(new URL("./components/editor.ts", import.meta.url), "utf8");
+  // the editor is editor.ts plus its modules under components/editor/ (#202)
+  const { editorSource } = await import("./components/editor-source.ts");
+  const editor = editorSource();
   const panel = readFileSync(new URL("./panel.ts", import.meta.url), "utf8");
   assert.match(editor, /unitLabel\(this\.t\("floor_shift"\), this\.unit\)/);
   assert.match(panel, /unitLabel\(label, unit\)/);
