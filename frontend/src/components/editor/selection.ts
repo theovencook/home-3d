@@ -398,7 +398,7 @@ export class SelectionPart {
     else if (this._wallId) this.deleteFreeWall();
     else if (this._openingId) this.deleteOpening();
     else if (this._furnitureId) this.deleteFurniture();
-    else if (this._vertex !== null && !this.houseTool) this.deleteVertex(this._vertex);
+    else if (this._vertex !== null && !this.houseTool) void this.deleteVertex(this._vertex);
     else if (this._tool === "select" || this._tool === "furniture") this.deleteRoom();
   }
 

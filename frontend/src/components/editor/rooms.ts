@@ -14,7 +14,8 @@ import { formatNumber, type I18nKey } from "../../i18n.ts";
 import { withKeys } from "../../clipboard.ts";
 import { bounds, centroid, FLOOR_MATERIALS, splitAliases, FURNITURE_SIZE, isAxisRect, spotGrid, step, type Direction, pointInPolygon, polygonArea, uid, type Building, type Floor, type Furniture, type FurnitureType, type Room, type Vec2 } from "../../model.ts";
 import { roomLiveSensors, type LiveKind } from "../../room-effects.ts";
-import { removeCorner } from "../../geometry/room-corners.ts";
+import { askConfirm } from "../../ask.ts";
+import { cornerLoss, removeCorner } from "../../geometry/room-corners.ts";
 import { type ResizeNote, round, patchItem, numberish } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
@@ -217,12 +218,33 @@ export class RoomsPart {
     this._roomId = id;
   }
 
-  deleteVertex(this: Fp3dEditor, index: number): void {
+  /**
+   * Remove a corner. Where that would drop doors or windows, or give the joined wall one of two different heights or
+   * thicknesses, ask first and say what is lost; openings that still fit on the joined wall can be kept (#206).
+   * A corner that costs nothing (in line with its neighbours) goes without a question.
+   */
+  async deleteVertex(this: Fp3dEditor, index: number): Promise<void> {
     const room = this.room;
     if (!room || room.points.length <= 3) return;
+    const loss = this.floor ? cornerLoss(this.floor, room.id, index) : null;
+    let keep: string[] = [];
+    if (loss && (loss.openings.length || loss.height || loss.thickness)) {
+      const n = room.points.length;
+      const parts = [
+        this.t("corner_joins", { a: ((index - 1 + n) % n) + 1, b: index + 1, c: ((index + 1) % n) + 1 }),
+        ...(loss.openings.length ? [this.t("corner_loses_openings", { n: loss.openings.length })] : []),
+        ...(loss.height ? [this.t("corner_loses_height")] : []),
+        ...(loss.thickness ? [this.t("corner_loses_thickness")] : []),
+      ];
+      if (!(await this.ask(parts.join(" "), this.t("delete_point")))) return;
+      if (loss.fit.length && (await askConfirm(this.t("corner_keep_openings", { k: loss.fit.length, n: loss.openings.length }), { ok: this.t("corner_keep"), cancel: this.t("corner_drop"), danger: false })))
+        keep = loss.fit.map((o) => o.id);
+      // the plan may have changed while the questions were open
+      if (this.room?.id !== room.id || this.room.points.length !== n) return;
+    }
     const base = this._doc;
     // the edges at the corner become one; splits, part heights and openings are remapped with it (#157)
-    this.change((_, floor) => removeCorner(floor, room.id, index));
+    this.change((_, floor) => removeCorner(floor, room.id, index, keep));
     this.noteResize(room.id, base);
     this._vertex = null;
   }
@@ -526,7 +548,7 @@ export class RoomsPart {
             <span class="fp3d-muted">${i + 1}</span>
             ${this.len(this.t("x"), p[0], (v) => this.setPoint(i, 0, v))} ${this.len(this.t("z"), p[1], (v) => this.setPoint(i, 1, v))}
             ${admin
-              ? html`<button class="fp3d-btn" title=${this.t("delete_point")} ?disabled=${room.points.length <= 3} @click=${() => this.deleteVertex(i)}>
+              ? html`<button class="fp3d-btn" title=${this.t("delete_point")} ?disabled=${room.points.length <= 3} @click=${() => void this.deleteVertex(i)}>
                   ×
                 </button>`
               : nothing}

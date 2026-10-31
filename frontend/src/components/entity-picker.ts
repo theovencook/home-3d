@@ -27,6 +27,7 @@ export class EntityPicker extends LitElement {
     disabled: { type: Boolean },
     placeholder: { attribute: false },
     prefer: { attribute: false },
+    groups: { attribute: false },
     _query: { state: true },
     _open: { state: true },
     _cursor: { state: true },
@@ -42,9 +43,12 @@ export class EntityPicker extends LitElement {
   declare placeholder: string;
   /** Which entities are likely (#132): the room's area, the link's domains. */
   declare prefer: OptionPreference;
+  /** Headings that split the list by the link's domains (#172): the entities that fit, then the others. Off when null. */
+  declare groups: { likely: string; other: string } | null;
   private declare _query: string;
   private declare _open: boolean;
   private declare _cursor: number;
+  private partition: { from: readonly PickerOption[]; domains: readonly string[]; list: readonly PickerOption[] } | null = null;
   private blurTimer: ReturnType<typeof setTimeout> | undefined;
   /** The ranked options, kept while the options and the preference stay (made only while the list is open). */
   private ranked: { options: PickerOption[]; prefer: string; list: readonly PickerOption[] } | null = null;
@@ -57,6 +61,7 @@ export class EntityPicker extends LitElement {
     this.disabled = false;
     this.placeholder = "";
     this.prefer = {};
+    this.groups = null;
     this._query = "";
     this._open = false;
     this._cursor = 0;
@@ -83,9 +88,37 @@ export class EntityPicker extends LitElement {
       return words.every((w) => text.includes(w));
     };
     const fixed = this.fixed.filter((o) => !q || match(o));
-    const all = this.rankedOptions();
+    const all = this.grouped(this.rankedOptions());
     const rest = q ? all.filter(match) : all;
     return [...fixed, ...rest.slice(0, MAX_SHOWN)];
+  }
+
+  /** Whether an entity is in one of the link's domains (#172). */
+  private fits(o: PickerOption): boolean {
+    return (this.prefer.domains ?? []).includes(o.id.slice(0, o.id.indexOf(".")));
+  }
+
+  /** With headings on: the entities of the link's domains first (each part keeps its room-first order), then the rest. */
+  private grouped(list: readonly PickerOption[]): readonly PickerOption[] {
+    if (!this.groups || !this.prefer.domains?.length) return list;
+    const key = list;
+    if (this.partition?.from === key && this.partition.domains === this.prefer.domains) return this.partition.list;
+    const out = [...list.filter((o) => this.fits(o)), ...list.filter((o) => !this.fits(o))];
+    this.partition = { from: key, domains: this.prefer.domains, list: out };
+    return out;
+  }
+
+  /** The heading before each row of the list: where the fitting entities start, and where the others do (#172). */
+  private headings(hits: readonly PickerOption[]): (string | null)[] {
+    const out: (string | null)[] = hits.map(() => null);
+    if (!this.groups || !this.prefer.domains?.length) return out;
+    const rows = hits.filter((h) => h.id.includes("."));
+    const fitting = rows.filter((h) => this.fits(h)).length;
+    // a single group needs no heading
+    if (!fitting || fitting === rows.length) return out;
+    out[hits.indexOf(rows[0])] = this.groups.likely;
+    out[hits.indexOf(rows[fitting])] = this.groups.other;
+    return out;
   }
 
   private rankedOptions(): readonly PickerOption[] {
@@ -152,6 +185,7 @@ export class EntityPicker extends LitElement {
   protected render() {
     const current = this.current;
     const hits = this._open ? this.hits : [];
+    const heads = this.headings(hits);
     const picked = this.value && this.value.includes(".") ? this.value : null;
     // a press anywhere in the picker but its box (the list's padding or scrollbar, a note row) keeps the box focused,
     // so the typed keys stay here instead of reaching the plan's shortcuts (#132)
@@ -182,7 +216,7 @@ export class EntityPicker extends LitElement {
         ? html`<ul class="list" role="listbox">
             ${hits.length ? nothing : html`<li class="empty">–</li>`}
             ${hits.map(
-              (o, i) => html`<li
+              (o, i) => html`${heads[i] ? html`<li class="group" role="presentation">${heads[i]}</li>` : nothing}<li
                 role="option"
                 aria-selected=${o.id === this.value}
                 class="${i === this._cursor ? "cursor" : ""} ${o.id === this.value ? "chosen" : ""}"
@@ -271,6 +305,18 @@ export class EntityPicker extends LitElement {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+      li.group {
+        color: var(--fp3d-muted);
+        cursor: default;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 6px 8px 2px;
+      }
+      li.group:hover {
+        background: none;
       }
       li.empty {
         color: var(--fp3d-muted);

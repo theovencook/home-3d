@@ -2,7 +2,7 @@
 // wall_thickness, wall_slopes, wall_splits, the openings) is indexed by edge, so it is remapped in the same step that
 // edits the corner list: one place, used by the mid-edge "+" handle and by deleting a corner.
 
-import type { Floor, Vec2, WallHeight } from "../model.ts";
+import type { Floor, Opening, Vec2, WallHeight } from "../model.ts";
 import { generateWalls } from "./walls.ts";
 
 const EPS = 1e-3;
@@ -101,13 +101,66 @@ export function insertCorner(floor: Floor, roomId: string, i: number, p: Vec2): 
   remapHeights(floor, before, old, roomId, (e, s) => (e <= i ? [e, s] : e === i + 1 ? [i, s + first] : [e - 1, s]));
 }
 
+/** What removing a corner would cost (#206): see `cornerLoss`. */
+export interface CornerLoss {
+  /** The corner lies in line with its neighbours: nothing is lost (the edges join without a trace). */
+  inLine: boolean;
+  /** Doors and windows on the two edges that the removal drops unless they are kept. */
+  openings: Opening[];
+  /** Those of them that still fit on the joined wall, at their distance along it (a subset of `openings`). */
+  fit: Opening[];
+  /** The edge after the corner differs in height from the one before: the joined wall takes the earlier one's. */
+  height: boolean;
+  /** Likewise its thickness. */
+  thickness: boolean;
+}
+
+const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/**
+ * What `removeCorner` would drop or change for corner `index` (#206), without changing anything: the openings on
+ * the two edges, which of them fit on the joined wall (whole, inside its length, not overlapping one kept before;
+ * the earlier edge's first, each at its distance along the joined wall), and whether the joined wall takes the
+ * earlier edge's height or thickness over the later one's.
+ */
+export function cornerLoss(floor: Floor, roomId: string, index: number): CornerLoss | null {
+  const room = floor.rooms.find((r) => r.id === roomId);
+  if (!room || room.points.length <= 3) return null;
+  const n = room.points.length;
+  const prev = (index - 1 + n) % n;
+  const P = room.points;
+  const next = (index + 1) % n;
+  const lp = dist(P[prev], P[index]);
+  const inLine = lp + dist(P[index], P[next]) - dist(P[prev], P[next]) < 0.005;
+  if (inLine) return { inLine, openings: [], fit: [], height: false, thickness: false };
+  const onEdge = (e: number) => floor.openings.filter((o) => o.room_id === roomId && !o.wall && o.edge === e).sort((a, b) => a.offset - b.offset);
+  const openings = [...onEdge(prev), ...onEdge(index)];
+  const joined = dist(P[prev], P[next]);
+  const fit: Opening[] = [];
+  let end = 0;
+  for (const o of openings) {
+    const c = o.edge === index ? o.offset + lp : o.offset;
+    if (c - o.width / 2 < end - EPS || c + o.width / 2 > joined + EPS) continue;
+    fit.push(o);
+    end = c + o.width / 2;
+  }
+  return {
+    inLine,
+    openings,
+    fit,
+    height: !same(room.wall_heights?.[prev], room.wall_heights?.[index]),
+    thickness: !same(room.wall_thickness?.[prev], room.wall_thickness?.[index]),
+  };
+}
+
 /**
  * Remove corner `index` of a room: the edge before it and the one starting there become one, which keeps the
  * earlier edge's height and thickness. A corner that lies in line with its neighbours (one a "+" made) goes
  * without a trace: the second edge's split points, part heights and openings move onto the joined edge, and a
- * split keeps two different heights apart. Otherwise the openings on both edges go, as the wall itself moves.
+ * split keeps two different heights apart. Otherwise the openings on both edges go, as the wall itself moves –
+ * except those of `keep` (ids, from `cornerLoss(...).fit`), which stay on the joined wall at their distance along it (#206).
  */
-export function removeCorner(floor: Floor, roomId: string, index: number): void {
+export function removeCorner(floor: Floor, roomId: string, index: number, keep: readonly string[] = []): void {
   const room = floor.rooms.find((r) => r.id === roomId);
   if (!room || room.points.length <= 3) return;
   const n = room.points.length;
@@ -140,7 +193,7 @@ export function removeCorner(floor: Floor, roomId: string, index: number): void 
     if (room.wall_slopes.every((x) => !x)) room.wall_slopes = undefined;
   }
   floor.openings = floor.openings
-    .filter((o) => o.room_id !== roomId || o.wall || inLine || (o.edge !== index && o.edge !== prev))
+    .filter((o) => o.room_id !== roomId || o.wall || inLine || (o.edge !== index && o.edge !== prev) || keep.includes(o.id))
     .map((o) => {
       if (o.room_id !== roomId || o.wall) return o;
       if (o.edge === index) return { ...o, edge: joinedEdge, offset: mm(o.offset + lp) };

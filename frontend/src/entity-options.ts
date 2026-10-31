@@ -51,7 +51,8 @@ export function entityOptionList(hass: HomeAssistant | undefined, filter: Filter
     .map((id) => {
       const area = areaOf(id);
       const name = area ? hass.areas?.[area]?.name : undefined;
-      return { id, label: `${entityName(hass, id)}${name ? ` · ${name}` : ""}`, ...(area ? { area } : {}) };
+      // the device name once (#172): "Lounge Lamp" in the Lounge reads "Lamp · Lounge", not "Lounge Lamp · Lounge"
+      return { id, label: `${entityName(hass, id, name)}${name ? ` · ${name}` : ""}`, ...(area ? { area } : {}) };
     })
     .sort((a, b) => a.label.localeCompare(b.label));
 }

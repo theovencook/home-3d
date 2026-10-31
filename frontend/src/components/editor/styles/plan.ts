@@ -94,6 +94,18 @@ export const planStyles = css`
         stroke-dasharray: 5 4;
         pointer-events: none;
       }
+      .fp3d-place-ghost-wall {
+        stroke-dasharray: none;
+        fill: color-mix(in srgb, var(--fp3d-accent) 30%, transparent);
+      }
+      .fp3d-place-label {
+        font-size: 11px;
+        fill: var(--fp3d-accent);
+        paint-order: stroke;
+        stroke: var(--fp3d-card, #fff);
+        stroke-width: 3px;
+        pointer-events: none;
+      }
       .fp3d-placing {
         display: flex;
         flex-wrap: wrap;

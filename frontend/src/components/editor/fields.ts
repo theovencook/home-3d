@@ -291,6 +291,7 @@ export class FieldsPart {
         .fixed=${fixed}
         .value=${current}
         .prefer=${{ area: this.pickerArea(), domains }}
+        .groups=${domains.length ? { likely: this.t("picker_likely"), other: this.t("picker_other") } : null}
         .placeholder=${this.t("entity_search")}
         ?disabled=${!this.isEditor}
         @change=${(e: CustomEvent<{ value: string }>) => {

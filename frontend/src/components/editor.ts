@@ -46,7 +46,7 @@ import { isPackType, packItem, setPacks, setPlanRecipes, type FurniturePack } fr
 import { UndoHistory } from "../undo-history.ts";
 import { EntityOptionCache } from "../entity-options.ts";
 import { HassWatch } from "../hass-watch.ts";
-import { ENTITY_DRAG, type ResizeNote, type FixKind, type Drag, type Guides, type EditorTopic, round, type RunDraft, type RunCtx, ARROWS } from "./editor/helpers.ts";
+import { ENTITY_DRAG, type ResizeNote, type FixKind, type Drag, type Guides, type EditorTopic, type PlaceTarget, round, type RunDraft, type RunCtx, ARROWS } from "./editor/helpers.ts";
 import { mixParts } from "./editor/parts.ts";
 import { Pane3dPart } from "./editor/pane3d.ts";
 import { PlanViewPart } from "./editor/plan-view.ts";
@@ -113,6 +113,7 @@ export class Fp3dEditor extends LitElement {
     _hiddenItems: { state: true },
     _placing: { state: true },
     _placeAt: { state: true },
+    _snapOn: { state: true },
     _single: { state: true },
     _multiMode: { state: true },
     _deviceId: { state: true },
@@ -264,7 +265,9 @@ export class Fp3dEditor extends LitElement {
   /** A library card waiting for a click on the plan that places it (#76). */
   declare _placing: { type: string; mirror: boolean } | null;
   /** Where the armed card would land (the pointer over the plan), for its outline. */
-  declare _placeAt: Vec2 | null;
+  declare _placeAt: PlaceTarget | null;
+  /** Snapping on (#173): the switch in the placement bar, for touch; Shift turns it off for one move. Remembered per device. */
+  declare _snapOn: boolean;
   /** Alignment lines for placing an armed card (#143), gathered again when the floor changes. */
   placeLines: { floor: Floor; lines: AlignLines } | null = null;
   /** One part of a furniture block is edited on its own (double-click), not the whole block. */
@@ -512,6 +515,13 @@ export class Fp3dEditor extends LitElement {
     this._hiddenItems = [];
     this._placing = null;
     this._placeAt = null;
+    this._snapOn = (() => {
+      try {
+        return localStorage.getItem("home3d.snap") !== "0";
+      } catch {
+        return true;
+      }
+    })();
     this._single = false;
     this._multiMode = false;
     this._deviceId = null;

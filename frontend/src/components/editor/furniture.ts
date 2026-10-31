@@ -4,7 +4,7 @@
 import { html, nothing, svg } from "lit";
 import { hasScreen, kindOf } from "../../devices.ts";
 import { furnitureSymbol } from "../furniture2d.ts";
-import { snapToWall } from "../../geometry/snap.ts";
+import { snapToWall, wallSnap } from "../../geometry/snap.ts";
 import { snapPoint, snapTolerance } from "../../geometry/snap-guides.ts";
 import { translate, type I18nKey } from "../../i18n.ts";
 import { retypePatch, typeOptionLabels } from "../../item-panel.ts";
@@ -19,7 +19,7 @@ import { packsVersion as libPacksVersion } from "../../packs.ts";
 import { setCameraLook } from "../../camera-models.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { furnitureSize, isElectric, isRobotVacuum, packItemName, packName, packType, type FurniturePack } from "../../packs.ts";
-import { MAX_MOUNT_Y, round, isEnergyDevice, EN_HASS } from "./helpers.ts";
+import { MAX_MOUNT_Y, round, isEnergyDevice, EN_HASS, type PlaceTarget } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** FurniturePart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
@@ -156,8 +156,8 @@ export class FurniturePart {
     void ensureRecipes(this.hass, [type]);
   }
 
-  /** The armed card placed at a plan point (or in the room's middle without one); Shift keeps it armed. */
-  placeArmed(this: Fp3dEditor, at: Vec2 | null, keep = false): void {
+  /** The armed card placed at a target (or in the room's middle without one); Ctrl/Cmd-click keeps it armed. */
+  placeArmed(this: Fp3dEditor, at: PlaceTarget | null, keep = false): void {
     const p = this._placing;
     if (!p || !this.hass) return;
     if (!keep) {
@@ -178,37 +178,70 @@ export class FurniturePart {
     this.showGuides([]);
   }
 
-  /** A plan point for the armed card: on a room's centre lines or in line with other items (#143), else on the grid; Alt places freely. */
-  placePoint(this: Fp3dEditor, world: Vec2, free: boolean): Vec2 {
+  /** Snapping is off for this event: Shift (or Alt) held on a desktop, or the snap switch turned off (#173). */
+  snapOff(this: Fp3dEditor, e: { shiftKey: boolean; altKey: boolean }): boolean {
+    return e.shiftKey || e.altKey || !this._snapOn;
+  }
+
+  /** The snap switch (for touch, where there is no Shift), remembered on this device (#173). */
+  setSnapOn(this: Fp3dEditor, on: boolean): void {
+    this._snapOn = on;
+    if (!on) this.showGuides([]);
+    try {
+      localStorage.setItem("home3d.snap", on ? "1" : "0");
+    } catch {
+      // private mode: the choice lasts until the editor closes
+    }
+  }
+
+  /**
+   * Where the armed card would land for a plan point, and what it lands on (#173): on a room's centre lines or in
+   * line with other items (#143), else on the grid, then against the nearest wall of the room under the pointer
+   * (back to the wall, flush). The room is the one under the true pointer, not the snapped point. `free`: no snapping.
+   */
+  placeTarget(this: Fp3dEditor, world: Vec2, free: boolean): PlaceTarget {
     const g = this._doc.settings.grid;
     const grid = (v: number) => (free || !g ? round(v) : round(Math.round(v / g) * g));
     const p = this._placing;
     const floor = this.floor;
+    const roomId = this.roomAt(world);
     if (free || !p || !floor) {
       this.showGuides([]);
-      return [grid(world[0]), grid(world[1])];
+      return { at: [grid(world[0]), grid(world[1])], rotation: 0, roomId, wall: null };
     }
-    const [w, d] = furnitureSize(p.type);
+    const [w, d, h] = furnitureSize(p.type);
     // the lines are gathered again only when the plan changed
     if (this.placeLines?.floor !== floor) this.placeLines = { floor, lines: this.alignLinesFor(floor, null) };
     const s = snapPoint(world, [w / 2, d / 2], this.placeLines.lines, snapTolerance(this._view.scale));
-    this.showGuides(s.guides);
-    return [s.x ? round(s.p[0]) : grid(world[0]), s.z ? round(s.p[1]) : grid(world[1])];
+    let x = s.x ? round(s.p[0]) : grid(world[0]);
+    let z = s.z ? round(s.p[1]) : grid(world[1]);
+    let rotation = 0;
+    let wall: PlaceTarget["wall"] = null;
+    const stand: Furniture = { id: "", type: p.type, x, z, rotation: 0, w, d, h, variant: null };
+    const hit = roomId ? wallSnap(floor, stand, this._doc.settings.wall_interior, undefined, { turn: true, roomId }) : null;
+    if (hit) {
+      ({ x, z, rotation } = hit);
+      wall = { roomId: hit.roomId, edge: hit.edge };
+    }
+    // a wall that pulled the item off a guide drops that guide
+    this.showGuides(s.guides.length ? s.guides.filter((q) => Math.abs(q.axis === "x" ? x - s.p[0] : z - s.p[1]) < 0.002) : []);
+    return { at: [x, z], rotation, roomId, wall };
   }
 
-  placeFurniture(this: Fp3dEditor, type: string, mirror: boolean, at: Vec2 | null = null): void {
+  placeFurniture(this: Fp3dEditor, type: string, mirror: boolean, target: PlaceTarget | null = null): void {
     const floor = this.floor;
     if (!floor || !this.isEditor) return;
-    // placed by a click (#76): into the room under the point
-    if (at) this._roomId = this.roomAt(at) ?? this._roomId;
+    const at = target?.at ?? null;
+    // placed by a click (#76): into the room under the pointer itself (#173), not under the snapped point
+    if (target) this._roomId = target.roomId ?? this._roomId;
     const [w, d, h0] = furnitureSize(type);
     // stairs reach up to the next floor
     const above = this._doc.floors.filter((f) => f.elevation > floor.elevation).sort((p, q) => p.elevation - q.elevation)[0];
     const h = STAIR_TYPES.has(type) ? round(above ? above.elevation - floor.elevation : floor.height + 0.25) : h0;
     const room = this.room;
     const [x, z] = at ?? (room ? centroid(room.points) : this.toWorld(this._size.w / 2, this._size.h / 2));
-    let rotation = 0;
-    if (type === "parking" && room) {
+    let rotation = target?.wall ? target.rotation : 0;
+    if (type === "parking" && room && !target?.wall) {
       // a parking spot runs into the room from its garage door, else along the room's longer side
       const gate = floor.openings.find((o) => o.room_id === room.id && o.type === "garage");
       const a = gate ? room.points[gate.edge] : null;
@@ -345,15 +378,21 @@ export class FurniturePart {
   }
 
   /** Rooms of the floor below, as orientation. */
-  /** The outline of an armed library card under the pointer (#76). */
+  /** The outline of an armed library card under the pointer (#76), turned to the wall it snaps to, with the room and wall named (#173). */
   renderPlaceGhost(this: Fp3dEditor) {
     const p = this._placing;
-    const at = this._placeAt;
-    if (!p || !at) return nothing;
+    const target = this._placeAt;
+    if (!p || !target) return nothing;
     const [w, d] = furnitureSize(p.type);
     const k = this._view.scale;
-    const [cx, cy] = this.toScreen(at);
-    return svg`<rect class="fp3d-place-ghost" x=${cx - (w * k) / 2} y=${cy - (d * k) / 2} width=${w * k} height=${d * k} />`;
+    const [cx, cy] = this.toScreen(target.at);
+    const room = target.roomId ? this.floor?.rooms.find((r) => r.id === target.roomId) : null;
+    const n = room?.points.length ?? 0;
+    const label = !room ? this.t("place_no_room") : target.wall ? `${room.name} · ${this.t("wall_n", { a: target.wall.edge + 1, b: ((target.wall.edge + 1) % n) + 1 })}` : room.name;
+    return svg`<g class="fp3d-place-ghost-g">
+      <rect class=${`fp3d-place-ghost${target.wall ? " fp3d-place-ghost-wall" : ""}`} x=${-(w * k) / 2} y=${-(d * k) / 2} width=${w * k} height=${d * k} transform="translate(${cx} ${cy}) rotate(${target.rotation})" />
+      <text class="fp3d-place-label" x=${cx} y=${cy - (Math.max(w, d) * k) / 2 - 6} text-anchor="middle">${label}</text>
+    </g>`;
   }
 
   renderFurniture(this: Fp3dEditor, floor: Floor) {
@@ -468,6 +507,10 @@ export class FurniturePart {
       ${this._placing
         ? html`<div class="fp3d-placing" role="status">
             <span>${this.t("place_armed", { name: furnitureName(this.hass, this._placing.type) })}</span>
+            <label class="fp3d-check" title=${this.t("snap_toggle_hint")}
+              ><input type="checkbox" .checked=${this._snapOn} @change=${(e: Event) => this.setSnapOn((e.target as HTMLInputElement).checked)} />
+              ${this.t("snap_toggle")}</label
+            >
             <button class="fp3d-btn fp3d-primary" @click=${() => this.placeArmedInMiddle()}>${room ? this.t("place_middle_room", { room: room.name }) : this.t("place_middle")}</button>
             <button class="fp3d-btn" @click=${() => this.cancelPlacing()}>${this.t("cancel")}</button>
           </div>`

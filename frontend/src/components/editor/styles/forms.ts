@@ -28,6 +28,18 @@ export const formStyles = css`
         text-overflow: ellipsis;
         min-width: 0;
       }
+      .fp3d-link-block {
+        margin: 10px 0 4px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--fp3d-line);
+      }
+      .fp3d-link-title {
+        margin: 0 0 6px;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--fp3d-muted);
+      }
       .fp3d-h3row {
         display: flex;
         align-items: center;
