@@ -2,6 +2,10 @@
 
 Known fields are checked; fields added by newer frontends are passed through (extra=ALLOW_EXTRA),
 so saving keeps working after a frontend update until Home Assistant restarts with the new backend.
+
+The two must not drift apart (#166): tests/test_contract.py checks that every field here is in the frontend's
+contract plan (tests/fixtures/contract/plan.json, written from frontend/src/plan-contract.fixture.ts, which holds every
+field model.ts has) and that the contract plan has no field this schema does not know.
 """
 
 from __future__ import annotations
@@ -11,7 +15,8 @@ import re
 
 import voluptuous as vol
 
-from .const import TIME_PATTERN
+from .const import PLAN_VERSION, TIME_PATTERN
+from .migrations import migrate_plan
 from .packs import COLOUR_ROLES
 from .racks import RACK_CONTENTS_SCHEMA
 from .recipes import recipes_validator
@@ -179,6 +184,8 @@ OPENING_SCHEMA = vol.Schema(
             None, vol.All(vol.Coerce(float), vol.Range(min=0.1, max=3))
         ),
         vol.Optional("contact2", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # doors: its smart lock (lock.*), a pin at the door (model.ts had it, the schema did not: #166)
+        vol.Optional("lock"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # windows: a plain contact, a handle sensor (open / tilted / closed), or a contact and a tilt sensor
         vol.Optional("sensor", default=None): vol.Any(None, vol.In(["contact", "handle", "contact_tilt"])),
         # the same for the second leaf of a double window
@@ -393,6 +400,13 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("extra", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # radiator or hot-water cylinder: the temperature it shades with (None = automatic, "none" = none, #10)
         vol.Optional("temp_sensor", default=None): _SENSOR_REF,
+        # radiator: a sensor saying whether it heats when the thermostat does not (#166: was only in model.ts)
+        vol.Optional("heat_sensor"): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # lamps: glow only while the light shows this colour ("#rrggbb"); with a power sensor: running above these
+        # watts; a camera's look: the camera (entity id) it moves with (#166: these were only in model.ts)
+        vol.Optional("only_color"): vol.Any(None, vol.All(str, vol.Length(max=32))),
+        vol.Optional("run_w"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=100000))),
+        vol.Optional("look_of"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # ceiling fan with light: its fan entity (the blades turn with its speed)
         vol.Optional("fan"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # mirrored left-right
@@ -532,6 +546,10 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Optional("cone", default=None): vol.Any(None, bool),
         # detection pins over the camera (None = shown); off leaves only the camera turning red
         vol.Optional("detect_pins", default=None): vol.Any(None, bool),
+        # cameras: the detection sensors that count, chosen by hand (None: the camera's own; #166: only in model.ts)
+        vol.Optional("detect_sensors"): vol.Any(
+            None, vol.All([vol.All(str, vol.Length(max=255))], vol.Length(max=MAX_HIDDEN))
+        ),
         # fixed against moving by accident
         vol.Optional("locked", default=None): vol.Any(None, bool),
     },
@@ -877,6 +895,8 @@ SETTINGS_SCHEMA = vol.Schema(
         vol.Optional("person_look", default=None): vol.Any(None, vol.In(["figure", "pin", "off"])),
         # plan lock: rooms, walls, doors, windows and outdoor areas cannot be moved by accident
         vol.Optional("lock_plan", default=False): bool,
+        # the floor the editor opens with (None: the first) (#166: was only in model.ts)
+        vol.Optional("editor_floor"): vol.Any(None, vol.All(str, vol.Length(max=64))),
         # False for a sample or template home (#61): the editor never offers to add rooms from this install's areas
         vol.Optional("area_import", default=True): bool,
         # a sample or demo home (#100): linked entities this install lacks show fixed demo states in the viewer
@@ -988,6 +1008,8 @@ SETTINGS_SCHEMA = vol.Schema(
                     # only the bins of the next pickup wear a tag; tags only from some days before (None = always)
                     vol.Optional("bin_next_only"): vol.Any(None, bool),
                     vol.Optional("bin_days"): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=0, max=60))),
+                    # a to-do list for the household's notes (#166: was only in model.ts)
+                    vol.Optional("notes"): vol.Any(None, vol.All(str, vol.Length(max=255))),
                 },
                 extra=vol.ALLOW_EXTRA,
             ),
@@ -1168,9 +1190,10 @@ PRESENCE_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
-BUILDING_SCHEMA = vol.Schema(
+# the fields of a plan of the current version (#165)
+BUILDING_FIELDS = vol.Schema(
     {
-        vol.Required("version"): 1,
+        vol.Required("version"): PLAN_VERSION,
         vol.Required("floors"): vol.All([FLOOR_SCHEMA], vol.Length(max=MAX_FLOORS)),
         vol.Required("settings"): SETTINGS_SCHEMA,
         vol.Optional("energy", default=lambda: dict(ENERGY_DEFAULTS)): ENERGY_SCHEMA,
@@ -1180,6 +1203,10 @@ BUILDING_SCHEMA = vol.Schema(
     },
     extra=vol.ALLOW_EXTRA,
 )
+
+# a plan as the backend takes it in (#165): brought to the current version first (migrations.py), then checked and
+# completed with the defaults of the fields added since; a plan of a newer version is refused (PlanTooNew)
+BUILDING_SCHEMA = vol.All(migrate_plan, BUILDING_FIELDS)
 
 IMAGE_DATA = vol.All(
     str,
@@ -1191,7 +1218,7 @@ IMAGE_DATA = vol.All(
 def empty_building() -> dict:
     """Return a building without floors."""
     return {
-        "version": 1,
+        "version": PLAN_VERSION,
         "floors": [],
         "settings": {"wall_exterior": 0.24, "wall_interior": 0.12, "grid": 0.05},
         "energy": dict(ENERGY_DEFAULTS),

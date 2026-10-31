@@ -23,6 +23,7 @@ from .const import (
     DATA_PACK_UPDATES,
     DATA_VOICE,
     DOMAIN,
+    PROTOCOL,
     SIGNAL_ASK,
     SIGNAL_BUILDING_UPDATED,
     SIGNAL_HOMES_UPDATED,
@@ -46,7 +47,7 @@ from .packs import (
 from .racks import RackError
 from .sample import SAMPLE_NAME, load_sample
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
-from .storage import FloorplanData, Home, HomesError, RevisionConflict, complete
+from .storage import FloorplanData, Home, HomesError, PlanReadOnly, RevisionConflict, check_plan
 from .timetravel import ws_timetravel_history
 from .voice import SENTENCE_MODES, AskBroker, VoiceSettings
 
@@ -153,6 +154,8 @@ async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveC
     if (home := _home(hass, connection, msg)) is None:
         return
     integration = await async_get_integration(hass, DOMAIN)
+    # what is wrong with the stored plan (#165): one this Home 3D cannot read is shown read-only
+    problem = {"problem": home.problem} if home.problem is not None else {}
     connection.send_result(
         msg["id"],
         {
@@ -162,8 +165,11 @@ async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveC
             "home_id": home.id,
             "home_name": home.name,
             "version": str(integration.version),
+            # which commands it understands (#166, const.PROTOCOL)
+            "protocol": PROTOCOL,
             # whether this user is on the editors list (#7); the backend checks every change again
-            "can_edit": can_edit(hass, connection.user),
+            "can_edit": can_edit(hass, connection.user) and not home.read_only,
+            **problem,
             **await _async_build(hass),
         },
     )
@@ -181,7 +187,9 @@ async def ws_version(hass: HomeAssistant, connection: websocket_api.ActiveConnec
     """The running integration version and the frontend build on disk (#60): an open page asks again when its
     websocket reconnects and offers a reload when it runs older JavaScript."""
     integration = await async_get_integration(hass, DOMAIN)
-    connection.send_result(msg["id"], {"version": str(integration.version), **await _async_build(hass)})
+    connection.send_result(
+        msg["id"], {"version": str(integration.version), "protocol": PROTOCOL, **await _async_build(hass)}
+    )
 
 
 @websocket_api.websocket_command(
@@ -238,6 +246,14 @@ async def ws_save_building(
         return
     except RevisionConflict as err:
         connection.send_error(msg["id"], "conflict", str(err))
+        return
+    except PlanReadOnly as err:
+        # the stored plan is one this Home 3D cannot read (#165): never written over by a save
+        connection.send_error(msg["id"], "read_only", str(err))
+        return
+    except HomesError as err:
+        # the home was deleted while the save waited (#167)
+        connection.send_error(msg["id"], err.code, err.detail)
         return
     except RackError as err:
         # rack gear where it does not fit (#113): the editor refuses it too, so only an outdated or foreign client
@@ -376,8 +392,18 @@ async def ws_history_restore(
     if building is None:
         connection.send_error(msg["id"], "not_found", "Restore point not found")
         return
+    # a restore point holds an older plan: brought to the current version and checked like a stored one (#165), in
+    # the executor (#176)
+    building, problem = await hass.async_add_executor_job(check_plan, building)
+    if problem is not None and problem["code"] != "plan_repaired":
+        connection.send_error(msg["id"], "invalid_format", problem["message"])
+        return
     missing = home.missing_images(building)
-    revision = await home.async_restore(await hass.async_add_executor_job(complete, building))
+    try:
+        revision = await home.async_restore(building)
+    except HomesError as err:
+        connection.send_error(msg["id"], err.code, err.detail)
+        return
     connection.send_result(msg["id"], {"revision": revision, "missing_pictures": len(missing)})
 
 
@@ -756,13 +782,14 @@ def _checked_backup(
     """Check a backup without the event loop (#176): its homes, its single building (a backup from before #53), the
     packs whose content validates, the custom items that do, and what was skipped. Raises vol.Invalid for plans that
     do not validate."""
-    homes = [{**h, "building": complete(BUILDING_SCHEMA(h["building"]))} for h in msg.get("homes", [])]
+    # an older plan is brought to the current version first (#165, BUILDING_SCHEMA migrates)
+    homes = [{**h, "building": BUILDING_SCHEMA(h["building"])} for h in msg.get("homes", [])]
     if not homes and "building" not in msg:
         raise vol.Invalid("a backup has a building or homes")
     if len({h["id"] for h in homes}) != len(homes):
         raise vol.Invalid("a backup names each home once")
     # with homes the building at the top is the active home's again (for older versions): not needed
-    building = complete(BUILDING_SCHEMA(msg["building"])) if not homes else None
+    building = BUILDING_SCHEMA(msg["building"]) if not homes else None
     checked: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     for entry in msg.get("packs", []):
@@ -1009,7 +1036,7 @@ async def ws_homes_load_sample(
     while name in taken:
         number += 1
         name = f"{SAMPLE_NAME} {number}"
-    building = await hass.async_add_executor_job(lambda: complete(load_sample()))
+    building = await hass.async_add_executor_job(lambda: BUILDING_SCHEMA(load_sample()))
     home = await data.async_create_home(name, building, area_import=False, demo=True)
     _send_homes(data, connection, msg, home=home.info())
 

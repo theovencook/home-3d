@@ -1260,8 +1260,21 @@ export interface PresenceLink {
   sensor: string | null;
 }
 
+/**
+ * The plan format this frontend writes (#165): a new plan gets it. The backend brings every older plan up to its own
+ * version (custom_components/home_3d/migrations.py) before anyone sees it; the frontend never changes the version of a
+ * plan it was given, so a plan it saves is migrated again where needed (an older backend keeps a version-1 plan).
+ */
+export const PLAN_VERSION = 2;
+
+/** Whether `version` is one of a plan this frontend reads (1 up to PLAN_VERSION). */
+export function knownPlanVersion(version: unknown): version is number {
+  return Number.isInteger(version) && (version as number) >= 1 && (version as number) <= PLAN_VERSION;
+}
+
 export interface Building {
-  version: 1;
+  /** The plan format (#165), see PLAN_VERSION. */
+  version: number;
   floors: Floor[];
   settings: BuildingSettings;
   energy: EnergySettings;
@@ -1291,7 +1304,7 @@ export const DEFAULT_ROOF: RoofSettings = { type: "none", pitch: 35, overhang: 0
 export const DEFAULT_SETTINGS: BuildingSettings = { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05, north: 0, roof: { ...DEFAULT_ROOF } };
 
 export function emptyBuilding(): Building {
-  return { version: 1, floors: [], settings: { ...DEFAULT_SETTINGS }, energy: { ...DEFAULT_ENERGY }, presence: [] };
+  return { version: PLAN_VERSION, floors: [], settings: { ...DEFAULT_SETTINGS }, energy: { ...DEFAULT_ENERGY }, presence: [] };
 }
 
 export function newFloor(id: string, name: string, elevation: number): Floor {
@@ -2007,7 +2020,10 @@ export function openingPreset(o: Pick<Opening, "type" | "leaves" | "sill" | "sty
   return two ? "window_double" : "window";
 }
 
-/** Fill fields added in later versions so older saved buildings keep working. */
+/**
+ * Fill fields added in later versions so older saved buildings keep working. Since #165 the backend migrates every plan
+ * (migrations.py); this stays as a defence for old export files and older backends: keep it, but add no new rules here.
+ */
 export function normalizeBuilding(b: Building): Building {
   b.energy = { ...DEFAULT_ENERGY, ...(b.energy ?? {}) };
   b.presence = b.presence ?? [];

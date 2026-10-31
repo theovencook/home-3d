@@ -5,6 +5,13 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+### Plan format version, contract and failure cases (#165, #166, #167)
+
+- **Plans carry a real format version (now 2)** and Home Assistant brings older plans up to date when it loads them, and when a save, a backup, an imported plan or a restore point brings one in; voice, time travel and the sensors see the same plan as the editor. Lights placed as devices become lamps on the server (keeping their name, aliases, actions and marker). The plan as stored before stays as a restore point.
+- **One contract for both sides (#166):** a plan with every field of the format (`frontend/src/plan-contract.fixture.ts`, copied to `tests/fixtures/contract/plan.json`) is checked against the TypeScript model and the Python schema, and the websocket commands are listed in `tests/fixtures/contract/websocket.json`, which the frontend's calls are checked against. Eight fields the editor already saved but the server did not check yet (a door's lock, a radiator's heat sensor, a lamp's only colour, the running watts, a camera look's camera, a camera's own detection sensors, the household notes list, the editor's opening floor) are now checked. `building/get` and `version` report a websocket `protocol` number.
+- **A stored plan that does not validate is no longer passed on as it is:** its invalid parts are left out, named in a notice, with the plan as it was kept as a restore point. A plan beyond repair, or one saved by a newer Home 3D, is shown read-only with a notice and never written over; a restore point or a backup can still replace it.
+- **Saves and deletes in failure cases (#167):** a save whose write fails leaves the plan and its revision as they are on disk (and tells no open view of a change that was not stored); deleting a home waits for a save that is running and refuses one that comes after, so no store of a deleted home is written again.
+
 ### No more Pro layer (#204)
 
 - **Plain names, no gates:** "Household Pro", "Energy Pro", "Car Pro" and the other names from the upstream paid shop are gone from the screens (English and German; the other languages follow). Bins and household, Energy, Car and the camera cockpit are simply part of Home 3D: no feature flags, no padlocks, no "not available" hints, no "Built-in features" list on the Extensions page.

@@ -242,6 +242,9 @@ class PackUpdates:
         packs = self.data.offered_packs
         merged: dict[str, dict[str, Any]] = {}
         for home in self.data.homes.values():
+            # a plan this Home 3D cannot read (#165) is never updated, so it lists nothing
+            if home.read_only:
+                continue
             for item in pending_items(home.building, packs):
                 if (seen := merged.get(item["type"])) is None:
                     merged[item["type"]] = {**item, "homes": [home.id]}

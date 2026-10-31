@@ -165,7 +165,7 @@ export class BackupPart {
       building = migratePlanTypes(parseExport(await file.text()));
     } catch (err) {
       const code = (err as Error).message;
-      await this.tell(code === "not_json" ? this.t("import_error_not_json") : code === "not_plan" ? this.t("import_error_not_plan") : this.t("backup_import_error", { error: code }));
+      await this.tell(code === "not_json" ? this.t("import_error_not_json") : code === "not_plan" ? this.t("import_error_not_plan") : code === "plan_too_new" ? this.t("import_error_too_new") : this.t("backup_import_error", { error: code }));
       return;
     }
     if (!(await this.ask(this.t("backup_import_confirm"), this.t("ask_ok")))) return;

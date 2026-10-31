@@ -1132,6 +1132,12 @@ export class Floorplan3dPanel extends LitElement {
     if (d.needsRestart && d.versionGap !== "frontend") {
       notices.push(html`<div class="fp3d-notice fp3d-notice-warn">${d.backendVersion ? this.t("needs_restart", { version: d.backendVersion, frontend: d.frontendVersion }) : this.t("needs_restart_old")}</div>`);
     }
+    // a stored plan the backend repaired or cannot read (#165)
+    const problem = d.planProblem;
+    if (problem && !this._tablet) {
+      const text = problem.code === "plan_repaired" ? this.t("plan_repaired", { parts: (problem.dropped ?? []).length }) : problem.code === "plan_too_new" ? this.t("plan_too_new") : this.t("plan_invalid", { error: problem.message });
+      notices.push(html`<div class="fp3d-notice fp3d-notice-${problem.code === "plan_repaired" ? "warn" : "error"}" role="status">${text}</div>`);
+    }
     if (d.saveState === "error" && d.saveError) {
       notices.push(html`<div class="fp3d-notice fp3d-notice-error">${this.t("save_failed_detail", { error: d.saveError })}</div>`);
     }
