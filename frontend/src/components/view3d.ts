@@ -170,6 +170,7 @@ import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
 import { activateKey } from "../activate-key.ts";
 import { callServiceSafe } from "../failure.ts";
+import { forwardHass, HASS_CHILDREN, HassWatch } from "../hass-watch.ts";
 import type { BinCue, DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SoundSource, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 import { wallLayout } from "../camera-wall.ts";
 import { watchedEntities } from "../watched.ts";
@@ -190,6 +191,9 @@ import "./ask-dialog.ts";
 import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
 import { forecastCurvePath, forecastSplit, solarMoreRows, solarPrefsInfo, type SolarForecast, type SolarPrefsInfo } from "../solar-more.ts";
 import { isPhoneWidth, NO_FIT_MARGIN, PHONE_FIT_MARGIN, PHONE_MEDIA, thumbsCompact } from "../phone.ts";
+
+/** Walking through the house (and the pets' floor map) is a chunk of its own (#179): it needs no three.js. */
+const loadWalk = () => import("../viewer/walk.ts");
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 /** "room": no symbols in the house and floor views, in a room only that room's (D477, D595). */
@@ -360,7 +364,22 @@ export class Fp3dView3d extends LitElement {
     _info: { state: true },
   };
 
-  declare hass: HomeAssistant;
+  /**
+   * Home Assistant as handed in; `hass` reads it through `hassWatch` during an update (#177): its render and the
+   * director note the states they read. Elements it draws get the plain object.
+   */
+  private rawHass: HomeAssistant | undefined;
+  private readonly hassWatch = new HassWatch({ entityLists: false });
+
+  get hass(): HomeAssistant {
+    const h = this.rawHass;
+    return (h && this.hassWatch.recording ? this.hassWatch.wrap(h) : h) as HomeAssistant;
+  }
+
+  set hass(value: HomeAssistant) {
+    this.rawHass = value;
+  }
+
   declare building: Building | null;
   /** On the editors list (#7): may change the plan's settings from the view. Unset: admins may (a backend before #7). */
   declare canEdit: boolean | undefined;
@@ -1085,7 +1104,41 @@ export class Fp3dView3d extends LitElement {
     void this.start();
   }
 
+  /**
+   * A new `hass` that changes no state the last update read and none the 3D scene shows (most of the several a second
+   * on a wall tablet) skips the whole update (#177): render, device sync and director. The quick menu, the microphone
+   * probe and a camera's live player still get it, as a render would have handed it to them.
+   */
+  protected shouldUpdate(changed: PropertyValues): boolean {
+    const old = changed.get("hass") as HomeAssistant | undefined;
+    const hass = this.rawHass;
+    // a replay ticks with updates of its own: it is never skipped
+    if (changed.size !== 1 || !changed.has("hass") || !old || !hass || this.replay || this.hassWatch.matters(old, hass)) return true;
+    if (old.states !== hass.states) {
+      // what the scene shows (syncDevices notes no reads, see there): the watched entities and the items shown only
+      // while a state holds (#15)
+      if (this.watched.some((id) => old.states[id] !== hass.states[id])) return true;
+      const b = this.building;
+      if (b && this.shownPlan?.from === b && hiddenItems(b, hass.states, new Date()).join("|") !== this.shownPlan.hidden) return true;
+    }
+    forwardHass(this.renderRoot, HASS_CHILDREN["components/view3d.ts"], [[old, hass]]);
+    if (this.live?.el) this.live.el.hass = hass;
+    return false;
+  }
+
+  /** The update ends here (after `updated`): see willUpdate. */
+  protected performUpdate(): void {
+    try {
+      super.performUpdate();
+    } finally {
+      this.hassWatch.end();
+    }
+  }
+
   protected willUpdate(changed: PropertyValues): void {
+    // the states read from here to the end of `updated` decide whether the next hass needs an update (#177); an update
+    // without a new hass runs only part of that work, so it adds to what the last one read
+    this.hassWatch.begin(!changed.has("hass"));
     // this bundle's own copy of the ground: lamps and markers on a sloped lawn sit on it
     if (changed.has("building")) {
       setTerrain(this.building ?? null);
@@ -1099,7 +1152,7 @@ export class Fp3dView3d extends LitElement {
     // the chrome goes light with the Day look (#85): the shared tokens read the attribute, nested parts inherit it
     if (changed.has("hass") || changed.has("theme")) this.toggleAttribute("light", lightChrome(this.effectiveTheme()));
     if (changed.has("plan2d") && changed.get("plan2d") !== undefined) this.switchViewer();
-    if (changed.has("hass") && this.live?.el) this.live.el.hass = this.hass;
+    if (changed.has("hass") && this.live?.el) this.live.el.hass = this.rawHass;
     if (changed.has("hass")) this.watchAsk();
     // the star menu closes when a room or another floor is chosen (#220)
     if (this._central && ((changed.has("roomId") && changed.get("roomId") !== undefined) || (changed.has("floorId") && changed.get("floorId") !== undefined))) this._central = false;
@@ -1207,6 +1260,9 @@ export class Fp3dView3d extends LitElement {
    * the building or the entity registry changes.
    */
   private syncDevices(force: boolean, timed = false): void {
+    // a sync during an update notes no reads (#177): whether a new hass needs one is `watched` (shouldUpdate checks it),
+    // and a full sync reads far more states than it shows (the locating goes through all of them)
+    if (this.hassWatch.recording) return this.hassWatch.pause(() => this.syncDevices(force, timed));
     const v = this.viewer;
     const full = this.building;
     if (!v || !full || !this.hass) return;
@@ -4514,12 +4570,12 @@ export class Fp3dView3d extends LitElement {
     if (this.petsLoading) return;
     this.petsLoading = true;
     try {
-      const [fun, mod] = await Promise.all([loadFun(), load3d()]);
+      const [fun, mod, walk] = await Promise.all([loadFun(), load3d(), loadWalk()]);
       if (!this.viewer || this.plan2d || this.pets) return;
       this.petsFor = this.building;
       this.pets = fun.startPets({
         lib: mod.funLib,
-        FloorMap: mod.FloorMap,
+        FloorMap: walk.FloorMap,
         viewer: this.viewer as never,
         building: this.building!,
         pets: this.building?.settings.pets?.on !== false && this.petsOn !== false ? (this.building?.settings.pets?.list ?? []) : [],
@@ -4585,7 +4641,7 @@ export class Fp3dView3d extends LitElement {
     const byRoom = this.roomId ? withRooms.find((f) => f.rooms.some((r) => r.id === this.roomId)) : undefined;
     const floor = byRoom ?? withRooms.find((f) => f.id === this.floorId) ?? [...withRooms].sort((x, y) => Math.abs(x.elevation) - Math.abs(y.elevation))[0];
     if (!floor) return;
-    const mod = await load3d();
+    const walk = await loadWalk();
     this._walk = { room: null, hint: true };
     await this.updateComplete;
     const surface = this.renderRoot.querySelector<HTMLElement>(".fp3d-walk-surface");
@@ -4593,14 +4649,14 @@ export class Fp3dView3d extends LitElement {
     // the floor alone, its walls whole (the view's floor and wall mode come back afterwards)
     v.setFloor(floor.id, false);
     v.setWallMode("auto");
-    const map = new mod.FloorMap(b, floor);
+    const map = new walk.FloorMap(b, floor);
     const room = this.roomId ? floor.rooms.find((r) => r.id === this.roomId) : undefined;
     let start;
     if (room) {
       const c = map.freeNear(centroid(room.points));
       start = { x: c[0], z: c[1], yaw: map.openYaw(c), pitch: -0.05 };
     }
-    this.walker = new mod.WalkCamera(v as never, map, surface, {
+    this.walker = new walk.WalkCamera(v as never, map, surface, {
       start,
       onRoom: (r) => {
         this.walkRoomPts = r?.points ?? null;
@@ -5956,7 +6012,7 @@ export class Fp3dView3d extends LitElement {
       <fp3d-quick-menu
         style="left:${left}px;top:${top}px"
         ?low=${this._low}
-        .hass=${this.hass}
+        .hass=${this.rawHass}
         .entity=${m.entity}
         .car=${m.car ?? null}
         ?doorLock=${!!m.doorLock}
@@ -6357,7 +6413,7 @@ export class Fp3dView3d extends LitElement {
       ${this.renderMenu()} ${this.renderEye()}
       ${this.renderMic()}
       ${this.pivotMark && !this._walk ? html`<span class="fp3d-pivot" aria-hidden="true"></span>` : nothing}
-      ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.hass} .building=${this.building} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
+      ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.rawHass} .building=${this.building} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
       ${this.showStats && this._stats
         ? html`<span class="fp3d-stats"
             ><b>${this._stats.fps ? translate(this.hass, "stats_fps", { fps: this._stats.fps, ms: this._stats.worstMs }) : translate(this.hass, "stats_idle")}</b>

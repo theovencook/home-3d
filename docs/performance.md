@@ -366,3 +366,101 @@ Measured 30 Oct 2026, before (integration @ `b650ade`) and after the #131 change
 
 - A real wall tablet and its GPU, and a live Home Assistant home.
 - The editor itself with 3D beside open: the harness drives the 3D view directly with the documents the editor would hand over.
+
+## View mode: no render for a state the view does not show (#177)
+
+Measured 31 Oct 2026, before (integration @ `08ad7c1`) and after the #177 change, on the same local plans. No Home Assistant was involved.
+
+### What changed
+
+- **The panel, the card and the 3D view note the states they read** while they render (`hass-watch.ts`, as the editor does since #130). A new `hass` that changes none of them skips the update. Before, each of the several updates a second ran the panel's and the view's whole Lit update: `render()`, `updated()`, the device sync's change check and the director.
+- **The 3D view also checks what its scene shows**: the entities it already watches (`watched`, the list the device sync compares) and the items shown only while a state holds (#15). The device sync itself notes no reads, because it goes through every state for the locating. Whether it runs is still decided by `watched`, as before.
+- **A skipped render still hands the new `hass` on** to every element it draws with one: the 3D view, the room panel, the editor, the quick menu and so on (`HASS_CHILDREN`, which a test checks against the sources). The plan's loader and the night dimming still get it too. Children decide for themselves, so the room panel still follows its own lights.
+- **Always renders:** a change to the registry, language, theme or user; anything while travelling in time; and a demo home whose demo devices turned real.
+- **The check is cheap.** It compares the plain objects under the proxies, and the panel, card and view skip the "did an entity come or go" pass over all ~5,000 states, which costs about 0.35 ms each time. The editor keeps that pass, because its entity lists depend on it.
+
+### Method
+
+- The browser check committed with #178 (`npm run speed`, `frontend/scripts/browser-check.mjs`): headless Edge (Chromium) through puppeteer with the desktop GPU, a 1280 x 800 page at DPR 1, and real CPU throttling (`Emulation.setCPUThrottlingRate`) at 1x and 4x. It mounts the shipped `home-3d-panel` from the built bundles with a fake `hass` of about 5,000 states: the plan's own entities plus 4,900 filler sensors.
+- **Plans:** the shipped sample home (110 items, 2 floors, 71 watched entities), and the #131 harness's large plan (514 items, 2 floors). The large plan stays local and is not in the repository.
+- **Background load:** 6 s at 5 `hass` updates a second, in the View tab. Each update changes one filler sensor that no plan links. In the "1 in 5 watched" run, every fifth update changes a sensor or light the plan shows instead. Each run counts the panel's and the view's renders and the time spent in their Lit updates (`performUpdate`, which also runs for a skipped update), plus long animation frames.
+- **Selection:** 15 presses each on a linked and a plain item in the editor's plan, timed to the updated panel painted, as in #130.
+- Before and after alternated, 2 rounds. The tables show the range over both rounds.
+
+### Results
+
+| Measure | Before 1x | After 1x | Before 4x | After 4x |
+|---|---|---|---|---|
+| Unwatched states: panel renders | 4.9 /s | **0** | 2.3 to 4.1 /s | **0** |
+| Unwatched states: 3D view renders | 4.9 /s | **0** | 2.3 to 4.1 /s | **0** |
+| Unwatched states: panel + view update time | 2.2 to 2.6 ms/s | **0.9 to 1.3 ms/s** | 6.5 to 13.0 ms/s | **2.5 to 4.0 ms/s** |
+| 1 in 5 watched: panel renders | 4.8 to 4.9 /s | **0** | 3.9 to 4.7 /s | **0** |
+| 1 in 5 watched: 3D view renders | 5.8 to 6.0 /s | **1.9 to 2.1 /s** | 4.8 to 5.7 /s | **1.7 to 1.9 /s** |
+| 1 in 5 watched: 3D view update time | 13.6 to 14.6 ms/s | 14.2 to 15.4 ms/s | 60 to 86 ms/s | 65 to 90 ms/s |
+| Editor selection, linked item | 14.9 to 15.9 ms | 15.2 to 17.4 ms | 94 to 124 ms | 97 to 104 ms |
+| Editor selection, plain item | 9.8 to 12.2 ms | 10.2 to 11.3 ms | 60 to 77 ms | 59 to 76 ms |
+| Load, sample home: ready | 1,023 to 1,634 ms | 1,046 to 1,611 ms | 3,341 to 3,399 ms | 3,057 to 3,604 ms |
+
+### Findings
+
+- **Idle view mode no longer renders.** At 4x, the panel and the view spend a third to a fifth of the time they did before. What is left is the check itself and the hand-on to their children: about 0.2 ms per update for the panel and the view together at 1x.
+- **The cost was smaller than the review expected.** Before, the panel's and the view's renders cost about 2.5 ms/s at 1x and 6 to 13 ms/s at 4x on these plans. PERF-2 estimated "a few tens of ms/s". The view's `render()` turned out to be cheap, because its heavy work (`syncDevices`) already ran only when a watched entity changed. The saving grows with what the panel draws (room panel, energy cards, time bar) and with slower tablets.
+- **A watched sensor still costs the same.** When a light or sensor on the plan changes, the view updates, and the paced device sync (#131) does the real work. With one watched change a second, the view now renders about twice a second instead of 5 to 6 times.
+- **Selection and load are unchanged** within the noise between runs. The 4x linked-selection worst case was 612 ms in one "before" run and at most 150 ms after, but that is a single outlier.
+- **Hot path:** every `hass` update now runs `shouldUpdate` in the panel, the card and the 3D view: one pass over the hass keys, the watched ids (about 270 on the large plan) and the plan's show-when items. Selection and the 3D frame are not touched.
+
+### Not measured
+
+- A real wall tablet, and a live Home Assistant with its real update rate.
+- The card on a dashboard. It uses the same code as the panel; the unit tests cover it.
+
+## Bundle sizes: what every page and a wall tablet load (#179)
+
+Measured 31 Oct 2026 with `npm run build` (the budgets it checks) on integration @ `08ad7c1` plus #177, before and after the #179 change. Gzip is level 9, which is about what Home Assistant sends.
+
+### What changed
+
+- **The 3D view is a lazy chunk of the main bundle.** Home Assistant loads `home-3d.js` on every page for every user, so that the card is known on any dashboard. The 3D view element (`components/view3d.ts` and the modules only it uses, such as the quick menu, the household and the alerts) used to be about 300 KB of it. It now loads when the panel or a card connects (`load-view.ts`), and both draw `<fp3d-view3d>` at once: the element takes its properties when its code arrives. The main build uses esbuild's code splitting. Modules that the main bundle and its chunks share sit in shared chunks (`home-3d-chunk-<hash>.js`), so there is still one pack registry and one language table. Chunk names carry their content hash.
+- **Walking through the house is a lazy chunk too** (`viewer/walk.ts`, about 10 KB). It needs no three.js and used to sit in the 3D bundle. It loads when someone starts walking or when the pets start.
+- **three.js's shaders are shrunk at build time** (`glsl-shrink.ts`): indentation, blank lines and comments go. Preprocessor lines keep their spaces, and any text with a line continuation or a block comment is left alone.
+- **Budgets:** each file has a raw budget and the files a wall tablet waits for also have a gzip budget. Two paths are budgeted as wholes, each file with everything it imports: "every page" (the main bundle and its shared chunks) and "wall tablet" (plus the 3D view chunk and the 3D bundle). A module moved from one bundle to another therefore still counts. A lazy chunk without a budget fails the build. `npm run build -- --report` lists the 15 biggest inputs of each bundle, and CI runs it, so a raise can name what grew. No budget went up.
+
+### Results
+
+| | Before | After | Budget now |
+|---|---|---|---|
+| `home-3d.js` | 693.4 KB (216.2 KB gzip) | **130.2 KB** (34.9 KB gzip) | 145 KB / 45 KB gzip (was 695 KB) |
+| Every page: main bundle with its imports | 693.4 KB (216.2 KB gzip) | **385.9 KB** (128.2 KB gzip) | 410 KB / 140 KB gzip |
+| 3D view chunk | (in `home-3d.js`) | 312.3 KB (91.5 KB gzip) | 335 KB / 100 KB gzip |
+| Walking chunk | (in `home-3d-3d.js`) | 9.7 KB | 16 KB |
+| `home-3d-3d.js` | 895.2 KB (262.9 KB gzip) | **875.6 KB** (258.0 KB gzip) | 900 KB / 280 KB gzip (unchanged raw) |
+| Wall tablet: main + view + 3D with their imports | 1,588.6 KB (479.1 KB gzip) | 1,573.7 KB (477.8 KB gzip) | 1,630 KB / 500 KB gzip |
+
+- **Every Home Assistant page** now loads 386 KB of Home 3D instead of 693 KB, 44% less, and parses that much less JavaScript. This counts on every dashboard and phone, not only where the house shows.
+- **The 3D bundle** gained 24 KB of headroom: 10 KB from the shaders and 10 KB from walking. three.js itself is 538 KB of it, and a bare `WebGLRenderer` alone is about 517 KB, so tree-shaking three.js has little left to win.
+- **A wall tablet** loads about the same as before (15 KB less), in two more files: the shared chunks and the view chunk. They come from the same server as the main bundle, and the 3D bundle was already a request of its own.
+
+### Not measured
+
+- How long a real wall tablet takes to parse the main bundle before and after. On the desktop the headless check (`npm run speed`, sample home, 2 runs each) showed no change in panel load: ready after 973 to 1,028 ms before and 933 to 1,042 ms after. Editor selection was also unchanged, at 14 to 16 ms for a linked item.
+
+## The browser check: smoke test in CI and a repeatable speed check (#178)
+
+`frontend/scripts/browser-check.mjs` loads the shipped bundles (`custom_components/home_3d/frontend`, as `npm run build` left them) in headless Chrome, Chromium or Edge through puppeteer-core. It mounts `home-3d-panel` with a fake Home Assistant (`scripts/browser-check/fake-hass.js`). That fake has the plan's entities plus 4,900 filler sensors, answers the `home_3d/*` websocket calls from one plan, and keeps nothing. The plan is the shipped sample home unless `--plan` names another.
+
+- **`npm run smoke`** (CI, after the build) shows the house and sends 2 s of `hass` updates. It walks through the house, switches every look (each compiles its shaders), opens the 2D plan, the Extensions tab and the item editor, the Settings tab and the editor, and presses items in the plan. It fails on any console error, page error, failed request or HTTP error, and when the panel or the 3D view renders for a state they do not show (#177). WebGL is drawn with SwiftShader, so no GPU is needed. Its times are printed but not gated: SwiftShader draws every frame on the CPU.
+- **`npm run speed`** (and `npm run speed -- --throttle 4`) uses the machine's GPU and measures what earlier rounds measured by hand: load, 6 s of background load in view mode (unwatched states, and 1 change in 5 watched), and 15 editor selections each of a linked and a plain item. It fails past its limits, which are about 3x today's numbers on the sample home. Other options: `--json` (one line, for scripts), `--bundles <dir>` (another build, for before/after runs), `--browser <path>` (or `HOME3D_BROWSER`) and `--swiftshader`.
+
+Today's numbers (31 Oct 2026, this desktop, sample home, integration @ `08ad7c1` plus #177 and #179):
+
+| Measure | 1x | 4x | Limit 1x / 4x |
+|---|---|---|---|
+| Load: ready (plan built, shaders compiled) | 0.9 to 1.6 s | 3.1 to 3.6 s | 5 / 15 s |
+| View mode, unwatched states: panel / 3D view renders | 0 / 0 | 0 / 0 | 0.5 /s |
+| View mode, unwatched states: panel / 3D view update time | 0.5 to 0.7 / 0.3 to 0.4 ms/s | 2.1 to 2.5 / 1.4 to 1.6 ms/s | 5 / 20 ms/s each |
+| Editor selection, linked item (median) | 14 to 17 ms | 95 to 103 ms | 50 / 300 ms |
+| Editor selection, plain item (median) | 9 to 11 ms | 59 to 66 ms | 35 / 200 ms |
+
+**Headless against live.** A live speed run in the built-in browser pane on the real install measured an editor selection at about 60 ms, against 15 to 18 ms here. Most of the difference is the forced layout in the editor's `updated()`: the `.fp3d-side` scroll reset (#71) costs 35 to 45 ms there, inside Home Assistant's own page with its sidebar, header and theme styles, against a few ms on this bare page. #130 found that removing the reset only moves that layout into the next frame. Compare runs of the same kind only: headless with headless, live with live. The headless check catches regressions in Home 3D's own code. It does not stand in for the live speed check.
+
+Not covered: a real wall tablet, a live Home Assistant, the time travel, the phone layouts and touch.

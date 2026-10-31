@@ -1,11 +1,24 @@
-// Builds the two bundles into custom_components/home_3d/frontend and checks the size budgets.
+// Builds the bundles into custom_components/home_3d/frontend and checks the size budgets.
+// `node build.mjs --report` also lists the 15 biggest inputs of each bundle (#179), so growth is put down to a module.
 
 import { build, context } from "esbuild";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { gzipSync } from "node:zlib";
+import { shrinkThreeShaders } from "./src/glsl-shrink.ts";
 
 const out = "../custom_components/home_3d/frontend";
 const watch = process.argv.includes("--watch");
+const report = process.argv.includes("--report");
+
+// three.js keeps its shaders as readable text (indented, with comments): about 117 KB of the 3D bundle. They are
+// shrunk as they are bundled (#179, src/glsl-shrink.ts); the shaders compile the same.
+const shrinkShaders = {
+  name: "shrink-three-shaders",
+  setup(b) {
+    b.onLoad({ filter: /[\\/]three[\\/]build[\\/]three\.module\.js$/ }, (args) => ({ contents: shrinkThreeShaders(readFileSync(args.path, "utf8")).code, loader: "js" }));
+  },
+};
 
 const common = {
   bundle: true,
@@ -17,6 +30,8 @@ const common = {
   sourcemap: false,
   legalComments: "none",
   logLevel: "info",
+  metafile: true,
+  plugins: [shrinkShaders],
 };
 
 const viewerConfig = { ...common, entryPoints: ["src/viewer/viewer3d.ts"], outfile: `${out}/home-3d-3d.js` };
@@ -68,10 +83,17 @@ const buildId = (() => {
   return h.digest("hex").slice(0, 12);
 })();
 // `hashes`: the content hash of each bundle it loads, by name (viewer, editor, cardEditor, timeTravel, fun, voice, locate, plan2d, settings)
+// Home Assistant loads the main bundle on every page (the card must be known on any dashboard), so the 3D view element
+// (components/view3d.ts, the biggest part) is a chunk of its own (#179): it loads where the panel or a card shows.
+// Chunks share the main bundle's modules (one pack registry, one language table: modules several of them use are in
+// shared chunks, home-3d-chunk-<hash>.js); a chunk's name carries its content hash, so it is never taken stale.
+const CHUNK = /^home-3d-[\w]+-[A-Z0-9]{8}\.js$/;
 const mainConfig = (hashes) => ({
   ...common,
-  entryPoints: ["src/main.ts"],
-  outfile: `${out}/home-3d.js`,
+  entryPoints: { "home-3d": "src/main.ts" },
+  outdir: out,
+  splitting: true,
+  chunkNames: "home-3d-[name]-[hash]",
   define: {
     __FP3D_VIEWER_HASH__: JSON.stringify(hashes.viewer),
     __FP3D_EDITOR_HASH__: JSON.stringify(hashes.editor),
@@ -116,26 +138,74 @@ function copyFonts() {
 // with a reason in this comment, and keep new strings' growth in the bundle that uses them.
 // #139: home-3d.js was already at 683.7 KB on integration (over its 680 KB) before the Settings tab; raised to 695 KB
 // for the tab, its loader and the "All settings" links (the page itself and its texts are a bundle of their own).
-const BUDGET = { "home-3d.js": 695 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 975 * 1024, "home-3d-card-editor.js": 160 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 120 * 1024 };
+// #179: the 3D view and walking through the house are chunks of the main bundle, named here without the hash in their
+// file name (home-3d-view3d-<hash>.js); shared chunks are counted in the paths below. home-3d.js went from 693 KB to
+// 130 KB, and every Home Assistant page loads 386 KB (with its shared chunks) instead of 693 KB. three.js's shaders
+// are shrunk and walking left the 3D bundle (895 -> 876 KB). No budget went up. GZIP_BUDGET: as sent, for the files a
+// wall tablet waits for.
+const BUDGET = { "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 975 * 1024, "home-3d-card-editor.js": 160 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 120 * 1024 };
+const GZIP_BUDGET = { "home-3d.js": 45 * 1024, "home-3d-view3d.js": 100 * 1024, "home-3d-3d.js": 280 * 1024 };
+
+// What is loaded before something shows, raw and as sent (gzip), with everything those files import (#179): a module
+// moved from one bundle to another does not slip through. Every page of Home Assistant loads the main bundle; a wall
+// tablet showing the house (the panel or a card) loads the 3D view and the 3D bundle on top.
+const PATHS = {
+  "every page": { files: ["home-3d.js"], raw: 410 * 1024, gzip: 140 * 1024 },
+  "wall tablet": { files: ["home-3d.js", "home-3d-view3d.js", "home-3d-3d.js"], raw: 1630 * 1024, gzip: 500 * 1024 },
+};
+
+/** The file a budget name stands for: a chunk's is found by its name without the hash. */
+function shippedFile(name) {
+  if (existsSync(`${out}/${name}`)) return name;
+  const stem = name.replace(/\.js$/, "-");
+  return readdirSync(out).find((f) => CHUNK.test(f) && f.startsWith(stem)) ?? name;
+}
+
+/** `files` and every file they import (not the lazy imports), by esbuild's metafiles. */
+function withImports(metafiles, files) {
+  const outputs = Object.fromEntries(metafiles.flatMap((m) => Object.entries(m.outputs)).map(([path, o]) => [path.split("/").pop(), o]));
+  const seen = new Set();
+  const visit = (file) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    for (const i of outputs[file]?.imports ?? []) if (i.kind === "import-statement") visit(i.path.split("/").pop());
+  };
+  files.forEach(visit);
+  return [...seen];
+}
+
+/** The biggest inputs of a bundle, from esbuild's metafile. */
+function topInputs(metafile, file, n = 15) {
+  const output = Object.entries(metafile.outputs).find(([path]) => path.endsWith(`/${file}`))?.[1];
+  if (!output) return [];
+  return Object.entries(output.inputs)
+    .map(([path, v]) => [path, v.bytesInOutput])
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n);
+}
 
 copyFonts();
 if (watch) {
   // in watch mode the hash is not tracked; a dev reload fetches the bundle anyway
   for (const c of [viewerConfig, itemsConfig("dev"), editorConfig("dev", "dev", "dev"), cardEditorConfig, timeTravelConfig, funConfig, voiceConfig, locateConfig, plan2dConfig, settingsConfig, mainConfig(Object.fromEntries(HASHED.map((name) => [name, "dev"])))]) await (await context(c)).watch();
 } else {
-  await build(viewerConfig);
-  await build(locateConfig);
+  // the main bundle's chunks of an earlier build go (their names change with their content)
+  for (const f of readdirSync(out)) if (CHUNK.test(f)) rmSync(`${out}/${f}`);
+  const metafiles = [];
+  const run = async (config) => metafiles.push((await build(config)).metafile);
+  await run(viewerConfig);
+  await run(locateConfig);
   const items = itemsConfig(hashOf(viewerConfig.outfile));
-  await build(items);
+  await run(items);
   const editor = editorConfig(hashOf(viewerConfig.outfile), hashOf(locateConfig.outfile), hashOf(items.outfile));
-  await build(editor);
-  await build(cardEditorConfig);
-  await build(timeTravelConfig);
-  await build(funConfig);
-  await build(voiceConfig);
-  await build(plan2dConfig);
-  await build(settingsConfig);
-  await build(
+  await run(editor);
+  await run(cardEditorConfig);
+  await run(timeTravelConfig);
+  await run(funConfig);
+  await run(voiceConfig);
+  await run(plan2dConfig);
+  await run(settingsConfig);
+  await run(
     mainConfig({
       viewer: hashOf(viewerConfig.outfile),
       editor: hashOf(editor.outfile),
@@ -153,7 +223,9 @@ if (watch) {
   let over = false;
   // old Fire-tablet WebViews (Chrome before 91, e.g. Fully Kiosk on a Fire 7) throw on an optional call with spread
   // arguments, `a?.b(...x)` – the roof failed there; lowering the target for it would cost ~11 KB, so it is banned
-  for (const file of Object.keys(BUDGET)) {
+  // every bundle and chunk shipped, shared chunks too
+  const shipped = readdirSync(out).filter((f) => f.endsWith(".js"));
+  for (const file of shipped) {
     const hit = readFileSync(`${out}/${file}`, "utf8").match(/\?\.(?:[\w$]+)?\(\.\.\./);
     if (hit) {
       over = true;
@@ -178,7 +250,7 @@ if (watch) {
   }
   // German is fetched (lang/de.json, #134): a bundle that imports the German table again carries it for everyone
   const german = [de.no_building_admin, de.no_persons, de.phone_hint];
-  for (const file of Object.keys(BUDGET)) {
+  for (const file of shipped) {
     const text = readFileSync(`${out}/${file}`, "utf8");
     if (german.some((s) => text.includes(JSON.stringify(s).slice(1, -1)))) {
       over = true;
@@ -195,11 +267,40 @@ if (watch) {
       console.log("ENGLISH home-3d-settings.js: holds the main texts – take them from the panel (t), never import i18n.ts");
     }
   }
-  for (const [file, limit] of Object.entries(BUDGET)) {
+  // a lazy import gets a budget of its own; a shared chunk (modules two of them use) is counted in the paths
+  for (const f of readdirSync(out)) {
+    if (CHUNK.test(f) && !f.startsWith("home-3d-chunk-") && !Object.keys(BUDGET).some((name) => shippedFile(name) === f)) {
+      over = true;
+      console.log(`CHUNK ${f}: a lazy import without a budget`);
+    }
+  }
+  const kb = (n) => `${(n / 1024).toFixed(1)} KB`;
+  const gz = (file) => gzipSync(readFileSync(`${out}/${file}`), { level: 9 }).length;
+  for (const [name, limit] of Object.entries(BUDGET)) {
+    const file = shippedFile(name);
     const size = statSync(`${out}/${file}`).size;
-    const ok = size <= limit;
+    const gzip = gz(file);
+    const gzipLimit = GZIP_BUDGET[name];
+    const ok = size <= limit && (gzipLimit === undefined || gzip <= gzipLimit);
     over ||= !ok;
-    console.log(`${ok ? "ok  " : "OVER"} ${file}: ${(size / 1024).toFixed(1)} KB (budget ${limit / 1024} KB)`);
+    console.log(`${ok ? "ok  " : "OVER"} ${file}: ${kb(size)} (budget ${limit / 1024} KB), gzip ${kb(gzip)}${gzipLimit ? ` (budget ${gzipLimit / 1024} KB)` : ""}`);
+  }
+  for (const [path, { files, raw, gzip }] of Object.entries(PATHS)) {
+    const all = withImports(metafiles, files.map(shippedFile));
+    const size = all.reduce((n, f) => n + statSync(`${out}/${f}`).size, 0);
+    const zipped = all.reduce((n, f) => n + gz(f), 0);
+    const ok = size <= raw && zipped <= gzip;
+    over ||= !ok;
+    console.log(`${ok ? "ok  " : "OVER"} ${path} (${all.join(" + ")}): ${kb(size)} (budget ${raw / 1024} KB), gzip ${kb(zipped)} (budget ${gzip / 1024} KB)`);
+  }
+  if (report) {
+    for (const name of Object.keys(BUDGET)) {
+      const file = shippedFile(name);
+      const meta = metafiles.find((m) => Object.keys(m.outputs).some((o) => o.endsWith(`/${file}`)));
+      if (!meta) continue;
+      console.log(`\n${file}, the 15 biggest inputs:`);
+      for (const [path, bytes] of topInputs(meta, file)) console.log(`  ${kb(bytes).padStart(9)}  ${path}`);
+    }
   }
   if (over) process.exit(1);
 }

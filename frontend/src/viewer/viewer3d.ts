@@ -66,8 +66,6 @@ import type { RoleColours } from "../colour-roles.ts";
 import type { RoleMaterials } from "../role-materials.ts";
 import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, pushFurniture, pushRackLeds, setLightLook, hasOwnColours, furnitureLook } from "./furniture.ts";
 import { pushPipeTube, type PipeTube } from "./pipes.ts";
-// the walk through the house at eye height (lives with the viewer it drives)
-export { FloorMap, WalkCamera, type WalkState } from "./walk.ts";
 
 /** three.js classes lent to the fun packs' bundle (so it carries no copy of three.js). */
 export const funLib = { Group, Mesh, MeshBasicMaterial, CanvasTexture, Color, PlaneGeometry, BufferGeometry: Geometry, Float32BufferAttribute, DoubleSide };
