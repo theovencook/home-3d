@@ -3,7 +3,7 @@
 import { defineElement } from "./define.ts";
 import { formatImperial, lengthUnit, parseLength, unitLabel } from "./units.ts";
 import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues } from "lit";
-import { PHONE_MEDIA } from "./phone.ts";
+import { closesViewMenuAfterPick, PHONE_MEDIA, PHONE_NARROW_MEDIA } from "./phone.ts";
 import { BuildingController, type PlanChange } from "./building-controller.ts";
 import { loadEditor } from "./load-editor.ts";
 import { loadSettings } from "./load-settings.ts";
@@ -17,8 +17,8 @@ import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
 import type { MarkerMode } from "./components/view3d.ts";
 import type { HeatMode } from "./heatmap.ts";
-import { lookOf, THEMES, type Look } from "./themes.ts";
-import { lightChrome } from "./scheme.ts";
+import { lookOf, THEMES, type Look, type Theme } from "./themes.ts";
+import { contrastChrome, lightChrome } from "./scheme.ts";
 import { followLook, shownAccent, shownLook, textOn } from "./ha-theme.ts";
 import { keepInRoom, snapToWall } from "./geometry/snap.ts";
 import { furnitureName } from "./furniture-names.ts";
@@ -575,6 +575,20 @@ export class Floorplan3dPanel extends LitElement {
   private setQuality(quality: Quality): void {
     this._quality = quality;
     prefs.set("quality", quality);
+    this.picked();
+  }
+
+  /** A look picked in the View menu (and announced). */
+  private setLook(t: Theme): void {
+    announce(lookAnnouncement(this._theme, t, (k, v) => this.t(k as I18nKey, v)));
+    this._theme = t;
+    prefs.set("theme", t);
+    this.picked();
+  }
+
+  /** On a phone the View menu floats over the view: a pick of one of its choices folds it (#216). */
+  private picked(): void {
+    if (closesViewMenuAfterPick(window.innerWidth)) this._optsOpen = false;
   }
 
   /** A change made here or on the Extensions page: saved, and one more step of the editor's undo history (#66). */
@@ -839,6 +853,7 @@ export class Floorplan3dPanel extends LitElement {
     if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);
     // the viewer's chrome goes light with the Day look (#85); the editor and the extensions page stay dark (deferred)
     this.toggleAttribute("light", this._mode === "view" && lightChrome(shownLook(this._theme, this.hass)));
+    this.toggleAttribute("contrast", this._mode === "view" && contrastChrome(shownLook(this._theme, this.hass)));
     // lab: the locating recorder box for admins (feasibility test, not a feature yet)
     if (!this.locateLab && this.hass?.user?.is_admin && this.data.building && labOn()) {
       this.locateLab = mountLocateLab(() => ({ hass: this.hass, building: this.data.building }));
@@ -909,8 +924,8 @@ export class Floorplan3dPanel extends LitElement {
             <button aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
             ${this.canEdit
               ? html`<button aria-pressed=${this._mode === "editor"} @click=${() => this.setMode("editor")}>${this.t("editor")}</button>
-                  <button class="fp3d-tab-ext" aria-pressed=${this._mode === "extensions"} @click=${() => this.setMode("extensions")}>
-                    ✦ ${this.t("ext_tab")}
+                  <button class="fp3d-tab-ext" aria-pressed=${this._mode === "extensions"} aria-label=${this.t("ext_tab")} title=${this.t("ext_tab")} @click=${() => this.setMode("extensions")}>
+                    ✦ <span class="fp3d-tab-ext-word">${this.t("ext_tab")}</span>
                   </button>`
               : nothing}
             <button class="fp3d-tab-settings" aria-pressed=${this._mode === "settings"} aria-label=${this.t("settings")} title=${this.t("settings")} @click=${() => this.openSettings()}>
@@ -945,11 +960,7 @@ export class Floorplan3dPanel extends LitElement {
                   (t) =>
                     html`<button
                       aria-pressed=${this._theme === t}
-                      @click=${() => {
-                        announce(lookAnnouncement(this._theme, t, (k, v) => this.t(k as I18nKey, v)));
-                        this._theme = t;
-                        prefs.set("theme", t);
-                      }}
+                      @click=${() => this.setLook(t)}
                     >
                       ${this.t(`theme_${t}`)}
                     </button>`,
@@ -999,6 +1010,7 @@ export class Floorplan3dPanel extends LitElement {
                     html`<button aria-pressed=${this._clock === p} title=${this.t(`clock_${p}`)} aria-label=${this.t(`clock_${p}`)} @click=${() => {
                       this._clock = p;
                       prefs.set("clock", p);
+                      this.picked();
                     }}>
                       ${p === "off" ? this.t("clock_off") : CLOCK_ARROW[p]}
                     </button>`,
@@ -1017,6 +1029,7 @@ export class Floorplan3dPanel extends LitElement {
                       @click=${() => {
                         this._markers = m;
                         prefs.set("markers", m);
+                        this.picked();
                       }}
                     >
                       ${this.t(`markers_${m}`)}
@@ -1034,6 +1047,7 @@ export class Floorplan3dPanel extends LitElement {
                       @click=${() => {
                         this._pinSize = k;
                         prefs.set("pinSize", k);
+                        this.picked();
                       }}
                     >
                       ${this.t(`pin_size_${k}`)}
@@ -1845,6 +1859,24 @@ export class Floorplan3dPanel extends LitElement {
         }
         .fp3d-header .fp3d-grow {
           display: none;
+        }
+      }
+      /* narrow phones (#216): a slim header, one row where it fits: no title (the page is named by HA's own bar), no
+         version, the Extensions tab as its symbol, tighter gaps */
+      @media ${unsafeCSS(PHONE_NARROW_MEDIA)} {
+        .fp3d-header {
+          gap: 4px;
+          padding: 2px 8px 2px 0;
+          min-height: 44px;
+        }
+        .fp3d-header h1,
+        .fp3d-header .fp3d-version,
+        .fp3d-tab-ext-word {
+          display: none;
+        }
+        .fp3d-header .fp3d-seg button {
+          padding-left: 9px;
+          padding-right: 9px;
         }
       }
       /* the installed version, at the far right of the header */

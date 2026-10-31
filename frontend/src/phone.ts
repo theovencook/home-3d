@@ -22,3 +22,12 @@ export function thumbsCompact(saved: string | null, phone: boolean): boolean {
 /** Share of a phone's view kept clear at the top (Walk) and the bottom (the bar) when the house is fitted. */
 export const PHONE_FIT_MARGIN = { x: 0, y: 0.1 } as const;
 export const NO_FIT_MARGIN = { x: 0, y: 0 } as const;
+
+/** Widest screen (CSS px) that gets the slim header (#216): title, version and the Extensions word are dropped. */
+export const PHONE_NARROW_MAX_PX = 480;
+export const PHONE_NARROW_MEDIA = `(max-width: ${PHONE_NARROW_MAX_PX}px)`;
+
+/** Whether the View menu folds after one of its choices is picked: where it floats over the view (a phone). */
+export function closesViewMenuAfterPick(width: number): boolean {
+  return isPhoneWidth(width);
+}

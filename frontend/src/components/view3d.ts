@@ -123,7 +123,7 @@ const GRID_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" s
 const GRID_OFF_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/><path d="M3 3l18 18"/></svg>';
 import { STAGE, type Look, type Theme } from "../themes.ts";
 import { shownLook } from "../ha-theme.ts";
-import { lightChrome } from "../scheme.ts";
+import { contrastChrome, lightChrome } from "../scheme.ts";
 import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
 import { furnitureName } from "../furniture-names.ts";
 import type { RackDraw, RackElevation } from "../rack-elevation.ts";
@@ -1161,7 +1161,10 @@ export class Fp3dView3d extends LitElement {
 
   protected updated(changed: PropertyValues): void {
     // the chrome goes light with the Day look (#85): the shared tokens read the attribute, nested parts inherit it
-    if (changed.has("hass") || changed.has("theme")) this.toggleAttribute("light", lightChrome(this.effectiveTheme()));
+    if (changed.has("hass") || changed.has("theme")) {
+      this.toggleAttribute("light", lightChrome(this.effectiveTheme()));
+      this.toggleAttribute("contrast", contrastChrome(this.effectiveTheme()));
+    }
     if (changed.has("plan2d") && changed.get("plan2d") !== undefined) this.switchViewer();
     if (changed.has("hass") && this.live?.el) this.live.el.hass = this.rawHass;
     if (changed.has("hass")) this.watchAsk();
@@ -9122,8 +9125,9 @@ export class Fp3dView3d extends LitElement {
         font-weight: 600;
         line-height: 1.35;
         color: var(--fp3d-text);
-        /* a notch more solid so names read over bright neon edges (#88) */
-        background: rgba(10, 16, 32, 0.88);
+        /* a notch more solid so names read over bright neon edges (#88); the scheme's own glass, so the text reads on it in
+           the light and high contrast chrome too (#216) */
+        background: color-mix(in srgb, var(--fp3d-chrome-solid) 92%, transparent);
         pointer-events: none;
       }
       .fp3d-dev-sel {

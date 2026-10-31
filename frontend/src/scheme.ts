@@ -55,9 +55,35 @@ export const LIGHT: Scheme = {
   colorScheme: "light",
 };
 
+/**
+ * High contrast (#216): pure white text on near-black glass, a yellow accent, strong outlines. Every text colour is 7:1
+ * (WCAG AAA) on every background, translucent glass included.
+ */
+export const HIGH: Scheme = {
+  bg: "#000000",
+  bg2: "#050a14",
+  chrome: "rgba(0, 0, 0, 0.94)",
+  chromeSolid: "#000000",
+  line: "rgba(255, 255, 255, 0.7)",
+  text: "#ffffff",
+  muted: "#dbe4f5",
+  accent: "#ffe14d",
+  accentText: "#000000",
+  soft: "#9db4ff",
+  warm: "#ffc247",
+  danger: "#ff8fa8",
+  shadow: "0 0 0 1px rgba(255, 255, 255, 0.5)",
+  colorScheme: "dark",
+};
+
 /** The viewer's chrome turns light with the Day look only; the other looks sit on dark skies. */
 export function lightChrome(theme: Theme): boolean {
   return theme === "day";
+}
+
+/** The viewer's chrome turns high contrast with the High contrast look (stored as "blueprint"). */
+export function contrastChrome(theme: Theme): boolean {
+  return theme === "blueprint";
 }
 
 const linear = (c: number) => {

@@ -1,5 +1,5 @@
 import { css, unsafeCSS } from "lit";
-import { DARK, LIGHT, schemeVars, type Scheme } from "./scheme.ts";
+import { DARK, HIGH, LIGHT, schemeVars, type Scheme } from "./scheme.ts";
 
 /**
  * Design tokens shared by panel, card and editor. Each colour reads an inherited `--fp3d-s-*` scheme variable with the
@@ -23,6 +23,9 @@ export const tokens = css`
   }
   :host([light]) {
     ${unsafeCSS(schemeVars(LIGHT))}
+  }
+  :host([contrast]) {
+    ${unsafeCSS(schemeVars(HIGH))}
   }
 `;
 

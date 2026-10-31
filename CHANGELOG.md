@@ -5,6 +5,13 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+### High contrast, room labels, lamps and the phone header (#216)
+
+- **High contrast meets 7:1:** edges are pure white on dark blue fills kept under a relative luminance of 0.1 (every floor, the lawn, walls, items, ground and sky); the chrome turns near-black glass with white text, a yellow accent and strong outlines (every text colour 7:1); the plan's walls, room outlines and items are white. Tests state the standard.
+- **Room labels hold in every look:** the plan's labels are no longer faded (they dropped under 7:1 in some looks) and are tested at 7:1 on their room fill in all four looks; the pins are tested at 7:1 over the lightest and darkest view in the dark, light and high contrast chrome. Device names in the Day look were dark text on dark glass; they now sit on the chrome's own glass.
+- **Lit and unlit lamps read at a glance:** an unlit shade is dark in every look and a lit shade is a bright, saturated glow (a white light shows as a warm white; a deep blue or red is lifted so it is bright enough), 3:1 apart in every look at the dimmest and the brightest.
+- **Phones:** up to 480 px the header is slim (no title or version, the Extensions tab as its symbol), and on a phone the View menu folds after a quality, look, clock, marker or size pick.
+
 ### Accessibility and languages (#196)
 
 - **Modal dialogs keep the keyboard:** the ask dialog, the editor's help overlay, the wall view, the pool part card, the rack sheet and the item editor are `aria-modal`, take the focus when they open, keep Tab and Shift+Tab inside and give the focus back when they close.
