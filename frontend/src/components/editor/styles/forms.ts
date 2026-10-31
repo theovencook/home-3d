@@ -348,8 +348,22 @@ export const formStyles = css`
         gap: 6px;
         flex-wrap: wrap;
       }
-      .fp3d-shift input {
-        width: 5.5em;
+      .fp3d-shift > span {
+        flex: 1 0 100%;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      /* X and Z side by side on one row, the Shift button after them (#236) */
+      .fp3d-shift-xz {
+        flex: 1 0 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .fp3d-shift-xz input {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
       }
       .fp3d-headroom {
         stroke: rgba(255, 214, 90, 0.55);
