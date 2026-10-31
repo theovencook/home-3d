@@ -4,6 +4,7 @@
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
 import { areaEntities, coverTiltButtons, entityName, groupByDevice, isUnavailable, kindOf, roomClimateSensors, roomClimateValue, roomPanelEntities, fromCelsius, tempUnit, type DeviceKind } from "../devices.ts";
 import { askConfirm } from "../ask.ts";
+import { confirmGroup } from "../confirm-group.ts";
 import "./ask-dialog.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { released } from "../features.ts";
@@ -130,6 +131,15 @@ export class Fp3dRoomPanel extends LitElement {
     return !this.confirmEntities?.has(id) || (await askConfirm(this.t("confirm_switch", { name: this.name(id) }), { ok: this.t("action_confirm_ok"), cancel: this.t("cancel") }));
   }
 
+  /** The group buttons ("All on", "All open" …) ask first once when any of the devices does (#162). */
+  private async callAll(domain: string, service: string, ids: string[]): Promise<void> {
+    if (this.readOnly) return;
+    const ok = await confirmGroup(ids, this.confirmEntities, (id) => this.name(id), (names) =>
+      askConfirm(this.t("confirm_switch", { name: names }), { ok: this.t("action_confirm_ok"), cancel: this.t("cancel") }),
+    );
+    if (ok) this.call(domain, service, { entity_id: ids });
+  }
+
   private toggle(st: HassEntity, on: boolean, onToggle: () => void) {
     const guarded = async () => {
       if (this.readOnly) return;
@@ -225,11 +235,11 @@ export class Fp3dRoomPanel extends LitElement {
               "panel_lights",
               lights.map((st) => this.lightRow(st)),
               html`${lightsOn.length < lights.length
-                ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.call("light", "turn_on", { entity_id: lights.filter((l) => !isUnavailable(l)).map((l) => l.entity_id) })}>
+                ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("light", "turn_on", lights.filter((l) => !isUnavailable(l)).map((l) => l.entity_id))}>
                     ${this.t("panel_all_on")}
                   </button>`
                 : nothing}${lightsOn.length
-                ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.call("light", "turn_off", { entity_id: lightsOn.map((l) => l.entity_id) })}>
+                ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("light", "turn_off", lightsOn.map((l) => l.entity_id))}>
                     ${this.t("panel_all_off")}
                   </button>`
                 : nothing}`,
@@ -240,9 +250,9 @@ export class Fp3dRoomPanel extends LitElement {
               "panel_covers",
               covers.map((st) => this.coverRow(st)),
               covers.length > 1
-                ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.call("cover", "open_cover", { entity_id: covers.filter((c) => !isUnavailable(c)).map((c) => c.entity_id) })}>
+                ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("cover", "open_cover", covers.filter((c) => !isUnavailable(c)).map((c) => c.entity_id))}>
                       ${this.t("panel_all_open")}</button
-                    ><button class="fp3d-btn fp3d-rp-small" @click=${() => this.call("cover", "close_cover", { entity_id: covers.filter((c) => !isUnavailable(c)).map((c) => c.entity_id) })}>
+                    ><button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("cover", "close_cover", covers.filter((c) => !isUnavailable(c)).map((c) => c.entity_id))}>
                       ${this.t("panel_all_close")}
                     </button>`
                 : nothing,

@@ -12,7 +12,51 @@ export interface ExportFile {
   building: Building;
 }
 
-/** A copy of the building without any link to entities or areas (background images stay out anyway). */
+/** Home Assistant entity domains: a string "<domain>.<object_id>" with one of these is a link to an entity. */
+const ENTITY_DOMAINS = [
+  "ai_task", "alarm_control_panel", "assist_satellite", "automation", "binary_sensor", "button", "calendar", "camera", "climate", "conversation", "counter", "cover",
+  "date", "datetime", "device_tracker", "event", "fan", "group", "humidifier", "image", "input_boolean", "input_button", "input_datetime", "input_number",
+  "input_select", "input_text", "lawn_mower", "light", "lock", "media_player", "notify", "number", "person", "plant", "remote", "scene", "schedule", "script",
+  "select", "sensor", "siren", "stt", "sun", "switch", "text", "time", "timer", "todo", "tts", "update", "vacuum", "valve", "water_heater", "weather", "zone",
+];
+const ENTITY_ID = new RegExp(`^(?:${ENTITY_DOMAINS.join("|")})\\.[a-z0-9_]+$`);
+
+/** Whether a value is an entity id of this Home Assistant. */
+export function isEntityLink(v: unknown): boolean {
+  return typeof v === "string" && ENTITY_ID.test(v);
+}
+
+/** Fields that hold an area or floor of this Home Assistant (plain ids, so no pattern finds them). */
+const AREA_KEYS = new Set(["area_id", "ha_floor"]);
+/** Whole blocks that only hold links to this Home Assistant: its entity sets, module data and menu buttons. */
+const LINK_BLOCKS = new Set(["mods", "car", "buttons"]);
+/** Lists of rules that are nothing without their entity: an element that names one goes. */
+const RULE_LISTS = new Set(["triggers", "alert_snoozed", "alert_ignored", "pictures"]);
+
+function stripLinks(node: unknown, key = ""): void {
+  if (Array.isArray(node)) {
+    for (let i = node.length - 1; i >= 0; i--) {
+      const el = node[i];
+      if (isEntityLink(el)) node.splice(i, 1);
+      else if (RULE_LISTS.has(key) && el && typeof el === "object" && Object.values(el).some(isEntityLink)) node.splice(i, 1);
+      else stripLinks(el, key);
+    }
+    return;
+  }
+  if (!node || typeof node !== "object") return;
+  const o = node as Record<string, unknown>;
+  for (const [k, v] of Object.entries(o)) {
+    if (LINK_BLOCKS.has(k)) delete o[k];
+    else if (AREA_KEYS.has(k) || isEntityLink(v)) o[k] = null;
+    else stripLinks(v, k);
+  }
+}
+
+/**
+ * A copy of the building without any link to this Home Assistant: entities, areas and floors, the menu buttons, module
+ * data and every picture (background images stay out anyway). Besides the fields known to hold a link, every value
+ * that is an entity id goes (#155), so a field added later is covered without a change here.
+ */
 export function withoutEntities(b: Building): Building {
   const out = structuredClone(b);
   out.energy = { ...out.energy, grid: null, solar: null, battery: null, battery_soc: null, tariff: null };
@@ -24,6 +68,7 @@ export function withoutEntities(b: Building): Building {
     f.furniture = f.furniture.map((m) => ({ ...m, entity: null, power: null }));
     f.openings = f.openings.map((o) => ({ ...o, cover: null, contact: null, tilt: null }));
   }
+  stripLinks(out);
   return out;
 }
 

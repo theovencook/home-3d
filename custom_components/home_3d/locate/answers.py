@@ -94,6 +94,7 @@ _TEXT = {
         "home": "Zu Hause: {list}.",
         "ring": "{who} klingelt jetzt.",
         "no_ring": "Für {who} ist keine App zum Klingeln eingestellt.",
+        "withheld": "Wo sich Personen aufhalten, sagt dir nur ein Administrator.",
     },
     "en": {
         "in": "{who} is in the {room}.",
@@ -104,6 +105,7 @@ _TEXT = {
         "home": "At home: {list}.",
         "ring": "{who} is ringing now.",
         "no_ring": "No app to ring is set for {who}.",
+        "withheld": "Only an administrator can be told where people are.",
     },
 }
 
@@ -215,10 +217,31 @@ async def async_answer(
     return located.text if located else None
 
 
+async def _is_admin(hass: HomeAssistant, user_id: str | None) -> bool:
+    """Whether the asking user is an admin. Nobody known (a satellite, an automation without a user) is not."""
+    user = await hass.auth.async_get_user(user_id) if user_id else None
+    return bool(user and user.is_admin and user.is_active)
+
+
 async def async_locate(
     hass: HomeAssistant, service: LocateService | None, text: str, language: str, user_id: str | None = None
 ) -> Located | None:
-    """The answer to a locating question with the rooms it names, or None when the sentence is no such question."""
+    """The answer to a locating question with the rooms it names, or None when the sentence is no such question.
+
+    With "show people to admins only" the server withholds the text and rooms about people from everyone else (#152):
+    the screen is not trusted to hide them."""
+    located = await _locate(hass, service, text, language, user_id)
+    if located is None or service is None or not located.persons or not service.admins_only:
+        return located
+    if await _is_admin(hass, user_id):
+        return located
+    lang = language if language in _TEXT else "en"
+    return Located(_TEXT[lang]["withheld"], [], True)
+
+
+async def _locate(
+    hass: HomeAssistant, service: LocateService | None, text: str, language: str, user_id: str | None
+) -> Located | None:
     if service is None or not service.devices:
         return None
     lang = language if language in _TEXT else "en"
@@ -252,7 +275,8 @@ async def async_locate(
             return None
         who, devices = found
         notify = next((d.get("notify") for d in devices if d.get("notify")), None)
-        if not notify:
+        # no notify service (the app was removed): say so instead of failing the whole answer (#152)
+        if not notify or not hass.services.has_service("notify", notify.removeprefix("notify.")):
             return Located(t["no_ring"].format(who=who), [], False)
         await ring(hass, notify, lang)
         return Located(t["ring"].format(who=who), [], False)

@@ -246,6 +246,45 @@ async def test_only_an_admin_adds_or_changes_a_perform_action(
         assert (await editor.receive_json())["error"]["code"] == "unauthorized", changed
 
 
+async def test_only_an_admin_adds_or_changes_a_service_or_event_button(
+    hass: HomeAssistant, hass_ws_client, hass_admin_user, hass_read_only_user, hass_read_only_access_token
+) -> None:
+    """A central-menu service or event button runs in the tapper's session (#151): a non-admin editor can't set one."""
+    await _setup(hass)
+    admin, editor = await _non_admin_editor(
+        hass, hass_ws_client, hass_admin_user.id, hass_read_only_user.id, hass_read_only_access_token
+    )
+
+    def with_buttons(*buttons: dict) -> dict:
+        building = copy.deepcopy(BUILDING)
+        building.setdefault("settings", {})["buttons"] = list(buttons)
+        return building
+
+    nav = {"id": "b0", "label": "Garden", "action": "navigate", "target": "/lovelace/garden"}
+    service = {"id": "b1", "label": "Party", "action": "service", "target": "script.turn_on", "data": {"a": 1}}
+    event = {"id": "b2", "label": "Popup", "action": "fire_dom_event", "data": {"browser_mod": {}}}
+    # a navigate button is fine for an editor
+    await editor.send_json_auto_id({"type": "home_3d/building/save", "building": with_buttons(nav)})
+    assert (await editor.receive_json())["success"]
+    for button in (service, event):
+        await editor.send_json_auto_id({"type": "home_3d/building/save", "building": with_buttons(nav, button)})
+        result = await editor.receive_json()
+        assert not result["success"], button
+        assert result["error"]["code"] == "unauthorized", button
+    await admin.send_json_auto_id({"type": "home_3d/building/save", "building": with_buttons(nav, service, event)})
+    assert (await admin.receive_json())["success"]
+    # the editor keeps them as they are, reorders and removes them, but can't change one
+    await editor.send_json_auto_id({"type": "home_3d/building/save", "building": with_buttons(event, service, nav)})
+    assert (await editor.receive_json())["success"]
+    await editor.send_json_auto_id({"type": "home_3d/building/save", "building": with_buttons(nav)})
+    assert (await editor.receive_json())["success"]
+    await admin.send_json_auto_id({"type": "home_3d/building/save", "building": with_buttons(nav, service)})
+    assert (await admin.receive_json())["success"]
+    for changed in ({**service, "target": "script.other"}, {**service, "data": {"a": 2}}):
+        await editor.send_json_auto_id({"type": "home_3d/building/save", "building": with_buttons(nav, changed)})
+        assert (await editor.receive_json())["error"]["code"] == "unauthorized", changed
+
+
 async def test_backup_import_and_restore_are_admin_only(
     hass: HomeAssistant, hass_ws_client, hass_admin_user, hass_read_only_user, hass_read_only_access_token
 ) -> None:

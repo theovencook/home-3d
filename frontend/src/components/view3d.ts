@@ -178,6 +178,7 @@ import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
 import { sunPath, type SunPath } from "../sun-path.ts";
 import { cheapRate } from "../cheap-rate.ts";
 import { askConfirm } from "../ask.ts";
+import { confirmGroup } from "../confirm-group.ts";
 import "./ask-dialog.ts";
 import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
 import { forecastCurvePath, forecastSplit, solarMoreRows, solarPrefsInfo, type SolarForecast, type SolarPrefsInfo } from "../solar-more.ts";
@@ -4760,7 +4761,8 @@ export class Fp3dView3d extends LitElement {
         return;
       }
       this._armed = null;
-      void hass.callService(domain, service, { entity_id: ids });
+      // devices that ask before switching are asked about first, once for the whole row (#162)
+      void this.confirmForAll(ids).then((ok) => ok && hass.callService(domain, service, { entity_id: ids }));
     };
     const button = (key: string, label: I18nKey, domain: string, service: string, ids: string[]) =>
       html`<button class="fp3d-btn ${this._armed === key ? "fp3d-central-armed" : ""}" ?disabled=${!ids.length} @click=${() => act(key, domain, service, ids)}>
@@ -6069,6 +6071,11 @@ export class Fp3dView3d extends LitElement {
   /** Asks first for devices marked so ("ask before switching"). */
   private async confirmFor(id: string): Promise<boolean> {
     return !this.confirmSet.has(id) || (await this.ask(translate(this.hass, "confirm_switch", { name: entityName(this.hass, id) })));
+  }
+
+  /** Asks once for a whole group when any of its devices asks first (#162). */
+  private confirmForAll(ids: readonly string[]): Promise<boolean> {
+    return confirmGroup(ids, this.confirmSet, (id) => entityName(this.hass, id), (names) => this.ask(translate(this.hass, "confirm_switch", { name: names })));
   }
 
   /** What a tap does by the device's kind (no own action). */

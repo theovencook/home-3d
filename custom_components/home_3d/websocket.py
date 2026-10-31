@@ -192,11 +192,14 @@ async def ws_version(hass: HomeAssistant, connection: websocket_api.ActiveConnec
 async def ws_save_building(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Replace the building. A new or changed `perform_action` item action needs an admin (#51)."""
+    """Replace the building. A new or changed `perform_action` item action or service/event menu button needs an
+    admin (#51, #151)."""
     if (home := _home(hass, connection, msg)) is None:
         return
     if not connection.user.is_admin and performed_actions(msg["building"]) - performed_actions(home.building):
-        connection.send_error(msg["id"], "unauthorized", "Only an admin adds or changes an item's perform action")
+        connection.send_error(
+            msg["id"], "unauthorized", "Only an admin adds or changes a perform action or a service/event button"
+        )
         return
     try:
         revision = await home.async_save_building(msg["building"], msg.get("recipe_bases"), check_racks=True)

@@ -103,3 +103,14 @@ test("a room's own name wins over an outdoor area answering to the same name (#6
   const b3 = { ...b, floors: [{ ...eg, outdoor: [{ ...drive, name: "Einfahrt" }] }, { ...kg, rooms: [{ ...room("ga", "Garage"), aliases: ["Einfahrt"] }] }] };
   assert.equal((showTarget("Zeige die Einfahrt", b3, [], alias) as { roomId: string }).roomId, "drive");
 });
+
+test("switch and open do not hijack Assist commands (#161)", () => {
+  for (const s of ["switch off the Stehlampe", "switch the Flur Licht off", "open the Waschmaschine", "oeffne die Waschmaschine", "switch off all cameras", "open the Kamera Haustür door", "switch off the lights in the Wohnzimmer"]) {
+    assert.equal(t(s), null, s);
+  }
+  // a camera or a place named alone is shown, a lamp or cover is Assist's to operate
+  assert.equal(t("switch to the Stehlampe"), null);
+  assert.equal(id(t("open Kamera Haustür")), "camera.haustuer");
+  assert.equal(t("open all cameras")?.kind, "cameras");
+  assert.equal(id(t("Zeig die Stehlampe")), "light.stehlampe");
+});

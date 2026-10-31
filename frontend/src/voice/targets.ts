@@ -5,7 +5,7 @@
 // without an entity.
 
 import type { Building } from "../model.ts";
-import { findPlace, normalize, showCommand, type Place, type RoomAlias } from "./commands.ts";
+import { FILLER, findPlace, normalize, SHOW_AMBIGUOUS, showCommand, type Place, type RoomAlias } from "./commands.ts";
 
 /** A device or piece of furniture that can be shown. */
 export interface Shown {
@@ -24,7 +24,7 @@ export interface Shown {
 export type Target = Place | { kind: "device"; id: string; entity: string | null; name: string; camera: boolean } | { kind: "cameras"; name: string };
 
 /** Words that ask to see something, and "where is …" (the place words of commands.ts and a few more). */
-const SHOW = /\b(zeig|zeige|zeigt|geh|gehe|wechsel|wechsle|oeffne|offne|spring|springe|navigier|wo|where|show|go|open|switch|jump|find|toon|waar|ga|montre|affiche|ou|va|mostra|dove|vai|apri|muestra|donde|ve|abre|mostre|visa|vis|hvor|nayta|missa|pokaz|gdzie|ukaz|kde|pokazi|arata|unde|mutasd|hol)\b/;
+const SHOW = /\b(zeig|zeige|zeigt|geh|gehe|wechsel|wechsle|spring|springe|navigier|wo|where|show|go|jump|find|toon|waar|ga|montre|affiche|ou|va|mostra|dove|vai|muestra|donde|ve|mostre|visa|vis|hvor|nayta|missa|pokaz|gdzie|ukaz|kde|pokazi|arata|unde|mutasd|hol)\b/;
 /** "camera" in the languages Home 3D speaks (plural forms end the same way or are listed). */
 const CAMERA = /\b(kamera|kameras|camera|cameras|cam|cams|camera's|telecamera|telecamere|camara|camaras|kamerat|kameraer|kamery|kamere|camerele|kamerak)\b/;
 const CAMERAS = /\b(kameras|cameras|cams|camera's|telecamere|camaras|kamerat|kameraer|kamery|kamere|camerele|kamerak|alle kamera|all camera)\b/;
@@ -102,10 +102,15 @@ function telling(name: string): string[] {
 export function showTarget(sentence: string, building: Building, devices: readonly Shown[], alias?: RoomAlias): Target | null {
   const text = normalize(sentence);
   if (!text) return null;
-  const asks = SHOW.test(text);
   const said = new Set(words(text));
+  // "switch" and "open" also start switching commands: they ask to see something only when the sentence says nothing
+  // but the name of what to show (#161) – "switch off the hall light" is for Assist
+  const ambiguous = !SHOW.test(text) && SHOW_AMBIGUOUS.test(text);
+  const asks = SHOW.test(text) || ambiguous;
+  const nothingElse = (named: readonly string[]) =>
+    !ambiguous || [...said].every((w) => FILLER.has(w) || SHOW_AMBIGUOUS.test(w) || CAMERA.test(w) || /^(all|alle)$/.test(w) || named.includes(w));
   const camWord = CAMERA.test(text) || [...said].some((w) => CAMERA.test(w));
-  if (asks && CAMERAS.test(text) && devices.some((d) => d.camera)) return { kind: "cameras", name: "" };
+  if (asks && CAMERAS.test(text) && devices.some((d) => d.camera) && nothingElse([])) return { kind: "cameras", name: "" };
   const place = findPlace(sentence, building, alias);
   let best: Shown | null = null;
   let bestScore = 0;
@@ -137,7 +142,9 @@ export function showTarget(sentence: string, building: Building, devices: readon
     // "die Wohnzimmer Decke" name the device
     const roomWords = place && place.kind !== "house" ? new Set(words(place.name)) : null;
     const roomBetter = !!roomWords && !best.camera && (!bestFull || bestWords.every((w) => roomWords.has(w)));
-    if (!roomBetter) return { kind: "device", id: best.id, entity: best.entity, name: best.name, camera: best.camera };
+    const named = [...(best.names?.length ? best.names : [best.name]).flatMap(words), ...words(best.room)];
+    // with "switch" or "open" only a camera is claimed: a lamp, cover or lock named like that is Assist's to operate
+    if (!roomBetter && (!ambiguous || best.camera) && nothingElse(named)) return { kind: "device", id: best.id, entity: best.entity, name: best.name, camera: best.camera };
   }
   return showCommand(sentence, building, alias);
 }
