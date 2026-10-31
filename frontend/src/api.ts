@@ -2,7 +2,7 @@
 
 import type { EditorUser } from "./editors.ts";
 import type { Building } from "./model.ts";
-import type { PackUpdateSettings, PackUpdateStatus } from "./pack-updates.ts";
+import type { PackPreview, PackUpdateSettings, PackUpdateStatus } from "./pack-updates.ts";
 import type { FurniturePack, PackItem, PackOrigin, PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
@@ -15,7 +15,7 @@ const at = (home?: string | null): { home_id?: string } => (home ? { home_id: ho
  * (BuildingController.speaks) instead of trying it and falling back. contract.test.ts checks every command and field
  * used here against tests/fixtures/contract/websocket.json.
  */
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;
 
 /** `can_edit`: the user is on the editors list (missing from backends before #7). `home_id`: the home loaded (#53;
  * missing from older backends), the one to save back to. */
@@ -228,9 +228,27 @@ export async function importPackFolder(hass: HomeAssistant, files: Record<string
   return hass.callWS<ImportedPack>({ type: "home_3d/packs/import", files, ...(confirm ? { confirm } : {}) });
 }
 
-/** Install a pack from a GitHub URL (a repo, or a pack folder in one); Home Assistant fetches and checks it (#25). */
-export async function installPackFromUrl(hass: HomeAssistant, url: string, confirm = false): Promise<ImportedPack & { origin: PackOrigin }> {
-  return hass.callWS<ImportedPack & { origin: PackOrigin }>({ type: "home_3d/packs/install_url", url, ...(confirm ? { confirm } : {}) });
+/**
+ * Install a pack from a GitHub URL (a repo, or a pack folder in one); Home Assistant fetches and checks it (#25).
+ * With `commit` (from a preview, #189) it is refused unless the ref still points at that commit.
+ */
+export async function installPackFromUrl(
+  hass: HomeAssistant,
+  url: string,
+  confirm = false,
+  commit?: string,
+): Promise<ImportedPack & { origin: PackOrigin }> {
+  return hass.callWS<ImportedPack & { origin: PackOrigin }>({
+    type: "home_3d/packs/install_url",
+    url,
+    ...(confirm ? { confirm } : {}),
+    ...(commit ? { commit } : {}),
+  });
+}
+
+/** What installing the pack at a GitHub URL (or updating to it) would change; nothing is installed (#189). */
+export function previewPackFromUrl(hass: HomeAssistant, url: string): Promise<PackPreview> {
+  return hass.callWS<PackPreview>({ type: "home_3d/packs/preview_url", url });
 }
 
 /** Pack updates (#26): the settings, the installed packs and the placed items with an update. */

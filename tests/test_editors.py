@@ -97,6 +97,7 @@ async def test_someone_not_on_the_list_cannot_install_or_change_packs(
         {"type": "home_3d/packs/import", "files": _files()},
         {"type": "home_3d/packs/import", "pack": "{}"},
         {"type": "home_3d/packs/install_url", "url": "https://github.com/someone/their-pack"},
+        {"type": "home_3d/packs/preview_url", "url": "https://github.com/someone/their-pack"},
         {"type": "home_3d/packs/updates/settings", "auto_update": True},
         {"type": "home_3d/packs/update_items"},
         {"type": "home_3d/packs/check"},

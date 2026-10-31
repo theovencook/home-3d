@@ -7,9 +7,11 @@ copy of the installed item into the plan; with the auto-update setting on, that 
 newer release arrives (an import, an install, a scheduled check, a Home 3D update that brings a bundled pack).
 
 Packs installed from GitHub (#25) are checked on the schedule the household sets (daily, weekly or monthly at a
-time, or off): when the pack's own pack.json at the ref names a higher release, the new release is installed into the
-library (placed items still keep their copies). A pack folder in a repository with several packs is compared by its
-own release, so a release of the repository that changes other packs is no update for it.
+time, or off): when the pack's own pack.json at the ref names a higher release, the check records "update available"
+(#189); an editor sees what it changes (items added, changed, removed) and installs it, or, with auto-update on, the new
+release is installed into the library by the check itself (placed items still keep their copies). A pack folder in a
+repository with several packs is compared by its own release, so a release of the repository that changes other packs
+is no update for it.
 
 A pinned pack is left alone: no check installs a newer release of it, auto-update skips its items, and an import of
 another release asks first. Rolling back puts back the release a pack had before its last update (and the placed
@@ -45,6 +47,7 @@ from .custom_items import not_reserved
 from .moves import migrate_pins, moved_copy, moved_out_of, retired_packs
 from .off_loop import OFF_LOOP
 from .pack_github import checked_origin, fetch_pack, latest_release
+from .pack_preview import pack_preview
 from .packs import CUSTOM_PACK_ID, PackError, checked_folder, with_bundled
 from .recipes import installed_copies, placed_types, recipe_copy
 
@@ -307,19 +310,41 @@ class PackUpdates:
         unless `confirm`. (An older copy of a bundled pack changes nothing: the bundled release stays offered.)"""
         # never in the middle of a check, which could put its release over this one (#47)
         async with self._lock:
-            current = self._installed(payload["id"])
-            after = self._offered_after(payload)
-            if current is not None and not confirm:
-                installed, new = current.get("release", 1), after.get("release", 1)
-                if new < installed:
-                    raise PackError(
-                        "older_release",
-                        f"release {payload.get('release', 1)} is older than the installed release {installed}",
-                    )
-                if payload["id"] in self.pinned and new != installed:
-                    raise PackError("pinned", f"{payload['id']} is pinned to release {installed}")
+            if not confirm and (asked := self._asks_first(payload)) is not None:
+                raise asked
             await self._async_add(payload, source)
+            # an install of the release a check found (or a later one) answers its "update available"
+            check = self.checks.get(payload["id"])
+            if check and check.get("available", {}).get("release", 0) <= payload.get("release", 1):
+                del check["available"]
+                await self._async_save()
         await self.async_auto_update()
+
+    def _asks_first(self, payload: dict[str, Any]) -> PackError | None:
+        """The question an install of this pack must be confirmed against, or None."""
+        current = self._installed(payload["id"])
+        if current is None:
+            return None
+        installed, new = current.get("release", 1), self._offered_after(payload).get("release", 1)
+        if new < installed:
+            return PackError(
+                "older_release",
+                f"release {payload.get('release', 1)} is older than the installed release {installed}",
+            )
+        if payload["id"] in self.pinned and new != installed:
+            return PackError("pinned", f"{payload['id']} is pinned to release {installed}")
+        return None
+
+    def preview(self, payload: dict[str, Any], origin: dict[str, Any]) -> dict[str, Any]:
+        """What installing this checked pack from GitHub would change (#189); nothing is written."""
+        current = self._installed(payload["id"])
+        warnings = []
+        if (asked := self._asks_first(payload)) is not None:
+            warnings.append(asked.code)
+        if current is not None and current.get("bundled") and current.get("publisher") != payload["publisher"]:
+            # the id of a pack that ships with Home 3D, from another publisher
+            warnings.append("bundled_publisher")
+        return pack_preview(payload, origin, current, pinned=payload["id"] in self.pinned, warnings=warnings)
 
     async def _async_add(self, payload: dict[str, Any], source: dict[str, Any]) -> None:
         """Install a pack, keeping the release the library offered so far for a roll back."""
@@ -426,15 +451,21 @@ class PackUpdates:
         return {"installed": installed, "updated": updated}
 
     async def _async_check_pack(self, pack: dict[str, Any], origin: dict[str, Any], result: dict[str, Any]) -> bool:
-        """Check one pack; whether a newer release was installed. Raises PackError."""
+        """Check one pack; whether a newer release was installed (with auto-update off it is only recorded as
+        available). Raises PackError."""
         release = pack.get("release", 1)
-        _commit, pack_json = await latest_release(self.hass, origin)
+        commit, pack_json = await latest_release(self.hass, origin)
         if pack_json is not None and pack_json["id"] != pack["id"]:
             raise PackError("not_a_pack", f"the folder now holds the pack {pack_json['id']}")
         latest = pack_json["release"] if pack_json is not None else release
         result["latest_release"] = latest
         if latest <= release:
             # nothing newer for this pack (a check never installs an older release)
+            return False
+        if not self.settings["auto_update"]:
+            # updates are opt-in (#189): the check only records that one is waiting; an editor looks at what it
+            # changes and installs it (nothing is downloaded here, only the pack.json was read)
+            result["available"] = {"release": latest, "commit": commit}
             return False
         files, new_origin = await fetch_pack(self.hass, origin["url"])
         # a large pack takes a while to check: not in the event loop (#176)

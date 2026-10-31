@@ -9,6 +9,7 @@ import {
   importPackFolder,
   installPackFromUrl,
   pinPack,
+  previewPackFromUrl,
   removePack,
   rollbackPack,
   updatePlacedItems,
@@ -25,7 +26,17 @@ import { askConfirm } from "../ask.ts";
 import { errorText } from "../failure.ts";
 import "./ask-dialog.ts";
 import { planPackFolders } from "../pack-folder.ts";
-import { askingFirst, nextCheck, updateSummary, type ConfirmCode, type PackUpdateStatus } from "../pack-updates.ts";
+import {
+  askingFirst,
+  changesNothing,
+  nextCheck,
+  previewName,
+  shortCommit,
+  updateSummary,
+  type ConfirmCode,
+  type PackPreview,
+  type PackUpdateStatus,
+} from "../pack-updates.ts";
 import { packName, packOrigin, type FurniturePack } from "../packs.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -44,6 +55,7 @@ export class Extensions extends LitElement {
     _open: { state: true },
     _packUrl: { state: true },
     _installing: { state: true },
+    _preview: { state: true },
     _updates: { state: true },
     _checking: { state: true },
     _updatesMsg: { state: true },
@@ -61,6 +73,8 @@ export class Extensions extends LitElement {
   /** The GitHub URL typed into the install field, and whether Home Assistant is fetching it (#25). */
   private declare _packUrl: string;
   private declare _installing: boolean;
+  /** What installing or updating a pack would change (#189), shown for the editor to confirm; nothing is installed yet. */
+  private declare _preview: PackPreview | null;
   /** Pack updates (#26): settings, pins, previous releases and the placed items with an update. */
   private declare _updates: PackUpdateStatus | null;
   private declare _checking: boolean;
@@ -74,6 +88,7 @@ export class Extensions extends LitElement {
     this._itemsError = null;
     this._packUrl = "";
     this._installing = false;
+    this._preview = null;
     this._updates = null;
     this._checking = false;
     this._updatesMsg = null;
@@ -157,7 +172,9 @@ export class Extensions extends LitElement {
     try {
       const res = await checkPacks(this.hass);
       this._updates = res;
-      this._updatesMsg = { ok: true, text: this.t("upd_checked", { n: res.installed.length }) };
+      // installed by the check (auto-update on) or waiting for an editor to review them (#189)
+      const waiting = res.packs.filter((p) => p.available).length;
+      this._updatesMsg = { ok: true, text: this.t("upd_checked", { n: res.installed.length + waiting }) };
       if (res.installed.length) this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
     } catch (err) {
       this._updatesMsg = { ok: false, text: this.packError(err) };
@@ -236,9 +253,14 @@ export class Extensions extends LitElement {
     const name = packName(pack, this.hass?.language ?? "de");
     return html`${state.error
         ? html`<span class="fp3d-sub fp3d-pack-error">${this.t("pack_check_error", { detail: state.error })}</span>`
-        : state.latest_release != null
-          ? html`<span class="fp3d-sub">${this.t("pack_latest", { release: state.latest_release })}</span>`
-          : nothing}
+        : state.available
+          ? html`<span class="fp3d-sub fp3d-pack-available">${this.t("pack_available", { release: state.available.release, commit: shortCommit(state.available.commit) })}</span>
+              ${this.isEditor && pack.source?.origin
+                ? html`<button class="fp3d-btn" ?disabled=${this._installing} @click=${() => void this.review(pack.source!.origin!.url)}>${this.t("pack_review_update")}</button>`
+                : nothing}`
+          : state.latest_release != null
+            ? html`<span class="fp3d-sub">${this.t("pack_latest", { release: state.latest_release })}</span>`
+            : nothing}
       ${this.isEditor
         ? html`<span class="fp3d-pack-tools">
             <label class="fp3d-check">
@@ -500,6 +522,7 @@ export class Extensions extends LitElement {
             </button>
           </form>`
         : nothing}
+      ${this.renderPreview()}
       ${this._packMsg ? html`<p class="fp3d-sub ${this._packMsg.ok ? "fp3d-notice" : "fp3d-pack-error"}">${this._packMsg.text}</p>` : nothing}
       <p class="fp3d-sub">${this.t("packs_hint")}</p>
     </section>`;
@@ -512,24 +535,88 @@ export class Extensions extends LitElement {
     return html`<span class="fp3d-sub">${this.t("pack_from")} <a href=${origin.url} target="_blank" rel="noreferrer noopener">${origin.label}</a></span>`;
   }
 
-  /** Installs the pack at a GitHub URL: Home Assistant fetches and checks it, the browser only sends the URL (#25). */
+  /** The pack at a GitHub URL: Home Assistant fetches and checks it, the browser only sends the URL (#25). It is first
+   *  previewed (#189); an editor confirms what changes in the panel, then `install` runs. */
   private async installFromUrl(e: Event): Promise<void> {
     e.preventDefault();
     const url = this._packUrl.trim();
-    if (!url || !this.hass || this._installing) return;
+    if (!url || !this.hass) return;
+    await this.review(url);
+  }
+
+  /** Fetches what installing (or updating to) the pack at a URL would change and shows it, or, on a backend that has
+   *  no preview, installs as before. */
+  private async review(url: string): Promise<void> {
+    if (!this.hass || this._installing) return;
+    this._installing = true;
+    this._packMsg = null;
+    this._preview = null;
+    try {
+      this._preview = await previewPackFromUrl(this.hass, url);
+    } catch (err) {
+      if ((err as { code?: string })?.code === "unknown_command") {
+        this._installing = false;
+        await this.install(url);
+      } else this._packMsg = { ok: false, text: this.packError(err) };
+    } finally {
+      this._installing = false;
+    }
+  }
+
+  /** Installs what the panel shows, insisting on the commit it showed (#189). */
+  private async install(url: string, commit?: string): Promise<void> {
+    if (!this.hass) return;
     this._installing = true;
     try {
       const hass = this.hass;
-      const res = await askingFirst((confirm) => installPackFromUrl(hass, url, confirm), this.askConfirm);
+      const res = await askingFirst((confirm) => installPackFromUrl(hass, url, confirm, commit), this.askConfirm);
       if (!res) return;
+      this._preview = null;
       this._packUrl = "";
       this._packMsg = { ok: true, text: this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }) };
       this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
     } catch (err) {
+      this._preview = null;
       this._packMsg = { ok: false, text: this.packError(err) };
     } finally {
       this._installing = false;
     }
+  }
+
+  /** What an install or update changes: where it comes from (the commit is the pin), the release and the items. */
+  private renderPreview() {
+    const p = this._preview;
+    if (!p) return nothing;
+    const lang = this.hass?.language ?? "de";
+    const update = p.installed !== null;
+    const c = p.changes;
+    const list = (label: I18nKey, items: PackPreview["changes"]["added"]) =>
+      items.length
+        ? html`<li><b>${this.t(label, { n: items.length })}</b>: ${items.slice(0, 12).map((i) => previewName(i, lang)).join(", ")}${items.length > 12 ? " …" : ""}</li>`
+        : nothing;
+    return html`<div class="fp3d-preview" role="group" aria-label=${this.t("pp_title")}>
+      <b>${update ? this.t("pp_update", { name: p.pack.name, from: p.installed!.release, to: p.pack.release }) : this.t("pp_install", { name: p.pack.name, release: p.pack.release })}</b>
+      <span class="fp3d-sub">${this.t("pack_by", { publisher: p.pack.publisher, n: p.pack.items })} · ${this.t("pack_licence", { licence: p.pack.licence })}</span>
+      <span class="fp3d-sub">
+        ${this.t("pp_from")}
+        <a href=${p.origin.url} target="_blank" rel="noreferrer noopener">${p.origin.owner}/${p.origin.repo}${p.origin.folder ? `/${p.origin.folder}` : ""} @ ${p.origin.ref}</a>
+        · ${this.t("pp_commit")} <code>${shortCommit(p.origin.commit)}</code>${p.installed?.commit ? html` (${this.t("pp_now")} <code>${shortCommit(p.installed.commit)}</code>)` : nothing}
+      </span>
+      ${p.warnings.map((w) => html`<span class="fp3d-sub fp3d-pack-error">${this.t(`pp_warn_${w}` as I18nKey)}</span>`)}
+      ${changesNothing(p)
+        ? html`<span class="fp3d-sub">${update ? this.t("pp_nothing") : this.t("pp_empty")}</span>`
+        : html`<ul>
+            ${list("pp_added", c.added)} ${list("pp_changed", c.changed)} ${list("pp_removed", c.removed)}
+          </ul>
+          <span class="fp3d-sub">${this.t("pp_unchanged", { n: c.unchanged })}</span>`}
+      ${update && (c.changed.length || c.removed.length) ? html`<span class="fp3d-sub">${this.t("pp_placed_hint")}</span>` : nothing}
+      <span class="fp3d-pack-tools">
+        <button class="fp3d-btn fp3d-primary" ?disabled=${this._installing} @click=${() => void this.install(p.origin.url, p.origin.commit)}>
+          ${update ? this.t("pp_do_update") : this.t("pp_do_install")}
+        </button>
+        <button class="fp3d-btn" ?disabled=${this._installing} @click=${() => (this._preview = null)}>${this.t("cancel")}</button>
+      </span>
+    </div>`;
   }
 
   /** Imports one or several pack files at once. */
@@ -664,6 +751,21 @@ export class Extensions extends LitElement {
       }
       .fp3d-sum-missing-text {
         color: #60a5fa;
+      }
+      .fp3d-preview {
+        display: grid;
+        gap: 6px;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid var(--fp3d-line, rgba(120, 190, 255, 0.22));
+        background: rgba(4, 8, 18, 0.35);
+      }
+      .fp3d-preview ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      .fp3d-preview code {
+        font-family: ui-monospace, monospace;
       }
       .fp3d-sum-caret {
         color: var(--fp3d-muted, #8ea3c4);

@@ -628,6 +628,12 @@ folders. Branch names that contain a `/` cannot be told from the folder and are 
 | The repository (or branch, tag, folder) does not exist or is private | `not_found` |
 | GitHub cannot be reached, refuses (rate limit) or redirects elsewhere | `fetch_failed` |
 
+Before anything is installed, the page shows what it would change: the repository, the ref and the commit, the
+release now installed, and the items added, changed and removed (`home_3d/packs/preview_url`, nothing is written).
+**Install** then sends the previewed commit (`commit` on `install_url`); if the ref moved on since, the install is
+refused with `changed_since_preview` and the editor looks again. The commit stays visible next to the pack's origin
+in the pack list.
+
 The installed pack keeps where it came from in `source.origin`, so an update check knows where to look:
 
 ```json
@@ -661,7 +667,10 @@ editor can also press **Check now**.
   Otherwise it reads only the pack's own `pack.json` there and compares its `release` with the installed one. A
   repository with a folder per pack (like `theovencook/home-3d-packs`) changes when any pack in it changes, so the
   release of the pack's folder decides, not the commit: **publishers raise `release` with every change to a pack**.
-- A higher release is installed into the library. Placed items keep their recipe copies: the **Pack updates**
+- A higher release is only recorded as "available" (with its commit) unless **Update placed items automatically** is
+  on: an editor presses **See what changes**, reads the added, changed and removed items and installs the update (or
+  cancels). With auto-update on, the check installs it itself. Either way the release goes into the library, and
+  placed items keep their recipe copies: the **Pack updates**
   section lists every placed item whose installed item differs from its copy, with the release it has and the one
   it would get, and **Update** replaces its copy (**Update all** does every listed item).
 - With **Update placed items automatically** on (off by default), new releases are applied to placed items without

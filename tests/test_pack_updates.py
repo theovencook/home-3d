@@ -468,29 +468,29 @@ async def _installed_from_github(client, aioclient_mock: AiohttpClientMocker) ->
     await _call(client, type="home_3d/building/save", building=plan)
 
 
-async def test_a_check_installs_a_newer_release_without_changing_placed_items(
+async def test_a_check_only_records_the_update_until_an_editor_installs_it(
     hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
 ) -> None:
+    """Auto-update is off by default: a check finds the newer release but installs nothing (#189)."""
     client = await _client(hass, hass_ws_client)
     await _installed_from_github(client, aioclient_mock)
     _github(aioclient_mock, 2, _files(2, chair_size=[1.2, 0.9, 0.8]))
 
     status = await _call(client, type="home_3d/packs/check")
 
-    assert status["installed"] == ["test.starter"]
+    assert status["installed"] == []
     pack = hass.data[DOMAIN].packs[0]
-    assert pack["release"] == 2
-    assert pack["source"]["origin"]["commit"] == _sha(2)
+    assert pack["release"] == 1
+    assert pack["source"]["origin"]["commit"] == _sha(1)
     starter = next(p for p in status["packs"] if p["id"] == "test.starter")
     assert starter["latest_release"] == 2
-    assert starter["checked"] is True
-    assert starter["previous_release"] == 1
-    assert status["last_check"] is not None
-    # the house waits for the household: the chair is offered as an update
-    assert (await _recipes(client))[CHAIR_TYPE]["release"] == 1
-    assert [i["type"] for i in status["items"]] == [CHAIR_TYPE]
-    # every request went to GitHub
-    assert {url.split("/")[2] for url in _fetched(aioclient_mock)} <= {"api.github.com", "raw.githubusercontent.com"}
+    assert starter["available"] == {"release": 2, "commit": _sha(2)}
+    assert status["items"] == []
+    # nothing was downloaded: the commit and the pack's own pack.json
+    assert _fetched(aioclient_mock) == [
+        f"{API}/commits/main",
+        f"https://raw.githubusercontent.com/{OWNER}/{REPO}/{_sha(2)}/test.starter/pack.json",
+    ]
 
 
 async def test_a_repository_change_to_another_pack_is_no_update(
@@ -540,6 +540,10 @@ async def test_a_check_with_auto_update_updates_the_placed_items(
     recipes = await _recipes(client)
     assert recipes[CHAIR_TYPE]["release"] == 2
     assert recipes[CHAIR_TYPE]["commit"] == _sha(2)
+    # the library took the release, with the one before it kept for a roll back
+    assert status["installed"] == ["test.starter"]
+    starter = next(p for p in status["packs"] if p["id"] == "test.starter")
+    assert starter["previous_release"] == 1 and "available" not in starter
 
 
 async def test_a_check_leaves_pinned_packs_and_never_installs_an_older_release(
@@ -613,6 +617,7 @@ async def test_a_rollback_waits_for_a_running_check(
 ) -> None:
     client = await _client(hass, hass_ws_client)
     await _installed_from_github(client, aioclient_mock)
+    await _call(client, type="home_3d/packs/updates/settings", auto_update=True)
     _github(aioclient_mock, 2, _files(2))
     await _call(client, type="home_3d/packs/check")
     updates = hass.data[DATA_PACK_UPDATES]
@@ -662,6 +667,7 @@ async def test_checks_run_on_the_configured_schedule(
     client = await _client(hass, hass_ws_client)
     freezer.move_to(monday)
     await _installed_from_github(client, aioclient_mock)
+    await _call(client, type="home_3d/packs/updates/settings", auto_update=True)
     # by default a daily check at 04:00
     assert (await _call(client, type="home_3d/packs/updates"))["settings"]["frequency"] == "daily"
     await _call(client, type="home_3d/packs/updates/settings", frequency="weekly", weekday=2, time="05:30")
@@ -685,6 +691,7 @@ async def test_a_daily_check_and_switching_checks_off(
     client = await _client(hass, hass_ws_client)
     freezer.move_to(start)
     await _installed_from_github(client, aioclient_mock)
+    await _call(client, type="home_3d/packs/updates/settings", auto_update=True)
     _github(aioclient_mock, 2, _files(2))
     await _call(client, type="home_3d/packs/updates/settings", frequency="off")
     await _at(hass, freezer, start.replace(hour=4))
@@ -703,6 +710,7 @@ async def test_a_check_missed_while_home_assistant_was_down_runs_once_after_star
     client = await _client(hass, hass_ws_client)
     freezer.move_to(start)
     await _installed_from_github(client, aioclient_mock)
+    await _call(client, type="home_3d/packs/updates/settings", auto_update=True)
     await _call(client, type="home_3d/packs/check")
     entry = hass.config_entries.async_entries(DOMAIN)[0]
 
@@ -719,3 +727,141 @@ async def test_a_check_missed_while_home_assistant_was_down_runs_once_after_star
     assert await hass.config_entries.async_reload(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert _fetched(aioclient_mock) == []
+
+
+# ---------------------------------------------------------------------------- what an install or update changes (#189)
+
+
+async def _preview(client, url: str = FOLDER_URL) -> dict:
+    return await _call(client, type="home_3d/packs/preview_url", url=url)
+
+
+async def test_a_preview_names_the_commit_and_the_items_an_update_adds_changes_and_removes(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    newer = _files(2, chair_size=[1.2, 0.9, 0.8])
+    del newer["stool.json"]
+    newer["bench.json"] = json.dumps({**STOOL, "id": "bench", "name": {"en": "Bench"}})
+    _github(aioclient_mock, 2, newer)
+
+    preview = await _preview(client)
+
+    assert preview["origin"] == {
+        "url": FOLDER_URL,
+        "owner": OWNER,
+        "repo": REPO,
+        "ref": "main",
+        "folder": "test.starter",
+        "commit": _sha(2),
+        "default_branch": False,
+    }
+    assert preview["pack"] | {"items": 0} == {
+        "id": "test.starter",
+        "name": "Starter",
+        "publisher": "Test",
+        "licence": "MIT",
+        "release": 2,
+        "items": 0,
+    }
+    assert preview["installed"] == {
+        "release": 1,
+        "publisher": "Test",
+        "bundled": False,
+        "pinned": False,
+        "commit": _sha(1),
+    }
+    changes = preview["changes"]
+    assert [i["id"] for i in changes["added"]] == ["bench"]
+    assert [i["id"] for i in changes["changed"]] == ["cube_chair"]
+    assert [i["id"] for i in changes["removed"]] == ["stool"]
+    assert changes["added"][0]["name"] == {"en": "Bench"}
+    assert changes["unchanged"] == 0
+    assert preview["warnings"] == []
+    # a preview installs nothing
+    assert hass.data[DOMAIN].packs[0]["release"] == 1
+    assert hass.data[DOMAIN].packs[0]["source"]["origin"]["commit"] == _sha(1)
+
+
+async def test_a_preview_of_a_pack_not_installed_lists_every_item_as_new(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    _github(aioclient_mock, 1, _files())
+
+    preview = await _preview(client)
+
+    assert preview["installed"] is None
+    assert sorted(i["id"] for i in preview["changes"]["added"]) == ["cube_chair", "stool"]
+    assert preview["changes"]["changed"] == [] and preview["changes"]["removed"] == []
+    assert hass.data[DOMAIN].packs == []
+
+
+async def test_a_preview_warns_about_an_older_release_and_a_pinned_pack(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    await _call(client, type="home_3d/packs/import", files=_files(3))
+    _github(aioclient_mock, 2, _files(2))
+    assert (await _preview(client))["warnings"] == ["older_release"]
+
+    await _call(client, type="home_3d/packs/pin", pack_id="test.starter", pinned=True)
+    _github(aioclient_mock, 4, _files(4))
+    preview = await _preview(client)
+    assert preview["warnings"] == ["pinned"]
+    assert preview["installed"]["pinned"] is True
+
+
+async def test_an_install_insists_on_the_commit_the_preview_showed(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    _github(aioclient_mock, 2, _files(2))
+    commit = (await _preview(client))["origin"]["commit"]
+
+    # the branch moved on after the preview: nothing is installed, the editor looks again
+    _github(aioclient_mock, 3, _files(3))
+    moved = await _send(client, type="home_3d/packs/install_url", url=FOLDER_URL, commit=commit)
+    assert moved["error"]["code"] == "changed_since_preview"
+    assert hass.data[DOMAIN].packs[0]["release"] == 1
+
+    _github(aioclient_mock, 2, _files(2))
+    done = await _call(client, type="home_3d/packs/install_url", url=FOLDER_URL, commit=commit)
+    assert done["origin"]["commit"] == commit
+    assert hass.data[DOMAIN].packs[0]["release"] == 2
+
+
+async def test_installing_the_update_a_check_found_clears_it(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    _github(aioclient_mock, 2, _files(2))
+    status = await _call(client, type="home_3d/packs/check")
+    assert next(p for p in status["packs"] if p["id"] == "test.starter")["available"]["release"] == 2
+
+    await _call(client, type="home_3d/packs/install_url", url=FOLDER_URL, commit=_sha(2))
+
+    status = await _call(client, type="home_3d/packs/updates")
+    starter = next(p for p in status["packs"] if p["id"] == "test.starter")
+    assert starter["release"] == 2 and "available" not in starter
+
+
+async def test_a_preview_of_a_bundled_pack_id_from_another_publisher_is_flagged(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    bundled = hass.data[DOMAIN].bundled[0]
+    files = _files(bundled.get("release", 1) + 1)
+    files["pack.json"] = json.dumps(
+        {**PACK_JSON, "id": bundled["id"], "publisher": "Someone else", "release": bundled.get("release", 1) + 1}
+    )
+    _github(aioclient_mock, 1, {"pack.json": files["pack.json"], "stool.json": files["stool.json"]})
+
+    preview = await _preview(client)
+
+    assert preview["installed"]["bundled"] is True
+    assert "bundled_publisher" in preview["warnings"]
