@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { shrinkThreeShaders } from "./src/glsl-shrink.ts";
+import { borrowEnglish } from "./src/borrow-english.ts";
 
 const out = "../custom_components/home_3d/frontend";
 const watch = process.argv.includes("--watch");
@@ -31,7 +32,8 @@ const common = {
   legalComments: "none",
   logLevel: "info",
   metafile: true,
-  plugins: [shrinkShaders],
+  // every bundle but the main one loads from the main bundle, which holds the English table: they borrow it (#196)
+  plugins: [shrinkShaders, borrowEnglish],
 };
 
 const viewerConfig = { ...common, entryPoints: ["src/viewer/viewer3d.ts"], outfile: `${out}/home-3d-3d.js` };
@@ -89,6 +91,8 @@ const buildId = (() => {
 const CHUNK = /^home-3d-[\w]+-[A-Z0-9]{8}\.js$/;
 const mainConfig = (hashes) => ({
   ...common,
+  // the one bundle with the English table (its chunks share it)
+  plugins: [shrinkShaders],
   entryPoints: { "home-3d": "src/main.ts" },
   outdir: out,
   splitting: true,
@@ -143,7 +147,10 @@ function copyFonts() {
 // 130 KB, and every Home Assistant page loads 386 KB (with its shared chunks) instead of 693 KB. three.js's shaders
 // are shrunk and walking left the 3D bundle (895 -> 876 KB). No budget went up. GZIP_BUDGET: as sent, for the files a
 // wall tablet waits for.
-const BUDGET = { "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 975 * 1024, "home-3d-card-editor.js": 160 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 120 * 1024 };
+// #196: only the main bundle carries the English table; every other bundle borrows it from the page (borrow-english.ts).
+// The editor went from 971 to 847 KB and the card editor from 157 to 33 KB; their budgets were set just above (975 ->
+// 860 KB, 160 -> 40 KB) so growth shows again.
+const BUDGET = { "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 120 * 1024 };
 const GZIP_BUDGET = { "home-3d.js": 45 * 1024, "home-3d-view3d.js": 100 * 1024, "home-3d-3d.js": 280 * 1024 };
 
 // What is loaded before something shows, raw and as sent (gzip), with everything those files import (#179): a module
@@ -257,14 +264,16 @@ if (watch) {
       console.log(`GERMAN ${file}: holds the German table – German comes from its language pack, never from a bundle`);
     }
   }
-  // the Settings page borrows the main bundle's texts (#139): a settings bundle that imports i18n.ts carries the
-  // whole English table a second time
+  // the Settings page borrows the main bundle's texts (#139), the editor and the card editor its English table (#196):
+  // a bundle of these that holds the table carries the whole English table a second time
   {
     const { englishTable } = await import("./src/i18n.ts");
-    const text = readFileSync(`${out}/home-3d-settings.js`, "utf8");
-    if (text.includes(JSON.stringify(englishTable().no_building_admin).slice(1, -1))) {
-      over = true;
-      console.log("ENGLISH home-3d-settings.js: holds the main texts – take them from the panel (t), never import i18n.ts");
+    for (const file of ["home-3d-settings.js", "home-3d-editor.js", "home-3d-card-editor.js"]) {
+      const text = readFileSync(`${out}/${file}`, "utf8");
+      if (text.includes(JSON.stringify(englishTable().no_building_admin).slice(1, -1))) {
+        over = true;
+        console.log(`ENGLISH ${file}: holds the main texts – ${file === "home-3d-settings.js" ? "take them from the panel (t), never import i18n.ts" : "the borrow-english plugin must swap i18n.ts for i18n-borrowed.ts"}`);
+      }
     }
   }
   // a lazy import gets a budget of its own; a shared chunk (modules two of them use) is counted in the paths

@@ -304,7 +304,8 @@ const check = {
       button.click();
       await ed.updateComplete;
       await waitFor(() => box() && root.activeElement && box().contains(root.activeElement), 5000, "the help overlay to take the focus");
-      return { modal: box().getAttribute("aria-modal"), lang: panel.getAttribute("lang") };
+      // the editor bundle borrows the main bundle's English texts (#196): a missing table would show the key
+      return { modal: box().getAttribute("aria-modal"), lang: panel.getAttribute("lang"), title: box().querySelector("h3")?.textContent ?? "" };
     }
     if (step === "where") return { inside: !!box() && box().contains(root.activeElement), on: root.activeElement?.className ?? root.activeElement?.tagName };
     await ed.updateComplete;

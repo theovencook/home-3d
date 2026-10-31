@@ -152,6 +152,7 @@ try {
   results.help = await run("helpDialog", { step: "open" });
   if (results.help.modal !== "true") problems.push("the help overlay is not aria-modal (#196)");
   if (results.help.lang !== "en") problems.push(`the panel's lang is ${results.help.lang}, not en (#196)`);
+  if (!results.help.title || /^[a-z_]+$/.test(results.help.title)) problems.push(`the editor shows "${results.help.title}", not its English text (#196)`);
   for (const shift of [false, true]) {
     for (let i = 0; i < 40; i++) {
       if (shift) await page.keyboard.down("Shift");
