@@ -13,7 +13,9 @@
 // So each element we define is remembered (on the page, shared by every copy of the bundle), and once the registry has
 // been replaced the earlier ones are defined in the new one too: when Home Assistant defines <home-assistant> (right
 // after the polyfill) and before each later define, so before the polyfill can touch our base class. The polyfill
-// then keeps using the browser's definition for those tags and builds them again.
+// then keeps using the browser's definition for those tags and builds them again. A copy of an older build keeps no
+// record: a tag the browser already builds a class for is carried over with that class (see builtByTheBrowser).
+// A later copy never defines its own class for a tag that is taken, so only one copy's elements are ever built.
 
 interface Defined {
   cls: CustomElementConstructor;
@@ -49,14 +51,46 @@ export function adoptElements(): void {
   }
 }
 
+/**
+ * The class the browser builds for this tag when the current registry does not know it: one another copy of the bundle
+ * defined in the browser's own registry and kept no record of (a build before #218, served from a cache next to a
+ * newer one). The browser keeps building that class for the tag whatever is defined later, so it is the one the new
+ * registry has to know. Undefined when the browser has nothing for the tag (a plain element comes back).
+ */
+function builtByTheBrowser(tag: string, cls: CustomElementConstructor): CustomElementConstructor | undefined {
+  if (typeof document === "undefined") return undefined;
+  let probe: Element;
+  try {
+    probe = document.createElement(tag);
+  } catch {
+    return undefined;
+  }
+  const proto = Object.getPrototypeOf(probe) as object | null;
+  // a plain element for a tag nothing defined; HTMLUnknownElement when that class could not be built any more
+  if (proto === HTMLElement.prototype || probe instanceof HTMLUnknownElement || !(probe instanceof HTMLElement)) return undefined;
+  const ctor = probe.constructor as CustomElementConstructor;
+  return ctor === cls ? undefined : ctor;
+}
+
 /** `customElements.define`, once per tag (a second copy of the bundle leaves the first one's), see above. True when
  * this call defined it. */
 export function defineElement(tag: string, cls: CustomElementConstructor): boolean {
   adoptElements();
   const registry = globalThis.customElements;
   if (registry.get(tag)) return false;
-  registry.define(tag, cls);
   const s = shared();
+  // a copy with no record got there first: its class is carried over, ours is not defined (it would never be built)
+  const theirs = builtByTheBrowser(tag, cls);
+  if (theirs) {
+    try {
+      registry.define(tag, theirs);
+      s.defined.set(tag, { cls: theirs, registry });
+    } catch (err) {
+      console.warn(`Home 3D: could not define ${tag} in the page's element registry`, err);
+    }
+    return false;
+  }
+  registry.define(tag, cls);
   s.defined.set(tag, { cls, registry });
   if (!s.watching) {
     s.watching = true;

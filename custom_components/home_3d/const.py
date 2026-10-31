@@ -28,8 +28,16 @@ DEFAULT_HOME_NAME = "Home"
 HISTORY_MAX = 20
 HISTORY_INTERVAL = 600
 
-URL_BASE = "/home_3d_static"
+# The frontend files are served under /api/ (#218): Home Assistant's service worker takes /api/ paths from the network
+# only, while it answers any other path, and Home Assistant's own page, from its cache first. So the main bundle keeps
+# ONE URL for every build and every restart, and a page the service worker kept from before an update names the same
+# module as the panel's module_url: the browser runs one copy of the bundle, not two. The files stay fresh because
+# they are sent with no-cache (a short 304 when unchanged), not because their URL changes.
+URL_BASE = "/api/home_3d/static"
+# the path before #218, still served: a cached page or an old dashboard resource can name it
+LEGACY_URL_BASE = "/home_3d_static"
 MAIN_BUNDLE = "home-3d.js"
+MAIN_URL = f"{URL_BASE}/{MAIN_BUNDLE}"
 PANEL_URL_PATH = "home_3d"
 PANEL_COMPONENT = "home-3d-panel"
 PANEL_ICON = "mdi:floor-plan"

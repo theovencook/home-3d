@@ -81,3 +81,50 @@ test("nothing changes while the registry stays the same", () => {
   adoptElements();
   assert.deepEqual([...native.defs.keys()], ["x-a"]);
 });
+
+/** A page with a browser registry: `builds` is what document.createElement builds for a tag (a plain element else). */
+function fakePage() {
+  class HTMLElementLike {}
+  class Unknown extends HTMLElementLike {}
+  const builds = new Map<string, new () => object>();
+  const g = globalThis as unknown as Record<string, unknown>;
+  g.HTMLElement = HTMLElementLike;
+  g.HTMLUnknownElement = Unknown;
+  g.document = { createElement: (tag: string) => new (builds.get(tag) ?? HTMLElementLike)() };
+  return { HTMLElementLike, builds };
+}
+const unpage = () => {
+  const g = globalThis as unknown as Record<string, unknown>;
+  delete g.document;
+  delete g.HTMLElement;
+  delete g.HTMLUnknownElement;
+};
+
+test("a tag an older copy defined in the browser's registry, with no record, is carried over with ITS class", () => {
+  try {
+    const { HTMLElementLike, builds } = fakePage();
+    class Theirs extends HTMLElementLike {}
+    builds.set("x-a", Theirs);
+    const polyfill = use(fakeRegistry());
+    assert.equal(defineElement("x-a", A), false);
+    assert.equal(polyfill.get("x-a"), Theirs);
+    // a tag the browser has nothing for is ours
+    assert.equal(defineElement("x-b", B), true);
+    assert.equal(polyfill.get("x-b"), B);
+  } finally {
+    unpage();
+  }
+});
+
+test("a class the browser can no longer build (an unknown element comes back) is not carried over", () => {
+  try {
+    const { builds } = fakePage();
+    const g = globalThis as unknown as { HTMLUnknownElement: new () => object };
+    builds.set("x-a", g.HTMLUnknownElement);
+    const polyfill = use(fakeRegistry());
+    assert.equal(defineElement("x-a", A), true);
+    assert.equal(polyfill.get("x-a"), A);
+  } finally {
+    unpage();
+  }
+});

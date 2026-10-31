@@ -59,19 +59,28 @@ let fake;
 let panel;
 let host;
 
-// The main bundle's URL. Home Assistant uses one URL for the "extra module" and the panel's module_url, so the panel
-// load finds the module that already ran.
-const BUNDLE = "/static/home-3d.js?v=check";
+// Which copies of the main bundle the page loads (#218), from the page's ?copies=:
+// - "two" (the default): the extra module from a page Home Assistant's service worker kept from before an update
+//   names another URL (another path: its own chunks and Lit too) than the panel's module_url, so two copies run;
+// - "older": the same, and the first copy keeps no record of its elements, like a build before #218;
+// - "one": one URL for both, as the integration registers them.
+const COPIES = new URLSearchParams(location.search).get("copies") ?? "two";
+const PANEL_URL = "/static/home-3d.js";
+const EXTRA_URL = COPIES === "one" ? PANEL_URL : "/old/home-3d.js?v=cached";
 
 /**
  * Home Assistant's page as far as the panel is concerned (#218). Its index page imports the extra modules (our main
  * bundle) next to its own app script, which installs the scoped custom element registry polyfill first thing and then
- * defines <home-assistant>: our bundle can run first, against the browser's own registry. Its custom panel host
- * (ha-panel-custom) then loads module_url with a script tag and creates the panel element by name; when the user goes
- * to another sidebar page it is detached and empties itself, and coming back fills it again with a NEW panel element.
+ * defines <home-assistant>: our bundle can run first, against the browser's own registry (see COPIES for the copies).
+ * Its custom panel host (ha-panel-custom) then loads module_url with a script tag and creates the panel element by
+ * name; when the user goes to another sidebar page it is detached and empties itself, and coming back fills it again
+ * with a NEW panel element.
  */
 async function loadLikeHomeAssistant() {
-  await import(BUNDLE);
+  await import(EXTRA_URL);
+  // the dashboard card's loader (a Lovelace resource) imports the bundle as well
+  await import(EXTRA_URL);
+  if (COPIES === "older") delete globalThis[Symbol.for("home-3d.custom-elements")];
   await import("/vendor/scoped-custom-element-registry.js");
   customElements.define("home-assistant", class extends HTMLElement {});
   customElements.define(
@@ -80,7 +89,7 @@ async function loadLikeHomeAssistant() {
       connectedCallback() {
         const script = document.createElement("script");
         script.type = "module";
-        script.src = BUNDLE;
+        script.src = PANEL_URL;
         script.onload = () => {
           if (!this.isConnected || this.firstElementChild) return;
           try {
@@ -120,15 +129,15 @@ const check = {
     const [plan, build] = await Promise.all([fetch("/plan.json").then((r) => r.json()), fetch("/static/build.json").then((r) => r.json())]);
     fake = makeFakeHass(plan, build);
     await loadLikeHomeAssistant();
-    // Home Assistant asks its registry (the polyfill's) for our elements: the dashboard card and the loader look the
-    // card up by name (#218)
-    const known = Object.fromEntries(["home-3d-panel", "home-3d-card"].map((tag) => [tag, !!customElements.get(tag)]));
     countUpdates("home-3d-panel");
     // the 3D view is a chunk of its own (#179): it is counted once its code is there
     void customElements.whenDefined("fp3d-view3d").then(() => countUpdates("fp3d-view3d"));
     const t0 = performance.now();
     await showPanel();
     const ready = performance.now() - t0;
+    // Home Assistant asks its registry (the polyfill's) for our elements: the dashboard card and the loader look the
+    // card up by name (#218); by now every copy of the bundle has run
+    const known = Object.fromEntries(["home-3d-panel", "home-3d-card"].map((tag) => [tag, !!customElements.get(tag)]));
     // long animation frames are reported a little later
     await sleep(300);
     const during = longFrames.filter((f) => f.at + f.ms >= t0 && f.at <= t0 + ready);

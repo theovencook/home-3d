@@ -39,7 +39,7 @@ class FakeResources:
         self.items = [i for i in self.items if i["id"] != item_id]
 
 
-URL = "/home_3d_static/home-3d.js?v=1.12.4-abc"
+URL = "/api/home_3d/static/home-3d.js"
 
 
 async def test_added_updated_and_removed() -> None:
@@ -52,8 +52,11 @@ async def test_added_updated_and_removed() -> None:
     # an update and an old hand-installed copy: both lead to the current bundle, nothing is added twice
     res.items[1]["url"] = "/home_3d_static/home-3d.js?v=1.12.3-old"
     res.items.append({"id": "old", "type": "module", "url": "/local/home-3d.js"})
+    res.items.append({"id": "older", "type": "module", "url": "/home_3d_static/home-3d-loader.js?v=1.12.3-old"})
     await async_ensure_card_resource(hass, URL)
-    assert [i["url"] for i in res.items] == [other["url"], URL, URL]
+    assert [i["url"] for i in res.items] == [other["url"], URL, URL, URL]
+    # one on the path before #218 is removed as well
+    res.items.append({"id": "legacy", "type": "module", "url": "/home_3d_static/home-3d.js?v=1"})
     await async_remove_card_resource(hass)
     assert res.items == [other]
 
@@ -71,7 +74,7 @@ async def test_loader_resource_replaces_the_bundle_and_goes_on_removal() -> None
     """The loader takes the bundle's place in the resources (#461) and is removed with the integration."""
     res = FakeResources([{"id": "a", "type": "module", "url": URL}])
     hass = SimpleNamespace(data={"lovelace": SimpleNamespace(resources=res)})
-    loader = f"{LOADER_URL}?v=1.16.0-abc"
+    loader = LOADER_URL
     await async_ensure_card_resource(hass, loader)
     assert [i["url"] for i in res.items] == [loader]
     await async_remove_card_resource(hass)

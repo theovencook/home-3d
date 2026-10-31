@@ -20,7 +20,7 @@ from typing import Any
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, Event, HomeAssistant
 
-from .const import MAIN_BUNDLE, URL_BASE
+from .const import LEGACY_URL_BASE, MAIN_BUNDLE, URL_BASE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ const url = "{url}";
 const tag = "home-3d-card";
 const load = async (n) => {{
   try {{
-    await import(n ? `${{url}}&retry=${{n}}` : url);
+    await import(n ? `${{url}}${{url.includes("?") ? "&" : "?"}}retry=${{n}}` : url);
     return true;
   }} catch (err) {{
     return false; // not there yet
@@ -118,7 +118,7 @@ async def async_remove_card_resource(hass: HomeAssistant) -> None:
         await resources.async_get_info()
         for item in list(resources.async_items()):
             url = str(item.get("url", ""))
-            if url.startswith(f"{URL_BASE}/"):
+            if url.startswith((f"{URL_BASE}/", f"{LEGACY_URL_BASE}/")):
                 await resources.async_delete_item(item["id"])
     except Exception:
         _LOGGER.debug("Could not remove the dashboard resource", exc_info=True)

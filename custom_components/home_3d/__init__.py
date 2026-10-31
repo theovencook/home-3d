@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 from functools import partial
-import hashlib
 import logging
 from pathlib import Path
 
@@ -16,7 +15,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.http import KEY_HASS
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.loader import async_get_integration
 
 from .card_resource import (
     LOADER_FILE,
@@ -33,7 +31,8 @@ from .const import (
     DEFAULT_RESTORE_PICTURE_DAYS,
     DEFAULT_SHOW_IN_SIDEBAR,
     DOMAIN,
-    MAIN_BUNDLE,
+    LEGACY_URL_BASE,
+    MAIN_URL,
     PANEL_COMPONENT,
     PANEL_ICON,
     PANEL_TITLE,
@@ -68,9 +67,10 @@ FRONTEND_DIR = Path(__file__).parent / "frontend"
 class FrontendView(HomeAssistantView):
     """The bundles, languages and pictures of the frontend, served without caching: a browser checks every file on
     each load (and gets a short 304 when it is unchanged), so an update of the files shows after a reload, with no
-    restart of Home Assistant for the frontend alone."""
+    restart of Home Assistant for the frontend alone. Also under the path before #218 (see URL_BASE)."""
 
     url = f"{URL_BASE}/{{path:.+}}"
+    extra_urls = [f"{LEGACY_URL_BASE}/{{path:.+}}"]  # noqa: RUF012 (HomeAssistantView declares it a list)
     name = f"{DOMAIN}:frontend"
     requires_auth = False
 
@@ -78,7 +78,7 @@ class FrontendView(HomeAssistantView):
         hass: HomeAssistant = request.app[KEY_HASS]
         if path == LOADER_FILE:
             # the dashboard resource: loads the bundle and tries again while it is not there yet (#461)
-            text = loader_source(await _async_main_url(hass))
+            text = loader_source(MAIN_URL)
             return web.Response(text=text, content_type="text/javascript", headers={"Cache-Control": "no-cache"})
         file = await hass.async_add_executor_job(_frontend_file, path)
         if file is None:
@@ -99,30 +99,6 @@ async def _async_register_static(hass: HomeAssistant) -> None:
         return
     hass.http.register_view(FrontendView())
     hass.data[_STATIC_REGISTERED] = True
-
-
-_MAIN_URL = f"{DOMAIN}_main_url"
-
-
-def _bundle_hash() -> str:
-    """A short hash of the main bundle: a rebuilt bundle gets a new URL even when the version stays."""
-    path = Path(__file__).parent / "frontend" / MAIN_BUNDLE
-    try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()[:10]
-    except OSError:
-        return "0"
-
-
-async def _async_main_url(hass: HomeAssistant) -> str:
-    # computed once per setup, so adding and removing the script use the same URL; unloading forgets it, so a
-    # reload after copying in a new bundle serves it under its new hash
-    if url := hass.data.get(_MAIN_URL):
-        return url
-    integration = await async_get_integration(hass, DOMAIN)
-    digest = await hass.async_add_executor_job(_bundle_hash)
-    url = f"{URL_BASE}/{MAIN_BUNDLE}?v={integration.version}-{digest}"
-    hass.data[_MAIN_URL] = url
-    return url
 
 
 async def _async_register_panel(hass: HomeAssistant, entry: ConfigEntry, url: str) -> None:
@@ -147,7 +123,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     if (data := hass.data.get(DOMAIN)) is not None:
         data.picture_days = entry.options.get(CONF_RESTORE_PICTURE_DAYS, DEFAULT_RESTORE_PICTURE_DAYS)
     frontend.async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
-    await _async_register_panel(hass, entry, await _async_main_url(hass))
+    await _async_register_panel(hass, entry, MAIN_URL)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -192,13 +168,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await _async_register_static(hass)
 
-    url = await _async_main_url(hass)
-    entry.async_on_unload(partial(_forget, hass, _MAIN_URL))
+    # one URL for the bundle everywhere: the extra module, the panel's module_url and the card loader (#218)
+    url = MAIN_URL
     entry.async_on_unload(partial(_remove_frontend, hass, url))
     frontend.add_extra_js_url(hass, url)
     # and as a dashboard resource, so a dashboard never draws the card before its script is there (#252), through
     # the loader on our own path, which tries again while the bundle is not there yet (#461)
-    entry.async_on_unload(async_schedule_card_resource(hass, f"{LOADER_URL}?{url.split('?', 1)[1]}"))
+    entry.async_on_unload(async_schedule_card_resource(hass, LOADER_URL))
     await _async_register_panel(hass, entry, url)
     # the sidebar option (#8) applies at once: the panel is registered again, the entry is not reloaded
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))

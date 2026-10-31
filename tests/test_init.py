@@ -506,7 +506,9 @@ async def test_panel_and_card_are_registered_and_removed(hass: HomeAssistant, mo
     mock_frontend["register"].assert_awaited_once()
     assert mock_frontend["register"].await_args.kwargs["frontend_url_path"] == "home_3d"
     url = mock_frontend["add_js"].call_args.args[1]
-    assert url.startswith("/home_3d_static/home-3d.js?v=")
+    # one URL for the bundle (#218): the extra module and the panel's module_url are the same
+    assert url == "/api/home_3d/static/home-3d.js"
+    assert mock_frontend["register"].await_args.kwargs["module_url"] == url
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
@@ -514,37 +516,41 @@ async def test_panel_and_card_are_registered_and_removed(hass: HomeAssistant, mo
     mock_frontend["remove_js"].assert_called_once_with(hass, url)
 
 
-async def test_reload_serves_a_rebuilt_bundle_under_a_new_url(hass: HomeAssistant, mock_frontend, monkeypatch) -> None:
+async def test_the_bundle_keeps_its_url_across_a_reload(hass: HomeAssistant, mock_frontend) -> None:
+    """A page Home Assistant's service worker kept from before names the same module as the panel (#218): the URL
+    does not change with a reload, a rebuild or an update."""
     entry = await _setup(hass)
     first = mock_frontend["add_js"].call_args.args[1]
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
-
-    monkeypatch.setattr("custom_components.home_3d._bundle_hash", lambda: "rebuilt")
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    second = mock_frontend["add_js"].call_args.args[1]
-    assert second != first
-    assert second.endswith("-rebuilt")
+    assert mock_frontend["add_js"].call_args.args[1] == first
+    assert mock_frontend["register"].await_args.kwargs["module_url"] == first
 
 
 async def test_frontend_files_are_served_without_caching(hass: HomeAssistant, hass_client) -> None:
     """A reload shows a new bundle: no-cache (and a 304 when unchanged); nothing outside the folder."""
     await _setup(hass)
     client = await hass_client()
-    res = await client.get("/home_3d_static/home-3d.js?v=1")
+    res = await client.get("/api/home_3d/static/home-3d.js")
     assert res.status == 200
     assert res.headers["Cache-Control"] == "no-cache"
     etag = res.headers.get("ETag")
     assert etag
-    again = await client.get("/home_3d_static/home-3d.js", headers={"If-None-Match": etag})
+    again = await client.get("/api/home_3d/static/home-3d.js", headers={"If-None-Match": etag})
     assert again.status == 304
-    assert (await client.get("/home_3d_static/../manifest.json")).status in (403, 404)
+    assert (await client.get("/api/home_3d/static/../manifest.json")).status in (403, 404)
+    assert (await client.get("/api/home_3d/static/nothing.js")).status == 404
+    # the path before #218 still works, for a page or a dashboard resource that names it
+    assert (await client.get("/home_3d_static/home-3d.js?v=1")).status == 200
     assert (await client.get("/home_3d_static/nothing.js")).status == 404
     # the card loader comes from our own path, nothing is written into the user's www folder
-    loader = await client.get("/home_3d_static/home-3d-loader.js?v=1")
+    loader = await client.get("/api/home_3d/static/home-3d-loader.js")
     assert loader.status == 200
-    assert 'const tag = "home-3d-card";' in await loader.text()
+    text = await loader.text()
+    assert 'const tag = "home-3d-card";' in text
+    assert 'const url = "/api/home_3d/static/home-3d.js";' in text
     assert not (Path(hass.config.path("www")) / "home_3d").exists()
 
 
@@ -613,9 +619,9 @@ async def test_card_and_static_files_work_with_sidebar_entry_off(
     hass.config_entries.async_update_entry(entry, options={"show_in_sidebar": False})
     await hass.async_block_till_done()
     client = await hass_client()
-    assert (await client.get("/home_3d_static/home-3d.js?v=1")).status == 200
+    assert (await client.get("/api/home_3d/static/home-3d.js")).status == 200
     # the dashboard card's resource loader is still served
-    assert (await client.get("/home_3d_static/home-3d-loader.js")).status == 200
+    assert (await client.get("/api/home_3d/static/home-3d-loader.js")).status == 200
 
 
 async def test_a_failed_setup_stops_what_it_started(hass: HomeAssistant, mock_frontend) -> None:

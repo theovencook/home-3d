@@ -3,10 +3,12 @@
 // every look and the 2D plan, times the renderer's render and deletes the timing wrapper again (#213), opens the
 // Extensions tab with the item editor, the Settings tab and the editor, and fails on any console error, page error
 // or failed request. It loads like Home Assistant's page (#218): the main bundle first, then Home Assistant's scoped
-// custom element registry polyfill, the panel created by name through a fake panel host; at the end it leaves the
-// panel and comes back twice without a reload. It also measures, as in docs/performance.md: load, background load in
-// view mode (5 hass updates a second), the renderer's render and editor selection; with --speed it fails when a
-// measure is past its limit.
+// custom element registry polyfill, the panel created by name through a fake panel host from a second URL (two
+// copies of the bundle, as on a page Home Assistant's service worker kept); at the end it leaves the panel and comes
+// back twice without a reload, and does load-leave-return again with one copy and with an older copy that keeps no
+// record of its elements. It also measures, as in docs/performance.md: load, background load in view mode (5 hass
+// updates a second), the renderer's render and editor selection; with --speed it fails when a measure is past its
+// limit.
 //
 //   npm run smoke                     the CI check (SwiftShader, no GPU needed)
 //   npm run speed                     the speed check at 1x
@@ -89,7 +91,8 @@ function serve() {
     if (path === "/plan.json") return send(200, plan, "application/json");
     // Home Assistant's own scoped custom element registry polyfill (#218), the version its frontend pins
     if (path === "/vendor/scoped-custom-element-registry.js") return send(200, readFileSync(POLYFILL), "text/javascript");
-    const [root, rest] = path.startsWith("/static/") ? [bundles, path.slice(8)] : path.startsWith("/check/") ? [join(here, "browser-check"), path.slice(7)] : [null, ""];
+    // /old/: the same bundles under a second path, as the copy a cached page names (#218)
+    const [root, rest] = path.startsWith("/static/") ? [bundles, path.slice(8)] : path.startsWith("/old/") ? [bundles, path.slice(5)] : path.startsWith("/check/") ? [join(here, "browser-check"), path.slice(7)] : [null, ""];
     const file = root && resolve(root, rest);
     if (!file || !file.startsWith(root) || !existsSync(file) || !statSync(file).isFile()) return send(404, "not found");
     send(200, readFileSync(file), TYPES[extname(file)] ?? "application/octet-stream");
@@ -114,27 +117,37 @@ const browser = await puppeteer.launch({
     ...(process.env.CI ? ["--no-sandbox"] : []),
   ],
 });
-try {
+/** A page of the check, `copies` as in harness.js (#218); every problem it logs is labelled with it. */
+async function openPage(copies) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1 });
+  const where = copies === "two" ? "" : ` [copies=${copies}]`;
   page.on("console", (m) => {
-    if (m.type() === "error") problems.push(`console: ${m.text()}`);
+    if (m.type() === "error") problems.push(`console${where}: ${m.text()}`);
   });
-  page.on("pageerror", (e) => problems.push(`page error: ${flag("stack") ? e.stack : e.message}`));
-  page.on("requestfailed", (r) => problems.push(`request failed: ${r.url()} (${r.failure()?.errorText})`));
+  page.on("pageerror", (e) => problems.push(`page error${where}: ${flag("stack") ? e.stack : e.message}`));
+  page.on("requestfailed", (r) => problems.push(`request failed${where}: ${r.url()} (${r.failure()?.errorText})`));
   page.on("response", (r) => {
-    if (r.status() >= 400) problems.push(`HTTP ${r.status()}: ${r.url()}`);
+    if (r.status() >= 400) problems.push(`HTTP ${r.status()}${where}: ${r.url()}`);
   });
   const cdp = await page.createCDPSession();
   if (throttle > 1) await cdp.send("Emulation.setCPUThrottlingRate", { rate: throttle });
-
-  await page.goto(origin, { waitUntil: "load" });
+  await page.goto(`${origin}/?copies=${copies}`, { waitUntil: "load" });
   await page.waitForFunction(() => !!window.check, { timeout: 30000 });
   const run = (name, arg) => page.evaluate((n, a) => window.check[n](a), name, arg);
+  return { page, run, where };
+}
 
+/** #218: Home Assistant's registry (its scoped-registry polyfill) knows our elements, although the bundle ran first. */
+function checkKnown(load, where) {
+  for (const [tag, known] of Object.entries(load?.known ?? {})) if (!known) problems.push(`customElements.get("${tag}") is undefined after Home Assistant's polyfill loaded (#218)${where}`);
+}
+
+try {
+  // the full check runs with two copies of the main bundle, as on a page Home Assistant's service worker kept (#218)
+  const { page, run } = await openPage("two");
   results.load = await run("start");
-  // #218: Home Assistant's registry (its scoped-registry polyfill) knows our elements, although the bundle ran first
-  for (const [tag, known] of Object.entries(results.load.known)) if (!known) problems.push(`customElements.get("${tag}") is undefined after Home Assistant's polyfill loaded (#218)`);
+  checkKnown(results.load, "");
   results.render = await run("renderInfo");
   if (!results.render) problems.push("the 3D view has no renderer");
   if (speed) {
@@ -178,6 +191,19 @@ try {
   // time, which must start (it stayed blank with "Illegal constructor" from the polyfill)
   await run("reenter", { times: 2 });
   results.unknownCalls = await run("unknownCalls");
+  await page.close();
+  // #218: the other ways the bundle can be on the page, each loaded and left and entered again
+  for (const copies of ["one", "older"]) {
+    const other = await openPage(copies);
+    try {
+      checkKnown(await other.run("start"), other.where);
+      await other.run("reenter", { times: 2 });
+    } catch (err) {
+      problems.push(`check failed${other.where}: ${err.message}`);
+    } finally {
+      await other.page.close();
+    }
+  }
 } catch (err) {
   problems.push(`check failed: ${err.message}`);
 } finally {
