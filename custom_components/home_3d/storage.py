@@ -753,7 +753,7 @@ class FloorplanData:
         self, building: dict[str, Any], recipe_bases: dict[str, str] | None = None, *, check_racks: bool = False
     ) -> int:
         """Store the active home's building (see Home.async_save_building)."""
-        return await self.active.async_save_building(building, recipe_bases)
+        return await self.active.async_save_building(building, recipe_bases, check_racks=check_racks)
 
     async def async_update_building(self, change: Callable[[dict[str, Any]], dict[str, Any] | None]) -> int:
         """Change the active home's building from the plan it has then (see Home.async_update_building)."""

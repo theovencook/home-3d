@@ -209,14 +209,6 @@ def _where(hass: HomeAssistant, service: LocateService, who: str, devices: list[
     return Located(t["in"].format(who=who, room=best["room_name"]), [best["room"]], persons)
 
 
-async def async_answer(
-    hass: HomeAssistant, service: LocateService | None, text: str, language: str, user_id: str | None = None
-) -> str | None:
-    """The answer to a locating question, or None when the sentence is no such question."""
-    located = await async_locate(hass, service, text, language, user_id)
-    return located.text if located else None
-
-
 async def _is_admin(hass: HomeAssistant, user_id: str | None) -> bool:
     """Whether the asking user is an admin. Nobody known (a satellite, an automation without a user) is not."""
     user = await hass.auth.async_get_user(user_id) if user_id else None

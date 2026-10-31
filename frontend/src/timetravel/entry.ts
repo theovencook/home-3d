@@ -51,7 +51,7 @@ export class Session implements TimeTravelSession {
   hass: HomeAssistant | null = null;
   readonly replay: ReplayInfo;
   state: SessionState = "loading";
-  /** Error code of the failed load ("not_unlocked", "no_recorder", "unknown_command" …). */
+  /** Error code of the failed load ("no_recorder", "unknown_command" …). */
   error: string | null = null;
   progress = 0;
   playback: Playback | null = null;

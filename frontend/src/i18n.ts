@@ -1253,7 +1253,6 @@ const en = {
   tt_retry: "Retry",
   tt_no_recorder: "Without Home Assistant's recorder there is no history.",
   tt_restart: "Please restart Home Assistant – only then does it know time travel.",
-  tt_locked: "Time travel is not available.",
   tt_readonly: "Time travel: view only – nothing is switched",
   tt_past_no: "Not while looking at the past",
   tt_ev_door: "{name} opened",

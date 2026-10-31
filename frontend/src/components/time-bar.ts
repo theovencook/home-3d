@@ -585,13 +585,11 @@ export class Fp3dTimeBar extends LitElement {
     const ready = s.state === "ready" && !!pb;
     const error =
       s.state === "error"
-        ? s.error === "not_unlocked"
-          ? t("tt_locked")
-          : s.error === "no_recorder"
-            ? t("tt_no_recorder")
-            : s.error === "unknown_command"
-              ? t("tt_restart")
-              : t("tt_error", { error: s.error ?? "?" })
+        ? s.error === "no_recorder"
+          ? t("tt_no_recorder")
+          : s.error === "unknown_command"
+            ? t("tt_restart")
+            : t("tt_error", { error: s.error ?? "?" })
         : null;
     const perHour = pb ? 3600 / pb.speed : 10;
     const minutes = Math.round((s.end - s.start) / 60000);
@@ -626,7 +624,7 @@ export class Fp3dTimeBar extends LitElement {
         >
           ${ready ? this.renderTrack() : error ? html`<em class="msg">${error}</em>` : html`<i class="progress" style="width:${Math.round(s.progress * 100)}%"></i>`}
         </div>
-        ${error && s.error !== "not_unlocked" ? html`<button class="chip" @click=${() => void s.load()}>${t("tt_retry")}</button>` : nothing}
+        ${error ? html`<button class="chip" @click=${() => void s.load()}>${t("tt_retry")}</button>` : nothing}
         <button class="chip range" ?disabled=${!ready} title=${t("tt_range_hint")} aria-label=${t("tt_range_hint")} @click=${() => s.setRange(s.range === "7d" ? "24h" : "7d")}>
           ${s.range === "7d" ? t("tt_days", { n: s.maxDays }) : "24 h"}
         </button>

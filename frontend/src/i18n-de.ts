@@ -1255,7 +1255,6 @@ export const de: Record<I18nKey, string> = {
   tt_retry: "Erneut",
   tt_no_recorder: "Ohne den Recorder von Home Assistant gibt es keinen Verlauf.",
   tt_restart: "Bitte Home Assistant neu starten – erst dann kennt es die Zeitreise.",
-  tt_locked: "Die Zeitreise ist nicht verfügbar.",
   tt_readonly: "Zeitreise: nur ansehen – nichts wird geschaltet",
   tt_past_no: "Nicht beim Blick in die Vergangenheit",
   tt_ev_door: "{name} geöffnet",
