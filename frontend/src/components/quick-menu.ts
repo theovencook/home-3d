@@ -4,6 +4,7 @@
 import { css, html, LitElement, nothing } from "lit";
 import { type CarState, coverTiltButtons, entityName, isUnavailable, kindOf } from "../devices.ts";
 import { askConfirm } from "../ask.ts";
+import { callServiceSafe } from "../failure.ts";
 import "./ask-dialog.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import { openMoreInfo, stateText } from "../markers.ts";
@@ -118,7 +119,7 @@ export class Fp3dQuickMenu extends LitElement {
   }
 
   private call(domain: string, service: string, data: Record<string, unknown> = {}): void {
-    void this.hass.callService(domain, service, { entity_id: this.entity, ...data });
+    callServiceSafe(this.hass, domain, service, { entity_id: this.entity, ...data }, (error) => this.t("service_failed", { error }));
   }
 
   private close(): void {
@@ -243,7 +244,7 @@ export class Fp3dQuickMenu extends LitElement {
   /** Auto Pro: lock and unlock (unlocking asks first), climate, charging; the charge and range on top. */
   private renderCar(car: CarState) {
     const e = car.entities;
-    const svc = (domain: string, service: string, id: string, data: Record<string, unknown> = {}) => void this.hass.callService(domain, service, { entity_id: id, ...data });
+    const svc = (domain: string, service: string, id: string, data: Record<string, unknown> = {}) => callServiceSafe(this.hass, domain, service, { entity_id: id, ...data }, (error) => this.t("service_failed", { error }));
     const lockId = e.lock;
     const lockIsLock = !!lockId && lockId.startsWith("lock.");
     // anything that switches on and off (a switch, an input_boolean helper …) goes through homeassistant.turn_on/off

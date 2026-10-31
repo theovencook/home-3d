@@ -47,6 +47,11 @@ import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, type En
 import { fieldFace, fieldSize, roofFaces, roofWindowRoom } from "../solar.ts";
 import { type CustomButton, type EntityRef, DEFAULT_HOLOGRAM, lockAlong, type PoolPipe, type RoofWindow, type SolarField, uid } from "../model.ts";
 
+/** A service call from the 3D view; a refused one shows a short message instead of doing nothing (#171). */
+function safeCall(hass: HomeAssistant, domain: string, service: string, data: Record<string, unknown>): void {
+  callServiceSafe(hass, domain, service, data, (error) => translate(hass, "service_failed", { error }));
+}
+
 /** A hologram card: the house's balance on the main plant, one plant (a balcony plant) on its own, or a device. */
 /** The unit a meter counts in (m³ when it does not say). */
 function meterUnit(hass: HomeAssistant, id: string | null | undefined): string {
@@ -163,6 +168,7 @@ import { flowWidth } from "../viewer/flow-style.ts";
 import { floorCounts, floorInfoText, locatedPersons, personLook, personsInRooms, personsShown } from "../presence.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
+import { callServiceSafe } from "../failure.ts";
 import type { BinCue, DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SoundSource, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 import { wallLayout } from "../camera-wall.ts";
 import { watchedEntities } from "../watched.ts";
@@ -2319,7 +2325,7 @@ export class Fp3dView3d extends LitElement {
       else this.mediaFolded.add(c.spot);
       this.requestUpdate();
     };
-    const svc = (domain: string, service: string, id: string) => void hass.callService(domain, service, { entity_id: id });
+    const svc = (domain: string, service: string, id: string) => safeCall(hass, domain, service, { entity_id: id });
     const onOff = (id: string, on: boolean) => (id.startsWith("climate.") ? svc("climate", on ? "turn_on" : "turn_off", id) : svc("homeassistant", on ? "turn_on" : "turn_off", id));
     const lockTap = async () => {
       if (!c.lock) return;
@@ -3102,7 +3108,7 @@ export class Fp3dView3d extends LitElement {
     const lights = [...ids].filter((id) => !this.confirmSet.has(id));
     if (!lights.length) return;
     const anyOn = lights.some((id) => hass.states[id]?.state === "on");
-    void hass.callService("homeassistant", anyOn ? "turn_off" : "turn_on", { entity_id: lights });
+    safeCall(hass, "homeassistant", anyOn ? "turn_off" : "turn_on", { entity_id: lights });
     this.roomFlash = { roomId, until: performance.now() + 350 };
     this.applyTint();
     setTimeout(() => {
@@ -3113,7 +3119,7 @@ export class Fp3dView3d extends LitElement {
 
   private runScene(id: string): void {
     if (this.ro) return;
-    void this.hass.callService(id.split(".")[0], "turn_on", { entity_id: id });
+    safeCall(this.hass, id.split(".")[0], "turn_on", { entity_id: id });
     this._sceneFired = id;
     setTimeout(() => (this._sceneFired = null), 600);
   }
@@ -4346,9 +4352,9 @@ export class Fp3dView3d extends LitElement {
     const s = this._swipe;
     if (!s || !this.hass) return;
     if (s.kind === "light") {
-      if (s.value <= 0) void this.hass.callService("light", "turn_off", { entity_id: s.entity });
-      else void this.hass.callService("light", "turn_on", { entity_id: s.entity, brightness_pct: s.value });
-    } else void this.hass.callService("cover", "set_cover_position", { entity_id: s.entity, position: s.value });
+      if (s.value <= 0) safeCall(this.hass, "light", "turn_off", { entity_id: s.entity });
+      else safeCall(this.hass, "light", "turn_on", { entity_id: s.entity, brightness_pct: s.value });
+    } else safeCall(this.hass, "cover", "set_cover_position", { entity_id: s.entity, position: s.value });
   }
 
   /** Fly to a search result: rooms are selected, devices shown on their floor and flashing. */
@@ -4812,7 +4818,7 @@ export class Fp3dView3d extends LitElement {
                   aria-pressed=${on || this._sceneFired === id}
                   ?disabled=${isUnavailable(st)}
                   @click=${() => {
-                    void hass.callService(domain, service, { entity_id: id });
+                    safeCall(hass, domain, service, { entity_id: id });
                     this._sceneFired = id;
                     setTimeout(() => (this._sceneFired = null), 600);
                   }}

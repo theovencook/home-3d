@@ -3,6 +3,7 @@
 
 import { html, nothing } from "lit";
 import { storeImage } from "../../api.ts";
+import { errorText } from "../../failure.ts";
 import { carEntities, type CarEntities, furnitureEntities, hasScreen, isMediaFurniture, pictureRuleMatches } from "../../devices.ts";
 import { clipConvex } from "../../geometry/area.ts";
 import { holeInRoom } from "../../geometry/holes.ts";
@@ -1089,6 +1090,14 @@ export class ItemFormPart {
     const file = input.files?.[0];
     input.value = "";
     if (!file) return;
+    try {
+      await this.storePicture(file, f, index);
+    } catch (err) {
+      await this.tell(this.t("picture_failed", { error: errorText(err) }));
+    }
+  }
+
+  async storePicture(this: Fp3dEditor, file: File, f: Furniture, index: number): Promise<void> {
     const bitmap = await createImageBitmap(file);
     const k = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas");

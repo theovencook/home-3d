@@ -4,6 +4,7 @@
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
 import { areaEntities, coverTiltButtons, entityName, groupByDevice, isUnavailable, kindOf, roomClimateSensors, roomClimateValue, roomPanelEntities, fromCelsius, tempUnit, type DeviceKind } from "../devices.ts";
 import { askConfirm } from "../ask.ts";
+import { callServiceSafe } from "../failure.ts";
 import { confirmGroup } from "../confirm-group.ts";
 import "./ask-dialog.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
@@ -111,7 +112,7 @@ export class Fp3dRoomPanel extends LitElement {
 
   private call(domain: string, service: string, data: Record<string, unknown>): void {
     if (this.readOnly) return;
-    void this.hass.callService(domain, service, data);
+    callServiceSafe(this.hass, domain, service, data, (error) => this.t("service_failed", { error }));
   }
 
   private get areaName(): string | undefined {

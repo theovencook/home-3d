@@ -6,6 +6,7 @@ import { download, exportFile, parseExport } from "../../transfer.ts";
 import { storedImageIds } from "../../transfer.ts";
 import { normalizeBuilding } from "../../model.ts";
 import type { Building } from "../../model.ts";
+import { errorText } from "../../failure.ts";
 import { checkBackup, fetchBackup, restoreBackup, type BackupFile, type BackupHome } from "../../api.ts";
 import { migratePlanTypes } from "../../packs.ts";
 import type { Fp3dEditor } from "../editor.ts";
@@ -25,7 +26,13 @@ export class BackupPart {
     // a picture it names may be gone (kept only so many days, #154): it restores without it, and says so
     const lacks = snap.missing_pictures ? ` ${this.t("backup_restore_missing", { n: snap.missing_pictures })}` : "";
     if (!this.hass || !(await this.ask(this.t("backup_restore_confirm", { time: this.snapshotTime(snap) }) + lacks, this.t("backup_restore")))) return;
-    const res = await restoreSnapshot(this.hass, snap.id, this.home);
+    let res: Awaited<ReturnType<typeof restoreSnapshot>>;
+    try {
+      res = await restoreSnapshot(this.hass, snap.id, this.home);
+    } catch (err) {
+      await this.tell(this.t("restore_failed", { error: errorText(err) }));
+      return;
+    }
     this._notice = res.missing_pictures ? this.t("backup_restored_missing", { n: res.missing_pictures }) : this.t("backup_restored");
     await this.loadHistory();
   }
