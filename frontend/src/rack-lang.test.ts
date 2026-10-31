@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { bundledLanguages } from "./bundled-languages.fixture.ts";
 import { translate } from "./i18n.ts";
 import type { HomeAssistant } from "./types.ts";
 
@@ -11,13 +12,12 @@ for (const m of src.slice(src.indexOf("const en")).matchAll(/^ {2}([a-z0-9_]+): 
 const keys = Object.keys(en).filter((k) => /^(rack_|voice_rack_|card_rack_)/.test(k));
 const holes = (s: string) => (s.match(/\{[a-z]+\}/g) ?? []).sort().join();
 
-test("every language file has the rack strings with the same placeholders", () => {
+test("every bundled language pack has the rack strings with the same placeholders", () => {
   assert.ok(keys.length > 60);
-  for (const f of readdirSync(new URL("../lang/", import.meta.url))) {
-    const table = JSON.parse(readFileSync(new URL(`../lang/${f}`, import.meta.url), "utf8")) as Record<string, string>;
+  for (const { folder, strings: table } of bundledLanguages()) {
     for (const k of keys) {
-      assert.equal(typeof table[k], "string", `${f}: ${k} missing`);
-      assert.equal(holes(table[k]!), holes(en[k]!), `${f}: ${k} placeholders`);
+      assert.equal(typeof table[k], "string", `${folder}: ${k} missing`);
+      assert.equal(holes(table[k]!), holes(en[k]!), `${folder}: ${k} placeholders`);
     }
   }
 });

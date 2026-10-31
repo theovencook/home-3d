@@ -5,7 +5,7 @@ pack**: a small folder with the texts of that language, which installs like a [f
 make one and publish it, and a text the pack lacks shows in English, so a pack that covers only part of the screens
 is still useful.
 
-German ships with Home 3D as the first language pack. Home 3D shows the language Home Assistant runs in (the user's
+German and 16 further languages ship with Home 3D as language packs. Home 3D shows the language Home Assistant runs in (the user's
 language in their profile).
 
 ## A language pack is a folder
@@ -113,13 +113,13 @@ packs ([Updates](packs.md#updates)). A backup carries the installed language pac
   for that language's texts once (`home_3d/languages/get`, open to everyone who can see Home 3D, such as a wall
   tablet's user) and draws once they are there. The browser keeps them with their hash and sends the hash next time:
   while the texts are the same, Home Assistant answers with the hash alone.
-- Older partial tables for a few languages (`frontend/lang/*.json`: French, Spanish, Dutch, Italian, Hungarian,
-  Danish, Swedish, Norwegian, Finnish, Czech, Polish, Romanian, Slovenian, Chinese, Portuguese) are still fetched
-  next to the bundles. A language pack's texts win over them; English fills whatever both lack.
+- Every text of the page is in the English table or in a language pack: the item editor, the Settings page, time travel, the locating setup and the microphone probe included (#217). There is no other file of texts next to the bundles.
 - The panel, the cards and the card editor set their `lang` attribute to the language their texts are in: Home
   Assistant's language when there are texts for it, otherwise `en`. Screen readers pick their voice by it.
 
-## Not in language packs yet
+## What ships
 
-The item editor and the Settings page keep their own English and German texts in their own bundles, and the names of
-furniture come from their packs (`name` by language). Those parts show English in other languages for now.
+The bundled packs are `theovencook.lang-de` (every text) and `theovencook.lang-fr`, `-es`, `-nl`, `-it`, `-hu`, `-da`, `-sv`, `-nb`, `-nn`, `-fi`, `-cs`, `-pl`, `-ro`, `-sl`, `-zh` and `-pt`. The 16 are partial: a text they lack
+shows in English, and a pack installed later (or a newer release of a bundled one) can add the missing ones.
+
+The names of furniture come from their packs (`name` by language), not from a language pack.

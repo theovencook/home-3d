@@ -1,22 +1,16 @@
-// How texts are looked up and loaded (#196): the language a page shows, its texts from language packs and lang/*.json,
-// English as the fallback. No table here: i18n.ts holds the English one and registers it, so the editor and card
-// editor bundles can share it (i18n-borrowed.ts) instead of carrying a copy each.
+// How texts are looked up and loaded (#196): the language a page shows, its texts from language packs, English as the
+// fallback (#217: there is no other source of texts). No table here: i18n.ts holds the English one and registers it, so
+// the editor and card editor bundles can share it (i18n-borrowed.ts) instead of carrying a copy each.
 
 import type { I18nKey } from "./i18n.ts";
 import type { HomeAssistant } from "./types.ts";
 
-declare const __FP3D_LANG_HASH__: string;
-
 /**
  * English is built in; every other language is loaded once when Home Assistant runs in it (#196), so wall tablets
- * never load texts they do not need. Its texts come from two places, and a key neither has shows in English:
- *
- * - language packs, from Home Assistant (`home_3d/languages/get`): the ones that come with Home 3D (German) and the
- *   ones installed from a folder or GitHub, like furniture packs. A key in a pack wins.
- * - the older partial tables in lang/<code>.json next to the bundles, for the languages below.
+ * never load texts they do not need. Its texts come from language packs in Home Assistant (`home_3d/languages/get`): the
+ * ones that come with Home 3D (German and 16 partial ones, #217) and the ones installed from a folder or GitHub, like
+ * furniture packs. A key a pack lacks shows in English.
  */
-// "zh" is Simplified Chinese (zh-Hans; zh-Hant reads it too until it has its own), "pt" Portuguese for Portugal and Brazil
-export const STATIC_LANGUAGES = ["fr", "es", "nl", "it", "hu", "da", "sv", "nb", "nn", "fi", "cs", "pl", "ro", "sl", "zh", "pt"] as const;
 type Table = Record<string, string>;
 // shared on the page: every bundle that names texts carries its own copy of this module, and a language one of them
 // loaded is at hand in the others at once (no English flash, no second fetch). The English table is the main bundle's
@@ -104,21 +98,8 @@ async function packTexts(code: string, hass: Caller | undefined): Promise<Table>
   }
 }
 
-/** A language's older table in lang/<code>.json; none or broken: empty. */
-async function fileTexts(code: string): Promise<Table> {
-  if (!(STATIC_LANGUAGES as readonly string[]).includes(code)) return {};
-  try {
-    const url = new URL(`./lang/${code}.json?v=${typeof __FP3D_LANG_HASH__ === "string" ? __FP3D_LANG_HASH__ : "0"}`, import.meta.url).href;
-    const r = await fetch(url);
-    const table = r.ok ? ((await r.json()) as Table) : {};
-    return table && typeof table === "object" ? table : {};
-  } catch {
-    return {};
-  }
-}
-
 /**
- * Load a language's texts (once): its packs from Home Assistant and its file, the pack's keys over the file's. Nothing
+ * Load a language's texts (once): its packs from Home Assistant. Nothing
  * found leaves English in place. `again`: load anew (a language pack was installed or removed); the texts shown stay
  * until the new ones are there.
  */
@@ -127,8 +108,8 @@ export function loadLanguage(lang: string | undefined, hass?: Caller, again = fa
   if (!code || (extra.has(code) && !again)) return Promise.resolve();
   let p = pending.get(code);
   if (!p) {
-    p = Promise.all([fileTexts(code), packTexts(code, hass)])
-      .then(([file, pack]) => void extra.set(code, { ...file, ...pack }))
+    p = packTexts(code, hass)
+      .then((pack) => void extra.set(code, pack))
       .finally(() => pending.delete(code));
     pending.set(code, p);
   }

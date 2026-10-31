@@ -38,23 +38,17 @@ const common = {
 
 const viewerConfig = { ...common, entryPoints: ["src/viewer/viewer3d.ts"], outfile: `${out}/home-3d-3d.js` };
 // the card's visual editor only loads in the dashboard's card dialog
-// the language files (lang/*.json) are fetched with a hash of their content, so a new text is never stale
-const LANGS = ["fr", "es", "nl", "it", "hu", "da", "sv", "nb", "nn", "fi", "cs", "pl", "ro", "sl", "zh", "pt"];
-// German is a language pack that ships with Home 3D (#196: bundled_languages/theovencook.lang-de, sent by Home
-// Assistant like an installed language pack); no bundle carries it (#134), the check below makes sure
+// Every language but English is a language pack that ships with Home 3D (#196, #217: bundled_languages/theovencook.lang-*,
+// sent by Home Assistant like an installed language pack); no bundle carries one (#134), the check below makes sure
 const de = JSON.parse(readFileSync("../custom_components/home_3d/bundled_languages/theovencook.lang-de/strings.json", "utf8"));
-const langHash = createHash("sha256")
-  .update(LANGS.map((l) => (existsSync(`lang/${l}.json`) ? readFileSync(`lang/${l}.json`) : "")).join("\n"))
-  .digest("hex")
-  .slice(0, 12);
-const cardEditorConfig = { ...common, entryPoints: ["src/card-editor.ts"], outfile: `${out}/home-3d-card-editor.js`, define: { __FP3D_LANG_HASH__: JSON.stringify(langHash) } };
+const cardEditorConfig = { ...common, entryPoints: ["src/card-editor.ts"], outfile: `${out}/home-3d-card-editor.js` };
 // the editor is only needed by admins who open it, so it is a bundle of its own as well
 // (it draws furniture previews with the 3D bundle, so it knows that bundle's hash too)
 const editorConfig = (viewerHash, locateHash, itemsHash) => ({
   ...common,
   entryPoints: ["src/components/editor.ts"],
   outfile: `${out}/home-3d-editor.js`,
-  define: { __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash), __FP3D_LANG_HASH__: JSON.stringify(langHash), __FP3D_LOCATE_HASH__: JSON.stringify(locateHash), __FP3D_ITEMS_HASH__: JSON.stringify(itemsHash) },
+  define: { __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash), __FP3D_LOCATE_HASH__: JSON.stringify(locateHash), __FP3D_ITEMS_HASH__: JSON.stringify(itemsHash) },
 });
 // the item editor (#13) only loads when an editor opens it; it draws its live picture with the 3D bundle
 const itemsConfig = (viewerHash) => ({ ...common, entryPoints: ["src/items/entry.ts"], outfile: `${out}/home-3d-items.js`, define: { __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash) } });
@@ -80,7 +74,7 @@ const version = JSON.parse(readFileSync("../custom_components/home_3d/manifest.j
 const inputs = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? inputs(`${dir}/${e.name}`) : [`${dir}/${e.name}`])).sort();
 const buildId = (() => {
   const h = createHash("sha256").update(version);
-  for (const file of [...inputs("src"), ...inputs("lang"), "package-lock.json", "build.mjs"]) if (existsSync(file)) h.update(file).update(readFileSync(file));
+  for (const file of [...inputs("src"), "package-lock.json", "build.mjs"]) if (existsSync(file)) h.update(file).update(readFileSync(file));
   return h.digest("hex").slice(0, 12);
 })();
 // `hashes`: the content hash of each bundle it loads, by name (viewer, editor, cardEditor, timeTravel, fun, voice, locate, plan2d, settings)
@@ -109,7 +103,6 @@ const mainConfig = (hashes) => ({
     __FP3D_SETTINGS_HASH__: JSON.stringify(hashes.settings),
     __FP3D_VERSION__: JSON.stringify(version),
     __FP3D_BUILD__: JSON.stringify(buildId),
-    __FP3D_LANG_HASH__: JSON.stringify(langHash),
   },
 });
 // the bundles the main bundle loads by hash (the keys of mainConfig's `hashes`)
@@ -123,11 +116,8 @@ const FONTS = [
 ];
 function copyFonts() {
   mkdirSync(`${out}/fonts`, { recursive: true });
-  // further languages, fetched by the bundles only when Home Assistant runs in them
-  mkdirSync(`${out}/lang`, { recursive: true });
-  for (const l of LANGS) if (existsSync(`lang/${l}.json`)) copyFileSync(`lang/${l}.json`, `${out}/lang/${l}.json`);
-  // German came from here before #196: it is a language pack now
-  rmSync(`${out}/lang/de.json`, { force: true });
+  // every language comes from a language pack (#196, #217); the lang/*.json tables of older builds are gone
+  rmSync(`${out}/lang`, { recursive: true, force: true });
   for (const [pkg, file, name] of FONTS) {
     const dir = `node_modules/@fontsource-variable/${pkg}`;
     copyFileSync(`${dir}/files/${file}`, `${out}/fonts/${name}`);
@@ -255,7 +245,7 @@ if (watch) {
       }
     });
   }
-  // German is fetched (lang/de.json, #134): a bundle that imports the German table again carries it for everyone
+  // German comes from its language pack (#134, #196): a bundle that imports the German table again carries it for everyone
   const german = [de.no_building_admin, de.no_persons, de.phone_hint];
   for (const file of shipped) {
     const text = readFileSync(`${out}/${file}`, "utf8");

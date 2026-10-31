@@ -94,6 +94,24 @@ def test_the_bundled_german_pack_is_complete_and_checks() -> None:
     assert len(german["strings"]) > 2000
 
 
+LANGUAGES = ["de", "fr", "es", "nl", "it", "hu", "da", "sv", "nb", "nn", "fi", "cs", "pl", "ro", "sl", "zh", "pt"]
+
+
+def test_every_language_ships_as_a_bundled_pack_that_checks() -> None:
+    """#217: German and the 16 partial languages are bundled packs (no lang/*.json next to the bundles any more)."""
+    bundled = packs.load_bundled(packs.BUNDLED_LANGUAGES_DIR)
+    by_language = {p["language"]: p for p in bundled}
+    assert sorted(by_language) == sorted(LANGUAGES)
+    for code, pack in by_language.items():
+        assert pack["id"] == f"theovencook.lang-{code}" and pack["bundled"] and pack["licence"] == "MIT"
+        assert len(pack["strings"]) > 500, code
+        # every pack carries the locating setup and the item editor texts: those pages are not English-only any more
+        assert "loc_title" in pack["strings"], code
+    assert "ie_title" in by_language["de"]["strings"] and "st_title" in by_language["de"]["strings"]
+    strings, ids = packs.language_of(bundled, "fr")
+    assert ids == ["theovencook.lang-fr"] and strings["editor"] == "Éditeur"
+
+
 def test_several_packs_for_one_language_add_up_the_later_one_wins() -> None:
     first = {**packs.verify_folder(_folder()), "id": "a.fr"}
     second = {**packs.verify_folder(_folder(strings={"view": "Vue", "floor": "Étage"})), "id": "b.fr"}

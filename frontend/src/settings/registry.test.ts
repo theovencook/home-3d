@@ -27,11 +27,13 @@ import {
   type Setting,
   type SettingsEnv,
 } from "./registry.ts";
-import { SETTINGS_DE, SETTINGS_EN, settingsTexts } from "./texts.ts";
 import { sampleBuilding, sampleHass } from "./settings.fixture.ts";
 
 const en = englishTable() as Record<string, string>;
-const text = settingsTexts((k) => en[k] ?? k, () => "en");
+const text = (k: string, vars: Record<string, string | number> = {}) => Object.entries(vars).reduce((s, [n, v]) => s.replace(`{${n}}`, String(v)), en[k] ?? k);
+const deTable = de as Record<string, string>;
+const SETTINGS_EN = Object.fromEntries(Object.entries(en).filter(([k]) => k.startsWith("st_")));
+const SETTINGS_DE = Object.fromEntries(Object.entries(deTable).filter(([k]) => k.startsWith("st_")));
 
 function memoryPrefs(): DevicePrefs & { map: Map<string, string> } {
   const map = new Map<string, string>();
@@ -103,7 +105,7 @@ test("the page's own texts are complete in German, with the same placeholders", 
   const holes = (t: string) => (t.match(/\{[a-z_]+\}/g) ?? []).sort().join();
   for (const [k, v] of Object.entries(SETTINGS_EN)) {
     assert.equal(typeof SETTINGS_DE[k], "string", `de: ${k}`);
-    assert.equal(holes(SETTINGS_DE[k]), holes(v), `de: ${k} placeholders`);
+    assert.equal(holes(SETTINGS_DE[k]!), holes(v), `de: ${k} placeholders`);
   }
   for (const k of Object.keys(SETTINGS_DE)) assert.ok(k in SETTINGS_EN, `de only: ${k}`);
 });

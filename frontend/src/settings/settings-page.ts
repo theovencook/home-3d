@@ -40,7 +40,6 @@ import {
   shownLength,
   typedLength,
 } from "./registry.ts";
-import { settingsTexts } from "./texts.ts";
 
 /** The browser's storages a reset looks through (blocked storage is skipped). */
 function browserStores(): KeyStore[] {
@@ -150,9 +149,9 @@ export class SettingsPage extends LitElement {
     this._note = null;
   }
 
-  /** The page's text: its own first, else the main texts. */
+  /** The page's text (st_ keys are in the main table and the language packs like every other). */
   private tr(key: TextKey, vars?: Record<string, string | number>): string {
-    return settingsTexts(this.t, () => this.hass?.language ?? navigator.language)(key, vars);
+    return this.t(key, vars);
   }
 
   /** The loaders in use: the registry's, unless a test hands in its own. */

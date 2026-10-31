@@ -6,7 +6,6 @@ import { englishTable } from "../i18n.ts";
 import type { HomeAssistant } from "../types.ts";
 import { liveSections, settingsIn, type SettingsEnv } from "./registry.ts";
 import { sampleBuilding } from "./settings.fixture.ts";
-import { settingsTexts } from "./texts.ts";
 
 const { SettingsPage } = await import("./settings-page.ts");
 const en = englishTable() as Record<string, string>;
@@ -15,7 +14,7 @@ const t = (k: string, vars: Record<string, string | number> = {}) => {
   for (const [n, v] of Object.entries(vars)) s = s.replace(`{${n}}`, String(v));
   return s;
 };
-const tr = settingsTexts(t, () => "en");
+const tr = t;
 
 /** The text and attribute names of a lit template, nested templates and lists included. */
 function flat(v: unknown): string {
