@@ -9178,6 +9178,13 @@ export class Fp3dView3d extends LitElement {
         color: var(--fp3d-muted);
         font-variant-numeric: tabular-nums;
         pointer-events: none;
+        /* the buttons (search, hide, star) fill the corner on the controls' side: the line keeps clear of them and wraps (#241) */
+        max-width: calc(100% - 126px);
+        text-align: right;
+        text-wrap: balance;
+      }
+      .fp3d-side-right .fp3d-stats {
+        right: 116px;
       }
       .fp3d-error {
         position: absolute;
