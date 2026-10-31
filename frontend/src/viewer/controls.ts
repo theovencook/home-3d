@@ -73,6 +73,8 @@ export class OrbitControls {
   private held = false;
   /** An object is being dragged: moves go to events.drag instead of the camera. */
   private grabbing = false;
+  /** The pointer that started the furniture drag; every other pointer is ignored until it lifts (#174). */
+  private grabId: number | null = null;
   /** A swipe on an object: vertical moves go to events.swipeMove. */
   private swiping: { startY: number } | null = null;
   private pinch: { dist: number; mid: [number, number] } | null = null;
@@ -174,9 +176,12 @@ export class OrbitControls {
   }
 
   private onDown(e: PointerEvent): void {
+    // a second finger must not take over (or end) a furniture drag
+    if (this.grabbing) return;
     this.el.setPointerCapture(e.pointerId);
     if (this.pointers.size === 0 && e.button === 0 && this.events.grab && this.events.grab(...this.local(e))) {
       this.grabbing = true;
+      this.grabId = e.pointerId;
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button, type: e.pointerType });
       this.flight = null;
       this.velocity = { theta: 0, phi: 0 };
@@ -207,6 +212,7 @@ export class OrbitControls {
     const p = this.pointers.get(e.pointerId);
     if (!p) return;
     if (this.grabbing) {
+      if (e.pointerId !== this.grabId) return;
       if (this.events.drag) this.events.drag(...this.local(e), e.altKey);
       return;
     }
@@ -279,7 +285,9 @@ export class OrbitControls {
   private onUp(e: PointerEvent): void {
     if (!this.pointers.has(e.pointerId)) return;
     if (this.grabbing) {
+      if (e.pointerId !== this.grabId) return;
       this.grabbing = false;
+      this.grabId = null;
       this.pointers.delete(e.pointerId);
       this.events.drop?.();
       return;
