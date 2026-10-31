@@ -797,6 +797,16 @@ export class Floorplan3dPanel extends LitElement {
     this.editPlan({ ...b, settings: { ...b.settings, start_view: view ?? null } });
   }
 
+  /**
+   * "Sun and lights …" (#87, #231): the 3D view's ⚙ sheet. When the view is not there to open it (its code has not
+   * arrived, or it is not drawn), the button must still do something you can see: the Settings page at its sun card.
+   */
+  private openSunAndLights(): void {
+    const view = this.view3d();
+    if (view) view.openSettings();
+    else this.openSettings("scene", "sun");
+  }
+
   private view3d() {
     return readyView(this.renderRoot) as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; openSettings(): void }) | null;
   }
@@ -998,7 +1008,7 @@ export class Floorplan3dPanel extends LitElement {
               <button class="fp3d-chip fp3d-opt-more" @click=${() => {
                 // the sheet opens over the page: the popover that led to it closes (#214)
                 this._optsOpen = false;
-                this.view3d()?.openSettings();
+                this.openSunAndLights();
               }}>${this.t("sun_and_lights")}</button>
               </section>
               <section class="fp3d-opt-group">
