@@ -14,6 +14,17 @@ export const planStyles = css`
         -webkit-user-select: none;
         cursor: default;
       }
+      /* empty plan can be dragged to pan it (#233) */
+      svg.fp3d-tool-select,
+      svg.fp3d-tool-furniture,
+      svg.fp3d-tool-roof,
+      svg.fp3d-tool-energy {
+        cursor: grab;
+      }
+      svg.fp3d-plan.fp3d-panning,
+      svg.fp3d-plan.fp3d-panning * {
+        cursor: grabbing !important;
+      }
       svg.fp3d-tool-rect,
       svg.fp3d-tool-polygon {
         cursor: crosshair;
