@@ -46,7 +46,7 @@ from .packs import (
 from .racks import RackError
 from .sample import SAMPLE_NAME, load_sample
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
-from .storage import FloorplanData, Home, HomesError, complete
+from .storage import FloorplanData, Home, HomesError, RevisionConflict, complete
 from .timetravel import ws_timetravel_history
 from .voice import SENTENCE_MODES, AskBroker, VoiceSettings
 
@@ -119,6 +119,10 @@ def require_editor(func: Callable[..., Any]) -> Callable[..., Any]:
     return with_editor
 
 
+class _NeedsAdmin(Exception):
+    """A save that adds or changes an item's perform action, from someone who is no admin (#51)."""
+
+
 def _data(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> FloorplanData | None:
     data: FloorplanData | None = hass.data.get(DOMAIN)
     if data is None:
@@ -185,6 +189,8 @@ async def ws_version(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         vol.Required("building"): BUILDING_SCHEMA,
         # the hashes of the recipe copies the client started from (#45), by pack item type
         vol.Optional("recipe_bases"): vol.All({str: vol.All(str, vol.Length(max=100))}, vol.Length(max=2000)),
+        # the revision the client's plan started from (#149): a save from an out-of-date plan is refused
+        vol.Optional("base_revision"): vol.All(int, vol.Range(min=0)),
     }
 )
 @require_editor
@@ -192,14 +198,31 @@ async def ws_version(hass: HomeAssistant, connection: websocket_api.ActiveConnec
 async def ws_save_building(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Replace the building. A new or changed `perform_action` item action needs an admin (#51)."""
+    """Replace the building. A new or changed `perform_action` item action needs an admin (#51). With `base_revision`
+    (#149) a save from a plan that someone else changed since is refused with "conflict" and changes nothing: the
+    client then fetches the current plan (building/get) to merge or offer a reload."""
     if (home := _home(hass, connection, msg)) is None:
         return
-    if not connection.user.is_admin and performed_actions(msg["building"]) - performed_actions(home.building):
+
+    def guard(current: dict[str, Any]) -> None:
+        # checked against the plan as it is when the save runs, not as it was when the message came
+        if not connection.user.is_admin and performed_actions(msg["building"]) - performed_actions(current):
+            raise _NeedsAdmin
+
+    try:
+        revision = await home.async_save_building(
+            msg["building"],
+            msg.get("recipe_bases"),
+            check_racks=True,
+            base_revision=msg.get("base_revision"),
+            guard=guard,
+        )
+    except _NeedsAdmin:
         connection.send_error(msg["id"], "unauthorized", "Only an admin adds or changes an item's perform action")
         return
-    try:
-        revision = await home.async_save_building(msg["building"], msg.get("recipe_bases"), check_racks=True)
+    except RevisionConflict as err:
+        connection.send_error(msg["id"], "conflict", str(err))
+        return
     except RackError as err:
         # rack gear where it does not fit (#113): the editor refuses it too, so only an outdated or foreign client
         connection.send_error(msg["id"], "invalid_rack", str(err))
@@ -214,7 +237,8 @@ async def ws_save_building(
 @callback
 def ws_subscribe_building(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Send the new revision (and the home's id) whenever the building changes. Without a home this follows the
-    active home: when another home becomes active, its revision is sent at once."""
+    active home: when another home becomes active, its revision is sent at once. The current revision also comes once
+    right after subscribing (#149), so a view whose websocket reconnects learns whether it is behind."""
     if (home := _home(hass, connection, msg)) is None:
         return
     data: FloorplanData = hass.data[DOMAIN]
@@ -247,6 +271,7 @@ def ws_subscribe_building(hass: HomeAssistant, connection: websocket_api.ActiveC
 
     connection.subscriptions[msg["id"]] = unsubscribe
     connection.send_result(msg["id"])
+    send(home.id, home.revision)
 
 
 @websocket_api.websocket_command(

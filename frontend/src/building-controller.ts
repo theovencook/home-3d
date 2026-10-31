@@ -1,7 +1,7 @@
 // Loads the building, follows changes made elsewhere and saves edits (debounced).
 
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import { fetchBuilding, fetchVersion, listPacks, saveBuilding, subscribeBuilding } from "./api.ts";
+import { fetchBuilding, fetchVersion, listPacks, saveBuilding, subscribeBuilding, takeSnapshot } from "./api.ts";
 import { normalizeBuilding, type Building } from "./model.ts";
 import { recipeHashes, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -19,6 +19,12 @@ export const FRONTEND_VERSION = typeof __FP3D_VERSION__ === "string" ? __FP3D_VE
  * whose files it serves now, so a page still running older JavaScript at the same version notices. */
 declare const __FP3D_BUILD__: string;
 export const FRONTEND_BUILD = typeof __FP3D_BUILD__ === "string" ? __FP3D_BUILD__ : "dev";
+
+/** A change to the plan that can be made again on a newer plan (#149): the 3D view's settings and its modules. */
+export type PlanChange = (building: Building) => void;
+
+/** How often a refused save is made again on the newer plan before the edits are kept as a draft instead (#149). */
+const REPLAYS = 3;
 
 export interface Draft {
   building: Building;
@@ -65,6 +71,9 @@ export class BuildingController implements ReactiveController {
   frontend = { version: FRONTEND_VERSION, build: FRONTEND_BUILD };
   /** Unsaved edits from an earlier session, offered for restoring. */
   draft: Draft | null = null;
+  /** The last save was refused because someone else changed the plan meanwhile (#149): the plan now shows their
+   * version, and `draft` holds the edits made here (restoring it keeps theirs as a restore point). */
+  conflict = false;
   /** The library (#44): the offered packs with an index of their items, loaded when an editor first needs it. */
   packs: FurniturePack[] = [];
   /** This user is on the editors list (#7): sees the Editor and Extensions and may change the plan. The backend
@@ -90,6 +99,10 @@ export class BuildingController implements ReactiveController {
   private unsubscribe: (() => Promise<void>) | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private pending: Building | null = null;
+  /** How `pending` came from the plan shown before it, when only `update()` changes made it (#149); null: edits. */
+  private changes: PlanChange[] | null = [];
+  /** The newest revision another save announced while this view had edits on their way (#149). */
+  private remoteRevision = -1;
   private saving: Promise<void> | null = null;
   private connected = false;
   /** The websocket whose reconnects this view follows (#60). */
@@ -163,9 +176,22 @@ export class BuildingController implements ReactiveController {
     this.building = building;
     setPlanRecipes(building.recipes);
     this.pending = building;
+    this.changes = null;
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => void this.flush(), SAVE_DELAY);
     this.host.requestUpdate();
+  }
+
+  /** A change from the 3D view (#149: its settings, a module): shown and saved at once. When someone else changed the
+   * plan meanwhile, it is made again on their plan, so neither change is lost. */
+  update(change: PlanChange): void {
+    if (!this.building) return;
+    const before = this.pending ? this.changes : [];
+    const next = structuredClone(this.building);
+    change(next);
+    this.edit(next);
+    this.changes = before ? [...before, change] : null;
+    void this.flush();
   }
 
   /** This frontend's version, for notices. */
@@ -212,15 +238,27 @@ export class BuildingController implements ReactiveController {
     return true;
   }
 
-  /** Take over the unsaved edits of an earlier session (they are saved right away). */
-  restoreDraft(): void {
+  /** Take over the unsaved edits of an earlier session (they are saved right away). After a refused save (#149) the
+   * plan someone else saved is kept as a restore point first, as these edits replace it. */
+  async restoreDraft(): Promise<void> {
     const draft = this.draft;
+    const conflict = this.conflict;
     this.draft = null;
-    if (draft) this.edit(normalizeBuilding(draft.building));
+    this.conflict = false;
+    if (!draft) return;
+    if (conflict && this.hass) {
+      try {
+        await takeSnapshot(this.hass, this.homeId ?? this.home);
+      } catch {
+        // an older backend or a lost connection: the edits are still saved, as the button says
+      }
+    }
+    this.edit(normalizeBuilding(draft.building));
   }
 
   discardDraft(): void {
     this.draft = null;
+    this.conflict = false;
     writeDraft(null);
     this.host.requestUpdate();
   }
@@ -230,7 +268,9 @@ export class BuildingController implements ReactiveController {
     if (this.saving) await this.saving;
     const building = this.pending;
     if (!building || !this.hass) return;
+    const changes = this.changes;
     this.pending = null;
+    this.changes = [];
     // a mount height above what the backend accepts (10 m – "40" typed as centimetres) would refuse every save,
     // also of an edit kept from earlier: it is brought into range here
     for (const f of building.floors) for (const m of f.furniture) if (m.mount_y != null && m.mount_y > 10) m.mount_y = 10;
@@ -238,8 +278,33 @@ export class BuildingController implements ReactiveController {
     this.host.requestUpdate();
     this.saving = (async () => {
       try {
-        const bases = this.recipeBases;
-        const { revision, recipes } = await saveBuilding(this.hass!, building, bases, this.homeId ?? this.home);
+        await this.save(building, changes);
+      } catch (err) {
+        this.saveState = "error";
+        this.saveError = errorText(err);
+        // keep the edit: after a restart it can be restored and saved
+        writeDraft({ building, savedAt: Date.now(), ...(this.homeId ? { home: this.homeId } : {}) });
+      }
+      this.host.requestUpdate();
+    })();
+    await this.saving;
+    this.saving = null;
+    // another save landed while this one was on its way: shown now, unless more edits follow (they meet it as a
+    // refused save, #149)
+    if (!this.pending && this.remoteRevision > this.revision) void this.reload();
+  }
+
+  /**
+   * Save `building` from the plan at `revision` (#149). When the backend refuses it because someone else changed the
+   * plan meanwhile, their plan is loaded; edits made only by `update()` changes are made again on it and saved, any
+   * other edits stay as `draft` with `conflict` set, so nothing is lost and nothing of theirs is overwritten unasked.
+   */
+  private async save(building: Building, changes: PlanChange[] | null): Promise<void> {
+    for (let attempt = 1; ; attempt++) {
+      const bases = this.recipeBases;
+      try {
+        const base = this.revision >= 0 ? this.revision : undefined;
+        const { revision, recipes } = await saveBuilding(this.hass!, building, bases, this.homeId ?? this.home, base);
         // the copies the backend made for items placed now: the plan keeps them, also when their pack goes (#2);
         // and the ones it changed meanwhile (an update, a rollback, #45) replace the copies this plan started from
         if (recipes) {
@@ -252,17 +317,33 @@ export class BuildingController implements ReactiveController {
         this.revision = revision;
         this.saveState = this.pending ? "saving" : "saved";
         this.saveError = null;
-        writeDraft(null);
+        if (!this.conflict) writeDraft(null);
+        return;
       } catch (err) {
-        this.saveState = "error";
-        this.saveError = errorText(err);
-        // keep the edit: after a restart it can be restored and saved
-        writeDraft({ building, savedAt: Date.now(), ...(this.homeId ? { home: this.homeId } : {}) });
+        if (!isConflict(err)) throw err;
       }
+      const loaded = await this.reload();
+      // edits made while their plan was loading belong to the refused ones (they were made on the older plan)
+      const local = this.pending ?? building;
+      const all = this.pending ? (changes && this.changes ? [...changes, ...this.changes] : null) : changes;
+      clearTimeout(this.saveTimer);
+      this.pending = null;
+      this.changes = [];
+      if (!loaded || !all || attempt >= REPLAYS || !this.building) {
+        this.conflict = true;
+        this.draft = { building: local, savedAt: Date.now(), ...(this.homeId ? { home: this.homeId } : {}) };
+        writeDraft(this.draft);
+        this.saveState = "error";
+        this.saveError = null;
+        return;
+      }
+      building = structuredClone(this.building);
+      for (const change of all) change(building);
+      changes = all;
+      this.building = building;
+      setPlanRecipes(building.recipes);
       this.host.requestUpdate();
-    })();
-    await this.saving;
-    this.saving = null;
+    }
   }
 
   private async start(): Promise<void> {
@@ -285,7 +366,10 @@ export class BuildingController implements ReactiveController {
               return;
             }
             if (this.ownRevisions.has(revision) || revision === this.revision) return;
-            if (this.pending || this.saving) return; // our own edits win; they are saved next
+            this.remoteRevision = Math.max(this.remoteRevision, revision);
+            // shown once the edits on their way are saved; a save from the older plan is refused by the backend
+            // and handled there (#149)
+            if (this.pending || this.saving) return;
             void this.reload();
           },
           this.home,
@@ -317,8 +401,9 @@ export class BuildingController implements ReactiveController {
     this.host.requestUpdate();
   }
 
-  private async reload(): Promise<void> {
-    if (!this.hass) return;
+  /** Load the shown home's plan; whether it came. */
+  private async reload(): Promise<boolean> {
+    if (!this.hass) return false;
     try {
       const res = await fetchBuilding(this.hass, this.home);
       if ((res.home_id ?? null) !== this.homeId) this.ownRevisions.clear();
@@ -338,8 +423,11 @@ export class BuildingController implements ReactiveController {
       this.error = null;
     } catch (err) {
       this.error = errorText(err);
+      this.host.requestUpdate();
+      return false;
     }
     this.host.requestUpdate();
+    return true;
   }
 }
 
@@ -351,6 +439,11 @@ function adoptRecipes(building: Building, recipes: Record<string, PlanRecipe>, b
   building.recipes = { ...recipes, ...Object.fromEntries(kept) };
 }
 
+
+/** The backend refused a save from a plan someone else changed since (#149). */
+function isConflict(err: unknown): boolean {
+  return !!err && typeof err === "object" && (err as { code?: unknown }).code === "conflict";
+}
 
 function errorText(err: unknown): string {
   if (err && typeof err === "object" && "message" in err) return String((err as { message: unknown }).message);

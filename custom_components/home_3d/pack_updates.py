@@ -231,16 +231,24 @@ class PackUpdates:
 
     async def async_apply(self, types: list[str] | None, *, skip_pinned: bool = False) -> tuple[list[str], int]:
         """Update placed items (None: every one with an update) to the installed release; the updated types and the
-        plan's revision."""
-        if skip_pinned:
-            pending = pending_items(self.data.building, self.data.offered_packs)
-            types = [
-                p["type"] for p in pending if p["pack"] not in self.pinned and (types is None or p["type"] in types)
-            ]
-        building, updated = with_updates(self.data.building, self.data.offered_packs, types)
-        if not updated:
-            return [], self.data.revision
-        return updated, await self.data.async_save_building(building)
+        plan's revision. Worked out from the plan as it is once no save runs (#149), so none is overwritten."""
+        updated: list[str] = []
+
+        def change(building: dict[str, Any]) -> dict[str, Any] | None:
+            nonlocal updated
+            packs = self.data.offered_packs
+            wanted = types
+            if skip_pinned:
+                wanted = [
+                    p["type"]
+                    for p in pending_items(building, packs)
+                    if p["pack"] not in self.pinned and (types is None or p["type"] in types)
+                ]
+            new, updated = with_updates(building, packs, wanted)
+            return new if updated else None
+
+        revision = await self.data.async_update_building(change)
+        return updated, revision
 
     async def async_auto_update(self) -> list[str]:
         """With auto-update on, update every placed item of a pack that is not pinned; the updated types."""
@@ -449,13 +457,18 @@ class PackUpdates:
             release = restored.get("release", 1) if restored else previous.get("release", 1)
             if restored is not None and (took or took_moved):
                 installed = installed_copies([restored])
-                recipes = dict(self.data.building.get("recipes") or {})
-                for type_ in took:
-                    if type_ in installed:
-                        recipes[type_] = recipe_copy(*installed[type_])
                 restored_items = {i["id"]: i for i in restored["items"]}
-                for type_, item_id in took_moved.items():
-                    if item_id in restored_items:
-                        recipes[type_] = moved_copy(recipe_copy(restored, restored_items[item_id]), type_)
-                await self.data.async_save_building({**self.data.building, "recipes": recipes})
+
+                # on the plan as it is once no save runs (#149)
+                def change(building: dict[str, Any]) -> dict[str, Any]:
+                    recipes = dict(building.get("recipes") or {})
+                    for type_ in took:
+                        if type_ in installed:
+                            recipes[type_] = recipe_copy(*installed[type_])
+                    for type_, item_id in took_moved.items():
+                        if item_id in restored_items:
+                            recipes[type_] = moved_copy(recipe_copy(restored, restored_items[item_id]), type_)
+                    return {**building, "recipes": recipes}
+
+                await self.data.async_update_building(change)
         return {"release": release}

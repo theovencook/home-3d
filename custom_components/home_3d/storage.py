@@ -7,6 +7,7 @@ The packs, the custom items and the list of homes are shared.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 import copy
 import inspect
@@ -72,6 +73,20 @@ if "serialize_in_event_loop" in inspect.signature(Store.__init__).parameters:
     _OFF_LOOP["serialize_in_event_loop"] = False
 
 
+class RevisionConflict(Exception):
+    """A save from a plan that is out of date (#149): the plan changed since the revision the client started from."""
+
+    def __init__(self, base: int, revision: int) -> None:
+        """Keep both revisions."""
+        super().__init__(f"The plan changed since revision {base}; it is at revision {revision} now")
+        self.base = base
+        self.revision = revision
+
+
+def _without_recipes(building: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in building.items() if k != "recipes"}
+
+
 class HomesError(Exception):
     """A change to the homes that cannot be made (`code` for the websocket error)."""
 
@@ -123,6 +138,12 @@ class Home:
         self._history_store: Store[Any] = Store(hass, STORAGE_VERSION, history_key, **_OFF_LOOP)
         self.building: dict[str, Any] = empty_building()
         self.revision = 0
+        # the last revision that changed more than the recipe copies (#149): a save from a plan at this revision or
+        # later is not out of date, as the server's own recipe-only writes merge with it (recipe_bases, #45)
+        self._content_revision = 0
+        # saves, restores and the server's own updates of this home run one at a time (#149), so the revision check,
+        # the plan they start from and the write are one step
+        self._lock = asyncio.Lock()
         self._images: dict[str, str] = {}
         self._history: list[dict[str, Any]] = []
 
@@ -136,6 +157,7 @@ class Home:
         if stored:
             self.building = complete(stored.get("building") or empty_building())
             self.revision = int(stored.get("revision", 0))
+            self._content_revision = self.revision
             # items that moved to another pack take their new ids (#110), and a plan saved before #2 (or placed
             # while a client did not send recipes) picks up the recipes of its pack items from the installed packs;
             # both are written back once
@@ -164,19 +186,57 @@ class Home:
             building = migrate_building(building, self._moves())
             self.building = with_recipes(building, building.get("recipes"), self._packs())
             self.revision = 1
+            self._content_revision = 1
         await self._save_building()
 
     async def async_save_building(
-        self, building: dict[str, Any], recipe_bases: dict[str, str] | None = None, *, check_racks: bool = False
+        self,
+        building: dict[str, Any],
+        recipe_bases: dict[str, str] | None = None,
+        *,
+        check_racks: bool = False,
+        base_revision: int | None = None,
+        guard: Callable[[dict[str, Any]], None] | None = None,
     ) -> int:
         """Store a validated building, bump the revision and notify subscribers.
 
         The state before the save becomes a restore point when the last one is older than
         HISTORY_INTERVAL, so a long editing session leaves a trail without saving every step.
+
+        `base_revision` (#149) is the revision the client's plan started from: when the plan changed since (more than
+        its recipe copies), the save is refused with RevisionConflict and nothing changes. Without it (an older
+        client) the save replaces the plan as before. `guard` sees the current plan first and may raise to refuse.
         """
+        async with self._lock:
+            if base_revision is not None and not self._content_revision <= base_revision <= self.revision:
+                raise RevisionConflict(base_revision, self.revision)
+            if guard is not None:
+                guard(self.building)
+            return await self._async_store(building, recipe_bases, check_racks=check_racks)
+
+    async def async_update_building(self, change: Callable[[dict[str, Any]], dict[str, Any] | None]) -> int:
+        """A change the server makes itself (#149: a pack update, a rollback, a custom item edit): `change` gets the
+        current plan once no other save runs and returns the new one (None: nothing to change), so a save that
+        landed meanwhile is never overwritten. The revision after it."""
+        async with self._lock:
+            building = change(self.building)
+            if building is None:
+                return self.revision
+            return await self._async_store(building, content=None)
+
+    async def _async_store(
+        self,
+        building: dict[str, Any],
+        recipe_bases: dict[str, str] | None = None,
+        *,
+        check_racks: bool = False,
+        content: bool | None = True,
+    ) -> int:
+        """Store a building while the lock is held. `content`: whether more than the recipe copies changed (None:
+        compare)."""
         last = self._history[-1]["saved_at"] if self._history else 0
         if self.building.get("floors") and time.time() - last > HISTORY_INTERVAL:
-            await self.async_snapshot()
+            await self._async_snapshot()
         # items that moved to another pack take their new ids (#110): an imported plan, a backup, a restore point
         moves = self._moves()
         sent, building = building, migrate_building(building, moves)
@@ -188,25 +248,39 @@ class Home:
         # (a pack update) stays
         if check_racks and (problems := new_rack_problems(self.building, building)):
             raise RackError(problems)
+        if content is None:
+            content = _without_recipes(building) != _without_recipes(self.building)
         self.building = building
         self.revision += 1
+        # the revision of this save, also when the write below takes a while
+        revision = self.revision
+        if content:
+            self._content_revision = revision
         await self._save_building()
-        async_dispatcher_send(self.hass, SIGNAL_BUILDING_UPDATED, self.id, self.revision)
-        return self.revision
+        async_dispatcher_send(self.hass, SIGNAL_BUILDING_UPDATED, self.id, revision)
+        return revision
 
     async def async_follow_custom_items(self) -> None:
         """After a custom item changed (#13): placed copies of it follow the change at once (#26)."""
-        building = with_recipes(self.building, self.building.get("recipes"), self._packs())
-        if building.get("recipes") != self.building.get("recipes"):
-            await self.async_save_building(building)
+
+        def follow(current: dict[str, Any]) -> dict[str, Any] | None:
+            building = with_recipes(current, current.get("recipes"), self._packs())
+            return building if building.get("recipes") != current.get("recipes") else None
+
+        await self.async_update_building(follow)
 
     async def async_restore(self, building: dict[str, Any]) -> int:
         """Replace the plan (a restore point or a backup); the state before becomes a restore point."""
-        await self.async_snapshot()
-        return await self.async_save_building(building)
+        async with self._lock:
+            await self._async_snapshot()
+            return await self._async_store(building)
 
     async def async_snapshot(self) -> None:
         """Keep the current building as a restore point."""
+        async with self._lock:
+            await self._async_snapshot()
+
+    async def _async_snapshot(self) -> None:
         self._history.append(
             {
                 "id": uuid.uuid4().hex[:12],
@@ -427,6 +501,10 @@ class FloorplanData:
     ) -> int:
         """Store the active home's building (see Home.async_save_building)."""
         return await self.active.async_save_building(building, recipe_bases)
+
+    async def async_update_building(self, change: Callable[[dict[str, Any]], dict[str, Any] | None]) -> int:
+        """Change the active home's building from the plan it has then (see Home.async_update_building)."""
+        return await self.active.async_update_building(change)
 
     async def async_snapshot(self) -> None:
         """Keep the active home's building as a restore point."""

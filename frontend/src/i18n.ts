@@ -26,6 +26,8 @@ const en = {
   draft_found: "Unsaved changes from {time} found.",
   draft_restore: "Restore and save",
   draft_discard: "Discard",
+  save_conflict: "Someone else changed this home while you were editing. It now shows their version; your changes are kept here.",
+  draft_restore_conflict: "Use mine (theirs stays as a restore point)",
   walls_auto: "Tall walls",
   walls_cut: "Cut",
   plan_view: "2D or 3D",

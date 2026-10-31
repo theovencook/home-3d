@@ -25,18 +25,21 @@ export async function fetchVersion(hass: HomeAssistant): Promise<{ version?: str
 
 /** Save the plan; the backend answers with its revision and the plan's recipe copies as stored (#2). */
 /** `recipeBases`: the hashes of the plan's recipe copies as this editor got them (#45), so the backend keeps a copy
- * changed on the server since instead of the older one sent back unchanged. */
+ * changed on the server since instead of the older one sent back unchanged. `baseRevision` (#149): the revision the
+ * plan started from; when someone else changed the plan since, the save is refused with the error code "conflict". */
 export async function saveBuilding(
   hass: HomeAssistant,
   building: Building,
   recipeBases?: Record<string, string>,
   home?: string | null,
+  baseRevision?: number,
 ): Promise<{ revision: number; recipes?: Record<string, PlanRecipe> }> {
   return hass.callWS<{ revision: number; recipes?: Record<string, PlanRecipe> }>({
     type: "home_3d/building/save",
     ...at(home),
     building,
     ...(recipeBases ? { recipe_bases: recipeBases } : {}),
+    ...(baseRevision !== undefined ? { base_revision: baseRevision } : {}),
   });
 }
 

@@ -28,6 +28,8 @@ export const de: Record<I18nKey, string> = {
   draft_found: "Nicht gespeicherte Änderungen vom {time} gefunden.",
   draft_restore: "Übernehmen und speichern",
   draft_discard: "Verwerfen",
+  save_conflict: "Jemand anderes hat dieses Zuhause geändert, während du bearbeitet hast. Es zeigt jetzt deren Stand; deine Änderungen sind hier aufbewahrt.",
+  draft_restore_conflict: "Meine übernehmen (deren Stand bleibt als Wiederherstellungspunkt)",
   walls_auto: "Wände hoch",
   walls_cut: "Schnitt",
   plan_view: "2D oder 3D",

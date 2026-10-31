@@ -68,6 +68,8 @@ async def test_save_and_get_building(hass: HomeAssistant, hass_ws_client) -> Non
     await client.send_json_auto_id({"type": "home_3d/building/subscribe"})
     sub = await client.receive_json()
     assert sub["success"]
+    # the current revision comes once at the start (#149)
+    assert (await client.receive_json())["event"] == {"revision": 0, "home_id": "home"}
 
     await client.send_json_auto_id({"type": "home_3d/building/save", "building": BUILDING})
     event = await client.receive_json()

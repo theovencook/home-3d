@@ -3,7 +3,7 @@
 import { formatImperial, lengthUnit, parseLength } from "./units.ts";
 import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { PHONE_MEDIA } from "./phone.ts";
-import { BuildingController } from "./building-controller.ts";
+import { BuildingController, type PlanChange } from "./building-controller.ts";
 import { loadEditor } from "./load-editor.ts";
 import { loadSettings } from "./load-settings.ts";
 import { loadLocate } from "./load-locate.ts";
@@ -416,6 +416,13 @@ export class Floorplan3dPanel extends LitElement {
         }),
       );
     }
+  }
+
+  /** A change from the 3D view's settings or a module (#149): saved by the controller, which makes it again on a newer
+   * plan when someone else saved meanwhile. */
+  private onPlanChange(e: CustomEvent<{ change: PlanChange }>): void {
+    e.preventDefault();
+    this.data.update(e.detail.change);
   }
 
   private onRoomTap(e: CustomEvent<{ floorId: string; roomId: string | null }>): void {
@@ -1013,8 +1020,8 @@ export class Floorplan3dPanel extends LitElement {
       const at = new Date(d.draft.savedAt).toLocaleString(this.hass?.language);
       notices.push(
         html`<div class="fp3d-notice">
-          <span>${this.t("draft_found", { time: at })}</span>
-          <button class="fp3d-btn fp3d-primary" @click=${() => d.restoreDraft()}>${this.t("draft_restore")}</button>
+          <span>${d.conflict ? this.t("save_conflict") : this.t("draft_found", { time: at })}</span>
+          <button class="fp3d-btn fp3d-primary" @click=${() => void d.restoreDraft()}>${this.t(d.conflict ? "draft_restore_conflict" : "draft_restore")}</button>
           <button class="fp3d-btn" @click=${() => d.discardDraft()}>${this.t("draft_discard")}</button>
         </div>`,
       );
@@ -1284,6 +1291,7 @@ export class Floorplan3dPanel extends LitElement {
             this._roomId = null;
           }}
           @back=${() => this.back()}
+          @plan-change=${this.onPlanChange}
         ></fp3d-view3d>
         ${this._roomId
           ? html`<fp3d-room-panel

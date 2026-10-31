@@ -3,7 +3,7 @@
 import { zonesOf } from "./model.ts";
 import { confirmEntities } from "./devices.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
-import { BuildingController } from "./building-controller.ts";
+import { BuildingController, type PlanChange } from "./building-controller.ts";
 import "./components/room-panel.ts";
 import "./components/view3d.ts";
 import { languageReady, loadLanguage, translate, type I18nKey } from "./i18n.ts";
@@ -320,6 +320,13 @@ clearTimeout(this.cleanTimer);
     return b && b.floors.length === 1 ? b.floors[0].id : b?.floors.some((f) => f.id === chosen) ? chosen : null;
   }
 
+  /** A change from the 3D view's settings or a module (#149): saved by the controller, which makes it again on a newer
+   * plan when someone else saved meanwhile. */
+  private onPlanChange(e: CustomEvent<{ change: PlanChange }>): void {
+    e.preventDefault();
+    this.data.update(e.detail.change);
+  }
+
   private back(): void {
     if (this._roomId) this._roomId = null;
     else if (this.canSwitch) this._floorId = null;
@@ -448,6 +455,7 @@ clearTimeout(this.cleanTimer);
                 this._roomId = null;
               }}
               @back=${() => this.back()}
+              @plan-change=${this.onPlanChange}
             ></fp3d-view3d>`
           : html`<p class="fp3d-card-msg">${this.data.error ?? (b ? translate(this.hass, "no_building") : translate(this.hass, "loading"))}</p>`}
         ${this._roomId && b && this._config?.room_panel !== false
