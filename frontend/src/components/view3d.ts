@@ -168,6 +168,7 @@ import { flowWidth } from "../viewer/flow-style.ts";
 import { floorCounts, floorInfoText, locatedPersons, personLook, personsInRooms, personsShown } from "../presence.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
+import { activateKey } from "../activate-key.ts";
 import { callServiceSafe } from "../failure.ts";
 import type { BinCue, DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SoundSource, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 import { wallLayout } from "../camera-wall.ts";
@@ -2345,7 +2346,7 @@ export class Fp3dView3d extends LitElement {
         <div class="fp3d-holo-sheen"></div>
         <div class="fp3d-holo-scan"></div>
         <div class="fp3d-holo-body">
-          <div class="fp3d-holo-head" role="button" tabindex="0" @click=${toggle}>
+          <div class="fp3d-holo-head" role="button" tabindex="0" aria-expanded=${open ? "true" : "false"} @click=${toggle} @keydown=${activateKey(toggle)}>
             <span>🚗 ${card.name}</span><span class="fp3d-holo-live">${c.charging ? `⚡ ${t("car_charging_short")}` : c.locked === null ? "" : c.locked ? "🔒" : "🔓"}</span>
           </div>
           <div class="fp3d-holo-car-main">
@@ -2386,7 +2387,7 @@ export class Fp3dView3d extends LitElement {
         <div class="fp3d-holo-sheen"></div>
         <div class="fp3d-holo-scan"></div>
         <div class="fp3d-holo-body">
-          <div class="fp3d-holo-head" role="button" tabindex="0" @click=${toggle}><span>${m.icon} ${m.title}</span><span class="fp3d-holo-live" style=${styled(m.liveColor)}>${m.live ?? ""}</span></div>
+          <div class="fp3d-holo-head" role="button" tabindex="0" aria-expanded=${open ? "true" : "false"} @click=${toggle} @keydown=${activateKey(toggle)}><span>${m.icon} ${m.title}</span><span class="fp3d-holo-live" style=${styled(m.liveColor)}>${m.live ?? ""}</span></div>
           ${m.status
             ? html`<div class="fp3d-holo-status" style=${m.status.color ? `--st:${m.status.color}` : ""}>
                 ${m.status.icon ? html`<i>${m.status.icon}</i>` : nothing}<b>${m.status.text}</b>${m.status.since ? html`<span>${m.status.since}</span>` : nothing}
@@ -2507,7 +2508,7 @@ export class Fp3dView3d extends LitElement {
       <div class="fp3d-holo-sheen"></div>
       <div class="fp3d-holo-scan"></div>
       <div class="fp3d-holo-body">
-        <div class="fp3d-holo-head" role="button" tabindex="0" @click=${toggle}><span>♪ ${card.name}</span><span class="fp3d-holo-live">${playing ? `● ${t("holo_media_playing")}` : t("holo_media_paused")}</span></div>
+        <div class="fp3d-holo-head" role="button" tabindex="0" aria-expanded=${open ? "true" : "false"} @click=${toggle} @keydown=${activateKey(toggle)}><span>♪ ${card.name}</span><span class="fp3d-holo-live">${playing ? `● ${t("holo_media_playing")}` : t("holo_media_paused")}</span></div>
         <div class="fp3d-holo-track">
           ${m.picture ? html`<img class="fp3d-holo-cover" src=${m.picture} alt="" />` : html`<span class="fp3d-holo-cover fp3d-holo-cover-none">♪</span>`}
           <div class="fp3d-holo-titles"><b>${m.title}</b>${m.artist ? html`<span>${m.artist}</span>` : nothing}</div>
@@ -2692,7 +2693,7 @@ export class Fp3dView3d extends LitElement {
       this.requestUpdate();
     };
     return html`<svg class="fp3d-holo-link" data-holo=${index} hidden aria-hidden="true"><line x1="0" y1="0" x2="0" y2="0" /><circle cx="0" cy="0" r="3" /></svg>
-      <div class="fp3d-holo fp3d-holo-dev ${open ? "" : "fp3d-holo-min"} ${this._low ? "fp3d-holo-plain" : ""}" data-holo=${index} hidden role="button" tabindex="0" aria-label=${card.name} @click=${toggle}>
+      <div class="fp3d-holo fp3d-holo-dev ${open ? "" : "fp3d-holo-min"} ${this._low ? "fp3d-holo-plain" : ""}" data-holo=${index} hidden role="button" tabindex="0" aria-expanded=${open ? "true" : "false"} aria-label=${card.w === null ? card.name : `${card.name}: ${formatPower(hass, card.w)}`} @click=${toggle} @keydown=${activateKey(toggle)}>
       <div class="fp3d-holo-sheen"></div>
       <div class="fp3d-holo-scan"></div>
       <div class="fp3d-holo-body">
@@ -2803,11 +2804,7 @@ export class Fp3dView3d extends LitElement {
       this.holoHoverOff = false;
       this.growHolo(false, index);
     };
-    const key = (ev: KeyboardEvent) => {
-      if (!main || (ev.key !== "Enter" && ev.key !== " ")) return;
-      ev.preventDefault();
-      toggle();
-    };
+    const key = activateKey(toggle);
     const big = main ? (e.solar ?? e.consumption ?? 0) : (card.w ?? 0);
     const bat = main ? (e.battery !== null || e.soc !== null ? { soc: e.soc, w: e.battery } : null) : card.battery;
     return html`<svg class="fp3d-holo-link" data-holo=${index} hidden aria-hidden="true"><line x1="0" y1="0" x2="0" y2="0" /><circle cx="0" cy="0" r="3" /></svg>
@@ -2817,8 +2814,8 @@ export class Fp3dView3d extends LitElement {
         hidden
         role="button"
         tabindex="0"
-        aria-label=${card.name}
-        aria-expanded=${main ? String(grown) : nothing}
+        aria-label=${`${card.name}: ${formatPower(hass, big)}`}
+        aria-expanded=${String(main ? grown : open)}
         @click=${toggle}
         @keydown=${key}
         @pointerdown=${(ev: PointerEvent) => (this.holoPress = ev.pointerType)}
@@ -6257,9 +6254,9 @@ export class Fp3dView3d extends LitElement {
         ? nothing
         : items.map(
             (i) =>
-              html`<div class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}${this._bigTile === i.cls ? " fp3d-energy-big" : ""}" tabindex="0" @click=${() => this.toggleEnergyTile(i.cls)}>
+              html`<button type="button" class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}${this._bigTile === i.cls ? " fp3d-energy-big" : ""}" aria-pressed=${this._bigTile === i.cls ? "true" : "false"} @click=${() => this.toggleEnergyTile(i.cls)}>
                 <span>${i.label}</span><b>${i.value}</b>
-              </div>`,
+              </button>`,
           )}
       ${this.flows !== null
         ? nothing
@@ -8675,6 +8672,11 @@ export class Fp3dView3d extends LitElement {
         position: relative;
         pointer-events: auto;
         cursor: zoom-in;
+        border: 0;
+        border-left: 3px solid var(--fp3d-line);
+        color: inherit;
+        text-align: left;
+        font: inherit;
         transform-origin: top left;
         transition: transform 160ms ease-out;
       }

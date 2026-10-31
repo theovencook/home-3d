@@ -824,15 +824,15 @@ export class Floorplan3dPanel extends LitElement {
                 @home-reload=${() => void this.data.reopen()}
                 @home-open=${(e: CustomEvent<{ home: string | null }>) => this.openHome(e.detail.home ?? undefined)}
               ></fp3d-home-switcher>` : nothing}
-          <div class="fp3d-seg" role="tablist">
-            <button role="tab" aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
+          <div class="fp3d-seg" role="group" aria-label=${this.t("modes")}>
+            <button aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
             ${this.canEdit
-              ? html`<button role="tab" aria-pressed=${this._mode === "editor"} @click=${() => this.setMode("editor")}>${this.t("editor")}</button>
-                  <button role="tab" class="fp3d-tab-ext" aria-pressed=${this._mode === "extensions"} @click=${() => this.setMode("extensions")}>
+              ? html`<button aria-pressed=${this._mode === "editor"} @click=${() => this.setMode("editor")}>${this.t("editor")}</button>
+                  <button class="fp3d-tab-ext" aria-pressed=${this._mode === "extensions"} @click=${() => this.setMode("extensions")}>
                     ✦ ${this.t("ext_tab")}
                   </button>`
               : nothing}
-            <button role="tab" class="fp3d-tab-settings" aria-pressed=${this._mode === "settings"} title=${this.t("settings")} @click=${() => this.openSettings()}>
+            <button class="fp3d-tab-settings" aria-pressed=${this._mode === "settings"} aria-label=${this.t("settings")} title=${this.t("settings")} @click=${() => this.openSettings()}>
               ⚙ <span class="fp3d-tab-word">${this.t("settings")}</span>
             </button>
           </div>

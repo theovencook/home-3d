@@ -38,9 +38,10 @@ function tileClass(el: Record<string, any>, cls: string): string {
   return m[1];
 }
 
-test("energy tiles can be reached by pointer and keyboard so they can grow (#90)", () => {
+test("energy tiles are real buttons, so pointer and keyboard both grow them (#90, #180)", () => {
   const out = flat(viewer().renderEnergy());
-  assert.match(out, /fp3d-energy-solar[^>]*tabindex="0"/);
+  assert.match(out, /<button type="button" class="fp3d-energy-item fp3d-energy-tile fp3d-energy-solar[^>]*aria-pressed=false/);
+  assert.doesNotMatch(out, /<div class="fp3d-energy-item fp3d-energy-tile/);
 });
 
 test("tapping an energy tile enlarges it; tapping it again shrinks it back (#90)", () => {

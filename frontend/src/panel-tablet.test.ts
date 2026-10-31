@@ -62,7 +62,7 @@ test("an editor sees the tabs, the home switcher and the view settings without t
   at("");
   const text = shown(panel(building()));
   assert.match(text, /fp3d-home-switcher/);
-  assert.match(text, /role="tablist"/);
+  assert.match(text, /role="group" aria-label=Mode>/);
   assert.match(text, /fp3d-opts-btn/);
 });
 
@@ -72,7 +72,7 @@ test("?tablet shows only the home name, the floors and a View menu: no tabs, swi
   const text = shown(panel(building()));
   assert.match(text, /Sample Home/);
   assert.doesNotMatch(text, /fp3d-home-switcher/);
-  assert.doesNotMatch(text, /role="tablist"/);
+  assert.doesNotMatch(text, /role="group" aria-label=Mode>/);
   assert.doesNotMatch(text, /fp3d-opts-btn/);
   assert.doesNotMatch(text, /fp3d-tt-chip/);
   assert.doesNotMatch(text, /fp3d-room-chip/);
@@ -85,11 +85,11 @@ test("a user ticked as a wall tablet gets the locked view, and the Editor stays 
   t.mock.timers.enable({ apis: ["setTimeout"] });
   at("");
   const p = panel(building(["wall"]), "wall");
-  assert.doesNotMatch(shown(p), /role="tablist"/);
+  assert.doesNotMatch(shown(p), /role="group" aria-label=Mode>/);
   p.setMode("editor");
   assert.equal(p._mode, "view");
   at("?tablet=0");
-  assert.match(shown(p), /role="tablist"/);
+  assert.match(shown(p), /role="group" aria-label=Mode>/);
 });
 
 test("a tablet goes back to the whole house after the plan's idle time; a touch restarts the wait (#92)", (t) => {

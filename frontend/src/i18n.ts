@@ -193,6 +193,7 @@ const en = {
   delete: "Delete",
   new_room: "Room {n}",
   settings: "Settings",
+  modes: "Mode",
   all_settings: "All settings",
   settings_moved_energy: "Meters, tariff, cheap rate and the hologram are on the Settings page.",
   settings_moved_bins: "When bins glow and which carry a tag is set for all bins on the Settings page.",
