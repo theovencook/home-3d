@@ -1786,23 +1786,33 @@ export class LocateSetup extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
+    this.closed = false;
     this.load().catch((e: unknown) => (this._error = `load: ${(e as Error)?.stack ?? String(e)}`));
     this.timer = window.setInterval(() => void this.tick(), 1000);
     void this.hass.connection
       .subscribeMessage<Live>((live) => (this._live = live), { type: "home_3d/locate/subscribe" })
-      .then((u) => (this.unsub = u))
+      .then((u) => {
+        // closed before the answer came: the server must not keep pushing to a dead element (#200)
+        if (this.closed) u();
+        else this.unsub = u;
+      })
       .catch(() => undefined);
   }
 
+  private closed = false;
+
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.closed = true;
     window.clearInterval(this.timer);
     this.unsub?.();
+    this.unsub = null;
   }
 
-  private async call<T>(msg: Record<string, unknown>): Promise<T | null> {
+  /** `poll`: the 1 s refresh must not wipe the message of a failed save. */
+  private async call<T>(msg: Record<string, unknown>, poll = false): Promise<T | null> {
     try {
-      this._error = "";
+      if (!poll) this._error = "";
       return await this.hass.callWS<T>(msg);
     } catch (e) {
       this._error = (e as { message?: string }).message ?? String(e);
@@ -1883,12 +1893,12 @@ export class LocateSetup extends LitElement {
     const live = this.hassSource?.();
     if (live && live !== this.hass) this.hass = live;
     if (this._step === "devices" && this.nearOpen) {
-      const res = await this.call<{ devices: Nearby[] }>({ type: "home_3d/locate/nearby" });
+      const res = await this.call<{ devices: Nearby[] }>({ type: "home_3d/locate/nearby" }, true);
       if (res) this._near = res.devices;
     }
     if (this._step === "walk") {
       // the countdown and the sample counts come from here (the live state only changes when a room changes)
-      const res = await this.call<{ calibration: Live["calibration"]; samples: Config["samples"] }>({ type: "home_3d/locate/calibrate", action: "status" });
+      const res = await this.call<{ calibration: Live["calibration"]; samples: Config["samples"] }>({ type: "home_3d/locate/calibrate", action: "status" }, true);
       if (res && this._cfg) {
         this._cfg = { ...this._cfg, samples: res.samples };
         this._live = { ...(this._live ?? { running: true, devices: [] }), calibration: res.calibration };
