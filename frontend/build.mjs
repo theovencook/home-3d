@@ -140,14 +140,18 @@ function copyFonts() {
 // #196: only the main bundle carries the English table; every other bundle borrows it from the page (borrow-english.ts).
 // The editor went from 971 to 847 KB and the card editor from 157 to 33 KB; their budgets were set just above (975 ->
 // 860 KB, 160 -> 40 KB) so growth shows again.
-const BUDGET = { "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 60 * 1024, "home-3d-locate.js": 160 * 1024, "home-3d-timetravel.js": 120 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 120 * 1024 };
+// #217: the item editor, Settings, time travel, locating setup and microphone probe texts moved into the English table
+// (18 KB more on every page, 4 KB gzip) and the 16 lang/*.json tables into language packs; the lazy bundles lost their own
+// copies (locate 151 -> 40 KB, items 69 -> 62, settings 101 -> 87), so their budgets came down to just above, and the
+// "every page" path went from 410 to 425 KB (gzip 140 -> 146). The main bundle itself did not change: the table is in a shared chunk.
+const BUDGET = { "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
 const GZIP_BUDGET = { "home-3d.js": 45 * 1024, "home-3d-view3d.js": 100 * 1024, "home-3d-3d.js": 280 * 1024 };
 
 // What is loaded before something shows, raw and as sent (gzip), with everything those files import (#179): a module
 // moved from one bundle to another does not slip through. Every page of Home Assistant loads the main bundle; a wall
 // tablet showing the house (the panel or a card) loads the 3D view and the 3D bundle on top.
 const PATHS = {
-  "every page": { files: ["home-3d.js"], raw: 410 * 1024, gzip: 140 * 1024 },
+  "every page": { files: ["home-3d.js"], raw: 425 * 1024, gzip: 146 * 1024 },
   "wall tablet": { files: ["home-3d.js", "home-3d-view3d.js", "home-3d-3d.js"], raw: 1630 * 1024, gzip: 500 * 1024 },
 };
 
