@@ -11,6 +11,13 @@ import { checkBackup, fetchBackup, restoreBackup, type BackupFile, type BackupHo
 import { migratePlanTypes } from "../../packs.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
+/** A size for people (#240): 900 B, 42 KB, 1.3 MB (1 KB = 1,024 bytes). */
+export function bytesText(bytes: number, lang?: string): string {
+  const unit = bytes < 1024 ? [bytes, "B"] : bytes < 1024 * 1024 ? [bytes / 1024, "KB"] : [bytes / 1024 / 1024, "MB"];
+  const n = unit[0] as number;
+  return `${new Intl.NumberFormat(lang, { maximumFractionDigits: n < 10 && unit[1] !== "B" ? 1 : 0 }).format(n)} ${unit[1]}`;
+}
+
 /** BackupPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class BackupPart {
   async loadHistory(this: Fp3dEditor): Promise<void> {
@@ -197,7 +204,7 @@ export class BackupPart {
           ? html`<div class="fp3d-room-list">
               ${this._history.map(
                 (h) => html`<div class="fp3d-row fp3d-dev-row">
-                  <span>${this.snapshotTime(h)} <span class="fp3d-muted">· ${this.t("backup_summary", { rooms: h.rooms, furniture: h.furniture })}</span></span>
+                  <span>${this.snapshotTime(h)} <span class="fp3d-muted">· ${this.t("backup_summary", { rooms: h.rooms, furniture: h.furniture })}${h.size ? ` · ${bytesText(h.size, this.hass?.language)}` : ""}</span></span>
                   <button class="fp3d-link" ?disabled=${!this.isHaAdmin} title=${this.isHaAdmin ? "" : this.t("backup_admin_only")} @click=${() => this.restoreFromHistory(h)}>${this.t("backup_restore")}</button>
                 </div>`,
               )}
