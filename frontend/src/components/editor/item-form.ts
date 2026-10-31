@@ -53,6 +53,7 @@ export class ItemFormPart {
         <div class="fp3d-h3row"><h3>${f.name || this.t("furniture")}</h3>${this.fixButton("furniture", f.id)}</div>
         <div class="fp3d-form">${panel.head.map((field) => this.furnitureField(f, field))}</div>
       </div>
+      ${this.renderLinkBlock(f)}
       ${f.group
         ? html`<p class="fp3d-sub fp3d-block-note">▣ ${this.t("block_part")} <button class="fp3d-link" @click=${() => {
             this._single = false;
@@ -94,7 +95,7 @@ export class ItemFormPart {
             >
           </div>`
         : nothing}
-      ${isElectric(f.type) ? this.renderFurnitureLinks(f) : !NO_STATE_TYPES.has(f.type) ? html`<div class="fp3d-form fp3d-links">${this.renderStateLinks(f)}</div>` : nothing} ${GANG_TYPES.has(f.type) ? this.renderGangsForm(f) : nothing} ${TECH_TYPES.has(f.type) ? this.renderTechForm(f) : nothing} ${f.type === "parking" ? this.renderParkingForm(f) : nothing} ${f.type === "waste_bin" || f.type === "mailbox" ? this.renderHouseholdForm(f) : this.renderHouseholdExtras(f)}
+      ${GANG_TYPES.has(f.type) ? this.renderGangsForm(f) : nothing} ${TECH_TYPES.has(f.type) ? this.renderTechForm(f) : nothing} ${f.type === "parking" ? this.renderParkingForm(f) : nothing} ${f.type === "waste_bin" || f.type === "mailbox" ? this.renderHouseholdForm(f) : this.renderHouseholdExtras(f)}
       ${this.renderModuleFurnitureFields(f)}
       ${this.renderShowWhen(f)}
       ${this.renderItemActions(f.actions, f.entity && f.entity !== "none" ? f.entity : null, (a) => this.updateFurniture({ actions: a }))}
@@ -121,6 +122,16 @@ export class ItemFormPart {
           ${this.renderMultiToggle()}`
         : nothing}
     </section>`;
+  }
+
+  /**
+   * The one "Link a device" block of the item panel (#172), directly under X / Z / rotation so it is never a scroll
+   * away: the item's main link and the other links of its kind, or its state sensors.
+   */
+  renderLinkBlock(this: Fp3dEditor, f: Furniture) {
+    const body = isElectric(f.type) ? this.renderFurnitureLinks(f) : !NO_STATE_TYPES.has(f.type) ? html`<div class="fp3d-form fp3d-links">${this.renderStateLinks(f)}</div>` : nothing;
+    if (body === nothing) return nothing;
+    return html`<div class="fp3d-link-block"><h4 class="fp3d-link-title">${this.t("link_device")}</h4>${body}</div>`;
   }
 
   /** One field (or a few that belong together) of the item panel, in the order of furnitureFields (#70). */
