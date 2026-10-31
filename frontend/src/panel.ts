@@ -35,6 +35,7 @@ import type { HistorySpec } from "./timetravel/types.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 import { UndoHistory } from "./undo-history.ts";
 import { showsDemo, withDemo } from "./demo.ts";
+import { forwardHass, HASS_CHILDREN, HassWatch } from "./hass-watch.ts";
 import { loadSampleHome } from "./api.ts";
 import { tell } from "./ask.ts";
 
@@ -119,7 +120,22 @@ export class Floorplan3dPanel extends LitElement {
     _settingsAt: { state: true },
   };
 
-  declare hass: HomeAssistant;
+  /** Home Assistant as handed in; `hass` reads it through `hassWatch` while rendering (#177, as the editor #130).
+   * Elements the render draws get the plain object. */
+  private rawHass: HomeAssistant | undefined;
+  private readonly hassWatch = new HassWatch({ entityLists: false });
+  /** The hass the last render handed the 3D view and the room panel (the demo home's states over the live ones). */
+  private shownHass: HomeAssistant | undefined;
+
+  get hass(): HomeAssistant {
+    const h = this.rawHass;
+    return (h && this.hassWatch.recording ? this.hassWatch.wrap(h) : h) as HomeAssistant;
+  }
+
+  set hass(value: HomeAssistant) {
+    this.rawHass = value;
+  }
+
   declare narrow: boolean;
   declare route: unknown;
   declare panel: unknown;
@@ -275,12 +291,53 @@ export class Floorplan3dPanel extends LitElement {
     return translate(this.hass, key, vars);
   }
 
-  protected willUpdate(changed: PropertyValues): void {
-    if (changed.has("hass") && this.hass) {
-      if (!this.homeRestored) this.restoreHome();
-      this.data.setHass(this.hass);
-      this.tt.session?.setLive(this.hass);
+  /**
+   * A new `hass` for a state change of nothing the last render read (most of the several updates a second on a wall
+   * tablet) needs no render (#177): the plan's loader still gets it, and so do the elements the render hands it to (the
+   * 3D view and the editor then decide for themselves).
+   */
+  protected shouldUpdate(changed: PropertyValues): boolean {
+    const old = changed.get("hass") as HomeAssistant | undefined;
+    const hass = this.rawHass;
+    // while travelling in time the session follows the live states and may move the replay: every update renders
+    if (changed.size !== 1 || !changed.has("hass") || !old || !hass || this.tt.active || this.hassWatch.matters(old, hass)) return true;
+    this.takeHass(hass);
+    const shown = this.shownHass;
+    const next = shown && this.viewHass(hass, this.data.building);
+    // a demo device that turned real (or went unavailable) changes the demo chip
+    if (shown && next && showsDemo(shown) !== showsDemo(next)) return true;
+    forwardHass(this.renderRoot, HASS_CHILDREN["panel.ts"], [
+      [old, hass],
+      [shown, next],
+    ]);
+    this.shownHass = next;
+    return false;
+  }
+
+  /** A render notes which states it reads (see shouldUpdate). */
+  protected update(changed: PropertyValues): void {
+    this.hassWatch.begin();
+    try {
+      super.update(changed);
+    } finally {
+      this.hassWatch.end();
     }
+  }
+
+  /** What a new hass is handed to besides the render. */
+  private takeHass(hass: HomeAssistant): void {
+    if (!this.homeRestored) this.restoreHome();
+    this.data.setHass(hass);
+    this.tt.session?.setLive(hass);
+  }
+
+  /** The hass the 3D view gets: the replayed past while travelling in time, a demo home's states over the live ones. */
+  private viewHass(hass: HomeAssistant, b: Building | null | undefined): HomeAssistant {
+    return withDemo(this.tt.hass(hass), b);
+  }
+
+  protected willUpdate(changed: PropertyValues): void {
+    if (changed.has("hass") && this.rawHass) this.takeHass(this.rawHass);
     // a language beyond German and English: its texts are fetched first, then everything renders
     if (changed.has("hass") && this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language).then(() => this.requestUpdate());
     const b = this.data.building;
@@ -814,12 +871,12 @@ export class Floorplan3dPanel extends LitElement {
     const saveState = this.data.saveState;
     return html`
       <div class="fp3d-app ${this._clean && this._mode === "view" ? "fp3d-clean" : ""}" style=${this.accentStyle()}>
-        ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.hass} .building=${b} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
+        ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.rawHass} .building=${b} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
         ${this._clean && this._mode === "view" ? nothing : this._tablet ? this.renderTabletHeader() : html`<header class="fp3d-header">
-          <ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>
+          <ha-menu-button .hass=${this.rawHass} .narrow=${this.narrow}></ha-menu-button>
           <h1>Home 3D</h1>
           ${this.canEdit && this.hass ? html`<fp3d-home-switcher
-                .hass=${this.hass}
+                .hass=${this.rawHass}
                 .home=${this.data.homeId}
                 @home-reload=${() => void this.data.reopen()}
                 @home-open=${(e: CustomEvent<{ home: string | null }>) => this.openHome(e.detail.home ?? undefined)}
@@ -1130,7 +1187,7 @@ export class Floorplan3dPanel extends LitElement {
     if (pending) return pending;
     return html`<fp3d-extensions
       class="fp3d-body"
-      .hass=${this.hass}
+      .hass=${this.rawHass}
       .canEdit=${this.data.canEdit}
       .packs=${this.data.packs}
       .building=${this.data.building}
@@ -1156,7 +1213,7 @@ export class Floorplan3dPanel extends LitElement {
     }
     return html`<fp3d-settings-page
       class="fp3d-body"
-      .hass=${this.hass}
+      .hass=${this.rawHass}
       .building=${b}
       .canEdit=${this.data.canEdit}
       .packs=${this.data.packs}
@@ -1184,7 +1241,7 @@ export class Floorplan3dPanel extends LitElement {
     if (pending) return pending;
     return html`<fp3d-editor
       class="fp3d-body"
-      .hass=${this.hass}
+      .hass=${this.rawHass}
       .canEdit=${this.data.canEdit}
       .home=${this.data.homeId}
       .homeName=${this.data.homeName}
@@ -1228,7 +1285,8 @@ export class Floorplan3dPanel extends LitElement {
     const roomFloors = floor ? [floor] : b.floors;
     const tt = this.tt.active;
     // a sample / demo home: devices this Home Assistant lacks show fixed demo states (#100)
-    const hass = withDemo(this.tt.hass(this.hass), b);
+    const hass = this.viewHass(this.rawHass!, b);
+    this.shownHass = hass;
     // 3D or the 2D plan: beside the View menu, inside it on a tablet (#92)
     const planView = html`<div class="fp3d-seg" role="group" aria-label=${this.t("plan_view")}>
       <button aria-pressed=${!this._plan2d} @click=${() => this.setPlan2d(false)}>${this.t("view_3d")}</button>

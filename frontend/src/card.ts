@@ -18,6 +18,7 @@ import { loadCardEditor } from "./load-card-editor.ts";
 import type { WallMode } from "./viewer/viewer3d.ts";
 import { TimeTravel } from "./load-timetravel.ts";
 import { withDemo } from "./demo.ts";
+import { forwardHass, HASS_CHILDREN, HassWatch } from "./hass-watch.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
 
 type HeatMode = NonNullable<CardConfig["heatmap"]>;
@@ -51,7 +52,21 @@ export class Floorplan3dCard extends LitElement {
     _orbit: { state: true },
   };
 
-  declare hass: HomeAssistant;
+  /** Home Assistant as handed in; `hass` reads it through `hassWatch` while rendering (#177, as the editor #130).
+   * Elements the render draws get the plain object. */
+  private rawHass: HomeAssistant | undefined;
+  private readonly hassWatch = new HassWatch({ entityLists: false });
+  /** The hass the last render handed the 3D view and the room panel (the demo home's states over the live ones). */
+  private shownHass: HomeAssistant | undefined;
+
+  get hass(): HomeAssistant {
+    const h = this.rawHass;
+    return (h && this.hassWatch.recording ? this.hassWatch.wrap(h) : h) as HomeAssistant;
+  }
+
+  set hass(value: HomeAssistant) {
+    this.rawHass = value;
+  }
   private declare _config: CardConfig;
   private declare _roomId: string | null;
   /** The configured start room was applied once the building arrived. */
@@ -286,14 +301,54 @@ clearTimeout(this.cleanTimer);
     return { columns: "full", rows: this._config?.fill ? 12 : Math.ceil((this._config?.height ?? 420) / 56), min_rows: 4 };
   }
 
+  /**
+   * A new `hass` for a state change of nothing the last render read needs no render (#177): the plan's loader still
+   * gets it, and so do the elements the render hands it to (the 3D view and the room panel then decide for themselves).
+   */
+  protected shouldUpdate(changed: PropertyValues): boolean {
+    const old = changed.get("hass") as HomeAssistant | undefined;
+    const hass = this.rawHass;
+    // while travelling in time the session follows the live states and may move the replay: every update renders
+    if (changed.size !== 1 || !changed.has("hass") || !old || !hass || this.tt.active || this.hassWatch.matters(old, hass) || nightActive(this._config?.night, hass) !== this._night) return true;
+    this.takeHass(hass);
+    const shown = this.shownHass;
+    const next = shown && this.viewHass(hass, this.data.building);
+    forwardHass(this.renderRoot, HASS_CHILDREN["card.ts"], [
+      [old, hass],
+      [shown, next],
+    ]);
+    this.shownHass = next;
+    return false;
+  }
+
+  /** A render notes which states it reads (see shouldUpdate). */
+  protected update(changed: PropertyValues): void {
+    this.hassWatch.begin();
+    try {
+      super.update(changed);
+    } finally {
+      this.hassWatch.end();
+    }
+  }
+
+  /** What a new hass is handed to besides the render. */
+  private takeHass(hass: HomeAssistant): void {
+    this.data.setHass(hass);
+    this.tt.session?.setLive(hass);
+    const night = nightActive(this._config?.night, hass);
+    if (night !== this._night) this._night = night;
+  }
+
+  /** The hass the 3D view gets: the replayed past while travelling in time, a demo home's states over the live ones. */
+  private viewHass(hass: HomeAssistant, b: Building | null | undefined): HomeAssistant {
+    return withDemo(this.tt.hass(hass), b);
+  }
+
   protected willUpdate(changed: PropertyValues): void {
-    if (changed.has("hass") && this.hass) {
-      this.data.setHass(this.hass);
-      this.tt.session?.setLive(this.hass);
+    if (changed.has("hass") && this.rawHass) {
+      this.takeHass(this.rawHass);
       // a language beyond German and English: its texts are fetched first, then everything renders
-      if (!languageReady(this.hass.language)) void loadLanguage(this.hass.language).then(() => this.requestUpdate());
-      const night = nightActive(this._config?.night, this.hass);
-      if (night !== this._night) this._night = night;
+      if (!languageReady(this.rawHass.language)) void loadLanguage(this.rawHass.language).then(() => this.requestUpdate());
     }
     // a room that is not in the plan shown now (another home became active, or it was removed) closes (#150)
     const b = this.data.building;
@@ -376,7 +431,8 @@ clearTimeout(this.cleanTimer);
     const bar = !!b && !this._clean && (canGoBack || ((!!c?.controls || !!c?.time_travel) && !(this._roomId && c.room_panel !== false)));
     const tt = this.tt.active;
     // a sample / demo home: devices this Home Assistant lacks show fixed demo states (#100)
-    const hass = withDemo(this.tt.hass(this.hass), b);
+    const hass = this.viewHass(this.rawHass!, b);
+    this.shownHass = hass;
     const eye = c?.controls_hidden !== undefined || (c?.controls_hide_after ?? 0) > 0;
     const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
     // the card's own accent, else (while the look follows the HA theme) the theme's primary colour (#38)
