@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Room, type Vec2 } from "../model.ts";
-import { FloorMap, type Obstacle } from "./walk.ts";
+import { FloorMap, WalkCamera, type Obstacle } from "./walk.ts";
 
 function rect(id: string, x0: number, z0: number, x1: number, z1: number): Room {
   return { id, name: id, area_id: null, points: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], floor_material: "wood" };
@@ -54,4 +54,36 @@ test("an outer door upstairs leads nowhere unless a balcony is drawn behind it; 
   assert.equal(new FloorMap({ ...emptyBuilding(), floors: [withBalcony] }, withBalcony).doors.length, 1);
   const down = { ...up, elevation: 0 };
   assert.equal(new FloorMap({ ...emptyBuilding(), floors: [down] }, down).doors.length, 1);
+});
+
+test("the walk takes the camera again when the viewer swaps its controls, and gives it back on dispose (#200)", () => {
+  const g = globalThis as unknown as Record<string, unknown>;
+  g.requestAnimationFrame ??= () => 1;
+  g.cancelAnimationFrame ??= () => undefined;
+  g.window ??= new EventTarget();
+  g.document ??= new EventTarget();
+  const protoUpdate = () => false;
+  const makeControls = () => ({ update: protoUpdate, view: { target: { x: 0, y: 0, z: 0, set() {} }, radius: 1, theta: 0, phi: 0 } });
+  const v = {
+    camera: { position: { set() {}, x: 0, y: 0, z: 0 }, lookAt() {}, fov: 50, near: 0.1, updateProjectionMatrix() {}, aspect: 1 },
+    controls: makeControls(),
+    floorMap: new Map(),
+    floors: [],
+    labels: { style: { visibility: "" } },
+    renderer: { domElement: {} },
+    invalidate() {},
+    updateWalls() {},
+    onControls: null as (() => void) | null,
+  };
+  const surface = new EventTarget() as unknown as HTMLElement;
+  const walk = new WalkCamera(v as never, new FloorMap(building, floor), surface, { onRoom() {} });
+  assert.notEqual(v.controls.update, protoUpdate, "the walk drives the camera");
+  // a quality change: new controls, the walk's hook runs
+  v.controls = makeControls();
+  assert.equal(v.controls.update, protoUpdate);
+  v.onControls?.();
+  assert.notEqual(v.controls.update, protoUpdate, "the walk took the camera again");
+  walk.dispose();
+  assert.equal(v.controls.update, protoUpdate, "the orbit camera is back");
+  assert.equal(v.onControls, null);
 });

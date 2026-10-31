@@ -308,6 +308,8 @@ interface ViewerInternals {
   renderer: { domElement: HTMLCanvasElement };
   invalidate(): void;
   updateWalls(): void;
+  /** Called when the viewer builds new controls (a quality change): the walk takes the camera again (#200). */
+  onControls?: (() => void) | null;
 }
 
 export interface WalkState {
@@ -354,6 +356,9 @@ export class WalkCamera {
     this.origNear = v.camera.near;
     // Home 3D's frame calls these: the walk owns the camera, walls stand whole and opaque
     v.controls.update = () => this.apply();
+    v.onControls = () => {
+      v.controls.update = () => this.apply();
+    };
     v.updateWalls = () => {
       for (const fv of v.floors) {
         fv.mask.standing.value = 0xffff;
@@ -372,6 +377,7 @@ export class WalkCamera {
   dispose(): void {
     cancelAnimationFrame(this.raf);
     for (const [t, type, fn, capture] of this.listeners) t.removeEventListener(type, fn, capture);
+    this.v.onControls = null;
     this.v.controls.update = this.origUpdate;
     this.v.updateWalls = this.origWalls;
     this.v.camera.fov = this.origFov;

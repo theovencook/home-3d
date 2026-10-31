@@ -1108,8 +1108,18 @@ export class FloorplanViewer {
     this.controls.dispose();
     this.controls = this.makeControls();
     this.controls.view = view;
+    // a drag that was under way is over with the old controls: nothing stays grabbed (#200)
+    if (this.surfaceDragging) this.surfaceGrab?.end();
+    this.surfaceDragging = false;
+    this.grab = null;
+    this.deviceGrab = null;
+    this.updateGhost();
+    this.onControls?.();
     this.resize();
   }
+
+  /** Set by the walk: called after the controls were replaced, so it can take the camera again. */
+  onControls: (() => void) | null = null;
 
   /**
    * Furniture packs (models of pack furniture); set before the building that uses them. `recipes`: the plan's recipe
