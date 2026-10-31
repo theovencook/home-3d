@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 import copy
-import inspect
 import logging
 import time
 from typing import Any
@@ -40,6 +39,7 @@ from .const import (
 )
 from .custom_items import CustomItems
 from .moves import Moves, load_moves, migrate_bases, migrate_building, moved_into
+from .off_loop import OFF_LOOP as _OFF_LOOP
 from .packs import library_pack, load_bundled, with_bundled
 from .racks import RackError, new_rack_problems
 from .recipes import with_recipes
@@ -65,13 +65,6 @@ class _BuildingStore(Store):
         if old_minor_version < 2 and old_data.get("building"):
             old_data = {**old_data, "building": complete(old_data["building"])}
         return old_data
-
-
-# newer Home Assistant turns a store's data into JSON in the event loop unless told otherwise; the background images
-# and the restore points can be megabytes, so they are serialised in the executor (older versions always did that)
-_OFF_LOOP: dict[str, Any] = {}
-if "serialize_in_event_loop" in inspect.signature(Store.__init__).parameters:
-    _OFF_LOOP["serialize_in_event_loop"] = False
 
 
 class RevisionConflict(Exception):
@@ -136,7 +129,9 @@ class Home:
         self._moves = moves
         self._picture_days = picture_days
         building_key, image_key, history_key = _home_keys(home_id)
-        self._building_store = _BuildingStore(hass, STORAGE_VERSION, building_key, minor_version=STORAGE_MINOR_VERSION)
+        self._building_store = _BuildingStore(
+            hass, STORAGE_VERSION, building_key, minor_version=STORAGE_MINOR_VERSION, **_OFF_LOOP
+        )
         self._image_store: Store[Any] = Store(hass, STORAGE_VERSION, image_key, **_OFF_LOOP)
         self._history_store: Store[Any] = Store(hass, STORAGE_VERSION, history_key, **_OFF_LOOP)
         self.building: dict[str, Any] = empty_building()
@@ -241,13 +236,10 @@ class Home:
         last = self._history[-1]["saved_at"] if self._history else 0
         if self.building.get("floors") and time.time() - last > HISTORY_INTERVAL:
             await self._async_snapshot()
-        # items that moved to another pack take their new ids (#110): an imported plan, a backup, a restore point
-        moves = self._moves()
-        sent, building = building, migrate_building(building, moves)
-        recipe_bases = migrate_bases(recipe_bases, sent, building, moves)
-        # every pack item type in the plan keeps its recipe copy (#2): the one sent, else the one kept so far, else
-        # a copy of the installed item; one the client sends as it started from it gives way to a newer kept one (#45)
-        building = with_recipes(building, self.building.get("recipes"), self._packs(), recipe_bases)
+        # in the executor (#176): on a large plan this is tens of milliseconds the event loop need not wait for
+        building = await self.hass.async_add_executor_job(
+            self._prepared, building, recipe_bases, self.building.get("recipes"), self._packs(), self._moves()
+        )
         # an editor's save that puts rack gear where it does not fit is refused (#113); what broke the rules before
         # (a pack update) stays
         if check_racks and (problems := new_rack_problems(self.building, building)):
@@ -263,6 +255,22 @@ class Home:
         await self._save_building()
         async_dispatcher_send(self.hass, SIGNAL_BUILDING_UPDATED, self.id, revision)
         return revision
+
+    @staticmethod
+    def _prepared(
+        building: dict[str, Any],
+        recipe_bases: dict[str, str] | None,
+        kept: dict[str, Any] | None,
+        packs: list[dict[str, Any]],
+        moves: Moves,
+    ) -> dict[str, Any]:
+        """A building as it is stored (no event loop needed): items that moved to another pack take their new ids
+        (#110: an imported plan, a backup, a restore point), and every pack item type keeps its recipe copy (#2): the
+        one sent, else the one kept so far, else a copy of the installed item; one the client sends as it started from
+        it gives way to a newer kept one (#45)."""
+        sent, building = building, migrate_building(building, moves)
+        recipe_bases = migrate_bases(recipe_bases, sent, building, moves)
+        return with_recipes(building, kept, packs, recipe_bases)
 
     async def async_follow_custom_items(self) -> None:
         """After a custom item changed (#13): placed copies of it follow the change at once (#26)."""
@@ -379,7 +387,7 @@ class FloorplanData:
         """Initialise the stores; `picture_days`: how long a picture only a restore point uses is kept (#154)."""
         self.hass = hass
         self.picture_days = picture_days
-        self._pack_store: Store[Any] = Store(hass, STORAGE_VERSION, STORAGE_KEY_PACKS)
+        self._pack_store: Store[Any] = Store(hass, STORAGE_VERSION, STORAGE_KEY_PACKS, **_OFF_LOOP)
         self._homes_store: Store[Any] = Store(hass, STORAGE_VERSION, STORAGE_KEY_HOMES)
         self.homes: dict[str, Home] = {}
         self.active_id = FIRST_HOME_ID

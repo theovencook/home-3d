@@ -4,7 +4,7 @@
 import { css, html, LitElement, nothing } from "lit";
 import type { Building } from "../model.ts";
 import type { HomeAssistant } from "../types.ts";
-import { doorPairs, locateRooms, roomAt, type LocateRoom } from "./graph.ts";
+import { locateRooms, roomAt, type LocateRoom } from "./graph.ts";
 
 interface Scanner {
   offline?: boolean;
@@ -1872,20 +1872,9 @@ export class LocateSetup extends LitElement {
     return null;
   }
 
-  /** Every save sends the plan's rooms and doors along, so the service always knows the current plan. */
+  /** Save settings. The service reads the rooms and doors from the active home's plan itself (#169), so they are not sent. */
   private async save(changes: Record<string, unknown>): Promise<void> {
-    let doors: [string, string][] = [];
-    try {
-      doors = doorPairs(this.building);
-    } catch (e) {
-      console.warn("Home 3D locate: no door graph", e);
-    }
-    const cfg = await this.call<Config>({
-      type: "home_3d/locate/configure",
-      rooms: this.rooms,
-      doors,
-      ...changes,
-    });
+    const cfg = await this.call<Config>({ type: "home_3d/locate/configure", ...changes });
     if (cfg) this._cfg = { ...cfg, scanner_rooms: { ...cfg.scanner_rooms } };
   }
 

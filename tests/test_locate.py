@@ -13,6 +13,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, async_
 
 from custom_components.home_3d.const import DOMAIN
 from custom_components.home_3d.locate.engine import Fingerprints
+from custom_components.home_3d.locate.plan import plan_doors, plan_rooms
 from custom_components.home_3d.locate.service import DATA_LOCATE, SIGNAL_LOCATE, LocateService
 
 ROOMS = [
@@ -415,3 +416,122 @@ async def test_no_room_sensors_for_people_when_turned_off(hass: HomeAssistant, h
     await service.async_configure({"person_sensors": True})
     await hass.async_block_till_done()
     assert uid("irk_phone") is not None and uid("irk_tablet") is not None
+
+
+# ---------------------------------------------------------------------------- the rooms follow the plan (#169)
+
+
+def _room(room_id: str, name: str, x0: float, x1: float, area: str | None = None) -> dict:
+    points = [[x0, 0], [x1, 0], [x1, 4], [x0, 4]]
+    return {"id": room_id, "name": name, "area_id": area, "points": points, "floor_material": "wood"}
+
+
+def _door(opening_id: str, room_id: str, edge: int, *, kind: str = "door", sill: float = 0) -> dict:
+    return {
+        "id": opening_id,
+        "room_id": room_id,
+        "edge": edge,
+        "offset": 2,
+        "width": 0.9,
+        "type": kind,
+        "sill": sill,
+        "height": 2.0,
+    }
+
+
+def _plan(rooms: list[dict], openings: list[dict]) -> dict:
+    floor = {"id": "f1", "name": "Ground", "elevation": 0, "height": 2.5, "cut_height": 1.15}
+    floor |= {"rooms": rooms, "openings": openings, "furniture": [], "placements": [], "background": None}
+    return {"version": 1, "settings": {"wall_exterior": 0.24, "wall_interior": 0.12, "grid": 0.05}, "floors": [floor]}
+
+
+# kitchen | hall | living side by side: a door kitchen-hall (the kitchen's right edge), a door from the hall to the
+# garden (its bottom edge), a high window hall-living and a window down to the floor living-hall
+KITCHEN, HALL, LIVING = (
+    _room("kitchen", "Kitchen", 0, 4, "kitchen"),
+    _room("hall", "Hall", 4, 8),
+    _room("living", "Living", 8, 12),
+)
+OPENINGS = [
+    _door("d1", "kitchen", 1),
+    _door("d2", "hall", 0),
+    _door("w1", "hall", 1, kind="window", sill=0.9),
+]
+
+
+async def _save(client, building: dict, home_id: str | None = None) -> None:
+    msg = {"type": "home_3d/building/save", "building": building, **({"home_id": home_id} if home_id else {})}
+    await client.send_json_auto_id(msg)
+    res = await client.receive_json()
+    assert res["success"], res
+
+
+def test_the_door_graph_is_read_from_the_plan() -> None:
+    plan = _plan([KITCHEN, HALL, LIVING], OPENINGS)
+    assert plan_doors(plan) == [("kitchen", "hall")]
+    # a window down to the floor is a way through, like a passage
+    plan = _plan([KITCHEN, HALL, LIVING], [*OPENINGS, _door("w2", "living", 3, kind="window", sill=0.05)])
+    assert plan_doors(plan) == [("kitchen", "hall"), ("living", "hall")]
+    assert plan_rooms(plan)[0] == {"id": "kitchen", "name": "Kitchen", "floor": "Ground", "area_id": "kitchen"}
+
+
+async def test_the_rooms_follow_the_active_plan(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    await service.async_configure({"devices": [WATCH]})
+
+    await _save(client, _plan([KITCHEN, HALL], OPENINGS))
+    assert [r["id"] for r in service.rooms] == ["kitchen", "hall"]
+    assert service.doors == [("kitchen", "hall")]
+    assert service._trackers["irk_watch"].neighbours["kitchen"] == {"hall"}
+
+    # the watch is in the hall; the hall is renamed, then removed
+    service.state["irk_watch"] = {
+        "room": "hall",
+        "room_name": "Hall",
+        "floor": "Ground",
+        "area_id": None,
+        "probability": 0.9,
+    }
+    await _save(client, _plan([KITCHEN, {**HALL, "name": "Entrance"}], OPENINGS))
+    assert service.state["irk_watch"]["room_name"] == "Entrance"
+    await _save(client, _plan([KITCHEN, LIVING], []))
+    assert [r["id"] for r in service.rooms] == ["kitchen", "living"]
+    assert service.doors == []
+    assert "irk_watch" not in service.state
+    assert service._trackers["irk_watch"].rooms == ["kitchen", "living"]
+
+
+async def test_another_home_made_active_brings_its_rooms(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    await _save(client, _plan([KITCHEN, HALL], OPENINGS))
+    await client.send_json_auto_id({"type": "home_3d/homes/create", "name": "Flat"})
+    flat = (await client.receive_json())["result"]["home"]["id"]
+
+    # a home that is not active changes nothing
+    await _save(client, _plan([LIVING], []), home_id=flat)
+    assert [r["id"] for r in service.rooms] == ["kitchen", "hall"]
+
+    await client.send_json_auto_id({"type": "home_3d/homes/set_active", "home_id": flat})
+    assert (await client.receive_json())["success"]
+    assert [r["id"] for r in service.rooms] == ["living"]
+
+
+async def test_a_setting_keeps_where_everyone_is(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    await service.async_configure({"devices": [WATCH]})
+    await _save(client, _plan([KITCHEN, HALL], OPENINGS))
+    tracker = service._trackers["irk_watch"]
+
+    # another setting, a renamed room or furniture moved: the tracker (and the room it shows) stays
+    await service.async_configure({"fly": False})
+    await _save(client, _plan([{**KITCHEN, "name": "Cook room"}, HALL], OPENINGS))
+    assert service._trackers["irk_watch"] is tracker
+    # a room more: the trackers start again with it
+    await _save(client, _plan([KITCHEN, HALL, LIVING], OPENINGS))
+    assert service._trackers["irk_watch"] is not tracker

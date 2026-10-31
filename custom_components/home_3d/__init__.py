@@ -172,6 +172,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     locate = LocateService(hass)
     await locate.async_load()
     hass.data[DATA_LOCATE] = locate
+    # with the rooms and doors of the active home's plan, whenever it changes (#169)
+    entry.async_on_unload(locate.follow_plan(lambda: data.active.building, lambda: data.active_id))
 
     # Assist asks the house: service, intent and the sentences Assist understands (with the names locating knows)
     await async_setup_voice(hass)

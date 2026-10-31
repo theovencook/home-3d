@@ -292,6 +292,122 @@ async def test_placed_custom_items_follow_the_households_edits(hass: HomeAssista
     assert (await _recipes(client))[shelf_type]["recipe"]["size"] == [1.0, 0.3, 1.8]
 
 
+# ---------------------------------------------------------------------------- every home (#164)
+
+
+async def _recipes_of(client, home_id: str) -> dict:
+    return (await _call(client, type="home_3d/building/get", home_id=home_id))["building"]["recipes"]
+
+
+async def _chairs_in_two_homes(client) -> str:
+    """Release 1 installed, a chair placed in the active home and two in a second home that is not active; the second
+    home's id."""
+    await _placed_chair_and_stool(client)
+    second = (await _call(client, type="home_3d/homes/create", name="Flat"))["home"]["id"]
+    plan = _building(_furniture("a", CHAIR_TYPE), _furniture("b", CHAIR_TYPE, x=3))
+    await _call(client, type="home_3d/building/save", home_id=second, building=plan)
+    return second
+
+
+async def test_auto_update_reaches_the_homes_that_are_not_active(hass: HomeAssistant, hass_ws_client) -> None:
+    client = await _client(hass, hass_ws_client)
+    second = await _chairs_in_two_homes(client)
+    await _call(client, type="home_3d/packs/updates/settings", auto_update=True)
+
+    await _call(client, type="home_3d/packs/import", files=_files(2, chair_size=[1.2, 0.9, 0.8]))
+
+    assert (await _recipes(client))[CHAIR_TYPE]["release"] == 2
+    flat = await _recipes_of(client, second)
+    assert flat[CHAIR_TYPE]["release"] == 2
+    assert flat[CHAIR_TYPE]["recipe"]["size"] == [1.2, 0.9, 0.8]
+
+
+async def test_the_items_with_an_update_cover_every_home_and_update_together(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    second = await _chairs_in_two_homes(client)
+    active = hass.data[DOMAIN].active_id
+    await _call(client, type="home_3d/packs/import", files=_files(2, chair_size=[1.2, 0.9, 0.8]))
+
+    items = {i["type"]: i for i in (await _call(client, type="home_3d/packs/updates"))["items"]}
+    # two chairs in the flat and two in the active home
+    assert items[CHAIR_TYPE]["placed"] == 4
+    assert items[CHAIR_TYPE]["homes"] == [active, second]
+
+    result = await _call(client, type="home_3d/packs/update_items", types=[CHAIR_TYPE])
+
+    assert result["updated"] == [CHAIR_TYPE]
+    assert result["revision"] == hass.data[DOMAIN].revision
+    assert (await _recipes(client))[CHAIR_TYPE]["release"] == 2
+    assert (await _recipes_of(client, second))[CHAIR_TYPE]["release"] == 2
+    assert [i["type"] for i in (await _call(client, type="home_3d/packs/updates"))["items"]] == []
+
+
+async def test_a_rollback_puts_back_the_items_of_every_home(hass: HomeAssistant, hass_ws_client) -> None:
+    client = await _client(hass, hass_ws_client)
+    second = await _chairs_in_two_homes(client)
+    await _call(client, type="home_3d/packs/updates/settings", auto_update=True)
+    await _call(client, type="home_3d/packs/import", files=_files(2, chair_size=[1.2, 0.9, 0.8]))
+    assert (await _recipes_of(client, second))[CHAIR_TYPE]["release"] == 2
+    flat_revision = hass.data[DOMAIN].homes[second].revision
+
+    await _call(client, type="home_3d/packs/rollback", pack_id="test.starter")
+
+    for recipes in (await _recipes(client), await _recipes_of(client, second)):
+        assert recipes[CHAIR_TYPE]["release"] == 1
+        assert recipes[CHAIR_TYPE]["recipe"]["size"] == [0.8, 0.8, 0.75]
+    assert hass.data[DOMAIN].homes[second].revision == flat_revision + 1
+
+
+async def test_a_rollback_leaves_a_home_without_the_update_unchanged(hass: HomeAssistant, hass_ws_client) -> None:
+    client = await _client(hass, hass_ws_client)
+    second = await _chairs_in_two_homes(client)
+    first_copy = (await _recipes(client))[CHAIR_TYPE]
+    await _call(client, type="home_3d/packs/import", files=_files(2, chair_size=[1.2, 0.9, 0.8]))
+    await _call(client, type="home_3d/packs/update_items", types=[CHAIR_TYPE])
+    # the flat goes back to release 1 by a save of its own (an editor that kept the older copy)
+    flat = (await _call(client, type="home_3d/building/get", home_id=second))["building"]
+    await _call(
+        client, type="home_3d/building/save", home_id=second, building={**flat, "recipes": {CHAIR_TYPE: first_copy}}
+    )
+    assert (await _recipes_of(client, second))[CHAIR_TYPE]["release"] == 1
+    revision = hass.data[DOMAIN].homes[second].revision
+
+    await _call(client, type="home_3d/packs/rollback", pack_id="test.starter")
+
+    assert (await _recipes(client))[CHAIR_TYPE]["release"] == 1
+    # nothing to put back in the flat: it is not written
+    assert hass.data[DOMAIN].homes[second].revision == revision
+
+
+async def test_removing_a_pack_forgets_its_pin_and_previous_release(
+    hass: HomeAssistant, hass_ws_client, hass_storage
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _call(client, type="home_3d/packs/import", files=_files())
+    await _call(client, type="home_3d/packs/import", files=_files(2))
+    await _call(client, type="home_3d/packs/pin", pack_id="test.starter", pinned=True)
+    stored = hass_storage[STORAGE_KEY_PACK_UPDATES]["data"]
+    assert stored["pinned"] == ["test.starter"]
+    assert stored["previous"]["test.starter"]["release"] == 1
+
+    await _call(client, type="home_3d/packs/remove", pack_id="test.starter")
+
+    stored = hass_storage[STORAGE_KEY_PACK_UPDATES]["data"]
+    assert stored["pinned"] == []
+    assert "test.starter" not in stored["previous"]
+    # installed again, the pack starts afresh: not pinned, nothing to roll back to
+    await _call(client, type="home_3d/packs/import", files=_files(3))
+    starter = next(p for p in (await _call(client, type="home_3d/packs/updates"))["packs"] if p["id"] == "test.starter")
+    assert starter["pinned"] is False
+    assert starter["previous_release"] is None
+    refused = await _send(client, type="home_3d/packs/rollback", pack_id="test.starter")
+    assert refused["error"]["code"] == "no_previous"
+    missing = await _send(client, type="home_3d/packs/remove", pack_id="no.such")
+    assert missing["error"]["code"] == "not_found"
+
+
 # ---------------------------------------------------------------------------- checks against GitHub (mocked)
 
 OWNER, REPO = "theovencook", "home-3d-packs"
