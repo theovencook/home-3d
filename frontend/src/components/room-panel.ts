@@ -124,7 +124,7 @@ export class Fp3dRoomPanel extends LitElement {
   }
 
   private nameButton(id: string) {
-    return html`<button class="fp3d-rp-name" title=${this.t("details")} @click=${() => !this.readOnly && openMoreInfo(this, id)}>${this.name(id)}</button>`;
+    return html`<button class="fp3d-rp-name" title=${this.readOnly ? nothing : this.t("details")} @click=${() => !this.readOnly && openMoreInfo(this, id)}>${this.name(id)}</button>`;
   }
 
   /** Ask first for devices marked so (a blind that must not move by accident). */
@@ -226,6 +226,8 @@ export class Fp3dRoomPanel extends LitElement {
         </button>
       </header>
       <div class="fp3d-rp-body">
+        <!-- time travel: one disabled fieldset greys out and disables every control inside it, with one tooltip (#210) -->
+        <fieldset class="fp3d-rp-controls" ?disabled=${this.readOnly} title=${this.readOnly ? this.t("tt_past_no") : nothing}>
         ${!room.area_id
           ? html`<p class="fp3d-rp-note">${this.t("panel_no_area")}</p>`
           : !ids.length
@@ -282,6 +284,7 @@ export class Fp3dRoomPanel extends LitElement {
               ],
             )
           : nothing}
+        </fieldset>
         ${hiddenCount
           ? html`<button class="fp3d-btn fp3d-rp-small fp3d-rp-more" @click=${() => (this._showAll = !this._showAll)}>
               ${this._showAll ? this.t("panel_less") : this.t("panel_more", { n: hiddenCount })}
@@ -529,12 +532,14 @@ export class Fp3dRoomPanel extends LitElement {
     // a changing query parameter makes the browser fetch a fresh snapshot (not for inline pictures)
     const src = picture && !isUnavailable(st) ? (picture.startsWith("data:") ? picture : `${picture}${picture.includes("?") ? "&" : "?"}fp3d=${this._tick}`) : null;
     const placed = this.floor?.placements.some((p) => p.entity_id === st.entity_id);
+    const shot = html`${src ? html`<img src=${src} alt=${this.name(st.entity_id)} loading="lazy" />` : html`<span class="fp3d-rp-note">${stateText(this.hass, st)}</span>`}
+      <span class="fp3d-rp-camera-name">${this.name(st.entity_id)}</span>`;
+    // time travel: there is no live view or camera to go to, so the picture is no button and "look through" is gone (#210)
     return html`<div class="fp3d-rp-camera-wrap">
-      <button class="fp3d-rp-camera" title=${this.t("camera_live")} @click=${() => !this.readOnly && openMoreInfo(this, st.entity_id)}>
-        ${src ? html`<img src=${src} alt=${this.name(st.entity_id)} loading="lazy" />` : html`<span class="fp3d-rp-note">${stateText(this.hass, st)}</span>`}
-        <span class="fp3d-rp-camera-name">${this.name(st.entity_id)}</span>
-      </button>
-      ${placed && !this.noLook
+      ${this.readOnly
+        ? html`<div class="fp3d-rp-camera fp3d-rp-camera-still">${shot}</div>`
+        : html`<button class="fp3d-rp-camera" title=${this.t("camera_live")} @click=${() => openMoreInfo(this, st.entity_id)}>${shot}</button>`}
+      ${placed && !this.noLook && !this.readOnly
         ? html`<button
             class="fp3d-rp-look"
             title=${this.t("through_camera")}
@@ -579,9 +584,20 @@ export class Fp3dRoomPanel extends LitElement {
         box-shadow: var(--fp3d-shadow);
         overflow: hidden;
       }
-      /* time travel: the controls show the past and take no touches (the list still scrolls) */
-      .fp3d-rp-ro .fp3d-rp-body :is(button, input, select) {
-        pointer-events: none;
+      /* time travel: the controls are in a disabled fieldset, greyed out, with a tooltip (#210) */
+      .fp3d-rp-controls {
+        display: contents;
+        border: 0;
+        margin: 0;
+        padding: 0;
+        min-width: 0;
+      }
+      .fp3d-rp-ro .fp3d-rp-body :is(button, input, select):disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .fp3d-rp-camera-still {
+        cursor: default;
       }
       .fp3d-rp-ro-note {
         color: #ffb020;

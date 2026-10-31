@@ -44,7 +44,7 @@ test("the Recently used block folds away and back, and starts open (#78)", () =>
   const lib = new FurnitureLibrary() as unknown as Record<string, any>;
   assert.equal(lib._recentShut, false);
   const open = (): boolean => {
-    const t = lib.section("recent", "Recently used", [], false, true);
+    const t = lib.section("recent", "Recently used", [], false);
     return t.values.some((v: unknown) => v === true);
   };
   assert.equal(open(), true);
@@ -53,4 +53,80 @@ test("the Recently used block folds away and back, and starts open (#78)", () =>
   assert.equal(open(), false);
   lib.toggleRecent();
   assert.equal(lib._recentShut, false);
+});
+
+/** A library with two sections (sofas and seating) and one favourite, as the headers see it (#211). */
+function sectioned() {
+  const mk = (key: string, kind: string, label: string) => ({ ...stool, key, type: key, kind, label, rooms: [], search: label.toLowerCase() }) as unknown as LibraryEntry;
+  const lib = new FurnitureLibrary() as unknown as Record<string, any>;
+  lib.entries = [mk("couch", "sofa", "Couch"), mk("chair", "seating", "Chair")];
+  lib._open = null;
+  lib._fav = ["couch"];
+  lib._shut = new Set();
+  lib._searchShut = new Set();
+  lib.render();
+  return lib;
+}
+
+test("the first section is open by default and can be closed (#211)", () => {
+  const lib = sectioned();
+  assert.equal(lib.isOpen("sofa", false), true);
+  assert.equal(lib.isOpen("seating", false), false);
+  lib.toggleOpen("sofa", false);
+  assert.equal(lib.isOpen("sofa", false), false);
+  lib.toggleOpen("sofa", false);
+  assert.equal(lib.isOpen("sofa", false), true);
+});
+
+test("opening one section leaves the others as they are, any number open at once (#211)", () => {
+  const lib = sectioned();
+  lib.toggleOpen("seating", false);
+  assert.equal(lib.isOpen("sofa", false), true);
+  assert.equal(lib.isOpen("seating", false), true);
+  lib.toggleOpen("sofa", false);
+  assert.equal(lib.isOpen("sofa", false), false);
+  assert.equal(lib.isOpen("seating", false), true);
+});
+
+test("Favourites and Other rooms headers fold away and back (#211)", () => {
+  const lib = sectioned();
+  for (const key of ["fav", "other-rooms"]) {
+    assert.equal(lib.isOpen(key, false), true);
+    lib.toggleOpen(key, false);
+    assert.equal(lib.isOpen(key, false), false);
+    lib.toggleOpen(key, false);
+    assert.equal(lib.isOpen(key, false), true);
+  }
+});
+
+test("during a search every section shows expanded and its header still folds it (#211)", () => {
+  const lib = sectioned();
+  lib.setQuery("c");
+  assert.equal(lib.isOpen("seating", true), true);
+  assert.equal(lib.isOpen("fav", true), true);
+  lib.toggleOpen("seating", true);
+  assert.equal(lib.isOpen("seating", true), false);
+  lib.toggleOpen("seating", true);
+  assert.equal(lib.isOpen("seating", true), true);
+  // folding during a search does not touch the remembered sections, and ends with the search
+  lib.toggleOpen("sofa", true);
+  assert.equal(lib.isOpen("sofa", false), true);
+  lib.setQuery("");
+  assert.equal(lib.isOpen("sofa", true), true);
+});
+
+test("the open sections are remembered per device, including all closed (#211)", () => {
+  const store = new Map<string, string>();
+  (globalThis as any).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) };
+  try {
+    const lib = sectioned();
+    lib.toggleOpen("sofa", false);
+    assert.equal(store.get("home3d.lib.open"), "[]");
+    const again = new FurnitureLibrary() as unknown as Record<string, any>;
+    assert.equal(again.isOpen("sofa", false), false);
+    lib.toggleOpen("fav", false);
+    assert.equal(store.get("home3d.lib.shut"), '["fav"]');
+  } finally {
+    delete (globalThis as any).localStorage;
+  }
 });

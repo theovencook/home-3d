@@ -19,6 +19,11 @@ const STORE_OPEN = "home3d.lib.open";
 const STORE_FAV = "home3d.lib.fav";
 const STORE_RECENT = "home3d.lib.recent";
 const STORE_RECENT_SHUT = "home3d.lib.recent.shut";
+const STORE_SHUT = "home3d.lib.shut";
+/** Blocks above and below the sections: open by default, each folds away on its own header (#211). */
+const SPECIAL = new Set(["fav", "other-rooms"]);
+/** The sections open until the person has opened or closed one. */
+const DEFAULT_OPEN = ["sofa", "lamp"];
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -56,6 +61,8 @@ export class FurnitureLibrary extends LitElement {
     _outdoor: { state: true },
     _pack: { state: true },
     _open: { state: true },
+    _shut: { state: true },
+    _searchShut: { state: true },
     _fav: { state: true },
     _recent: { state: true },
     _recentShut: { state: true },
@@ -84,7 +91,14 @@ export class FurnitureLibrary extends LitElement {
   private declare _outdoor: boolean;
   /** The pack the library is narrowed to (its id), or null for all (#109). */
   private declare _pack: string | null;
-  private declare _open: Set<string>;
+  /** The sections the person left open (remembered per device); null until one was opened or closed (#211). */
+  private declare _open: Set<string> | null;
+  /** Favourites / other rooms folded away (remembered per device). */
+  private declare _shut: Set<string>;
+  /** Headers folded away while a search is typed (forgotten when the search starts or ends). */
+  private declare _searchShut: Set<string>;
+  /** What opens by itself while nothing was chosen: worked out by render. */
+  private defaultOpen = new Set<string>();
   private declare _fav: string[];
   private declare _recent: string[];
   /** The Recently used block is folded away (#78). */
@@ -117,7 +131,10 @@ export class FurnitureLibrary extends LitElement {
     this._light = false;
     this._outdoor = false;
     this._pack = null;
-    this._open = new Set(load<string[]>(STORE_OPEN, ["sofa", "lamp"]));
+    const stored = load<string[] | null>(STORE_OPEN, null);
+    this._open = Array.isArray(stored) ? new Set(stored) : null;
+    this._shut = new Set(load<string[]>(STORE_SHUT, []));
+    this._searchShut = new Set();
     this._fav = load<string[]>(STORE_FAV, []);
     this._recent = load<string[]>(STORE_RECENT, []);
     this._recentShut = load<boolean>(STORE_RECENT_SHUT, false) === true;
@@ -258,12 +275,38 @@ export class FurnitureLibrary extends LitElement {
     save(STORE_RECENT_SHUT, this._recentShut);
   }
 
-  private toggleOpen(key: string): void {
-    const next = new Set(this._open);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    this._open = next;
-    save(STORE_OPEN, [...next]);
+  /** Is the block under this header showing? (#211) */
+  private isOpen(key: string, searching: boolean): boolean {
+    if (key === "recent") return !this._recentShut;
+    if (searching) return !this._searchShut.has(key);
+    if (SPECIAL.has(key)) return !this._shut.has(key);
+    return (this._open ?? this.defaultOpen).has(key);
+  }
+
+  /** A header toggles its own block only; any number stay open (#211). */
+  private toggleOpen(key: string, searching: boolean): void {
+    if (key === "recent") return this.toggleRecent();
+    const flip = (from: Set<string>): Set<string> => {
+      const next = new Set(from);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    };
+    // the shut sets hold the folded blocks, the open set the opened ones
+    if (searching) this._searchShut = flip(this._searchShut);
+    else if (SPECIAL.has(key)) {
+      this._shut = flip(this._shut);
+      save(STORE_SHUT, [...this._shut]);
+    } else {
+      this._open = flip(this._open ?? this.defaultOpen);
+      save(STORE_OPEN, [...this._open]);
+    }
+  }
+
+  private setQuery(value: string): void {
+    // folding done during one search is forgotten when a search starts or ends
+    if (!!this._query.trim() !== !!value.trim()) this._searchShut = new Set();
+    this._query = value;
   }
 
   private setRoom(room: Room | null): void {
@@ -311,8 +354,9 @@ export class FurnitureLibrary extends LitElement {
     // while searching, the room chip ranks instead of hiding (#77): its items by kind, then the rest in one block
     const sections = KINDS.map((kind) => ({ kind, cards: cardsOf(found.inRoom, kind) })).filter((s) => s.cards.length);
     const others = found.otherRooms.length ? KINDS.flatMap((kind) => cardsOf(found.otherRooms, kind)) : [];
-    // with nothing open among the sections that have hits, the first one opens by itself
-    const firstOpen = sections.length && !sections.some((s) => this._open.has(s.kind)) ? sections[0].kind : null;
+    // until the person opens or closes one, the usual sections open by themselves, else the first one
+    const usual = sections.filter((s) => DEFAULT_OPEN.includes(s.kind)).map((s) => s.kind);
+    this.defaultOpen = new Set(usual.length ? usual : sections.length ? [sections[0].kind] : []);
     const active = activeFilters(filter);
     const chipName = (c: LibraryChip) => (c === "room" ? t(`lib_room_${this._room}`) : c === "pack" ? (this.entries.find((e) => e.pack === this._pack)?.packLabel ?? this._pack ?? "") : t(`lib_chip_${c}`));
     return html`<input
@@ -320,9 +364,9 @@ export class FurnitureLibrary extends LitElement {
         type="search"
         placeholder=${t("furniture_search")}
         .value=${this._query}
-        @input=${(e: Event) => (this._query = (e.target as HTMLInputElement).value)}
+        @input=${(e: Event) => this.setQuery((e.target as HTMLInputElement).value)}
         @keydown=${(e: KeyboardEvent) => {
-          if (e.key === "Escape") this._query = "";
+          if (e.key === "Escape") this.setQuery("");
         }}
       />
       <div class="fp3d-lib-rooms" role="group">
@@ -343,10 +387,10 @@ export class FurnitureLibrary extends LitElement {
         : nothing}
       ${!searching && this.roomHint && this._room === this.roomHint && !this.roomTouched ? html`<p class="fp3d-lib-hint">${t("lib_hint_room")}</p>` : nothing}
       ${!hits.length ? html`<p class="fp3d-lib-hint">${t("furniture_search_none")}</p>` : nothing}
-      ${recent.length ? this.section("recent", `🕘 ${t("lib_recent")}`, recent.map(single), searching, true) : nothing}
-      ${favs.length ? this.section("fav", `★ ${t("lib_favorites")}`, favs.map(single), searching, true) : nothing}
-      ${sections.map((s) => this.section(s.kind, t(`lib_kind_${s.kind}`), s.cards, searching || s.kind === firstOpen, false))}
-      ${others.length ? this.section("other-rooms", t("lib_other_rooms", { n: found.otherRooms.length }), others, true, true) : nothing}`;
+      ${recent.length ? this.section("recent", `🕘 ${t("lib_recent")}`, recent.map(single), searching) : nothing}
+      ${favs.length ? this.section("fav", `★ ${t("lib_favorites")}`, favs.map(single), searching) : nothing}
+      ${sections.map((s) => this.section(s.kind, t(`lib_kind_${s.kind}`), s.cards, searching))}
+      ${others.length ? this.section("other-rooms", t("lib_other_rooms", { n: found.otherRooms.length }), others, searching) : nothing}`;
   }
 
   /** One chip per pack to narrow the library to it; none while only one pack is installed (#109). */
@@ -360,15 +404,15 @@ export class FurnitureLibrary extends LitElement {
     </div>`;
   }
 
-  private section(key: string, title: string, cards: LibraryCard[], searching: boolean, special: boolean) {
-    // Recently used folds away on its own switch (and stays folded while searching); the other special blocks stay open
+  private section(key: string, title: string, cards: LibraryCard[], searching: boolean) {
+    // every header folds its own block away; while searching the blocks start expanded (#211)
     const recent = key === "recent";
-    const open = recent ? !this._recentShut : searching || special || this._open.has(key);
+    const open = this.isOpen(key, searching);
     const limit = this._limits.get(key) ?? PAGE;
     const shown = cards.slice(0, limit);
     const count = cards.reduce((n, c) => n + c.entries.length, 0);
-    return html`<button class="fp3d-lib-head fp3d-lib-toggle ${recent ? "fp3d-lib-recent" : ""}" aria-expanded=${open} @click=${() => (recent ? this.toggleRecent() : special ? undefined : this.toggleOpen(key))}>
-        <span class="fp3d-lib-caret">${special && !recent ? "" : open ? "▾" : "▸"}</span>${title} <span class="fp3d-lib-count">${count}</span>
+    return html`<button class="fp3d-lib-head fp3d-lib-toggle ${recent ? "fp3d-lib-recent" : ""}" aria-expanded=${open} @click=${() => this.toggleOpen(key, searching)}>
+        <span class="fp3d-lib-caret">${open ? "▾" : "▸"}</span>${title} <span class="fp3d-lib-count">${count}</span>
       </button>
       ${open
         ? html`<div class="fp3d-lib-grid ${recent ? "fp3d-lib-recent-grid" : ""}">${repeat(shown, (c) => c.key, (c) => this.card(c))}</div>
