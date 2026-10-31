@@ -37,3 +37,15 @@ test("a command to show: a show word or a bare place name – not a sentence tha
   // the Home Assistant area's own name counts too
   assert.equal(showCommand("geh in die Stube", building, (r) => (r.id === "wz" ? "Stube" : null))?.name, "Wohnzimmer");
 });
+
+test("switch and open claim a sentence only when it names nothing but a place (#161)", () => {
+  // switching and opening commands that happen to name a room are for Assist
+  for (const s of ["switch off the lights in the Wohnzimmer", "switch the Wohnzimmer light on", "open the blinds in the Wohnzimmer", "oeffne die Rollos im Wohnzimmer", "Öffne das Fenster im Kinderzimmer", "apri la tapparella del Wohnzimmer"]) {
+    assert.equal(showCommand(s, building), null, s);
+  }
+  // asking to see the place with them still works
+  assert.equal(showCommand("switch to the Wohnzimmer", building)?.name, "Wohnzimmer");
+  assert.equal(showCommand("open the Wohnzimmer", building)?.name, "Wohnzimmer");
+  assert.equal(showCommand("öffne das Wohnzimmer bitte", building)?.name, "Wohnzimmer");
+  assert.equal(showCommand("show the Wohnzimmer", building)?.name, "Wohnzimmer");
+});

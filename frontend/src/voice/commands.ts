@@ -69,9 +69,14 @@ export function findPlace(sentence: string, building: Building, alias?: RoomAlia
 }
 
 /** Words that ask to see a place ("zeig", "geh ins", "show", "toon", "montre" …). */
-const SHOW = /\b(zeig|zeige|zeigt|geh|gehe|wechsel|wechsle|oeffne|offne|spring|springe|navigier|show|go|open|switch|jump|view|toon|ga|open|montre|affiche|va|aller|mostra|vai|apri|muestra|ve|vaya|abre|visa|vis|ga till|naytta|nayta|pokaz|ukaz|prejdi|arata|mergi|pokazi|mutasd|menj|显示|去)\b/;
+const SHOW = /\b(zeig|zeige|zeigt|geh|gehe|wechsel|wechsle|spring|springe|navigier|show|go|jump|view|toon|ga|montre|affiche|va|aller|mostra|vai|muestra|ve|vaya|visa|vis|ga till|naytta|nayta|pokaz|ukaz|prejdi|arata|mergi|pokazi|mutasd|menj|显示|去)\b/;
+/**
+ * Words that also start a switching command ("switch off the lights in the kitchen", "öffne die Rollos im Wohnzimmer"):
+ * they only ask to see a place when nothing else but the place's name follows (#161); anything more is for Assist.
+ */
+export const SHOW_AMBIGUOUS = /\b(switch|open|oeffne|offne|apri|abre)\b/;
 /** Little words around a bare place name ("das Wohnzimmer bitte"). */
-const FILLER = new Set("das den dem die der ins in im zum zur ins nach bitte mal mir mich the to please me my het de naar le la les au a la il lo al el ett en till".split(" "));
+export const FILLER = new Set("das den dem die der ins in im zum zur ins nach bitte mal mir mich the to into please me my het de naar le la les au a la il lo al el ett en till".split(" "));
 
 /**
  * What a spoken sentence asks Home 3D to show: a place, when the sentence says "show/go to …" or is no more than a
@@ -83,10 +88,11 @@ export function showCommand(sentence: string, building: Building, alias?: RoomAl
   if (!place) return null;
   const text = normalize(sentence);
   if (SHOW.test(text)) return place;
+  const ambiguous = SHOW_AMBIGUOUS.test(text);
   const theRoom = place.kind === "room" ? zonesOf(building.floors.find((f) => f.id === place.floorId)!).find((r) => r.id === place.roomId) : undefined;
   const names = place.kind === "house" ? [] : [place.name, ...(theRoom ? [...([] as (string | null | undefined)[]).concat(alias?.(theRoom) ?? []), ...(theRoom.aliases ?? [])] : [])];
   let rest = ` ${text} `;
   for (const n of names) if (n) rest = rest.replace(` ${normalize(n)} `, " ");
   if (place.kind === "house") rest = rest.replace(HOUSE, " ");
-  return rest.split(" ").every((w) => !w || FILLER.has(w)) ? place : null;
+  return rest.split(" ").every((w) => !w || FILLER.has(w) || (ambiguous && SHOW_AMBIGUOUS.test(w))) ? place : null;
 }
