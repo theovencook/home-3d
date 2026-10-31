@@ -6,7 +6,7 @@ import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { BuildingController, type PlanChange } from "./building-controller.ts";
 import "./components/room-panel.ts";
 import { loadView, readyView } from "./load-view.ts";
-import { languageReady, loadLanguage, translate, type I18nKey } from "./i18n.ts";
+import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
 import { showsPlan2d, type CardConfig, type CardControl } from "./card-config.ts";
@@ -369,6 +369,9 @@ clearTimeout(this.cleanTimer);
   protected updated(): void {
     // the card's chrome goes light with the Day look (#85)
     this.toggleAttribute("light", lightChrome(shownLook(lookOf(this._config?.theme), this.hass)));
+    // the language its texts are in (#196)
+    const lang = uiLanguage(this.hass);
+    if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);
   }
 
   /** One level up: room -> floor -> house. */

@@ -148,6 +148,22 @@ try {
   await new Promise((r) => setTimeout(r, 500));
   await run("editor");
   results.select = await run("select", { n: speed ? 15 : 3 });
+  // #196: the help overlay takes the focus, keeps Tab and Shift+Tab inside and gives the focus back when it closes
+  results.help = await run("helpDialog", { step: "open" });
+  if (results.help.modal !== "true") problems.push("the help overlay is not aria-modal (#196)");
+  if (results.help.lang !== "en") problems.push(`the panel's lang is ${results.help.lang}, not en (#196)`);
+  for (const shift of [false, true]) {
+    for (let i = 0; i < 40; i++) {
+      if (shift) await page.keyboard.down("Shift");
+      await page.keyboard.press("Tab");
+      if (shift) await page.keyboard.up("Shift");
+    }
+    const where = await run("helpDialog", { step: "where" });
+    if (!where.inside) problems.push(`${shift ? "Shift+" : ""}Tab left the help overlay (on ${where.on}, #196)`);
+  }
+  await page.keyboard.press("Escape");
+  const closed = await run("helpDialog", { step: "closed" });
+  if (closed.open || closed.back !== "?") problems.push(`the help overlay did not give the focus back (${JSON.stringify(closed)}, #196)`);
   await run("tab", 0);
   results.unknownCalls = await run("unknownCalls");
 } catch (err) {

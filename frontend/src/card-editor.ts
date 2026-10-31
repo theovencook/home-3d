@@ -5,7 +5,7 @@ import { css, html, LitElement, nothing } from "lit";
 import { fetchBuilding, listHomes, type HomeInfo } from "./api.ts";
 import { labOn, UNRELEASED } from "./features.ts";
 import { CARD_CONTROLS, type CardConfig, type CardControl } from "./card-config.ts";
-import { languageReady, loadLanguage, translate, type I18nKey } from "./i18n.ts";
+import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
 import type { HomeAssistant } from "./types.ts";
 
 /** Defaults of the card: options at their default are left out of the config. */
@@ -82,6 +82,9 @@ export class Floorplan3dCardEditor extends LitElement {
   protected willUpdate(): void {
     // a language beyond German and English: its texts are fetched first, then everything renders
     if (this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language).then(() => this.requestUpdate());
+    // the language its texts are in (#196)
+    const lang = uiLanguage(this.hass);
+    if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);
     // the floors of the card's home, for the floor choice
     const home = this._config.home ?? "";
     if (this.hass && this.floorsOf !== home) {

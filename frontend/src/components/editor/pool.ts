@@ -3,6 +3,7 @@
 
 import { html, nothing, svg } from "lit";
 import { unitLabel } from "../../units.ts";
+import { modalFocus } from "../../dialog-focus.ts";
 import { pipePath, type P3 } from "../../geometry/runs.ts";
 import { connectionsAt, laidPipe, nearestOnOutline, planConnection, poolNodeAt, splitPipe, type Connection, type ConnectVia } from "../../pool-runs.ts";
 import { devicePorts, FILTER_VALVES, jointPorts, nodePart, poolPortFlow, portFlow, splitNode } from "../../pool-ports.ts";
@@ -424,7 +425,7 @@ export class PoolPart {
     const [done, all] = this.partStatus(a, card.part);
     const at = where();
     return html`<div class="fp3d-wv-veil fp3d-pc-veil" @click=${(e: Event) => e.target === e.currentTarget && close()}>
-      <div class="fp3d-pc" role="dialog" tabindex="0" @keydown=${(e: KeyboardEvent) => e.key === "Escape" && close()}>
+      <div class="fp3d-pc" role="dialog" aria-modal="true" tabindex="0" ${modalFocus()} @keydown=${(e: KeyboardEvent) => e.key === "Escape" && close()}>
         <div class="fp3d-wv-head">
           ${joint && admin
             ? html`<input

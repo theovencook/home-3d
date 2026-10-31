@@ -5,6 +5,12 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+### Accessibility and languages (#196)
+
+- **Modal dialogs keep the keyboard:** the ask dialog, the editor's help overlay, the wall view, the pool part card, the rack sheet and the item editor are `aria-modal`, take the focus when they open, keep Tab and Shift+Tab inside and give the focus back when they close.
+- **Changes are announced:** one polite live region tells a screen reader about another home, floor or look, an undo or redo, and a follow switch (Home Assistant's theme, the sun) that picking a look turned off.
+- **The page names its language:** the panel, the cards and the card editor carry `lang`: Home Assistant's language when its texts are there, else English.
+
 ### Plan format version, contract and failure cases (#165, #166, #167)
 
 - **Plans carry a real format version (now 2)** and Home Assistant brings older plans up to date when it loads them, and when a save, a backup, an imported plan or a restore point brings one in; voice, time travel and the sensors see the same plan as the editor. Lights placed as devices become lamps on the server (keeping their name, aliases, actions and marker). The plan as stored before stays as a restore point.

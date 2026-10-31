@@ -555,6 +555,13 @@ const en = {
   view_group_controls: "Controls",
   follow_ha: "Follow Home Assistant",
   follow_sun: "By the sun",
+  announce_home: "Showing {name}",
+  announce_floor: "Floor {name}",
+  announce_look: "Look: {look}",
+  announce_follow_ha_off: "Follow Home Assistant is off",
+  announce_follow_sun_off: "By the sun is off",
+  announce_undo: "Undone",
+  announce_redo: "Redone",
   follow_now: "now {look}",
   sun_and_lights: "Sun and lights …",
   panel_all_open: "All up",
@@ -2493,6 +2500,19 @@ export function loadLanguage(lang: string | undefined): Promise<void> {
     pending.set(code, p);
   }
   return p;
+}
+
+/**
+ * The language the texts are shown in, for the `lang` attribute (#196: a screen reader picks its voice by it): Home
+ * Assistant's language when texts for it are at hand, else English (the texts fall back to it).
+ */
+export function uiLanguage(hass: HomeAssistant | undefined): string {
+  const lang = hass?.language ?? navigator.language ?? "en";
+  const code = languageCode(lang);
+  if (!code) return /^en(?:-|$)/i.test(lang) ? lang : "en";
+  const table = extra.get(code);
+  for (const _ in table) return lang;
+  return "en";
 }
 
 export function translate(hass: HomeAssistant | undefined, key: Key, vars: Record<string, string | number> = {}): string {

@@ -289,6 +289,32 @@ const check = {
     return true;
   },
 
+  /**
+   * The editor's help overlay (#196), opened from its "?" button: whether it took the focus, and (`step: "where"`)
+   * whether the focus is still inside it, or (`step: "closed"`) back on the button. The Node script presses the keys.
+   */
+  async helpDialog({ step }) {
+    const ed = panel.shadowRoot.querySelector("fp3d-editor") ?? (await check.editor());
+    const root = ed.shadowRoot;
+    const box = () => root.querySelector(".fp3d-help-overlay");
+    if (step === "open") {
+      const button = root.querySelector(".fp3d-help-btn");
+      if (!button) throw new Error("no help button");
+      button.focus();
+      button.click();
+      await ed.updateComplete;
+      await waitFor(() => box() && root.activeElement && box().contains(root.activeElement), 5000, "the help overlay to take the focus");
+      return { modal: box().getAttribute("aria-modal"), lang: panel.getAttribute("lang") };
+    }
+    if (step === "where") return { inside: !!box() && box().contains(root.activeElement), on: root.activeElement?.className ?? root.activeElement?.tagName };
+    await ed.updateComplete;
+    await nextFrame();
+    return { open: !!box(), back: root.activeElement?.textContent?.trim() ?? null };
+  },
+
+  /** The page's announcements so far (#196): the live region's text. */
+  announced: () => document.getElementById("fp3d-announce")?.textContent ?? null,
+
   /** What the fake backend was asked that it has no answer for. */
   unknownCalls: () => [...(fake?.unknown ?? [])],
 };

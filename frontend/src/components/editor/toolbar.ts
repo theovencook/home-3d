@@ -2,6 +2,7 @@
 
 import { html, nothing, svg } from "lit";
 import { live } from "lit/directives/live.js";
+import { modalFocus } from "../../dialog-focus.ts";
 import { released } from "../../features.ts";
 import { loadLocate } from "../../load-locate.ts";
 import type { I18nKey } from "../../i18n.ts";
@@ -315,7 +316,7 @@ export class ToolbarPart {
       return html`<svg class="fp3d-help-mark" viewBox="0 0 26 26" aria-hidden="true">${shape}</svg>`;
     };
     return html`<div class="fp3d-dialog-veil" @click=${(e: Event) => e.target === e.currentTarget && close()}>
-      <div class="fp3d-dialog fp3d-help-overlay" role="dialog" aria-label=${this.t("help_overlay_title")} tabindex="-1">
+      <div class="fp3d-dialog fp3d-help-overlay" role="dialog" aria-modal="true" aria-label=${this.t("help_overlay_title")} tabindex="-1" ${modalFocus()}>
         <div class="fp3d-dialog-head">
           <h3>${this.t("help_overlay_title")}</h3>
           <button class="fp3d-btn" aria-label=${this.t("close")} @click=${close}>✕</button>

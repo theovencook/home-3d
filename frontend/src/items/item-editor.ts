@@ -6,6 +6,7 @@
 
 import { css, html, LitElement, nothing } from "lit";
 import { removeCustomItem, saveCustomItem } from "../api.ts";
+import { modalFocus } from "../dialog-focus.ts";
 import {
   addPart,
   changePart,
@@ -381,7 +382,7 @@ export class ItemEditor extends LitElement {
 
   protected render() {
     return html`<div class="ie-backdrop" @click=${(e: Event) => e.target === e.currentTarget && this.close()}>
-      <div class="ie" role="dialog" aria-modal="true" aria-label=${this.t("ie_title")}>
+      <div class="ie" role="dialog" aria-modal="true" aria-label=${this.t("ie_title")} ${modalFocus()}>
         <header class="ie-head">
           <h2>${this.t("ie_title")}</h2>
           <button class="fp3d-btn" @click=${() => this.close()}>${this.t("ie_close")}</button>

@@ -10,7 +10,7 @@ import { loadLocate } from "./load-locate.ts";
 import "./components/room-panel.ts";
 import { loadView, readyView } from "./load-view.ts";
 import "./components/home-switcher.ts";
-import { languageReady, loadLanguage, translate, type I18nKey } from "./i18n.ts";
+import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
 import type { Building, StartView } from "./model.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -38,6 +38,7 @@ import { showsDemo, withDemo } from "./demo.ts";
 import { forwardHass, HASS_CHILDREN, HassWatch } from "./hass-watch.ts";
 import { loadSampleHome } from "./api.ts";
 import { tell } from "./ask.ts";
+import { announce, lookAnnouncement, viewChange, type ViewSpot } from "./announce.ts";
 
 /** The corners of the clock, as arrows in the view menu (the full name is the button's title). */
 const CLOCK_ARROW: Record<Exclude<ClockPos, "off">, string> = { tl: "↖", tr: "↗", bl: "↙", br: "↘" };
@@ -817,7 +818,24 @@ export class Floorplan3dPanel extends LitElement {
     this.tt.start({ live: this.hass, building: b, spec: view.historyEntities(), quality: this._quality, at, t: (k, vars) => translate(this.hass, k as I18nKey, vars) });
   }
 
+  /** The home and floor last announced (#196): a screen reader hears when either changes, not on the first load. */
+  private announcedView: ViewSpot | null = null;
+
+  private announceView(): void {
+    const b = this.data.building;
+    if (!b) return;
+    const now = { home: this.data.homeId, floor: this._floorId };
+    const change = viewChange(this.announcedView, now);
+    this.announcedView = now;
+    if (change === "home") announce(this.t("announce_home", { name: this.data.homeName ?? "Home 3D" }));
+    else if (change === "floor") announce(now.floor ? this.t("announce_floor", { name: b.floors.find((f) => f.id === now.floor)?.name ?? "" }) : this.t("all_floors"));
+  }
+
   protected updated(): void {
+    this.announceView();
+    // the page's language is the one its texts are in (#196): English while a language has no texts here
+    const lang = uiLanguage(this.hass);
+    if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);
     // the viewer's chrome goes light with the Day look (#85); the editor and the extensions page stay dark (deferred)
     this.toggleAttribute("light", this._mode === "view" && lightChrome(shownLook(this._theme, this.hass)));
     // lab: the locating recorder box for admins (feasibility test, not a feature yet)
@@ -927,6 +945,7 @@ export class Floorplan3dPanel extends LitElement {
                     html`<button
                       aria-pressed=${this._theme === t}
                       @click=${() => {
+                        announce(lookAnnouncement(this._theme, t, (k, v) => this.t(k as I18nKey, v)));
                         this._theme = t;
                         prefs.set("theme", t);
                       }}
