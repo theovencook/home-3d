@@ -274,6 +274,8 @@ class Home:
         self._history: list[dict[str, Any]] = []
         # what is wrong with the stored plan (#165, see check_plan): None when nothing is
         self.problem: dict[str, Any] | None = None
+        # deleted (#167): a save or restore that waited for the lock while the home was deleted writes nothing
+        self.deleted = False
 
     @property
     def read_only(self) -> bool:
@@ -363,6 +365,7 @@ class Home:
         client) the save replaces the plan as before. `guard` sees the current plan first and may raise to refuse.
         """
         async with self._lock:
+            self._check_not_deleted()
             if self.read_only and self.problem is not None:
                 raise PlanReadOnly(self.problem["message"])
             if base_revision is not None and not self._content_revision <= base_revision <= self.revision:
@@ -376,8 +379,8 @@ class Home:
         current plan once no other save runs and returns the new one (None: nothing to change), so a save that
         landed meanwhile is never overwritten. The revision after it."""
         async with self._lock:
-            # a plan this Home 3D cannot read is never written over (#165)
-            if self.read_only:
+            # a plan this Home 3D cannot read is never written over (#165), nor a deleted home's (#167)
+            if self.read_only or self.deleted:
                 return self.revision
             building = change(self.building)
             if building is None:
@@ -412,15 +415,16 @@ class Home:
             raise RackError(problems)
         if content is None:
             content = _without_recipes(building) != _without_recipes(self.building)
+        # written first (#167): when the write fails the home keeps the plan and the revision it has on disk, and the
+        # error goes to the caller (an editor keeps its edits as a draft)
+        revision = self.revision + 1
+        await self._building_store.async_save({"revision": revision, "building": building})
         self.building = building
-        self.revision += 1
-        # the revision of this save, also when the write below takes a while
-        revision = self.revision
+        self.revision = revision
         if content:
             self._content_revision = revision
         # a plan replaced by a valid one has no problem any more (#165)
         self.problem = None
-        await self._save_building()
         async_dispatcher_send(self.hass, SIGNAL_BUILDING_UPDATED, self.id, revision)
         return revision
 
@@ -436,13 +440,19 @@ class Home:
     async def async_restore(self, building: dict[str, Any]) -> int:
         """Replace the plan (a restore point or a backup); the state before becomes a restore point."""
         async with self._lock:
+            self._check_not_deleted()
             await self._async_snapshot()
             return await self._async_store(building)
 
     async def async_snapshot(self) -> None:
         """Keep the current building as a restore point."""
         async with self._lock:
+            self._check_not_deleted()
             await self._async_snapshot()
+
+    def _check_not_deleted(self) -> None:
+        if self.deleted:
+            raise HomesError("home_not_found", f"The home {self.id} was deleted")
 
     async def _async_snapshot(self, building: dict[str, Any] | None = None) -> None:
         """Keep the current building (or `building`, the plan as stored before a migration, #165) as a restore
@@ -524,6 +534,13 @@ class Home:
         """Delete the home's stores."""
         for store in (self._building_store, self._image_store, self._history_store):
             await store.async_remove()
+
+    async def async_delete(self) -> None:
+        """Delete the home for good (#167): once a save or restore running now is done, so none writes its stores
+        again after they are gone; one still waiting is refused with "home_not_found"."""
+        async with self._lock:
+            self.deleted = True
+            await self.async_remove()
 
     async def _save_building(self) -> None:
         await self._building_store.async_save({"revision": self.revision, "building": self.building})
@@ -661,7 +678,7 @@ class FloorplanData:
         if self.active_id == home_id:
             self.active_id = next(iter(self.homes))
         await self._save_homes()
-        await home.async_remove()
+        await home.async_delete()
         async_dispatcher_send(self.hass, SIGNAL_HOMES_UPDATED)
 
     async def async_set_active(self, home_id: str) -> Home:

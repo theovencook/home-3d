@@ -241,6 +241,10 @@ async def ws_save_building(
         # the stored plan is one this Home 3D cannot read (#165): never written over by a save
         connection.send_error(msg["id"], "read_only", str(err))
         return
+    except HomesError as err:
+        # the home was deleted while the save waited (#167)
+        connection.send_error(msg["id"], err.code, err.detail)
+        return
     except RackError as err:
         # rack gear where it does not fit (#113): the editor refuses it too, so only an outdated or foreign client
         connection.send_error(msg["id"], "invalid_rack", str(err))
@@ -384,7 +388,11 @@ async def ws_history_restore(
         connection.send_error(msg["id"], "invalid_format", problem["message"])
         return
     missing = home.missing_images(building)
-    revision = await home.async_restore(building)
+    try:
+        revision = await home.async_restore(building)
+    except HomesError as err:
+        connection.send_error(msg["id"], err.code, err.detail)
+        return
     connection.send_result(msg["id"], {"revision": revision, "missing_pictures": len(missing)})
 
 
