@@ -78,3 +78,16 @@ test("the lit surfaces read each vertex's material (#40); a geometry drawn witho
   r.realize(h.root, true);
   assert.equal(h.wall.geometry.getAttribute("fp3dMat").count, 9);
 });
+
+test("disposing the look frees the depth materials it made for the shadows (#200)", () => {
+  const h = house();
+  const r = new Realism();
+  r.enable(h.scene, true);
+  r.realize(h.root, true);
+  const depth = h.wall.customDepthMaterial;
+  assert.ok(depth, "a folding wall casts a shadow through its own depth material");
+  let freed = 0;
+  depth.addEventListener("dispose", () => freed++);
+  r.dispose();
+  assert.equal(freed, 1);
+});

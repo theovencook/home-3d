@@ -2617,9 +2617,13 @@ export class FloorplanViewer {
         (pic.mesh.material as Material).dispose();
         pic.texture?.dispose();
       }
+      const own = new Set<Material>(Object.values(fv.materials));
       fv.group.traverse((o) => {
         const g = (o as Mesh).geometry as BufferGeometry | undefined;
         g?.dispose();
+        // a material of a mesh of its own (sound rings, pool water): freed with the floor, like the shared ones (#200)
+        const m = (o as Mesh).material as Material | Material[] | undefined;
+        for (const x of Array.isArray(m) ? m : m ? [m] : []) if (!own.has(x)) this.retired.push(x);
       });
       // the floor materials are disposed after the next frame, once the new ones use the same shader programs:
       // disposing them now let three.js delete the programs and compile them again on every rebuild – a

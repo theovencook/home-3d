@@ -58,6 +58,8 @@ export class Realism {
   private readonly lawn: Mesh<CircleGeometry, MeshLambertMaterial>;
   private readonly twins = new Map<MeshBasicMaterial, MeshPhongMaterial>();
   private readonly depths = new WeakMap<FoldMasks, Map<FoldRole, MeshDepthMaterial>>();
+  /** The depth materials made, to free them with the look (the WeakMap above cannot be walked, #200). */
+  private readonly depthAll = new Set<MeshDepthMaterial>();
   private meshes = new Set<Mesh>();
   private on = false;
   private plan: ShadowPlan | null = null;
@@ -200,6 +202,8 @@ export class Realism {
   dispose(): void {
     for (const twin of this.twins.values()) twin.dispose();
     this.twins.clear();
+    for (const m of this.depthAll) m.dispose();
+    this.depthAll.clear();
     this.lawn.geometry.dispose();
     this.lawn.material.alphaMap?.dispose();
     this.lawn.material.dispose();
@@ -238,7 +242,10 @@ export class Realism {
     let byRole = this.depths.get(masks);
     if (!byRole) this.depths.set(masks, (byRole = new Map()));
     let m = byRole.get(role);
-    if (!m) byRole.set(role, (m = makeFoldable(new MeshDepthMaterial(), masks, role)));
+    if (!m) {
+      byRole.set(role, (m = makeFoldable(new MeshDepthMaterial(), masks, role)));
+      this.depthAll.add(m);
+    }
     return m;
   }
 }
