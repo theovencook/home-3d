@@ -1,17 +1,13 @@
 // The item editor's bundle (#13): loaded only when an editor opens the item editor.
 
-import type { HomeAssistant } from "../types.ts";
-import { ItemEditor, type ItemEditorOptions, type Translate } from "./item-editor.ts";
-import { itemTexts } from "./texts.ts";
+import { ItemEditor, type ItemEditorOptions } from "./item-editor.ts";
 
 export type { ItemEditorOptions };
 
-/** Open the item editor over the page; `t` is the panel's translate (the editor adds its own texts). */
+/** Open the item editor over the page; `t` is the panel's translate (the item editor's ie_ texts are in the main table and the language packs). */
 export function openItemEditor(options: ItemEditorOptions): void {
   document.querySelector("fp3d-item-editor")?.remove();
   const el = document.createElement("fp3d-item-editor") as ItemEditor;
-  const hass = (): HomeAssistant => options.hassSource?.() ?? options.hass;
-  const t: Translate = itemTexts(options.t, () => hass().language);
-  el.options = { ...options, t };
+  el.options = options;
   document.body.append(el);
 }

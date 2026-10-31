@@ -15,7 +15,6 @@ import { robotRun } from "./robot.ts";
 import { roomEntities, roomOf, type RoomEntities } from "./rooms.ts";
 import { isNight, nightBands } from "./sun.ts";
 import { awaySuggestion, awaySummary, dayEnergy, daySummary, energyAt, energyIds, quietStretches, type AwayRow, type DaySummary } from "./summary.ts";
-import { withTexts } from "./texts.ts";
 import { buildTimeline, findGaps, indexAt, mergeTimelines, rowCount, statRows, thinPulses, THIN_ROWS, timelineBytes, trimTimeline, type Timeline, type WireDay } from "./timeline.ts";
 import { nextDay, setZone, zoneOf } from "./tz.ts";
 import type { Range, ReplayInfo, StartOptions, TimeTravelSession } from "./types.ts";
@@ -126,7 +125,7 @@ export class Session implements TimeTravelSession {
     this.startStates = opts.live.states;
     this.quality = opts.quality;
     this.low = opts.spec.low;
-    this.t = withTexts(opts.t, () => this.live.language);
+    this.t = opts.t;
     setZone(zoneOf(opts.live));
     this.end = Date.now();
     this.range = opts.range === "7d" ? "7d" : "24h";

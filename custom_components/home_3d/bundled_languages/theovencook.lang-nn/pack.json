@@ -1,0 +1,12 @@
+{
+  "format": "home3d-pack",
+  "version": 2,
+  "kind": "language",
+  "language": "nn",
+  "id": "theovencook.lang-nn",
+  "name": "Norsk nynorsk",
+  "publisher": "theovencook",
+  "licence": "MIT",
+  "release": 1,
+  "description": "Norsk nynorsk texts for Home 3D (partial: a text this pack lacks shows in English)."
+}

@@ -8,7 +8,9 @@ import { ITEM_FORMAT } from "../item-format.ts";
 import { KINDS, ROOMS } from "../vocabulary.ts";
 import { readItemFile } from "../custom-items.ts";
 import { llmBrief } from "./llm-brief.ts";
-import { ITEMS_EN } from "./texts.ts";
+import { englishTable } from "../i18n.ts";
+
+const english = englishTable();
 
 const PACKS_PY = readFileSync(new URL("../../../custom_components/home_3d/packs.py", import.meta.url), "utf8");
 
@@ -92,8 +94,8 @@ test("an item an LLM wrote from the brief reads for import as it is (the backend
 
 test("the brief says where in the item editor the answer goes, by the editor's own labels", () => {
   const brief = llmBrief({ kinds: KINDS, rooms: ROOMS });
-  assert.ok(brief.includes(`${ITEMS_EN.ie_paste} → ${ITEMS_EN.ie_paste_import}`), "the paste box and its button");
-  assert.ok(brief.includes(ITEMS_EN.ie_import), "the file import");
+  assert.ok(brief.includes(`${english.ie_paste} → ${english.ie_paste_import}`), "the paste box and its button");
+  assert.ok(brief.includes(english.ie_import), "the file import");
 });
 
 test("the brief lets the LLM answer several items as one JSON list, which the paste box takes (#84)", () => {

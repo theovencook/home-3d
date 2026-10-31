@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
+import { bundledLanguages } from "./bundled-languages.fixture.ts";
 import { de } from "./german.fixture.ts";
 import { englishTable, languageCode, languageReady, loadLanguage, translate, useLanguage } from "./i18n.ts";
-import { ITEMS_DE, ITEMS_EN } from "./items/texts.ts";
 import type { HomeAssistant } from "./types.ts";
 
 // #134: the German table is not built into the bundles. #196: it is a language pack that comes with Home 3D, sent by
@@ -74,19 +74,23 @@ test("German comes from its language pack in Home Assistant, not from a bundle o
   assert.equal(translate(DE, "rack_edit"), de.rack_edit);
 });
 
-test("a language pack's keys win over its file, and a key neither has shows in English", async () => {
+test("a language pack's keys are its texts, and a key it lacks shows in English", async () => {
   const realFetch = globalThis.fetch;
-  globalThis.fetch = (async (url: string) => ({ ok: true, json: async () => (String(url).includes("/lang/fr.json") ? { view: "Vue (fichier)", floor: "Étage" } : {}) })) as unknown as typeof fetch;
+  const fetched: string[] = [];
+  globalThis.fetch = (async (url: string) => {
+    fetched.push(String(url));
+    return { ok: false, json: async () => ({}) };
+  }) as unknown as typeof fetch;
   try {
     await loadLanguage("fr-CA", packHass({ fr: { view: "Vue 3D" } }));
-    // a language without a file or a pack, and an older Home Assistant that does not know languages/get
+    // a language without a pack, and an older Home Assistant that does not know languages/get
     await loadLanguage("uk", { callWS: async () => Promise.reject(new Error("unknown_command")) });
   } finally {
     globalThis.fetch = realFetch;
   }
+  assert.deepEqual(fetched, [], "no language has a file next to the bundles any more (#217)");
   const fr = { language: "fr-CA" } as unknown as HomeAssistant;
   assert.equal(translate(fr, "view"), "Vue 3D");
-  assert.equal(translate(fr, "floor"), "Étage");
   assert.equal(translate(fr, "rack_edit"), "Edit rack");
   assert.equal(languageReady("uk"), true);
   assert.equal(translate({ language: "uk" } as unknown as HomeAssistant, "rack_edit"), "Edit rack");
@@ -109,19 +113,22 @@ test("the German table has every English key, no others, with the same placehold
   for (const k of Object.keys(deTable)) assert.ok(k in en, `de: ${k} is not an English key`);
 });
 
-test("every language file holds only known keys and no unknown placeholders; the rest falls back to English", () => {
-  for (const f of readdirSync(new URL("../lang/", import.meta.url))) {
-    const table = JSON.parse(readFileSync(new URL(`../lang/${f}`, import.meta.url), "utf8")) as Record<string, string>;
-    for (const [k, v] of Object.entries(table)) {
-      assert.ok(k in en, `${f}: ${k} is not an English key`);
-      assert.equal(typeof v, "string", `${f}: ${k}`);
+test("every bundled language pack holds only known keys and no unknown placeholders; the rest falls back to English", () => {
+  const packs = bundledLanguages();
+  assert.ok(packs.length >= 17, `found ${packs.length} bundled language packs`);
+  for (const { folder, pack, language, strings } of packs) {
+    assert.equal(folder, `theovencook.lang-${language}`);
+    assert.equal(pack.id, folder);
+    assert.equal(pack.kind, "language");
+    for (const [k, v] of Object.entries(strings)) {
+      assert.ok(k in en, `${folder}: ${k} is not an English key`);
+      assert.equal(typeof v, "string", `${folder}: ${k}`);
       // a placeholder English does not have would show as "{x}"
-      for (const h of v.match(/\{[a-z_]+\}/g) ?? []) assert.ok(en[k]!.includes(h), `${f}: ${k} has ${h}`);
+      for (const h of v.match(/{[a-z_]+}/g) ?? []) assert.ok(en[k]!.includes(h), `${folder}: ${k} has ${h}`);
     }
-    const code = f.replace(".json", "");
-    useLanguage(code, table);
-    const hass = { language: code } as unknown as HomeAssistant;
-    for (const k of Object.keys(en)) assert.notEqual(translate(hass, k as never), k, `${code}: ${k} shows as a raw key`);
+    useLanguage(language, strings);
+    const hass = { language } as unknown as HomeAssistant;
+    for (const k of Object.keys(en)) assert.notEqual(translate(hass, k as never), k, `${language}: ${k} shows as a raw key`);
   }
 });
 
@@ -141,7 +148,6 @@ test("every key the code names exists in English and German (main, editor, card 
     if (!/\bi18n\.ts"|\bI18nKey\b|translate\(/.test(text) && !file.pathname.includes("/components/editor/")) continue;
     for (const m of text.matchAll(CALL)) {
       const key = m[1]!;
-      if (key.startsWith("ie_")) continue; // the item editor's own table, below
       seen++;
       if (!(key in en) || !(key in de)) missing.push(`${file.pathname.split("/src/")[1]}: ${key}`);
     }
@@ -150,7 +156,7 @@ test("every key the code names exists in English and German (main, editor, card 
   assert.deepEqual(missing, []);
 });
 
-test("the item editor bundle resolves its own keys in English and German", () => {
+test("the item editor's keys are in the English table and the German pack (#217)", () => {
   const text = readdirSync(new URL("./items/", import.meta.url))
     .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
     .map((f) => readFileSync(new URL(`./items/${f}`, import.meta.url), "utf8"))
@@ -158,8 +164,8 @@ test("the item editor bundle resolves its own keys in English and German", () =>
   const keys = [...text.matchAll(/"(ie_[a-z0-9_]+)"/g)].map((m) => m[1]!);
   assert.ok(keys.length > 20);
   for (const k of keys) {
-    assert.equal(typeof ITEMS_EN[k], "string", `en: ${k}`);
-    assert.equal(typeof ITEMS_DE[k], "string", `de: ${k}`);
+    assert.equal(typeof en[k], "string", `en: ${k}`);
+    assert.equal(typeof (de as Record<string, string>)[k], "string", `de: ${k}`);
   }
 });
 
