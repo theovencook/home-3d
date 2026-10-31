@@ -15,6 +15,10 @@ A pinned pack is left alone: no check installs a newer release of it, auto-updat
 another release asks first. Rolling back puts back the release a pack had before its last update (and the placed
 items that had taken that update), and pins the pack so the next check does not bring the update back.
 
+The packs are shared by every home (#53), so are their updates (#164): an update, an auto-update and a roll back
+change the placed items of every home, and the list of items with an update covers every home. Removing a pack forgets
+its pin, its previous release and its last check.
+
 The household's own items (#13, `household.custom`) are never listed: placed copies follow their edits by themselves.
 Bundled packs come with Home 3D itself; their placed items follow the auto-update setting like any other.
 """
@@ -44,7 +48,7 @@ from .packs import CUSTOM_PACK_ID, PackError, source_of_folder, verify_folder, w
 from .recipes import installed_copies, placed_types, recipe_copy
 
 if TYPE_CHECKING:
-    from .storage import FloorplanData
+    from .storage import FloorplanData, Home
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -226,11 +230,23 @@ class PackUpdates:
                     **self.checks.get(pack["id"], {}),
                 }
             )
-        items = [
-            {**item, "pinned": item["pack"] in self.pinned}
-            for item in pending_items(self.data.building, self.data.offered_packs)
-        ]
+        items = [{**item, "pinned": item["pack"] in self.pinned} for item in self._pending_everywhere()]
         return {"settings": dict(self.settings), "last_check": self.last_check, "packs": packs, "items": items}
+
+    def _pending_everywhere(self) -> list[dict[str, Any]]:
+        """The placed items with an update in any home (#164: the packs are shared, so an update is too): one entry
+        per type, `placed` counted over every home, `release` the oldest copy and `homes` the homes that have one."""
+        packs = self.data.offered_packs
+        merged: dict[str, dict[str, Any]] = {}
+        for home in self.data.homes.values():
+            for item in pending_items(home.building, packs):
+                if (seen := merged.get(item["type"])) is None:
+                    merged[item["type"]] = {**item, "homes": [home.id]}
+                    continue
+                seen["placed"] += item["placed"]
+                seen["release"] = min(seen["release"], item["release"])
+                seen["homes"].append(home.id)
+        return [merged[type_] for type_ in sorted(merged)]
 
     async def async_set(self, changes: dict[str, Any]) -> None:
         """Change settings (checked by SETTINGS_SCHEMA); switching auto-update on applies the waiting updates."""
@@ -242,8 +258,16 @@ class PackUpdates:
     # ------------------------------------------------------------------------ placed items
 
     async def async_apply(self, types: list[str] | None, *, skip_pinned: bool = False) -> tuple[list[str], int]:
-        """Update placed items (None: every one with an update) to the installed release; the updated types and the
-        plan's revision. Worked out from the plan as it is once no save runs (#149), so none is overwritten."""
+        """Update placed items (None: every one with an update) to the installed release in every home (#164); the
+        updated types and the active plan's revision. Each home's change is worked out from its plan as it is once no
+        save runs there (#149), so none is overwritten."""
+        updated: set[str] = set()
+        for home in list(self.data.homes.values()):
+            updated.update(await self._async_apply_home(home, types, skip_pinned))
+        return sorted(updated), self.data.revision
+
+    async def _async_apply_home(self, home: Home, types: list[str] | None, skip_pinned: bool) -> list[str]:
+        """Update one home's placed items (see async_apply); the types updated there."""
         updated: list[str] = []
 
         def change(building: dict[str, Any]) -> dict[str, Any] | None:
@@ -259,8 +283,8 @@ class PackUpdates:
             new, updated = with_updates(building, packs, wanted)
             return new if updated else None
 
-        revision = await self.data.async_update_building(change)
-        return updated, revision
+        await home.async_update_building(change)
+        return updated
 
     async def async_auto_update(self) -> list[str]:
         """With auto-update on, update every placed item of a pack that is not pinned; the updated types."""
@@ -427,34 +451,48 @@ class PackUpdates:
         if not pinned:
             await self.async_auto_update()
 
+    async def async_remove(self, pack_id: str) -> bool:
+        """Remove an imported pack and forget its pin, its previous release and its last check (#164), so the same
+        pack installed again starts afresh; whether a pack was removed. Removing an imported copy of a bundled pack
+        brings the bundled release back, which auto-update then applies like any other new release."""
+        # never in the middle of a check, which could install the pack again
+        async with self._lock:
+            if not await self.data.async_remove_pack(pack_id):
+                return False
+            if pack_id in self.pinned or pack_id in self.previous or pack_id in self.checks:
+                self.pinned.discard(pack_id)
+                self.previous.pop(pack_id, None)
+                self.checks.pop(pack_id, None)
+                await self._async_save()
+        await self.async_auto_update()
+        return True
+
     async def async_rollback(self, pack_id: str) -> dict[str, Any]:
-        """Put back the release a pack had before its last update, with the placed items that had taken that update,
-        and pin the pack to it; raises PackError. The answer names the release now installed."""
+        """Put back the release a pack had before its last update, with the placed items that had taken that update
+        in every home (#164), and pin the pack to it; raises PackError. The answer names the release now installed."""
         # never in the middle of a check, which could install over the release put back (#47)
         async with self._lock:
             current = self._installed(pack_id)
             previous = self.previous.get(pack_id)
             if current is None or previous is None:
                 raise PackError("no_previous", f"{pack_id} has no earlier release to go back to")
-            # the placed items that show the release being rolled back
-            took = {
-                type_
-                for type_, copy_ in (self.data.building.get("recipes") or {}).items()
-                if copy_["pack"] == pack_id
-                and any(
-                    recipe_copy(current, i)["hash"] == copy_.get("hash")
-                    for i in current["items"]
-                    if i["id"] == copy_["item"]
-                )
-            }
-            # and the placed items that moved out of the pack since and still show that release (#110)
+            # the copies that show the release being rolled back: of its own items, by item id (worked out once for
+            # the items placed in some home) ...
             current_items = {i["id"]: i for i in current["items"]}
-            took_moved = {
-                type_: item_id
+            took_hashes: dict[str, str] = {}
+
+            def shows_current(item_id: str, hash_: str | None) -> bool:
+                if item_id not in current_items:
+                    return False
+                if item_id not in took_hashes:
+                    took_hashes[item_id] = recipe_copy(current, current_items[item_id])["hash"]
+                return took_hashes[item_id] == hash_
+
+            # ... and of the items that moved out of the pack since (#110), by their new type
+            moved_hashes = {
+                type_: (item_id, moved_copy(recipe_copy(current, current_items[item_id]), type_)["hash"])
                 for type_, item_id in moved_out_of(pack_id, self.data.moves).items()
-                if (copy_ := (self.data.building.get("recipes") or {}).get(type_)) is not None
-                and item_id in current_items
-                and moved_copy(recipe_copy(current, current_items[item_id]), type_)["hash"] == copy_.get("hash")
+                if item_id in current_items
             }
             if previous.get("bundled"):
                 # the bundled release comes back once the imported copy is gone
@@ -467,20 +505,23 @@ class PackUpdates:
             await self._async_save()
             restored = self._installed(pack_id)
             release = restored.get("release", 1) if restored else previous.get("release", 1)
-            if restored is not None and (took or took_moved):
+            if restored is not None:
                 installed = installed_copies([restored])
                 restored_items = {i["id"]: i for i in restored["items"]}
 
-                # on the plan as it is once no save runs (#149)
-                def change(building: dict[str, Any]) -> dict[str, Any]:
-                    recipes = dict(building.get("recipes") or {})
-                    for type_ in took:
-                        if type_ in installed:
-                            recipes[type_] = recipe_copy(*installed[type_])
-                    for type_, item_id in took_moved.items():
-                        if item_id in restored_items:
-                            recipes[type_] = moved_copy(recipe_copy(restored, restored_items[item_id]), type_)
-                    return {**building, "recipes": recipes}
+                # on each home's plan as it is once no save runs there (#149)
+                def change(building: dict[str, Any]) -> dict[str, Any] | None:
+                    recipes = building.get("recipes") or {}
+                    new = dict(recipes)
+                    for type_, copy_ in recipes.items():
+                        took = copy_["pack"] == pack_id and shows_current(copy_["item"], copy_.get("hash"))
+                        if took and type_ in installed:
+                            new[type_] = recipe_copy(*installed[type_])
+                        moved = moved_hashes.get(type_)
+                        if moved is not None and moved[1] == copy_.get("hash") and moved[0] in restored_items:
+                            new[type_] = moved_copy(recipe_copy(restored, restored_items[moved[0]]), type_)
+                    return {**building, "recipes": new} if new != recipes else None
 
-                await self.data.async_update_building(change)
+                for home in list(self.data.homes.values()):
+                    await home.async_update_building(change)
         return {"release": release}
