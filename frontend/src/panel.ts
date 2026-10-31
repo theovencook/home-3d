@@ -33,6 +33,7 @@ import type { ClockPos } from "./card-config.ts";
 import { TimeTravel } from "./load-timetravel.ts";
 import { IdleClock, tabletIdleSeconds, tabletMode } from "./kiosk.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
+import { uiIcon } from "./ui-icons.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 import { UndoHistory } from "./undo-history.ts";
 import { showsDemo, withDemo } from "./demo.ts";
@@ -1069,7 +1070,7 @@ export class Floorplan3dPanel extends LitElement {
                         prefs.set("controls", right ? "right" : "left");
                       }}
                     >
-                      ${right ? "◨" : "◧"}
+                      ${uiIcon(right ? "panel-right" : "panel-left")}
                     </button>`,
                 )}
                 ${this.canEdit
