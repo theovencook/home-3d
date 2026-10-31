@@ -23,6 +23,7 @@ import voluptuous as vol
 
 from .const import (
     DEFAULT_HOME_NAME,
+    DEFAULT_RESTORE_PICTURE_DAYS,
     DOMAIN,
     FIRST_HOME_ID,
     HISTORY_INTERVAL,
@@ -124,14 +125,16 @@ class Home:
         name: str,
         packs: Callable[[], list[dict[str, Any]]],
         moves: Callable[[], Moves] = dict,
+        picture_days: Callable[[], int] = lambda: DEFAULT_RESTORE_PICTURE_DAYS,
     ) -> None:
         """Make the stores; `packs` gives the packs on offer (for the plan's recipe copies), `moves` the items that
-        moved between packs (#110)."""
+        moved between packs (#110), `picture_days` how long the pictures of restore points are kept (#154)."""
         self.hass = hass
         self.id = home_id
         self.name = name
         self._packs = packs
         self._moves = moves
+        self._picture_days = picture_days
         building_key, image_key, history_key = _home_keys(home_id)
         self._building_store = _BuildingStore(hass, STORAGE_VERSION, building_key, minor_version=STORAGE_MINOR_VERSION)
         self._image_store: Store[Any] = Store(hass, STORAGE_VERSION, image_key, **_OFF_LOOP)
@@ -152,7 +155,7 @@ class Home:
         return {"id": self.id, "name": self.name, "revision": self.revision, **_summary(self.building)}
 
     async def async_load(self) -> None:
-        """Load the stores and drop images no floor refers to any more."""
+        """Load the stores and drop the images neither the plan nor a recent restore point uses (#154)."""
         stored = await self._building_store.async_load()
         if stored:
             self.building = complete(stored.get("building") or empty_building())
@@ -170,7 +173,8 @@ class Home:
         self._history = list((history or {}).get("snapshots", []))
         images = await self._image_store.async_load()
         self._images = dict((images or {}).get("images", {}))
-        unused = set(self._images) - image_ids(self.building)
+        used = self._images_in_use()
+        unused = set(self._images) - used if used is not None else set()
         if unused:
             _LOGGER.debug("Removing %d unused background images", len(unused))
             for image_id in unused:
@@ -293,10 +297,39 @@ class Home:
         # copies: the JSON is written in the executor while the loop may change the originals
         await self._history_store.async_save({"snapshots": list(self._history)})
 
+    def _images_in_use(self) -> set[str] | None:
+        """The images the plan uses and those of the restore points made in the last `picture_days` days (#154); a
+        picture only an older restore point names is removed. None (remove nothing) when a restore point cannot be
+        read."""
+        used = image_ids(self.building)
+        since = time.time() - self._picture_days() * 86400
+        try:
+            for point in self._history:
+                if point["saved_at"] >= since:
+                    used |= image_ids(point["building"])
+        except (KeyError, TypeError, AttributeError) as err:
+            _LOGGER.warning("A restore point of home %s cannot be read (%s); keeping every picture", self.id, err)
+            return None
+        return used
+
+    def missing_images(self, building: dict[str, Any]) -> list[str]:
+        """The stored pictures a plan names that this home no longer has (#154: removed after `picture_days`)."""
+        try:
+            return sorted(image_ids(building) - set(self._images))
+        except (KeyError, TypeError, AttributeError):
+            return []
+
     def history(self) -> list[dict[str, Any]]:
-        """Restore points, newest first, without their buildings."""
+        """Restore points, newest first, without their buildings; `missing_pictures`: how many of the pictures a
+        restore point names are gone (#154), so it restores without them."""
         return [
-            {"id": h["id"], "revision": h["revision"], "saved_at": h["saved_at"], **_summary(h["building"])}
+            {
+                "id": h["id"],
+                "revision": h["revision"],
+                "saved_at": h["saved_at"],
+                **_summary(h["building"]),
+                "missing_pictures": len(self.missing_images(h["building"])),
+            }
             for h in reversed(self._history)
         ]
 
@@ -342,9 +375,10 @@ class FloorplanData:
     the panel opens, cards show by default and voice, locating and time travel use.
     """
 
-    def __init__(self, hass: HomeAssistant) -> None:
-        """Initialise the stores."""
+    def __init__(self, hass: HomeAssistant, picture_days: int = DEFAULT_RESTORE_PICTURE_DAYS) -> None:
+        """Initialise the stores; `picture_days`: how long a picture only a restore point uses is kept (#154)."""
         self.hass = hass
+        self.picture_days = picture_days
         self._pack_store: Store[Any] = Store(hass, STORAGE_VERSION, STORAGE_KEY_PACKS)
         self._homes_store: Store[Any] = Store(hass, STORAGE_VERSION, STORAGE_KEY_HOMES)
         self.homes: dict[str, Home] = {}
@@ -381,7 +415,7 @@ class FloorplanData:
             await self._save_homes()
 
     def _new_home(self, home_id: str, name: str) -> Home:
-        return Home(self.hass, home_id, name, lambda: self.offered_packs, lambda: self.moves)
+        return Home(self.hass, home_id, name, lambda: self.offered_packs, lambda: self.moves, lambda: self.picture_days)
 
     async def _save_homes(self) -> None:
         homes = [{"id": h.id, "name": h.name} for h in self.homes.values()]
@@ -447,9 +481,12 @@ class FloorplanData:
         return home
 
     async def async_duplicate_home(self, home_id: str, name: str) -> Home:
-        """A new home with a copy of another's plan and pictures (the restore points stay with the original)."""
+        """A new home with a copy of another's plan and the pictures it uses (the restore points stay with the
+        original, and so do the pictures only they use, #154)."""
         source = self._get(home_id)
-        return await self.async_create_home(name, copy.deepcopy(source.building), source.images)
+        used = image_ids(source.building)
+        images = {k: v for k, v in source.images.items() if k in used}
+        return await self.async_create_home(name, copy.deepcopy(source.building), images)
 
     async def async_delete_home(self, home_id: str) -> None:
         """Remove a home with its stores; the last one stays. If it was active, the first one left becomes so."""

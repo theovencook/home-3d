@@ -355,15 +355,17 @@ async def ws_history_snapshot(
 async def ws_history_restore(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Go back to a restore point; the current state becomes a restore point itself."""
+    """Go back to a restore point; the current state becomes a restore point itself. A picture the restore point
+    names that is no longer kept (#154) stays named in the plan but shows nothing: `missing_pictures` counts them."""
     if (home := _home(hass, connection, msg)) is None:
         return
     building = home.snapshot(msg["snapshot_id"])
     if building is None:
         connection.send_error(msg["id"], "not_found", "Restore point not found")
         return
+    missing = home.missing_images(building)
     revision = await home.async_restore(complete(building))
-    connection.send_result(msg["id"], {"revision": revision})
+    connection.send_result(msg["id"], {"revision": revision, "missing_pictures": len(missing)})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/packs/list"})

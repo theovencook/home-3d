@@ -96,6 +96,8 @@ export interface Snapshot {
   floors: number;
   rooms: number;
   furniture: number;
+  /** How many stored pictures it names are no longer kept (#154): it restores without them. */
+  missing_pictures?: number;
 }
 
 export async function listHistory(hass: HomeAssistant, home?: string | null): Promise<Snapshot[]> {
@@ -107,9 +109,9 @@ export async function takeSnapshot(hass: HomeAssistant, home?: string | null): P
   await hass.callWS({ type: "home_3d/history/snapshot", ...at(home) });
 }
 
-export async function restoreSnapshot(hass: HomeAssistant, snapshotId: string, home?: string | null): Promise<number> {
-  const res = await hass.callWS<{ revision: number }>({ type: "home_3d/history/restore", ...at(home), snapshot_id: snapshotId });
-  return res.revision;
+/** Go back to a restore point; `missing_pictures` (#154): how many of its pictures were no longer kept. */
+export async function restoreSnapshot(hass: HomeAssistant, snapshotId: string, home?: string | null): Promise<{ revision: number; missing_pictures?: number }> {
+  return hass.callWS<{ revision: number; missing_pictures?: number }>({ type: "home_3d/history/restore", ...at(home), snapshot_id: snapshotId });
 }
 
 /** A home of the install (#53), as the switcher lists it. */

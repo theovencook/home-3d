@@ -30,6 +30,9 @@ PANEL_TITLE = "Home 3D"
 # integration option (#8): whether the panel has an entry in the sidebar (the panel URL and the card work either way)
 CONF_SHOW_IN_SIDEBAR = "show_in_sidebar"
 DEFAULT_SHOW_IN_SIDEBAR = True
+# integration option (#154): how many days a picture only a restore point still uses is kept (0: not at all)
+CONF_RESTORE_PICTURE_DAYS = "restore_picture_days"
+DEFAULT_RESTORE_PICTURE_DAYS = 90
 
 # a home's plan changed: (home id, revision)
 SIGNAL_BUILDING_UPDATED = f"{DOMAIN}_building_updated"

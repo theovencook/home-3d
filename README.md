@@ -59,6 +59,8 @@ Want to look around before you build? Open the home menu at the top and choose *
 
 Home 3D keeps restore points of the plan, so you can go back to an earlier version. It can also make a full backup of the plan, its pictures and the packs; take one before big changes.
 
+A background or screen picture that only a restore point still uses is kept for 90 days after that restore point was made. Change the number of days under the integration's **Configure**. A restore point whose picture has gone restores without it and tells you so.
+
 ### Supported versions
 
 - Home Assistant 2025.1.0 or newer (the same minimum is set in `hacs.json`).

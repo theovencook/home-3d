@@ -14614,9 +14614,11 @@ export class Fp3dEditor extends LitElement {
   }
 
   private async restoreFromHistory(snap: Snapshot): Promise<void> {
-    if (!this.hass || !(await this.ask(this.t("backup_restore_confirm", { time: this.snapshotTime(snap) }), this.t("backup_restore")))) return;
-    await restoreSnapshot(this.hass, snap.id, this.home);
-    this._notice = this.t("backup_restored");
+    // a picture it names may be gone (kept only so many days, #154): it restores without it, and says so
+    const lacks = snap.missing_pictures ? ` ${this.t("backup_restore_missing", { n: snap.missing_pictures })}` : "";
+    if (!this.hass || !(await this.ask(this.t("backup_restore_confirm", { time: this.snapshotTime(snap) }) + lacks, this.t("backup_restore")))) return;
+    const res = await restoreSnapshot(this.hass, snap.id, this.home);
+    this._notice = res.missing_pictures ? this.t("backup_restored_missing", { n: res.missing_pictures }) : this.t("backup_restored");
     await this.loadHistory();
   }
 

@@ -340,6 +340,8 @@ export const de: Record<I18nKey, string> = {
   backup_restore: "Wiederherstellen",
   backup_restore_confirm: "Den Stand vom {time} wiederherstellen? Der jetzige Stand bleibt als Wiederherstellungspunkt erhalten.",
   backup_restored: "Wiederhergestellt.",
+  backup_restore_missing: "{n} seiner Bilder sind nicht mehr gespeichert; er wird ohne sie wiederhergestellt.",
+  backup_restored_missing: "Wiederhergestellt, ohne {n} Bilder, die nicht mehr gespeichert sind.",
   backup_file: "Datei",
   backup_export: "Exportieren",
   backup_export_share: "Als Vorlage teilen",

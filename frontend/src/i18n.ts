@@ -338,6 +338,8 @@ const en = {
   backup_restore: "Restore",
   backup_restore_confirm: "Restore the state of {time}? The current state is kept as a restore point.",
   backup_restored: "Restored.",
+  backup_restore_missing: "{n} of its pictures are no longer kept; it restores without them.",
+  backup_restored_missing: "Restored without {n} pictures that are no longer kept.",
   backup_file: "File",
   backup_export: "Export",
   backup_export_share: "Share as template",

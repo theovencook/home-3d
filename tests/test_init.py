@@ -552,7 +552,8 @@ async def test_options_flow_sets_show_in_sidebar(hass: HomeAssistant, mock_front
     assert result["data_schema"]({})["show_in_sidebar"] is True
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"show_in_sidebar": False})
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.options == {"show_in_sidebar": False}
+    # the pictures of restore points are kept 90 days unless set otherwise (#154)
+    assert entry.options == {"show_in_sidebar": False, "restore_picture_days": 90}
 
 
 async def test_panel_registers_without_sidebar_entry_when_option_is_off(hass: HomeAssistant, mock_frontend) -> None:
