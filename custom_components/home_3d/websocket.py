@@ -388,13 +388,14 @@ async def ws_history_restore(
     names that is no longer kept (#154) stays named in the plan but shows nothing: `missing_pictures` counts them."""
     if (home := _home(hass, connection, msg)) is None:
         return
-    building = home.snapshot(msg["snapshot_id"])
-    if building is None:
+    point = home.snapshot(msg["snapshot_id"])
+    if point is None:
         connection.send_error(msg["id"], "not_found", "Restore point not found")
         return
     # a restore point holds an older plan: brought to the current version and checked like a stored one (#165), in
     # the executor (#176)
-    building, problem = await hass.async_add_executor_job(check_plan, building)
+    checked: tuple[dict[str, Any], dict[str, Any] | None] = await hass.async_add_executor_job(check_plan, point)
+    building, problem = checked
     if problem is not None and problem["code"] != "plan_repaired":
         connection.send_error(msg["id"], "invalid_format", problem["message"])
         return

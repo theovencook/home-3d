@@ -179,6 +179,7 @@
         "doors",
         "enabled",
         "fly",
+        "person_sensors",
         "rooms",
         "scanner_rooms"
       ]

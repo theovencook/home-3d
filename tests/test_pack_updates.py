@@ -344,6 +344,28 @@ async def test_the_items_with_an_update_cover_every_home_and_update_together(
     assert [i["type"] for i in (await _call(client, type="home_3d/packs/updates"))["items"]] == []
 
 
+async def test_a_home_whose_plan_cannot_be_read_takes_no_update(hass: HomeAssistant, hass_ws_client) -> None:
+    """A read-only home (#165: plan_too_new or plan_invalid) is never written over: it lists no item with an update
+    and an update of every home leaves it as it is."""
+    client = await _client(hass, hass_ws_client)
+    second = await _chairs_in_two_homes(client)
+    active = hass.data[DOMAIN].active_id
+    flat = hass.data[DOMAIN].homes[second]
+    flat.problem = {"code": "plan_too_new", "message": "The stored plan cannot be opened"}
+    revision, building = flat.revision, flat.building
+    await _call(client, type="home_3d/packs/import", files=_files(2, chair_size=[1.2, 0.9, 0.8]))
+
+    items = {i["type"]: i for i in (await _call(client, type="home_3d/packs/updates"))["items"]}
+    assert items[CHAIR_TYPE]["homes"] == [active]
+    assert items[CHAIR_TYPE]["placed"] == 2
+
+    result = await _call(client, type="home_3d/packs/update_items", types=[CHAIR_TYPE])
+
+    assert result["updated"] == [CHAIR_TYPE]
+    assert (await _recipes(client))[CHAIR_TYPE]["release"] == 2
+    assert flat.revision == revision and flat.building is building
+
+
 async def test_a_rollback_puts_back_the_items_of_every_home(hass: HomeAssistant, hass_ws_client) -> None:
     client = await _client(hass, hass_ws_client)
     second = await _chairs_in_two_homes(client)

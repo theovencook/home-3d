@@ -852,5 +852,6 @@ export const PLAN_CONTRACT = {
       "sensor": "text"
     }
   ],
-  "recipes": {}
+  "recipes": {},
+  "opening_links_saved": true
 } satisfies Complete<Omit<Building, "recipes">> & Pick<Building, "recipes">;

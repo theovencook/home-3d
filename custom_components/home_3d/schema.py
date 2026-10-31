@@ -1200,6 +1200,10 @@ BUILDING_FIELDS = vol.Schema(
         vol.Optional("presence", default=list): vol.All([PRESENCE_SCHEMA], vol.Length(max=50)),
         # a copy of the recipe of every pack item type the plan uses (#2, see recipes.py)
         vol.Optional("recipes", default=dict): recipes_validator,
+        # set once the contact sensors once matched with doors and windows by position are saved as links (#203): a
+        # one-off the frontend does (it needs Home Assistant's states), apart from the plan's version; no default, so
+        # a plan without it is one still to do
+        vol.Optional("opening_links_saved"): bool,
     },
     extra=vol.ALLOW_EXTRA,
 )

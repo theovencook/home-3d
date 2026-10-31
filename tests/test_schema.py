@@ -8,6 +8,7 @@ import pytest
 import voluptuous as vol
 
 from custom_components.home_3d.schema import (
+    BUILDING_SCHEMA,
     ENERGY_SCHEMA,
     FURNITURE_SCHEMA,
     HOLOGRAM_SCHEMA,
@@ -19,6 +20,7 @@ from custom_components.home_3d.schema import (
     ROOM_SCHEMA,
     SETTINGS_SCHEMA,
     START_VIEW_SCHEMA,
+    empty_building,
 )
 
 ROOM = {"id": "r1", "name": "Bad", "area_id": None, "points": [[0, 0], [2, 0], [2, 2]], "floor_material": "tiles"}
@@ -635,3 +637,16 @@ def test_dismissed_warnings_are_kept_and_checked() -> None:
         SETTINGS_SCHEMA({**base, "alert_ignored": [{"kind": "", "entity": "binary_sensor.sample_window"}]})
     with pytest.raises(vol.Invalid):
         SETTINGS_SCHEMA({**base, "alert_ignored": [{"kind": "window_rain", "entity": "x" * 300}]})
+
+
+def test_the_opening_links_mark_is_an_optional_flag_apart_from_the_version() -> None:
+    # #203: the frontend's one-off marks the plan; a plan without the mark keeps none (so the one-off still runs)
+    plan = empty_building()
+    assert "opening_links_saved" not in BUILDING_SCHEMA(plan)
+    marked = BUILDING_SCHEMA({**plan, "opening_links_saved": True})
+    assert marked["opening_links_saved"] is True
+    assert marked["version"] == plan["version"]
+    # a version-1 plan keeps its mark through the migration (#165)
+    assert BUILDING_SCHEMA({**plan, "version": 1, "opening_links_saved": True})["opening_links_saved"] is True
+    with pytest.raises(vol.Invalid):
+        BUILDING_SCHEMA({**plan, "opening_links_saved": "yes"})

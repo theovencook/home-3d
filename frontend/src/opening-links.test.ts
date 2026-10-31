@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { openingEntities } from "./devices.ts";
 import type { Building, Floor, Opening, Room } from "./model.ts";
-import { emptyBuilding, newFloor } from "./model.ts";
+import { PLAN_VERSION, emptyBuilding, newFloor } from "./model.ts";
 import { saveAutomaticOpeningLinks } from "./opening-links.ts";
 import type { HomeAssistant } from "./types.ts";
 
@@ -94,4 +94,17 @@ test("the migration waits while Home Assistant has told no entities yet (#203)",
   assert.equal(b.opening_links_saved, undefined);
   assert.equal(saveAutomaticOpeningLinks(hassWith(SENSORS), b), 1);
   assert.equal(b.opening_links_saved, true);
+});
+
+test("the migration leaves the plan version alone: it is marked by its own flag, not by a version (#203, #165)", () => {
+  for (const version of [1, PLAN_VERSION]) {
+    const b = { ...home([open("w1", "window", 0)]), version };
+    assert.equal(saveAutomaticOpeningLinks(hassWith(SENSORS), b), 1);
+    assert.equal(b.version, version);
+    assert.equal(b.opening_links_saved, true);
+  }
+  // a plan of the current version that is not marked yet still gets its links
+  const fresh = home([open("w1", "window", 0)]);
+  assert.equal(fresh.version, PLAN_VERSION);
+  assert.equal(saveAutomaticOpeningLinks(hassWith(SENSORS), fresh), 1);
 });
