@@ -797,6 +797,7 @@ export class WallViewPart {
                 else this._wallSel = id;
               }}
               @furniture-move=${this.onFurnitureMoved3d}
+              @plan-change=${this.onPlanChange3d}
             ></fp3d-view3d>
             <div class="fp3d-wv-lift" hidden title=${this.t("wall_view_lift")} @pointerdown=${(e: PointerEvent) => this.liftDown(e)} @pointermove=${(e: PointerEvent) => this.liftMove(e)} @pointerup=${() => this.liftUp()} @pointercancel=${() => this.liftUp()}>
               <span>↕</span><b></b>

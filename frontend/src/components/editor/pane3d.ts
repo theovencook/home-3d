@@ -12,6 +12,7 @@ import type { WallMode } from "../../viewer/viewer3d.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { mountBase } from "../../packs.ts";
 import { MAX_MOUNT_Y, round } from "./helpers.ts";
+import type { PlanChange } from "../../building-controller.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** Pane3dPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
@@ -54,6 +55,15 @@ export class Pane3dPart {
     } catch {
       // no storage: the choice lasts for this page
     }
+  }
+
+  /**
+   * A change from the 3D view's ⚙ sheet or ★ menu (#212): made on the draft like any other edit, so it can be undone
+   * and goes out with the editor's save. Taking the event keeps the view from saving the plan behind the editor's back.
+   */
+  onPlanChange3d(this: Fp3dEditor, e: CustomEvent<{ change: PlanChange }>): void {
+    e.preventDefault();
+    this.change((doc) => e.detail.change(doc));
   }
 
   /** Furnishing in the 3D pane: the item moved there is moved in the draft (undoable, saved with the plan). */
@@ -284,6 +294,7 @@ export class Pane3dPart {
           else if (this._furnitureId) this.selectFrom3d("furniture", null);
         }}
         @furniture-move=${this.onFurnitureMoved3d}
+        @plan-change=${this.onPlanChange3d}
         @device-select=${(e: CustomEvent<{ id: string | null }>) => {
           if (e.detail.id) this.selectFrom3d("device", e.detail.id);
           else if (this._deviceId) this.selectFrom3d("device", null);
