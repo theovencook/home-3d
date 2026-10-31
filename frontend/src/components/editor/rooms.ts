@@ -19,6 +19,12 @@ import { cornerLoss, removeCorner } from "../../geometry/room-corners.ts";
 import { type ResizeNote, round, patchItem, numberish } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
+/**
+ * What ties a room to Home Assistant or to its own spot: a duplicate leaves these with the original (#186), else two
+ * rooms claim one area (and its voice names, chosen sensors, entity lists, start view and module links).
+ */
+const ROOM_LINKS = ["aliases", "climate", "live", "start_view", "panel", "hidden", "no_state", "mods"] as const satisfies readonly (keyof Room)[];
+
 /** RoomsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class RoomsPart {
   addDraftPoint(this: Fp3dEditor, p: Vec2, screen: [number, number]): void {
@@ -214,7 +220,10 @@ export class RoomsPart {
     const room = this.room;
     if (!room || !this.isEditor) return;
     const id = uid("room");
-    this.change((_, floor) => floor.rooms.push({ ...structuredClone(room), id, points: room.points.map(([x, z]) => [round(x + 0.5), round(z + 0.5)]) }));
+    // the copy keeps the shape and the look; it is a new room, named as a copy, with no area until one is picked (#186)
+    const copy: Room = { ...structuredClone(room), id, name: this.t("home_copy_name", { name: room.name }), area_id: null, points: room.points.map(([x, z]) => [round(x + 0.5), round(z + 0.5)]) };
+    for (const key of ROOM_LINKS) delete copy[key];
+    this.change((_, floor) => floor.rooms.push(copy));
     this._roomId = id;
   }
 

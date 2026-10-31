@@ -47,7 +47,8 @@ export class OutdoorPart {
   duplicateOutdoor(this: Fp3dEditor): void {
     const a = this.outdoorArea;
     if (!a || !this.isEditor) return;
-    const copy: OutdoorArea = { ...a, id: uid("outdoor"), points: a.points.map(([x, z]) => [round(x + 0.5), round(z + 0.5)]) };
+    // like a duplicated room, the copy has no area of its own until one is picked (#186)
+    const copy: OutdoorArea = { ...a, id: uid("outdoor"), area_id: null, points: a.points.map(([x, z]) => [round(x + 0.5), round(z + 0.5)]) };
     this.change((_, floor) => floor.outdoor.push(copy));
     this.selectItem("outdoor", copy.id);
   }
