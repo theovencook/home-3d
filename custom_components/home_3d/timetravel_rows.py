@@ -237,34 +237,6 @@ def car_state(state: str) -> str:
     return state if state in ("home", "unavailable", "unknown") else "not_home"
 
 
-# features whose code is in this integration: always on, no pack needed ("pool" is not here: its logic is missing)
-LOCAL_FEATURES = frozenset(
-    {
-        "camera_cockpit",
-        "weather",
-        "screens",
-        "energy_pro",
-        "sound",
-        "auto_pro",
-        "time_travel",
-        "household",
-        "fridge_smart",
-        "fun_pets",
-        "fun_halloween",
-    }
-)
-
-
-def has_feature(packs: Iterable[Mapping[str, Any]], feature: str) -> bool:
-    """Whether a feature is on: built in (LOCAL_FEATURES) or listed by an installed pack."""
-    return feature in LOCAL_FEATURES or any(feature in (pack.get("features") or []) for pack in packs)
-
-
-def has_time_travel(packs: Iterable[Mapping[str, Any]]) -> bool:
-    """Whether the time travel is on (always, it is built in)."""
-    return has_feature(packs, "time_travel")
-
-
 # where something or someone is: never part of the past (a phone's address, a car's coordinates, a Wi-Fi name)
 _LOCATION_CLASSES = frozenset({"geocoded_location", "location"})
 _LOCATION_NAME = re.compile(r"location|address|geocoded|ssid|bssid|standort|adresse", re.IGNORECASE)

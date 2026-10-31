@@ -1,6 +1,6 @@
 // Sidebar page: 3D view and editor.
 
-import { formatImperial, lengthUnit, parseLength } from "./units.ts";
+import { formatImperial, lengthUnit, parseLength, unitLabel } from "./units.ts";
 import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { PHONE_MEDIA } from "./phone.ts";
 import { BuildingController } from "./building-controller.ts";
@@ -24,7 +24,7 @@ import { furnitureName } from "./furniture-names.ts";
 import { confirmEntities, defaultHeight, entityName, kindOf } from "./devices.ts";
 import { canLift, zonesOf, type LampMount } from "./model.ts";
 import { mountBase } from "./packs.ts";
-import { hasFeature, labOn } from "./features.ts";
+import { labOn } from "./features.ts";
 import { mountLocateLab } from "./locate-lab.ts";
 import { directorOnHere } from "./director.ts";
 import { loadVoice, micProbeDone, screenName, voiceOnHere } from "./load-voice.ts";
@@ -32,7 +32,6 @@ import type { ClockPos } from "./card-config.ts";
 import { TimeTravel } from "./load-timetravel.ts";
 import { IdleClock, tabletIdleSeconds, tabletMode } from "./kiosk.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
-import type { Feature } from "./features.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 import { UndoHistory } from "./undo-history.ts";
 import { showsDemo, withDemo } from "./demo.ts";
@@ -583,19 +582,24 @@ export class Floorplan3dPanel extends LitElement {
     const camera = kind === "camera";
     const dome = p.mount === "ceiling";
     const auto = kind ? defaultHeight(kind, floor.height, light || camera ? (p.mount ?? (camera ? "wall" : "ceiling")) : null) : 1;
-    const numField = (label: string, value: number, step: number, min: number, max: number, set: (v: number) => void) =>
-      html`<label class="fp3d-size" title=${label}
-        >${label}
+    // feet and inches where the plan or Home Assistant says so (#117); a length field (metres) follows it (#170)
+    const unit = lengthUnit(this.hass, this.data.building?.settings.units);
+    const imperial = unit === "imperial";
+    const showLen = (v: number) => (imperial ? formatImperial(v) : String(Math.round(v * 100) / 100));
+    const readLen = (text: string) => (imperial ? parseLength(text, "imperial") : parseFloat(text.replace(",", ".")));
+    const numField = (label: string, value: number, step: number, min: number, max: number, set: (v: number) => void, length = false) =>
+      html`<label class="fp3d-size" title=${length ? unitLabel(label, unit) : label}
+        >${length ? unitLabel(label, unit) : label}
         <input
-          type="number"
+          type=${length && imperial ? "text" : "number"}
           inputmode="decimal"
           step=${step}
           min=${min}
           max=${max}
-          .value=${String(Math.round(value * 100) / 100)}
+          .value=${length ? showLen(value) : String(Math.round(value * 100) / 100)}
           @change=${(e: Event) => {
-            const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
-            if (Number.isFinite(v)) set(Math.min(max, Math.max(min, v)));
+            const v = length ? readLen((e.target as HTMLInputElement).value) : parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
+            if (v !== null && Number.isFinite(v)) set(Math.min(max, Math.max(min, v)));
           }}
         />
       </label>`;
@@ -610,20 +614,20 @@ export class Floorplan3dPanel extends LitElement {
               <option value="ceiling" ?selected=${dome}>${this.t("camera_mount_ceiling")}</option>
             </select>
             ${numField(this.t("camera_fov_short"), p.fov ?? (dome ? 360 : 90), 5, 10, 360, (v) => this.editDevice(id, (d) => (d.fov = v)))}
-            ${numField(this.t("camera_reach_short"), p.reach ?? (dome ? 3 : 4.5), 0.5, 0.5, 50, (v) => this.editDevice(id, (d) => (d.reach = v)))}
+            ${numField(this.t("camera_reach_short"), p.reach ?? (dome ? 3 : 4.5), 0.5, 0.5, 50, (v) => this.editDevice(id, (d) => (d.reach = v)), true)}
             ${numField(this.t("camera_tilt_short"), p.tilt ?? (dome ? 65 : 20), 5, 0, 90, (v) => this.editDevice(id, (d) => (d.tilt = v)))}`
         : nothing}
-      <label class="fp3d-size" title=${this.t("marker_height")}
+      <label class="fp3d-size" title=${unitLabel(this.t("marker_height"), unit)}
         >${this.t("size_short_h")}
         <input
-          type="number"
+          type=${imperial ? "text" : "number"}
           inputmode="decimal"
           step="0.05"
           min="0"
-          .value=${String(Math.round((p.y ?? auto) * 100) / 100)}
+          .value=${showLen(p.y ?? auto)}
           @change=${(e: Event) => {
-            const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
-            if (Number.isFinite(v) && v >= 0) this.editDevice(id, (d) => (d.y = Math.round(v * 1000) / 1000));
+            const v = readLen((e.target as HTMLInputElement).value);
+            if (v !== null && Number.isFinite(v) && v >= 0) this.editDevice(id, (d) => (d.y = Math.round(v * 1000) / 1000));
           }}
         />
       </label>
@@ -672,7 +676,7 @@ export class Floorplan3dPanel extends LitElement {
     const floor = this.data.building?.floors.find((fl) => fl.furniture.some((m) => m.id === id));
     return html`${field("w", this.t("size_short_w"))}${field("d", this.t("size_short_d"))}${field("h", this.t("size_short_h"))}
     ${floor && canLift(f)
-      ? html`<label class="fp3d-size" title=${this.t("mount_height")}
+      ? html`<label class="fp3d-size" title=${unitLabel(this.t("mount_height"), lengthUnit(this.hass, this.data.building?.settings.units))}
             >↕
             <input
               type=${imperial ? "text" : "number"}
@@ -714,7 +718,7 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   private view3d() {
-    return this.renderRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; proHint(f: Feature): void; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; openSettings(): void }) | null;
+    return this.renderRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; openSettings(): void }) | null;
   }
 
   /** A follow toggle in the view settings (#87): Home Assistant's theme or the sun; it names the look it shows now. */
@@ -744,10 +748,6 @@ export class Floorplan3dPanel extends LitElement {
     const view = this.view3d();
     const b = this.data.building;
     if (!view || !b || !this.hass) return;
-    if (!hasFeature("time_travel")) {
-      view.proHint("time_travel");
-      return;
-    }
     this._furnish = false;
     this._cameraWall = false;
     this.tt.start({ live: this.hass, building: b, spec: view.historyEntities(), quality: this._quality, at, t: (k, vars) => translate(this.hass, k as I18nKey, vars) });
@@ -765,7 +765,7 @@ export class Floorplan3dPanel extends LitElement {
     if (this.ttLinked || !this.data.building || this._mode !== "view" || !this.view3d()) return;
     this.ttLinked = true;
     const at = new URLSearchParams(location.search).get("tt");
-    if (at !== null && hasFeature("time_travel")) this.toggleTimeTravel(at);
+    if (at !== null) this.toggleTimeTravel(at);
   }
 
   private back(): void {
@@ -1435,7 +1435,7 @@ export class Floorplan3dPanel extends LitElement {
               prefs.set("trail", this._trail ? "1" : "0");
             }}
           >
-            ${hasFeature("camera_cockpit") ? "" : "🔒 "}${this.t("trail_short")}
+            ${this.t("trail_short")}
           </button>
           <button
             class="fp3d-chip"
@@ -1443,7 +1443,7 @@ export class Floorplan3dPanel extends LitElement {
             title=${this.t("camera_wall_hint")}
             @click=${() => (this._cameraWall = !this._cameraWall)}
           >
-            ${hasFeature("camera_cockpit") ? "" : "🔒 "}${this.t("cameras_short")}
+            ${this.t("cameras_short")}
           </button>
           <button
             class="fp3d-chip"
@@ -1454,14 +1454,14 @@ export class Floorplan3dPanel extends LitElement {
               prefs.set("weather", this._weather ? "1" : "0");
             }}
           >
-            ${hasFeature("weather") ? "" : "🔒 "}${this.t("weather_short")}
+            ${this.t("weather_short")}
           </button>
           ${this._tablet ? nothing : this.renderAllSettings("look", "walls")}
                   </div>`
               : nothing}
           </div>
           ${this._tablet ? nothing : html`<button class="fp3d-chip fp3d-tt-chip" aria-pressed=${tt} title=${this.t("tt_hint")} aria-label=${this.t("tt_chip")} @click=${() => this.toggleTimeTravel()}>
-            ${hasFeature("time_travel") ? "⏪" : "🔒"} <span class="fp3d-tt-label">${this.t("tt_chip")}</span>
+            ⏪ <span class="fp3d-tt-label">${this.t("tt_chip")}</span>
           </button>`}
           ${this._roomId || (this._floorId && b.floors.length > 1)
             ? html`<button class="fp3d-chip" @click=${() => this.back()}>${this.t("back")}</button>`

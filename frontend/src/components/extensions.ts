@@ -17,7 +17,7 @@ import { COLOUR_ROLES } from "../colour-roles.ts";
 import { customItems } from "../custom-items.ts";
 import { KINDS, ROOMS } from "../library-index.ts";
 import { loadItems } from "../load-items.ts";
-import { FEATURES, FUN, knownFeature, released, unlockedFeatures } from "../features.ts";
+import { FUN, released } from "../features.ts";
 import { DOG_BREEDS, PET_EYES, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
 import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
 import { translate, type I18nKey } from "../i18n.ts";
@@ -279,7 +279,6 @@ export class Extensions extends LitElement {
   }
 
   protected render() {
-    const unlocked = unlockedFeatures(this.packs ?? []);
     return html`<div class="fp3d-ext">
       <header class="fp3d-ext-head">
         <h2>${this.t("ext_title")}</h2>
@@ -288,19 +287,7 @@ export class Extensions extends LitElement {
           <a class="fp3d-btn" href=${ISSUES_URL} target="_blank" rel="noopener">🐞 ${this.t("help_issue")}</a>
         </div>
       </header>
-      <section class="fp3d-ext-card">
-        <h3>${this.t("ext_pro")}</h3>
-        <div class="fp3d-ext-pro">
-          ${FEATURES.filter((f) => released(f)).map(
-            (f) => html`<div class="fp3d-ext-feature ${unlocked.has(f) ? "fp3d-ext-on" : ""}">
-              <b>${unlocked.has(f) ? "✓" : "–"} ${this.t(`pro_name_${f}` as I18nKey)}</b>
-              <span class="fp3d-sub">${this.t(`pro_feature_${f}` as I18nKey)}</span>
-              ${unlocked.has(f) ? html`<span class="fp3d-ext-links"><span class="fp3d-ext-state">${this.t("ext_active")}</span></span>` : nothing}
-            </div>`,
-          )}
-        </div>
-      </section>
-      ${this.renderFun(unlocked)} ${this.renderItems()} ${this.renderUpdates()} ${this.renderPacks()}
+      ${this.renderFun()} ${this.renderItems()} ${this.renderUpdates()} ${this.renderPacks()}
     </div>`;
   }
 
@@ -313,8 +300,8 @@ export class Extensions extends LitElement {
   }
 
   /** Fun extras (built in): switched on and off here, the pets with their names, kinds and fur. */
-  private renderFun(unlocked: Set<string>) {
-    const shown = FUN.filter((f) => unlocked.has(f) || released(f));
+  private renderFun() {
+    const shown = FUN.filter((f) => released(f));
     if (!shown.length) return nothing;
     const pets = this.building?.settings.pets ?? null;
     const list = pets?.list ?? [];
@@ -333,9 +320,8 @@ export class Extensions extends LitElement {
       <p class="fp3d-sub">${this.t("fun_intro")}</p>
       ${shown.map((f) =>
         f === "fun_halloween"
-          ? this.renderHalloween(unlocked.has(f))
-          : unlocked.has(f)
-          ? html`<div class="fp3d-ext-feature fp3d-ext-on">
+          ? this.renderHalloween()
+          : html`<div class="fp3d-ext-feature fp3d-ext-on">
               <b>✓ ${this.t("fun_name_pets")}</b>
               <span class="fp3d-sub">${this.t("fun_feature_pets")}</span>
               ${this.isEditor && this.building
@@ -407,8 +393,7 @@ export class Extensions extends LitElement {
                           set((p) => p.list.push({ id: `pet_${Date.now().toString(36)}`, kind: "cat", name: "", fur: PET_FURS_OF.cat[p.list.length % PET_FURS_OF.cat.length] }))}>+ ${this.t("pet_add")}</button>`
                       : nothing}`
                 : nothing}
-            </div>`
-          : nothing,
+            </div>`,
       )}
     </section>`;
   }
@@ -427,9 +412,8 @@ export class Extensions extends LitElement {
   }
 
   /** Fun pack "Halloween": decorations in the furniture library, and the ghost (switched in Settings). */
-  private renderHalloween(unlocked: boolean) {
+  private renderHalloween() {
     const ghost = this.building?.settings.halloween?.ghost !== false;
-    if (!unlocked) return nothing;
     return html`<div class="fp3d-ext-feature fp3d-ext-on">
       <b>✓ 🎃 ${this.t("fun_name_halloween")}</b>
       <span class="fp3d-sub">${this.t("fun_feature_halloween")}</span>
@@ -481,10 +465,9 @@ export class Extensions extends LitElement {
         (p) => html`<div class="fp3d-pack">
           <div>
             <b>${packName(p, this.hass?.language ?? "de")}</b>
-            <span class="fp3d-sub">${p.features?.length ? this.t("pack_features", { publisher: p.publisher, n: p.features.length }) : this.t("pack_by", { publisher: p.publisher, n: p.items.length })}</span>
+            <span class="fp3d-sub">${this.t("pack_by", { publisher: p.publisher, n: p.items.length })}</span>
             ${p.licence || (p.release && p.release > 1) ? html`<span class="fp3d-sub">${[p.licence ? this.t("pack_licence", { licence: p.licence }) : "", p.release && p.release > 1 ? `v${p.release}` : ""].filter(Boolean).join(" · ")}</span>` : nothing}
             ${this.renderOrigin(p)} ${this.renderPackUpdate(p)}
-            ${(p.features ?? []).some((f) => !knownFeature(f)) ? html`<span class="fp3d-sub fp3d-pack-error">${this.t("pack_needs_update")}</span>` : nothing}
           </div>
           ${p.bundled
             ? html`<span class="fp3d-sub">${this.t("pack_bundled")}</span>`
@@ -723,11 +706,6 @@ export class Extensions extends LitElement {
         text-transform: uppercase;
         letter-spacing: 0.06em;
         color: var(--fp3d-text);
-      }
-      .fp3d-ext-pro {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-        gap: 10px;
       }
       .fp3d-ext-setting {
         justify-self: start;

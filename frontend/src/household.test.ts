@@ -325,3 +325,23 @@ test("a bin without a kerb spot behaves as before: never moves, no cue (#142)", 
   assert.deepEqual(binKerb({ bin_kerb: { x: 0, z: 0 } }), [0, 0]);
   assert.equal(binKerb({}), null);
 });
+
+test("a pack bin is recognised, so the editor can say where the kerb spot and the calendar are (#170)", async () => {
+  const { setPacks, packType } = await import("./packs.ts");
+  const { isPackBin } = await import("./household.ts");
+  const part = { shape: "box", x: 0, y: 0, z: 0, w: 0.1, h: 0.1, d: 0.1, color: "dark" };
+  setPacks([
+    {
+      id: "hh",
+      name: "Household",
+      items: [
+        { id: "wheelie_bin_blue", name: { en: "Wheelie bin" }, size: [0.6, 1, 0.7], tags: ["bin", "recycling"], parts: [part] },
+        { id: "broom", name: { en: "Broom" }, size: [0.3, 1.2, 0.3], tags: ["cleaning"], parts: [part] },
+      ],
+    } as never,
+  ]);
+  assert.equal(isPackBin(packType("hh", "wheelie_bin_blue")), true);
+  assert.equal(isPackBin(packType("hh", "broom")), false);
+  assert.equal(isPackBin("waste_bin"), false);
+  setPacks([]);
+});

@@ -1,23 +1,18 @@
 /**
- * Features: every feature whose code is in this repository is on (BUILT_IN); there is no tier and no licence.
- * A pack may still list feature names (older pack files do), which is harmless.
+ * Everything whose code is in this repository is simply on: there is no tier, no licence and no feature list. A pack may
+ * still list "features" (older pack files do); the field is ignored. What is left here: add-ons whose logic is not in this
+ * repository stay hidden unless the lab switch is on, and the fun extras are named so the extensions page can list them.
  */
-import { getPacks } from "./packs.ts";
 
-export type Feature = "camera_cockpit" | "weather" | "screens" | "energy_pro" | "sound" | "auto_pro" | "time_travel" | "pool" | "household" | "fridge_smart" | "fun_pets" | "fun_halloween";
-
-/** The features listed on the extensions page. */
-export const FEATURES: readonly Feature[] = ["camera_cockpit", "weather", "screens", "energy_pro", "sound", "auto_pro", "time_travel", "pool", "household"];
 /** Fun extras (pets, Halloween): shown in their own section of the extensions page and switched on and off there. */
-export const FUN: readonly Feature[] = ["fun_pets", "fun_halloween"];
+export type FunFeature = "fun_pets" | "fun_halloween";
+export const FUN: readonly FunFeature[] = ["fun_pets", "fun_halloween"];
 /** Free features that are always on (they can still be listed in UNRELEASED to hide them). */
 export type FreeFeature = "diagnostics" | "locate";
-export type Gated = Feature | FreeFeature;
+/** Add-ons whose logic is not in this repository ("pool"). */
+export type Gated = FunFeature | FreeFeature | "pool";
 
-/**
- * Features whose logic is not in this repository: they show nowhere unless a pack lists them or the lab switch is on
- * (localStorage "home3d.lab" = "1").
- */
+/** Hidden unless the lab switch is on (localStorage "home3d.lab" = "1"): their logic is not in this repository. */
 export const UNRELEASED: readonly Gated[] = ["pool"];
 
 export function labOn(): boolean {
@@ -44,28 +39,7 @@ export function projectionOn(): boolean {
   }
 }
 
-/** Whether an add-on may be shown and advertised: released, or unlocked, or the lab switch is on. */
+/** Whether an add-on may be shown: everything is, except the unreleased ones, which need the lab switch. */
 export function released(feature: Gated): boolean {
-  return !UNRELEASED.includes(feature) || (feature !== "diagnostics" && feature !== "locate" && hasFeature(feature)) || labOn();
-}
-
-/** Features unlocked by a pack but not listed anywhere (exclusive items). */
-const HIDDEN: readonly Feature[] = ["fridge_smart"];
-
-/** Whether this frontend knows a feature key at all (an older bundle does not know newer Pro add-ons). */
-export function knownFeature(key: string): boolean {
-  return (FEATURES as readonly string[]).includes(key) || (HIDDEN as readonly string[]).includes(key) || (FUN as readonly string[]).includes(key);
-}
-
-/** Every feature whose code is in this repository: on without any pack. */
-export const BUILT_IN: readonly Feature[] = ["camera_cockpit", "weather", "screens", "energy_pro", "sound", "auto_pro", "time_travel", "household", "fridge_smart", "fun_pets", "fun_halloween"];
-
-export function unlockedFeatures(packs: readonly { features?: string[] }[] = getPacks()): Set<Feature> {
-  const out = new Set<Feature>(BUILT_IN);
-  for (const p of packs) for (const f of p.features ?? []) if (knownFeature(f)) out.add(f as Feature);
-  return out;
-}
-
-export function hasFeature(feature: Feature, packs?: readonly { features?: string[] }[]): boolean {
-  return unlockedFeatures(packs).has(feature);
+  return !UNRELEASED.includes(feature) || labOn();
 }

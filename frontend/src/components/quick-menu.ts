@@ -3,7 +3,6 @@
 
 import { css, html, LitElement, nothing } from "lit";
 import { type CarState, coverTiltButtons, entityName, isUnavailable, kindOf } from "../devices.ts";
-import { hasFeature } from "../features.ts";
 import { askConfirm } from "../ask.ts";
 import "./ask-dialog.ts";
 import { translate, type I18nKey } from "../i18n.ts";
@@ -48,7 +47,6 @@ export class Fp3dQuickMenu extends LitElement {
     presets: { attribute: false },
     confirmSwitch: { type: Boolean },
     doorLock: { type: Boolean },
-    pro: { type: Boolean },
     noLook: { type: Boolean },
     low: { type: Boolean, reflect: true },
     _tick: { state: true },
@@ -65,7 +63,6 @@ export class Fp3dQuickMenu extends LitElement {
   /** The smart lock of a door that was tapped (#682): lock or unlock, always asking first. */
   declare doorLock: boolean;
   /** The camera cockpit is unlocked (otherwise the look-through button shows a lock). */
-  declare pro: boolean;
   /** The 2D plan (#41) has no camera to look through: the button stays away. */
   declare noLook: boolean;
   /** Tablet level: no blur behind the menu. */
@@ -97,7 +94,7 @@ export class Fp3dQuickMenu extends LitElement {
       ${this.noLook
         ? nothing
         : html`<button class="qm-details qm-look" @click=${() => this.dispatchEvent(new CustomEvent("camera-look", { detail: { entity: this.entity }, bubbles: true, composed: true }))}>
-            ${this.pro ? "" : "🔒 "}${this.t("through_camera")}
+            ${this.t("through_camera")}
           </button>`}`;
   }
 
@@ -316,7 +313,6 @@ export class Fp3dQuickMenu extends LitElement {
 
   /** Klang & Kino: start something – the player's own sources (Sonos favourites, inputs) and the plan's stations. */
   private renderPlay(st: HassEntity) {
-    if (!hasFeature("sound")) return nothing;
     const sources = Array.isArray(st.attributes.source_list) ? (st.attributes.source_list as string[]).slice(0, 10) : [];
     const presets = this.presets ?? [];
     if (!sources.length && !presets.length) return nothing;
@@ -380,7 +376,7 @@ export class Fp3dQuickMenu extends LitElement {
           ? this.renderCover(st)
           : kind === "camera"
             ? this.renderCamera(st)
-            : kind === "media" && hasFeature("sound")
+            : kind === "media"
               ? this.renderMedia(st)
               : this.renderToggle(st);
     return html`<div class="qm" role="dialog" aria-label=${entityName(this.hass, this.entity)}>

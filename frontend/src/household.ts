@@ -31,6 +31,11 @@ export function isPackPlant(type: string): boolean {
   return green > 0 && green + item.parts.filter((p) => p.color === "pot").length >= item.parts.length / 2;
 }
 
+/** A pack item that is a bin (tagged "bin": wheelie bins, recycling boxes, food caddies): a model only, with no kerb spot or calendar (#170). */
+export function isPackBin(type: string): boolean {
+  return !!packItem(type)?.tags?.includes("bin");
+}
+
 const PLANT_WORDS = /plant|pflanz|palm|monstera|ficus|feige|\bfig\b|fig_|bonsai|kaktus|cactus|yucca|orchid|bambus|bamboo|bogenhanf|snake_|einblatt|lily|gummibaum|rubber|olive|kräuter|\bherb|\bfarn|\bfern\b|\befeu\b|\bivy\b|blumen|flower|tulp|tulip/i;
 
 export const BIN_SHAPES = ["bin120", "bin240", "bin1100", "multi", "bag", "caddy", "underground"] as const;

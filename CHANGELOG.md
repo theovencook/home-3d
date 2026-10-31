@@ -5,6 +5,12 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+### No more Pro layer (#204)
+
+- **Plain names, no gates:** "Household Pro", "Energy Pro", "Car Pro" and the other names from the upstream paid shop are gone from the screens (English and German; the other languages follow). Bins and household, Energy, Car and the camera cockpit are simply part of Home 3D: no feature flags, no padlocks, no "not available" hints, no "Built-in features" list on the Extensions page.
+- **Packs that list `features` still load;** the field is ignored. The pool stays hidden behind the lab switch (its code is not in this repository).
+- **Time travel history** no longer checks for a feature before answering.
+
 ### Library and packs
 
 - **Vehicles catalogue:** about 195 cars (the most popular models of 20 brands, at their real outer sizes), four snowmobiles, bikes (road, gravel, mountain, e-mountain, folding, BMX, cargo, balance), motorbikes, golf carts, quad bikes, mobility scooters, scooters, a compact tractor, a caravan and trailers in the Garden & outdoor pack. A new colour role `paint` gives every vehicle a paint colour: ten base colours and a hex value in the item panel. Checklist with sizes and sources: `docs/vehicles.md`.

@@ -24,9 +24,9 @@ import { connectionsAt, laidPipe, nearestOnOutline, planConnection, poolNodeAt, 
 import { devicePorts, FILTER_VALVES, jointPortAt, jointPorts, nodePart, poolPortFlow, portFlow, splitNode, type PortName } from "../pool-ports.ts";
 import { holeInRoom } from "../geometry/holes.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
-import { hasFeature, labOn, released } from "../features.ts";
+import { labOn, released } from "../features.ts";
 import { loadLocate } from "../load-locate.ts";
-import { BIN_SHAPES, BIN_SIZE, binColors, binShape, householdCountry, isPackPlant, MAILBOX_SHAPES, MAILBOX_SIZE, mailboxShape, WASTE_KINDS, wasteColors } from "../household.ts";
+import { BIN_SHAPES, BIN_SIZE, binColors, binShape, householdCountry, isPackBin, isPackPlant, MAILBOX_SHAPES, MAILBOX_SIZE, mailboxShape, WASTE_KINDS, wasteColors } from "../household.ts";
 import { cameraMotionSensors, cameraOwnSensors, detectionKind, setCameraSensors, stateText } from "../markers.ts";
 import type { DirectorSettings } from "../director.ts";
 import { deviceSensors, energySummary, flowSegments, gridPoint, powerSensorFor, proposeEnergySensors, type EnergyPrefs, type FlowSegment, proposeMeters } from "../energy.ts";
@@ -1241,7 +1241,7 @@ export class Fp3dEditor extends LitElement {
         <span>${furnitureName(this.hass, f.type)}</span>
         ${num("w", this.t("size_short_w"))} ${num("d", this.t("size_short_d"))} ${num("h", this.t("size_short_h"))}
         ${wallItem
-          ? html`<label class="fp3d-3d-size" title=${this.t("mount_height")}
+          ? html`<label class="fp3d-3d-size" title=${unitLabel(this.t("mount_height"), this.unit)}
               >↕
               <input
                 type=${this.unit === "imperial" ? "text" : "number"}
@@ -1273,17 +1273,17 @@ export class Fp3dEditor extends LitElement {
               ${(["ceiling", "floor", "table", "wall"] as const).map((m) => html`<option value=${m} ?selected=${m === (d.mount ?? "ceiling")}>${this.t(`lamp_${m}`)}</option>`)}
             </select>`
           : nothing}
-        <label class="fp3d-3d-size" title=${this.t("marker_height")}
+        <label class="fp3d-3d-size" title=${unitLabel(this.t("marker_height"), this.unit)}
           >${this.t("size_short_h")}
           <input
-            type="number"
+            type=${this.unit === "imperial" ? "text" : "number"}
             inputmode="decimal"
             step="0.05"
             min="0"
-            .value=${String(Math.round((d.y ?? auto) * 100) / 100)}
+            .value=${this.lenValue(d.y ?? auto)}
             @change=${(e: Event) => {
-              const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
-              if (Number.isFinite(v) && v >= 0) this.updateDevice({ y: Math.round(v * 1000) / 1000 });
+              const v = this.readLen((e.target as HTMLInputElement).value);
+              if (v !== null && v >= 0) this.updateDevice({ y: Math.round(v * 1000) / 1000 });
             }}
           />
         </label>
@@ -3896,7 +3896,6 @@ export class Fp3dEditor extends LitElement {
 
   /** The cables in the plan: faint for the automatic ways, solid for laid ones, with points on the picked cable. */
   private renderCables() {
-    if (!hasFeature("energy_pro")) return nothing;
     const all = this.cableSegments();
     if (!all.length) return nothing;
     const segs = all.filter((x) => x.floorId === this._floorId);
@@ -3985,7 +3984,7 @@ export class Fp3dEditor extends LitElement {
     if (!floor) return nothing;
     const icons: Record<string, string> = { inverter: "⚡", home_battery: "🔋", wallbox: "🔌", meter: "📟", grid_point: "🏁", solar: "☀" };
     const h = this._doc.settings.roof.hologram;
-    const holoPt = hasFeature("energy_pro") && h?.place === "free" && Number.isFinite(h.x) && Number.isFinite(h.z) ? this.toScreen([h.x!, h.z!]) : null;
+    const holoPt = h?.place === "free" && Number.isFinite(h.x) && Number.isFinite(h.z) ? this.toScreen([h.x!, h.z!]) : null;
     return svg`<g class="fp3d-energy-markers">${
       holoPt
         ? svg`<g data-holo-pt="1" class="fp3d-energy-marker fp3d-holo-pt">
@@ -4413,8 +4412,7 @@ export class Fp3dEditor extends LitElement {
     if (device)
       return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("furniture", null)}>‹ ${this.t("tool_energy")}</button>
         ${this.renderFurnitureForm(device)}`;
-    const pro = hasFeature("energy_pro");
-    return html`${this.renderEnergyChecklist()}${this.renderSolarList()}${this.renderEnergyDevices()}${pro ? this.renderCableSettings() : nothing}
+    return html`${this.renderEnergyChecklist()}${this.renderSolarList()}${this.renderEnergyDevices()}${this.renderCableSettings()}
       ${this.renderSettingsLink("energy", null, "settings_moved_energy")}`;
   }
 
@@ -5302,7 +5300,7 @@ export class Fp3dEditor extends LitElement {
   private typeChoices(current: string): string[] {
     const shown = new Set<string>(Object.values(FURNITURE_GROUPS).flat());
     // the smart fridge: its own pack, or Haushalt Pro
-    if (hasFeature("fridge_smart") || hasFeature("household")) shown.add("fridge_smart");
+    shown.add("fridge_smart");
     return FURNITURE_TYPES.filter((t) => shown.has(t) || t === current);
   }
 
@@ -7238,7 +7236,6 @@ export class Fp3dEditor extends LitElement {
     const own = cameraOwnSensors(hass, cameraId);
     const sensors = cameraMotionSensors(hass, cameraId);
     const kinds = [...new Set(sensors.map((id) => detectionKind(hass, id)))];
-    const pro = hasFeature("camera_cockpit");
     const admin = this.isEditor;
     const set = (list: string[] | null) => this.updateDevice({ detect_sensors: list });
     const detectClass = (id: string) => id.startsWith("binary_sensor.") && ["motion", "occupancy", "presence"].includes(String(hass.states[id]?.attributes.device_class));
@@ -7246,7 +7243,7 @@ export class Fp3dEditor extends LitElement {
     const listed = [...new Set([...own, ...(chosen ?? [])])];
     return html`<p class="fp3d-sub fp3d-wide">
         ${sensors.length
-          ? html`${pro ? "" : "🔒 "}${this.t("camera_detect_found", { kinds: kinds.map((k) => this.t(`detect_${k}` as I18nKey)).join(", "), n: sensors.length })}`
+          ? html`${this.t("camera_detect_found", { kinds: kinds.map((k) => this.t(`detect_${k}` as I18nKey)).join(", "), n: sensors.length })}`
           : this.t("camera_detect_none")}
       </p>
       <label class="fp3d-check fp3d-wide" title=${this.t("camera_detect_choose_hint")}
@@ -8905,7 +8902,7 @@ export class Fp3dEditor extends LitElement {
       ["light", "💡"],
       ["switches", "🔌"],
       ...((this.packs ?? []).some((p) => p.items.length) ? ([["pack", "🧩"]] as [string, string][]) : []),
-      ...(hasFeature("energy_pro") ? ([["energy", "⚡"]] as [string, string][]) : []),
+      ...([["energy", "⚡"]] as [string, string][]),
     ];
     const shown = [...recent, ...hits.slice(0, 40).map((h) => h.type)];
     void this.askKitPics(shown);
@@ -8958,10 +8955,9 @@ export class Fp3dEditor extends LitElement {
   /** The wall view's side bar: pool devices, ball valves and sight glasses (Pool Pro), energy devices (Energie Pro). */
   private renderWallKit(frame: WallFrame, room: Room, rc: RunCtx | null) {
     const pool = !!rc;
-    const energy = hasFeature("energy_pro");
     if (!pool) return this.isEditor ? this.renderWallFurniture(frame, room) : nothing;
     if (this._techMode && rc) return this.renderTechKit(frame, room, rc);
-    if (!this.isEditor || (!pool && !energy)) return nothing;
+    if (!this.isEditor) return nothing;
     const add = (t: string) => html`<button class="fp3d-btn" @click=${() => this.addOnWall(t, frame, room)}>+ ${this.t(`furn_${t}` as I18nKey)}</button>`;
     const fit = (mode: "valve" | "sight", label: I18nKey) =>
       html`<button class="fp3d-btn ${this._runMode === mode ? "fp3d-primary" : ""}" title=${this.t("wall_run_fit")} @click=${() => this.kitFitting(rc, mode)}>+ ${this.t(label)}</button>`;
@@ -8976,7 +8972,7 @@ export class Fp3dEditor extends LitElement {
               }}>+ ${this.t(`wall_kit_${m}` as I18nKey)}</button>`,
             )}`
         : nothing}
-      ${energy ? html`<h4>${this.t("wall_kit_energy")}</h4>${(["meter", "inverter", "home_battery", "wallbox"] as const).map(add)}` : nothing}
+      ${html`<h4>${this.t("wall_kit_energy")}</h4>${(["meter", "inverter", "home_battery", "wallbox"] as const).map(add)}`}
     </aside>`;
   }
 
@@ -10836,7 +10832,7 @@ export class Fp3dEditor extends LitElement {
             <button class="fp3d-link" title=${this.t("card_open")} @click=${() => this.openCard(a.id, `port:${p.id}`)}>${this.poolNodeLabel(a, `port:${p.id}`)}</button>
             <span class="fp3d-muted">${this.partStatus(a, `port:${p.id}`)[0] ? "✓" : "○"}</span>
             ${p.kind === "inlet" || p.kind === "skimmer"
-              ? html`<label class="fp3d-pool-depth" title=${this.t("pool_port_depth_hint")}
+              ? html`<label class="fp3d-pool-depth" title=${unitLabel(this.t("pool_port_depth_hint"), this.unit)}
                   >${this.t("pool_port_depth")}
                   <input type="number" step="0.05" min="0" max="3" .value=${String(p.depth ?? (p.kind === "inlet" ? 0.3 : 0))} ?disabled=${!admin} @change=${(e: Event) => {
                     const v = Number((e.target as HTMLInputElement).value.replace(",", "."));
@@ -11307,7 +11303,7 @@ export class Fp3dEditor extends LitElement {
 
   /** Fun pack "pets": the static pets of this floor (#17), a paw at each one's spot, dragged to move it. */
   private renderPets(floor: Floor) {
-    if (!hasFeature("fun_pets") || this._doc.settings.pets?.on === false) return nothing;
+    if (this._doc.settings.pets?.on === false) return nothing;
     return svg`<g>${staticPetsOn(this._doc, floor.id).map((pet) => {
       const [x, y] = this.toScreen([pet.x!, pet.z!]);
       return svg`<g data-pet=${pet.id} class="fp3d-device fp3d-pet" transform="translate(${x} ${y})">
@@ -11480,6 +11476,8 @@ export class Fp3dEditor extends LitElement {
         type="text"
         inputmode="text"
         spellcheck="false"
+        placeholder="8' 2&quot;"
+        title=${this.t("units_formats")}
         .value=${typedValue(this.typed, formatImperial(value))}
         ?disabled=${!this.isEditor}
         @focus=${on.focus}
@@ -11731,9 +11729,9 @@ export class Fp3dEditor extends LitElement {
               ${this.len(this.t("elevation"), floor.elevation, (v) => this.updateFloor({ elevation: v }))}
               ${admin
                 ? html`<div class="fp3d-field fp3d-wide fp3d-shift" title=${this.t("floor_shift_hint")}>
-                    <span>${this.t("floor_shift")}</span>
-                    <input type="number" step="0.05" .value=${String(this._shiftX)} aria-label="X" @change=${(e: Event) => (this._shiftX = Number((e.target as HTMLInputElement).value) || 0)} />
-                    <input type="number" step="0.05" .value=${String(this._shiftZ)} aria-label="Z" @change=${(e: Event) => (this._shiftZ = Number((e.target as HTMLInputElement).value) || 0)} />
+                    <span>${unitLabel(this.t("floor_shift"), this.unit)}</span>
+                    <input type=${this.unit === "imperial" ? "text" : "number"} step="0.05" .value=${this.lenValue(this._shiftX)} aria-label="X" @change=${(e: Event) => (this._shiftX = this.readLen((e.target as HTMLInputElement).value) ?? 0)} />
+                    <input type=${this.unit === "imperial" ? "text" : "number"} step="0.05" .value=${this.lenValue(this._shiftZ)} aria-label="Z" @change=${(e: Event) => (this._shiftZ = this.readLen((e.target as HTMLInputElement).value) ?? 0)} />
                     <button class="fp3d-btn" ?disabled=${!this._shiftX && !this._shiftZ} @click=${() => this.shiftFloor(this._shiftX, this._shiftZ)}>${this.t("floor_shift_apply")}</button>
                     <button class="fp3d-btn" title=${this.t("floor_turn_hint")} @click=${() => this.turnFloor()}>${this.t("floor_turn")}</button>
                     <button class="fp3d-btn" title=${this.t("floor_start_view_hint")} @click=${() => this.rememberFloorView()}>${this.t("floor_start_view")}</button>
@@ -13017,7 +13015,6 @@ export class Fp3dEditor extends LitElement {
     if (!hass) return nothing;
     const list = d.triggers ?? [];
     const save = (next: { entity: string; camera: string | null }[]) => this.change((doc) => (doc.settings.director = { ...(doc.settings.director ?? {}), triggers: next.length ? next : null }));
-    const pro = hasFeature("camera_cockpit");
     return html`<div class="fp3d-wide">
       <h4 class="fp3d-lib-head">${this.t("director_triggers")}</h4>
       <p class="fp3d-sub">${this.t("director_triggers_hint")}</p>
@@ -13029,10 +13026,10 @@ export class Fp3dEditor extends LitElement {
           ${this.entitySelect(this.t("director_doorbell_camera"), t.camera, undefined, this.entityOptions((id) => id.startsWith("camera.") && placed.includes(id), placed.join(",")), (v) =>
             save(list.map((x, k) => (k === i ? { ...x, camera: v && v !== "none" ? v : null } : x))),
           )}
-          <button class="fp3d-btn" ?disabled=${!pro} @click=${() => save(list.filter((_, k) => k !== i))}>✕ ${this.t("delete")}</button>
+          <button class="fp3d-btn" @click=${() => save(list.filter((_, k) => k !== i))}>✕ ${this.t("delete")}</button>
         </div>`,
       )}
-      ${list.length < 20 && pro
+      ${list.length < 20
         ? html`<div class="fp3d-form">
             ${this.entitySelect(this.t("director_trigger_add"), null, undefined, this.entityOptions((id) => /^(event|binary_sensor|cover|lock|switch|input_boolean)\./.test(id)), (v) => {
               if (v && v !== "none") save([...list, { entity: v, camera: null }]);
@@ -13279,8 +13276,6 @@ export class Fp3dEditor extends LitElement {
    */
   private renderHouseholdForm(f: Furniture) {
     const admin = this.isEditor;
-    const pro = hasFeature("household");
-    const teaser = nothing;
     const select = <T extends string>(label: string, value: T, options: readonly T[], key: (o: T) => I18nKey, onChange: (v: T) => void) =>
       html`<label class="fp3d-field fp3d-wide"
         >${label}
@@ -13311,8 +13306,7 @@ export class Fp3dEditor extends LitElement {
           >${this.t("bin_lid")}
           <input type="color" .value=${lid} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ bin_lid: (e.target as HTMLInputElement).value })}
         /></label>
-        ${pro
-          ? html`${this.entitySelect(this.t("bin_source"), f.bin_source ?? null, undefined, sources, (v) => this.updateFurniture({ bin_source: v === "none" ? null : v }))}
+        ${html`${this.entitySelect(this.t("bin_source"), f.bin_source ?? null, undefined, sources, (v) => this.updateFurniture({ bin_source: v === "none" ? null : v }))}
               <label class="fp3d-field fp3d-wide"
                 >${this.t("bin_match")}
                 <input type="text" .value=${f.bin_match ?? ""} placeholder=${this.t(`bin_kind_${kind}` as I18nKey)} ?disabled=${!admin}
@@ -13329,8 +13323,7 @@ export class Fp3dEditor extends LitElement {
                 </div>
               </div>
               <p class="fp3d-sub fp3d-wide">${this.t(this._kerbPick ? "hint_kerb_pick" : "bin_kerb_hint")}</p>
-              ${this.renderSettingsLink("household", "household.bin_from", "settings_moved_bins")}`
-          : teaser}
+              ${this.renderSettingsLink("household", "household.bin_from", "settings_moved_bins")}`}
       </div>`;
     }
     const shape = mailboxShape(f);
@@ -13341,11 +13334,9 @@ export class Fp3dEditor extends LitElement {
         const [w, d, h] = MAILBOX_SIZE[v];
         this.updateFurniture({ variant: v === "wall" ? null : v, w, d, h });
       })}
-      ${pro
-        ? html`${this.entitySelect(this.t("mailbox_entity"), typeof f.entity === "string" && f.entity !== "none" ? f.entity : null, undefined, flags, (v) => this.updateFurniture({ entity: v ?? "none" }))}
+      ${html`${this.entitySelect(this.t("mailbox_entity"), typeof f.entity === "string" && f.entity !== "none" ? f.entity : null, undefined, flags, (v) => this.updateFurniture({ entity: v ?? "none" }))}
             ${this.entitySelect(this.t("mailbox_door"), f.mailbox_door ?? null, undefined, doors, (v) => this.updateFurniture({ mailbox_door: v === "none" ? null : v }))}
-            <p class="fp3d-sub fp3d-wide">${this.t("mailbox_hint")}</p>`
-        : teaser}
+            <p class="fp3d-sub fp3d-wide">${this.t("mailbox_hint")}</p>`}
     </div>`;
   }
 
@@ -13358,14 +13349,15 @@ export class Fp3dEditor extends LitElement {
     const appliance = f.type === "washer" || f.type === "dryer" || f.type === "dishwasher";
     const fridge = f.type === "fridge" || f.type === "fridge_smart";
     const electric = isElectric(f.type);
+    // a bin from a pack is only a model: say where the kerb spot and the calendar are (#170)
+    if (!plant && !electric && isPackBin(f.type)) return html`<p class="fp3d-sub fp3d-wide">${this.t("bin_model_hint")}</p>`;
     if (!plant && !electric) return nothing;
-    if (!hasFeature("household")) return nothing;
     const sensors = this.entityOptions((id) => id.startsWith("sensor."));
     const doors = this.entityOptions((id) => id.startsWith("binary_sensor."));
     const services = this.entityOptions((id) => ["sensor.", "binary_sensor.", "input_boolean.", "input_datetime.", "input_number."].some((d) => id.startsWith(d)));
     const ref = (v: string | null) => (v === "none" ? null : v);
     return html`<div class="fp3d-form fp3d-links">
-      <p class="fp3d-sub fp3d-wide"><b>🏠 ${this.t("pro_name_household")}</b></p>
+      <p class="fp3d-sub fp3d-wide"><b>🏠 ${this.t("section_household")}</b></p>
       ${plant
         ? html`${this.entitySelect(this.t("hh_moisture"), f.moisture ?? null, undefined, this.entityOptions((id) => id.startsWith("plant.") || id.startsWith("sensor.")), (v) => this.updateFurniture({ moisture: ref(v) }))}
             ${this.num(this.t("hh_moisture_min"), f.moisture_min ?? 20, (v) => this.updateFurniture({ moisture_min: Math.max(0, Math.min(100, Math.round(v))) }), 1)}`
@@ -13630,12 +13622,12 @@ export class Fp3dEditor extends LitElement {
           : nothing}
         ${!lamp && f.power && f.power !== "none" && !isEnergyDevice(f.type) ? this.circuitSelect(f.circuit ?? null, f.power, (v) => this.updateFurniture({ circuit: v })) : nothing}
         ${!lamp && f.power && f.power !== "none" && !isEnergyDevice(f.type) ? this.wireEnergySelect(f.energy ?? null, f.power, (v) => this.updateFurniture({ energy: v })) : nothing}
-        ${hasFeature("energy_pro") && !lamp && !["grid_point", "meter", "inverter", "home_battery"].includes(energyRole(f.type) ?? f.type)
+        ${!lamp && !["grid_point", "meter", "inverter", "home_battery"].includes(energyRole(f.type) ?? f.type)
           ? html`<label class="fp3d-check fp3d-wide" title=${this.t("furn_holo_hint")}
               ><input type="checkbox" .checked=${!!f.holo} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ holo: (ev.target as HTMLInputElement).checked })} />
               ${this.t("furn_holo")}</label
             >`
-          : hasFeature("energy_pro") && energyRole(f.type) === "inverter"
+          : energyRole(f.type) === "inverter"
             ? html`<label class="fp3d-check fp3d-wide" title=${this.t("furn_plant_card_hint")}
                 ><input type="checkbox" .checked=${f.plant_card !== false} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ plant_card: (ev.target as HTMLInputElement).checked ? undefined : false })} />
                 ${this.t("furn_plant_card")}</label
@@ -13779,7 +13771,6 @@ export class Fp3dEditor extends LitElement {
 
   /** Auto Pro: the car's entities – one entity of the car's device is enough, the roles are found beside it. */
   private renderCarForm(f: Furniture) {
-    if (!hasFeature("auto_pro")) return nothing;
     if (!this.hass) return nothing;
     const hass = this.hass;
     const car = f.car ?? {};
@@ -13789,7 +13780,7 @@ export class Fp3dEditor extends LitElement {
     const role = (key: keyof CarLinks & keyof CarEntities, label: I18nKey, options: { id: string; label: string }[]) =>
       this.entitySelect(this.t(label), car[key] ?? null, auto[key], options, (v) => set({ [key]: v === "none" ? "none" : v }));
     return html`<section>
-      <h3>🚗 ${this.t("pro_name_auto_pro")}</h3>
+      <h3>🚗 ${this.t("section_car")}</h3>
       <p class="fp3d-sub">${this.t("car_hint")}</p>
       <div class="fp3d-form fp3d-links">
         ${this.entitySelect(this.t("car_device"), car.device ?? null, undefined, any, (v) => set({ device: v === "none" ? null : v }))}
@@ -13822,12 +13813,6 @@ export class Fp3dEditor extends LitElement {
   private renderPictureRules(f: Furniture) {
     const admin = this.isEditor;
     const rules = f.pictures ?? [];
-    if (!hasFeature("screens")) {
-      return html`<div class="fp3d-wide">
-        <div class="fp3d-sub">${this.t("screen_pictures")}</div>
-        <p class="fp3d-sub">🔒 ${this.t("pro_feature_screens")}</p>
-      </div>`;
-    }
     const set = (next: ScreenPicture[]) => this.updateFurniture({ pictures: next });
     const entities = this.entityOptions(() => true);
     const scalar = (v: unknown) => ["string", "number", "boolean"].includes(typeof v);
@@ -13991,7 +13976,7 @@ export class Fp3dEditor extends LitElement {
   /** The library's index, built once per language and pack state. */
   private libraryEntries(lang: string): LibraryEntry[] {
     // the smart fridge is exclusive: an installed pack with the feature "fridge_smart", or Haushalt Pro, offers it
-    const extra = hasFeature("fridge_smart") || hasFeature("household") ? ["fridge_smart"] : [];
+    const extra = ["fridge_smart"];
     const key = `${lang}|${libPacksVersion()}|${this.packs?.length ?? 0}|${extra.length}`;
     if (this.libIndex?.key === key) return this.libIndex.entries;
     const entries = buildIndex({
@@ -14162,7 +14147,7 @@ export class Fp3dEditor extends LitElement {
               ${this.t("device_confirm")}</label
             >`
           : nothing}
-        ${hasFeature("energy_pro") && powerSensorFor(this.hass!, pl.entity_id)
+        ${powerSensorFor(this.hass!, pl.entity_id)
           ? html`<label class="fp3d-check fp3d-wide" title=${this.t("furn_holo_hint")}
               ><input type="checkbox" .checked=${!!pl.holo} ?disabled=${!admin} @change=${(ev: Event) => this.updateDevice({ holo: (ev.target as HTMLInputElement).checked || undefined })} />
               ${this.t("furn_holo")}</label
@@ -16980,45 +16965,6 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-chk-opt {
         opacity: 0.75;
-      }
-      .fp3d-teaser-on {
-        border-color: rgba(89, 255, 140, 0.5);
-      }
-      .fp3d-teaser {
-        margin-top: 12px;
-        padding: 12px;
-        border-radius: 14px;
-        border: 1px solid color-mix(in srgb, #ffd75a 45%, transparent);
-        background: linear-gradient(160deg, color-mix(in srgb, #ffd75a 10%, transparent), transparent 60%);
-      }
-      .fp3d-teaser-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-      .fp3d-teaser-soon {
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: #0b1426;
-        background: #ffd75a;
-        border-radius: 999px;
-        padding: 2px 8px;
-        white-space: nowrap;
-      }
-      .fp3d-teaser img {
-        display: block;
-        width: 100%;
-        border-radius: 10px;
-        border: 1px solid color-mix(in srgb, var(--fp3d-accent) 40%, transparent);
-      }
-      .fp3d-teaser ul {
-        margin: 8px 0 4px;
-        padding-left: 18px;
-        font-size: 13px;
       }
       /* the roof and energy tools say what can be moved there (everything else is locked) */
       .fp3d-phone-hint {
