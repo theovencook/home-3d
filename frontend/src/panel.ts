@@ -1273,6 +1273,7 @@ export class Floorplan3dPanel extends LitElement {
       }}
       @mic-probe=${() => loadVoice().then(() => (this._micProbe = true)).catch(() => undefined)}
       @open-extensions=${() => this.setMode("extensions")}
+      @load-sample=${() => void this.loadSample()}
       @building-changed=${(e: CustomEvent<{ building: Building }>) => this.data.edit(e.detail.building)}
     ></fp3d-editor>`;
   }

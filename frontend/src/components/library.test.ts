@@ -130,3 +130,44 @@ test("the open sections are remembered per device, including all closed (#211)",
     delete (globalThis as any).localStorage;
   }
 });
+
+test("a pack update draws its pictures again and queued items are asked for anew (#192)", () => {
+  const lib = new FurnitureLibrary() as unknown as Record<string, any>;
+  const v1 = { ...stool, packRelease: 1 } as LibraryEntry;
+  const other = { ...stool, key: "bench", type: "bench", packRelease: 1 } as LibraryEntry;
+  lib.entries = [v1, other];
+  lib._thumbs = new Map([["stool|1", "data:stool"]]);
+  // "bench" was queued but never drawn: it stays wanted unless the change resets it
+  lib.wanted = new Set(["stool|1", "bench|1"]);
+  lib.queue = [other];
+  lib.thumb = async () => "data:x";
+  // the pack is updated: release 2
+  lib.entries = [{ ...v1, packRelease: 2 } as LibraryEntry, { ...other, packRelease: 1 } as LibraryEntry];
+  lib.willUpdate(new Map([["entries", null]]));
+  assert.equal(lib._thumbs.has("stool|1"), false, "the old release's picture is dropped");
+  assert.equal(lib.wanted.has("bench|1"), false, "queued, never drawn: asked for again");
+  assert.deepEqual(lib.queue, []);
+  lib.want(lib.entries[1]);
+  assert.equal(lib.queue.length + lib.drawing >= 1, true, "it can be queued again");
+});
+
+test("pictures of the unchanged items survive a change of the entries (#192)", () => {
+  const lib = new FurnitureLibrary() as unknown as Record<string, any>;
+  const e = { ...stool, packRelease: 3 } as LibraryEntry;
+  lib.entries = [e];
+  lib._thumbs = new Map([["stool|3", "data:stool"]]);
+  lib.wanted = new Set(["stool|3"]);
+  lib.willUpdate(new Map([["entries", null]]));
+  assert.equal(lib._thumbs.get("stool|3"), "data:stool");
+  assert.equal(lib.wanted.has("stool|3"), true);
+});
+
+test("the Recently used block is hidden while a search is typed (#192)", () => {
+  const lib = new FurnitureLibrary() as unknown as Record<string, any>;
+  lib.entries = [stool];
+  lib._recent = ["stool"];
+  const text = (v: unknown): string => JSON.stringify(v, (_k, x) => (typeof x === "function" ? undefined : x));
+  assert.ok(text(lib.render()).includes("lib_recent"));
+  lib._query = "stool";
+  assert.equal(text(lib.render()).includes("lib_recent"), false);
+});

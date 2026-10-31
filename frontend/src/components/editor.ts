@@ -47,6 +47,7 @@ import { UndoHistory } from "../undo-history.ts";
 import { EntityOptionCache } from "../entity-options.ts";
 import { HassWatch } from "../hass-watch.ts";
 import { ENTITY_DRAG, type ResizeNote, type FixKind, type Drag, type Guides, type EditorTopic, type PlaceTarget, round, type RunDraft, type RunCtx, ARROWS } from "./editor/helpers.ts";
+import { startsFullWidth } from "../start-checklist.ts";
 import { mixParts } from "./editor/parts.ts";
 import { Pane3dPart } from "./editor/pane3d.ts";
 import { PlanViewPart } from "./editor/plan-view.ts";
@@ -756,6 +757,11 @@ export class Fp3dEditor extends LitElement {
       if (this._floorId === null && start && this._doc.floors.some((f) => f.id === start)) this._floorId = start;
       if (!this._doc.floors.some((f) => f.id === this._floorId)) this._floorId = this._doc.floors[0]?.id ?? null;
       if (!this.floor?.rooms.some((r) => r.id === this._roomId)) this._roomId = null;
+      // a home without rooms opens with the plan at full width (#193); the stored 3D beside choice is kept
+      if (!this.startChecked && this._doc) {
+        this.startChecked = true;
+        if (startsFullWidth(this._doc, this._split)) this._split = false;
+      }
     }
     // the plan's recipe copies (#2): placed items keep their look whatever the installed packs say
     setPlanRecipes(this._doc?.recipes);
@@ -765,6 +771,8 @@ export class Fp3dEditor extends LitElement {
   }
 
   recipesAsked = new Set<string>();
+  /** The first plan was looked at for the empty-home start (#193). */
+  startChecked = false;
 
   /**
    * Library items in the plan that neither the plan's copies nor the fetched recipes draw yet (#44: a camera look, a
