@@ -326,7 +326,6 @@
  "camera_reach_short": "Dosah m",
  "camera_tilt": "Sklon dolů (°)",
  "camera_tilt_short": "Sklon °",
- "camera_aim_hint": "V plánu klín ukazuje, kam se kamera dívá. Úchytem na jeho špičce kameru otočíš a nastavíš dosah. Ve 3D klín končí u první stěny.",
  "camera_detect_found": "Detekce (kamerový kokpit): na zařízení nalezeno senzorů: {n} – {kinds}. Když některý něco nahlásí, objeví se ve 3D pohledu před kamerou špendlík; kamerová stěna (přepínač Kamery dole ve 3D pohledu) ukazuje všechny živé obrazy.",
  "camera_detect_none": "Detekce (kamerový kokpit): zařízení kamery nemá žádné senzory pohybu ani detekce. Špendlíky se objeví, jakmile je integrace poskytne (Frigate, UniFi Protect, Reolink …).",
  "camera_detect_choose": "Vybrat detekční senzory ručně",

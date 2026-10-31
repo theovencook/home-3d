@@ -326,7 +326,6 @@
  "camera_reach_short": "Rekkjevidd m",
  "camera_tilt": "Vinkling nedover (°)",
  "camera_tilt_short": "Helling °",
- "camera_aim_hint": "I planen viser kilen kvar kameraet ser. Handtaket på spissen dreier kameraet og stiller inn rekkjevidda. I 3D sluttar kilen ved første vegg.",
  "camera_detect_found": "Deteksjon (Kamerasentral): {n} sensorar funne på eininga – {kinds}. Når ein av dei melder noko, står ei nål framfor kameraet i 3D-visinga; kameraveggen (brytaren «Kamera» nedst i 3D-visinga) viser alle direktebileta.",
  "camera_detect_none": "Deteksjon (Kamerasentral): eininga til kameraet har ingen rørsle- eller deteksjonssensorar. Nåler dukkar opp så snart integrasjonen leverer nokre (Frigate, UniFi Protect, Reolink …).",
  "camera_detect_choose": "Vel deteksjonssensorane sjølv",

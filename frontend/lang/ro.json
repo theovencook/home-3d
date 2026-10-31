@@ -326,7 +326,6 @@
  "camera_reach_short": "Rază m",
  "camera_tilt": "Înclinare în jos (°)",
  "camera_tilt_short": "Înclinare °",
- "camera_aim_hint": "În plan, pana arată unde privește camera. Mânerul de la vârf rotește camera și îi setează raza. În 3D pana se oprește la primul perete.",
  "camera_detect_found": "Detecție (cockpit camere): {n} senzori găsiți pe dispozitiv – {kinds}. Când unul raportează ceva, un marcaj apare în fața camerei în vederea 3D; peretele de camere (comutatorul Camere din partea de jos a vederii 3D) arată toate imaginile live.",
  "camera_detect_none": "Detecție (cockpit camere): dispozitivul camerei nu are senzori de mișcare sau de detecție. Marcajele apar imediat ce integrarea oferă așa ceva (Frigate, UniFi Protect, Reolink …).",
  "camera_detect_choose": "Alege singur senzorii de detecție",

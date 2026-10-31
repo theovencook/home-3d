@@ -326,7 +326,6 @@
  "camera_reach_short": "Räckvidd m",
  "camera_tilt": "Lutning nedåt (°)",
  "camera_tilt_short": "Lutning °",
- "camera_aim_hint": "I planen visar kilen vart kameran tittar. Handtaget i spetsen vrider kameran och ställer in räckvidden. I 3D slutar kilen vid första väggen.",
  "camera_detect_found": "Detektering (kameracockpit): {n} sensorer hittades på enheten – {kinds}. När en rapporterar något står en nål framför kameran i 3D-vyn; kameraväggen (knappen Kameror längst ner i 3D-vyn) visar alla livebilder.",
  "camera_detect_none": "Detektering (kameracockpit): kamerans enhet har inga rörelse- eller detekteringssensorer. Nålar visas så snart integrationen tillhandahåller några (Frigate, UniFi Protect, Reolink …).",
  "camera_detect_choose": "Välj detekteringssensorerna själv",

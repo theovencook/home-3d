@@ -326,7 +326,6 @@
  "camera_reach_short": "Zasięg m",
  "camera_tilt": "Pochylenie w dół (°)",
  "camera_tilt_short": "Pochyl. °",
- "camera_aim_hint": "W planie klin pokazuje, gdzie patrzy kamera. Uchwyt na jego czubku obraca kamerę i ustawia zasięg. W 3D klin kończy się na pierwszej ścianie.",
  "camera_detect_found": "Detekcja (kokpit kamer): znaleziono czujniki urządzenia ({n}) – {kinds}. Gdy któryś coś zgłosi, w widoku 3D przed kamerą pojawia się pinezka; ściana kamer (przełącznik Kamery na dole widoku 3D) pokazuje wszystkie obrazy na żywo.",
  "camera_detect_none": "Detekcja (kokpit kamer): urządzenie kamery nie ma czujników ruchu ani detekcji. Pinezki pojawią się, gdy tylko integracja je udostępni (Frigate, UniFi Protect, Reolink …).",
  "camera_detect_choose": "Wybierz czujniki wykrywania samodzielnie",

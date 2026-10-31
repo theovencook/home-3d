@@ -508,7 +508,6 @@ const en = {
   camera_reach_short: "Reach m",
   camera_tilt: "Tilt down (°)",
   camera_tilt_short: "Tilt °",
-  camera_aim_hint: "In the plan the wedge shows where the camera looks. The handle at its tip turns the camera and sets its reach. In 3D the wedge ends at the first wall.",
   camera_detect_found: "Detection (camera cockpit): {n} sensors found on the device – {kinds}. When one reports something, a pin stands in front of the camera in the 3D view; the camera wall (Cameras switch at the bottom of the 3D view) shows every live picture.",
   camera_detect_none: "Detection (camera cockpit): the camera's device has no motion or detection sensors. Pins appear as soon as the integration provides some (Frigate, UniFi Protect, Reolink …).",
   camera_detect_choose: "Choose the detection sensors yourself",
