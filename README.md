@@ -98,6 +98,10 @@ Home Assistant's `.storage`, and the frontend only talks to your own Home Assist
 connection and no usage reporting. The only outside addresses it loads are ones you enter yourself (for example a
 background picture by URL).
 
+### People and the room sensors
+
+With locating on, Home 3D creates one room sensor per tracked device. Those sensors carry the room and the person, and every Home Assistant user can read them, so "Show people to admins only" only hides the figure in Home 3D: it does not protect the data. Households that want the room hidden for real can tick "Do not create a room sensor per person" in the locating setup (`person_sensors: false`): devices that belong to a person then get no sensor (and no figure), and sensors made earlier are removed. Things without a person, such as keys, keep theirs. The default is unchanged.
+
 ## Furniture packs
 
 A pack is a folder of plain JSON: a `pack.json` that names the pack and its licence, and one file per item (see

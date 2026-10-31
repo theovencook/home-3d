@@ -24,18 +24,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     @callback
     def sync() -> None:
-        new = [LocateSensor(service, d["id"]) for d in service.devices if d["id"] not in known]
+        # "no per-person room sensors" (#183): a device that belongs to a person gets none, a thing (keys) still does
+        wanted = {d["id"] for d in service.devices if service.person_sensors or not d.get("person")}
+        new = [LocateSensor(service, d["id"]) for d in service.devices if d["id"] in wanted and d["id"] not in known]
         for sensor in new:
             known[sensor.device_id] = sensor
         if new:
             async_add_entities(new)
         # a removed device takes its sensor along (no "unavailable" leftovers in Home Assistant)
-        ids = {d["id"] for d in service.devices}
         registry = er.async_get(hass)
-        for device_id in [k for k in known if k not in ids]:
+        for device_id in [k for k in known if k not in wanted]:
             sensor = known.pop(device_id)
             if sensor.entity_id and registry.async_get(sensor.entity_id):
                 registry.async_remove(sensor.entity_id)
+        # sensors left in the registry by an earlier run (before the setting was turned off) go too
+        prefix = f"{DOMAIN}_locate_"
+        for reg in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if (
+                reg.domain == "sensor"
+                and reg.unique_id.startswith(prefix)
+                and reg.unique_id[len(prefix) :] not in wanted
+            ):
+                registry.async_remove(reg.entity_id)
 
     sync()
     entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_LOCATE_DEVICES, sync))

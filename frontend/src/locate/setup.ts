@@ -28,6 +28,8 @@ interface Device {
 interface Config {
   enabled: boolean;
   admins_only: boolean;
+  /** false: no room sensor is created for a device that belongs to a person (default on) */
+  person_sensors?: boolean;
   /** spoken questions fly the open views into the room (default on) */
   fly?: boolean;
   devices: Device[];
@@ -126,6 +128,8 @@ const DE = {
   live_intro: "So sieht Home 3D dich gerade. Lauf herum und schau, ob es stimmt.",
   enabled: "Ortung eingeschaltet",
   admins_only: "Personen nur für Admins zeigen",
+  person_sensors: "Kein Raumsensor pro Person anlegen",
+  person_sensors_hint: "Die Sensoren, die Raum und Person tragen, kann jeder Home-Assistant-Benutzer lesen: „nur für Admins“ blendet nur die Figur aus. Ohne diese Sensoren gibt es die Räume der Personen gar nicht (auch keine Figuren). Dinge wie Schlüssel behalten ihren Sensor.",
   not_heard: "nicht gehört",
   next: "Weiter",
   need_device: "Erst ein Gerät hinzufügen.",
@@ -213,6 +217,8 @@ const EN: typeof DE = {
   live_intro: "This is where Home 3D sees you now. Walk around and check.",
   enabled: "Locating on",
   admins_only: "Show people to admins only",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "not heard",
   next: "Next",
   need_device: "Add a device first.",
@@ -301,6 +307,8 @@ const CS: typeof DE = {
   live_intro: "Takhle tě Home 3D právě vidí. Projdi se a zkontroluj, jestli to sedí.",
   enabled: "Lokalizace zapnuta",
   admins_only: "Osoby zobrazit jen správcům",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "neslyšeno",
   next: "Další",
   need_device: "Nejdřív přidej zařízení.",
@@ -388,6 +396,8 @@ const DA: typeof DE = {
   live_intro: "Sådan ser Home 3D dig lige nu. Gå rundt og se, om det passer.",
   enabled: "Lokalisering slået til",
   admins_only: "Vis kun personer for administratorer",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "ikke hørt",
   next: "Næste",
   need_device: "Tilføj først en enhed.",
@@ -475,6 +485,8 @@ const ES: typeof DE = {
   live_intro: "Así te ve Home 3D ahora mismo. Camina un poco y comprueba si acierta.",
   enabled: "Localización activada",
   admins_only: "Mostrar personas solo a administradores",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "sin señal",
   next: "Siguiente",
   need_device: "Primero añade un dispositivo.",
@@ -562,6 +574,8 @@ const FI: typeof DE = {
   live_intro: "Näin Home 3D näkee sinut juuri nyt. Kävele ympäriinsä ja katso, pitääkö se paikkansa.",
   enabled: "Paikannus päällä",
   admins_only: "Näytä henkilöt vain ylläpitäjille",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "ei kuultu",
   next: "Seuraava",
   need_device: "Lisää ensin laite.",
@@ -649,6 +663,8 @@ const FR: typeof DE = {
   live_intro: "Voici comment Home 3D vous voit en ce moment. Déplacez-vous et vérifiez.",
   enabled: "Localisation activée",
   admins_only: "Afficher les personnes aux admins uniquement",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "non capté",
   next: "Suivant",
   need_device: "Ajoutez d’abord un appareil.",
@@ -736,6 +752,8 @@ const HU: typeof DE = {
   live_intro: "Így lát most téged a Home 3D. Sétálj egy kicsit, és nézd meg, stimmel-e.",
   enabled: "Helymeghatározás bekapcsolva",
   admins_only: "Személyek csak adminoknak",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "nem hallható",
   next: "Tovább",
   need_device: "Előbb adj hozzá egy eszközt.",
@@ -823,6 +841,8 @@ const IT: typeof DE = {
   live_intro: "Ecco come ti vede Home 3D adesso. Cammina un po’ e controlla se è giusto.",
   enabled: "Localizzazione attiva",
   admins_only: "Mostra persone solo agli admin",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "non rilevato",
   next: "Avanti",
   need_device: "Prima aggiungi un dispositivo.",
@@ -910,6 +930,8 @@ const NB: typeof DE = {
   live_intro: "Slik ser Home 3D deg akkurat nå. Gå rundt og se om det stemmer.",
   enabled: "Lokalisering på",
   admins_only: "Vis personer bare for administratorer",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "ikke hørt",
   next: "Neste",
   need_device: "Legg til en enhet først.",
@@ -997,6 +1019,8 @@ const NL: typeof DE = {
   live_intro: "Zo ziet Home 3D je nu. Loop rond en kijk of het klopt.",
   enabled: "Locatiebepaling aan",
   admins_only: "Personen alleen aan admins tonen",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "niet gehoord",
   next: "Volgende",
   need_device: "Voeg eerst een apparaat toe.",
@@ -1084,6 +1108,8 @@ const NN: typeof DE = {
   live_intro: "Slik ser Home 3D deg akkurat no. Gå rundt og sjå om det stemmer.",
   enabled: "Lokalisering på",
   admins_only: "Vis personar berre for administratorar",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "ikkje høyrt",
   next: "Neste",
   need_device: "Legg til ei eining først.",
@@ -1171,6 +1197,8 @@ const PL: typeof DE = {
   live_intro: "Tak Home 3D widzi cię teraz. Przejdź się i sprawdź, czy się zgadza.",
   enabled: "Lokalizacja włączona",
   admins_only: "Pokazuj osoby tylko adminom",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "brak sygnału",
   next: "Dalej",
   need_device: "Najpierw dodaj urządzenie.",
@@ -1258,6 +1286,8 @@ const PT: typeof DE = {
   live_intro: "É assim que o Home 3D o vê agora. Ande um pouco e confirme se está certo.",
   enabled: "Localização ligada",
   admins_only: "Mostrar pessoas só a administradores",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "não detetado",
   next: "Seguinte",
   need_device: "Adicione primeiro um dispositivo.",
@@ -1345,6 +1375,8 @@ const RO: typeof DE = {
   live_intro: "Așa te vede Home 3D acum. Plimbă-te și verifică dacă e corect.",
   enabled: "Localizare pornită",
   admins_only: "Arată persoanele doar adminilor",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "neauzit",
   next: "Înainte",
   need_device: "Adaugă mai întâi un dispozitiv.",
@@ -1432,6 +1464,8 @@ const SL: typeof DE = {
   live_intro: "Tako te Home 3D vidi zdaj. Sprehodi se in preveri, ali drži.",
   enabled: "Lociranje vklopljeno",
   admins_only: "Osebe prikaži samo skrbnikom",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "ni slišano",
   next: "Naprej",
   need_device: "Najprej dodaj napravo.",
@@ -1519,6 +1553,8 @@ const SV: typeof DE = {
   live_intro: "Så här ser Home 3D dig just nu. Gå runt och kolla om det stämmer.",
   enabled: "Positionering på",
   admins_only: "Visa personer bara för administratörer",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "inte hörd",
   next: "Nästa",
   need_device: "Lägg till en enhet först.",
@@ -1606,6 +1642,8 @@ const ZH: typeof DE = {
   live_intro: "这是 Home 3D 此刻看到的你。走动一下，看看是否准确。",
   enabled: "定位已开启",
   admins_only: "仅向管理员显示人员",
+  person_sensors: "Do not create a room sensor per person",
+  person_sensors_hint: "The sensors that carry the room and the person can be read by every Home Assistant user, so “admins only” only hides the figure. Without these sensors the rooms of people do not exist at all (and no figures are drawn). Things such as keys keep their sensor.",
   not_heard: "未检测到",
   next: "下一步",
   need_device: "请先添加设备。",
@@ -2265,6 +2303,9 @@ export class LocateSetup extends LitElement {
       ${this.voiceLanguage ? html`<p class="hint">${t.voice_hint}</p>` : nothing}
       <label class="row"><input type="checkbox" .checked=${cfg.enabled} @change=${(e: Event) => void this.save({ enabled: (e.target as HTMLInputElement).checked })} /> ${t.enabled}</label>
       <label class="row"><input type="checkbox" .checked=${cfg.admins_only} @change=${(e: Event) => void this.save({ admins_only: (e.target as HTMLInputElement).checked })} /> ${t.admins_only}</label>
+      <label class="row" title=${t.person_sensors_hint}
+        ><input type="checkbox" .checked=${cfg.person_sensors === false} @change=${(e: Event) => void this.save({ person_sensors: !(e.target as HTMLInputElement).checked })} /> ${t.person_sensors}</label
+      >
       <label class="row" title=${t.fly_hint}
         ><input type="checkbox" .checked=${cfg.fly !== false} @change=${(e: Event) => void this.save({ fly: (e.target as HTMLInputElement).checked })} /> ${t.fly}</label
       >

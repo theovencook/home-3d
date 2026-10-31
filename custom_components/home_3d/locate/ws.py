@@ -35,6 +35,7 @@ def ws_locate_config(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         vol.Required("type"): "home_3d/locate/configure",
         vol.Optional("enabled"): bool,
         vol.Optional("admins_only"): bool,
+        vol.Optional("person_sensors"): bool,
         vol.Optional("fly"): bool,
         vol.Optional("devices"): [dict],
         vol.Optional("scanner_rooms"): {str: vol.Any(None, str)},
