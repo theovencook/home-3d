@@ -466,6 +466,7 @@ const en = {
   stats_low: "tablet level, pixel ratio {r}",
   stats_full: "full level, pixel ratio {r}",
   floors_apart: "Apart",
+  pick_all_floors: "Pick All floors",
   floors_stacked: "Stacked",
   roof_keep: "Roof stays",
   roof_keep_hint: "The roof stays on the house while zooming in instead of lifting and fading out",

@@ -964,7 +964,11 @@ export class Floorplan3dPanel extends LitElement {
               <section class="fp3d-opt-group">
               <h3>${this.t("view_group_lighting")}</h3>
               ${this.renderFollow("auto", "follow_sun")}
-              <button class="fp3d-chip fp3d-opt-more" @click=${() => this.view3d()?.openSettings()}>${this.t("sun_and_lights")}</button>
+              <button class="fp3d-chip fp3d-opt-more" @click=${() => {
+                // the sheet opens over the page: the popover that led to it closes (#214)
+                this._optsOpen = false;
+                this.view3d()?.openSettings();
+              }}>${this.t("sun_and_lights")}</button>
               </section>
               <section class="fp3d-opt-group">
               <h3>${this.t("clock")}</h3>
@@ -989,6 +993,7 @@ export class Floorplan3dPanel extends LitElement {
                     html`<button
                       aria-pressed=${this._markers === m}
                       title=${this.t("markers")}
+                      aria-label=${`${this.t("markers")}: ${this.t(`markers_${m}`)}`}
                       @click=${() => {
                         this._markers = m;
                         prefs.set("markers", m);
@@ -1452,17 +1457,18 @@ export class Floorplan3dPanel extends LitElement {
                 <button aria-pressed=${this._wallMode === "auto"} @click=${() => this.setWallMode("auto")}>${this.t("walls_auto")}</button>
                 <button aria-pressed=${this._wallMode === "cut"} @click=${() => this.setWallMode("cut")}>${this.t("walls_cut")}</button>
               </div>`}
-          ${b.floors.length > 1 && !this._floorId && !this._plan2d
-            ? html`<div class="fp3d-seg">
-                <button aria-pressed=${this._explode} @click=${() => this.setExplode(true)}>${this.t("floors_apart")}</button>
-                <button aria-pressed=${!this._explode} @click=${() => this.setExplode(false)}>${this.t("floors_stacked")}</button>
+          ${b.floors.length > 1 && !this._plan2d
+            ? html`<div class="fp3d-seg" role="group" aria-label=${this.t("floors_apart")} title=${this._floorId ? this.t("pick_all_floors") : nothing}>
+                <button aria-pressed=${this._explode} ?disabled=${!!this._floorId} @click=${() => this.setExplode(true)}>${this.t("floors_apart")}</button>
+                <button aria-pressed=${!this._explode} ?disabled=${!!this._floorId} @click=${() => this.setExplode(false)}>${this.t("floors_stacked")}</button>
               </div>`
             : nothing}
-          ${!this._floorId && !this._plan2d && b.settings.roof.type !== "none"
-            ? html`<div class="fp3d-seg">
-                <button aria-pressed=${this._keepRoof} title=${this.t("roof_keep_hint")} @click=${() => this.setKeepRoof(!this._keepRoof)}>${this.t("roof_keep")}</button>
+          ${!this._plan2d && b.settings.roof.type !== "none"
+            ? html`<div class="fp3d-seg" title=${this._floorId ? this.t("pick_all_floors") : nothing}>
+                <button aria-pressed=${this._keepRoof} ?disabled=${!!this._floorId} title=${this._floorId ? this.t("pick_all_floors") : this.t("roof_keep_hint")} @click=${() => this.setKeepRoof(!this._keepRoof)}>${this.t("roof_keep")}</button>
               </div>`
             : nothing}
+          ${this._floorId && !this._plan2d && (b.floors.length > 1 || b.settings.roof.type !== "none") ? html`<small class="fp3d-show-hint">${this.t("pick_all_floors")}</small>` : nothing}
           ${b.floors.length > 1 && this._floorId && !this._plan2d
             ? html`<div class="fp3d-seg" role="group" aria-label=${this.t("card_floor_stack")}>
                 ${(["dim", "stacked", "single"] as FloorStack[]).map(
@@ -2042,6 +2048,11 @@ export class Floorplan3dPanel extends LitElement {
         position: fixed;
         inset: 0;
         z-index: 29;
+      }
+      .fp3d-show-hint {
+        flex-basis: 100%;
+        font-size: 12px;
+        opacity: 0.75;
       }
       .fp3d-show-panel {
         position: absolute;

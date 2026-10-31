@@ -570,6 +570,7 @@ export const de: Record<I18nKey, string> = {
   central_close: "Zu",
   central_sure: "Sicher?",
   central_confirm: "Bestätigen",
+  pick_all_floors: "Alle Etagen wählen",
   central_again_lights_on: "Noch einmal tippen: alle Lichter an",
   central_again_lights_off: "Noch einmal tippen: alle Lichter aus",
   central_again_covers_open: "Noch einmal tippen: alle Rollos hoch",
