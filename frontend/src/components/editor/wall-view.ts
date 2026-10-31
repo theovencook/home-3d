@@ -826,8 +826,7 @@ export class WallViewPart {
                 this.techPress = null;
                 up();
                 this.runPointUp();
-                this.fitDrag = null;
-                this.jointDrag = null;
+                this.endJointDrags();
                 return;
               }
               if (this.wvPinch) return;
@@ -922,7 +921,7 @@ export class WallViewPart {
             this.techStroke = null;
             up();
             this.runPointUp();
-            this.fitDrag = null;
+            this.endJointDrags();
           }}
           style="--fs:${fs}px"
         >

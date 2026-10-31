@@ -67,8 +67,14 @@ export interface Guides {
   lines?: { a: Vec2; b: Vec2; label: string }[];
 }
 
-/** Drags that change the document live (restored when cancelled, recorded in the history when done). */
-export const EDIT_DRAGS = new Set(["vertex", "room", "device", "pet", "opening", "furniture", "furnset", "rotate", "resize", "outdoor", "roofmove", "roofcorner", "roofvertex", "outvertex", "outbox", "pipept", "poolport", "pooldev", "pooljoint", "solarmove", "solarturn", "cablept", "holopt", "bgmove", "bgscale", "bgrotate"]);
+/** Every drag with a `base` and `moved`: one that changes the document live. */
+type EditDragKind = Extract<Drag, { base: Building; moved: boolean }>["kind"];
+/**
+ * Drags that change the document live (restored when cancelled, recorded in the history when done). Typed as a
+ * record of every such kind (#184): a new one left out of it no longer type-checks.
+ */
+const EDIT_DRAG_KINDS: Record<EditDragKind, true> = { vertex: true, room: true, device: true, pet: true, opening: true, furniture: true, furnset: true, rotate: true, resize: true, outdoor: true, roofmove: true, roofcorner: true, roofvertex: true, outvertex: true, outbox: true, pipept: true, poolport: true, pooldev: true, pooljoint: true, solarmove: true, solarturn: true, cablept: true, holopt: true, bgmove: true, bgscale: true, bgrotate: true, wallmove: true };
+export const EDIT_DRAGS: ReadonlySet<string> = new Set(Object.keys(EDIT_DRAG_KINDS));
 
 /** The other doors and windows on the wall `o` sits on (#143): centre offsets and widths, for equal spacing. */
 export function wallPeers(floor: Floor, o: Pick<Opening, "id" | "room_id" | "edge"> & { wall?: string | null }): Span[] {

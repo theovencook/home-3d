@@ -217,8 +217,10 @@ export class PlanViewPart {
     this.showHistory();
   }
 
+  /** A drag was cancelled: the plan as it was before it, with the history following (#184; else a reopen drops it). */
   restoreLive(this: Fp3dEditor, base: Building): void {
     this._doc = base;
+    this.history.track(base);
     this.dispatchEvent(new CustomEvent("building-changed", { detail: { building: base }, bubbles: true, composed: true }));
   }
 

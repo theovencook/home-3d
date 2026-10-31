@@ -799,6 +799,17 @@ export class PipesPart {
   }
 
   /**
+   * A gesture on the wall view was cut short (pointercancel, a second finger): a joint or fitting already dragged
+   * keeps its place as one undo step, like the wall view's other drags, and the drag ends (#184; a joint drag left
+   * behind used to push its stale base on the next pointer-up).
+   */
+  endJointDrags(this: Fp3dEditor): void {
+    for (const g of [this.fitDrag, this.jointDrag]) if (g?.moved) this.pushHistory(g.base);
+    this.fitDrag = null;
+    this.jointDrag = null;
+  }
+
+  /**
    * A ball valve or sight glass: dragged it slides along its pipe, a tap opens or closes a valve, a double click
    * takes it out.
    */
