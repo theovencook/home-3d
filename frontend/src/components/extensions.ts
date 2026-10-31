@@ -13,6 +13,7 @@ import {
   removePack,
   rollbackPack,
   updatePlacedItems,
+  type ImportedPack,
 } from "../api.ts";
 import { COLOUR_ROLES } from "../colour-roles.ts";
 import { customItems } from "../custom-items.ts";
@@ -21,7 +22,7 @@ import { loadItems } from "../load-items.ts";
 import { FUN, released } from "../features.ts";
 import { DOG_BREEDS, PET_EYES, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
 import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
-import { translate, type I18nKey } from "../i18n.ts";
+import { languageCode, loadLanguage, translate, type I18nKey } from "../i18n.ts";
 import { askConfirm } from "../ask.ts";
 import { errorText } from "../failure.ts";
 import "./ask-dialog.ts";
@@ -316,7 +317,7 @@ export class Extensions extends LitElement {
           <a class="fp3d-btn" href=${ISSUES_URL} target="_blank" rel="noopener">🐞 ${this.t("help_issue")}</a>
         </div>
       </header>
-      ${this.renderFun()} ${this.renderItems()} ${this.renderUpdates()} ${this.renderPacks()}
+      ${this.renderFun()} ${this.renderItems()} ${this.renderUpdates()} ${this.renderPacks()} ${this.renderLanguages()}
     </div>`;
   }
 
@@ -485,7 +486,7 @@ export class Extensions extends LitElement {
   }
 
   private renderPacks() {
-    const packs = (this.packs ?? []).filter((p) => !p.custom);
+    const packs = (this.packs ?? []).filter((p) => !p.custom && p.kind !== "language");
     const items = packs.reduce((s, p) => s + p.items.length, 0);
     return html`<section class="fp3d-ext-card">
       <h3>${this.t("packs")}</h3>
@@ -534,6 +535,46 @@ export class Extensions extends LitElement {
     </section>`;
   }
 
+  /**
+   * The language packs (#196): the ones that come with Home 3D and the installed ones. They install with the furniture
+   * packs' buttons (a folder or a GitHub URL); the language Home Assistant runs in is the one shown.
+   */
+  private renderLanguages() {
+    const langs = (this.packs ?? []).filter((p) => p.kind === "language");
+    const shown = languageCode(this.hass?.language);
+    return html`<section class="fp3d-ext-card">
+      <h3>${this.t("languages")}</h3>
+      ${langs.length ? nothing : html`<p class="fp3d-sub">${this.t("lang_pack_none")}</p>`}
+      ${langs.map(
+        (p) => html`<div class="fp3d-pack">
+          <div>
+            <b lang=${p.language ?? nothing}>${p.name}</b>
+            <span class="fp3d-sub">${this.t("lang_pack_texts", { language: p.language ?? "?", n: p.texts ?? 0, publisher: p.publisher })}${p.language === shown ? ` · ${this.t("lang_pack_shown")}` : ""}</span>
+            ${p.licence || (p.release && p.release > 1) ? html`<span class="fp3d-sub">${[p.licence ? this.t("pack_licence", { licence: p.licence }) : "", p.release && p.release > 1 ? `v${p.release}` : ""].filter(Boolean).join(" · ")}</span>` : nothing}
+            ${this.renderOrigin(p)} ${this.renderPackUpdate(p)}
+          </div>
+          ${p.bundled
+            ? html`<span class="fp3d-sub">${this.t("pack_bundled")}</span>`
+            : this.isEditor
+              ? html`<button class="fp3d-btn fp3d-danger" @click=${() => this.deletePack(p)}>${this.t("pack_remove")}</button>`
+              : nothing}
+        </div>`,
+      )}
+      <p class="fp3d-sub">${this.t("languages_hint")}</p>
+    </section>`;
+  }
+
+  /** What an import says: a language pack names its language and texts, a furniture pack its items. */
+  private importedText(res: ImportedPack): string {
+    if (res.kind === "language") return this.t("lang_pack_imported", { name: res.name, language: res.language ?? "?", n: res.texts ?? 0 });
+    return this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items });
+  }
+
+  /** A language pack of the language shown came or went: the page loads its texts again before it draws anew. */
+  private async languageChanged(language: string | undefined): Promise<void> {
+    if (this.hass && language && language === languageCode(this.hass.language)) await loadLanguage(this.hass.language, this.hass, true);
+  }
+
   /** Where a pack installed from GitHub came from, as a link (#25). */
   private renderOrigin(pack: FurniturePack) {
     const origin = packOrigin(pack);
@@ -579,7 +620,8 @@ export class Extensions extends LitElement {
       if (!res) return;
       this._preview = null;
       this._packUrl = "";
-      this._packMsg = { ok: true, text: this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }) };
+      this._packMsg = { ok: true, text: this.importedText(res) };
+      await this.languageChanged(res.language);
       this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
     } catch (err) {
       this._preview = null;
@@ -596,13 +638,14 @@ export class Extensions extends LitElement {
     const lang = this.hass?.language ?? "de";
     const update = p.installed !== null;
     const c = p.changes;
+    const texts = p.pack.kind === "language";
     const list = (label: I18nKey, items: PackPreview["changes"]["added"]) =>
       items.length
         ? html`<li><b>${this.t(label, { n: items.length })}</b>: ${items.slice(0, 12).map((i) => previewName(i, lang)).join(", ")}${items.length > 12 ? " …" : ""}</li>`
         : nothing;
     return html`<div class="fp3d-preview" role="group" aria-label=${this.t("pp_title")}>
       <b>${update ? this.t("pp_update", { name: p.pack.name, from: p.installed!.release, to: p.pack.release }) : this.t("pp_install", { name: p.pack.name, release: p.pack.release })}</b>
-      <span class="fp3d-sub">${this.t("pack_by", { publisher: p.pack.publisher, n: p.pack.items })} · ${this.t("pack_licence", { licence: p.pack.licence })}</span>
+      <span class="fp3d-sub">${texts ? this.t("lang_pack_texts", { language: p.pack.language ?? "?", n: p.pack.texts ?? 0, publisher: p.pack.publisher }) : this.t("pack_by", { publisher: p.pack.publisher, n: p.pack.items })} · ${this.t("pack_licence", { licence: p.pack.licence })}</span>
       <span class="fp3d-sub">
         ${this.t("pp_from")}
         <a href=${p.origin.url} target="_blank" rel="noreferrer noopener">${p.origin.owner}/${p.origin.repo}${p.origin.folder ? `/${p.origin.folder}` : ""} @ ${p.origin.ref}</a>
@@ -610,12 +653,12 @@ export class Extensions extends LitElement {
       </span>
       ${p.warnings.map((w) => html`<span class="fp3d-sub fp3d-pack-error">${this.t(`pp_warn_${w}` as I18nKey)}</span>`)}
       ${changesNothing(p)
-        ? html`<span class="fp3d-sub">${update ? this.t("pp_nothing") : this.t("pp_empty")}</span>`
+        ? html`<span class="fp3d-sub">${update ? this.t(texts ? "pp_nothing_texts" : "pp_nothing") : this.t("pp_empty")}</span>`
         : html`<ul>
             ${list("pp_added", c.added)} ${list("pp_changed", c.changed)} ${list("pp_removed", c.removed)}
           </ul>
-          <span class="fp3d-sub">${this.t("pp_unchanged", { n: c.unchanged })}</span>`}
-      ${update && (c.changed.length || c.removed.length) ? html`<span class="fp3d-sub">${this.t("pp_placed_hint")}</span>` : nothing}
+          <span class="fp3d-sub">${this.t(texts ? "pp_unchanged_texts" : "pp_unchanged", { n: c.unchanged })}</span>`}
+      ${update && !texts && (c.changed.length || c.removed.length) ? html`<span class="fp3d-sub">${this.t("pp_placed_hint")}</span>` : nothing}
       <span class="fp3d-pack-tools">
         <button class="fp3d-btn fp3d-primary" ?disabled=${this._installing} @click=${() => void this.install(p.origin.url, p.origin.commit)}>
           ${update ? this.t("pp_do_update") : this.t("pp_do_install")}
@@ -639,7 +682,7 @@ export class Extensions extends LitElement {
         const text = await file.text();
         const res = await askingFirst((confirm) => importPack(hass, text, confirm), this.askConfirm);
         if (!res) continue;
-        done.push(this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }));
+        done.push(this.importedText(res));
       } catch (err) {
         failed.push(`${file.name}: ${this.packError(err)}`);
       }
@@ -675,7 +718,8 @@ export class Extensions extends LitElement {
         const hass = this.hass;
         const res = await askingFirst((confirm) => importPackFolder(hass, files, confirm), this.askConfirm);
         if (!res) continue;
-        done.push(this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }));
+        done.push(this.importedText(res));
+        await this.languageChanged(res.language);
       } catch (err) {
         failed.push(`${label}: ${this.packError(err)}`);
       }
@@ -702,6 +746,7 @@ export class Extensions extends LitElement {
       return;
     }
     this._packMsg = null;
+    await this.languageChanged(pack.language);
     this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
   }
 

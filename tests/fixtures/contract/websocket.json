@@ -149,6 +149,14 @@
       ],
       "optional": []
     },
+    "home_3d/languages/get": {
+      "required": [
+        "language"
+      ],
+      "optional": [
+        "hash"
+      ]
+    },
     "home_3d/locate/ask": {
       "required": [
         "text"

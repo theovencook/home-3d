@@ -42,7 +42,7 @@ from .custom_items import CustomItems
 from .migrations import PlanTooNew, migrate_plan
 from .moves import Moves, load_moves, migrate_bases, migrate_building, moved_into
 from .off_loop import OFF_LOOP as _OFF_LOOP
-from .packs import library_pack, load_bundled, with_bundled
+from .packs import BUNDLED_LANGUAGES_DIR, language_of, library_pack, load_bundled, strings_hash, with_bundled
 from .racks import RackError, new_rack_problems
 from .recipes import with_recipes
 from .schema import BUILDING_SCHEMA, empty_building, image_ids
@@ -615,7 +615,9 @@ class FloorplanData:
         becomes the first home, read from the stores it always had (nothing is copied)."""
         packs = await self._pack_store.async_load()
         self.packs = list((packs or {}).get("packs", []))
+        # the bundled furniture packs, then the bundled language packs (#196)
         self.bundled = await self.hass.async_add_executor_job(load_bundled)
+        self.bundled += await self.hass.async_add_executor_job(load_bundled, BUNDLED_LANGUAGES_DIR)
         self.moves = await self.hass.async_add_executor_job(load_moves)
         await self.custom.async_load()
         stored = await self._homes_store.async_load()
@@ -807,6 +809,12 @@ class FloorplanData:
             listed.append(light)
         self._library = kept
         return listed
+
+    def language(self, code: str) -> dict[str, Any]:
+        """A language's texts from the offered language packs (#196): the bundled one, then installed ones (a key in
+        a later pack wins), with their hash and the ids of the packs; no packs: no texts (English is in the page)."""
+        strings, ids = language_of(self.offered_packs, code)
+        return {"language": code, "packs": ids, "hash": strings_hash(strings), "strings": strings}
 
     async def async_add_pack(self, payload: dict[str, Any], source: dict[str, Any] | None = None) -> None:
         """Keep an imported pack; a newer release of the same pack replaces the old one. Its source (the files of a

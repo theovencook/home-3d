@@ -32,6 +32,7 @@ import {
   type RackSpace,
 } from "../rack.ts";
 import { RACK_MAX_LINKS, RACK_STATUS_COLOURS, type RackStatus } from "../rack-links.ts";
+import { modalFocus } from "../dialog-focus.ts";
 import { controls, tokens } from "../styles.ts";
 import type { PickerOption } from "./entity-picker.ts";
 
@@ -442,7 +443,7 @@ export class RackSheet extends LitElement {
     const shown = this.slots.filter((s) => !s.on && this.onFace(s));
     const ghostType = this.pick ? ("add" in this.pick ? this.pick.add : this.slots.find((s) => this.pick && "move" in this.pick && s.id === this.pick.move)?.type) : undefined;
     return html`<div class="fp3d-rack-veil" @click=${(e: Event) => e.target === e.currentTarget && this.close()} @keydown=${this.onKey}>
-      <div class="fp3d-rack-sheet" role="dialog" aria-label=${t("rack_edit")} tabindex="-1">
+      <div class="fp3d-rack-sheet" role="dialog" aria-modal="true" aria-label=${t("rack_edit")} tabindex="-1" ${modalFocus()}>
         <div class="fp3d-rack-head">
           <h3>${this.heading || t("rack_edit")}</h3>
           ${this.renderTotals()}

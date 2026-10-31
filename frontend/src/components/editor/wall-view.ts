@@ -3,6 +3,7 @@
 
 import { html, nothing, svg } from "lit";
 import { ref } from "lit/directives/ref.js";
+import { modalFocus } from "../../dialog-focus.ts";
 import { clampIntoRoom, sharedEdge } from "../../geometry/snap.ts";
 import { poolNodeAt, runsOnWall } from "../../pool-runs.ts";
 import { fromWall, furnitureOnWall, openingsOnWall, roomEdgeFrame, slideAlong, toWall, type WallFrame } from "../../geometry/wall-frame.ts";
@@ -709,7 +710,7 @@ export class WallViewPart {
         }
       : null);
     return html`<div class="fp3d-wv-veil" @click=${(e: Event) => e.target === e.currentTarget && (this._wallView = null)}>
-      <div class="fp3d-wv" role="dialog" aria-label=${this.t("wall_view")} tabindex="0" @keydown=${key}>
+      <div class="fp3d-wv" role="dialog" aria-modal="true" aria-label=${this.t("wall_view")} tabindex="0" @keydown=${key} ${modalFocus()}>
         <div class="fp3d-wv-head">
           <button class="fp3d-btn" title=${`${this.t("wall_prev")}: ${wallName(leftEdge)}`} @click=${() => go(leftEdge)}>‹</button>
           <b>${this.t("wall_view")} · ${room.name} · ${this.t("wall_n", { a: v.edge + 1, b: ((v.edge + 1) % n) + 1 })} · ${this.m(L, 2)}</b>

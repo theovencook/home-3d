@@ -41,6 +41,7 @@ from .packs import (
     checked_file,
     checked_folder,
     is_bundled,
+    is_language_pack,
     verify_item,
     verify_source,
 )
@@ -86,6 +87,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_packs_check,
         ws_packs_pin,
         ws_packs_rollback,
+        ws_languages_get,
         ws_items_save,
         ws_items_remove,
         ws_backup_export,
@@ -476,6 +478,13 @@ def ws_packs_items(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
     connection.send_result(msg["id"], result)
 
 
+def _language_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    """What an import result says of a language pack (#196): its language and how many texts it has."""
+    if not is_language_pack(payload):
+        return {}
+    return {"kind": "language", "language": payload["language"], "texts": len(payload["strings"])}
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "home_3d/packs/import",
@@ -512,6 +521,7 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
         "publisher": payload["publisher"],
         "licence": payload["licence"],
         "items": len(payload["items"]),
+        **_language_fields(payload),
     }
     connection.send_result(msg["id"], result)
 
@@ -552,6 +562,7 @@ async def ws_packs_install_url(
         "publisher": payload["publisher"],
         "licence": payload["licence"],
         "items": len(payload["items"]),
+        **_language_fields(payload),
         "origin": source["origin"],
     }
     connection.send_result(msg["id"], result)
@@ -600,6 +611,27 @@ async def ws_packs_remove(hass: HomeAssistant, connection: websocket_api.ActiveC
         connection.send_error(msg["id"], "not_found", "Pack not found")
         return
     connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_3d/languages/get",
+        # a base language code, as Home Assistant's language starts ("de" of "de-AT")
+        vol.Required("language"): vol.All(str, vol.Match(r"^[a-z]{2,3}$")),
+        # the hash of the texts the page already has: when they are still the same, they are not sent again
+        vol.Optional("hash"): vol.All(str, vol.Length(max=80)),
+    }
+)
+@callback
+def ws_languages_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The texts of a language from the language packs (#196), for anyone who sees Home 3D (a wall tablet, a card).
+    The page keeps them by their hash; a key no pack has shows in English."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    result = data.language(msg["language"])
+    if msg.get("hash") == result["hash"]:
+        result = {key: value for key, value in result.items() if key != "strings"}
+    connection.send_result(msg["id"], result)
 
 
 # ---------------------------------------------------------------------------- pack updates (#26)

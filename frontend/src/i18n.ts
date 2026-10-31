@@ -1,6 +1,8 @@
-// UI strings. English, the fallback for every language; German and the others are fetched (lang/*.json).
+// UI strings. English, the fallback for every language; the others are loaded from language packs and lang/*.json
+// (#196, i18n-core.ts). Only the main bundle carries this table: the editor and card-editor bundles borrow it from the
+// page (i18n-borrowed.ts, swapped in by build.mjs).
 
-import type { HomeAssistant } from "./types.ts";
+import { registerEnglish } from "./i18n-core.ts";
 
 const en = {
   view: "3D",
@@ -564,6 +566,13 @@ const en = {
   view_group_controls: "Controls",
   follow_ha: "Follow Home Assistant",
   follow_sun: "By the sun",
+  announce_home: "Showing {name}",
+  announce_floor: "Floor {name}",
+  announce_look: "Look: {look}",
+  announce_follow_ha_off: "Follow Home Assistant is off",
+  announce_follow_sun_off: "By the sun is off",
+  announce_undo: "Undone",
+  announce_redo: "Redone",
   follow_now: "now {look}",
   sun_and_lights: "Sun and lights …",
   panel_all_open: "All up",
@@ -1160,6 +1169,14 @@ const en = {
   pack_imported: "Imported “{name}” by {publisher} – {n} items",
   packs_imported_n: "{n} of {total} packs imported",
   pack_by: "by {publisher} · {n} items",
+  languages: "Languages",
+  languages_hint: "Home 3D speaks English. A language pack adds the texts of another language, and whatever it lacks shows in English. Language packs install like furniture packs: import the pack folder or paste its GitHub URL under Furniture packs. Home 3D shows the language Home Assistant runs in.",
+  lang_pack_texts: "{language} · {n} texts · by {publisher}",
+  lang_pack_imported: "Installed the language pack “{name}” ({language}) – {n} texts",
+  lang_pack_none: "No language packs.",
+  lang_pack_shown: "shown now",
+  pp_unchanged_texts: "Unchanged texts: {n}",
+  pp_nothing_texts: "No text changes; only the pack's details differ.",
   ext_tab: "Extensions",
   ext_title: "Extensions",
   ext_intro: "The fun extras and your furniture packs. Everything runs locally in Home Assistant.",
@@ -2474,70 +2491,9 @@ type Key = keyof typeof en;
 
 export type I18nKey = Key;
 
-/** The English texts, every key (tests; tree-shaken out of the bundles). */
+/** The English texts, every key (tests, the build's checks). */
 export const englishTable = (): Readonly<Record<Key, string>> => en;
 
-declare const __FP3D_LANG_HASH__: string;
+registerEnglish(en);
 
-/**
- * Every language but English lives in lang/<code>.json next to the bundles (so wall tablets never load texts they do
- * not need) and is fetched once when Home Assistant runs in that language. German is complete (written from
- * i18n-de.ts by build.mjs, #134); the others may lack keys, which fall back to English.
- */
-// "zh" is Simplified Chinese (zh-Hans; zh-Hant reads it too until it has its own), "pt" Portuguese for Portugal and Brazil
-export const EXTRA_LANGUAGES = ["de", "fr", "es", "nl", "it", "hu", "da", "sv", "nb", "nn", "fi", "cs", "pl", "ro", "sl", "zh", "pt"] as const;
-// shared on the page: the main, editor and card-editor bundles each carry their own copy of this module, and a
-// language one of them fetched is at hand in the others at once (no English flash, no second fetch)
-const shared = ((globalThis as { __fp3dLanguages?: { extra: Map<string, Record<string, string>>; pending: Map<string, Promise<void>> } }).__fp3dLanguages ??= {
-  extra: new Map(),
-  pending: new Map(),
-});
-const { extra, pending } = shared;
-
-/** The language file a Home Assistant language needs (null: English, built in). */
-export function languageCode(lang: string | undefined): string | null {
-  const raw = (lang ?? navigator.language).toLowerCase();
-  // plain "no" (Norwegian) reads as Bokmål
-  const code = raw.startsWith("no") ? "nb" : raw.slice(0, 2);
-  return (EXTRA_LANGUAGES as readonly string[]).includes(code) ? code : null;
-}
-
-/** Whether the texts for a language are at hand (English, or already fetched). */
-export function languageReady(lang: string | undefined): boolean {
-  const code = languageCode(lang);
-  return !code || extra.has(code);
-}
-
-/** Put a language's texts in place without fetching them (tests); a key the table lacks still falls back to English. */
-export function useLanguage(code: string, table: Record<string, string>): void {
-  extra.set(code, table);
-}
-
-/** Fetch a language's texts (once); a missing or broken file leaves English in place. */
-export function loadLanguage(lang: string | undefined): Promise<void> {
-  const code = languageCode(lang);
-  if (!code || extra.has(code)) return Promise.resolve();
-  let p = pending.get(code);
-  if (!p) {
-    const url = new URL(`./lang/${code}.json?v=${typeof __FP3D_LANG_HASH__ === "string" ? __FP3D_LANG_HASH__ : "0"}`, import.meta.url).href;
-    p = fetch(url)
-      .then((r) => (r.ok ? r.json() : {}))
-      .then((table: Record<string, string>) => void extra.set(code, table && typeof table === "object" ? table : {}))
-      .catch(() => void extra.set(code, {}))
-      .finally(() => pending.delete(code));
-    pending.set(code, p);
-  }
-  return p;
-}
-
-export function translate(hass: HomeAssistant | undefined, key: Key, vars: Record<string, string | number> = {}): string {
-  const code = languageCode(hass?.language ?? navigator.language);
-  const table = code ? extra.get(code) : undefined;
-  let s: string = table?.[key] ?? en[key] ?? key;
-  for (const [k, v] of Object.entries(vars)) s = s.replace(`{${k}}`, String(v));
-  return s;
-}
-
-export function formatNumber(hass: HomeAssistant | undefined, value: number, digits = 2): string {
-  return value.toLocaleString(hass?.language ?? undefined, { maximumFractionDigits: digits });
-}
+export * from "./i18n-core.ts";

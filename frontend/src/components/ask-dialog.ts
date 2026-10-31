@@ -6,6 +6,7 @@
 import { css, html, LitElement, nothing } from "lit";
 import { live } from "lit/directives/live.js";
 import { AskQueue, registerAskFactory, type AskAnswer, type AskHost, type AskRequest } from "../ask.ts";
+import { trapTab } from "../dialog-focus.ts";
 import { controls, tokens } from "../styles.ts";
 
 const TAG = "fp3d-ask-dialog";
@@ -54,7 +55,7 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
     } else if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") {
       e.preventDefault();
       this.answer(true);
-    }
+    } else trapTab(e, e.currentTarget as HTMLElement); // Tab stays in the dialog (#196)
   }
 
   protected willUpdate(): void {

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .packs import is_language_pack
+
 
 def item_changes(current: dict[str, Any] | None, payload: dict[str, Any]) -> dict[str, Any]:
     """The items of `payload` against the pack installed now (None: a pack not installed yet, every item is new).
@@ -14,6 +16,17 @@ def item_changes(current: dict[str, Any] | None, payload: dict[str, Any]) -> dic
     added = [{"id": i, "name": new[i].get("name") or {}} for i in new if i not in old]
     changed = [{"id": i, "name": new[i].get("name") or {}} for i in new if i in old and new[i] != old[i]]
     removed = [{"id": i, "name": old[i].get("name") or {}} for i in old if i not in new]
+    return {"added": added, "changed": changed, "removed": removed, "unchanged": len(new) - len(added) - len(changed)}
+
+
+def text_changes(current: dict[str, Any] | None, payload: dict[str, Any]) -> dict[str, Any]:
+    """A language pack's texts (#196) against the installed one, in the shape of item_changes: each entry is a text
+    key (as the id, with no name)."""
+    old: dict[str, str] = (current or {}).get("strings", {})
+    new: dict[str, str] = payload["strings"]
+    added = [{"id": k, "name": {}} for k in new if k not in old]
+    changed = [{"id": k, "name": {}} for k in new if k in old and new[k] != old[k]]
+    removed = [{"id": k, "name": {}} for k in old if k not in new]
     return {"added": added, "changed": changed, "removed": removed, "unchanged": len(new) - len(added) - len(changed)}
 
 
@@ -36,6 +49,12 @@ def pack_preview(
             "licence": payload["licence"],
             "release": payload["release"],
             "items": len(payload["items"]),
+            # a language pack (#196): its language and how many texts it has
+            **(
+                {"kind": "language", "language": payload["language"], "texts": len(payload["strings"])}
+                if is_language_pack(payload)
+                else {}
+            ),
         },
         "origin": {k: origin[k] for k in ("url", "owner", "repo", "ref", "folder", "commit", "default_branch")},
         "installed": None
@@ -47,6 +66,6 @@ def pack_preview(
             "pinned": pinned,
             "commit": installed_origin.get("commit") if isinstance(installed_origin, dict) else None,
         },
-        "changes": item_changes(current, payload),
+        "changes": text_changes(current, payload) if is_language_pack(payload) else item_changes(current, payload),
         "warnings": warnings,
     }

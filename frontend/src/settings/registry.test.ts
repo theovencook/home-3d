@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { englishTable } from "../i18n.ts";
-import { de } from "../i18n-de.ts";
+import { de } from "../german.fixture.ts";
 import type { Building } from "../model.ts";
 import {
   easterEggsOn,

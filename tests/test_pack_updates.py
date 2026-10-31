@@ -865,3 +865,36 @@ async def test_a_preview_of_a_bundled_pack_id_from_another_publisher_is_flagged(
 
     assert preview["installed"]["bundled"] is True
     assert "bundled_publisher" in preview["warnings"]
+
+
+def _language_files(release: int, strings: dict[str, str]) -> dict[str, str]:
+    pack = {**PACK_JSON, "kind": "language", "language": "fr", "release": release}
+    return {"pack.json": json.dumps(pack), "strings.json": json.dumps(strings)}
+
+
+async def test_a_language_pack_previews_its_texts_and_installs_at_the_previewed_commit(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A language pack (#196) goes through the same preview and commit pin (#189); its changes are text keys."""
+    client = await _client(hass, hass_ws_client)
+    _github(aioclient_mock, 1, _language_files(1, {"view": "Vue 3D", "editor": "Éditeur"}))
+    first = await _preview(client)
+    assert first["pack"]["kind"] == "language" and first["pack"]["language"] == "fr" and first["pack"]["texts"] == 2
+    assert sorted(i["id"] for i in first["changes"]["added"]) == ["editor", "view"]
+    done = await _call(client, type="home_3d/packs/install_url", url=FOLDER_URL, commit=first["origin"]["commit"])
+    assert done["kind"] == "language" and done["origin"]["commit"] == _sha(1)
+
+    _github(aioclient_mock, 2, _language_files(2, {"view": "Vue", "loading": "Chargement …"}))
+    update = await _preview(client)
+    changes = update["changes"]
+    assert [i["id"] for i in changes["added"]] == ["loading"]
+    assert [i["id"] for i in changes["changed"]] == ["view"]
+    assert [i["id"] for i in changes["removed"]] == ["editor"]
+    assert changes["unchanged"] == 0 and update["installed"]["commit"] == _sha(1)
+
+    # moved on after the preview: refused, the installed texts stay
+    _github(aioclient_mock, 3, _language_files(3, {"view": "Vue"}))
+    moved = await _send(client, type="home_3d/packs/install_url", url=FOLDER_URL, commit=update["origin"]["commit"])
+    assert moved["error"]["code"] == "changed_since_preview"
+    got = await _call(client, type="home_3d/languages/get", language="fr")
+    assert got["strings"] == {"view": "Vue 3D", "editor": "Éditeur"}

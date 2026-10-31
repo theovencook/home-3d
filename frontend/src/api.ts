@@ -212,6 +212,10 @@ export interface ImportedPack {
   /** The licence the pack declares; null for an old single-file pack. */
   licence: string | null;
   items: number;
+  /** A language pack (#196): its language and how many texts it has. */
+  kind?: "language";
+  language?: string;
+  texts?: number;
 }
 
 /**

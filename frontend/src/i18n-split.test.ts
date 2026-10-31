@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
-import { de } from "./i18n-de.ts";
+import { de } from "./german.fixture.ts";
 import { englishTable, languageCode, languageReady, loadLanguage, translate, useLanguage } from "./i18n.ts";
 import { ITEMS_DE, ITEMS_EN } from "./items/texts.ts";
 import type { HomeAssistant } from "./types.ts";
 
-// #134: the German table is no longer built into the bundles; it is fetched like the other 16 languages.
+// #134: the German table is not built into the bundles. #196: it is a language pack that comes with Home 3D, sent by
+// Home Assistant (home_3d/languages/get) like any installed language pack; English is the fallback for every key.
 
 // The English table (the bundles carry only this one) and the source, to check no German is left in it.
 const src = readFileSync(new URL("./i18n.ts", import.meta.url), "utf8");
@@ -14,12 +15,38 @@ const en: Record<string, string> = englishTable();
 const holes = (s: string) => (s.match(/\{[a-z_]+\}/g) ?? []).sort().join();
 const DE = { language: "de" } as unknown as HomeAssistant;
 
-test("German is a language that is fetched, not one the bundles carry (#134)", async () => {
+/** A Home Assistant that answers languages/get from `packs` (language -> texts), and notes what it was asked. */
+function packHass(packs: Record<string, Record<string, string>>) {
+  const asked: Record<string, unknown>[] = [];
+  const hash = (strings: Record<string, string>) => `h${Object.keys(strings).length}:${Object.values(strings).join("").length}`;
+  return {
+    asked,
+    callWS: async <T,>(msg: Record<string, unknown>): Promise<T> => {
+      asked.push(msg);
+      const strings = packs[msg.language as string] ?? {};
+      const h = hash(strings);
+      return (msg.hash === h ? { language: msg.language, hash: h } : { language: msg.language, hash: h, strings }) as T;
+    },
+  };
+}
+
+/** localStorage in Node, as a browser has it. */
+const stored = new Map<string, string>();
+(globalThis as Record<string, unknown>).localStorage ??= {
+  getItem: (k: string) => stored.get(k) ?? null,
+  setItem: (k: string, v: string) => void stored.set(k, v),
+  removeItem: (k: string) => void stored.delete(k),
+};
+
+test("German comes from its language pack in Home Assistant, not from a bundle or a file (#134, #196)", async () => {
   assert.equal(languageCode("de"), "de");
   assert.equal(languageCode("de-AT"), "de");
   assert.equal(languageCode("en-GB"), null);
+  assert.equal(languageCode("no"), "nb");
+  // any language can have a pack, not only the ones with a file
+  assert.equal(languageCode("uk-UA"), "uk");
   assert.equal(languageReady("de"), false);
-  // before its file is there, German reads English rather than a key
+  // before its texts are there, German reads English rather than a key
   assert.equal(translate(DE, "rack_edit"), "Edit rack");
   assert.ok(!/"Rack bearbeiten"|"Ein Plan|Noch kein Plan/.test(src), "no German text left in i18n.ts");
 
@@ -27,18 +54,42 @@ test("German is a language that is fetched, not one the bundles carry (#134)", a
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (url: string) => {
     fetched.push(String(url));
-    return { ok: true, json: async () => de };
+    return { ok: false, json: async () => ({}) };
   }) as unknown as typeof fetch;
+  const hass = packHass({ de });
   try {
-    await loadLanguage("de-DE");
+    await loadLanguage("de-DE", hass);
   } finally {
     globalThis.fetch = realFetch;
   }
-  assert.equal(fetched.length, 1);
-  assert.match(fetched[0]!, /\/lang\/de\.json\?v=/);
+  assert.deepEqual(fetched, [], "German has no file any more");
+  assert.deepEqual(hass.asked, [{ type: "home_3d/languages/get", language: "de" }]);
   assert.equal(languageReady("de"), true);
   assert.equal(translate(DE, "rack_edit"), de.rack_edit);
   assert.notEqual(translate(DE, "rack_edit"), "Edit rack");
+
+  // loaded again (a pack was installed): the browser sends the hash of what it kept and gets no texts back
+  await loadLanguage("de", hass, true);
+  assert.ok((hass.asked[1] as { hash?: string }).hash, "the kept texts' hash is sent");
+  assert.equal(translate(DE, "rack_edit"), de.rack_edit);
+});
+
+test("a language pack's keys win over its file, and a key neither has shows in English", async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => ({ ok: true, json: async () => (String(url).includes("/lang/fr.json") ? { view: "Vue (fichier)", floor: "Étage" } : {}) })) as unknown as typeof fetch;
+  try {
+    await loadLanguage("fr-CA", packHass({ fr: { view: "Vue 3D" } }));
+    // a language without a file or a pack, and an older Home Assistant that does not know languages/get
+    await loadLanguage("uk", { callWS: async () => Promise.reject(new Error("unknown_command")) });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  const fr = { language: "fr-CA" } as unknown as HomeAssistant;
+  assert.equal(translate(fr, "view"), "Vue 3D");
+  assert.equal(translate(fr, "floor"), "Étage");
+  assert.equal(translate(fr, "rack_edit"), "Edit rack");
+  assert.equal(languageReady("uk"), true);
+  assert.equal(translate({ language: "uk" } as unknown as HomeAssistant, "rack_edit"), "Edit rack");
 });
 
 test("useLanguage puts a table in place without fetching (tests, preloaded pages)", () => {
@@ -77,7 +128,7 @@ test("every language file holds only known keys and no unknown placeholders; the
 // Every key the code names literally, by the table it is read from.
 const sources = (dir: URL): URL[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? sources(new URL(`${e.name}/`, dir)) : e.name.endsWith(".ts") && !e.name.endsWith(".test.ts") && e.name !== "i18n.ts" && e.name !== "i18n-de.ts" ? [new URL(e.name, dir)] : [],
+    e.isDirectory() ? sources(new URL(`${e.name}/`, dir)) : e.name.endsWith(".ts") && !e.name.endsWith(".test.ts") && e.name !== "i18n.ts" ? [new URL(e.name, dir)] : [],
   );
 const CALL = /\b(?:this\.t|t|tr|translate)\(\s*(?:[\w.?]+\s*,\s*)?"([a-z][a-z0-9_]*)"/g;
 

@@ -52,7 +52,7 @@ export function makeFakeHass(plan, build) {
   const unknown = new Set();
   let revision = 1;
   // the websocket protocol of the backend of this release (#166: const.PROTOCOL, api.ts PROTOCOL)
-  const protocol = 1;
+  const protocol = 2;
   const answer = (msg) => {
     calls.push(msg.type);
     switch (msg.type) {
@@ -62,6 +62,8 @@ export function makeFakeHass(plan, build) {
         return { version: build.version, build: build.build, protocol };
       case "home_3d/packs/list":
         return { packs: [] };
+      case "home_3d/languages/get":
+        return { language: msg.language, packs: [], hash: "harness", strings: {} };
       case "home_3d/packs/items":
         return { pack_id: msg.pack_id, hash: "harness", release: 1, items: [] };
       case "home_3d/packs/updates":

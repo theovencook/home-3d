@@ -115,7 +115,8 @@ export interface PreviewItem {
 
 /** What installing a pack release from GitHub would change (#189; backend pack_preview.py). Nothing is installed yet. */
 export interface PackPreview {
-  pack: { id: string; name: string; publisher: string; licence: string; release: number; items: number };
+  /** `kind`, `language`, `texts`: a language pack (#196), whose `changes` are its text keys. */
+  pack: { id: string; name: string; publisher: string; licence: string; release: number; items: number; kind?: "language"; language?: string; texts?: number };
   /** Where it comes from; `commit` is the pin: the install insists on exactly this commit. */
   origin: { url: string; owner: string; repo: string; ref: string; folder: string; commit: string; default_branch: boolean };
   /** The pack the library offers now under this id, null when it is new. */

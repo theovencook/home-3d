@@ -4,7 +4,7 @@ import { alertColor, alertEntities, alertSources, alertText, alertTint, findAler
 import type { OpeningEntities } from "./devices.ts";
 import { emptyBuilding, newFloor, type Opening } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
-import { de } from "./i18n-de.ts";
+import { de } from "./german.fixture.ts";
 import { useLanguage } from "./i18n.ts";
 
 // these tests read the German texts, which a page fetches (lang/de.json, #134)

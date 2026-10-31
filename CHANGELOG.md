@@ -5,6 +5,14 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+### Accessibility and languages (#196)
+
+- **Modal dialogs keep the keyboard:** the ask dialog, the editor's help overlay, the wall view, the pool part card, the rack sheet and the item editor are `aria-modal`, take the focus when they open, keep Tab and Shift+Tab inside and give the focus back when they close.
+- **Changes are announced:** one polite live region tells a screen reader about another home, floor or look, an undo or redo, and a follow switch (Home Assistant's theme, the sun) that picking a look turned off.
+- **Languages are packs:** English is built in and the fallback for every text. Any other language comes from a language pack (`"kind": "language"` in `pack.json`, its texts in `strings.json`), checked, installed (folder or GitHub URL), updated, listed and removed like a furniture pack, under **Languages** on the Extensions page. German is the first: it ships as the bundled pack `theovencook.lang-de` and is no longer a file next to the bundles. Pages get a language's texts from Home Assistant (`home_3d/languages/get`) and keep them by their hash. See `docs/languages.md`.
+- **Smaller editor bundles:** only the main bundle carries the English texts; the editor (971 -> 847 KB) and the card editor (157 -> 33 KB) borrow them from the page.
+- **The page names its language:** the panel, the cards and the card editor carry `lang`: Home Assistant's language when its texts are there, else English.
+
 ### Plan format version, contract and failure cases (#165, #166, #167)
 
 - **Plans carry a real format version (now 2)** and Home Assistant brings older plans up to date when it loads them, and when a save, a backup, an imported plan or a restore point brings one in; voice, time travel and the sensors see the same plan as the editor. Lights placed as devices become lamps on the server (keeping their name, aliases, actions and marker). The plan as stored before stays as a restore point.

@@ -26,12 +26,24 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 from yarl import URL
 
-from .packs import MAX_FILE_SIZE, MAX_FOLDER_SIZE, MAX_ITEMS, PACK_FILE, PackError, data_paths, verify_pack_file
+from .packs import (
+    MAX_FILE_SIZE,
+    MAX_FOLDER_SIZE,
+    MAX_ITEMS,
+    MAX_STRINGS_SIZE,
+    PACK_FILE,
+    STRINGS_FILE,
+    PackError,
+    data_paths,
+    verify_pack_file,
+)
 
 # the only hosts a pack is fetched from (a redirect elsewhere is refused)
 ALLOWED_HOSTS = frozenset({"github.com", "api.github.com", "raw.githubusercontent.com"})
 # GitHub's file sizes are bytes; the pack limits count characters, which take up to four bytes each in UTF-8
 MAX_FILE_BYTES = MAX_FILE_SIZE * 4
+# a language pack's strings.json (#196) may be larger
+MAX_STRINGS_BYTES = MAX_STRINGS_SIZE * 4
 MAX_FOLDER_BYTES = MAX_FOLDER_SIZE * 4
 # files in the pack folder (data files plus a readme and a licence text); more is refused before any download
 MAX_FILES = MAX_ITEMS + 10
@@ -150,6 +162,11 @@ async def _get_json(session: aiohttp.ClientSession, url: str, what: str) -> Any:
         raise PackError("fetch_failed", f"{what}: GitHub sent no JSON") from err
 
 
+def _byte_limit(path: str) -> int:
+    """The largest download for a file of a pack folder: a language pack's texts may be larger than an item."""
+    return MAX_STRINGS_BYTES if path == STRINGS_FILE else MAX_FILE_BYTES
+
+
 def _hidden(path: str) -> bool:
     return any(part.startswith(".") for part in path.split("/"))
 
@@ -223,8 +240,8 @@ async def fetch_pack(hass: HomeAssistant, url: str) -> tuple[dict[str, str], dic
     except PackError as err:
         raise PackError(err.code, f"{shown}: {err.detail}") from err
     for path in wanted:
-        if sizes[path] > MAX_FILE_BYTES:
-            raise PackError("too_large", f"{path}: {sizes[path]} bytes, at most {MAX_FILE_BYTES}")
+        if sizes[path] > (limit := _byte_limit(path)):
+            raise PackError("too_large", f"{path}: {sizes[path]} bytes, at most {limit}")
     if (total := sum(sizes[p] for p in wanted)) > MAX_FOLDER_BYTES:
         raise PackError("too_large", f"{shown}: {total} bytes, at most {MAX_FOLDER_BYTES}")
 
@@ -233,7 +250,7 @@ async def fetch_pack(hass: HomeAssistant, url: str) -> tuple[dict[str, str], dic
 
     async def download(path: str) -> str:
         async with gate:
-            body = await _get(session, raw + path, MAX_FILE_BYTES, path)
+            body = await _get(session, raw + path, _byte_limit(path), path)
         try:
             return body.decode("utf-8")
         except UnicodeDecodeError as err:

@@ -4,6 +4,7 @@
 import { nothing, svg } from "lit";
 import { alignLines, itemBox, type AlignLines, type Box, type Guide } from "../../geometry/snap-guides.ts";
 import { setCameraSensors } from "../../markers.ts";
+import { announce } from "../../announce.ts";
 import { syncCameraLooks } from "../../model.ts";
 import type { I18nKey } from "../../i18n.ts";
 import { bounds, type Building, type Floor, type Vec2 } from "../../model.ts";
@@ -51,12 +52,18 @@ export class PlanViewPart {
 
   undo(this: Fp3dEditor): void {
     const prev = this.history.undo(this._doc);
-    if (prev) this.restore(prev);
+    if (prev) {
+      this.restore(prev);
+      announce(this.t("announce_undo"));
+    }
   }
 
   redo(this: Fp3dEditor): void {
     const next = this.history.redo(this._doc);
-    if (next) this.restore(next);
+    if (next) {
+      this.restore(next);
+      announce(this.t("announce_redo"));
+    }
   }
 
   /** The undo / redo buttons follow the history. */

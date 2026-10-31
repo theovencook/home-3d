@@ -116,6 +116,12 @@ export interface FurniturePack {
   version?: number;
   /** "publisher.pack". */
   id: string;
+  /** What the pack holds (#196): furniture (missing) or the texts of a language. */
+  kind?: "furniture" | "language";
+  /** A language pack's language, a base code such as "de". */
+  language?: string;
+  /** How many texts a language pack has (the texts themselves come with languages/get). */
+  texts?: number;
   name: string;
   publisher: string;
   /** The licence the pack declares (an SPDX id such as "MIT"); null or missing for old single-file packs. */

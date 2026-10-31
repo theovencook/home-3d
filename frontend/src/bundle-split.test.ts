@@ -3,13 +3,15 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { build, type Metafile } from "esbuild";
+import { build, type Metafile, type Plugin } from "esbuild";
+import { borrowEnglish } from "./borrow-english.ts";
 
 const root = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const hashes = Object.fromEntries(["VIEWER", "EDITOR", "CARD_EDITOR", "TIMETRAVEL", "FUN", "VOICE", "LOCATE", "PLAN2D", "SETTINGS", "LANG"].map((k) => [`__FP3D_${k}_HASH__`, '"test"']));
 
-async function meta(entry: string, splitting: boolean): Promise<Metafile> {
+async function meta(entry: string, splitting: boolean, plugins: Plugin[] = []): Promise<Metafile> {
   const res = await build({
+    plugins,
     absWorkingDir: root,
     entryPoints: { out: entry },
     bundle: true,
@@ -54,4 +56,27 @@ test("the 3D bundle does not carry walking through the house (#179)", async () =
   const inputs = new Set(Object.values(m.outputs).flatMap((o) => Object.keys(o.inputs)));
   assert.ok(inputs.has("src/viewer/build.ts"));
   assert.ok(!inputs.has("src/viewer/walk.ts"));
+});
+
+test("only the main bundle carries the English table; the editor and the card editor borrow it (#196)", async () => {
+  const inputsOf = (m: Metafile) => new Set(Object.values(m.outputs).flatMap((o) => Object.keys(o.inputs)));
+  assert.ok(staticInputs(await meta("src/main.ts", true)).has("src/i18n.ts"), "the main bundle loads the table on every page");
+  for (const entry of ["src/components/editor.ts", "src/card-editor.ts"]) {
+    const inputs = inputsOf(await meta(entry, false, [borrowEnglish]));
+    assert.ok(!inputs.has("src/i18n.ts"), `${entry}: carries the English table`);
+    assert.ok(inputs.has("src/i18n-borrowed.ts") && inputs.has("src/i18n-core.ts"), `${entry}: borrows it`);
+  }
+});
+
+test("a bundle that borrows the table reads the page's English and shares its languages (#196)", async () => {
+  const main = await import("./i18n.ts");
+  const borrowed = await import("./i18n-borrowed.ts");
+  const hass = { language: "en" } as never;
+  assert.equal(borrowed.translate(hass, "rack_edit"), "Edit rack");
+  assert.equal(borrowed.englishTable(), main.englishTable());
+  main.useLanguage("da", { view: "Visning" });
+  assert.equal(borrowed.translate({ language: "da" } as never, "view"), "Visning");
+  // the core module holds no texts of its own
+  const { readFileSync } = await import("node:fs");
+  for (const f of ["./i18n-core.ts", "./i18n-borrowed.ts"]) assert.ok(!readFileSync(new URL(f, import.meta.url), "utf8").includes("Edit rack"), f);
 });

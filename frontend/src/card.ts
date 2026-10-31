@@ -6,7 +6,7 @@ import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { BuildingController, type PlanChange } from "./building-controller.ts";
 import "./components/room-panel.ts";
 import { loadView, readyView } from "./load-view.ts";
-import { languageReady, loadLanguage, translate, type I18nKey } from "./i18n.ts";
+import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
 import { showsPlan2d, type CardConfig, type CardControl } from "./card-config.ts";
@@ -356,8 +356,8 @@ clearTimeout(this.cleanTimer);
   protected willUpdate(changed: PropertyValues): void {
     if (changed.has("hass") && this.rawHass) {
       this.takeHass(this.rawHass);
-      // a language beyond German and English: its texts are fetched first, then everything renders
-      if (!languageReady(this.rawHass.language)) void loadLanguage(this.rawHass.language).then(() => this.requestUpdate());
+      // a language other than English: its texts are loaded first, then everything renders
+      if (!languageReady(this.rawHass.language)) void loadLanguage(this.rawHass.language, this.rawHass).then(() => this.requestUpdate());
     }
     // a room that is not in the plan shown now (another home became active, or it was removed) closes (#150)
     const b = this.data.building;
@@ -373,6 +373,9 @@ clearTimeout(this.cleanTimer);
   protected updated(): void {
     // the card's chrome goes light with the Day look (#85)
     this.toggleAttribute("light", lightChrome(shownLook(lookOf(this._config?.theme), this.hass)));
+    // the language its texts are in (#196)
+    const lang = uiLanguage(this.hass);
+    if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);
   }
 
   /** One level up: room -> floor -> house. */
