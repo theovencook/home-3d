@@ -9,6 +9,7 @@ import type * as THREE from "three";
 import type { Building, Floor, Furniture, Pet, Vec2 } from "../model.ts";
 import type { FloorMap, Obstacle } from "../viewer/walk.ts";
 import { BED, isStaticPet, itemOf, petFloor, SOFA, staticPlace, type StaticPlace } from "../pet-place.ts";
+import { disposeTree } from "./dispose.ts";
 
 /** The three.js classes the pets need, lent by the 3D bundle (it has no ready-made spheres or boxes: shapes are made here). */
 export type FunLib = Pick<typeof THREE, "Group" | "Mesh" | "MeshBasicMaterial" | "CanvasTexture" | "Color" | "PlaneGeometry" | "BufferGeometry" | "Float32BufferAttribute"> & { DoubleSide: typeof THREE.DoubleSide };
@@ -1280,8 +1281,14 @@ export function startPets(ctx: PetsContext): PetsController {
     cancelAnimationFrame(raf);
     clearTimeout(timer);
     clearInterval(fishTimer);
-    for (const a of animals) a.model.root.removeFromParent();
-    for (const t of tanks) t.removeFromParent();
+    for (const a of animals) {
+      a.model.root.removeFromParent();
+      disposeTree(a.model.root);
+    }
+    for (const t of tanks) {
+      t.removeFromParent();
+      disposeTree(t);
+    }
     animals = [];
     tanks = [];
     fishes = [];

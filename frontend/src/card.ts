@@ -202,6 +202,8 @@ export class Floorplan3dCard extends LitElement {
     }
   };
 
+  private viewportTimer?: ReturnType<typeof setTimeout>;
+
   connectedCallback(): void {
     super.connectedCallback();
     // the 3D view's code is a chunk of its own (#179); what the card asks of it waits until it is there
@@ -214,8 +216,9 @@ export class Floorplan3dCard extends LitElement {
     window.visualViewport?.addEventListener("resize", this.onViewport);
     requestAnimationFrame(this.onViewport);
     // the dashboard may still be laying out: measure once more a moment later
-    setTimeout(this.onViewport, 600);
+    this.viewportTimer = setTimeout(this.onViewport, 600);
     this.armIdle();
+    this.armClean();
     // a time range for the night needs a look at the clock now and then
     this.nightTimer = setInterval(() => (this._night = nightActive(this._config?.night, this.hass)), 60000);
   }
@@ -226,6 +229,7 @@ export class Floorplan3dCard extends LitElement {
     window.removeEventListener("resize", this.onViewport);
     window.visualViewport?.removeEventListener("resize", this.onViewport);
     this.tt.stop();
+    clearTimeout(this.viewportTimer);
 clearTimeout(this.cleanTimer);
         clearTimeout(this.idleTimer);
     clearInterval(this.nightTimer);

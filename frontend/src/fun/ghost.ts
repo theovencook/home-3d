@@ -6,6 +6,7 @@ import type * as THREE from "three";
 import type { Building, Floor } from "../model.ts";
 import { centroid } from "../model.ts";
 import type { FunLib, PetViewer } from "./pets.ts";
+import { disposeTree } from "./dispose.ts";
 
 export interface GhostContext {
   lib: FunLib;
@@ -177,6 +178,7 @@ export function startGhost(ctx: GhostContext): GhostController {
       clearTimeout(timer);
       cancelAnimationFrame(raf);
       host?.remove(ghost.root);
+      disposeTree(ghost.root);
       viewer.invalidate();
     },
   };

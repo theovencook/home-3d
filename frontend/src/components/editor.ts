@@ -689,6 +689,8 @@ export class Fp3dEditor extends LitElement {
     window.removeEventListener("keydown", this.onKey);
     window.removeEventListener("keyup", this.onShift);
     this.resizeObserver?.disconnect();
+    // the thumbnail renderer holds a WebGL context: freed with the editor, made anew when a picture is next drawn (#200)
+    void load3d().then((mod) => mod.releasePreviewRenderer());
   }
 
   /**

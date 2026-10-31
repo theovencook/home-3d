@@ -1108,8 +1108,18 @@ export class FloorplanViewer {
     this.controls.dispose();
     this.controls = this.makeControls();
     this.controls.view = view;
+    // a drag that was under way is over with the old controls: nothing stays grabbed (#200)
+    if (this.surfaceDragging) this.surfaceGrab?.end();
+    this.surfaceDragging = false;
+    this.grab = null;
+    this.deviceGrab = null;
+    this.updateGhost();
+    this.onControls?.();
     this.resize();
   }
+
+  /** Set by the walk: called after the controls were replaced, so it can take the camera again. */
+  onControls: (() => void) | null = null;
 
   /**
    * Furniture packs (models of pack furniture); set before the building that uses them. `recipes`: the plan's recipe
@@ -1204,7 +1214,10 @@ export class FloorplanViewer {
       const base = fv.floor.elevation + fv.ty;
       const [mx, mz] = centroid(room.points);
       const t = own.target ?? { x: mx, y: 0.3, z: mz };
-      this.controls.flyTo({ target: new Vector3(t.x, t.y + base, t.z), radius: own.radius, phi: own.phi, theta: own.theta }, 700, true);
+      // saved on a wide screen: on a portrait one it stands back as a fitted house does, within the controls' reach (#200)
+      const radius = startViewRadius(own.radius, this.camera.fov, this.camera.aspect);
+      this.controls.maxRadius = Math.max(this.controls.maxRadius, radius * 1.5);
+      this.controls.flyTo({ target: new Vector3(t.x, t.y + base, t.z), radius, phi: own.phi, theta: own.theta }, 700, true);
       return;
     }
     const [cx, cz] = centroid(room.points);
@@ -2604,9 +2617,13 @@ export class FloorplanViewer {
         (pic.mesh.material as Material).dispose();
         pic.texture?.dispose();
       }
+      const own = new Set<Material>(Object.values(fv.materials));
       fv.group.traverse((o) => {
         const g = (o as Mesh).geometry as BufferGeometry | undefined;
         g?.dispose();
+        // a material of a mesh of its own (sound rings, pool water): freed with the floor, like the shared ones (#200)
+        const m = (o as Mesh).material as Material | Material[] | undefined;
+        for (const x of Array.isArray(m) ? m : m ? [m] : []) if (!own.has(x)) this.retired.push(x);
       });
       // the floor materials are disposed after the next frame, once the new ones use the same shader programs:
       // disposing them now let three.js delete the programs and compile them again on every rebuild – a
@@ -6178,7 +6195,7 @@ function makeGroundTexture(): CanvasTexture {
   return tex;
 }
 
-export { furnitureFront, furniturePreview, itemPicture, type FrontPicture, type PreviewItem } from "./preview.ts";
+export { furnitureFront, furniturePreview, itemPicture, releasePreviewRenderer, type FrontPicture, type PreviewItem } from "./preview.ts";
 
 /** A rack's gear as a mesh and its edges (#121), drawn with the floor's materials; tagged with the rack for taps. */
 function rackGearMeshes(floor: Floor, at: RackGearAt, detail: boolean, materials: { wall: Material; lines: Material }): [Mesh, LineSegments] {

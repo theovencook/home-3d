@@ -422,3 +422,31 @@ test("a cat works in every coat and eye colour, in every pose, at most 1.5x the 
     }
   }
 });
+
+test("a rebuild and a dispose free the GPU objects of the pets they replace (#200)", () => {
+  const { b, group, run } = house([{ ...cat, static: true, pose: "sit", x: 2.3, z: 1.1 }]);
+  running = run;
+  let geometries = 0;
+  let materials = 0;
+  let textures = 0;
+  const watch = () => {
+    group.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.geometry.addEventListener("dispose", () => geometries++);
+      for (const mat of [m.material].flat() as THREE.MeshBasicMaterial[]) {
+        mat.addEventListener("dispose", () => materials++);
+        mat.map?.addEventListener("dispose", () => textures++);
+      }
+    });
+  };
+  watch();
+  assert.ok(group.children.length > 0);
+  run.update(b, [{ ...cat, static: true, pose: "sit", x: 2.3, z: 1.1 }]);
+  assert.ok(geometries > 0 && materials > 0 && textures > 0, "the old model was freed by the rebuild");
+  geometries = materials = textures = 0;
+  watch();
+  run.dispose();
+  assert.ok(geometries > 0 && materials > 0 && textures > 0, "dispose frees the model");
+  assert.equal(group.children.length, 0);
+});

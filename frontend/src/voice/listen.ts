@@ -183,8 +183,10 @@ export async function speak(hass: HomeAssistant, text: string, chosen: string | 
   if (!pipeline) return false;
   const url = await new Promise<string | null>((resolve) => {
     let unsub: (() => Promise<void>) | null = null;
-    const stop = setTimeout(() => resolve(null), 15000);
+    let over = false;
+    const stop = setTimeout(() => finish(null), 15000);
     const finish = (u: string | null) => {
+      over = true;
       clearTimeout(stop);
       void unsub?.();
       resolve(u);
@@ -197,7 +199,10 @@ export async function speak(hass: HomeAssistant, text: string, chosen: string | 
         },
         { type: "assist_pipeline/run", start_stage: "tts", end_stage: "tts", input: { text }, pipeline },
       )
-      .then((u) => (unsub = u))
+      .then((u) => {
+        unsub = u;
+        if (over) void u();
+      })
       .catch(() => finish(null));
   });
   if (!url) return false;

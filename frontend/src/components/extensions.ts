@@ -119,22 +119,28 @@ export class Extensions extends LitElement {
 
   /** The update status is fetched when the page opens and again whenever the packs or the plan change. */
   protected updated(changed: Map<string, unknown>): void {
-    const first = changed.has("hass") && !this._updates && !this.updatesLoading;
+    const first = changed.has("hass") && !this._updates && !this.updatesLoading && !this.updatesTried;
     if (this.hass && (first || changed.has("packs") || changed.has("building"))) void this.loadUpdates();
   }
 
   private updatesLoading = false;
+  /** Asked once already: a failed answer is not asked for again on every state change of Home Assistant (#200). */
+  private updatesTried = false;
+  private updatesSeq = 0;
 
   private async loadUpdates(): Promise<void> {
     if (!this.hass) return;
     this.updatesLoading = true;
+    this.updatesTried = true;
+    const seq = ++this.updatesSeq;
     try {
-      this._updates = await fetchPackUpdates(this.hass);
+      const got = await fetchPackUpdates(this.hass);
+      if (seq === this.updatesSeq) this._updates = got;
     } catch {
       // a backend before #26: no updates section
-      this._updates = null;
+      if (seq === this.updatesSeq) this._updates = null;
     } finally {
-      this.updatesLoading = false;
+      if (seq === this.updatesSeq) this.updatesLoading = false;
     }
   }
 
