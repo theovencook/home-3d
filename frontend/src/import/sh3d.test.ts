@@ -102,3 +102,40 @@ test("a Sweet Home 3D file with walls but no rooms: the rooms are found between 
 test("an old Sweet Home 3D file without Home.xml is told apart", async () => {
   await assert.rejects(readSh3d(makeZip({ Home: "x" })), /sh3d_old/);
 });
+
+// curved walls (#197): the arc must end at the wall's end point, bend to the side the sign says, and keep its radius
+function arcPieces(arcExtent: number, x1 = 400, y1 = 0) {
+  const xml = `<?xml version='1.0'?><home version='7000' wallHeight='250'><wall id='w1' xStart='0' yStart='0' xEnd='${x1}' yEnd='${y1}' height='250' thickness='20' arcExtent='${arcExtent}'/></home>`;
+  return readSh3d(makeZip({ Home: "binary", "Home.xml": xml })).then((raw) => raw.floors[0].walls);
+}
+
+for (const arc of [Math.PI / 2, -Math.PI / 2, Math.PI, 1.5 * Math.PI, -1.5 * Math.PI, 0.3]) {
+  test(`a curved wall of extent ${arc.toFixed(2)} ends at its end point on a constant radius (#197)`, async () => {
+    const walls = await arcPieces(arc, 300, 400);
+    assert.deepEqual(walls[0].a, [0, 0]);
+    assert.ok(Math.hypot(walls[walls.length - 1].b[0] - 3, walls[walls.length - 1].b[1] - 4) < 1e-9);
+    // all points on one circle through a and b
+    const pts = [walls[0].a, ...walls.map((w) => w.b)];
+    const chord = 5;
+    const radius = chord / (2 * Math.sin(Math.abs(arc) / 2));
+    // centre: the point equidistant from first, last and a middle point
+    const [p, q, r] = [pts[0], pts[Math.floor(pts.length / 2)], pts[pts.length - 1]];
+    const d = 2 * (p[0] * (q[1] - r[1]) + q[0] * (r[1] - p[1]) + r[0] * (p[1] - q[1]));
+    const ux = ((p[0] ** 2 + p[1] ** 2) * (q[1] - r[1]) + (q[0] ** 2 + q[1] ** 2) * (r[1] - p[1]) + (r[0] ** 2 + r[1] ** 2) * (p[1] - q[1])) / d;
+    const uy = ((p[0] ** 2 + p[1] ** 2) * (r[0] - q[0]) + (q[0] ** 2 + q[1] ** 2) * (p[0] - r[0]) + (r[0] ** 2 + r[1] ** 2) * (q[0] - p[0])) / d;
+    for (const pt of pts) assert.ok(Math.abs(Math.hypot(pt[0] - ux, pt[1] - uy) - radius) < 1e-6);
+  });
+}
+
+test("a positive extent bulges to one side and a negative extent to the other; past a half circle it bulges further (#197)", async () => {
+  const side = (w: { a: [number, number]; b: [number, number] }[]) => {
+    const m = w[Math.floor(w.length / 2)].a; // a wall from (0,0) to (4,0): the sign of the middle point's y is the side
+    return m[1];
+  };
+  const pos = await arcPieces(Math.PI / 2);
+  const neg = await arcPieces(-Math.PI / 2);
+  assert.ok(side(pos) * side(neg) < 0);
+  const big = await arcPieces(1.5 * Math.PI);
+  assert.ok(Math.abs(side(big)) > 2, "a three-quarter circle reaches further out than a half circle's radius");
+  assert.ok(side(big) * side(pos) > 0);
+});

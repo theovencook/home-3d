@@ -5,7 +5,7 @@
 import type { Building, Floor, FreeWall, Furniture, FurnitureType, Opening, Room, SillBoard, Vec2 } from "../model.ts";
 import { canLift, emptyBuilding, FURNITURE_SIZE, FURNITURE_TYPES, newFloor, normalizeBuilding, pointInPolygon, polygonArea } from "../model.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
-import { bridgeGaps, cleanPolygon, faces, squareUp, type Seg } from "./geom.ts";
+import { bridgeGaps, cleanPolygon, faces, minMax, squareUp, type Seg } from "./geom.ts";
 import { furnitureType, isDecor } from "./furniture-map.ts";
 
 export interface RawRoom {
@@ -183,8 +183,8 @@ export function buildPlan(raw: RawPlan, options: BuildOptions = {}): BuildResult
 
   // the plan moved so it starts near the origin (other programs often keep large offsets)
   const all: Vec2[] = floorsIn.flatMap((f) => [...f.rooms.flatMap((r) => r.points), ...f.walls.flatMap((w) => [w.a, w.b])]);
-  const minX = all.length ? Math.min(...all.map((p) => p[0])) : 0;
-  const minZ = all.length ? Math.min(...all.map((p) => p[1])) : 0;
+  const minX = all.length ? minMax(all.map((p) => p[0]))[0] : 0;
+  const minZ = all.length ? minMax(all.map((p) => p[1]))[0] : 0;
   const shift = (p: Vec2): Vec2 => [r3(p[0] - minX), r3(p[1] - minZ)];
 
   const thickAll = floorsIn.flatMap((f) => f.walls.map((w) => w.thickness ?? NaN)).filter((t) => t > 0.03 && t < 1);
@@ -230,7 +230,11 @@ export function buildPlan(raw: RawPlan, options: BuildOptions = {}): BuildResult
       // an area that holds another one is no room: the outline of the whole house around the rooms (an outer
       // wall face that touches nothing inside)
       // (a wardrobe cut through inside a room is no reason: what it holds must make up much of its area)
-      const box = (pts: Vec2[]) => ({ x0: Math.min(...pts.map((p) => p[0])), z0: Math.min(...pts.map((p) => p[1])), x1: Math.max(...pts.map((p) => p[0])), z1: Math.max(...pts.map((p) => p[1])) });
+      const box = (pts: Vec2[]) => {
+        const [x0, x1] = minMax(pts.map((p) => p[0]));
+        const [z0, z1] = minMax(pts.map((p) => p[1]));
+        return { x0, z0, x1, z1 };
+      };
       const boxes = new Map(found.map((f) => [f, box(f.points)]));
       const holds = (f: { points: Vec2[]; area: number }) => {
         const fb = boxes.get(f)!;
