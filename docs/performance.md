@@ -413,3 +413,33 @@ Measured 31 Oct 2026, before (integration @ `08ad7c1`) and after the #177 change
 
 - A real wall tablet, and a live Home Assistant with its real update rate.
 - The card on a dashboard. It uses the same code as the panel; the unit tests cover it.
+
+## Bundle sizes: what every page and a wall tablet load (#179)
+
+Measured 31 Oct 2026 with `npm run build` (the budgets it checks) on integration @ `08ad7c1` plus #177, before and after the #179 change. Gzip is level 9, which is about what Home Assistant sends.
+
+### What changed
+
+- **The 3D view is a lazy chunk of the main bundle.** Home Assistant loads `home-3d.js` on every page for every user, so that the card is known on any dashboard. The 3D view element (`components/view3d.ts` and the modules only it uses, such as the quick menu, the household and the alerts) used to be about 300 KB of it. It now loads when the panel or a card connects (`load-view.ts`), and both draw `<fp3d-view3d>` at once: the element takes its properties when its code arrives. The main build uses esbuild's code splitting. Modules that the main bundle and its chunks share sit in shared chunks (`home-3d-chunk-<hash>.js`), so there is still one pack registry and one language table. Chunk names carry their content hash.
+- **Walking through the house is a lazy chunk too** (`viewer/walk.ts`, about 10 KB). It needs no three.js and used to sit in the 3D bundle. It loads when someone starts walking or when the pets start.
+- **three.js's shaders are shrunk at build time** (`glsl-shrink.ts`): indentation, blank lines and comments go. Preprocessor lines keep their spaces, and any text with a line continuation or a block comment is left alone.
+- **Budgets:** each file has a raw budget and the files a wall tablet waits for also have a gzip budget. Two paths are budgeted as wholes, each file with everything it imports: "every page" (the main bundle and its shared chunks) and "wall tablet" (plus the 3D view chunk and the 3D bundle). A module moved from one bundle to another therefore still counts. A lazy chunk without a budget fails the build. `npm run build -- --report` lists the 15 biggest inputs of each bundle, and CI runs it, so a raise can name what grew. No budget went up.
+
+### Results
+
+| | Before | After | Budget now |
+|---|---|---|---|
+| `home-3d.js` | 693.4 KB (216.2 KB gzip) | **130.2 KB** (34.9 KB gzip) | 145 KB / 45 KB gzip (was 695 KB) |
+| Every page: main bundle with its imports | 693.4 KB (216.2 KB gzip) | **385.9 KB** (128.2 KB gzip) | 410 KB / 140 KB gzip |
+| 3D view chunk | (in `home-3d.js`) | 312.3 KB (91.5 KB gzip) | 335 KB / 100 KB gzip |
+| Walking chunk | (in `home-3d-3d.js`) | 9.7 KB | 16 KB |
+| `home-3d-3d.js` | 895.2 KB (262.9 KB gzip) | **875.6 KB** (258.0 KB gzip) | 900 KB / 280 KB gzip (unchanged raw) |
+| Wall tablet: main + view + 3D with their imports | 1,588.6 KB (479.1 KB gzip) | 1,573.7 KB (477.8 KB gzip) | 1,630 KB / 500 KB gzip |
+
+- **Every Home Assistant page** now loads 386 KB of Home 3D instead of 693 KB, 44% less, and parses that much less JavaScript. This counts on every dashboard and phone, not only where the house shows.
+- **The 3D bundle** gained 24 KB of headroom: 10 KB from the shaders and 10 KB from walking. three.js itself is 538 KB of it, and a bare `WebGLRenderer` alone is about 517 KB, so tree-shaking three.js has little left to win.
+- **A wall tablet** loads about the same as before (15 KB less), in two more files: the shared chunks and the view chunk. They come from the same server as the main bundle, and the 3D bundle was already a request of its own.
+
+### Not measured
+
+- How long a real wall tablet takes to parse the main bundle before and after. On the desktop the headless check (`npm run speed`, sample home, 2 runs each) showed no change in panel load: ready after 973 to 1,028 ms before and 933 to 1,042 ms after. Editor selection was also unchanged, at 14 to 16 ms for a linked item.

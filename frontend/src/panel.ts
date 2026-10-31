@@ -8,7 +8,7 @@ import { loadEditor } from "./load-editor.ts";
 import { loadSettings } from "./load-settings.ts";
 import { loadLocate } from "./load-locate.ts";
 import "./components/room-panel.ts";
-import "./components/view3d.ts";
+import { loadView, readyView } from "./load-view.ts";
 import "./components/home-switcher.ts";
 import { languageReady, loadLanguage, translate, type I18nKey } from "./i18n.ts";
 import type { Building, StartView } from "./model.ts";
@@ -782,7 +782,7 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   private view3d() {
-    return this.renderRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; openSettings(): void }) | null;
+    return readyView(this.renderRoot) as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; openSettings(): void }) | null;
   }
 
   /** A follow toggle in the view settings (#87): Home Assistant's theme or the sun; it names the look it shows now. */
@@ -847,6 +847,11 @@ export class Floorplan3dPanel extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
+    // the 3D view's code is a chunk of its own (#179); what the panel asks of it waits until it is there
+    void loadView().then(
+      () => this.requestUpdate(),
+      (err: unknown) => console.error("Home 3D: the 3D view failed to load", err),
+    );
     window.addEventListener("keydown", this.onKey);
     window.addEventListener("hashchange", this.onHash);
     window.addEventListener("location-changed", this.onHash);

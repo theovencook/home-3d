@@ -185,6 +185,9 @@ import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
 import { forecastCurvePath, forecastSplit, solarMoreRows, solarPrefsInfo, type SolarForecast, type SolarPrefsInfo } from "../solar-more.ts";
 import { isPhoneWidth, NO_FIT_MARGIN, PHONE_FIT_MARGIN, PHONE_MEDIA, thumbsCompact } from "../phone.ts";
 
+/** Walking through the house (and the pets' floor map) is a chunk of its own (#179): it needs no three.js. */
+const loadWalk = () => import("../viewer/walk.ts");
+
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 /** "room": no symbols in the house and floor views, in a room only that room's (D477, D595). */
 export type MarkerMode = "none" | "important" | "all" | "room";
@@ -4564,12 +4567,12 @@ export class Fp3dView3d extends LitElement {
     if (this.petsLoading) return;
     this.petsLoading = true;
     try {
-      const [fun, mod] = await Promise.all([loadFun(), load3d()]);
+      const [fun, mod, walk] = await Promise.all([loadFun(), load3d(), loadWalk()]);
       if (!this.viewer || this.plan2d || this.pets) return;
       this.petsFor = this.building;
       this.pets = fun.startPets({
         lib: mod.funLib,
-        FloorMap: mod.FloorMap,
+        FloorMap: walk.FloorMap,
         viewer: this.viewer as never,
         building: this.building!,
         pets: this.building?.settings.pets?.on !== false && this.petsOn !== false ? (this.building?.settings.pets?.list ?? []) : [],
@@ -4635,7 +4638,7 @@ export class Fp3dView3d extends LitElement {
     const byRoom = this.roomId ? withRooms.find((f) => f.rooms.some((r) => r.id === this.roomId)) : undefined;
     const floor = byRoom ?? withRooms.find((f) => f.id === this.floorId) ?? [...withRooms].sort((x, y) => Math.abs(x.elevation) - Math.abs(y.elevation))[0];
     if (!floor) return;
-    const mod = await load3d();
+    const walk = await loadWalk();
     this._walk = { room: null, hint: true };
     await this.updateComplete;
     const surface = this.renderRoot.querySelector<HTMLElement>(".fp3d-walk-surface");
@@ -4643,14 +4646,14 @@ export class Fp3dView3d extends LitElement {
     // the floor alone, its walls whole (the view's floor and wall mode come back afterwards)
     v.setFloor(floor.id, false);
     v.setWallMode("auto");
-    const map = new mod.FloorMap(b, floor);
+    const map = new walk.FloorMap(b, floor);
     const room = this.roomId ? floor.rooms.find((r) => r.id === this.roomId) : undefined;
     let start;
     if (room) {
       const c = map.freeNear(centroid(room.points));
       start = { x: c[0], z: c[1], yaw: map.openYaw(c), pitch: -0.05 };
     }
-    this.walker = new mod.WalkCamera(v as never, map, surface, {
+    this.walker = new walk.WalkCamera(v as never, map, surface, {
       start,
       onRoom: (r) => {
         this.walkRoomPts = r?.points ?? null;

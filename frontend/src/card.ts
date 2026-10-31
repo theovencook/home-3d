@@ -5,7 +5,7 @@ import { confirmEntities } from "./devices.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { BuildingController, type PlanChange } from "./building-controller.ts";
 import "./components/room-panel.ts";
-import "./components/view3d.ts";
+import { loadView, readyView } from "./load-view.ts";
 import { languageReady, loadLanguage, translate, type I18nKey } from "./i18n.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -140,7 +140,7 @@ export class Floorplan3dCard extends LitElement {
   }
 
   private view3d() {
-    return this.shadowRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void }) | null;
+    return readyView(this.shadowRoot) as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void }) | null;
   }
 
   /** Time travel on or off; without the Pro add-on its hint shows. */
@@ -204,6 +204,11 @@ export class Floorplan3dCard extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
+    // the 3D view's code is a chunk of its own (#179); what the card asks of it waits until it is there
+    void loadView().then(
+      () => this.requestUpdate(),
+      (err: unknown) => console.error("Home 3D: the 3D view failed to load", err),
+    );
     document.addEventListener("fullscreenchange", this.onFullscreen);
     window.addEventListener("resize", this.onViewport);
     window.visualViewport?.addEventListener("resize", this.onViewport);

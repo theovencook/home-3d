@@ -76,6 +76,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - The bundle budgets went up: main 722 to 780 KB, 3D 836 to 900 KB, editor 944 to 1024 KB (the 2D plan bundle has its own 72 KB budget).
 - mypy runs clean in a CI-like environment (Python 3.13, `requirements_test.txt`).
 - Less duplication: one `COLOUR_ROLES`, one household pack id, one walk over the placed pack items, one `lazyBundle` for the lazily loaded bundles and one HH:MM helper.
+- Every Home Assistant page loads less of Home 3D (#179): the 3D view and walking through the house are lazy chunks of the main bundle, so `home-3d.js` and its shared chunks are 386 KB instead of 693 KB. three.js's shaders are shrunk at build time. Budgets now cover gzip and the whole "every page" and "wall tablet" paths, and `npm run build -- --report` lists each bundle's biggest inputs.
 
 ## Home 3D 0.1.0
 
