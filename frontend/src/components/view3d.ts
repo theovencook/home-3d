@@ -1497,33 +1497,31 @@ export class Fp3dView3d extends LitElement {
     // device holograms: a small card over every device the editor marked, on its floor, in its room and – unless
     // switched off (#226) – in the house view
     const deviceViews = holo.device_house === false ? ("floor" as const) : ("all" as const);
-    {
-      for (const floor of b.floors) {
-        for (const f of floor.furniture) {
-          if (!f.holo) continue;
-          const sensor = this.furnitureLinks?.get(f.id)?.power ?? null;
-          const c = consumers.find((k) => k.id === f.id);
-          if (!sensor && !c) continue;
-          // anchors are building coordinates: the floor's elevation plus the device's top on its floor (#151)
-          const top = floor.elevation + mountBase(floor, f) + f.h;
-          anchors.push({ p: [f.x, top + 0.1, f.z], n: [0, 1, 0], floorId: floor.id, size: holo.size * 0.7, roof: false, views: deviceViews, room: roomAt(floor, f.x, f.z) });
-          cards.push({
-            kind: "device",
-            name: f.name || furnitureName(hass, f.type),
-            w: c?.power ?? (sensor ? readPower(hass.states[sensor]) : null),
-            dayIds: sensor ? [sensor] : [],
-            battery: null,
-          });
-        }
-        // placed devices too: a smart plug with its power (D178)
-        for (const pl of floor.placements) {
-          if (!pl.holo) continue;
-          const sensor = powerSensorFor(hass, pl.entity_id);
-          if (!sensor) continue;
-          const top = floor.elevation + (pl.y ?? 0.4) + 0.2;
-          anchors.push({ p: [pl.x, top, pl.z], n: [0, 1, 0], floorId: floor.id, size: holo.size * 0.7, roof: false, views: deviceViews, room: roomAt(floor, pl.x, pl.z) });
-          cards.push({ kind: "device", name: pl.name || entityName(hass, pl.entity_id), w: readPower(hass.states[sensor]), dayIds: [sensor], battery: null });
-        }
+    for (const floor of b.floors) {
+      for (const f of floor.furniture) {
+        if (!f.holo) continue;
+        const sensor = this.furnitureLinks?.get(f.id)?.power ?? null;
+        const c = consumers.find((k) => k.id === f.id);
+        if (!sensor && !c) continue;
+        // anchors are building coordinates: the floor's elevation plus the device's top on its floor (#151)
+        const top = floor.elevation + mountBase(floor, f) + f.h;
+        anchors.push({ p: [f.x, top + 0.1, f.z], n: [0, 1, 0], floorId: floor.id, size: holo.size * 0.7, roof: false, views: deviceViews, room: roomAt(floor, f.x, f.z) });
+        cards.push({
+          kind: "device",
+          name: f.name || furnitureName(hass, f.type),
+          w: c?.power ?? (sensor ? readPower(hass.states[sensor]) : null),
+          dayIds: sensor ? [sensor] : [],
+          battery: null,
+        });
+      }
+      // placed devices too: a smart plug with its power (D178)
+      for (const pl of floor.placements) {
+        if (!pl.holo) continue;
+        const sensor = powerSensorFor(hass, pl.entity_id);
+        if (!sensor) continue;
+        const top = floor.elevation + (pl.y ?? 0.4) + 0.2;
+        anchors.push({ p: [pl.x, top, pl.z], n: [0, 1, 0], floorId: floor.id, size: holo.size * 0.7, roof: false, views: deviceViews, room: roomAt(floor, pl.x, pl.z) });
+        cards.push({ kind: "device", name: pl.name || entityName(hass, pl.entity_id), w: readPower(hass.states[sensor]), dayIds: [sensor], battery: null });
       }
     }
     // Klang & Kino: a now-playing card over every speaker or media furniture that plays, rings around it,
@@ -3290,20 +3288,18 @@ export class Fp3dView3d extends LitElement {
           if (hh?.item) today.push(hh.item);
           if (!plant) continue;
         }
-        {
-          // a consumable or service due (a filter, salt): a yellow glow on the item
-          // a second one (a robot vacuum's dock) is a line of its own on the card
-          const due = servicesDue(f, hass);
-          if (due.length && !screens.has(f.id)) screens.set(f.id, { color: [1, 0.8, 0.2], level: 0.8, faces: [{ part: "top", color: [1, 0.8, 0.2], level: 0.8 }] });
-          for (const id of due) {
-            const name = f.name || furnitureName(hass, f.type);
-            today.push({ icon: "wrench-outline", text: id === f.service ? translate(hass, "hh_service", { name }) : translate(hass, "hh_service2", { name, what: entityName(hass, id) }), entity: id });
-          }
-          // a fridge door standing open too long: the fridge glows icy blue (the warning shows at the top)
-          if ((f.type === "fridge" || f.type === "fridge_smart") && fridgeOpenTooLong(f, hass)) {
-            screens.set(f.id, { color: [0.45, 0.85, 1], level: 1, faces: [{ part: "band", color: [0.45, 0.85, 1], level: 1 }] });
-            today.push({ icon: "fridge-alert-outline", text: translate(hass, "hh_fridge_open", { name: f.name || furnitureName(hass, f.type) }), entity: doorsOf(f)[0] ?? null });
-          }
+        // a consumable or service due (a filter, salt): a yellow glow on the item
+        // a second one (a robot vacuum's dock) is a line of its own on the card
+        const due = servicesDue(f, hass);
+        if (due.length && !screens.has(f.id)) screens.set(f.id, { color: [1, 0.8, 0.2], level: 0.8, faces: [{ part: "top", color: [1, 0.8, 0.2], level: 0.8 }] });
+        for (const id of due) {
+          const name = f.name || furnitureName(hass, f.type);
+          today.push({ icon: "wrench-outline", text: id === f.service ? translate(hass, "hh_service", { name }) : translate(hass, "hh_service2", { name, what: entityName(hass, id) }), entity: id });
+        }
+        // a fridge door standing open too long: the fridge glows icy blue (the warning shows at the top)
+        if ((f.type === "fridge" || f.type === "fridge_smart") && fridgeOpenTooLong(f, hass)) {
+          screens.set(f.id, { color: [0.45, 0.85, 1], level: 1, faces: [{ part: "band", color: [0.45, 0.85, 1], level: 1 }] });
+          today.push({ icon: "fridge-alert-outline", text: translate(hass, "hh_fridge_open", { name: f.name || furnitureName(hass, f.type) }), entity: doorsOf(f)[0] ?? null });
         }
         const autoPro = f.type === "parking" && !!f.car;
         const car = autoPro ? carState(hass, f) : null;
@@ -5002,76 +4998,74 @@ export class Fp3dView3d extends LitElement {
   private async handleSentence(hass: HomeAssistant, b: Building, v: Awaited<ReturnType<typeof loadVoice>>, text: string, speak: boolean): Promise<string | null> {
     const say = (phase: "wait" | "listen" | "done" | "error", t: string) => this.sayVoice(phase, t);
     const { devices, items } = this.spokenDevices(hass, b, v.SYNONYMS);
-    {
-      const place = v.showTarget(text, b, devices, (r) => (r.area_id ? hass.areas?.[r.area_id]?.name : null));
-      if (place) {
-        const name = place.kind === "house" ? translate(hass, "all_floors") : place.kind === "cameras" ? translate(hass, "camera_wall_title") : place.name;
-        say("done", `“${text}” → ${name}`);
-        this.directing.touch(Date.now());
-        if (place.kind === "cameras") {
-          this.dispatchEvent(new CustomEvent("camera-wall-open", { bubbles: true, composed: true }));
-        } else if (place.kind === "device") {
-          const item = items.get(place.id);
-          // a camera is looked through (Kamera-Cockpit), any other device shown where it stands
-          if (place.camera && place.entity) this.lookThrough(place.entity);
-          else if (item) this.goTo(item);
-        } else if (place.kind === "house") this.fire("floor-tap", { floorId: null });
-        else if (place.kind === "floor") this.fire("floor-tap", { floorId: place.floorId });
-        else {
-          if (this.floorId !== place.floorId) this.fire("floor-tap", { floorId: place.floorId });
-          setTimeout(() => this.fire("room-tap", { floorId: place.floorId, roomId: place.roomId }), 60);
-        }
-        return translate(hass, "voice_showing", { name });
+    const place = v.showTarget(text, b, devices, (r) => (r.area_id ? hass.areas?.[r.area_id]?.name : null));
+    if (place) {
+      const name = place.kind === "house" ? translate(hass, "all_floors") : place.kind === "cameras" ? translate(hass, "camera_wall_title") : place.name;
+      say("done", `“${text}” → ${name}`);
+      this.directing.touch(Date.now());
+      if (place.kind === "cameras") {
+        this.dispatchEvent(new CustomEvent("camera-wall-open", { bubbles: true, composed: true }));
+      } else if (place.kind === "device") {
+        const item = items.get(place.id);
+        // a camera is looked through (Kamera-Cockpit), any other device shown where it stands
+        if (place.camera && place.entity) this.lookThrough(place.entity);
+        else if (item) this.goTo(item);
+      } else if (place.kind === "house") this.fire("floor-tap", { floorId: null });
+      else if (place.kind === "floor") this.fire("floor-tap", { floorId: place.floorId });
+      else {
+        if (this.floorId !== place.floorId) this.fire("floor-tap", { floorId: place.floorId });
+        setTimeout(() => this.fire("room-tap", { floorId: place.floorId, roomId: place.roomId }), 60);
       }
-      // a rack question ("how hot is the rack?", "what's the UPS battery?"): answered from the rack card's values
-      const racks = this.spokenRacks(hass, b);
-      const rackSaid = racks.length ? v.rackAnswer(text, racks, (key, vars) => translate(hass, key as I18nKey, vars)) : null;
-      if (rackSaid) {
-        say("done", `“${text}” – ${rackSaid.text}`);
-        this.directing.touch(Date.now());
-        const item = items.get(`furniture:${rackSaid.rackId}`);
-        if (item) this.goTo(item);
-        if (speak) void v.speak(hass, rackSaid.text, voicePipeline());
-        return rackSaid.text;
-      }
-      // who and what is where: locating answers first (the same answer Assist gets) and flies there
-      const located = await hass
-        .callWS<{ text: string; rooms: string[]; admins_only: boolean } | null>({ type: "home_3d/locate/ask", text, language: hass.language })
-        .catch(() => null);
-      if (located) {
-        say("done", `“${text}” – ${located.text}`);
-        if (located.rooms.length && (!located.admins_only || hass.user?.is_admin)) void this.showRooms(b, located.rooms);
-        if (speak) void v.speak(hass, located.text, voicePipeline());
-        return located.text;
-      }
-      // a module of the house answers (registered in code): what to say and what to show
-      const host = this.moduleHost(hass, b, v.SYNONYMS, (s) => v.showTarget(s, b, devices, (r) => (r.area_id ? hass.areas?.[r.area_id]?.name : null)));
-      const own = await moduleVoice(text, host);
-      if (own) {
-        say("done", own.text ? `“${text}” – ${own.text}` : `“${text}”`);
-        this.directing.touch(Date.now());
-        if (own.highlight?.length) this.viewer?.flashDevices(own.highlight);
-        const f = own.focus;
-        const spoken = own.spoken ?? own.text ?? "";
-        if (own.tour?.length) {
-          // the intro is spoken first, then the tour speaks at its stops
-          const talk = speak && own.speak !== false ? (t: string) => v.speak(hass, t, voicePipeline()) : null;
-          const intro = own.spoken ?? own.text;
-          if (intro && talk) await talk(intro);
-          void this.runTour(own.tour, b, items, talk);
-          return spoken;
-        }
-        if (f?.roomId && f.floorId) {
-          if (this.floorId !== f.floorId) this.fire("floor-tap", { floorId: f.floorId });
-          setTimeout(() => this.fire("room-tap", { floorId: f.floorId, roomId: f.roomId }), 60);
-        } else if (f?.floorId && !f.entity && !f.furnitureId) this.fire("floor-tap", { floorId: f.floorId });
-        else if (f?.entity || f?.furnitureId) {
-          const item = items.get(f.entity ?? `furniture:${f.furnitureId}`);
-          if (item) this.goTo(item);
-        }
-        if (own.text && own.speak !== false && speak) void v.speak(hass, own.text, voicePipeline());
+      return translate(hass, "voice_showing", { name });
+    }
+    // a rack question ("how hot is the rack?", "what's the UPS battery?"): answered from the rack card's values
+    const racks = this.spokenRacks(hass, b);
+    const rackSaid = racks.length ? v.rackAnswer(text, racks, (key, vars) => translate(hass, key as I18nKey, vars)) : null;
+    if (rackSaid) {
+      say("done", `“${text}” – ${rackSaid.text}`);
+      this.directing.touch(Date.now());
+      const item = items.get(`furniture:${rackSaid.rackId}`);
+      if (item) this.goTo(item);
+      if (speak) void v.speak(hass, rackSaid.text, voicePipeline());
+      return rackSaid.text;
+    }
+    // who and what is where: locating answers first (the same answer Assist gets) and flies there
+    const located = await hass
+      .callWS<{ text: string; rooms: string[]; admins_only: boolean } | null>({ type: "home_3d/locate/ask", text, language: hass.language })
+      .catch(() => null);
+    if (located) {
+      say("done", `“${text}” – ${located.text}`);
+      if (located.rooms.length && (!located.admins_only || hass.user?.is_admin)) void this.showRooms(b, located.rooms);
+      if (speak) void v.speak(hass, located.text, voicePipeline());
+      return located.text;
+    }
+    // a module of the house answers (registered in code): what to say and what to show
+    const host = this.moduleHost(hass, b, v.SYNONYMS, (s) => v.showTarget(s, b, devices, (r) => (r.area_id ? hass.areas?.[r.area_id]?.name : null)));
+    const own = await moduleVoice(text, host);
+    if (own) {
+      say("done", own.text ? `“${text}” – ${own.text}` : `“${text}”`);
+      this.directing.touch(Date.now());
+      if (own.highlight?.length) this.viewer?.flashDevices(own.highlight);
+      const f = own.focus;
+      const spoken = own.spoken ?? own.text ?? "";
+      if (own.tour?.length) {
+        // the intro is spoken first, then the tour speaks at its stops
+        const talk = speak && own.speak !== false ? (t: string) => v.speak(hass, t, voicePipeline()) : null;
+        const intro = own.spoken ?? own.text;
+        if (intro && talk) await talk(intro);
+        void this.runTour(own.tour, b, items, talk);
         return spoken;
       }
+      if (f?.roomId && f.floorId) {
+        if (this.floorId !== f.floorId) this.fire("floor-tap", { floorId: f.floorId });
+        setTimeout(() => this.fire("room-tap", { floorId: f.floorId, roomId: f.roomId }), 60);
+      } else if (f?.floorId && !f.entity && !f.furnitureId) this.fire("floor-tap", { floorId: f.floorId });
+      else if (f?.entity || f?.furnitureId) {
+        const item = items.get(f.entity ?? `furniture:${f.furnitureId}`);
+        if (item) this.goTo(item);
+      }
+      if (own.text && own.speak !== false && speak) void v.speak(hass, own.text, voicePipeline());
+      return spoken;
     }
     return null;
   }
