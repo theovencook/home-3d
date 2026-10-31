@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deviceSensors, energySummary, fieldPowers, findConsumers, flowColor, FLOW_COLORS, flowDots, flowSegments, sourceMix, type EnergySummary, gridPoint, meterPosition, powerSensorFor, proposeEnergySensors, readPower, solarCurvePath, solarDayFromStats } from "./energy.ts";
+import { deviceSensors, energySummary, fieldPowers, findConsumers, flowColor, FLOW_COLORS, flowDots, flowSegments, sourceMix, type EnergySummary, gridPoint, meterPosition, powerSensorFor, proposeEnergySensors, readPower, solarCurvePath, solarDayFromStats, wattsPerUnit } from "./energy.ts";
 import { proposeField, roofFaces } from "./solar.ts";
 import type { Building, Room } from "./model.ts";
 import { emptyBuilding, newFloor } from "./model.ts";
@@ -280,6 +280,26 @@ test("today's solar statistics add up over the sensors: energy, peak and the cur
   assert.ok(path.line.startsWith("M0.0 42.0"));
   assert.ok(path.area.endsWith("L0 44 Z"));
   assert.ok(path.endX > 108 && path.endX < 115);
+});
+
+test("a kilowatt solar sensor is charted in watts, not 1000 times too low (#168)", () => {
+  const now = new Date(2026, 9, 3, 12, 17);
+  const midnight = new Date(2026, 9, 3, 0, 0).getTime();
+  const rows = {
+    "sensor.pv_kw": [{ start: midnight + 100 * 300000, mean: 1.5 }],
+    "sensor.pv_w": [{ start: midnight + 100 * 300000, mean: 500 }],
+    "sensor.pv_mw": [{ start: midnight + 101 * 300000, mean: 0.002 }],
+  };
+  const units = { "sensor.pv_kw": "kW", "sensor.pv_w": "W", "sensor.pv_mw": "MW" };
+  const day = solarDayFromStats(rows, now, units);
+  assert.equal(day.curve[100], 2000);
+  assert.equal(day.curve[101], 2000);
+  assert.equal(day.peak, 2000);
+  assert.ok(Math.abs(day.kwh - (4000 * 5) / 60 / 1000) < 1e-9);
+  // no unit known: watts, as before
+  assert.equal(solarDayFromStats({ a: rows["sensor.pv_kw"] }, now).curve[100], 1.5);
+  assert.equal(wattsPerUnit("kW"), 1000);
+  assert.equal(wattsPerUnit(undefined), 1);
 });
 
 test("a battery with separate charging and discharging sensors: the charging is taken off", () => {
