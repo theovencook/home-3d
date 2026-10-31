@@ -193,6 +193,42 @@ export const planStyles = css`
         stroke: var(--fp3d-bg);
         stroke-width: 3px;
       }
+      /* zoom and fit buttons on the plan (#234): right edge, half way down, clear of the hint bar */
+      .fp3d-nav {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 12px;
+        background: var(--fp3d-chrome-solid);
+        box-shadow: var(--fp3d-shadow);
+        overflow: hidden;
+      }
+      .fp3d-nav-btn {
+        display: grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border: 0;
+        border-bottom: 1px solid var(--fp3d-line);
+        background: none;
+        color: var(--fp3d-text);
+        font: 600 20px/1 var(--fp3d-font);
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      .fp3d-nav-btn:last-child {
+        border-bottom: 0;
+      }
+      .fp3d-nav-btn:hover,
+      .fp3d-nav-btn:focus-visible {
+        background: color-mix(in srgb, var(--fp3d-accent) 18%, transparent);
+      }
       /* the hint bar (#96): a readable strip on its own background, not a faint line on the grid */
       .fp3d-hint {
         position: absolute;
