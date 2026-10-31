@@ -6191,7 +6191,7 @@ function makeGroundTexture(): CanvasTexture {
   return tex;
 }
 
-export { furnitureFront, furniturePreview, itemPicture, type FrontPicture, type PreviewItem } from "./preview.ts";
+export { furnitureFront, furniturePreview, itemPicture, releasePreviewRenderer, type FrontPicture, type PreviewItem } from "./preview.ts";
 
 /** A rack's gear as a mesh and its edges (#121), drawn with the floor's materials; tagged with the rack for taps. */
 function rackGearMeshes(floor: Floor, at: RackGearAt, detail: boolean, materials: { wall: Material; lines: Material }): [Mesh, LineSegments] {

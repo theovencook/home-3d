@@ -4,13 +4,30 @@
 import { Box3, Color, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, OrthographicCamera, Scene, Vector3, WebGLRenderer } from "three";
 import type { Furniture } from "../model.ts";
 import { DRAFT_TYPE, isPackType, packItem, usePacksQuietly, withPackItem, type FurniturePack, type PackItem } from "../packs.ts";
-import { pushFurniture, pushPackLamp } from "./furniture.ts";
+import { furnitureLook, pushFurniture, pushPackLamp } from "./furniture.ts";
 import { GeoBuffer, LineBuffer } from "./geo.ts";
 import { keepRender } from "./keep-render.ts";
 import { themed, themeIndex } from "./theme.ts";
 import { pushLampModel, type LampModel } from "./viewer3d.ts";
 
 let renderer: WebGLRenderer | null = null;
+/** The last picture was drawn on a lost context: blank, and not worth keeping (#200). */
+let blank = false;
+
+/** Frees the shared renderer (the editor closed); the next picture makes a new one. */
+export function releasePreviewRenderer(): void {
+  renderer?.dispose();
+  renderer?.forceContextLoss();
+  renderer = null;
+}
+
+/** The picture of the current render; a lost context leaves the renderer to be made anew. */
+function snapshot(r: WebGLRenderer): string {
+  blank = r.getContext().isContextLost();
+  const url = r.domElement.toDataURL("image/png");
+  if (blank) renderer = null;
+  return url;
+}
 const DAY = { value: themeIndex("day") };
 const cache = new Map<string, string>();
 
@@ -43,13 +60,13 @@ function buildModel(item: PreviewItem, rotation = 0): { buf: GeoBuffer; lines: L
 
 /** PNG data URL of an item (cached per type and size); `packs` are needed for pack furniture. */
 export function furniturePreview(item: PreviewItem, size = 180, packs?: FurniturePack[], brightness = 1.3): string {
-  const key = `${item.type}|${item.w}|${item.d}|${item.h}|${item.variant ?? ""}|${size}|${brightness}`;
+  const key = `${item.type}|${item.w}|${item.d}|${item.h}|${item.variant ?? ""}|${size}|${brightness}|${furnitureLook()}`;
   const hit = cache.get(key);
   if (hit) return hit;
   if (packs) usePacksQuietly(packs);
   const url = picture(buildModel(item), size, new Vector3(0.9, 0.75, 1.3), brightness);
   // a library item drawn before its recipe came (#44) is a plain box: not kept, the next call draws it properly
-  if (!isPackType(item.type) || packItem(item.type)) cache.set(key, url);
+  if (!blank && (!isPackType(item.type) || packItem(item.type))) cache.set(key, url);
   return url;
 }
 
@@ -107,7 +124,7 @@ function picture({ buf, lines }: { buf: GeoBuffer; lines: LineBuffer }, size: nu
   camera.bottom = -pad;
   camera.updateProjectionMatrix();
   renderer.render(scene, camera);
-  const url = renderer.domElement.toDataURL("image/png");
+  const url = snapshot(renderer);
 
   mesh.geometry.dispose();
   (mesh.material as MeshBasicMaterial).dispose();
@@ -130,7 +147,7 @@ export interface FrontPicture {
  * to the viewer (0 = its front faces the viewer), the picture covers exactly the model's extent at `pxPerM`.
  */
 export function furnitureFront(item: PreviewItem, rotation: number, pxPerM = 160, packs?: FurniturePack[], brightness = 1.25): FrontPicture | null {
-  const key = `front|${item.type}|${item.w}|${item.d}|${item.h}|${item.variant ?? ""}|${Math.round(rotation)}|${pxPerM}|${brightness}`;
+  const key = `front|${item.type}|${item.w}|${item.d}|${item.h}|${item.variant ?? ""}|${Math.round(rotation)}|${pxPerM}|${brightness}|${furnitureLook()}`;
   const hit = frontCache.get(key);
   if (hit) return hit;
   if (packs) usePacksQuietly(packs);
@@ -157,13 +174,13 @@ export function furnitureFront(item: PreviewItem, rotation: number, pxPerM = 160
   camera.lookAt(0, 0, 0);
   camera.updateProjectionMatrix();
   renderer.render(scene, camera);
-  const url = renderer.domElement.toDataURL("image/png");
+  const url = snapshot(renderer);
   mesh.geometry.dispose();
   (mesh.material as MeshBasicMaterial).dispose();
   edges.geometry.dispose();
   (edges.material as LineBasicMaterial).dispose();
   const out = { url, x0, x1, y0, y1 };
-  if (!isPackType(item.type) || packItem(item.type)) frontCache.set(key, out);
+  if (!blank && (!isPackType(item.type) || packItem(item.type))) frontCache.set(key, out);
   return out;
 }
 
