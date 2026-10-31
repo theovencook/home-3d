@@ -8814,6 +8814,9 @@ export class Fp3dView3d extends LitElement {
         left: 0;
         top: 0;
         z-index: 3;
+        /* clear of the pin it belongs to (#207): the dot sits above the pin's top edge (half a pin is 12 px times
+           the symbol size, 7 px more with the coarse-pointer padding), so a tap on the pin never lands on the dot */
+        margin-top: calc(-12px * var(--fp3d-pin-k, 1) - 18px);
         width: 14px;
         height: 14px;
         padding: 0;
@@ -8827,10 +8830,10 @@ export class Fp3dView3d extends LitElement {
         display: none;
       }
       .fp3d-wire::before {
-        /* a larger target for fingers */
+        /* a larger target for fingers, 4 px round: it ends above the pin (#207) */
         content: "";
         position: absolute;
-        inset: -10px;
+        inset: -4px;
       }
       .fp3d-wire-tip {
         position: absolute;
