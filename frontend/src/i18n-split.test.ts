@@ -86,7 +86,8 @@ test("every key the code names exists in English and German (main, editor, card 
   let seen = 0;
   for (const file of sources(new URL("./", import.meta.url))) {
     const text = readFileSync(file, "utf8");
-    if (!/\bi18n\.ts"|\bI18nKey\b|translate\(/.test(text)) continue;
+    // files that name keys: they import i18n.ts, or are the editor's area modules (#202), which call the element's this.t
+    if (!/\bi18n\.ts"|\bI18nKey\b|translate\(/.test(text) && !file.pathname.includes("/components/editor/")) continue;
     for (const m of text.matchAll(CALL)) {
       const key = m[1]!;
       if (key.startsWith("ie_")) continue; // the item editor's own table, below

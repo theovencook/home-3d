@@ -24,7 +24,6 @@ export const MAX_MOUNT_Y = 10;
 /** A paw (24 × 24), the static pets' mark in the plan. */
 export const PAW = "M8.3 3.5a2 1.6 0 1 1 0 3.2 2 1.6 0 0 1 0-3.2m7.4 0a2 1.6 0 1 1 0 3.2 2 1.6 0 0 1 0-3.2M4.5 8a1.8 1.5 0 1 1 0 3 1.8 1.5 0 0 1 0-3m15 0a1.8 1.5 0 1 1 0 3 1.8 1.5 0 0 1 0-3M12 10c2.5 0 4.6 1.9 5.3 4.3.6 2 .2 3.7-1.3 4.5-1.4.8-2.6-.2-4-.2s-2.6 1-4 .2c-1.5-.8-1.9-2.5-1.3-4.5C7.4 11.9 9.5 10 12 10";
 
-
 export type Drag =
   | { kind: "pan"; last: [number, number] }
   | { kind: "vertex"; roomId: string; index: number; base: Building; moved: boolean }
@@ -230,7 +229,6 @@ export function volumeMeter(type: string): boolean {
   const item = packInfo(type);
   return item?.family === "meter" && (item.tags ?? []).some((t) => /^(gas|water|wasser)$/i.test(t));
 }
-
 
 /** Distance of a plan point from a segment. */
 export function distToSegment(p: Vec2, a: Vec2, b: Vec2): number {
