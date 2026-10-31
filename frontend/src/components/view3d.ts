@@ -920,8 +920,11 @@ export class Fp3dView3d extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     clearInterval(this.wireTimer);
+    clearInterval(this.meterTimer);
+    this.meterTimer = undefined;
     clearTimeout(this.armTimer);
     this.wireKey = "";
+    this.meterKey = "";
     document.removeEventListener("visibilitychange", this.onVisible);
     this.taps.cancel();
     this.stopWalk();
