@@ -2691,6 +2691,8 @@ const en = {
   st_accent_default: "Neon cyan",
   st_view_2d: "Open the plan in 2D",
   st_nav_wrap: "Floor and room bar on several lines",
+  st_plan_pin_zoom: "Show markers on the plan from this zoom",
+  st_plan_pin_zoom_hint: "Zoomed out, the markers of a whole floor cover each other, so the flat plan hides them. They come back when you zoom in, and always show in the chosen room. Pixels per metre of plan; 0 = always show them. Kept for this device.",
   st_heat: "Heatmap",
   st_walls: "Walls",
   st_floors: "Floors when the whole house shows",

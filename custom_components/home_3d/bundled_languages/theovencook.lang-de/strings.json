@@ -2676,6 +2676,8 @@
  "st_accent_default": "Neon-Cyan",
  "st_view_2d": "Den Plan in 2D öffnen",
  "st_nav_wrap": "Etagen- und Raumleiste auf mehreren Zeilen",
+ "st_plan_pin_zoom": "Markierungen im Plan ab diesem Zoom zeigen",
+ "st_plan_pin_zoom_hint": "Weit herausgezoomt verdecken sich die Markierungen eines ganzen Stockwerks, darum blendet der flache Plan sie aus. Beim Hineinzoomen kommen sie zurück und im gewählten Raum sind sie immer da. Pixel pro Meter Plan; 0 = immer zeigen. Gilt für dieses Gerät.",
  "st_heat": "Heatmap",
  "st_walls": "Wände",
  "st_floors": "Etagen, wenn das ganze Haus zu sehen ist",
