@@ -31,6 +31,7 @@ import { FURNITURE_SIZE, isLamp, LAMP_MODEL, type OpeningPreset, uid, type Build
 import { controls, tokens } from "../styles.ts";
 import "./entity-picker.ts";
 import "./multi-select.ts";
+import "./time-field.ts";
 import type { HassFloor, HomeAssistant } from "../types.ts";
 import type { EditorUser } from "../editors.ts";
 import { load3d } from "../load3d.ts";

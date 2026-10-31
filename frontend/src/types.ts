@@ -59,6 +59,8 @@ export interface HassConnection {
 
 export interface HomeAssistant {
   language: string;
+  /** The profile's language and 12/24 hour choice (time_format: "language", "system", "12", "24"). */
+  locale?: { language?: string; time_format?: string };
   user?: { id?: string; is_admin: boolean; name: string };
   areas?: Record<string, HassArea>;
   floors?: Record<string, HassFloor>;

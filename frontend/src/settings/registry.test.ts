@@ -69,6 +69,8 @@ function otherValue(s: Setting, e: SettingsEnv): unknown {
       return "Kitchen";
     case "time":
       return "05:30";
+    case "hour":
+      return now === 5.5 ? 6 : 5.5;
     case "colour":
       return "#123456";
     case "range":

@@ -107,6 +107,8 @@ export type Control =
     }
   | { kind: "text"; placeholder?: TextKey; maxLength?: number }
   | { kind: "time" }
+  /** A time of day stored as a number of hours (14.5 = 14:30), picked with the time field (#225). */
+  | { kind: "hour" }
   | { kind: "colour"; fallback: string; clearable?: boolean }
   | { kind: "range"; min: number; max: number; step: number }
   | { kind: "checks"; options: Option[] }
@@ -870,7 +872,7 @@ const SCENE: Setting[] = [
 ];
 
 const householdOf = (env: SettingsEnv) => env.building?.settings.household ?? {};
-/** An hour of the bins' glow (Household): 0–24 in half hours, for every bin. */
+/** A time of day of the bins' glow (Household), stored as hours (14.5 = 14:30), for every bin. */
 const binHour = (id: "bin_from" | "bin_until", label: TextKey, def: number, hint?: TextKey): Setting<number> => ({
   id: `household.${id}`,
   section: "household",
@@ -880,7 +882,7 @@ const binHour = (id: "bin_from" | "bin_until", label: TextKey, def: number, hint
   label,
   hint,
   keywords: ["bin", "waste", "rubbish", "glow", "pickup"],
-  control: { kind: "number", step: 0.5, min: 0, max: 24, unit: "h" },
+  control: { kind: "hour" },
   default: def,
   read: (env) => householdOf(env)[id] ?? def,
   write: (env, v) => withPart(env.building!, "household", { [id]: clamp(v, 0, 24) }),
