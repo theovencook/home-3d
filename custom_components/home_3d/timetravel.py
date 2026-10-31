@@ -12,6 +12,7 @@ from datetime import datetime
 import logging
 from typing import Any
 
+from homeassistant.auth.permissions.const import POLICY_READ
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -20,6 +21,7 @@ from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
 from .const import DOMAIN
+from .sample import entity_ids as plan_entity_ids
 from .timetravel_rows import (
     ATTR_KEEP,
     MAX_SPAN,
@@ -92,6 +94,14 @@ def private_entities(hass: HomeAssistant, entity_ids: list[str]) -> set[str]:
         translation_key = entry.translation_key if entry is not None else None
         if location_like(entity_id, state.attributes if state else None, translation_key, device_class):
             out.add(entity_id)
+    return out
+
+
+def plan_entities(data: Any) -> set[str]:
+    """Every entity the plans of all homes name: the only ones whose past can be asked for (#187)."""
+    out: set[str] = set()
+    for home in data.homes.values():
+        out.update(plan_entity_ids(home.building))
     return out
 
 
@@ -210,8 +220,17 @@ async def ws_timetravel_history(
     cars = [e for e in msg["car_trackers"] if e in configured and e not in private]
     # places and the devices people carry stay out, whatever the frontend asks for
     hidden = private_entities(hass, [*msg["entity_ids"], *msg["statistic_ids"]])
-    entity_ids = [e for e in msg["entity_ids"] if e not in hidden]
-    statistic_ids = [e for e in msg["statistic_ids"] if e not in hidden]
+    # only entities on a plan, and only those this user may read (as Home Assistant's own history does, #187)
+    on_plan = plan_entities(data)
+    user = connection.user
+
+    def allowed(entity_id: str) -> bool:
+        if entity_id not in on_plan or entity_id in hidden:
+            return False
+        return bool(user.permissions.check_entity(entity_id, POLICY_READ))
+
+    entity_ids = [e for e in msg["entity_ids"] if allowed(e)]
+    statistic_ids = [e for e in msg["statistic_ids"] if allowed(e)]
     try:
         result = await instance.async_add_executor_job(collect, hass, start, end, entity_ids, statistic_ids, cars)
     except Exception as err:  # the recorder may fail in many ways (database busy, migrating)

@@ -200,6 +200,15 @@ async def _setup(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
 
+def _on_plan(hass: HomeAssistant, *entity_ids: str) -> None:
+    """Name entities on the active plan: time travel answers only for those (#187)."""
+    data = hass.data[DOMAIN]
+    building = data.building
+    floors = [dict(f) for f in building.get("floors") or [{"furniture": []}]]
+    floors[0]["furniture"] = [*(floors[0].get("furniture") or []), *({"type": "lamp", "entity": e} for e in entity_ids)]
+    data.building = {**building, "floors": floors}
+
+
 def _msg(**over: Any) -> dict[str, Any]:
     return {
         "type": "home_3d/timetravel/history",
@@ -239,6 +248,7 @@ async def test_history_answer(hass: HomeAssistant, hass_ws_client) -> None:
     await _setup(hass)
     hass.data[DOMAIN].packs = [{"id": "test.pro", "features": ["time_travel"], "items": []}]
     hass.config.components.add("recorder")
+    _on_plan(hass, "light.kitchen", "sensor.temp", "person.anna")
     asked: dict[str, Any] = {}
 
     def fake_states(_hass, start, end, entity_ids, with_attributes):
@@ -289,6 +299,7 @@ async def test_history_car_trackers(hass: HomeAssistant, hass_ws_client) -> None
                 "furniture": [
                     {"type": "parking", "entity": "device_tracker.car", "car": None},
                     {"type": "parking", "entity": None, "car": {"tracker": "device_tracker.anna_phone"}},
+                    {"type": "lamp", "entity": "light.kitchen"},
                 ]
             }
         ],
@@ -370,6 +381,9 @@ async def test_history_leaves_places_and_carried_devices_out(hass: HomeAssistant
     await _setup(hass)
     hass.data[DOMAIN].packs = [{"id": "test.pro", "features": ["time_travel"], "items": []}]
     hass.config.components.add("recorder")
+    _on_plan(
+        hass, "sensor.car_place", "sensor.wifi_ssid", "light.kitchen", "sensor.pixel_battery", "sensor.flur_temperature"
+    )
     phone = MockConfigEntry(domain="mobile_app", data={})
     phone.add_to_hass(hass)
     device = dr.async_get(hass).async_get_or_create(
@@ -415,3 +429,35 @@ async def test_history_leaves_places_and_carried_devices_out(hass: HomeAssistant
     assert "sensor.car_place" not in str(asked)
     assert "sensor.wifi_ssid" not in str(asked)
     assert "light.kitchen" in asked["states"]
+
+
+async def test_history_answers_only_for_entities_on_the_plan(hass: HomeAssistant, hass_ws_client) -> None:
+    """An entity no plan names is never read from the recorder, as history or as statistics (#187)."""
+    await _setup(hass)
+    hass.config.components.add("recorder")
+    _on_plan(hass, "light.kitchen", "sensor.temp")
+    asked: dict[str, Any] = {"states": []}
+
+    def fake_states(_hass, start, end, entity_ids, with_attributes):
+        asked["states"].extend(entity_ids)
+        return {}
+
+    def fake_stats(_hass, **kwargs):
+        asked["stats"] = sorted(kwargs["statistic_ids"])
+        return {}
+
+    with (
+        patch("homeassistant.components.recorder.get_instance", return_value=_Instance()),
+        patch.object(timetravel, "_states", fake_states),
+        patch("homeassistant.components.recorder.statistics.statistics_during_period", fake_stats),
+    ):
+        client = await hass_ws_client(hass)
+        await client.send_json_auto_id(
+            _msg(entity_ids=["light.kitchen", "lock.front_door"], statistic_ids=["sensor.temp", "sensor.secret_power"])
+        )
+        result = await client.receive_json()
+    assert result["success"], result
+    assert sorted(asked["states"]) == ["light.kitchen", "sensor.temp"]
+    assert asked["stats"] == ["sensor.temp"]
+    assert "lock.front_door" not in str(asked)
+    assert "sensor.secret_power" not in str(asked)
