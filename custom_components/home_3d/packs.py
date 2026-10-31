@@ -686,6 +686,17 @@ def source_of_folder(files: dict[str, str]) -> dict[str, Any]:
     return {"files": _data_files(files)}
 
 
+def checked_folder(files: dict[str, str]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """A pack folder's checked payload and the source kept with it; raises PackError. Plain work without the event
+    loop: a large pack takes a while, so callers run it in the executor (#176)."""
+    return verify_folder(files), source_of_folder(files)
+
+
+def checked_file(text: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """An old single-file pack's checked payload and the source kept with it; raises PackError (see checked_folder)."""
+    return verify_pack(text), parts_of(text)
+
+
 def verify_source(source: Any) -> dict[str, Any]:
     """Check the kept source of an imported pack again (a backup being restored); raises PackError."""
     if isinstance(source, dict) and isinstance(source.get("files"), dict):

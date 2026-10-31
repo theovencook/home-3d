@@ -43,8 +43,9 @@ import voluptuous as vol
 from .const import STORAGE_KEY_PACK_UPDATES, STORAGE_VERSION, TIME_PATTERN
 from .custom_items import not_reserved
 from .moves import migrate_pins, moved_copy, moved_out_of, retired_packs
+from .off_loop import OFF_LOOP
 from .pack_github import checked_origin, fetch_pack, latest_release
-from .packs import CUSTOM_PACK_ID, PackError, source_of_folder, verify_folder, with_bundled
+from .packs import CUSTOM_PACK_ID, PackError, checked_folder, with_bundled
 from .recipes import installed_copies, placed_types, recipe_copy
 
 if TYPE_CHECKING:
@@ -141,7 +142,8 @@ class PackUpdates:
     def __init__(self, hass: HomeAssistant, data: FloorplanData) -> None:
         self.hass = hass
         self.data = data
-        self._store: Store = Store(hass, STORAGE_VERSION, STORAGE_KEY_PACK_UPDATES)
+        # the previous releases are whole packs: written in the executor (#176)
+        self._store: Store = Store(hass, STORAGE_VERSION, STORAGE_KEY_PACK_UPDATES, **OFF_LOOP)
         self.settings: dict[str, Any] = dict(DEFAULT_SETTINGS)
         self.pinned: set[str] = set()
         # pack id -> the pack entry its last update replaced ({"id", "release", "bundled": True} for a bundled one)
@@ -200,8 +202,9 @@ class PackUpdates:
             {
                 "settings": self.settings,
                 "pinned": sorted(self.pinned),
-                "previous": self.previous,
-                "checks": self.checks,
+                # copies: the JSON is written in the executor while a check may add to these (#176)
+                "previous": dict(self.previous),
+                "checks": dict(self.checks),
                 "last_check": self.last_check,
             }
         )
@@ -431,10 +434,12 @@ class PackUpdates:
             # nothing newer for this pack (a check never installs an older release)
             return False
         files, new_origin = await fetch_pack(self.hass, origin["url"])
-        payload = not_reserved(verify_folder(files))
+        # a large pack takes a while to check: not in the event loop (#176)
+        payload, source = await self.hass.async_add_executor_job(checked_folder, files)
+        not_reserved(payload)
         if payload["id"] != pack["id"] or payload["release"] <= release:
             return False
-        source = {**source_of_folder(files), "origin": {**new_origin, "release": payload["release"]}}
+        source = {**source, "origin": {**new_origin, "release": payload["release"]}}
         await self._async_add(payload, source)
         result["latest_release"] = payload["release"]
         return True

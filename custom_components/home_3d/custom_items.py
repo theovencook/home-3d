@@ -15,6 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .const import STORAGE_KEY_ITEMS, STORAGE_VERSION
+from .off_loop import OFF_LOOP
 from .packs import CUSTOM_PACK_ID, MAX_ITEMS, PACK_FORMAT_V2, PACK_VERSION_V2, PackError, verify_item
 
 
@@ -47,7 +48,7 @@ class CustomItems:
     """The custom items of one installation."""
 
     def __init__(self, hass: HomeAssistant) -> None:
-        self._store: Store = Store(hass, STORAGE_VERSION, STORAGE_KEY_ITEMS)
+        self._store: Store = Store(hass, STORAGE_VERSION, STORAGE_KEY_ITEMS, **OFF_LOOP)
         self.items: list[dict[str, Any]] = []
 
     async def async_load(self) -> None:

@@ -14,6 +14,7 @@ from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.loader import async_get_integration
 import voluptuous as vol
+from voluptuous.humanize import humanize_error
 
 from . import frontend_build
 from .const import (
@@ -36,12 +37,10 @@ from .packs import (
     MAX_ITEMS,
     MAX_PACK_SIZE,
     PackError,
+    checked_file,
+    checked_folder,
     is_bundled,
-    parts_of,
-    source_of_folder,
-    verify_folder,
     verify_item,
-    verify_pack,
     verify_source,
 )
 from .racks import RackError
@@ -189,7 +188,9 @@ async def ws_version(hass: HomeAssistant, connection: websocket_api.ActiveConnec
     {
         vol.Required("type"): "home_3d/building/save",
         **_HOME,
-        vol.Required("building"): BUILDING_SCHEMA,
+        # checked against BUILDING_SCHEMA in the handler, in the executor (#176): on a large plan that takes tens of
+        # milliseconds, and an editor saves about every second
+        vol.Required("building"): dict,
         # the hashes of the recipe copies the client started from (#45), by pack item type
         vol.Optional("recipe_bases"): vol.All({str: vol.All(str, vol.Length(max=100))}, vol.Length(max=2000)),
         # the revision the client's plan started from (#149): a save from an out-of-date plan is refused
@@ -207,15 +208,24 @@ async def ws_save_building(
     reload."""
     if (home := _home(hass, connection, msg)) is None:
         return
+    try:
+        building = await hass.async_add_executor_job(BUILDING_SCHEMA, msg["building"])
+    except vol.Invalid as err:
+        connection.send_error(
+            msg["id"],
+            websocket_api.ERR_INVALID_FORMAT,
+            f"Message incorrectly formatted: {humanize_error(msg['building'], err)} for building",
+        )
+        return
 
     def guard(current: dict[str, Any]) -> None:
         # checked against the plan as it is when the save runs, not as it was when the message came
-        if not connection.user.is_admin and performed_actions(msg["building"]) - performed_actions(current):
+        if not connection.user.is_admin and performed_actions(building) - performed_actions(current):
             raise _NeedsAdmin
 
     try:
         revision = await home.async_save_building(
-            msg["building"],
+            building,
             msg.get("recipe_bases"),
             check_racks=True,
             base_revision=msg.get("base_revision"),
@@ -367,7 +377,7 @@ async def ws_history_restore(
         connection.send_error(msg["id"], "not_found", "Restore point not found")
         return
     missing = home.missing_images(building)
-    revision = await home.async_restore(complete(building))
+    revision = await home.async_restore(await hass.async_add_executor_job(complete, building))
     connection.send_result(msg["id"], {"revision": revision, "missing_pictures": len(missing)})
 
 
@@ -424,12 +434,11 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
     if _data(hass, connection, msg) is None or (updates := _updates(hass, connection, msg)) is None:
         return
     try:
+        # a large pack takes a while to check: not in the event loop (#176)
         if "files" in msg:
-            payload = verify_folder(msg["files"])
-            source = source_of_folder(msg["files"])
+            payload, source = await hass.async_add_executor_job(checked_folder, msg["files"])
         elif "pack" in msg:
-            payload = verify_pack(msg["pack"])
-            source = parts_of(msg["pack"])
+            payload, source = await hass.async_add_executor_job(checked_file, msg["pack"])
         else:
             raise PackError("not_a_pack", "send a pack file or a pack folder")
         not_reserved(payload)
@@ -465,8 +474,10 @@ async def ws_packs_install_url(
         return
     try:
         files, origin = await fetch_pack(hass, msg["url"])
-        payload = not_reserved(verify_folder(files))
-        source = {**source_of_folder(files), "origin": {**origin, "release": payload["release"]}}
+        # checked in the executor (#176)
+        payload, source = await hass.async_add_executor_job(checked_folder, files)
+        not_reserved(payload)
+        source = {**source, "origin": {**origin, "release": payload["release"]}}
         await updates.async_install(payload, source, confirm=msg["confirm"])
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
@@ -706,19 +717,52 @@ async def ws_backup_import(
     if (data := _data(hass, connection, msg)) is None:
         return
     try:
-        homes = [{**h, "building": complete(BUILDING_SCHEMA(h["building"]))} for h in msg.get("homes", [])]
-        if not homes and "building" not in msg:
-            raise vol.Invalid("a backup has a building or homes")
-        if len({h["id"] for h in homes}) != len(homes):
-            raise vol.Invalid("a backup names each home once")
-        # with homes the building at the top is the active home's again (for older versions): not needed
-        building = complete(BUILDING_SCHEMA(msg["building"])) if not homes else None
+        # every plan, pack and item of a backup is checked in the executor (#176): megabytes of work
+        homes, building, checked, items, skipped = await hass.async_add_executor_job(_checked_backup, msg)
     except vol.Invalid as err:
         connection.send_error(msg["id"], "invalid_format", str(err))
         return
     target = None
     if not homes and (target := _home(hass, connection, msg)) is None:
         return
+    if msg["check_only"]:
+        connection.send_result(msg["id"], {"checked": True, "skipped": skipped})
+        return
+    try:
+        await _async_restore_backup(hass, data, target, building, homes, msg.get("active"), checked, items)
+    except _RestoreFailed as err:
+        connection.send_error(msg["id"], "restore_failed", str(err))
+        return
+    shown = target or data.active
+    result: dict[str, Any] = {
+        "revision": shown.revision,
+        "building": shown.building,
+        "home_id": shown.id,
+        "homes": data.homes_list(),
+        "active": data.active_id,
+        "packs": len(checked),
+        "skipped": skipped,
+    }
+    if "items" in msg:
+        result["items"] = len(items)
+    connection.send_result(msg["id"], result)
+
+
+def _checked_backup(
+    msg: dict[str, Any],
+) -> tuple[
+    list[dict[str, Any]], dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]], list[dict[str, str]]
+]:
+    """Check a backup without the event loop (#176): its homes, its single building (a backup from before #53), the
+    packs whose content validates, the custom items that do, and what was skipped. Raises vol.Invalid for plans that
+    do not validate."""
+    homes = [{**h, "building": complete(BUILDING_SCHEMA(h["building"]))} for h in msg.get("homes", [])]
+    if not homes and "building" not in msg:
+        raise vol.Invalid("a backup has a building or homes")
+    if len({h["id"] for h in homes}) != len(homes):
+        raise vol.Invalid("a backup names each home once")
+    # with homes the building at the top is the active home's again (for older versions): not needed
+    building = complete(BUILDING_SCHEMA(msg["building"])) if not homes else None
     checked: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     for entry in msg.get("packs", []):
@@ -744,27 +788,7 @@ async def ws_backup_import(
             items.append(verify_item(item))
         except PackError as err:
             skipped.append({"id": str(item.get("id") or "?"), "reason": err.code})
-    if msg["check_only"]:
-        connection.send_result(msg["id"], {"checked": True, "skipped": skipped})
-        return
-    try:
-        await _async_restore_backup(hass, data, target, building, homes, msg.get("active"), checked, items)
-    except _RestoreFailed as err:
-        connection.send_error(msg["id"], "restore_failed", str(err))
-        return
-    shown = target or data.active
-    result: dict[str, Any] = {
-        "revision": shown.revision,
-        "building": shown.building,
-        "home_id": shown.id,
-        "homes": data.homes_list(),
-        "active": data.active_id,
-        "packs": len(checked),
-        "skipped": skipped,
-    }
-    if "items" in msg:
-        result["items"] = len(items)
-    connection.send_result(msg["id"], result)
+    return homes, building, checked, items, skipped
 
 
 class _RestoreFailed(Exception):
@@ -985,8 +1009,8 @@ async def ws_homes_load_sample(
     while name in taken:
         number += 1
         name = f"{SAMPLE_NAME} {number}"
-    building = await hass.async_add_executor_job(load_sample)
-    home = await data.async_create_home(name, complete(building), area_import=False, demo=True)
+    building = await hass.async_add_executor_job(lambda: complete(load_sample()))
+    home = await data.async_create_home(name, building, area_import=False, demo=True)
     _send_homes(data, connection, msg, home=home.info())
 
 
