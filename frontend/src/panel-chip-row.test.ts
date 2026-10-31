@@ -1,4 +1,5 @@
-// The floor / room chip row (#222): floor chips only under "All floors"; a picked floor brings its rooms.
+// The floor / room chip row (#222, #224): floor chips only under "All floors", and the scroll / expand button has its
+// own place beside the scrolling chips instead of sitting over the last one.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding } from "./model.ts";
@@ -49,3 +50,13 @@ test("All floors lists the floor chips only; a picked floor brings its rooms (#2
   assert.ok(one.includes("fp3d-room-chip"), "the picked floor shows its rooms");
 });
 
+test("the scroll / expand button sits beside the chips box, not inside it (#224)", () => {
+  const out = flat(panel("f1").render());
+  const chips = out.indexOf('class="fp3d-nav-chips');
+  const close = out.indexOf("</div>", out.indexOf("fp3d-room-chip"));
+  const toggle = out.indexOf("fp3d-nav-toggle");
+  assert.ok(chips > -1 && toggle > close, "the toggle follows the end of the scrolling chips box");
+  const css = String((Floorplan3dPanel as unknown as { styles: unknown }).styles instanceof Array ? ((Floorplan3dPanel as unknown as { styles: { cssText?: string }[] }).styles.map((x) => x.cssText ?? "").join("")) : "");
+  const rule = css.match(/\.fp3d-nav-toggle \{[^}]*\}/)?.[0] ?? "";
+  assert.ok(rule && !/sticky/.test(rule), "no sticky overlay");
+});

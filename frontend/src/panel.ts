@@ -1346,7 +1346,8 @@ export class Floorplan3dPanel extends LitElement {
       <button aria-pressed=${this._plan2d} @click=${() => this.setPlan2d(true)}>${this.t("view_2d")}</button>
     </div>`;
     return html`
-      ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : html`<nav class="fp3d-nav ${this._navWrap ? "fp3d-nav-wrap" : ""}" @wheel=${this.onNavWheel}>
+      ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : html`<nav class="fp3d-nav">
+        <div class="fp3d-nav-chips ${this._navWrap ? "fp3d-nav-wrap" : ""}" @wheel=${this.onNavWheel}>
         ${b.floors.length > 1
           ? html`<button class="fp3d-chip" aria-pressed=${this._floorId === null} @click=${() => {
                 this._floorId = null;
@@ -1387,6 +1388,7 @@ export class Floorplan3dPanel extends LitElement {
             </button>`,
           ),
         ])}
+        </div>
         ${this._tablet ? nothing : html`<button
           class="fp3d-chip fp3d-nav-toggle"
           title=${this.t(this._navWrap ? "nav_row" : "nav_wrap")}
@@ -1927,15 +1929,23 @@ export class Floorplan3dPanel extends LitElement {
       }
       .fp3d-nav {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 6px;
         padding: 10px 14px;
-        overflow-x: auto;
-        scrollbar-width: none;
         flex: none;
       }
+      /* the chips scroll in their own box; the scroll / expand button beside it has its own room (#224) */
+      .fp3d-nav-chips {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
       /* a desktop shows a thin scrollbar while the pointer rests on the bar */
-      .fp3d-nav:hover {
+      .fp3d-nav-chips:hover {
         scrollbar-width: thin;
       }
       /* wrapped: several lines, at most about three before the bar itself scrolls */
@@ -1945,20 +1955,8 @@ export class Floorplan3dPanel extends LitElement {
         overflow-y: auto;
         max-height: 132px;
       }
-      .fp3d-nav-floor {
-        flex: none;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--fp3d-muted);
-        margin-left: 6px;
-      }
       .fp3d-nav-toggle {
         flex: none;
-        margin-left: auto;
-        position: sticky;
-        right: 0;
         min-width: 34px;
         padding-left: 8px;
         padding-right: 8px;
