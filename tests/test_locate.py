@@ -536,3 +536,44 @@ async def test_a_setting_keeps_where_everyone_is(hass: HomeAssistant, hass_ws_cl
     # a room more: the trackers start again with it
     await _save(client, _plan([KITCHEN, HALL, LIVING], OPENINGS))
     assert service._trackers["irk_watch"] is not tracker
+
+
+async def test_an_unchanged_window_is_not_measured_again(hass: HomeAssistant, monkeypatch) -> None:
+    from custom_components.home_3d.locate import service as service_module
+
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    fp = Fingerprints({"kitchen": [{"s1": -60.0}] * 3, "hall": [{"s1": -80.0}] * 3})
+    calls = 0
+    real = service_module.evidence
+
+    def counting(*args):
+        nonlocal calls
+        calls += 1
+        return real(*args)
+
+    monkeypatch.setattr(service_module, "evidence", counting)
+    window = {"s1": -61.0}
+    first = service._evidence_for("irk_watch", fp, window)
+    assert service._evidence_for("irk_watch", fp, dict(window)) is first
+    assert calls == 1
+    # a new reading, a sample learned, or a scanner moved to another room: measured again
+    service._evidence_for("irk_watch", fp, {"s1": -70.0})
+    fp.add("hall", {"s1": -79.0})
+    service._evidence_for("irk_watch", fp, {"s1": -70.0})
+    service.scanner_rooms = {"s1": "hall"}
+    service._evidence_for("irk_watch", fp, {"s1": -70.0})
+    assert calls == 4
+
+
+async def test_pooled_samples_follow_calibration_at_the_cap(hass: HomeAssistant) -> None:
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    service.fingerprints["a"] = Fingerprints()
+    service.fingerprints["a"].add("kitchen", {"s1": -60.0}, keep=1)
+    service.fingerprints["a"].add("hall", {"s1": -80.0}, keep=1)
+    first = service.pooled()
+    service.fingerprints["a"].add("kitchen", {"s1": -50.0}, keep=1)  # same count, newer sample
+    assert service.pooled() is not first
+    assert service.pooled().samples["kitchen"] == [{"s1": -50.0}]
+    assert service.pooled() is service.pooled()

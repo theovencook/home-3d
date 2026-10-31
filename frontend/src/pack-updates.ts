@@ -27,6 +27,8 @@ export interface PackUpdateState {
   /** The last check: when, the release found, or why it failed. */
   checked_at?: number;
   latest_release?: number;
+  /** A newer release a check found but did not install (#189): auto-update is off, an editor reviews and installs it. */
+  available?: { release: number; commit: string };
   error?: string;
 }
 
@@ -103,4 +105,38 @@ export function nextCheck(settings: PackUpdateSettings, now: Date = new Date()):
     return at;
   }
   return null;
+}
+
+/** One item in a preview: its id and name map. */
+export interface PreviewItem {
+  id: string;
+  name: Record<string, string>;
+}
+
+/** What installing a pack release from GitHub would change (#189; backend pack_preview.py). Nothing is installed yet. */
+export interface PackPreview {
+  pack: { id: string; name: string; publisher: string; licence: string; release: number; items: number };
+  /** Where it comes from; `commit` is the pin: the install insists on exactly this commit. */
+  origin: { url: string; owner: string; repo: string; ref: string; folder: string; commit: string; default_branch: boolean };
+  /** The pack the library offers now under this id, null when it is new. */
+  installed: { release: number; publisher: string | null; bundled: boolean; pinned: boolean; commit: string | null } | null;
+  changes: { added: PreviewItem[]; changed: PreviewItem[]; removed: PreviewItem[]; unchanged: number };
+  /** Codes the page words: "older_release", "pinned", "bundled_publisher". */
+  warnings: string[];
+}
+
+/** A commit as shown to people: the first seven characters. */
+export function shortCommit(commit: string | null | undefined): string {
+  return commit ? commit.slice(0, 7) : "";
+}
+
+/** The name of an item or pack-item name map in a language, falling back to English, any name, then the id. */
+export function previewName(item: PreviewItem, language: string): string {
+  return item.name[language.split("-")[0]] ?? item.name.en ?? Object.values(item.name)[0] ?? item.id;
+}
+
+/** Whether a preview changes anything in an installed pack's items (a new release may only change the pack's text). */
+export function changesNothing(preview: PackPreview): boolean {
+  const c = preview.changes;
+  return !c.added.length && !c.changed.length && !c.removed.length;
 }

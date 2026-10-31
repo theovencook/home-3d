@@ -78,6 +78,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_packs_items,
         ws_packs_import,
         ws_packs_install_url,
+        ws_packs_preview_url,
         ws_packs_remove,
         ws_packs_updates,
         ws_packs_updates_settings,
@@ -520,6 +521,8 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
         vol.Required("type"): "home_3d/packs/install_url",
         vol.Required("url"): vol.All(str, vol.Length(min=1, max=500)),
         vol.Optional("confirm", default=False): bool,
+        # the commit a preview showed (#189): installed only if the ref still points there
+        vol.Optional("commit"): vol.All(str, vol.Match(r"^[0-9a-f]{40}$")),
     }
 )
 @require_editor
@@ -533,6 +536,8 @@ async def ws_packs_install_url(
         return
     try:
         files, origin = await fetch_pack(hass, msg["url"])
+        if "commit" in msg and origin["commit"] != msg["commit"]:
+            raise PackError("changed_since_preview", "the pack changed since the preview; look at the changes again")
         # checked in the executor (#176)
         payload, source = await hass.async_add_executor_job(checked_folder, files)
         not_reserved(payload)
@@ -550,6 +555,32 @@ async def ws_packs_install_url(
         "origin": source["origin"],
     }
     connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_3d/packs/preview_url",
+        vol.Required("url"): vol.All(str, vol.Length(min=1, max=500)),
+    }
+)
+@require_editor
+@websocket_api.async_response
+async def ws_packs_preview_url(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """What installing (or updating to) the pack at a GitHub URL would change (#189): the repository and commit, the
+    installed release and the items added, changed and removed. Nothing is installed; `install_url` with the
+    previewed `commit` installs exactly this."""
+    if _data(hass, connection, msg) is None or (updates := _updates(hass, connection, msg)) is None:
+        return
+    try:
+        files, origin = await fetch_pack(hass, msg["url"])
+        payload, _source = await hass.async_add_executor_job(checked_folder, files)
+        not_reserved(payload)
+    except PackError as err:
+        connection.send_error(msg["id"], err.code, err.detail or err.code)
+        return
+    connection.send_result(msg["id"], updates.preview(payload, origin))
 
 
 @websocket_api.websocket_command(

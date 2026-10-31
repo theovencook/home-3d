@@ -168,7 +168,9 @@ export function packOrigin(pack: FurniturePack): { label: string; url: string } 
   const origin = pack.source?.origin;
   if (origin?.type !== "github") return null;
   const path = [origin.owner, origin.repo, origin.folder].filter(Boolean).join("/");
-  return { label: origin.default_branch ? path : `${path} @ ${origin.ref}`, url: origin.url };
+  // the commit the files came from stays visible (#189): a branch moves, a commit does not
+  const commit = origin.commit ? ` · ${origin.commit.slice(0, 7)}` : "";
+  return { label: `${origin.default_branch ? path : `${path} @ ${origin.ref}`}${commit}`, url: origin.url };
 }
 
 /**

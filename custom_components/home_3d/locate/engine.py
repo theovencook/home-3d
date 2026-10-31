@@ -13,8 +13,9 @@ How a room is chosen, every STEP seconds per tracked device:
 
 from __future__ import annotations
 
-from collections import deque
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
+import heapq
 import math
 
 WINDOW = 4.0  # seconds of readings per estimate
@@ -33,6 +34,7 @@ AWAY_AFTER = 120.0  # seconds without any reading: a person is no longer placed
 THING_AWAY_AFTER = 6 * 3600.0  # a thing (keys, a phone lying somewhere) keeps its last room much longer
 UNLEARNED_DISTANCE = 9.5  # dB: farther than this from every learned sample, the device is in a room not learned yet
 CONFIRM_PLAUSIBLE = 0.1  # belief a room needs for a presence sensor to move the device there
+KEEP = 30.0  # seconds of readings kept per scanner (the longest window any estimate reads is QUIET_WINDOW)
 
 
 Vector = dict[str, float]
@@ -54,32 +56,58 @@ def distance(a: Vector, b: Vector, miss: float = MISS) -> float:
 
 @dataclass
 class Fingerprints:
-    """Calibration samples: room id -> list of window vectors."""
+    """Calibration samples: room id -> list of window vectors.
+
+    `version` goes up whenever a sample is added or dropped through the methods, so a caller can tell cheaply whether
+    anything it derived from the samples (the pooled set, a remembered estimate) is still good."""
 
     samples: dict[str, list[Vector]] = field(default_factory=dict)
+    version: int = field(default=0, compare=False)
 
-    def add(self, room: str, vector: Vector) -> None:
+    def add(self, room: str, vector: Vector, keep: int | None = None) -> None:
+        """Learn one window for a room; with `keep` only the newest `keep` samples of the room stay."""
         if vector:
-            self.samples.setdefault(room, []).append(dict(vector))
+            rows = self.samples.setdefault(room, [])
+            rows.append(dict(vector))
+            if keep is not None:
+                del rows[:-keep]
+            self.version += 1
+
+    def drop(self, room: str | None = None) -> None:
+        """Forget one room, or (without a room) everything."""
+        if room is None:
+            self.samples.clear()
+        else:
+            self.samples.pop(room, None)
+        self.version += 1
+
+    def stamp(self) -> tuple[int, int]:
+        """Changes whenever the samples do (the version, and the count for samples edited in place)."""
+        return self.version, sum(len(v) for v in self.samples.values())
 
     def rooms(self) -> list[str]:
         return [r for r, s in self.samples.items() if s]
 
+    def distances(self, vector: Vector) -> list[tuple[float, str]]:
+        """(distance, room) of every learned sample - computed once per estimate and shared by nearest and scores."""
+        return [(distance(vector, v), room) for room, vectors in self.samples.items() for v in vectors]
+
     def nearest(self, vector: Vector) -> float:
         """Distance to the closest learned sample (inf without samples)."""
-        return min((distance(vector, v) for vs in self.samples.values() for v in vs), default=math.inf)
+        return min((d for d, _room in self.distances(vector)), default=math.inf)
 
     def scores(self, vector: Vector, k: int = K) -> dict[str, float]:
         """Room -> share of the weighted votes of the k nearest samples (empty without samples)."""
-        best: list[tuple[float, str]] = []
-        for room, vectors in self.samples.items():
-            best.extend((distance(vector, v), room) for v in vectors)
-        best.sort(key=lambda x: x[0])
-        votes: dict[str, float] = {}
-        for d, room in best[:k]:
-            votes[room] = votes.get(room, 0.0) + 1.0 / (0.5 + d)
-        total = sum(votes.values())
-        return {r: v / total for r, v in votes.items()} if total else {}
+        return scores_from(self.distances(vector), k)
+
+
+def scores_from(dists: list[tuple[float, str]], k: int = K) -> dict[str, float]:
+    """Votes of the k nearest of already measured samples (a partial selection, not a sort of all of them)."""
+    votes: dict[str, float] = {}
+    for d, room in heapq.nsmallest(k, dists, key=lambda x: x[0]):
+        votes[room] = votes.get(room, 0.0) + 1.0 / (0.5 + d)
+    total = sum(votes.values())
+    return {r: v / total for r, v in votes.items()} if total else {}
 
 
 def nearest_scores(vector: Vector, scanner_rooms: dict[str, str]) -> dict[str, float]:
@@ -99,8 +127,9 @@ def evidence(fp: Fingerprints | None, vector: Vector, scanner_rooms: dict[str, s
     upstairs say), the placed scanners of the rooms not learned; without any learning the nearest scanner."""
     if fp is None or len(fp.rooms()) < 2:
         return nearest_scores(vector, scanner_rooms)
-    if fp.nearest(vector) <= UNLEARNED_DISTANCE:
-        return fp.scores(vector)
+    dists = fp.distances(vector)  # one pass over the samples serves both the nearest check and the votes
+    if min((d for d, _room in dists), default=math.inf) <= UNLEARNED_DISTANCE:
+        return scores_from(dists)
     learned = set(fp.rooms())
     return nearest_scores(vector, {s: r for s, r in scanner_rooms.items() if r not in learned})
 
@@ -127,7 +156,8 @@ class RoomTracker:
                 self.neighbours[a].add(b)
                 self.neighbours[b].add(a)
         self.belief = {r: 1.0 / len(self.rooms) for r in self.rooms} if self.rooms else {}
-        self.readings: deque[tuple[float, str, float]] = deque()
+        # readings per scanner, in time order (times and values side by side): a window reads only its own slice
+        self._series: dict[str, tuple[list[float], list[float]]] = {}
         self.shown: str | None = None
         self.since: float | None = None
         self.last_seen: float | None = None
@@ -135,17 +165,31 @@ class RoomTracker:
         self._streak = 0
 
     def add(self, t: float, scanner: str, rssi: float) -> None:
-        self.readings.append((t, scanner, rssi))
+        times, values = self._series.setdefault(scanner, ([], []))
+        if not times or t >= times[-1]:
+            times.append(t)
+            values.append(rssi)
+        else:  # a late reading goes where its time belongs
+            i = bisect_right(times, t)
+            times.insert(i, t)
+            values.insert(i, rssi)
         self.last_seen = t if self.last_seen is None else max(self.last_seen, t)
 
     def window(self, now: float, length: float = WINDOW) -> Vector:
-        while self.readings and self.readings[0][0] < now - 30.0:
-            self.readings.popleft()
-        sums: dict[str, list[float]] = {}
-        for t, scanner, rssi in self.readings:
-            if now - length <= t <= now:
-                sums.setdefault(scanner, []).append(rssi)
-        return {s: sum(v) / len(v) for s, v in sums.items()}
+        """Mean RSSI per scanner over the last `length` seconds; only that slice of each scanner's readings is read."""
+        out: Vector = {}
+        for scanner in list(self._series):
+            times, values = self._series[scanner]
+            old = bisect_left(times, now - KEEP)
+            if old:
+                del times[:old], values[:old]
+            if not times:
+                del self._series[scanner]
+                continue
+            lo, hi = bisect_left(times, now - length), bisect_right(times, now)
+            if hi > lo:
+                out[scanner] = sum(values[lo:hi]) / (hi - lo)
+        return out
 
     def adaptive_window(self, now: float) -> Vector:
         """The usual window; for a quiet device (few scanners heard) a longer one, so it is placed at all."""

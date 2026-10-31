@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { askingFirst, libraryUpdates, nextCheck, updatesOnCard, updateSummary, type PackUpdateStatus } from "./pack-updates.ts";
+import { askingFirst, changesNothing, libraryUpdates, nextCheck, previewName, shortCommit, updatesOnCard, updateSummary, type PackPreview, type PackUpdateStatus } from "./pack-updates.ts";
 
 const status: PackUpdateStatus = {
   settings: { auto_update: false, frequency: "daily", time: "04:00", weekday: 0 },
@@ -91,4 +91,33 @@ test("the question may be answered later, in the app's own dialog (#59)", async 
   assert.equal(await askingFirst(send, async () => false), null);
   assert.deepEqual(sent, [false], "an awaited no sends nothing again");
   assert.equal(await askingFirst(send, async () => true), "installed");
+});
+
+// ---- what an install or update changes (#189)
+
+const preview: PackPreview = {
+  pack: { id: "a.one", name: "One", publisher: "Someone", licence: "MIT", release: 2, items: 3 },
+  origin: { url: "https://github.com/o/r/tree/main/a.one", owner: "o", repo: "r", ref: "main", folder: "a.one", commit: "0123456789abcdef0123456789abcdef01234567", default_branch: false },
+  installed: { release: 1, publisher: "Someone", bundled: false, pinned: false, commit: "fedcba9876543210fedcba9876543210fedcba98" },
+  changes: { added: [{ id: "bench", name: { en: "Bench" } }], changed: [], removed: [], unchanged: 2 },
+  warnings: [],
+};
+
+test("a commit is shown as its first seven characters; nothing when there is none", () => {
+  assert.equal(shortCommit(preview.origin.commit), "0123456");
+  assert.equal(shortCommit(null), "");
+  assert.equal(shortCommit(undefined), "");
+});
+
+test("an item in a preview is named in the viewer's language, then English, then any name, then its id", () => {
+  assert.equal(previewName({ id: "x", name: { de: "Bank", en: "Bench" } }, "de-DE"), "Bank");
+  assert.equal(previewName({ id: "x", name: { en: "Bench" } }, "de"), "Bench");
+  assert.equal(previewName({ id: "x", name: { fr: "Banc" } }, "de"), "Banc");
+  assert.equal(previewName({ id: "x", name: {} }, "de"), "x");
+});
+
+test("a preview that adds, changes and removes nothing says so", () => {
+  assert.equal(changesNothing(preview), false);
+  assert.equal(changesNothing({ ...preview, changes: { added: [], changed: [], removed: [], unchanged: 3 } }), true);
+  assert.equal(changesNothing({ ...preview, changes: { added: [], changed: [], removed: [{ id: "x", name: {} }], unchanged: 3 } }), false);
 });

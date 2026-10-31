@@ -76,7 +76,11 @@ class LocateService:
         self.devices: list[dict[str, Any]] = []
         self.scanner_rooms: dict[str, str] = {}
         self.scanner_names: dict[str, str] = {}  # last known names (a scanner that is offline keeps its row)
-        self._pooled: tuple[int, Fingerprints] | None = None
+        self._pooled: tuple[tuple[Any, ...], Fingerprints] | None = None
+        # the last evidence per device: while its window and the learning are unchanged it is reused, not measured
+        # again against every sample (a quiet device repeats its window second after second)
+        self._pool_serial = 0
+        self._evidence: dict[str, tuple[tuple[Any, ...], dict[str, float]]] = {}
         self.rooms: list[dict[str, Any]] = []  # {id, name, floor, area_id}
         self.doors: list[tuple[str, str]] = []
         self.fingerprints: dict[str, Fingerprints] = {}
@@ -157,6 +161,7 @@ class LocateService:
                 old if old is not None and old.away_after == away else RoomTracker(room_ids, self.doors, away)
             )
         self._trackers = trackers
+        self._evidence = {d: m for d, m in self._evidence.items() if d in trackers}
         self.state = {k: v for k, v in self.state.items() if k in self._trackers}
 
     # ------------------------------------------------------------------ the plan (#169)
@@ -323,13 +328,15 @@ class LocateService:
     def pooled(self) -> Fingerprints:
         """Every device's samples together: a device that was never walked with uses what the others learned
         (two watches see the rooms alike). Cached until a sample changes."""
-        count = sum(len(v) for fp in self.fingerprints.values() for v in fp.samples.values())
-        if self._pooled is None or self._pooled[0] != count:
+        key = tuple((dev, id(fp), fp.stamp()) for dev, fp in self.fingerprints.items())
+        if self._pooled is None or self._pooled[0] != key:
             merged = Fingerprints()
             for fp in self.fingerprints.values():
                 for room, vectors in fp.samples.items():
                     merged.samples.setdefault(room, []).extend(vectors)
-            self._pooled = (count, merged)
+            self._pool_serial += 1
+            merged.version = self._pool_serial  # a new set is never mistaken for the one it replaced
+            self._pooled = (key, merged)
         return self._pooled[1]
 
     def _bluetooth(self) -> bool:
@@ -465,10 +472,23 @@ class LocateService:
             vector = tracker.adaptive_window(now)
             if vector:
                 fp = self.fingerprints.setdefault(dev, Fingerprints())
-                samples = fp.samples.setdefault(cal["room"], [])
-                samples.append(vector)
-                del samples[:-MAX_SAMPLES_PER_ROOM]
+                fp.add(cal["room"], vector, MAX_SAMPLES_PER_ROOM)
                 cal["count"][dev] = cal["count"].get(dev, 0) + 1
+
+    def _evidence_for(self, dev: str, learned: Fingerprints | None, window: dict[str, float]) -> dict[str, float]:
+        """The room scores of a window; the last ones again while window, learning and scanner rooms are the same."""
+        key = (
+            tuple(sorted(window.items())),
+            id(learned),
+            learned.stamp() if learned else None,
+            tuple(sorted(self.scanner_rooms.items())),
+        )
+        memo = self._evidence.get(dev)
+        if memo is not None and memo[0] == key:
+            return memo[1]
+        scores = evidence(learned, window, self.scanner_rooms)
+        self._evidence[dev] = (key, scores)
+        return scores
 
     def _estimate(self, now: float) -> None:
         changed = False
@@ -480,7 +500,7 @@ class LocateService:
             # its own learning alone only when it covers most rooms (an iPhone in a pocket may have learned few)
             full = own is not None and len(own.rooms()) >= max(2, OWN_SHARE * len(pooled.rooms()))
             learned = own if full else pooled
-            est = tracker.step(now, evidence(learned, window, self.scanner_rooms))
+            est = tracker.step(now, self._evidence_for(dev, learned, window))
             room = names.get(est.room) if est.room else None
             new = {
                 "room": est.room,
@@ -523,10 +543,7 @@ class LocateService:
     @callback
     def calibrate_clear(self, room: str | None) -> None:
         for fp in self.fingerprints.values():
-            if room is None:
-                fp.samples.clear()
-            else:
-                fp.samples.pop(room, None)
+            fp.drop(room)
         self._save()
 
     def calibration_status(self) -> dict[str, Any] | None:

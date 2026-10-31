@@ -140,3 +140,103 @@ def test_a_quiet_device_gets_a_longer_window() -> None:
     for s in ("s_a", "s_b", "s_c"):
         tracker.add(100.5, s, -70)
     assert "s_hall" not in tracker.adaptive_window(101.0)
+
+
+# ---------------------------------------------------------------- the estimate reads only what it needs (#191)
+
+
+def brute_window(readings: list[tuple[float, str, float]], now: float, length: float) -> dict[str, float]:
+    sums: dict[str, list[float]] = {}
+    for t, scanner, rssi in readings:
+        if now - length <= t <= now:
+            sums.setdefault(scanner, []).append(rssi)
+    return {s: sum(v) / len(v) for s, v in sums.items()}
+
+
+def test_the_window_is_the_same_as_a_scan_of_every_reading() -> None:
+    rng = random.Random(7)
+    tracker = engine.RoomTracker(list(PROFILE), DOORS)
+    seen: list[tuple[float, str, float]] = []
+    for step in range(200):
+        now = float(step)
+        for s in ("a", "b", "c"):
+            for _ in range(rng.randint(0, 6)):
+                t = now - rng.random() * 1.5  # some arrive late, out of order
+                r = rng.uniform(-95, -50)
+                tracker.add(t, s, r)
+                seen.append((t, s, r))
+        for length in (engine.WINDOW, engine.QUIET_WINDOW):
+            got, want = tracker.window(now, length), brute_window(seen, now, length)
+            assert got.keys() == want.keys()
+            assert all(abs(got[k] - want[k]) < 1e-9 for k in want)
+
+
+def test_a_window_reads_only_its_own_slice_and_old_readings_go() -> None:
+    tracker = engine.RoomTracker(list(PROFILE), DOORS)
+    for t in range(3000):  # a busy scanner: ten readings a second for five minutes
+        for i in range(10):
+            tracker.add(t + i / 10, "s", -60.0)
+    tracker.window(3000.0)
+    times, _values = tracker._series["s"]
+    assert len(times) <= int(engine.KEEP) * 10 + 10  # the last thirty seconds only
+    reads: list[int] = []
+
+    class Spy(list):
+        def __getitem__(self, key):
+            out = super().__getitem__(key)
+            if isinstance(key, slice):
+                reads.append(len(out))
+            return out
+
+    tracker._series["s"] = (Spy(times), Spy(tracker._series["s"][1]))
+    tracker.window(3000.0)
+    assert sum(reads) <= int(engine.WINDOW) * 10 * 2 + 20  # four seconds of values, not thirty
+
+
+def test_the_samples_are_measured_once_per_estimate(monkeypatch) -> None:
+    fp = calibrated(random.Random(3))
+    calls = 0
+    real = engine.distance
+
+    def counting(a, b, miss=engine.MISS):
+        nonlocal calls
+        calls += 1
+        return real(a, b, miss)
+
+    monkeypatch.setattr(engine, "distance", counting)
+    vector = {"s_kitchen": -61.0, "s_living": -87.0}
+    scores = engine.evidence(fp, vector, {})
+    assert calls == sum(len(v) for v in fp.samples.values())  # once each, not once for nearest and again for scores
+    assert max(scores, key=scores.__getitem__) == "kitchen"
+
+
+def test_the_votes_are_the_same_as_sorting_every_sample() -> None:
+    rng = random.Random(11)
+    fp = calibrated(rng)
+    for _ in range(20):
+        vec = {s: -60 + rng.gauss(0, 15) for s in PROFILE["kitchen"] if rng.random() > 0.2}
+        if not vec:
+            continue
+        ranked = sorted(
+            ((engine.distance(vec, v), room) for room, vs in fp.samples.items() for v in vs), key=lambda x: x[0]
+        )
+        votes: dict[str, float] = {}
+        for d, room in ranked[: engine.K]:
+            votes[room] = votes.get(room, 0.0) + 1.0 / (0.5 + d)
+        total = sum(votes.values())
+        want = {r: v / total for r, v in votes.items()}
+        got = fp.scores(vec)
+        assert got.keys() == want.keys() and all(abs(got[r] - want[r]) < 1e-9 for r in want)
+
+
+def test_learning_and_dropping_change_the_stamp() -> None:
+    fp = engine.Fingerprints()
+    first = fp.stamp()
+    fp.add("kitchen", {"s": -60.0}, keep=2)
+    fp.add("kitchen", {"s": -61.0}, keep=2)
+    fp.add("kitchen", {"s": -62.0}, keep=2)  # at the cap the count stays, the version does not
+    assert len(fp.samples["kitchen"]) == 2 and fp.samples["kitchen"][-1] == {"s": -62.0}
+    assert fp.stamp() not in (first,)
+    before = fp.stamp()
+    fp.drop("kitchen")
+    assert fp.stamp() != before and fp.rooms() == []

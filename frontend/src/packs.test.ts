@@ -164,9 +164,9 @@ test("an item being edited is drawn as a pack item without changing the installe
 
 test("a pack installed from GitHub shows where it came from (#25); an imported one shows nothing", () => {
   const origin = { type: "github" as const, url: "https://github.com/theovencook/home-3d-packs/tree/main/theovencook.living", owner: "theovencook", repo: "home-3d-packs", ref: "main", default_branch: false, folder: "theovencook.living", commit: "a".repeat(40) };
-  assert.deepEqual(packOrigin({ ...pack, source: { origin } }), { label: "theovencook/home-3d-packs/theovencook.living @ main", url: origin.url });
+  assert.deepEqual(packOrigin({ ...pack, source: { origin } }), { label: "theovencook/home-3d-packs/theovencook.living @ main · aaaaaaa", url: origin.url });
   const root = { ...origin, url: "https://github.com/theovencook/one-pack", repo: "one-pack", ref: "trunk", default_branch: true, folder: "" };
-  assert.deepEqual(packOrigin({ ...pack, source: { origin: root } }), { label: "theovencook/one-pack", url: root.url });
+  assert.deepEqual(packOrigin({ ...pack, source: { origin: root } }), { label: "theovencook/one-pack · aaaaaaa", url: root.url });
   assert.equal(packOrigin(pack), null);
   assert.equal(packOrigin({ ...pack, source: { files: {} } }), null);
 });
