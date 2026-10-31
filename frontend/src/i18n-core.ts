@@ -23,9 +23,13 @@ interface Shared {
 const shared: Shared = ((globalThis as { __fp3dLanguages?: Shared }).__fp3dLanguages ??= { extra: new Map(), pending: new Map() });
 const { extra, pending } = shared;
 
-/** Make `table` the page's English texts (i18n.ts, in the main bundle). */
+/**
+ * Make `table` the page's English texts (i18n.ts, in the main bundle). A page can run two copies of the main bundle
+ * (#218: one a cached page still names), and the lazy bundles borrow whatever is registered (#238): the tables are
+ * merged, the later one's texts first, so a key either copy knows never shows as its key.
+ */
 export function registerEnglish(table: Table): void {
-  shared.en = table;
+  shared.en = shared.en && shared.en !== table ? { ...shared.en, ...table } : table;
 }
 
 /** The page's English texts (empty until the main bundle registered them). */
