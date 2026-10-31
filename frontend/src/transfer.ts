@@ -1,7 +1,7 @@
 // Export and import of the building as a JSON file. Without entities, a plan can be shared with others:
 // areas, lights, sensors and every other link to this Home Assistant are removed.
 
-import { normalizeBuilding, type Building } from "./model.ts";
+import { knownPlanVersion, normalizeBuilding, PLAN_VERSION, type Building } from "./model.ts";
 
 export const EXPORT_FORMAT = "home3d";
 
@@ -76,7 +76,8 @@ export function exportFile(b: Building, shareable: boolean): ExportFile {
   return { format: EXPORT_FORMAT, version: 1, exported_at: new Date().toISOString(), building: shareable ? withoutEntities(b) : structuredClone(b) };
 }
 
-/** Reads an export file; throws "not_json" or "not_plan" when it is none. */
+/** Reads an export file; throws "not_json" or "not_plan" when it is none, "plan_too_new" for a plan of a newer Home 3D
+ * (#165). */
 export function parseExport(text: string): Building {
   let data: unknown;
   try {
@@ -86,7 +87,9 @@ export function parseExport(text: string): Building {
   }
   const file = data as Partial<ExportFile>;
   const b = (file?.format === EXPORT_FORMAT ? file.building : data) as Building | undefined;
-  if (!b || b.version !== 1 || !Array.isArray(b.floors) || !b.settings) throw new Error("not_plan");
+  if (!b || !Array.isArray(b.floors) || !b.settings) throw new Error("not_plan");
+  if (Number.isInteger(b.version) && b.version > PLAN_VERSION) throw new Error("plan_too_new");
+  if (!knownPlanVersion(b.version)) throw new Error("not_plan");
   // background images are not part of an export
   for (const f of b.floors) f.background = null;
   return normalizeBuilding(b);

@@ -11,10 +11,18 @@ const at = (home?: string | null): { home_id?: string } => (home ? { home_id: ho
 
 /** `can_edit`: the user is on the editors list (missing from backends before #7). `home_id`: the home loaded (#53;
  * missing from older backends), the one to save back to. */
+/** What is wrong with a home's stored plan (#165): "plan_repaired" (invalid parts left out, named in `dropped`), or one
+ * the backend cannot read, shown read-only: "plan_invalid", "plan_too_new" (of a newer Home 3D). */
+export interface PlanProblem {
+  code: "plan_repaired" | "plan_invalid" | "plan_too_new";
+  message: string;
+  dropped?: string[];
+}
+
 export async function fetchBuilding(
   hass: HomeAssistant,
   home?: string | null,
-): Promise<{ building: Building; revision: number; version?: string; build?: string; can_edit?: boolean; home_id?: string; home_name?: string }> {
+): Promise<{ building: Building; revision: number; version?: string; build?: string; can_edit?: boolean; home_id?: string; home_name?: string; problem?: PlanProblem }> {
   return hass.callWS({ type: "home_3d/building/get", ...at(home) });
 }
 

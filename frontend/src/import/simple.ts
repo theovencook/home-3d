@@ -4,7 +4,7 @@
 // repaired or left out, with a warning for each.
 
 import type { Building, FurnitureType, SillBoard, Vec2 } from "../model.ts";
-import { FURNITURE_SIZE, FURNITURE_TYPES, SILL_BOARDS, normalizeBuilding, uid } from "../model.ts";
+import { FURNITURE_SIZE, FURNITURE_TYPES, SILL_BOARDS, knownPlanVersion, normalizeBuilding, PLAN_VERSION, uid } from "../model.ts";
 import type { RawFloor, RawPlan, Warning } from "./builder.ts";
 import { cleanPolygon } from "./geom.ts";
 import { furnitureType } from "./furniture-map.ts";
@@ -157,7 +157,8 @@ export function repairPlan(input: Building): { building: Building; warnings: War
     floor.ha_floor = f.ha_floor ?? null;
     return floor;
   });
-  b.version = 1;
+  // the version it came with (#165): the backend migrates an older one; one without is made in the current format
+  b.version = knownPlanVersion(input.version) ? input.version : PLAN_VERSION;
   if (!b.floors.length) throw new Error("not_plan");
   return { building: normalizeBuilding(b), warnings };
 }

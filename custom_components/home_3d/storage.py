@@ -28,6 +28,7 @@ from .const import (
     FIRST_HOME_ID,
     HISTORY_INTERVAL,
     HISTORY_MAX,
+    PLAN_VERSION,
     SIGNAL_BUILDING_UPDATED,
     SIGNAL_HOMES_UPDATED,
     STORAGE_KEY_BUILDING,
@@ -39,6 +40,7 @@ from .const import (
     STORAGE_VERSION,
 )
 from .custom_items import CustomItems
+from .migrations import PlanTooNew, migrate_plan
 from .moves import Moves, load_moves, migrate_bases, migrate_building, moved_into
 from .packs import library_pack, load_bundled, with_bundled
 from .racks import RackError, new_rack_problems
@@ -48,22 +50,139 @@ from .schema import BUILDING_SCHEMA, empty_building, image_ids
 _LOGGER = logging.getLogger(__name__)
 
 
-def complete(building: dict[str, Any]) -> dict[str, Any]:
-    """Fill fields added in later versions with their defaults (keeps the building when it is invalid)."""
+# a stored plan that does not validate is repaired by leaving out at most this many invalid parts (#165)
+_REPAIR_STEPS = 100
+# what a plan problem (#165) means: one Home 3D cannot read is shown but never written over
+PLAN_TOO_NEW = "plan_too_new"
+PLAN_INVALID = "plan_invalid"
+PLAN_REPAIRED = "plan_repaired"
+_READ_ONLY = (PLAN_TOO_NEW, PLAN_INVALID)
+
+
+class PlanReadOnly(Exception):
+    """A change to a home whose stored plan this Home 3D cannot read (#165): too new, or invalid beyond repair."""
+
+
+def check_plan(building: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """A stored plan as a home keeps it (#165): brought to the current version, checked and completed. The problem
+    with it, else None: "plan_repaired" (invalid parts left out, named in `dropped`), "plan_invalid" (beyond repair:
+    the plan comes back as it was) or "plan_too_new" (of a newer Home 3D: as it was)."""
     try:
-        return BUILDING_SCHEMA(building)
+        migrated = migrate_plan(building)
+    except PlanTooNew as err:
+        return building, {"code": PLAN_TOO_NEW, "message": f"The stored plan cannot be opened: {err.msg}"}
     except vol.Invalid as err:
-        _LOGGER.warning("Stored building does not validate (%s); loading it unchanged", err)
-        return building
+        return building, _invalid(err)
+    try:
+        return BUILDING_SCHEMA(migrated), None
+    except vol.Invalid as err:
+        first: vol.Invalid = err
+    # what is left out is marked first and taken out for each check, so every path named is one of the plan as stored
+    plan = copy.deepcopy(migrated)
+    dropped: list[str] = []
+    error = first
+    for _ in range(_REPAIR_STEPS):
+        where = _drop_invalid(plan, error)
+        if where is None:
+            break
+        dropped = [d for d in dropped if not d.startswith(f"{where}.")] + [where]
+        try:
+            repaired = BUILDING_SCHEMA(_without_dropped(plan))
+        except vol.Invalid as again:
+            error = again
+            continue
+        listed = ", ".join(dropped)
+        return repaired, {
+            "code": PLAN_REPAIRED,
+            "message": f"Parts of the stored plan were invalid and are left out ({listed}); the plan as it was is "
+            "kept as a restore point",
+            "dropped": dropped,
+        }
+    return building, _invalid(first)
+
+
+# a part check_plan leaves out (#165)
+_DROPPED = object()
+
+
+def _without_dropped(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _without_dropped(v) for k, v in value.items() if v is not _DROPPED}
+    if isinstance(value, list):
+        return [_without_dropped(v) for v in value if v is not _DROPPED]
+    return value
+
+
+def _drop_invalid(plan: dict[str, Any], err: vol.Invalid) -> str | None:
+    """Mark the part of a plan an error names as left out (#165): an invalid field (its default applies, unless it is
+    a required one or holds a list or an object), else the innermost list entry holding the error (never a whole
+    floor). The path of what is left out; None when nothing can be."""
+    try:
+        path = _stored_path(plan, list(err.path))
+        parent = _at(plan, path[:-1])
+        key = path[-1] if path else None
+        if (
+            isinstance(key, str)
+            and isinstance(parent, dict)
+            and key in parent
+            and not isinstance(parent[key], (dict, list))
+            and parent[key] is not _DROPPED
+            and "required key" not in err.msg
+            and path[:1] != ["version"]
+        ):
+            parent[key] = _DROPPED
+            return _dotted(path)
+        for depth in range(len(path) - 1, 0, -1):
+            index = path[depth]
+            if isinstance(index, int) and path[:depth] != ["floors"]:
+                _at(plan, path[:depth])[index] = _DROPPED
+                return _dotted(path[: depth + 1])
+    except (IndexError, KeyError, TypeError):
+        return None
+    return None
+
+
+def _stored_path(plan: Any, path: list[Any]) -> list[Any]:
+    """An error's path (in the plan without the parts left out) as a path in `plan`."""
+    stored: list[Any] = []
+    for key in path:
+        if isinstance(plan, list) and isinstance(key, int):
+            key = [i for i, v in enumerate(plan) if v is not _DROPPED][key]
+        stored.append(key)
+        if plan is _DROPPED:
+            raise KeyError(key)
+        plan = plan[key]
+    return stored
+
+
+def _at(plan: Any, path: list[Any]) -> Any:
+    for key in path:
+        plan = plan[key]
+    return plan
+
+
+def _dotted(path: list[Any]) -> str:
+    return ".".join(str(key) for key in path)
+
+
+def _migration_changes(plan: dict[str, Any]) -> bool:
+    """Whether bringing a (readable) plan to the current version changes more than its version number."""
+    return bool(migrate_plan(plan) != {**plan, "version": PLAN_VERSION})
+
+
+def _invalid(err: vol.Invalid) -> dict[str, Any]:
+    return {
+        "code": PLAN_INVALID,
+        "message": f"The stored plan is invalid ({err}); it is shown read-only: restore a restore point or a backup",
+    }
 
 
 class _BuildingStore(Store):
     """Building store with migrations between minor versions."""
 
     async def _async_migrate_func(self, old_major_version: int, old_minor_version: int, old_data: dict) -> dict:
-        # 1 -> 2: newer optional fields (openings, furniture, energy, presence) get their defaults
-        if old_minor_version < 2 and old_data.get("building"):
-            old_data = {**old_data, "building": complete(old_data["building"])}
+        # 1 -> 2 filled in the defaults of newer optional fields; Home.async_load now completes and migrates every
+        # plan it loads (#165, the plan's own version), so the data passes as it is
         return old_data
 
 
@@ -107,11 +226,15 @@ def _home_keys(home_id: str) -> tuple[str, str, str]:
 
 
 def _summary(building: dict[str, Any]) -> dict[str, int]:
-    floors = building.get("floors", [])
+    # also of a plan that does not validate (#165): what is no list counts as none
+    def count(value: Any) -> int:
+        return len(value) if isinstance(value, list) else 0
+
+    floors = [f for f in building.get("floors") or [] if isinstance(f, dict)] if isinstance(building, dict) else []
     return {
         "floors": len(floors),
-        "rooms": sum(len(f.get("rooms", [])) for f in floors),
-        "furniture": sum(len(f.get("furniture", [])) for f in floors),
+        "rooms": sum(count(f.get("rooms")) for f in floors),
+        "furniture": sum(count(f.get("furniture")) for f in floors),
     }
 
 
@@ -149,28 +272,48 @@ class Home:
         self._lock = asyncio.Lock()
         self._images: dict[str, str] = {}
         self._history: list[dict[str, Any]] = []
+        # what is wrong with the stored plan (#165, see check_plan): None when nothing is
+        self.problem: dict[str, Any] | None = None
+
+    @property
+    def read_only(self) -> bool:
+        """Whether the stored plan is one this Home 3D cannot read (#165): it is shown, never written over; only a
+        restore (a restore point, a backup) replaces it."""
+        return self.problem is not None and self.problem["code"] in _READ_ONLY
 
     def info(self) -> dict[str, Any]:
         """The home as the homes list shows it."""
         return {"id": self.id, "name": self.name, "revision": self.revision, **_summary(self.building)}
 
     async def async_load(self) -> None:
-        """Load the stores and drop the images neither the plan nor a recent restore point uses (#154)."""
-        stored = await self._building_store.async_load()
-        if stored:
-            self.building = complete(stored.get("building") or empty_building())
-            self.revision = int(stored.get("revision", 0))
-            self._content_revision = self.revision
-            # items that moved to another pack take their new ids (#110), and a plan saved before #2 (or placed
-            # while a client did not send recipes) picks up the recipes of its pack items from the installed packs;
-            # both are written back once
-            moved = migrate_building(self.building, self._moves())
-            building = with_recipes(moved, moved.get("recipes"), self._packs())
-            if moved is not self.building or building.get("recipes") != self.building.get("recipes"):
-                self.building = building
-                await self._save_building()
+        """Load the stores and drop the images neither the plan nor a recent restore point uses (#154).
+
+        The plan is brought to the current version and checked (#165, check_plan). A migrated or repaired plan is
+        written back once, the plan as stored kept as a restore point first; one that cannot be read is kept as it is
+        and the home is read-only."""
         history = await self._history_store.async_load()
         self._history = list((history or {}).get("snapshots", []))
+        stored = await self._building_store.async_load()
+        if stored:
+            original = stored.get("building") or empty_building()
+            self.revision = int(stored.get("revision", 0))
+            self._content_revision = self.revision
+            self.building, self.problem = check_plan(original)
+            if self.problem is not None:
+                _LOGGER.warning("Home %s: %s", self.id, self.problem["message"])
+            if not self.read_only:
+                changed = self.problem is not None or original.get("version") != PLAN_VERSION
+                if self.problem is not None or (changed and _migration_changes(original)):
+                    # nothing the migration or the repair leaves out is lost: the plan as stored stays a restore point
+                    await self._async_snapshot(original)
+                # items that moved to another pack take their new ids (#110), and a plan saved before #2 (or placed
+                # while a client did not send recipes) picks up the recipes of its pack items from the installed
+                # packs; all of it is written back once
+                moved = migrate_building(self.building, self._moves())
+                building = with_recipes(moved, moved.get("recipes"), self._packs())
+                if changed or moved is not self.building or building.get("recipes") != self.building.get("recipes"):
+                    self.building = building
+                    await self._save_building()
         images = await self._image_store.async_load()
         self._images = dict((images or {}).get("images", {}))
         used = self._images_in_use()
@@ -187,8 +330,16 @@ class Home:
             self._images = dict(images)
             await self._save_images()
         if building is not None:
-            building = migrate_building(building, self._moves())
-            self.building = with_recipes(building, building.get("recipes"), self._packs())
+            # a plan given here is checked already (a backup, the sample, a copy of a home); one of an older version
+            # is brought up to date (#165), one this Home 3D cannot read stays as it is and the home read-only
+            try:
+                building = migrate_plan(building)
+            except vol.Invalid:
+                building, self.problem = check_plan(building)
+            if not self.read_only:
+                building = migrate_building(building, self._moves())
+                building = with_recipes(building, building.get("recipes"), self._packs())
+            self.building = building
             self.revision = 1
             self._content_revision = 1
         await self._save_building()
@@ -212,6 +363,8 @@ class Home:
         client) the save replaces the plan as before. `guard` sees the current plan first and may raise to refuse.
         """
         async with self._lock:
+            if self.read_only and self.problem is not None:
+                raise PlanReadOnly(self.problem["message"])
             if base_revision is not None and not self._content_revision <= base_revision <= self.revision:
                 raise RevisionConflict(base_revision, self.revision)
             if guard is not None:
@@ -223,6 +376,9 @@ class Home:
         current plan once no other save runs and returns the new one (None: nothing to change), so a save that
         landed meanwhile is never overwritten. The revision after it."""
         async with self._lock:
+            # a plan this Home 3D cannot read is never written over (#165)
+            if self.read_only:
+                return self.revision
             building = change(self.building)
             if building is None:
                 return self.revision
@@ -247,7 +403,9 @@ class Home:
         recipe_bases = migrate_bases(recipe_bases, sent, building, moves)
         # every pack item type in the plan keeps its recipe copy (#2): the one sent, else the one kept so far, else
         # a copy of the installed item; one the client sends as it started from it gives way to a newer kept one (#45)
-        building = with_recipes(building, self.building.get("recipes"), self._packs(), recipe_bases)
+        # (a plan this Home 3D cannot read, #165, has none to keep)
+        kept = None if self.read_only else self.building.get("recipes")
+        building = with_recipes(building, kept, self._packs(), recipe_bases)
         # an editor's save that puts rack gear where it does not fit is refused (#113); what broke the rules before
         # (a pack update) stays
         if check_racks and (problems := new_rack_problems(self.building, building)):
@@ -260,6 +418,8 @@ class Home:
         revision = self.revision
         if content:
             self._content_revision = revision
+        # a plan replaced by a valid one has no problem any more (#165)
+        self.problem = None
         await self._save_building()
         async_dispatcher_send(self.hass, SIGNAL_BUILDING_UPDATED, self.id, revision)
         return revision
@@ -284,13 +444,15 @@ class Home:
         async with self._lock:
             await self._async_snapshot()
 
-    async def _async_snapshot(self) -> None:
+    async def _async_snapshot(self, building: dict[str, Any] | None = None) -> None:
+        """Keep the current building (or `building`, the plan as stored before a migration, #165) as a restore
+        point."""
         self._history.append(
             {
                 "id": uuid.uuid4().hex[:12],
                 "revision": self.revision,
                 "saved_at": time.time(),
-                "building": self.building,
+                "building": self.building if building is None else building,
             }
         )
         self._history = self._history[-HISTORY_MAX:]
@@ -299,11 +461,13 @@ class Home:
 
     def _images_in_use(self) -> set[str] | None:
         """The images the plan uses and those of the restore points made in the last `picture_days` days (#154); a
-        picture only an older restore point names is removed. None (remove nothing) when a restore point cannot be
-        read."""
-        used = image_ids(self.building)
+        picture only an older restore point names is removed. None (remove nothing) when the plan (#165) or a restore
+        point cannot be read."""
+        if self.read_only:
+            return None
         since = time.time() - self._picture_days() * 86400
         try:
+            used = image_ids(self.building)
             for point in self._history:
                 if point["saved_at"] >= since:
                     used |= image_ids(point["building"])

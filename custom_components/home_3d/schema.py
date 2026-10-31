@@ -11,7 +11,8 @@ import re
 
 import voluptuous as vol
 
-from .const import TIME_PATTERN
+from .const import PLAN_VERSION, TIME_PATTERN
+from .migrations import migrate_plan
 from .packs import COLOUR_ROLES
 from .racks import RACK_CONTENTS_SCHEMA
 from .recipes import recipes_validator
@@ -1168,9 +1169,10 @@ PRESENCE_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
-BUILDING_SCHEMA = vol.Schema(
+# the fields of a plan of the current version (#165)
+BUILDING_FIELDS = vol.Schema(
     {
-        vol.Required("version"): 1,
+        vol.Required("version"): PLAN_VERSION,
         vol.Required("floors"): vol.All([FLOOR_SCHEMA], vol.Length(max=MAX_FLOORS)),
         vol.Required("settings"): SETTINGS_SCHEMA,
         vol.Optional("energy", default=lambda: dict(ENERGY_DEFAULTS)): ENERGY_SCHEMA,
@@ -1180,6 +1182,10 @@ BUILDING_SCHEMA = vol.Schema(
     },
     extra=vol.ALLOW_EXTRA,
 )
+
+# a plan as the backend takes it in (#165): brought to the current version first (migrations.py), then checked and
+# completed with the defaults of the fields added since; a plan of a newer version is refused (PlanTooNew)
+BUILDING_SCHEMA = vol.All(migrate_plan, BUILDING_FIELDS)
 
 IMAGE_DATA = vol.All(
     str,
@@ -1191,7 +1197,7 @@ IMAGE_DATA = vol.All(
 def empty_building() -> dict:
     """Return a building without floors."""
     return {
-        "version": 1,
+        "version": PLAN_VERSION,
         "floors": [],
         "settings": {"wall_exterior": 0.24, "wall_interior": 0.12, "grid": 0.05},
         "energy": dict(ENERGY_DEFAULTS),

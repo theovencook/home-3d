@@ -227,9 +227,10 @@ async def test_placement_mount_defaults_to_none(hass: HomeAssistant, hass_ws_cli
     await _setup(hass)
     client = await hass_ws_client(hass)
     building = copy.deepcopy(BUILDING)
+    # lights kept as device pins on purpose (others become lamps, #165)
     building["floors"][0]["placements"] = [
-        {"entity_id": "light.a", "x": 1, "z": 1, "y": None},
-        {"entity_id": "light.b", "x": 2, "z": 1, "y": None, "mount": "floor"},
+        {"entity_id": "light.a", "x": 1, "z": 1, "y": None, "pin": True},
+        {"entity_id": "light.b", "x": 2, "z": 1, "y": None, "mount": "floor", "pin": True},
     ]
     await client.send_json_auto_id({"type": "home_3d/building/save", "building": building})
     assert (await client.receive_json())["success"]

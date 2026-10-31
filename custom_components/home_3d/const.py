@@ -7,6 +7,8 @@ DOMAIN = "home_3d"
 STORAGE_VERSION = 1
 # minor versions of the building store; each step has a migration in storage.py
 STORAGE_MINOR_VERSION = 2
+# the format of a plan (#165): its `version`; an older plan is brought up to this one by the steps in migrations.py
+PLAN_VERSION = 2
 STORAGE_KEY_BUILDING = f"{DOMAIN}.building"
 STORAGE_KEY_IMAGES = f"{DOMAIN}.images"
 STORAGE_KEY_HISTORY = f"{DOMAIN}.history"

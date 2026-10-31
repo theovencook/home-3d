@@ -42,6 +42,17 @@ test("an older backend without the editors list lets admins edit, as before", as
   assert.equal((await loaded(false, {})).canEdit, false);
 });
 
+test("a stored plan the backend cannot read comes with its problem and read-only (#165)", async () => {
+  const problem = { code: "plan_too_new", message: "the plan is of version 3" };
+  const c = await loaded(true, { can_edit: false, problem });
+  assert.deepEqual(c.planProblem, problem);
+  assert.equal(c.canEdit, false);
+  // an older backend says nothing about it; a version-1 plan from it keeps its version (the backend migrates it)
+  const old = await loaded(true, {});
+  assert.equal(old.planProblem, null);
+  assert.equal(old.building?.version, 1);
+});
+
 test("nobody edits before the building is loaded", () => {
   const host = { addController() {}, removeController() {}, requestUpdate() {}, updateComplete: Promise.resolve(true) };
   assert.equal(new BuildingController(host).canEdit, false);

@@ -1,7 +1,7 @@
 // Loads the building, follows changes made elsewhere and saves edits (debounced).
 
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import { fetchBuilding, fetchVersion, listPacks, saveBuilding, subscribeBuilding, takeSnapshot } from "./api.ts";
+import { fetchBuilding, fetchVersion, listPacks, saveBuilding, subscribeBuilding, takeSnapshot, type PlanProblem } from "./api.ts";
 import { normalizeBuilding, type Building } from "./model.ts";
 import { recipeHashes, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -62,6 +62,8 @@ function writeDraft(draft: Draft | null): void {
 export class BuildingController implements ReactiveController {
   building: Building | null = null;
   error: string | null = null;
+  /** What is wrong with the loaded home's stored plan (#165); a plan the backend cannot read comes with can_edit off. */
+  planProblem: PlanProblem | null = null;
   saveState: SaveState = "idle";
   /** Why the last save failed (message from the backend). */
   saveError: string | null = null;
@@ -577,6 +579,7 @@ export class BuildingController implements ReactiveController {
     this.backendVersion = res.version ?? null;
     this.backendBuild = res.build ?? null;
     this.canEdit = res.can_edit ?? !!this.hass?.user?.is_admin;
+    this.planProblem = res.problem ?? null;
     if (!plan) return;
     this.building = normalizeBuilding(res.building);
     setPlanRecipes(this.building.recipes);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { emptyBuilding, newFloor, type Building } from "./model.ts";
+import { emptyBuilding, newFloor, PLAN_VERSION, type Building } from "./model.ts";
 import { exportFile, isEntityLink, parseExport } from "./transfer.ts";
 
 function building() {
@@ -103,6 +103,18 @@ function strings(node: unknown, out: string[] = []): string[] {
   else if (node && typeof node === "object") for (const v of Object.values(node)) strings(v, out);
   return out;
 }
+
+test("import reads every plan version this frontend knows and refuses a newer one (#165)", () => {
+  const b = building();
+  assert.equal(b.version, PLAN_VERSION, "a new plan is of the current version");
+  // an old export (version 1) is read, its version kept: the backend migrates it on save
+  const old = parseExport(JSON.stringify({ ...b, version: 1 }));
+  assert.equal(old.version, 1);
+  assert.equal(parseExport(JSON.stringify(exportFile(b, false))).version, PLAN_VERSION);
+  assert.throws(() => parseExport(JSON.stringify({ ...b, version: PLAN_VERSION + 1 })), /plan_too_new/);
+  assert.throws(() => parseExport(JSON.stringify(exportFile({ ...b, version: PLAN_VERSION + 1 }, false))), /plan_too_new/);
+  for (const version of [0, "2", null, 1.5]) assert.throws(() => parseExport(JSON.stringify({ ...b, version })), /not_plan/);
+});
 
 test("a shareable export keeps no entity id, area or floor link anywhere", () => {
   const full = linked();

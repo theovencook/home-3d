@@ -1,6 +1,6 @@
 // Which program a file comes from, and reading it: by its name and its first bytes.
 
-import type { Building } from "../model.ts";
+import { knownPlanVersion, PLAN_VERSION, type Building } from "../model.ts";
 import { EXPORT_FORMAT } from "../transfer.ts";
 import type { RawPlan, Warning } from "./builder.ts";
 import { readDxf, type DxfLayer, type LayerRole } from "./dxf.ts";
@@ -58,11 +58,14 @@ export async function readFile(name: string, bytes: Uint8Array, options: ReadOpt
     throw new Error(e === "json" ? "not_json" : "unknown_format");
   }
   const d = data as { format?: string; building?: Building; version?: number; floors?: unknown; settings?: unknown };
+  // a plan of a newer Home 3D (#165) is not read as an older one
+  const version = (d?.format === EXPORT_FORMAT ? d.building?.version : d?.version) ?? 0;
+  if (Number.isInteger(version) && version > PLAN_VERSION) throw new Error("plan_too_new");
   if (d?.format === EXPORT_FORMAT && d.building) {
     const r = repairPlan(d.building);
     return { kind: "home3d", raw: null, building: r.building, warnings: r.warnings };
   }
-  if (d?.version === 1 && Array.isArray(d.floors) && d.settings) {
+  if (knownPlanVersion(d?.version) && Array.isArray(d.floors) && d.settings) {
     const r = repairPlan(d as unknown as Building);
     return { kind: "home3d", raw: null, building: r.building, warnings: r.warnings };
   }
