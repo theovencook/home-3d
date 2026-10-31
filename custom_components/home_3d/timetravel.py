@@ -29,8 +29,6 @@ from .timetravel_rows import (
     car_state,
     domain_of,
     entity_rows,
-    has_feature,
-    has_time_travel,
     location_like,
     oldest_data,
     read_row,
@@ -196,9 +194,6 @@ async def ws_timetravel_history(
     if data is None:
         connection.send_error(msg["id"], "not_loaded", "Home 3D is not set up")
         return
-    if not has_time_travel(data.packs):
-        connection.send_error(msg["id"], "not_unlocked", "Time travel is not available")
-        return
     start, end = msg["start_time"], msg["end_time"]
     if not 0 < end - start <= MAX_SPAN:
         connection.send_error(msg["id"], "invalid_range", f"The window must be longer than 0 and at most {MAX_SPAN} s")
@@ -211,7 +206,7 @@ async def ws_timetravel_history(
     instance = get_instance(hass)
     # only the trackers of the plan's cars (Auto Pro), never a person's own, even when linked as a car's
     private = private_trackers(hass)
-    configured = car_trackers(hass, data.building) if has_feature(data.packs, "auto_pro") else set()
+    configured = car_trackers(hass, data.building)
     cars = [e for e in msg["car_trackers"] if e in configured and e not in private]
     # places and the devices people carry stay out, whatever the frontend asks for
     hidden = private_entities(hass, [*msg["entity_ids"], *msg["statistic_ids"]])

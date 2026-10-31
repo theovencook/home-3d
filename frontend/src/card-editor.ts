@@ -284,7 +284,7 @@ export class Floorplan3dCardEditor extends LitElement {
       ${this.toggle("scenes", "card_scenes", "card_scenes_hint")}
       ${this.toggle("motion_trail", "card_motion_trail", "card_motion_trail_hint")} ${this.toggle("camera_wall", "card_camera_wall", "card_camera_wall_hint")}
       ${this.toggle("time_travel", "card_time_travel", "card_time_travel_hint")}
-      ${!UNRELEASED.includes("household") || labOn() ? this.toggle("household_card", "card_household", "card_household_hint") : nothing}
+      ${this.toggle("household_card", "card_household", "card_household_hint")}
       ${this.toggle("rack_cards", "card_rack_cards", "card_rack_cards_hint")}
       ${this.toggle("weather", "card_weather", "card_weather_hint")}
       ${v.weather !== false

@@ -6,7 +6,7 @@ import { areaEntities, coverTiltButtons, entityName, groupByDevice, isUnavailabl
 import { askConfirm } from "../ask.ts";
 import "./ask-dialog.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
-import { hasFeature, released } from "../features.ts";
+import { released } from "../features.ts";
 import { locatedPersons, personsShown } from "../presence.ts";
 import { iconPath } from "../icons.ts";
 import { openMoreInfo, stateText } from "../markers.ts";
@@ -529,7 +529,7 @@ export class Fp3dRoomPanel extends LitElement {
             title=${this.t("through_camera")}
             @click=${() => this.dispatchEvent(new CustomEvent("camera-look", { detail: { entity: st.entity_id }, bubbles: true, composed: true }))}
           >
-            ${hasFeature("camera_cockpit") ? "" : "🔒 "}${this.t("through_camera")}
+            ${this.t("through_camera")}
           </button>`
         : nothing}
     </div>`;

@@ -24,7 +24,7 @@ import { furnitureName } from "./furniture-names.ts";
 import { confirmEntities, defaultHeight, entityName, kindOf } from "./devices.ts";
 import { canLift, zonesOf, type LampMount } from "./model.ts";
 import { mountBase } from "./packs.ts";
-import { hasFeature, labOn } from "./features.ts";
+import { labOn } from "./features.ts";
 import { mountLocateLab } from "./locate-lab.ts";
 import { directorOnHere } from "./director.ts";
 import { loadVoice, micProbeDone, screenName, voiceOnHere } from "./load-voice.ts";
@@ -32,7 +32,6 @@ import type { ClockPos } from "./card-config.ts";
 import { TimeTravel } from "./load-timetravel.ts";
 import { IdleClock, tabletIdleSeconds, tabletMode } from "./kiosk.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
-import type { Feature } from "./features.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 import { UndoHistory } from "./undo-history.ts";
 import { showsDemo, withDemo } from "./demo.ts";
@@ -657,7 +656,7 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   private view3d() {
-    return this.renderRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; proHint(f: Feature): void; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; openSettings(): void }) | null;
+    return this.renderRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; openSettings(): void }) | null;
   }
 
   /** A follow toggle in the view settings (#87): Home Assistant's theme or the sun; it names the look it shows now. */
@@ -687,10 +686,6 @@ export class Floorplan3dPanel extends LitElement {
     const view = this.view3d();
     const b = this.data.building;
     if (!view || !b || !this.hass) return;
-    if (!hasFeature("time_travel")) {
-      view.proHint("time_travel");
-      return;
-    }
     this._furnish = false;
     this._cameraWall = false;
     this.tt.start({ live: this.hass, building: b, spec: view.historyEntities(), quality: this._quality, at, t: (k, vars) => translate(this.hass, k as I18nKey, vars) });
@@ -708,7 +703,7 @@ export class Floorplan3dPanel extends LitElement {
     if (this.ttLinked || !this.data.building || this._mode !== "view" || !this.view3d()) return;
     this.ttLinked = true;
     const at = new URLSearchParams(location.search).get("tt");
-    if (at !== null && hasFeature("time_travel")) this.toggleTimeTravel(at);
+    if (at !== null) this.toggleTimeTravel(at);
   }
 
   private back(): void {
@@ -1377,7 +1372,7 @@ export class Floorplan3dPanel extends LitElement {
               prefs.set("trail", this._trail ? "1" : "0");
             }}
           >
-            ${hasFeature("camera_cockpit") ? "" : "🔒 "}${this.t("trail_short")}
+            ${this.t("trail_short")}
           </button>
           <button
             class="fp3d-chip"
@@ -1385,7 +1380,7 @@ export class Floorplan3dPanel extends LitElement {
             title=${this.t("camera_wall_hint")}
             @click=${() => (this._cameraWall = !this._cameraWall)}
           >
-            ${hasFeature("camera_cockpit") ? "" : "🔒 "}${this.t("cameras_short")}
+            ${this.t("cameras_short")}
           </button>
           <button
             class="fp3d-chip"
@@ -1396,14 +1391,14 @@ export class Floorplan3dPanel extends LitElement {
               prefs.set("weather", this._weather ? "1" : "0");
             }}
           >
-            ${hasFeature("weather") ? "" : "🔒 "}${this.t("weather_short")}
+            ${this.t("weather_short")}
           </button>
           ${this._tablet ? nothing : this.renderAllSettings("look", "walls")}
                   </div>`
               : nothing}
           </div>
           ${this._tablet ? nothing : html`<button class="fp3d-chip fp3d-tt-chip" aria-pressed=${tt} title=${this.t("tt_hint")} aria-label=${this.t("tt_chip")} @click=${() => this.toggleTimeTravel()}>
-            ${hasFeature("time_travel") ? "⏪" : "🔒"} <span class="fp3d-tt-label">${this.t("tt_chip")}</span>
+            ⏪ <span class="fp3d-tt-label">${this.t("tt_chip")}</span>
           </button>`}
           ${this._roomId || (this._floorId && b.floors.length > 1)
             ? html`<button class="fp3d-chip" @click=${() => this.back()}>${this.t("back")}</button>`

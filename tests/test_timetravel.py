@@ -24,8 +24,6 @@ from custom_components.home_3d.timetravel_rows import (
     columnar,
     dedupe,
     entity_rows,
-    has_feature,
-    has_time_travel,
     location_like,
     oldest_data,
     quantise,
@@ -156,13 +154,9 @@ def test_a_car_tracker_says_home_or_away_only() -> None:
     assert reduce_attributes("vacuum", {"current_room": "Kitchen", "battery_level": 80}) == {"current_room": "Kitchen"}
 
 
-def test_time_travel_is_built_in() -> None:
-    assert has_time_travel([])
-    assert has_time_travel([{"features": ["energy_pro"]}, {"features": None}, {}])
+def test_old_packs_may_still_list_features() -> None:
+    # the field is ignored (no feature gate any more), but older pack files that list it keep validating
     assert "time_travel" in packs.KNOWN_FEATURES
-    # the pool's logic is not part of this integration: it stays off unless a pack lists it
-    assert not has_feature([], "pool")
-    assert has_feature([{"features": ["pool"]}], "pool")
 
 
 def test_places_stay_private() -> None:
@@ -196,7 +190,6 @@ def test_car_trackers_come_from_the_parking_spots() -> None:
     assert trackers == {"device_tracker.spot", "device_tracker.named"}
     assert seeds == {"binary_sensor.spot2", "sensor.ev_soc", "sensor.spot4"}
     assert car_refs({}) == (set(), set())
-    assert has_feature([], "auto_pro")
 
 
 async def _setup(hass: HomeAssistant) -> None:

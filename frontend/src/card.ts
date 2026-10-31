@@ -16,7 +16,6 @@ import { lightChrome } from "./scheme.ts";
 import { shownAccent, shownLook, textOn } from "./ha-theme.ts";
 import { loadCardEditor } from "./load-card-editor.ts";
 import type { WallMode } from "./viewer/viewer3d.ts";
-import { hasFeature, type Feature } from "./features.ts";
 import { TimeTravel } from "./load-timetravel.ts";
 import { withDemo } from "./demo.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
@@ -126,7 +125,7 @@ export class Floorplan3dCard extends LitElement {
   }
 
   private view3d() {
-    return this.shadowRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; proHint(f: Feature): void; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void }) | null;
+    return this.shadowRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void }) | null;
   }
 
   /** Time travel on or off; without the Pro add-on its hint shows. */
@@ -138,10 +137,6 @@ export class Floorplan3dCard extends LitElement {
     const view = this.view3d();
     const b = this.data.building;
     if (!view || !b || !this.hass) return;
-    if (!hasFeature("time_travel")) {
-      view.proHint("time_travel");
-      return;
-    }
     this._cameraWall = false;
     const c = this._config;
     this.tt.start({ live: this.hass, building: b, spec: view.historyEntities(), quality: c?.quality ?? "auto", speed: c?.time_travel_speed ?? null, range: c?.time_travel_range ?? null, t: (k, vars) => translate(this.hass, k as I18nKey, vars) });
@@ -471,7 +466,7 @@ clearTimeout(this.cleanTimer);
               ${canGoBack ? html`<button class="fp3d-chip" @click=${() => this.back()}>${t("back")}</button>` : nothing}
               ${c?.time_travel
                 ? html`<button class="fp3d-chip fp3d-tt-chip" aria-pressed=${tt} title=${t("tt_hint")} @click=${() => this.toggleTimeTravel()}>
-                    ${hasFeature("time_travel") ? "⏪" : "🔒"} ${t("tt_chip")}
+                    ⏪ ${t("tt_chip")}
                   </button>`
                 : nothing}
               ${c?.camera_wall ? html`<button class="fp3d-chip" aria-pressed=${this._cameraWall} title=${t("camera_wall_hint")} @click=${() => (this._cameraWall = !this._cameraWall)}>${t("cameras_short")}</button>` : nothing}

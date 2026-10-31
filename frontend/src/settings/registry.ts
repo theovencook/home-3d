@@ -15,7 +15,7 @@ import { TABLET_IDLE_DEFAULT } from "../kiosk.ts";
 import { fetchPackUpdates, getVoiceSettings, setPackUpdateSettings, setVoiceSentences, type SentenceMode } from "../api.ts";
 import type { PackUpdateSettings, PackUpdateStatus } from "../pack-updates.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
-import { hasFeature, released } from "../features.ts";
+import { released } from "../features.ts";
 import { EFFECT_DEFAULTS } from "../room-effects.ts";
 import { formatImperial, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 
@@ -711,7 +711,7 @@ const FUN: Setting[] = [
     keywords: ["halloween", "ghost", "spooky"],
     control: { kind: "switch" },
     default: true,
-    visible: (env) => hasFeature("fun_halloween") && released("fun_halloween") && easterEggsOn(env.building?.settings),
+    visible: (env) => released("fun_halloween") && easterEggsOn(env.building?.settings),
     read: (env) => env.building?.settings.halloween?.ghost !== false,
     write: (env, v) => withPart(env.building!, "halloween", { ghost: v }),
   } as Setting<boolean>,
@@ -725,7 +725,7 @@ const FUN: Setting[] = [
     keywords: ["cat", "dog", "rabbit", "animals"],
     control: { kind: "switch" },
     default: true,
-    visible: () => hasFeature("fun_pets") && released("fun_pets"),
+    visible: () => released("fun_pets"),
     read: (env) => env.building?.settings.pets?.on !== false,
     write: (env, v) => {
       const next = structuredClone(env.building!);
@@ -744,7 +744,7 @@ const FUN: Setting[] = [
     keywords: ["cat", "dog", "rabbit", "fur", "name"],
     control: { kind: "action", button: "st_pets_edit", action: "extensions" },
     default: [],
-    visible: () => hasFeature("fun_pets") && released("fun_pets"),
+    visible: () => released("fun_pets"),
     read: (env) => env.building?.settings.pets?.list ?? [],
   },
 ];
@@ -881,7 +881,6 @@ const binHour = (id: "bin_from" | "bin_until", label: TextKey, def: number, hint
   keywords: ["bin", "waste", "rubbish", "glow", "pickup"],
   control: { kind: "number", step: 0.5, min: 0, max: 24, unit: "h" },
   default: def,
-  visible: () => hasFeature("household"),
   read: (env) => householdOf(env)[id] ?? def,
   write: (env, v) => withPart(env.building!, "household", { [id]: clamp(v, 0, 24) }),
 });
@@ -899,7 +898,6 @@ const HOUSEHOLD: Setting[] = [
     keywords: ["bin", "tag", "label", "pickup"],
     control: { kind: "switch" },
     default: false,
-    visible: () => hasFeature("household"),
     read: (env) => !!householdOf(env).bin_next_only,
     write: (env, v) => withPart(env.building!, "household", { bin_next_only: v || null }),
   } as Setting<boolean>,
@@ -914,7 +912,6 @@ const HOUSEHOLD: Setting[] = [
     keywords: ["bin", "tag", "days", "before"],
     control: { kind: "number", step: 1, min: 0, max: 60, clearable: true },
     default: null,
-    visible: () => hasFeature("household"),
     read: (env) => householdOf(env).bin_days ?? null,
     write: (env, v) => withPart(env.building!, "household", { bin_days: v === null ? null : clamp(Math.round(v), 0, 60) }),
   } as Setting<number | null>,
@@ -929,7 +926,6 @@ const HOUSEHOLD: Setting[] = [
     keywords: ["bin", "kerb", "street", "calendar"],
     control: { kind: "action", button: "st_open_editor", action: "editor" },
     default: null,
-    visible: () => hasFeature("household"),
     read: () => null,
   },
   {
@@ -1140,7 +1136,6 @@ const ENERGY: Setting[] = [
   embedded("energy.balance", "energy", "meters", "energy_balance", "energy_balance", "energy_balance_hint", ["grid", "solar", "battery", "tariff", "cheap rate", "off-peak", "gas", "water", "meter", "sensor", "import"], "editor", (env) => env.building?.energy ?? null),
   {
     ...embedded("hologram", "energy", "hologram", "hologram", "holo_settings", "holo_settings_hint", ["hologram", "solar", "cards", "energy pro"], "editor", (env) => env.building?.settings.roof.hologram ?? null),
-    visible: () => hasFeature("energy_pro"),
   },
 ];
 
