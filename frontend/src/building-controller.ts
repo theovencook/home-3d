@@ -3,6 +3,7 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { fetchBuilding, fetchVersion, listPacks, saveBuilding, subscribeBuilding, takeSnapshot } from "./api.ts";
 import { normalizeBuilding, type Building } from "./model.ts";
+import { saveAutomaticOpeningLinks } from "./opening-links.ts";
 import { recipeHashes, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
@@ -582,6 +583,12 @@ export class BuildingController implements ReactiveController {
     setPlanRecipes(this.building.recipes);
     this.recipeBases = recipeHashes(this.building.recipes);
     this.revision = res.revision;
+    // one-off (#203): door and window sensors are not matched automatically any more, so the pairs this plan showed
+    // are saved as links; a viewer who cannot edit sees them for this session only, the next editor to load saves them
+    if (this.hass && !this.building.opening_links_saved) {
+      saveAutomaticOpeningLinks(this.hass, this.building);
+      if (this.building.opening_links_saved && this.canEdit) this.edit(this.building);
+    }
   }
 }
 

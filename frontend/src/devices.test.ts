@@ -119,7 +119,7 @@ test("automatic placement works in a tiny room", () => {
   for (const p of out) assert.ok(pointInPolygon([p.x, p.z], tiny.points));
 });
 
-test("doors and windows get blinds and contacts of their room's area, or the ones set by hand", () => {
+test("doors and windows get the blind of their room's area; contact sensors only when linked by hand (#203)", () => {
   const hass = hassWith();
   hass.entities!["binary_sensor.f1"] = { entity_id: "binary_sensor.f1", area_id: "wohnen" };
   hass.entities!["binary_sensor.f2"] = { entity_id: "binary_sensor.f2", area_id: "wohnen" };
@@ -136,11 +136,11 @@ test("doors and windows get blinds and contacts of their room's area, or the one
     openings: [o("w2", "window", 2), o("w1", "window", 0), o("d", "door", 1), o("w3", "window", 3, { cover: "none", contact: "binary_sensor.tuer" })],
   };
   const links = openingEntities(hass, [floor]);
-  // the only blind of the area serves every window without its own choice; sensors go one per window
-  assert.deepEqual(links.get("w1"), { cover: "cover.rollo", contact: "binary_sensor.f1", tilt: null, contact2: null, tilt2: null, position: null, positionInverted: false, tiltAngle: null, tiltMax: null, tiltOffset: null, tiltInvert: false, shut: false, lock: null });
-  assert.deepEqual(links.get("w2"), { cover: "cover.rollo", contact: "binary_sensor.f2", tilt: null, contact2: null, tilt2: null, position: null, positionInverted: false, tiltAngle: null, tiltMax: null, tiltOffset: null, tiltInvert: false, shut: false, lock: null });
+  // the only blind of the area serves every window without its own choice; no sensor is handed out by position
+  assert.deepEqual(links.get("w1"), { cover: "cover.rollo", contact: null, tilt: null, contact2: null, tilt2: null, position: null, positionInverted: false, tiltAngle: null, tiltMax: null, tiltOffset: null, tiltInvert: false, shut: false, lock: null });
+  assert.deepEqual(links.get("w2"), { cover: "cover.rollo", contact: null, tilt: null, contact2: null, tilt2: null, position: null, positionInverted: false, tiltAngle: null, tiltMax: null, tiltOffset: null, tiltInvert: false, shut: false, lock: null });
   assert.deepEqual(links.get("w3"), { cover: null, contact: "binary_sensor.tuer", tilt: null, contact2: null, tilt2: null, position: null, positionInverted: false, tiltAngle: null, tiltMax: null, tiltOffset: null, tiltInvert: false, shut: false, lock: null });
-  assert.deepEqual(links.get("d"), { cover: null, contact: "binary_sensor.tuer", tilt: null, contact2: null, tilt2: null, position: null, positionInverted: false, tiltAngle: null, tiltMax: null, tiltOffset: null, tiltInvert: false, shut: false, lock: null });
+  assert.deepEqual(links.get("d"), { cover: null, contact: null, tilt: null, contact2: null, tilt2: null, position: null, positionInverted: false, tiltAngle: null, tiltMax: null, tiltOffset: null, tiltInvert: false, shut: false, lock: null });
 });
 
 test("a position sensor drives the blind live, as a percentage or a fraction", () => {
@@ -185,11 +185,11 @@ test("garage doors use garage covers and contacts; door leaves follow their cont
   // the garage cover goes to the garage door only; the window keeps the ordinary blind
   assert.equal(links.get("g")!.cover, "cover.tor");
   assert.equal(links.get("w")!.cover, "cover.rollo");
-  assert.equal(links.get("d")!.contact, "binary_sensor.tuer");
+  assert.equal(links.get("d")!.contact, null);
   assert.deepEqual(stateOf(hass, links.get("g")!, "garage"), { open: 0, open2: 0, tilt: 0, tilt2: 0, cover: 0 });
   hass.states["cover.tor"] = { entity_id: "cover.tor", state: "closing", attributes: { device_class: "garage" } };
   assert.equal(stateOf(hass, links.get("g")!, "garage").cover, 0.5);
-  assert.equal(stateOf(hass, links.get("d")!, "door").open, 1);
+  assert.equal(stateOf(hass, { ...links.get("d")!, contact: "binary_sensor.tuer" }, "door").open, 1);
   assert.equal(stateOf(hass, { cover: null, contact: null, tilt: null }, "door").open, 0.5);
 });
 
