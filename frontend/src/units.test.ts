@@ -43,3 +43,15 @@ test("automatic follows Home Assistant's unit system; the plan's setting wins", 
   assert.equal(lengthUnit(us, "metric"), "metric");
   assert.equal(lengthUnit(undefined, null), "metric");
 });
+
+test("the length fields of the floor panel and the mobile rows follow the unit (#170)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const editor = readFileSync(new URL("./components/editor.ts", import.meta.url), "utf8");
+  const panel = readFileSync(new URL("./panel.ts", import.meta.url), "utf8");
+  assert.match(editor, /unitLabel\(this\.t\("floor_shift"\), this\.unit\)/);
+  assert.match(panel, /unitLabel\(label, unit\)/);
+  assert.equal(unitLabel("Shift the floor (m)", "imperial"), "Shift the floor (ft)");
+  assert.equal(unitLabel("Reach m", "imperial"), "Reach ft");
+  // no kerb gate left: the bin form shows its calendar and kerb spot to everyone
+  assert.doesNotMatch(editor, /hasFeature/);
+});

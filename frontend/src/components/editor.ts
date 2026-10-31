@@ -26,7 +26,7 @@ import { holeInRoom } from "../geometry/holes.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
 import { labOn, released } from "../features.ts";
 import { loadLocate } from "../load-locate.ts";
-import { BIN_SHAPES, BIN_SIZE, binColors, binShape, householdCountry, isPackPlant, MAILBOX_SHAPES, MAILBOX_SIZE, mailboxShape, WASTE_KINDS, wasteColors } from "../household.ts";
+import { BIN_SHAPES, BIN_SIZE, binColors, binShape, householdCountry, isPackBin, isPackPlant, MAILBOX_SHAPES, MAILBOX_SIZE, mailboxShape, WASTE_KINDS, wasteColors } from "../household.ts";
 import { cameraMotionSensors, cameraOwnSensors, detectionKind, setCameraSensors, stateText } from "../markers.ts";
 import type { DirectorSettings } from "../director.ts";
 import { deviceSensors, energySummary, flowSegments, gridPoint, powerSensorFor, proposeEnergySensors, type EnergyPrefs, type FlowSegment, proposeMeters } from "../energy.ts";
@@ -1232,7 +1232,7 @@ export class Fp3dEditor extends LitElement {
         <span>${furnitureName(this.hass, f.type)}</span>
         ${num("w", this.t("size_short_w"))} ${num("d", this.t("size_short_d"))} ${num("h", this.t("size_short_h"))}
         ${wallItem
-          ? html`<label class="fp3d-3d-size" title=${this.t("mount_height")}
+          ? html`<label class="fp3d-3d-size" title=${unitLabel(this.t("mount_height"), this.unit)}
               >↕
               <input
                 type=${this.unit === "imperial" ? "text" : "number"}
@@ -1264,17 +1264,17 @@ export class Fp3dEditor extends LitElement {
               ${(["ceiling", "floor", "table", "wall"] as const).map((m) => html`<option value=${m} ?selected=${m === (d.mount ?? "ceiling")}>${this.t(`lamp_${m}`)}</option>`)}
             </select>`
           : nothing}
-        <label class="fp3d-3d-size" title=${this.t("marker_height")}
+        <label class="fp3d-3d-size" title=${unitLabel(this.t("marker_height"), this.unit)}
           >${this.t("size_short_h")}
           <input
-            type="number"
+            type=${this.unit === "imperial" ? "text" : "number"}
             inputmode="decimal"
             step="0.05"
             min="0"
-            .value=${String(Math.round((d.y ?? auto) * 100) / 100)}
+            .value=${this.lenValue(d.y ?? auto)}
             @change=${(e: Event) => {
-              const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
-              if (Number.isFinite(v) && v >= 0) this.updateDevice({ y: Math.round(v * 1000) / 1000 });
+              const v = this.readLen((e.target as HTMLInputElement).value);
+              if (v !== null && v >= 0) this.updateDevice({ y: Math.round(v * 1000) / 1000 });
             }}
           />
         </label>
@@ -10890,7 +10890,7 @@ export class Fp3dEditor extends LitElement {
             <button class="fp3d-link" title=${this.t("card_open")} @click=${() => this.openCard(a.id, `port:${p.id}`)}>${this.poolNodeLabel(a, `port:${p.id}`)}</button>
             <span class="fp3d-muted">${this.partStatus(a, `port:${p.id}`)[0] ? "✓" : "○"}</span>
             ${p.kind === "inlet" || p.kind === "skimmer"
-              ? html`<label class="fp3d-pool-depth" title=${this.t("pool_port_depth_hint")}
+              ? html`<label class="fp3d-pool-depth" title=${unitLabel(this.t("pool_port_depth_hint"), this.unit)}
                   >${this.t("pool_port_depth")}
                   <input type="number" step="0.05" min="0" max="3" .value=${String(p.depth ?? (p.kind === "inlet" ? 0.3 : 0))} ?disabled=${!admin} @change=${(e: Event) => {
                     const v = Number((e.target as HTMLInputElement).value.replace(",", "."));
@@ -11561,6 +11561,8 @@ export class Fp3dEditor extends LitElement {
         type="text"
         inputmode="text"
         spellcheck="false"
+        placeholder="8' 2&quot;"
+        title=${this.t("units_formats")}
         .value=${typedValue(this.typed, formatImperial(value))}
         ?disabled=${!this.isEditor}
         @focus=${on.focus}
@@ -11811,9 +11813,9 @@ export class Fp3dEditor extends LitElement {
               ${this.len(this.t("elevation"), floor.elevation, (v) => this.updateFloor({ elevation: v }))}
               ${admin
                 ? html`<div class="fp3d-field fp3d-wide fp3d-shift" title=${this.t("floor_shift_hint")}>
-                    <span>${this.t("floor_shift")}</span>
-                    <input type="number" step="0.05" .value=${String(this._shiftX)} aria-label="X" @change=${(e: Event) => (this._shiftX = Number((e.target as HTMLInputElement).value) || 0)} />
-                    <input type="number" step="0.05" .value=${String(this._shiftZ)} aria-label="Z" @change=${(e: Event) => (this._shiftZ = Number((e.target as HTMLInputElement).value) || 0)} />
+                    <span>${unitLabel(this.t("floor_shift"), this.unit)}</span>
+                    <input type=${this.unit === "imperial" ? "text" : "number"} step="0.05" .value=${this.lenValue(this._shiftX)} aria-label="X" @change=${(e: Event) => (this._shiftX = this.readLen((e.target as HTMLInputElement).value) ?? 0)} />
+                    <input type=${this.unit === "imperial" ? "text" : "number"} step="0.05" .value=${this.lenValue(this._shiftZ)} aria-label="Z" @change=${(e: Event) => (this._shiftZ = this.readLen((e.target as HTMLInputElement).value) ?? 0)} />
                     <button class="fp3d-btn" ?disabled=${!this._shiftX && !this._shiftZ} @click=${() => this.shiftFloor(this._shiftX, this._shiftZ)}>${this.t("floor_shift_apply")}</button>
                     <button class="fp3d-btn" title=${this.t("floor_turn_hint")} @click=${() => this.turnFloor()}>${this.t("floor_turn")}</button>
                     <button class="fp3d-btn" title=${this.t("floor_start_view_hint")} @click=${() => this.rememberFloorView()}>${this.t("floor_start_view")}</button>
@@ -13429,6 +13431,8 @@ export class Fp3dEditor extends LitElement {
     const appliance = f.type === "washer" || f.type === "dryer" || f.type === "dishwasher";
     const fridge = f.type === "fridge" || f.type === "fridge_smart";
     const electric = isElectric(f.type);
+    // a bin from a pack is only a model: say where the kerb spot and the calendar are (#170)
+    if (!plant && !electric && isPackBin(f.type)) return html`<p class="fp3d-sub fp3d-wide">${this.t("bin_model_hint")}</p>`;
     if (!plant && !electric) return nothing;
     const sensors = this.entityOptions((id) => id.startsWith("sensor."));
     const doors = this.entityOptions((id) => id.startsWith("binary_sensor."));

@@ -1,6 +1,6 @@
 // Sidebar page: 3D view and editor.
 
-import { formatImperial, lengthUnit, parseLength } from "./units.ts";
+import { formatImperial, lengthUnit, parseLength, unitLabel } from "./units.ts";
 import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { PHONE_MEDIA } from "./phone.ts";
 import { BuildingController } from "./building-controller.ts";
@@ -525,19 +525,24 @@ export class Floorplan3dPanel extends LitElement {
     const camera = kind === "camera";
     const dome = p.mount === "ceiling";
     const auto = kind ? defaultHeight(kind, floor.height, light || camera ? (p.mount ?? (camera ? "wall" : "ceiling")) : null) : 1;
-    const numField = (label: string, value: number, step: number, min: number, max: number, set: (v: number) => void) =>
-      html`<label class="fp3d-size" title=${label}
-        >${label}
+    // feet and inches where the plan or Home Assistant says so (#117); a length field (metres) follows it (#170)
+    const unit = lengthUnit(this.hass, this.data.building?.settings.units);
+    const imperial = unit === "imperial";
+    const showLen = (v: number) => (imperial ? formatImperial(v) : String(Math.round(v * 100) / 100));
+    const readLen = (text: string) => (imperial ? parseLength(text, "imperial") : parseFloat(text.replace(",", ".")));
+    const numField = (label: string, value: number, step: number, min: number, max: number, set: (v: number) => void, length = false) =>
+      html`<label class="fp3d-size" title=${length ? unitLabel(label, unit) : label}
+        >${length ? unitLabel(label, unit) : label}
         <input
-          type="number"
+          type=${length && imperial ? "text" : "number"}
           inputmode="decimal"
           step=${step}
           min=${min}
           max=${max}
-          .value=${String(Math.round(value * 100) / 100)}
+          .value=${length ? showLen(value) : String(Math.round(value * 100) / 100)}
           @change=${(e: Event) => {
-            const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
-            if (Number.isFinite(v)) set(Math.min(max, Math.max(min, v)));
+            const v = length ? readLen((e.target as HTMLInputElement).value) : parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
+            if (v !== null && Number.isFinite(v)) set(Math.min(max, Math.max(min, v)));
           }}
         />
       </label>`;
@@ -552,20 +557,20 @@ export class Floorplan3dPanel extends LitElement {
               <option value="ceiling" ?selected=${dome}>${this.t("camera_mount_ceiling")}</option>
             </select>
             ${numField(this.t("camera_fov_short"), p.fov ?? (dome ? 360 : 90), 5, 10, 360, (v) => this.editDevice(id, (d) => (d.fov = v)))}
-            ${numField(this.t("camera_reach_short"), p.reach ?? (dome ? 3 : 4.5), 0.5, 0.5, 50, (v) => this.editDevice(id, (d) => (d.reach = v)))}
+            ${numField(this.t("camera_reach_short"), p.reach ?? (dome ? 3 : 4.5), 0.5, 0.5, 50, (v) => this.editDevice(id, (d) => (d.reach = v)), true)}
             ${numField(this.t("camera_tilt_short"), p.tilt ?? (dome ? 65 : 20), 5, 0, 90, (v) => this.editDevice(id, (d) => (d.tilt = v)))}`
         : nothing}
-      <label class="fp3d-size" title=${this.t("marker_height")}
+      <label class="fp3d-size" title=${unitLabel(this.t("marker_height"), unit)}
         >${this.t("size_short_h")}
         <input
-          type="number"
+          type=${imperial ? "text" : "number"}
           inputmode="decimal"
           step="0.05"
           min="0"
-          .value=${String(Math.round((p.y ?? auto) * 100) / 100)}
+          .value=${showLen(p.y ?? auto)}
           @change=${(e: Event) => {
-            const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
-            if (Number.isFinite(v) && v >= 0) this.editDevice(id, (d) => (d.y = Math.round(v * 1000) / 1000));
+            const v = readLen((e.target as HTMLInputElement).value);
+            if (v !== null && Number.isFinite(v) && v >= 0) this.editDevice(id, (d) => (d.y = Math.round(v * 1000) / 1000));
           }}
         />
       </label>
@@ -614,7 +619,7 @@ export class Floorplan3dPanel extends LitElement {
     const floor = this.data.building?.floors.find((fl) => fl.furniture.some((m) => m.id === id));
     return html`${field("w", this.t("size_short_w"))}${field("d", this.t("size_short_d"))}${field("h", this.t("size_short_h"))}
     ${floor && canLift(f)
-      ? html`<label class="fp3d-size" title=${this.t("mount_height")}
+      ? html`<label class="fp3d-size" title=${unitLabel(this.t("mount_height"), lengthUnit(this.hass, this.data.building?.settings.units))}
             >↕
             <input
               type=${imperial ? "text" : "number"}
