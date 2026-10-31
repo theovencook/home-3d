@@ -58,3 +58,21 @@ test("a new item (turn: true) takes the nearest wall whatever its turn, and name
   assert.deepEqual([hit.x, hit.z, hit.rotation, hit.roomId, hit.edge], [2, 0.45, 0, "r", 0]);
   assert.equal(wallSnap(floor, away, 0.12, undefined, { turn: true, roomId: "nope" }), null);
 });
+
+test("a neighbour's collinear but separate edge does not make an outer wall an interior one (#199)", () => {
+  // two rooms in a row with a gap: the top walls lie on the same line (z = 0) but the rooms do not touch
+  const row = {
+    ...newFloor("f", "F", 0),
+    rooms: [
+      { id: "a", name: "A", area_id: null, points: [[0, 0], [4, 0], [4, 3], [0, 3]] as [number, number][], floor_material: "wood" },
+      { id: "b", name: "B", area_id: null, points: [[6, 0], [10, 0], [10, 3], [6, 3]] as [number, number][], floor_material: "wood" },
+    ],
+  };
+  // flush to the exterior face: the sofa's back sits half its depth from the wall line, no interior-wall offset
+  assert.deepEqual(snapToWall(row, sofa(2, 0.6, 10), 0.12), { x: 2, z: 0.45, rotation: 0 });
+  // with the rooms sharing a wall (x = 4) the offset applies
+  const shared = { ...row, rooms: [row.rooms[0], { ...row.rooms[1], points: [[4, 0], [8, 0], [8, 3], [4, 3]] as [number, number][] }] };
+  const hit = snapToWall(shared, sofa(3.4, 1.5, 90), 0.12)!;
+  assert.ok(hit, "the shared wall still snaps");
+  assert.ok(Math.abs(hit.x - (4 - 0.06 - 0.45)) < 1e-9 || Math.abs(hit.x - (4 - 0.06 - 1)) < 1e-9, `shared wall face offset: ${hit.x}`);
+});

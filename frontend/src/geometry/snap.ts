@@ -124,16 +124,7 @@ export function wallSnap(floor: Floor, f: Furniture, wallInterior: number, reach
     const along = (f.x - a[0]) * u[0] + (f.z - a[1]) * u[1];
     if (along < 0 || along > len) continue;
     // interior walls stand on the room edge, so their face is half the wall thickness inside
-    const shared = floor.rooms.some(
-      (r) =>
-        r.id !== room.id &&
-        r.points.some((p, k) => {
-          const q = r.points[(k + 1) % r.points.length];
-          const d0 = Math.abs((p[0] - a[0]) * n[0] + (p[1] - a[1]) * n[1]);
-          const d1 = Math.abs((q[0] - a[0]) * n[0] + (q[1] - a[1]) * n[1]);
-          return d0 < 0.02 && d1 < 0.02;
-        }),
-    );
+    const shared = sharedEdge(floor, room.id, a, b);
     const face = shared ? half : 0;
     const dist = (f.x - a[0]) * n[0] + (f.z - a[1]) * n[1] - face;
     // rotation that turns the back to the wall (front along n)

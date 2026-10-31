@@ -136,3 +136,34 @@ test("a camera stays red for the hold time after its motion passed (#137)", () =
   b.settings = { ...b.settings, effects: { camera_seconds: 10 } };
   assert.equal(buildMarkers(hassWith(sensor("off", t0)), b, t0 + 20_000)[0].motion, false);
 });
+
+test("a camera's red hold counts from when this browser saw the sensor go off, not from Home Assistant's clock (#199)", async (t) => {
+  const real = Date.parse("2026-10-30T12:00:00Z");
+  t.mock.timers.enable({ apis: ["Date"], now: real });
+  const ha = (state: string, changedMs: number) =>
+    ({
+      states: {
+        "camera.hof": { entity_id: "camera.hof", state: "idle", attributes: {} },
+        "binary_sensor.hof_motion": { entity_id: "binary_sensor.hof_motion", state, last_changed: new Date(changedMs).toISOString(), attributes: { device_class: "motion" } },
+      },
+      entities: { "camera.hof": { entity_id: "camera.hof", device_id: "cam2" }, "binary_sensor.hof_motion": { entity_id: "binary_sensor.hof_motion", device_id: "cam2" } },
+    }) as unknown as HomeAssistant;
+  setCameraSensors(null);
+  // Home Assistant's clock runs 10 minutes behind this browser's
+  const skew = -10 * 60_000;
+  // seen on, then off: the hold counts from the moment of seeing it, 30 s
+  assert.equal(cameraRedUntil(ha("on", real + skew), "camera.hof", 30_000, real), Number.POSITIVE_INFINITY);
+  t.mock.timers.setTime(real + 5_000);
+  assert.equal(cameraRedUntil(ha("off", real + 5_000 + skew), "camera.hof", 30_000, real + 5_000), real + 35_000);
+  t.mock.timers.setTime(real + 20_000);
+  assert.equal(cameraRedUntil(ha("off", real + 5_000 + skew), "camera.hof", 30_000, real + 20_000), real + 35_000);
+  t.mock.timers.setTime(real + 36_000);
+  assert.equal(cameraRedUntil(ha("off", real + 5_000 + skew), "camera.hof", 30_000, real + 36_000), null);
+  // a sensor already off when first looked at (page just loaded) with a clock ahead of the server: never held from the future
+  t.mock.timers.setTime(real + 100_000);
+  setCameraSensors(null);
+  const fresh = ha("off", real + 100_000 + 5 * 60_000);
+  fresh.states["binary_sensor.hof_motion"].last_changed = new Date(real + 100_000 + 5 * 60_000).toISOString();
+  const until = cameraRedUntil({ ...fresh, entities: { ...fresh.entities, "binary_sensor.hof_motion": { entity_id: "binary_sensor.hof_motion", device_id: "cam3" }, "camera.hof": { entity_id: "camera.hof", device_id: "cam3" } } } as HomeAssistant, "camera.hof", 30_000, real + 100_000);
+  assert.ok(until === null || until <= real + 130_000);
+});

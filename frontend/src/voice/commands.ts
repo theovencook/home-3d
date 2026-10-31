@@ -12,7 +12,12 @@ export function normalize(text: string): string {
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/ß/g, "ss")
-    .replace(/[^a-z0-9一-鿿]+/g, " ")
+    // letters that do not decompose: said without their stroke
+    .replace(/ł/g, "l")
+    .replace(/ø/g, "o")
+    .replace(/đ/g, "d")
+    // any script's letters, marks (vowel signs) and digits stay: Cyrillic, Greek, Hebrew, Arabic, kana, Hangul, CJK
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, " ")
     .trim();
 }
 

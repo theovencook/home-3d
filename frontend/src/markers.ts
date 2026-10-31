@@ -126,16 +126,36 @@ export function cameraMotion(hass: HomeAssistant, cameraId: string): boolean {
 }
 
 /**
+ * When this browser saw each detection sensor take its present state (its own clock). The sensor's `last_changed`
+ * is Home Assistant's clock: a wall tablet whose clock is minutes off would hold a camera red for that much longer
+ * (or never show the hold), so a change seen live is timed by the browser's own clock.
+ */
+const seenChange = new Map<string, { changed: string; at: number }>();
+/** Within this much of the wall clock `now` is the live moment (a replay's is in the past, in Home Assistant's own clock). */
+const LIVE_MS = 60_000;
+
+/**
  * Until when a camera is drawn red: while a detection sensor is on, and for `holdMs` after the last one went off
  * (epoch ms; Infinity while on, null = not red). A sensor whose time is unknown counts only while on.
  */
 export function cameraRedUntil(hass: HomeAssistant, cameraId: string, holdMs: number, now: number): number | null {
   let until: number | null = null;
+  const live = Math.abs(now - Date.now()) < LIVE_MS;
   for (const id of cameraMotionSensors(hass, cameraId)) {
     const st = hass.states[id];
+    // a change seen while the page was open counts from the moment it was seen (the browser's own clock)
+    let seen = Number.NaN;
+    if (live && st) {
+      const prev = seenChange.get(id);
+      const changed = st.last_changed ?? "";
+      if (!prev || prev.changed !== changed) seenChange.set(id, { changed, at: prev ? now : Number.NaN });
+      seen = seenChange.get(id)!.at;
+    }
     if (st?.state === "on") return Number.POSITIVE_INFINITY;
     if (st?.state !== "off" || holdMs <= 0) continue;
-    const off = Date.parse(st.last_changed ?? "");
+    // one already there when first looked at counts from Home Assistant's time, but never from the future
+    const ha = Date.parse(st.last_changed ?? "");
+    const off = Number.isFinite(seen) ? seen : live ? Math.min(ha, now) : ha;
     if (Number.isFinite(off) && off + holdMs > now && (until === null || off + holdMs > until)) until = off + holdMs;
   }
   return until;

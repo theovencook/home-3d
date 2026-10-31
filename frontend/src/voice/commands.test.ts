@@ -49,3 +49,20 @@ test("switch and open claim a sentence only when it names nothing but a place (#
   assert.equal(showCommand("öffne das Wohnzimmer bitte", building)?.name, "Wohnzimmer");
   assert.equal(showCommand("show the Wohnzimmer", building)?.name, "Wohnzimmer");
 });
+
+test("room names in other scripts and with undecomposable letters can be addressed (#199)", () => {
+  assert.equal(normalize("Кухня"), "кухня");
+  assert.equal(normalize("Σαλόνι"), "σαλονι");
+  assert.notEqual(normalize("リビング"), "");
+  assert.notEqual(normalize("거실"), "");
+  assert.equal(normalize("Łazienka"), "lazienka");
+  assert.equal(normalize("Køkken"), "kokken");
+  assert.equal(normalize("Phòng đọc"), normalize("Phong doc"));
+  const b = {
+    ...emptyBuilding(),
+    floors: [{ ...newFloor("eg", "EG", 0), rooms: [room("k", "Кухня"), room("l", "Łazienka"), room("r", "リビング")] }],
+  };
+  assert.equal(findPlace("покажи Кухня", b)?.name, "Кухня");
+  assert.equal(findPlace("show lazienka", b)?.name, "Łazienka");
+  assert.equal(findPlace("リビング を 表示", b)?.name, "リビング");
+});

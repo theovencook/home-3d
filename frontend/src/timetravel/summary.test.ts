@@ -212,3 +212,9 @@ test("a thinned busy week: the quiet stretches and the motion count stay as they
   assert.equal(away(tl.start, tl.end).find((r) => r.kind === "motion")!.count, counted);
   assert.equal(away(ms(9 * H + 30 * 60), ms(9 * H + 40 * 60)).find((r) => r.kind === "motion")!.count, window);
 });
+
+test("motion that returns from unavailable is not counted as movement (#199)", () => {
+  const tl = timeline({ "binary_sensor.m": rows([0, "unavailable"], [9 * H, "on"], [9 * H + 20, "off"], [10 * H, "unavailable"], [10 * H + 30, "on"], [10 * H + 50, "off"], [11 * H, "on"], [11 * H + 20, "off"]) });
+  const away = awaySummary({ timeline: tl, roles: new Map(), events: [], lights: [], motion: ["binary_sensor.m"], from: tl.start, to: tl.end });
+  assert.equal(away.find((r) => r.kind === "motion")?.count, 1);
+});

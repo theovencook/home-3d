@@ -86,6 +86,8 @@ export const CATEGORY: Record<EventKind, Category> = {
 };
 
 const RAIN = new Set(["rainy", "pouring", "lightning-rainy", "hail", "snowy-rainy"]);
+/** A state that means "no reading", not a real change: coming back from it is no event (a restart, a new battery). */
+export const NO_READING: ReadonlySet<string> = new Set(["unavailable", "unknown"]);
 export const OPEN: ReadonlySet<string> = new Set(["on", "open", "opening", "tilted"]);
 
 /** Late evening to early morning (local time): motion then is worth a marker. */
@@ -266,7 +268,7 @@ export function findEvents({ timeline, roles, weather, night = sleepTime, energy
       if (c.from === null) continue;
       switch (role) {
         case "door":
-          if (OPEN.has(c.to) && !OPEN.has(c.from)) add(c.t, "door", id);
+          if (OPEN.has(c.to) && !OPEN.has(c.from) && !NO_READING.has(c.from)) add(c.t, "door", id);
           break;
         case "garage":
           if ((c.to === "on" || c.to === "open" || c.to === "opening") && (c.from === "off" || c.from === "closed" || c.from === "closing")) add(c.t, "garage", id);
@@ -281,14 +283,14 @@ export function findEvents({ timeline, roles, weather, night = sleepTime, energy
         case "gas":
         case "co":
         case "water":
-          if (c.to === "on" && c.from !== "on") add(c.t, role, id);
+          if (c.to === "on" && c.from !== "on" && !NO_READING.has(c.from)) add(c.t, role, id);
           break;
         case "motion":
           if (c.to === "on" && c.from === "off" && night(c.t)) add(c.t, "motion", id);
           break;
         case "camera":
           // a camera's detection: always (a motion sensor only at night), the same camera again after 5 minutes
-          if (c.to === "on" && c.from !== "on") add(c.t, "camera", id);
+          if (c.to === "on" && c.from !== "on" && !NO_READING.has(c.from)) add(c.t, "camera", id);
           break;
         case "robot":
           if (c.to === "cleaning" && c.from !== "cleaning" && c.from !== "paused") add(c.t, "robot_start", id);
