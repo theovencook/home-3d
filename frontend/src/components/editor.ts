@@ -536,6 +536,7 @@ export class Fp3dEditor extends LitElement {
     _canRedo: { state: true },
     canEdit: { attribute: false },
     home: { attribute: false },
+    homeName: { attribute: false },
     history: { attribute: false },
     topic: { attribute: false },
   };
@@ -560,6 +561,8 @@ export class Fp3dEditor extends LitElement {
   declare canEdit: boolean | undefined;
   /** The home being edited (#53): pictures, restore points and backups go there; unset: the active home. */
   declare home: string | null | undefined;
+  /** Its name (#160: the HA-areas import says which home its rooms go into). */
+  declare homeName: string | null | undefined;
   /** The undo history (#66): the panel's, so it outlives this element when another tab opens; else its own. */
   declare history: UndoHistory;
   /**
@@ -1068,6 +1071,11 @@ export class Fp3dEditor extends LitElement {
     if (changed.has("_tool") && (this.houseTool || changed.get("_tool") === "roof" || changed.get("_tool") === "energy")) this.reframe3d = true;
     // an armed library card (#76) belongs to the floor and home it was picked on (#126)
     if (this._placing && (changed.has("home") || (changed.has("_floorId") && changed.get("_floorId") !== undefined))) this.cancelPlacing();
+    // nothing chosen in one home stays chosen in another (#150): the new home's plan below picks its own start floor
+    if (changed.has("home") && changed.get("home") != null) {
+      this.selectItem("room", null);
+      this._floorId = null;
+    }
     if (changed.has("building") && this.building !== this._doc) {
       // the plan this panel's history leads up to keeps its steps (the tab was left and opened again, #66); a plan
       // from anywhere else (another home, the server, someone else's edit) starts a fresh history
@@ -11754,6 +11762,7 @@ export class Fp3dEditor extends LitElement {
                     <button class="fp3d-link" title=${this.t("area_rooms_hint")} @click=${() => this.addAreaRooms(floor)}>
                       ${this.t("area_rooms", { n: this.unplacedAreas(floor).length })}
                     </button>
+                    ${this.homeName ? html`<br /><small class="fp3d-area-home">${this.t("area_rooms_note", { home: this.homeName })}</small>` : nothing}
                   </p>`
                 : nothing}
               ${admin

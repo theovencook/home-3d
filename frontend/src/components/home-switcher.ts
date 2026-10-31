@@ -7,7 +7,7 @@
 
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { classMap } from "lit/directives/class-map.js";
-import { askConfirm, askText, tell } from "../ask.ts";
+import { askText, tell } from "../ask.ts";
 import { createHome, deleteHome, duplicateHome, listHomes, loadSampleHome, renameHome, setActiveHome, type HomeInfo, type HomesList } from "../api.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -32,20 +32,31 @@ export function homeOptionLabel(home: HomeInfo, active: string | null, t: (key: 
   return home.id === active ? `${home.name} · ${t("home_active_badge")}` : home.name;
 }
 
-/** A line of the home menu: a home, the separator, or an action. */
+/** A line of the home menu: a home, a separator, an action, or the destructive action set apart (#160). */
 export interface MenuRow {
   value: string;
   label: string;
-  kind: "home" | "sep" | "action";
+  kind: "home" | "sep" | "action" | "danger";
 }
 
-/** The home menu's lines (#132): the homes (the active one badged), a separator, then the actions. */
+/**
+ * The home menu's lines (#132): the homes (the active one badged), a separator, then the actions; Delete comes last
+ * in a block of its own below another separator (#160), away from Rename and Duplicate.
+ */
 export function menuRows(homes: readonly HomeInfo[], active: string | null, shown: string | null, t: (key: I18nKey) => string): MenuRow[] {
+  const actions = homeActions(homes, active, shown);
+  const sep = { value: "", label: "", kind: "sep" as const };
   return [
     ...homes.map((h) => ({ value: h.id, label: homeOptionLabel(h, active, t), kind: "home" as const })),
-    { value: "", label: "", kind: "sep" as const },
-    ...homeActions(homes, active, shown).map((a) => ({ value: a, label: t(`home_${a}`), kind: "action" as const })),
+    sep,
+    ...actions.filter((a) => a !== "delete").map((a) => ({ value: a, label: t(`home_${a}`), kind: "action" as const })),
+    ...(actions.includes("delete") ? [sep, { value: "delete", label: t("home_delete"), kind: "danger" as const }] : []),
   ];
+}
+
+/** The typed answer names the home to delete (#160): spaces around it and letter case do not matter. */
+export function namesHome(typed: string | null, name: string): boolean {
+  return typed != null && typed.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase();
 }
 
 /**
@@ -186,7 +197,14 @@ export class Fp3dHomeSwitcher extends LitElement {
       const name = await named(this.t("home_copy_name", { name: current.name }));
       const res = name ? await this.run(() => duplicateHome(this.hass, current.id, name)) : null;
       if (res) this.open(res.home.id);
-    } else if (await askConfirm(this.t("home_delete_confirm", { name: current.name }), { ok: this.t("delete"), cancel: this.t("cancel"), danger: true })) {
+    } else {
+      // deleting needs the home's name typed (#160): a slip in the menu cannot take the real house with it
+      const typed = await askText(this.t("home_delete_type", { name: current.name }), "", { ok: this.t("delete"), cancel: this.t("cancel"), danger: true });
+      if (typed === null) return;
+      if (!namesHome(typed, current.name)) {
+        await tell(this.t("home_delete_mismatch", { name: current.name }), { ok: this.t("ask_ok") });
+        return;
+      }
       // the open home is gone: show the active one (the backend picks another if it was the active one)
       if (await this.run(() => deleteHome(this.hass, current.id))) this.open(null);
     }
@@ -209,8 +227,8 @@ export class Fp3dHomeSwitcher extends LitElement {
     const shown = homes.find((h) => h.id === this.home);
     const t = (key: I18nKey) => this.t(key);
     return html`${chip
-        ? html`<span class="chip ${chip.onDisplays ? "" : "off"}" title=${chip.onDisplays ? this.t("home_active_badge") : this.t("home_not_on_displays")}
-            >${chip.name}${chip.onDisplays ? nothing : html`<small>${this.t("home_not_on_displays")}</small>`}</span
+        ? html`<span class="chip ${chip.onDisplays ? "live" : "off"}" title=${chip.onDisplays ? this.t("home_active_badge") : this.t("home_not_on_displays")}
+            >${chip.onDisplays ? html`<b class="live" aria-hidden="true"></b>` : nothing}${chip.name}<small>${chip.onDisplays ? this.t("home_live") : this.t("home_not_on_displays")}</small></span
           >`
         : nothing}<span class="menu"
         ><button
@@ -232,7 +250,7 @@ export class Fp3dHomeSwitcher extends LitElement {
                   : html`<li
                       role="option"
                       aria-selected=${r.value === this.home}
-                      class=${classMap({ cursor: i === this._cursor, action: r.kind === "action", chosen: r.value === this.home })}
+                      class=${classMap({ cursor: i === this._cursor, action: r.kind === "action", danger: r.kind === "danger", chosen: r.value === this.home })}
                       @mouseenter=${() => (this._cursor = i)}
                       @click=${() => this.pick(r.value)}
                     >
@@ -271,6 +289,18 @@ export class Fp3dHomeSwitcher extends LitElement {
     .chip small {
       font-weight: 400;
       opacity: 0.85;
+    }
+    /* the open home is the one on the displays (#160): a steady marker while it is edited */
+    .chip.live {
+      border-color: rgba(229, 57, 53, 0.7);
+    }
+    .chip .live {
+      align-self: center;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #e53935;
+      flex: none;
     }
     .menu {
       position: relative;
@@ -327,6 +357,9 @@ export class Fp3dHomeSwitcher extends LitElement {
     }
     li.chosen {
       font-weight: 600;
+    }
+    li.danger {
+      color: var(--error-color, #db4437);
     }
     li.sep {
       height: 1px;

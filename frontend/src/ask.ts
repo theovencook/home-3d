@@ -84,7 +84,7 @@ export async function askConfirm(text: string, labels: { ok: string; cancel: str
 }
 
 /** Asks for a text (a name); the trimmed text, or null when cancelled or left empty. */
-export async function askText(text: string, value: string, labels: { ok: string; cancel: string }): Promise<string | null> {
+export async function askText(text: string, value: string, labels: { ok: string; cancel: string; danger?: boolean }): Promise<string | null> {
   const a = await send({ text, input: value, ...labels });
   const typed = a.value.trim();
   return a.ok && typed ? typed : null;
