@@ -81,6 +81,7 @@ import { buildRoof, type RoofGeometry, type RoofWindowState } from "./roof.ts";
 import { SunFx } from "./sun-fx.ts";
 import { Realism } from "./realism.ts";
 import { watchContext } from "./context-loss.ts";
+import { keepRender } from "./keep-render.ts";
 import { deviceTier, shadowPlan, type ShadowPlan } from "../realistic.ts";
 import { houseShadow, shadowBox } from "./sun-shadow.ts";
 import type { SunPath } from "../sun-path.ts";
@@ -2463,7 +2464,8 @@ export class FloorplanViewer {
     this.lowQuality = low;
     this.applyWeather();
     this.highQuality = quality === "high";
-    const renderer = new WebGLRenderer({ antialias: !low, alpha: true, powerPreference: low ? "low-power" : "default" });
+    // its render can be wrapped (timing) but never deleted (#213)
+    const renderer = keepRender(new WebGLRenderer({ antialias: !low, alpha: true, powerPreference: low ? "low-power" : "default" }));
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, low ? 1 : quality === "high" ? 2.5 : 2));
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = SRGBColorSpace;
