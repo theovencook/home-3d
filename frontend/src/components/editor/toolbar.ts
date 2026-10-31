@@ -8,6 +8,7 @@ import type { I18nKey } from "../../i18n.ts";
 import { OUTDOOR_TYPES, type Floor } from "../../model.ts";
 import { LEGEND, SHORTCUTS } from "../../help.ts";
 import { hintKey, type Tool } from "../../editor-hint.ts";
+import { startChecklist, type StartStep } from "../../start-checklist.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
@@ -283,8 +284,70 @@ export class ToolbarPart {
     this.dispatchEvent(new CustomEvent("open-settings", { detail: { section, id }, bubbles: true, composed: true }));
   }
 
+  /** Rooms for the Home Assistant areas of the first free HA floor, from the empty-home checklist (#193). */
+  startAreas(this: Fp3dEditor): void {
+    let floor = this.floor;
+    if (!floor || !this.unplacedAreas(floor).length) {
+      const ha = this.freeHaFloors[0];
+      if (!ha) return;
+      if (floor && !floor.rooms.length && !floor.ha_floor) {
+        // the empty floor the person started with becomes that HA floor
+        this.change((_, f) => {
+          f.ha_floor = ha.floor_id;
+          f.name = ha.name;
+        });
+      } else this.addFloor(ha);
+      floor = this.floor;
+    }
+    if (floor) this.addAreaRooms(floor);
+  }
+
+  /** Is there something for "Add rooms from Home Assistant areas" to add? */
+  hasStartAreas(this: Fp3dEditor): boolean {
+    const floor = this.floor;
+    return this.freeHaFloors.length > 0 || (!!floor && this.unplacedAreas(floor).length > 0);
+  }
+
+  /** The empty home's checklist (#193): replaces the hint pill until the first room exists. */
+  renderStart(this: Fp3dEditor) {
+    if (!this.isEditor || this._tool !== "select" || this._placing) return null;
+    const list = startChecklist(this._doc);
+    if (!list.show) return null;
+    const t = this.t.bind(this);
+    const hasFloor = this._doc.floors.length > 0;
+    const drawRoom = () => {
+      if (!this.floor) this.addFloor();
+      this.setTool("rect");
+    };
+    const action: Record<StartStep, ReturnType<typeof html> | typeof nothing> = {
+      floor: hasFloor ? nothing : html`<button class="fp3d-btn fp3d-primary" @click=${() => this.addFloor()}>${t("start_floor_btn")}</button>`,
+      room: html`<button class="fp3d-btn ${hasFloor ? "fp3d-primary" : ""}" @click=${drawRoom}>${t("start_room_btn")}</button>`,
+      furniture: nothing,
+    };
+    return html`<section class="fp3d-start" aria-label=${t("start_title")}>
+      <h3>${t("start_title")}</h3>
+      <ol>
+        ${list.steps
+          .map(
+            (s) => html`<li class=${s.done ? "fp3d-start-done" : ""}>
+              ${s.done ? html`<span class="fp3d-start-mark" role="img" aria-label=${t("start_done")}>✓</span>` : html`<span class="fp3d-start-mark" aria-hidden="true"></span>`}
+              <span class="fp3d-start-text">${t(`start_${s.step}` as I18nKey)}</span>
+              ${s.done ? nothing : action[s.step]}
+            </li>`,
+          )}
+      </ol>
+      <p class="fp3d-start-or">${t("start_or")}</p>
+      <div class="fp3d-start-alt">
+        ${this.hasStartAreas() ? html`<button class="fp3d-btn" @click=${() => this.startAreas()}>${t("start_areas")}</button>` : nothing}
+        <button class="fp3d-btn" @click=${() => this.dispatchEvent(new CustomEvent("load-sample", { bubbles: true, composed: true }))}>${t("home_sample")}</button>
+      </div>
+    </section>`;
+  }
+
   /** The hint bar under the plan (#96): the current tool, the selection, or on a new plan the next step. */
   renderHint(this: Fp3dEditor) {
+    const start = this.renderStart();
+    if (start) return start;
     const key = this.hintKeyNow();
     const first = key === "hint_empty" || key === "hint_first_room";
     const warn = this._fixedHint || (this._tool === "opening" && !!this._openingNote);

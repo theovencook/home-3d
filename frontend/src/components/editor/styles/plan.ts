@@ -202,6 +202,71 @@ export const planStyles = css`
         color: var(--fp3d-text);
         pointer-events: none;
       }
+      /* the empty home's checklist (#193): where the hint pill sits, bigger, with the next step as the main button */
+      .fp3d-start {
+        position: absolute;
+        left: 12px;
+        bottom: 10px;
+        max-width: min(420px, calc(100% - 24px));
+        box-sizing: border-box;
+        padding: 14px 16px;
+        border: 1px solid var(--fp3d-accent);
+        border-radius: 12px;
+        background: var(--fp3d-chrome-solid);
+        box-shadow: var(--fp3d-shadow);
+        color: var(--fp3d-text);
+      }
+      .fp3d-start h3 {
+        margin: 0 0 8px;
+        font-size: 15px;
+      }
+      .fp3d-start ol {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 8px;
+      }
+      .fp3d-start li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+      }
+      .fp3d-start-text {
+        flex: 1;
+      }
+      .fp3d-start-mark {
+        flex: none;
+        width: 20px;
+        height: 20px;
+        box-sizing: border-box;
+        border: 1.5px solid var(--fp3d-line);
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        line-height: 1;
+      }
+      .fp3d-start-done .fp3d-start-mark {
+        background: var(--fp3d-accent);
+        border-color: var(--fp3d-accent);
+        color: var(--fp3d-on-accent, #fff);
+      }
+      .fp3d-start-done .fp3d-start-text {
+        color: var(--fp3d-muted);
+        text-decoration: line-through;
+      }
+      .fp3d-start-or {
+        margin: 12px 0 6px;
+        font-size: 12px;
+        color: var(--fp3d-muted);
+      }
+      .fp3d-start-alt {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
       .fp3d-hint-first {
         border-color: var(--fp3d-accent);
         font-weight: 600;
