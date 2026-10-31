@@ -14,12 +14,14 @@ from homeassistant.const import EVENT_STATE_CHANGED
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
 
+from ..const import SIGNAL_BUILDING_UPDATED, SIGNAL_HOMES_UPDATED
 from .engine import AWAY_AFTER, OWN_SHARE, STEP, THING_AWAY_AFTER, Fingerprints, RoomTracker, evidence
 from .identity import Identity, ibeacon_key
+from .plan import plan_doors, plan_rooms
 from .scanners import ScanReader, scanner_list
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,6 +85,8 @@ class LocateService:
         self._reader = ScanReader()
         self._identity = Identity([])
         self._trackers: dict[str, RoomTracker] = {}
+        # the rooms and doors the trackers were made for: they are kept while these stay (#169)
+        self._tracker_plan: tuple[tuple[str, ...], tuple[tuple[str, str], ...]] | None = None
         self._unsub: Callable[[], None] | None = None
         self._unsub_sensors: Callable[[], None] | None = None
         self._sensor_rooms: dict[str, str | None] = {}
@@ -134,14 +138,72 @@ class LocateService:
         self._store.async_delay_save(self._data, 5)
 
     def _rebuild(self) -> None:
+        """Trackers for the devices, rooms and doors. A device keeps its tracker (and so its current room) while the
+        rooms and doors stay the same (#169): another setting, a renamed room or a new device does not clear it."""
         self._identity = Identity(self.devices)
         self._sensor_rooms = {}
         room_ids = [r["id"] for r in self.rooms]
-        self._trackers = {
-            d["id"]: RoomTracker(room_ids, self.doors, AWAY_AFTER if d.get("person") else THING_AWAY_AFTER)
-            for d in self.devices
-        }
+        shape = (tuple(room_ids), tuple(self.doors))
+        kept = self._trackers if shape == self._tracker_plan else {}
+        self._tracker_plan = shape
+        trackers: dict[str, RoomTracker] = {}
+        for d in self.devices:
+            away = AWAY_AFTER if d.get("person") else THING_AWAY_AFTER
+            old = kept.get(d["id"])
+            trackers[d["id"]] = (
+                old if old is not None and old.away_after == away else RoomTracker(room_ids, self.doors, away)
+            )
+        self._trackers = trackers
         self.state = {k: v for k, v in self.state.items() if k in self._trackers}
+
+    # ------------------------------------------------------------------ the plan (#169)
+
+    @callback
+    def follow_plan(self, building: Callable[[], dict[str, Any]], active_id: Callable[[], str]) -> Callable[[], None]:
+        """Keep the rooms and doors in step with the active home's plan: now, whenever that plan changes and when
+        another home becomes active. Returns the function that stops it."""
+
+        @callback
+        def plan_changed(home_id: str, _revision: int) -> None:
+            if home_id == active_id():
+                self.set_plan(building())
+
+        @callback
+        def homes_changed() -> None:
+            self.set_plan(building())
+
+        self.set_plan(building())
+        unsubs = [
+            async_dispatcher_connect(self.hass, SIGNAL_BUILDING_UPDATED, plan_changed),
+            async_dispatcher_connect(self.hass, SIGNAL_HOMES_UPDATED, homes_changed),
+        ]
+
+        @callback
+        def stop() -> None:
+            for unsub in unsubs:
+                unsub()
+
+        return stop
+
+    @callback
+    def set_plan(self, building: dict[str, Any]) -> None:
+        """Take the rooms and doors of a plan (nothing happens when they are the ones known). Where a device is shown
+        follows at once: a removed room is no longer shown, a renamed one under its new name."""
+        rooms, doors = plan_rooms(building), plan_doors(building)
+        if rooms == self.rooms and doors == self.doors:
+            return
+        self.rooms, self.doors = rooms, doors
+        self._rebuild()
+        names = {r["id"]: r for r in self.rooms}
+        for dev, shown in list(self.state.items()):
+            if shown.get("room") is None:
+                continue
+            if (room := names.get(shown["room"])) is None:
+                self.state.pop(dev)
+            else:
+                shown.update(room_name=room["name"], floor=room.get("floor"), area_id=room.get("area_id"))
+        self._save()
+        async_dispatcher_send(self.hass, SIGNAL_LOCATE)
 
     # ------------------------------------------------------------------ config
 
@@ -154,6 +216,8 @@ class LocateService:
                 self.fingerprints.pop(gone, None)
         if "scanner_rooms" in changes:
             self.scanner_rooms = {str(k): str(v) for k, v in changes["scanner_rooms"].items() if v}
+        # the rooms and doors come from the active home's plan (follow_plan, #169); one sent here (by a client from
+        # before) holds until the plan changes
         if "rooms" in changes:
             self.rooms = [
                 {

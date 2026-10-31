@@ -14,7 +14,8 @@ export function locateRooms(b: Building): LocateRoom[] {
   return b.floors.flatMap((f) => f.rooms.map((r) => ({ id: r.id, name: r.name, floor: f.name, area_id: r.area_id ?? null })));
 }
 
-/** Room pairs joined by a door or a passage (a window down to the floor counts, a normal window does not). */
+/** Room pairs joined by a door or a passage (a window down to the floor counts, a normal window does not). The service
+ * works the same graph out in Python (locate/plan.py, #169). */
 export function doorPairs(b: Building): [string, string][] {
   const out: [string, string][] = [];
   const seen = new Set<string>();
