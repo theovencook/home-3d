@@ -22,6 +22,7 @@ from .const import (
     DATA_PACK_UPDATES,
     DATA_VOICE,
     DOMAIN,
+    PROTOCOL,
     SIGNAL_ASK,
     SIGNAL_BUILDING_UPDATED,
     SIGNAL_HOMES_UPDATED,
@@ -165,6 +166,8 @@ async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveC
             "home_id": home.id,
             "home_name": home.name,
             "version": str(integration.version),
+            # which commands it understands (#166, const.PROTOCOL)
+            "protocol": PROTOCOL,
             # whether this user is on the editors list (#7); the backend checks every change again
             "can_edit": can_edit(hass, connection.user) and not home.read_only,
             **problem,
@@ -185,7 +188,9 @@ async def ws_version(hass: HomeAssistant, connection: websocket_api.ActiveConnec
     """The running integration version and the frontend build on disk (#60): an open page asks again when its
     websocket reconnects and offers a reload when it runs older JavaScript."""
     integration = await async_get_integration(hass, DOMAIN)
-    connection.send_result(msg["id"], {"version": str(integration.version), **await _async_build(hass)})
+    connection.send_result(
+        msg["id"], {"version": str(integration.version), "protocol": PROTOCOL, **await _async_build(hass)}
+    )
 
 
 @websocket_api.websocket_command(

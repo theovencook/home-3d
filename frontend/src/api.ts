@@ -9,6 +9,14 @@ import type { HomeAssistant } from "./types.ts";
 /** A home (#53) a call is about: left out, the active one (a backend from before #53 has only that). */
 const at = (home?: string | null): { home_id?: string } => (home ? { home_id: home } : {});
 
+/**
+ * The websocket protocol this frontend speaks (#166): the backend's const.PROTOCOL of the same release. building/get and
+ * version report the backend's (none: an older backend, before #166); gate a newer command on it in one place
+ * (BuildingController.speaks) instead of trying it and falling back. contract.test.ts checks every command and field
+ * used here against tests/fixtures/contract/websocket.json.
+ */
+export const PROTOCOL = 1;
+
 /** `can_edit`: the user is on the editors list (missing from backends before #7). `home_id`: the home loaded (#53;
  * missing from older backends), the one to save back to. */
 /** What is wrong with a home's stored plan (#165): "plan_repaired" (invalid parts left out, named in `dropped`), or one
@@ -22,12 +30,12 @@ export interface PlanProblem {
 export async function fetchBuilding(
   hass: HomeAssistant,
   home?: string | null,
-): Promise<{ building: Building; revision: number; version?: string; build?: string; can_edit?: boolean; home_id?: string; home_name?: string; problem?: PlanProblem }> {
+): Promise<{ building: Building; revision: number; version?: string; protocol?: number; build?: string; can_edit?: boolean; home_id?: string; home_name?: string; problem?: PlanProblem }> {
   return hass.callWS({ type: "home_3d/building/get", ...at(home) });
 }
 
 /** The integration version the backend runs and the frontend build it serves now (#60). */
-export async function fetchVersion(hass: HomeAssistant): Promise<{ version?: string; build?: string }> {
+export async function fetchVersion(hass: HomeAssistant): Promise<{ version?: string; protocol?: number; build?: string }> {
   return hass.callWS({ type: "home_3d/version" });
 }
 

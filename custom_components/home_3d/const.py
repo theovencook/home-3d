@@ -9,6 +9,11 @@ STORAGE_VERSION = 1
 STORAGE_MINOR_VERSION = 2
 # the format of a plan (#165): its `version`; an older plan is brought up to this one by the steps in migrations.py
 PLAN_VERSION = 2
+# the websocket protocol (#166): one up whenever a command or a field of one is added, changed or removed, so the
+# frontend can tell what the backend it talks to understands (building/get and version send it). The commands are
+# listed in tests/fixtures/contract/websocket.json, which tests/test_contract.py keeps in step and the frontend
+# checks its calls against
+PROTOCOL = 1
 STORAGE_KEY_BUILDING = f"{DOMAIN}.building"
 STORAGE_KEY_IMAGES = f"{DOMAIN}.images"
 STORAGE_KEY_HISTORY = f"{DOMAIN}.history"

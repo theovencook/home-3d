@@ -5,9 +5,10 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
-### Plan format version (#165)
+### Plan format version and contract (#165, #166)
 
 - **Plans carry a real format version (now 2)** and Home Assistant brings older plans up to date when it loads them, and when a save, a backup, an imported plan or a restore point brings one in; voice, time travel and the sensors see the same plan as the editor. Lights placed as devices become lamps on the server (keeping their name, aliases, actions and marker). The plan as stored before stays as a restore point.
+- **One contract for both sides (#166):** a plan with every field of the format (`frontend/src/plan-contract.fixture.ts`, copied to `tests/fixtures/contract/plan.json`) is checked against the TypeScript model and the Python schema, and the websocket commands are listed in `tests/fixtures/contract/websocket.json`, which the frontend's calls are checked against. Eight fields the editor already saved but the server did not check yet (a door's lock, a radiator's heat sensor, a lamp's only colour, the running watts, a camera look's camera, a camera's own detection sensors, the household notes list, the editor's opening floor) are now checked. `building/get` and `version` report a websocket `protocol` number.
 - **A stored plan that does not validate is no longer passed on as it is:** its invalid parts are left out, named in a notice, with the plan as it was kept as a restore point. A plan beyond repair, or one saved by a newer Home 3D, is shown read-only with a notice and never written over; a restore point or a backup can still replace it.
 
 ### No more Pro layer (#204)

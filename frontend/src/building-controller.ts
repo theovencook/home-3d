@@ -62,6 +62,8 @@ function writeDraft(draft: Draft | null): void {
 export class BuildingController implements ReactiveController {
   building: Building | null = null;
   error: string | null = null;
+  /** The websocket protocol the backend speaks (#166): 0 for one from before protocols, null before it answered. */
+  backendProtocol: number | null = null;
   /** What is wrong with the loaded home's stored plan (#165); a plan the backend cannot read comes with can_edit off. */
   planProblem: PlanProblem | null = null;
   saveState: SaveState = "idle";
@@ -198,6 +200,7 @@ export class BuildingController implements ReactiveController {
     try {
       const res = await fetchVersion(this.hass);
       this.backendVersion = res.version ?? null;
+      this.backendProtocol = res.protocol ?? 0;
       this.backendBuild = res.build ?? null;
       this.host.requestUpdate();
     } catch {
@@ -229,6 +232,12 @@ export class BuildingController implements ReactiveController {
     this.edit(next);
     this.changes = before ? [...before, change] : null;
     void this.flush();
+  }
+
+  /** Whether the backend understands the commands of `protocol` (#166, api.ts PROTOCOL): the one place to gate a newer
+   * command on, instead of trying it and falling back. */
+  speaks(protocol: number): boolean {
+    return (this.backendProtocol ?? 0) >= protocol;
   }
 
   /** This frontend's version, for notices. */
@@ -577,6 +586,7 @@ export class BuildingController implements ReactiveController {
     this.homeId = res.home_id ?? null;
     this.homeName = res.home_name ?? null;
     this.backendVersion = res.version ?? null;
+    this.backendProtocol = res.protocol ?? 0;
     this.backendBuild = res.build ?? null;
     this.canEdit = res.can_edit ?? !!this.hass?.user?.is_admin;
     this.planProblem = res.problem ?? null;

@@ -1,0 +1,317 @@
+{
+  "protocol": 1,
+  "plan_version": 2,
+  "commands": {
+    "home_3d/backup/export": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/backup/import": {
+      "required": [],
+      "optional": [
+        "active",
+        "building",
+        "check_only",
+        "home_id",
+        "homes",
+        "items",
+        "packs"
+      ]
+    },
+    "home_3d/building/get": {
+      "required": [],
+      "optional": [
+        "home_id"
+      ]
+    },
+    "home_3d/building/save": {
+      "required": [
+        "building"
+      ],
+      "optional": [
+        "base_revision",
+        "home_id",
+        "recipe_bases"
+      ]
+    },
+    "home_3d/building/subscribe": {
+      "required": [],
+      "optional": [
+        "home_id"
+      ]
+    },
+    "home_3d/editors/get": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/editors/set": {
+      "required": [
+        "editors"
+      ],
+      "optional": []
+    },
+    "home_3d/history/list": {
+      "required": [],
+      "optional": [
+        "home_id"
+      ]
+    },
+    "home_3d/history/restore": {
+      "required": [
+        "snapshot_id"
+      ],
+      "optional": [
+        "home_id"
+      ]
+    },
+    "home_3d/history/snapshot": {
+      "required": [],
+      "optional": [
+        "home_id"
+      ]
+    },
+    "home_3d/homes/create": {
+      "required": [
+        "name"
+      ],
+      "optional": [
+        "area_import"
+      ]
+    },
+    "home_3d/homes/delete": {
+      "required": [
+        "home_id"
+      ],
+      "optional": []
+    },
+    "home_3d/homes/duplicate": {
+      "required": [
+        "home_id",
+        "name"
+      ],
+      "optional": []
+    },
+    "home_3d/homes/list": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/homes/load_sample": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/homes/rename": {
+      "required": [
+        "home_id",
+        "name"
+      ],
+      "optional": []
+    },
+    "home_3d/homes/set_active": {
+      "required": [
+        "home_id"
+      ],
+      "optional": []
+    },
+    "home_3d/image/delete": {
+      "required": [
+        "image_id"
+      ],
+      "optional": [
+        "home_id"
+      ]
+    },
+    "home_3d/image/get": {
+      "required": [
+        "image_id"
+      ],
+      "optional": [
+        "home_id"
+      ]
+    },
+    "home_3d/image/set": {
+      "required": [
+        "data",
+        "image_id"
+      ],
+      "optional": [
+        "home_id"
+      ]
+    },
+    "home_3d/items/remove": {
+      "required": [
+        "item_id"
+      ],
+      "optional": []
+    },
+    "home_3d/items/save": {
+      "required": [
+        "item"
+      ],
+      "optional": []
+    },
+    "home_3d/locate/ask": {
+      "required": [
+        "text"
+      ],
+      "optional": [
+        "language"
+      ]
+    },
+    "home_3d/locate/calibrate": {
+      "required": [
+        "action"
+      ],
+      "optional": [
+        "devices",
+        "room",
+        "seconds"
+      ]
+    },
+    "home_3d/locate/config": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/locate/configure": {
+      "required": [],
+      "optional": [
+        "admins_only",
+        "devices",
+        "doors",
+        "enabled",
+        "fly",
+        "rooms",
+        "scanner_rooms"
+      ]
+    },
+    "home_3d/locate/nearby": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/locate/quality": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/locate/rec": {
+      "required": [
+        "action"
+      ],
+      "optional": [
+        "name",
+        "note",
+        "room"
+      ]
+    },
+    "home_3d/locate/subscribe": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/packs/check": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/packs/import": {
+      "required": [],
+      "optional": [
+        "confirm",
+        "files",
+        "pack"
+      ]
+    },
+    "home_3d/packs/install_url": {
+      "required": [
+        "url"
+      ],
+      "optional": [
+        "confirm"
+      ]
+    },
+    "home_3d/packs/items": {
+      "required": [
+        "pack_id"
+      ],
+      "optional": [
+        "items"
+      ]
+    },
+    "home_3d/packs/list": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/packs/pin": {
+      "required": [
+        "pack_id",
+        "pinned"
+      ],
+      "optional": []
+    },
+    "home_3d/packs/remove": {
+      "required": [
+        "pack_id"
+      ],
+      "optional": []
+    },
+    "home_3d/packs/rollback": {
+      "required": [
+        "pack_id"
+      ],
+      "optional": []
+    },
+    "home_3d/packs/update_items": {
+      "required": [],
+      "optional": [
+        "types"
+      ]
+    },
+    "home_3d/packs/updates": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/packs/updates/settings": {
+      "required": [],
+      "optional": [
+        "auto_update",
+        "frequency",
+        "time",
+        "weekday"
+      ]
+    },
+    "home_3d/timetravel/history": {
+      "required": [
+        "end_time",
+        "start_time"
+      ],
+      "optional": [
+        "car_trackers",
+        "entity_ids",
+        "statistic_ids"
+      ]
+    },
+    "home_3d/version": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/voice/answer": {
+      "required": [
+        "ask_id",
+        "text"
+      ],
+      "optional": [
+        "answered"
+      ]
+    },
+    "home_3d/voice/settings": {
+      "required": [],
+      "optional": []
+    },
+    "home_3d/voice/settings/set": {
+      "required": [
+        "sentences"
+      ],
+      "optional": []
+    },
+    "home_3d/voice/subscribe": {
+      "required": [],
+      "optional": []
+    }
+  }
+}
