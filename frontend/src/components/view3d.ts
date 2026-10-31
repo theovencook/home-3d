@@ -165,6 +165,7 @@ import type { PipeTube } from "../viewer/viewer3d.ts";
 import type { PoolPiece } from "../viewer/pool-water.ts";
 import { sensorSyncDelay } from "../viewer/pace.ts";
 import { flowWidth } from "../viewer/flow-style.ts";
+import { roomSentence, sceneSummary, type FloorSummary } from "../room-summary.ts";
 import { floorCounts, floorInfoText, locatedPersons, personLook, personsInRooms, personsShown } from "../presence.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
@@ -1057,6 +1058,7 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setKeepView(this.keepView);
       this.viewer.setAngleLock(this.angleLock);
       this.viewer.setTheme(this.effectiveTheme());
+      this.viewer.setDescription((this.sceneLabel = translate(this.hass, flat ? "sr_plan" : "sr_scene")));
       this.viewer.setAccent(this.accent ?? null);
       this.viewer.setFurnishMode(this.furnish);
       this.viewer.setSurfaceGrab(this.surfaceGrab ?? null);
@@ -1211,6 +1213,10 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("autoOrbit")) v.setAutoOrbit(this.autoOrbit ? 0.06 : 0);
     v.setFitMargin(this._phoneStage ? PHONE_FIT_MARGIN : NO_FIT_MARGIN);
     if (changed.has("_thumbs") || changed.has("_narrowStage")) v.setLabelInset(this._thumbs.length ? (this.narrowThumbs ? 136 : 184) : 0);
+    if (changed.has("plan2d") || changed.has("hass") || !this.sceneLabel) {
+      const label = translate(this.hass, this.plan2d ? "sr_plan" : "sr_scene");
+      if (label !== this.sceneLabel) v.setDescription((this.sceneLabel = label));
+    }
     if (changed.has("floorId")) v.setFloor(this.floorId);
     if (changed.has("roomId") && (this.roomId || changed.get("roomId"))) v.selectRoom(this.roomId);
     if (changed.has("wallMode")) v.setWallMode(this.wallMode);
@@ -4481,6 +4487,37 @@ export class Fp3dView3d extends LitElement {
   }
 
   /** Date and time in a corner (D631), kept current every half minute while shown. */
+  /** The scene for the last list built: when none of these changed the list is the same (#195). */
+  private sceneList: { states: unknown; building: unknown; floorId: string | null; alerts: unknown; list: FloorSummary[] } | null = null;
+  private sceneLabel = "";
+
+  /**
+   * The rooms as text (#195): per floor the room, its lights, temperature and warnings, hidden until it takes the focus.
+   * A button there opens the room like a tap on it. The canvas and the plan point at it in their label.
+   */
+  private renderRoomList() {
+    const hass = this.hass;
+    const b = this.building;
+    if (!hass || !b || this._walk) return nothing;
+    const c = this.sceneList;
+    if (!c || c.states !== hass.states || c.building !== b || c.floorId !== this.floorId || c.alerts !== this._alerts) {
+      this.sceneList = { states: hass.states, building: b, floorId: this.floorId, alerts: this._alerts, list: sceneSummary(hass, b, this._alerts, this.floorId) };
+    }
+    const floors = this.sceneList!.list;
+    if (!floors.length) return nothing;
+    return html`<nav class="fp3d-sr-rooms" aria-label=${translate(hass, "sr_rooms")}>
+      ${floors.map(
+        (f) => html`<section aria-label=${f.name}>
+          <ul>
+            ${f.rooms.map(
+              (r) => html`<li><button type="button" @click=${() => this.fire("room-tap", { floorId: r.floorId, roomId: r.roomId })}>${roomSentence(hass, r)}</button></li>`,
+            )}
+          </ul>
+        </section>`,
+      )}
+    </nav>`;
+  }
+
   private renderClock() {
     const pos = this.clock;
     if (!pos || pos === "off" || !this.hass) {
@@ -6442,7 +6479,7 @@ export class Fp3dView3d extends LitElement {
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderWires()} ${this.clean ? nothing : this.renderLegend()}
       ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderSettings()} ${this.renderRackView()} ${this.renderNote()}
-      ${this.renderMenu()} ${this.renderEye()}
+      ${this.renderMenu()} ${this.renderEye()} ${this.renderRoomList()}
       ${this.renderMic()}
       ${this.pivotMark && !this._walk ? html`<span class="fp3d-pivot" aria-hidden="true"></span>` : nothing}
       ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.rawHass} .building=${this.building} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
@@ -6862,6 +6899,53 @@ export class Fp3dView3d extends LitElement {
         display: block;
         touch-action: none;
         cursor: grab;
+      }
+      .fp3d-canvas:focus-visible {
+        outline: 2px solid var(--fp3d-accent, #37e0ff);
+        outline-offset: -3px;
+      }
+      /* the rooms as text (#195): hidden until the keyboard reaches them, then a small panel at the top left */
+      .fp3d-sr-rooms {
+        position: absolute;
+        left: 12px;
+        top: 12px;
+        z-index: 7;
+        max-height: calc(100% - 24px);
+        max-width: min(420px, calc(100% - 24px));
+        overflow: auto;
+        padding: 6px;
+        border-radius: 10px;
+        background: var(--fp3d-chrome-solid);
+        color: var(--fp3d-text, #e6f0ff);
+      }
+      .fp3d-sr-rooms:not(:focus-within) {
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .fp3d-sr-rooms ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .fp3d-sr-rooms button {
+        display: block;
+        width: 100%;
+        min-height: 36px;
+        padding: 4px 10px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-sr-rooms button:focus-visible {
+        outline: 2px solid var(--fp3d-accent, #37e0ff);
       }
       .fp3d-canvas:active {
         cursor: grabbing;

@@ -1093,6 +1093,19 @@ export class FloorplanViewer {
     this.warming = warm;
   }
 
+  /** What the canvas is called for a screen reader (#195); set by the host, which knows the language and the room list. */
+  private canvasLabel = "";
+
+  setDescription(label: string): void {
+    this.canvasLabel = label;
+    this.labelCanvas(this.renderer.domElement);
+  }
+
+  private labelCanvas(canvas: HTMLCanvasElement): void {
+    if (this.canvasLabel) canvas.setAttribute("aria-label", this.canvasLabel);
+    else canvas.removeAttribute("aria-label");
+  }
+
   /** A new renderer (another quality) takes over the canvas. */
   private useRenderer(next: WebGLRenderer): void {
     this.renderer.domElement.replaceWith(next.domElement);
@@ -2470,6 +2483,10 @@ export class FloorplanViewer {
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = SRGBColorSpace;
     renderer.domElement.className = "fp3d-canvas";
+    // reachable and named for the keyboard and screen readers (#195): arrow keys turn it (controls.ts)
+    renderer.domElement.tabIndex = 0;
+    renderer.domElement.setAttribute("role", "application");
+    this.labelCanvas(renderer.domElement);
     this.host.prepend(renderer.domElement);
     return renderer;
   }
@@ -2529,6 +2546,8 @@ export class FloorplanViewer {
         if (this.swipe) this.options.onDeviceSwipe?.(this.swipe.entity, "end", 0, this.swipe.x, this.swipe.y);
         this.swipe = null;
       },
+      // the arrow keys steer the view, except while furnishing: there they nudge the selection (#195)
+      keys: () => !this.furnish,
       grab: (x, y) => this.grabFurniture(x, y),
       drag: (x, y, free) => this.dragFurniture(x, y, free),
       drop: () => this.dropFurniture(),

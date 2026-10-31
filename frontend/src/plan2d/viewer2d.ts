@@ -98,6 +98,9 @@ export class Plan2dViewer implements ViewerSurface {
     r.addEventListener("wheel", this.onWheel, { passive: false });
     r.addEventListener("contextmenu", (e) => e.preventDefault());
     r.addEventListener("keydown", this.onKey);
+    // reachable for the keyboard (#195): the arrows move the plan, plus and minus zoom
+    r.tabIndex = 0;
+    r.setAttribute("role", "application");
     this.resizer = typeof ResizeObserver === "function" ? new ResizeObserver(() => this.resize()) : null;
     this.resizer?.observe(host);
     // the bottom bar's height changes on its own (time travel opens): the probe's size follows it
@@ -269,6 +272,12 @@ export class Plan2dViewer implements ViewerSurface {
     if (!this.anchorCb) return;
     // a cable's end steps just below the device's pin (34 px) on the same point
     anchorSpots(this.anchors, this.floor()?.id ?? null, this.view, 26).forEach((s, i) => this.anchorCb?.(i, s.x, s.y, s.on, 1, true));
+  }
+
+  /** What the plan is called for a screen reader (#195). */
+  setDescription(label: string): void {
+    if (label) this.root.setAttribute("aria-label", label);
+    else this.root.removeAttribute("aria-label");
   }
 
   // what only the 3D view shows (or what edits): the plan leaves it out
@@ -495,6 +504,25 @@ export class Plan2dViewer implements ViewerSurface {
 
   /** Keyboard on a pin: Enter is a tap, Shift+Enter or the context-menu key a hold (as in 3D). */
   private readonly onKey = (e: KeyboardEvent) => {
+    if (e.target === this.root && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const step = e.shiftKey ? 160 : 60;
+      const w = this.size.w / 2;
+      const h = this.size.h / 2;
+      // an arrow moves the plan under the view the way the key points: right shows what lies to the right
+      const to =
+        e.key === "ArrowLeft" ? { ...this.view, tx: this.view.tx + step }
+        : e.key === "ArrowRight" ? { ...this.view, tx: this.view.tx - step }
+        : e.key === "ArrowUp" ? { ...this.view, ty: this.view.ty + step }
+        : e.key === "ArrowDown" ? { ...this.view, ty: this.view.ty - step }
+        : e.key === "+" || e.key === "=" ? zoomView(this.view, 1.2, w, h)
+        : e.key === "-" || e.key === "_" ? zoomView(this.view, 1 / 1.2, w, h)
+        : null;
+      if (to) {
+        e.preventDefault();
+        this.moveView(to);
+        return;
+      }
+    }
     const pin = (e.target as Element | null)?.closest?.("[data-pick]");
     const id = pin?.getAttribute("data-pick");
     if (!pin || !id) return;
@@ -550,6 +578,10 @@ export function createViewer(host: HTMLElement, options?: ViewerOptions): Plan2d
 
 /** The plan's look per theme; the pins use the view's own pin styles. */
 const CSS = `
+.fp3d-p2d:focus-visible {
+  outline: 2px solid var(--fp3d-accent, #37e0ff);
+  outline-offset: -3px;
+}
 .fp3d-p2d {
   position: absolute;
   inset: 0;

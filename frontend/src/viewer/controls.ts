@@ -31,6 +31,8 @@ export interface ControlEvents {
   swipeStart?(x: number, y: number, dx: number, dy: number): boolean;
   swipeMove?(dy: number): void;
   swipeEnd?(): void;
+  /** May the arrow and plus/minus keys steer the view now? (not while furnishing: there the arrows nudge the selection, #195) */
+  keys?(): boolean;
 }
 
 const HOLD_MS = 500;
@@ -49,6 +51,35 @@ export function stale(e: { timeStamp: number }, now: number): boolean {
 
 const MIN_PHI = 0.12;
 const MAX_PHI = 1.35;
+
+/** One keyboard step of the view (#195): radians for turning, a factor for zooming, a share of the distance for moving. */
+const KEY_TURN = Math.PI / 16;
+const KEY_ZOOM = 0.85;
+const KEY_MOVE = 0.1;
+
+/**
+ * Where a key takes the view from `from`: arrows turn it (Shift: move it across the ground), plus and minus zoom;
+ * null for any other key. Pure, for tests; `radius` stays inside min/max.
+ */
+export function keyView(key: string, shift: boolean, from: OrbitView, minRadius = 2, maxRadius = 80): Partial<OrbitView> | null {
+  const arrow = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].indexOf(key);
+  if (arrow >= 0) {
+    const dx = arrow === 1 ? 1 : arrow === 0 ? -1 : 0;
+    const dy = arrow === 3 ? 1 : arrow === 2 ? -1 : 0;
+    if (shift) {
+      // across the ground: right/left along the view's right, up/down along its forward
+      const step = from.radius * KEY_MOVE;
+      const target = from.target.clone();
+      target.x += (Math.cos(from.theta) * dx + Math.sin(from.theta) * dy) * step;
+      target.z += (-Math.sin(from.theta) * dx + Math.cos(from.theta) * dy) * step;
+      return { target };
+    }
+    return { theta: from.theta - dx * KEY_TURN, phi: clamp(from.phi + dy * KEY_TURN * 0.6, MIN_PHI, MAX_PHI) };
+  }
+  if (key === "+" || key === "=") return { radius: clamp(from.radius * KEY_ZOOM, minRadius, maxRadius) };
+  if (key === "-" || key === "_") return { radius: clamp(from.radius / KEY_ZOOM, minRadius, maxRadius) };
+  return null;
+}
 
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
@@ -97,6 +128,18 @@ export class OrbitControls {
     on("pointercancel", (e) => this.onUp(e));
     on("wheel", (e) => this.onWheel(e), { passive: false });
     on("contextmenu", (e) => e.preventDefault());
+    on("keydown", (e) => this.onKey(e));
+  }
+
+  /** Arrow keys turn the view, Shift+arrows move it, plus and minus zoom (#195): the canvas takes the focus for it. */
+  private onKey(e: KeyboardEvent): void {
+    if (e.target !== this.el || e.ctrlKey || e.metaKey || e.altKey || this.grabbing) return;
+    if (this.events.keys && !this.events.keys()) return;
+    const to = keyView(e.key, e.shiftKey, this.goal, this.minRadius, this.maxRadius);
+    if (!to) return;
+    e.preventDefault();
+    // a flight from where the last one is headed, so a held key keeps on turning
+    this.flyTo(to, 160);
   }
 
   dispose(): void {
