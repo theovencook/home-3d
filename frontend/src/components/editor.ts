@@ -201,6 +201,7 @@ import { UndoHistory } from "../undo-history.ts";
 import { EntityOptionCache, type EntityOption } from "../entity-options.ts";
 import { HassWatch } from "../hass-watch.ts";
 import { shiftBy, transformPlan, turnAbout } from "../plan-transform.ts";
+import { insertCorner, removeCorner } from "../geometry/room-corners.ts";
 
 /** Items that can be fixed against moving. */
 type ResizeNote = ResizeNoteOf<Building>;
@@ -2077,27 +2078,8 @@ export class Fp3dEditor extends LitElement {
       // no history here: the pointer-up records the state before the insert
       this.change(
         (_, floor) => {
-          const target = floor.rooms.find((r) => r.id === roomId)!;
-          target.points.splice(i + 1, 0, mid);
-          // both halves of the split edge keep its wall height
-          if (target.wall_heights) target.wall_heights.splice(i + 1, 0, target.wall_heights[i] ?? null);
-          if (target.wall_thickness) target.wall_thickness.splice(i + 1, 0, target.wall_thickness[i] ?? null);
-          const first = Math.hypot(mid[0] - a[0], mid[1] - a[1]);
-          if (target.wall_slopes) {
-            const sl = target.wall_slopes[i] ?? null;
-            const whole = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-            const hm = sl ? Math.round((sl[0] + ((sl[1] - sl[0]) * first) / whole) * 1000) / 1000 : 0;
-            if (sl) target.wall_slopes[i] = [sl[0], hm];
-            target.wall_slopes.splice(i + 1, 0, sl ? [hm, sl[1]] : null);
-          }
-          for (const o of floor.openings) {
-            if (o.room_id !== roomId || o.wall) continue;
-            if (o.edge > i) o.edge += 1;
-            else if (o.edge === i && o.offset > first) {
-              o.edge = i + 1;
-              o.offset = round(o.offset - first);
-            }
-          }
+          // the halves keep the wall's settings; splits, part heights and openings go with their half (#157)
+          insertCorner(floor, roomId, i, mid);
         },
         base,
         false,
@@ -6097,25 +6079,9 @@ export class Fp3dEditor extends LitElement {
   private deleteVertex(index: number): void {
     const room = this.room;
     if (!room || room.points.length <= 3) return;
-    const n = room.points.length;
-    const prev = (index - 1 + n) % n;
     const base = this._doc;
-    this.change((_, floor) => {
-      const target = floor.rooms.find((r) => r.id === room.id)!;
-      target.points.splice(index, 1);
-      // the edge starting at the removed corner goes away; the one before it keeps its height
-      if (target.wall_heights) target.wall_heights.splice(index, 1);
-      if (target.wall_thickness) target.wall_thickness.splice(index, 1);
-      if (target.wall_slopes) {
-        target.wall_slopes.splice(index, 1);
-        target.wall_slopes[(index - 1 + target.points.length) % target.points.length] = null;
-        if (target.wall_slopes.every((x) => !x)) target.wall_slopes = undefined;
-      }
-      // the two edges at the removed corner merge; openings on them cannot keep their place
-      floor.openings = floor.openings
-        .filter((o) => o.room_id !== room.id || o.wall || (o.edge !== index && o.edge !== prev))
-        .map((o) => (o.room_id === room.id && !o.wall && o.edge > index ? { ...o, edge: o.edge - 1 } : o));
-    });
+    // the edges at the corner become one; splits, part heights and openings are remapped with it (#157)
+    this.change((_, floor) => removeCorner(floor, room.id, index));
     this.noteResize(room.id, base);
     this._vertex = null;
   }
@@ -7163,8 +7129,8 @@ export class Fp3dEditor extends LitElement {
   private edgeParts(room: Room, edge: number): number[] {
     const floor = this.floor;
     if (!floor) return [0];
-    const walls = generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }, floor.walls ?? []).walls;
-    const starts = walls.flatMap((w) => w.sources.filter((s) => s.room_id === room.id && s.edge === edge).map((s) => s.t0));
+    // the parts a per-part height list follows (#157): also the ones whose walls merged or are left out ("No wall")
+    const starts = generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }, floor.walls ?? []).parts.get(`${room.id}:${edge}`) ?? [];
     return starts.length ? [...new Set(starts)].sort((a, b) => a - b) : [0];
   }
 

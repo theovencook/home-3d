@@ -70,6 +70,11 @@ export interface WallResult {
   warnings: string[];
   /** Room pairs whose shared wall is left out ("no wall"): they form one space, also for the light. */
   open: [string, string][];
+  /**
+   * Where the parts of each room edge start (m from points[edge], sorted), by "room:edge": the parts a per-part
+   * wall_heights list follows, one per cut by another room's corner, a free wall's end or a split (#157).
+   */
+  parts: Map<string, number[]>;
 }
 
 interface Segment {
@@ -371,7 +376,7 @@ export function generateWalls(rooms: readonly Room[], options: WallOptions, free
       ...(w.slope ? { slope: w.slope } : {}),
     };
   });
-  return { walls, warnings: [...new Set(warnings)], open };
+  return { walls, warnings: [...new Set(warnings)], open, parts: partsOf };
 }
 
 function wallId(a: Vec2, b: Vec2): string {
