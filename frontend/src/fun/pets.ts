@@ -85,9 +85,60 @@ function shapes(lib: FunLib) {
     return geo(pos);
   };
   const sphere = (n: number) => lathe(Array.from({ length: n / 2 + 1 }, (_, i): [number, number] => [Math.sin((i / (n / 2)) * Math.PI) * 0.5, -Math.cos((i / (n / 2)) * Math.PI) * 0.5]), n);
+  /**
+   * A soft tube along a smooth curve through the points (a cat's tail), its radius going from r0 to r1, the end
+   * rounded off; the start is open (it sits inside the body).
+   */
+  const tube = (ctrl: [number, number, number][], r0: number, r1: number, n = 7, sub = 3) => {
+    // Catmull-Rom through the points
+    const pts: [number, number, number][] = [];
+    const at = (i: number) => ctrl[Math.max(0, Math.min(ctrl.length - 1, i))];
+    for (let i = 0; i < ctrl.length - 1; i++) {
+      for (let s = 0; s < sub; s++) {
+        const t = s / sub;
+        const [p0, p1, p2, p3] = [at(i - 1), at(i), at(i + 1), at(i + 2)];
+        pts.push([0, 1, 2].map((k) => 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t * t + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t * t * t)) as [number, number, number]);
+      }
+    }
+    pts.push(ctrl[ctrl.length - 1]);
+    const norm = (v: number[]) => {
+      const l = Math.hypot(v[0], v[1], v[2]) || 1;
+      return [v[0] / l, v[1] / l, v[2] / l];
+    };
+    const cross = (a: number[], b: number[]) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const tan = pts.map((_, i) => norm([0, 1, 2].map((k) => pts[Math.min(pts.length - 1, i + 1)][k] - pts[Math.max(0, i - 1)][k])));
+    // rings round the curve, turned along with it (parallel transport), then the rounded tip
+    let nrm = norm(cross(tan[0], Math.abs(tan[0][1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]));
+    const rings: { c: number[]; r: number; n: number[]; b: number[] }[] = [];
+    pts.forEach((c, i) => {
+      if (i) nrm = norm(cross(cross(tan[i], nrm), tan[i]));
+      rings.push({ c, r: r0 + ((r1 - r0) * i) / (pts.length - 1), n: nrm, b: cross(tan[i], nrm) });
+    });
+    const last = rings[rings.length - 1];
+    const t1 = tan[tan.length - 1];
+    for (const [k, f] of [[0.55, 0.8], [0.9, 0.4], [1, 0]]) rings.push({ c: [0, 1, 2].map((j) => last.c[j] + t1[j] * r1 * k), r: r1 * f, n: last.n, b: last.b });
+    const pos: number[] = [];
+    const p = (g: (typeof rings)[number], a: number) => [0, 1, 2].map((j) => g.c[j] + g.r * (Math.cos(a) * g.n[j] + Math.sin(a) * g.b[j]));
+    for (let i = 0; i < rings.length - 1; i++) {
+      for (let k = 0; k < n; k++) {
+        const a0 = (k / n) * Math.PI * 2;
+        const a1 = ((k + 1) / n) * Math.PI * 2;
+        pos.push(...p(rings[i], a0), ...p(rings[i], a1), ...p(rings[i + 1], a1), ...p(rings[i], a0), ...p(rings[i + 1], a1), ...p(rings[i + 1], a0));
+      }
+    }
+    return geo(pos);
+  };
   return {
     /** A unit sphere (diameter 1): scale it to an ellipsoid. */
     ball: sphere(14),
+    /** The same, coarser, for small parts (eyes, nose, paws). */
+    pea: sphere(8),
+    /** In between, for middle-sized parts. */
+    bun: sphere(10),
+    /** A whisker: a thin cross of two strips along x from 0 to 1 (seen from any side), 1 wide; drawn both sides. */
+    ribbon: geo([0, -0.5, 0, 1, -0.5, 0, 1, 0.5, 0, 0, -0.5, 0, 1, 0.5, 0, 0, 0.5, 0, 0, 0, -0.5, 1, 0, -0.5, 1, 0, 0.5, 0, 0, -0.5, 1, 0, 0.5, 0, 0, 0.5]),
+    lathe,
+    tube,
     cylinder: (rTop: number, rBottom: number, h: number, n = 8) => lathe([[0, -h / 2], [rBottom, -h / 2], [rTop, h / 2], [0, h / 2]], n),
     cone: (r: number, h: number, n = 8) => lathe([[0, -h / 2], [r, -h / 2], [0, h / 2]], n),
   };
@@ -101,7 +152,8 @@ const FURS: Record<string, [string, string, ...string[]]> = {
   white: ["#f1f1f4", "#e6e1e4"],
   grey: ["#9097a3", "#d9dce2"],
   brown: ["#7d5536", "#d4a97c"],
-  calico: ["#f4f0e8", "#e09045"],
+  // #205: white with orange and black patches (it was white with an orange chest and face, no patches)
+  calico: ["#f4f0e8", "#f8f5ef", "#e09045", "#3a3536"],
   golden: ["#e3b46b", "#f7e3bd"],
   cream: ["#efe0c4", "#fff6e6"],
   // #42: white with grey and cream patches
@@ -151,10 +203,19 @@ interface Model {
   head: THREE.Group;
   eyes: THREE.Group[];
   zzz: THREE.Mesh;
+  /**
+   * A cat (#205) poses itself: walking (legs, head, tail and blinking follow the step phase), standing (head down at
+   * the bowls), sitting, lying like a loaf, or curled up asleep with the tail round it. Other animals have none: the
+   * pets' own animation moves their parts.
+   */
+  set?: (pose: CatPose, phase: number, headDown?: boolean) => void;
 }
+
+type CatPose = "walk" | "stand" | "sit" | "lie" | "curl";
 
 /** A round, friendly animal in the colours of its fur: big head, dark eyes with a shine, a little nose. */
 export function buildModel(lib: FunLib, pet: Pet): Model {
+  if (pet.kind === "cat") return buildCat(lib, pet);
   const S = shapes(lib);
   const L = lookOf(pet);
   const [main, second, ...patchColours] = FURS[pet.fur] ?? FURS.orange;
@@ -268,7 +329,13 @@ export function buildModel(lib: FunLib, pet: Pet): Model {
     if (L.tail === "cat") tail.add(ball(m1, thick * 1.8, thick * 1.8, thick * 1.8, 0, tl, 0));
   }
   body.add(tail);
-  // "z Z" over a sleeping pet, on a card tilted towards the usual view from above
+  const zzz = zzzCard(lib, L.hi + h * 2 + 0.12);
+  root.add(zzz);
+  return { root, body, legs, tail, head, eyes, zzz };
+}
+
+/** "z Z" over a sleeping pet, on a card tilted towards the usual view from above (hidden until it sleeps). */
+function zzzCard(lib: FunLib, y: number): THREE.Mesh {
   const c = document.createElement("canvas");
   c.width = 128;
   c.height = 64;
@@ -280,10 +347,262 @@ export function buildModel(lib: FunLib, pet: Pet): Model {
   g.fillText("Z", 58, 46);
   const zzz = new lib.Mesh(new lib.PlaneGeometry(0.3, 0.15), new lib.MeshBasicMaterial({ map: new lib.CanvasTexture(c), transparent: true, depthWrite: false, side: lib.DoubleSide }));
   zzz.rotation.x = -0.7;
-  zzz.position.set(0, L.hi + h * 2 + 0.12, 0);
+  zzz.position.set(0, y, 0);
   zzz.visible = false;
+  return zzz;
+}
+
+/**
+ * The parts that never move on their own, one mesh per material (fewer draw calls): each part's place, turn and size
+ * baked into its triangles, its shading kept.
+ */
+function mergeParts(lib: FunLib, parts: THREE.Object3D[]): THREE.Object3D[] {
+  const byMat = new Map<THREE.Material, THREE.Mesh[]>();
+  const out: THREE.Object3D[] = [];
+  for (const o of parts) {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) out.push(o);
+    else byMat.set(m.material as THREE.Material, [...(byMat.get(m.material as THREE.Material) ?? []), m]);
+  }
+  for (const [material, meshes] of byMat) {
+    if (meshes.length === 1) {
+      out.push(meshes[0]);
+      continue;
+    }
+    const pos: number[] = [];
+    const col: number[] = [];
+    for (const m of meshes) {
+      m.updateMatrix();
+      const e = m.matrix.elements;
+      const a = m.geometry.getAttribute("position");
+      const c = m.geometry.getAttribute("color");
+      for (let i = 0; i < a.count; i++) {
+        const [x, y, z] = [a.getX(i), a.getY(i), a.getZ(i)];
+        pos.push(e[0] * x + e[4] * y + e[8] * z + e[12], e[1] * x + e[5] * y + e[9] * z + e[13], e[2] * x + e[6] * y + e[10] * z + e[14]);
+        col.push(c.getX(i), c.getY(i), c.getZ(i));
+      }
+    }
+    const g = new lib.BufferGeometry();
+    g.setAttribute("position", new lib.Float32BufferAttribute(pos, 3));
+    g.setAttribute("color", new lib.Float32BufferAttribute(col, 3));
+    g.computeBoundingSphere();
+    out.push(new lib.Mesh(g, material));
+  }
+  return out;
+}
+
+type V3 = [number, number, number];
+
+/**
+ * The cat (#205): a cute kitten. What makes it read as a cat rather than a dog: a flat face (cheeks and whisker pads
+ * no further forward than the face) that is wider than tall, a small triangle of a nose, whiskers, big round eyes,
+ * big upright triangular ears on the corners of the head, the head close on the shoulders, a back that arches at the
+ * rump, slim legs tucked under it with the paws close together, and a tail held up with a hook at its tip. Each pose
+ * has its own body and tail, shown one at a time: standing and walking, sitting upright (a pear with the tail round
+ * the front paws), lying like a loaf, and curled up asleep (a round cushion with the tail round it). The head, eyes,
+ * legs and walking tail are shared and moved by `set`. Simple round shapes only; the parts that never move on their
+ * own are merged into one mesh per material.
+ */
+function buildCat(lib: FunLib, pet: Pet): Model {
+  const S = shapes(lib);
+  const [main, second, ...patchColours] = FURS[pet.fur] ?? FURS.orange;
+  const mat = (color: string | THREE.Color, shaded = true) => new lib.MeshBasicMaterial({ color, vertexColors: shaded });
+  const m1 = mat(main);
+  const m2 = mat(second);
+  const paw = mat(new lib.Color(main).lerp(new lib.Color(second), 0.6));
+  const pink = mat("#f08aa0", false);
+  const dark = mat("#16161c", false);
+  const shine = mat("#ffffff", false);
+  const irisColour = pet.eyes ? IRISES[pet.eyes] : undefined;
+  const iris = irisColour ? mat(irisColour, false) : null;
+  const patches = patchColours.map((c) => mat(c));
+  const light = new lib.Color(main).getHSL({ h: 0, s: 0, l: 0 }).l;
+  // whiskers grey on a light coat, white on a darker one; shut eyes light on a dark coat, so they show
+  const whiskerMat = new lib.MeshBasicMaterial({ color: light > 0.6 ? "#8d939e" : "#f2f2f4", side: lib.DoubleSide });
+  whiskerMat.name = "whiskers";
+  const lidMat = light < 0.25 ? mat("#9a9aa6", false) : dark;
+  // a tabby's darker stripes
+  const stripe = pet.fur === "tabby" ? mat(new lib.Color(main).multiplyScalar(0.7)) : null;
+  const ball = (m: THREE.Material, [sx, sy, sz]: V3, [x, y, z]: V3 = [0, 0, 0], g: THREE.BufferGeometry = S.ball, rot?: V3) => {
+    const o = new lib.Mesh(g, m);
+    o.scale.set(sx, sy, sz);
+    o.position.set(x, y, z);
+    if (rot) o.rotation.set(...rot);
+    return o;
+  };
+  const group = (...parts: THREE.Object3D[]) => {
+    const g = new lib.Group();
+    if (parts.length) g.add(...mergeParts(lib, parts));
+    return g;
+  };
+  /** A patch (a calico's) breaking through the top of a round part (its size and centre), shifted sideways and along. */
+  const patch = (i: number, [sx, sy, sz]: V3, [x, y, z]: V3, dx: number, dz: number, k = 0.66) => (patches[i] ? [ball(patches[i], [sx * k, sy * k, sz * k], [x + dx * sx, y + sy * 0.23, z + dz * sz], S.bun)] : []);
+  /** A tabby's stripes across a round part: thin slices of it, raised a little, so they show over the back only. */
+  const stripes = ([sx, sy, sz]: V3, [x, y, z]: V3, at: number[]) => (stripe ? at.map((k) => ball(stripe, [sx * Math.sqrt(1 - k * k), sy * Math.sqrt(1 - k * k), 0.016], [x, y + sy * 0.06, z + (k * sz) / 2], S.bun)) : []);
+  const tailOf = (ctrl: V3[]) => new lib.Mesh(S.tube(ctrl, TR0, TR1), m1);
+
+  // the kitten's proportions (metres): body and head half sizes, legs, the arch of its back, its tail
+  const [bx, by, bz] = [0.07, 0.07, 0.13];
+  const [hx, hy, hz] = [0.085, 0.075, 0.075];
+  const LEG = 0.06;
+  const LEG_R = 0.016;
+  const ARCH = 0.5;
+  const [TL, TR0, TR1, HOOK] = [0.18, 0.016, 0.011, 0.8];
+  const cy = LEG + by;
+  const root = new lib.Group();
+  const body = new lib.Group();
+  root.add(body);
+
+  // standing and walking: a chest and a rump that arches up, the chest and belly lighter
+  const chest: [V3, V3] = [[bx * 1.84, by * 1.8, bz * 1.24], [0, cy - by * 0.05, bz * 0.36]];
+  const rump: [V3, V3] = [[bx * 2, by * 2 * (1 + 0.08 * ARCH), bz * 1.36], [0, cy + by * 0.14 * ARCH, -bz * 0.3]];
+  const stand = group(ball(m1, ...chest), ball(m1, ...rump), ball(m2, [bx * 1.4, by * 1.3, bz * 1.0], [0, cy - by * 0.32, bz * 0.42], S.bun), ...stripes(...rump, [-0.55, -0.1, 0.35]), ...patch(0, ...rump, 0.18, -0.05), ...patch(1, ...chest, -0.2, 0.05, 0.6));
+  /** How far the body sinks when it lies like a loaf. */
+  const LIE = LEG + by * 0.02;
+
+  // sitting: a pear on its haunches, the front legs straight down in front, the tail round the front paws
+  const hs = LEG * 1.2 + by * 2.7;
+  const sz0 = -bz * 0.15;
+  const pear: [V3, V3] = [[bx * 2, hs, bx * 1.9], [0, hs / 2, sz0]];
+  const sitTail = [-100, -55, -10, 30, 65, 95].map((d, i): V3 => {
+    const a = (d * Math.PI) / 180;
+    return [Math.cos(a) * bx * 1.2, i ? TR0 * 0.95 : by * 0.6, sz0 + Math.sin(a) * bx * 1.2];
+  });
+  const sit = group(
+    ball(m1, [1, 1, 0.95], [0, 0, sz0], S.lathe([[0, 0], [bx * 0.85, hs * 0.03], [bx, hs * 0.2], [bx * 0.95, hs * 0.4], [bx * 0.8, hs * 0.6], [bx * 0.66, hs * 0.8], [bx * 0.5, hs * 0.93], [0, hs]], 14)),
+    ball(m1, [bx * 1.0, hs * 0.5, bz * 0.95], [bx * 0.55, hs * 0.25, sz0 - bz * 0.05], S.bun),
+    ball(m1, [bx * 1.0, hs * 0.5, bz * 0.95], [-bx * 0.55, hs * 0.25, sz0 - bz * 0.05], S.bun),
+    ball(m2, [bx * 1.0, hs * 0.5, bx * 0.5], [0, hs * 0.5, sz0 + bx * 0.72], S.bun),
+    ball(paw, [LEG_R * 2.3, LEG_R * 1.3, LEG_R * 2.8], [bx * 0.72, LEG_R * 0.65, sz0 + bx * 0.62], S.pea),
+    ball(paw, [LEG_R * 2.3, LEG_R * 1.3, LEG_R * 2.8], [-bx * 0.72, LEG_R * 0.65, sz0 + bx * 0.62], S.pea),
+    tailOf(sitTail),
+    ...patch(0, ...pear, 0.2, -0.3),
+    ...patch(1, [bx * 1.6, hs * 0.6, bx * 1.5], [0, hs * 0.55, sz0], -0.22, -0.25),
+  );
+
+  // lying like a loaf: the standing body sunk down, the tail along its side on the floor
+  const lie = group(tailOf([[0, cy + by * 0.3, -bz * 0.9], [bx * 0.5, LIE + TR0 * 1.2, -bz * 1.12], [bx * 1.05, LIE + TR0, -bz * 0.62], [bx * 1.15, LIE + TR0, 0], [bx * 1.05, LIE + TR0, bz * 0.5]]));
+
+  // curled up asleep: a round cushion, the paws under the chin, the tail round the front
+  const R = (bx + bz) / 2;
+  const cushion: [V3, V3] = [[R * 2.1, by * 1.7, R * 2], [0, by * 0.85, 0]];
+  const ring = (deg: number, y: number): V3 => [Math.cos((deg * Math.PI) / 180) * R * 1.03, y, Math.sin((deg * Math.PI) / 180) * R * 1.03];
+  const curl = group(
+    ball(m1, ...cushion),
+    ball(m1, [R * 1.25, by * 1.9, R * 1.25], [R * 0.35, by * 0.95, -R * 0.4], S.bun),
+    ball(m1, [R, by * 1.6, R], [-R * 0.4, by * 0.8, R * 0.2], S.bun),
+    ball(m2, [R * 0.7, by * 0.9, R * 0.6], [-R * 0.25, by * 0.45, R * 0.72], S.bun),
+    ball(paw, [LEG_R * 2.2, LEG_R * 1.2, LEG_R * 2.6], [-R * 0.62, LEG_R * 0.6, R * 0.88], S.pea),
+    ball(paw, [LEG_R * 2.2, LEG_R * 1.2, LEG_R * 2.6], [-R * 0.18, LEG_R * 0.6, R * 1.02], S.pea),
+    tailOf([ring(-95, by * 0.7), ring(-50, TR0 * 1.1), ring(0, TR0 * 1.1), ring(45, TR0 * 1.1), ring(85, TR0 * 1.1), ring(118, TR0)]),
+    ...stripes([R * 1.25, by * 1.9, R * 1.25], [R * 0.35, by * 0.95, -R * 0.4], [-0.4, 0.2]),
+    ...patch(0, ...cushion, 0.15, -0.18, 0.6),
+    ...patch(1, ...cushion, -0.2, 0.08, 0.5),
+  );
+  body.add(stand, sit, lie, curl);
+
+  // slim legs tucked under the body, the paws close together; the hind legs with round thighs. A front leg's shank is
+  // a part of its own (lying, only the paw peeks out); a hind leg is one piece with its thigh.
+  const hipY = LEG + by * 0.5;
+  const HIPS: V3[] = [[-bx * 0.42, hipY, bz * 0.52], [bx * 0.42, hipY, bz * 0.52], [-bx * 0.45, hipY, -bz * 0.55], [bx * 0.45, hipY, -bz * 0.55]];
+  const legParts = HIPS.map(([x, y, z], i) => {
+    const g = new lib.Group();
+    g.position.set(x, y, z);
+    const shank = new lib.Mesh(S.cylinder(LEG_R, LEG_R * 0.85, hipY, 8), m1);
+    shank.position.y = -hipY / 2;
+    const foot = ball(paw, [LEG_R * 2.3, LEG_R * 1.3, LEG_R * 2.7], [0, -hipY + LEG_R * 0.65, LEG_R * 0.3], S.pea);
+    if (i >= 2) g.add(...mergeParts(lib, [shank, ball(m1, [LEG_R * 3, by * 1.1, bz * 0.5], [Math.sign(x) * LEG_R * 0.3, -by * 0.15, 0], S.bun)]), foot);
+    else g.add(shank, foot);
+    body.add(g);
+    return { g, shank };
+  });
+
+  // the tail: up from the rump, the tip hooked over
+  const tailGroup = group(tailOf([[0, 0, 0], [0, TL * 0.28, -TL * 0.16], [0, TL * 0.62, -TL * 0.2], [0, TL * 0.88, -TL * 0.1], [0, TL * (0.98 - 0.04 * HOOK), TL * 0.08 * HOOK], [0, TL * 0.9, TL * 0.13 * HOOK]]));
+  tailGroup.position.set(0, cy + by * (0.45 + 0.2 * ARCH), -bz * 0.92);
+  body.add(tailGroup);
+
+  // the head: wider than tall, a flat face: soft cheeks, whisker pads and a chin flush with it, a small triangle of a
+  // nose (point down), whiskers
+  const zs = (x: number, y: number) => hz * Math.sqrt(Math.max(0.05, 1 - x * x - y * y));
+  const face: THREE.Object3D[] = [ball(m1, [hx * 2, hy * 2, hz * 2])];
+  for (const s of [-1, 1]) {
+    face.push(ball(m1, [hx * 0.975, hy, hz * 1.2], [s * hx * 0.42, -hy * 0.36, hz * 0.2]), ball(m2, [hx * 0.44, hy * 0.38, hz * 0.26], [s * hx * 0.19, -hy * 0.42, zs(0.19, 0.42) - hz * 0.1], S.pea));
+    for (const tilt of [0.24, -0.22]) face.push(ball(whiskerMat, [0.06, 0.0018, 0.0018], [s * hx * 0.3, -hy * (tilt > 0 ? 0.42 : 0.48), zs(0.3, 0.45) - hz * 0.04], S.ribbon, [0, s > 0 ? 0.25 : Math.PI - 0.25, tilt]));
+  }
+  face.push(ball(m2, [hx * 0.36, hy * 0.26, hz * 0.3], [0, -hy * 0.68, zs(0, 0.68) - hz * 0.12], S.pea));
+  face.push(ball(pink, [hx * 0.17, hy * 0.13, hz * 0.08], [0, -hy * 0.2, zs(0, 0.2) - hz * 0.01], S.cone(0.5, 1, 3), [0, -Math.PI / 2, Math.PI]));
+  // a tabby's "M" on the forehead
+  if (stripe) for (const x of [-0.018, 0, 0.018]) face.push(ball(stripe, [0.008, 0.03, 0.009], [x, hy * 0.6, zs(x / hx, 0.6) - 0.002], S.pea, [-0.75, x * 8, 0]));
+  const skull: [V3, V3] = [[hx * 2, hy * 2, hz * 2], [0, 0, 0]];
+  const head = group(...face, ...patch(0, ...skull, 0.24, -0.03, 0.66), ...patch(1, ...skull, -0.25, -0.15, 0.55));
+  // big upright triangular ears on the corners of the head, pink inside; the one over a patch takes its colour
+  const [ew, eh] = [0.045, 0.09];
+  const earShape = S.cone(0.5, 1, 4);
+  for (const s of [-1, 1]) {
+    const outer = s > 0 && patches[0] ? patches[0] : s < 0 && patches[1] ? patches[1] : m1;
+    const ear = new lib.Group();
+    ear.add(ball(outer, [ew * 2, eh, ew * 0.75], [0, eh / 2, 0], earShape, [0, Math.PI / 4, 0]), ball(pink, [ew * 1.2, eh * 0.72, ew * 0.3], [0, eh * 0.4, ew * 0.24], earShape, [0, Math.PI / 4, 0]));
+    ear.position.set(s * hx * 0.56, hy * 0.6, -hz * 0.12);
+    ear.rotation.set(-0.1, 0, -s * 0.18);
+    head.add(ear);
+  }
+  // big round eyes: the iris (dark without an eye colour) round a big pupil, two shines; shut, a thin arc
+  const eyes: THREE.Group[] = [];
+  const open: THREE.Object3D[] = [];
+  const shut: THREE.Object3D[] = [];
+  const lidShape = S.tube([[-0.5, 0.1, 0.2], [-0.25, -0.15, 0.32], [0, -0.22, 0.36], [0.25, -0.15, 0.32], [0.5, 0.1, 0.2]], 0.1, 0.1, 4, 2);
+  const [w, h, d] = [0.036, 0.04, hz * 0.2];
+  for (const s of [-1, 1]) {
+    const e = new lib.Group();
+    e.position.set(s * hx * 0.4, hy * 0.02, zs(0.4, 0.02) - hz * 0.06);
+    e.rotation.y = s * 0.38;
+    const parts = mergeParts(lib, [ball(iris ?? dark, [w, h, d]), ball(dark, [w * 0.62, h * 0.66, d * 0.8], [0, -h * 0.04, d * 0.22], S.pea), ball(shine, [w * 0.16, w * 0.16, d * 0.4], [s * w * 0.18, -h * 0.22, d * 0.42], S.pea), ball(shine, [w * 0.34, w * 0.34, d * 0.4], [-s * w * 0.2, h * 0.22, d * 0.42], S.pea)]);
+    const lid = ball(lidMat, [w * 1.1, w * 1.1, d * 2.2], [0, 0, 0], lidShape);
+    lid.visible = false;
+    e.add(...parts, lid);
+    open.push(...parts);
+    shut.push(lid);
+    head.add(e);
+    eyes.push(e);
+  }
+  body.add(head);
+  const zzz = zzzCard(lib, by * 2 + hy * 2 + 0.12);
   root.add(zzz);
-  return { root, body, legs, tail, head, eyes, zzz };
+
+  const set = (pose: CatPose, phase: number, headDown = false) => {
+    const walking = pose === "walk";
+    const upright = walking || pose === "stand";
+    stand.visible = upright || pose === "lie";
+    sit.visible = pose === "sit";
+    lie.visible = pose === "lie";
+    curl.visible = pose === "curl";
+    tailGroup.visible = upright;
+    body.position.y = pose === "lie" ? -LIE : 0;
+    const swing = walking ? Math.sin(phase) : 0;
+    legParts.forEach(({ g, shank }, i) => {
+      g.visible = upright || (i < 2 && (pose === "sit" || pose === "lie"));
+      g.position.set(...HIPS[i]);
+      g.rotation.x = upright ? (i === 0 || i === 3 ? swing : -swing) * 0.45 : 0;
+      shank.visible = pose !== "lie";
+      if (pose === "sit") g.position.set(HIPS[i][0] * 0.7, hipY, sz0 + bx * 0.72);
+      // lying: the front paws peek out in front, under the chest
+      if (pose === "lie") g.position.set(HIPS[i][0] * 0.8, LIE + hipY, bz * 0.82);
+    });
+    // the head close on the shoulders: over the chest standing, on top of the pear sitting, resting curled up
+    if (pose === "sit") head.position.set(0, hs + hy * 0.5, sz0 + bx * 0.35);
+    else if (pose === "curl") head.position.set(-R * 0.36, hy * 0.92, R * 0.6);
+    else head.position.set(0, cy + by * 0.85 + hy * 0.5, bz * 0.72);
+    if (pose === "curl") head.rotation.set(0.25, 0.35, 0.15);
+    else head.rotation.set(headDown ? 0.5 : walking ? Math.sin(phase * 2) * 0.04 : pose === "lie" ? 0.06 : 0, 0, 0);
+    tailGroup.rotation.set(0, 0, walking ? Math.sin(phase * 0.7) * 0.3 : 0.08);
+    // eyes shut asleep, and a blink now and then while it walks
+    const closed = pose === "curl" || (walking && (phase * 0.035) % 1 < 0.06);
+    for (const o of open) o.visible = !closed;
+    for (const o of shut) o.visible = closed;
+  };
+  set("stand", 0);
+  return { root, body, legs: legParts.map((l) => l.g), tail: tailGroup, head, eyes, zzz, set };
 }
 
 /** A place a pet likes: where it lies (and how high), where it walks to first (to jump up from the front), which way it faces. */
@@ -694,8 +1013,14 @@ export function startPets(ctx: PetsContext): PetsController {
     const lift = !a.climb && !a.jump && a.y < 0.05 ? rugTop(floors.get(a.floorId)?.rugs ?? [], a.pos) : 0;
     a.model.root.position.set(a.pos[0], a.y + lift, a.pos[1]);
     a.model.root.rotation.y = a.heading;
-    // walking: legs swing, the head nods, the tail wags; lying like a loaf: legs tucked away, the tail round the side
     const moving = (a.mode === "walk" || a.mode === "climb") && !a.jump;
+    a.model.zzz.visible = a.mode === "sleep";
+    if (a.model.set) {
+      // a cat: lying by day like a loaf, asleep curled up; standing still at the bowls (head down) and in a jump
+      a.model.set(lying ? (a.mode === "sleep" ? "curl" : "lie") : moving ? "walk" : "stand", a.phase, a.mode === "stand");
+      return;
+    }
+    // walking: legs swing, the head nods, the tail wags; lying like a loaf: legs tucked away, the tail round the side
     const swing = moving ? Math.sin(a.phase) : 0;
     a.model.legs.forEach((l, i) => {
       l.rotation.x = lying ? 0 : (i === 0 || i === 3 ? swing : -swing) * 0.6;
@@ -707,7 +1032,6 @@ export function startPets(ctx: PetsContext): PetsController {
     if (lying) a.model.tail.rotation.set(-1.45, 0, 0.9);
     else a.model.tail.rotation.set(L.tail === "cat" ? -0.5 : -0.9, 0, Math.sin(a.phase * 0.7) * (moving ? 0.6 : 0.2));
     for (const e of a.model.eyes) e.scale.y = a.mode === "sleep" ? 0.12 : 1;
-    a.model.zzz.visible = a.mode === "sleep";
   };
 
   /**
@@ -720,6 +1044,10 @@ export function startPets(ctx: PetsContext): PetsController {
     m.root.position.set(s.pos[0], s.y + (s.y < 0.05 ? rugTop(floors.get(a.floorId)?.rugs ?? [], s.pos) : 0), s.pos[1]);
     m.root.rotation.y = s.heading;
     m.zzz.visible = false;
+    if (m.set) {
+      m.set(s.pose === "sit" ? "sit" : s.pose === "curl" ? "curl" : "lie", 0);
+      return;
+    }
     if (s.pose === "sit") {
       // the body tilts up at the front round its feet, the rear down on the floor; front legs straight, rear tucked
       const tilt = -0.5;
