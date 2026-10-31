@@ -46,13 +46,14 @@ var Et=globalThis,Ot=Et.ShadowRoot&&(Et.ShadyCSS===void 0||Et.ShadyCSS.nativeSha
   --p2d-out: rgba(91, 124, 255, 0.06);
 }
 .fp3d-p2d[data-theme="blueprint"] {
-  --p2d-wall: #e8f1ff;
+  --p2d-wall: #ffffff;
   --p2d-wall-ext: #ffffff;
-  --p2d-room: rgba(255, 255, 255, 0.05);
-  --p2d-room-line: rgba(255, 255, 255, 0.35);
-  --p2d-item: rgba(235, 244, 255, 0.7);
-  --p2d-item-fill: rgba(255, 255, 255, 0.08);
-  --p2d-gap: #123e7a;
+  --p2d-room: rgba(255, 255, 255, 0.04);
+  --p2d-room-line: rgba(255, 255, 255, 0.9);
+  --p2d-item: rgba(255, 255, 255, 0.95);
+  --p2d-item-fill: rgba(255, 255, 255, 0.06);
+  --p2d-gap: #0a2a58;
+  --p2d-label: #ffffff;
   --p2d-out: rgba(255, 255, 255, 0.05);
 }
 .fp3d-p2d[data-theme="day"] {
@@ -183,7 +184,7 @@ var Et=globalThis,Ot=Et.ShadowRoot&&(Et.ShadyCSS===void 0||Et.ShadyCSS.nativeSha
   color: var(--p2d-label);
   font: 600 12px var(--fp3d-title-font, sans-serif);
   white-space: nowrap;
-  opacity: 0.85;
+  /* full strength: a faded label dropped under 7:1 in some looks (#216) */
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   pointer-events: none;
 }
@@ -191,7 +192,6 @@ var Et=globalThis,Ot=Et.ShadowRoot&&(Et.ShadyCSS===void 0||Et.ShadyCSS.nativeSha
 .fp3d-p2d[data-theme="realistic"] .fp3d-p2d-label { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8); }
 .fp3d-p2d-label small {
   font: 500 11px var(--fp3d-font, sans-serif);
-  opacity: 0.85;
 }
 .fp3d-p2d-pin { pointer-events: auto; }
 .fp3d-p2d-flash { outline: 3px solid var(--fp3d-accent); outline-offset: 3px; }
