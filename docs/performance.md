@@ -443,3 +443,24 @@ Measured 31 Oct 2026 with `npm run build` (the budgets it checks) on integration
 ### Not measured
 
 - How long a real wall tablet takes to parse the main bundle before and after. On the desktop the headless check (`npm run speed`, sample home, 2 runs each) showed no change in panel load: ready after 973 to 1,028 ms before and 933 to 1,042 ms after. Editor selection was also unchanged, at 14 to 16 ms for a linked item.
+
+## The browser check: smoke test in CI and a repeatable speed check (#178)
+
+`frontend/scripts/browser-check.mjs` loads the shipped bundles (`custom_components/home_3d/frontend`, as `npm run build` left them) in headless Chrome, Chromium or Edge through puppeteer-core. It mounts `home-3d-panel` with a fake Home Assistant (`scripts/browser-check/fake-hass.js`). That fake has the plan's entities plus 4,900 filler sensors, answers the `home_3d/*` websocket calls from one plan, and keeps nothing. The plan is the shipped sample home unless `--plan` names another.
+
+- **`npm run smoke`** (CI, after the build) shows the house and sends 2 s of `hass` updates. It walks through the house, switches every look (each compiles its shaders), opens the 2D plan, the Extensions tab and the item editor, the Settings tab and the editor, and presses items in the plan. It fails on any console error, page error, failed request or HTTP error, and when the panel or the 3D view renders for a state they do not show (#177). WebGL is drawn with SwiftShader, so no GPU is needed. Its times are printed but not gated: SwiftShader draws every frame on the CPU.
+- **`npm run speed`** (and `npm run speed -- --throttle 4`) uses the machine's GPU and measures what earlier rounds measured by hand: load, 6 s of background load in view mode (unwatched states, and 1 change in 5 watched), and 15 editor selections each of a linked and a plain item. It fails past its limits, which are about 3x today's numbers on the sample home. Other options: `--json` (one line, for scripts), `--bundles <dir>` (another build, for before/after runs), `--browser <path>` (or `HOME3D_BROWSER`) and `--swiftshader`.
+
+Today's numbers (31 Oct 2026, this desktop, sample home, integration @ `08ad7c1` plus #177 and #179):
+
+| Measure | 1x | 4x | Limit 1x / 4x |
+|---|---|---|---|
+| Load: ready (plan built, shaders compiled) | 0.9 to 1.6 s | 3.1 to 3.6 s | 5 / 15 s |
+| View mode, unwatched states: panel / 3D view renders | 0 / 0 | 0 / 0 | 0.5 /s |
+| View mode, unwatched states: panel / 3D view update time | 0.5 to 0.7 / 0.3 to 0.4 ms/s | 2.1 to 2.5 / 1.4 to 1.6 ms/s | 5 / 20 ms/s each |
+| Editor selection, linked item (median) | 14 to 17 ms | 95 to 103 ms | 50 / 300 ms |
+| Editor selection, plain item (median) | 9 to 11 ms | 59 to 66 ms | 35 / 200 ms |
+
+**Headless against live.** A live speed run in the built-in browser pane on the real install measured an editor selection at about 60 ms, against 15 to 18 ms here. Most of the difference is the forced layout in the editor's `updated()`: the `.fp3d-side` scroll reset (#71) costs 35 to 45 ms there, inside Home Assistant's own page with its sidebar, header and theme styles, against a few ms on this bare page. #130 found that removing the reset only moves that layout into the next frame. Compare runs of the same kind only: headless with headless, live with live. The headless check catches regressions in Home 3D's own code. It does not stand in for the live speed check.
+
+Not covered: a real wall tablet, a live Home Assistant, the time travel, the phone layouts and touch.

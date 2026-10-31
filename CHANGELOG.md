@@ -77,6 +77,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - mypy runs clean in a CI-like environment (Python 3.13, `requirements_test.txt`).
 - Less duplication: one `COLOUR_ROLES`, one household pack id, one walk over the placed pack items, one `lazyBundle` for the lazily loaded bundles and one HH:MM helper.
 - Every Home Assistant page loads less of Home 3D (#179): the 3D view and walking through the house are lazy chunks of the main bundle, so `home-3d.js` and its shared chunks are 386 KB instead of 693 KB. three.js's shaders are shrunk at build time. Budgets now cover gzip and the whole "every page" and "wall tablet" paths, and `npm run build -- --report` lists each bundle's biggest inputs.
+- CI loads the shipped bundles in a headless browser (#178, `npm run smoke`): the panel with a fake Home Assistant, every look, the 2D plan, the item editor, Settings and the editor. A console error or a failed request fails the run. `npm run speed` is the repeatable speed check (load, background load, editor selection) with limits; see docs/performance.md.
 
 ## Home 3D 0.1.0
 

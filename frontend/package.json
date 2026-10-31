@@ -7,6 +7,8 @@
     "watch": "node build.mjs --watch",
     "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
+    "smoke": "node scripts/browser-check.mjs",
+    "speed": "node scripts/browser-check.mjs --speed",
     "deploy": "node build.mjs && node ../scripts/deploy.mjs"
   },
   "dependencies": {

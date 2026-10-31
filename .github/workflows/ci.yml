@@ -24,6 +24,10 @@ jobs:
       - name: Build and check budgets
         # --report lists each bundle's biggest inputs (#179), so growth can be put down to a module
         run: npm run build -- --report
+      - name: Load the shipped bundles in a headless browser
+        # the panel with a fake Home Assistant: every tab, look and lazy bundle; fails on a console error or a failed
+        # request (#178). The runner's Chrome draws WebGL with SwiftShader.
+        run: npm run smoke
       - name: Committed bundles are up to date
         # the main bundle's chunks carry their hash in their name: a new or a left-over file counts too (#179)
         run: |
