@@ -281,15 +281,29 @@ export function fetchBackup(hass: HomeAssistant): Promise<Pick<BackupFile, "form
  * one); packs and items that fail their check are skipped. With `homes` (#53) every home in the backup is restored
  * (onto the home with its id, or added) and `building` may be null; without, `building` replaces the plan of `home`
  * (default: the active one). */
+/** Restore (a part of) a backup. Packs and custom items left out stay as they are; the ones given are restored onto
+ * the installed ones with the same id (#153). A failure undoes the part and is the error "restore_failed". */
 export function restoreBackup(
   hass: HomeAssistant,
   building: Building | null,
-  packs: FurniturePack[],
+  packs?: FurniturePack[],
   items?: PackItem[],
   homes?: { homes: Omit<BackupHome, "images">[]; active?: string },
   home?: string | null,
 ): Promise<{ revision: number; building: Building; home_id?: string; packs: number; items?: number; skipped: { id: string; reason: string }[] }> {
-  return hass.callWS({ type: "home_3d/backup/import", ...at(home), ...(building ? { building } : {}), packs, ...(items ? { items } : {}), ...(homes ?? {}) });
+  return hass.callWS({ type: "home_3d/backup/import", ...at(home), ...(building ? { building } : {}), ...(packs ? { packs } : {}), ...(items ? { items } : {}), ...(homes ?? {}) });
+}
+
+/** Check (a part of) a backup without restoring anything (#153); throws "invalid_format" for one that would fail. */
+export function checkBackup(
+  hass: HomeAssistant,
+  building: Building | null,
+  packs?: FurniturePack[],
+  items?: PackItem[],
+  homes?: { homes: Omit<BackupHome, "images">[] },
+  home?: string | null,
+): Promise<{ checked: boolean; skipped: { id: string; reason: string }[] }> {
+  return hass.callWS({ type: "home_3d/backup/import", check_only: true, ...at(home), ...(building ? { building } : {}), ...(packs ? { packs } : {}), ...(items ? { items } : {}), ...(homes ?? {}) });
 }
 
 export type SentenceMode = "distinct" | "all" | "off";

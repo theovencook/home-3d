@@ -179,6 +179,18 @@ class PackUpdates:
         self.pinned, self.previous, self.checks = pinned, previous, checks
         return True
 
+    async def async_forget_uninstalled(self) -> None:
+        """After the packs were replaced (a backup, #153): pins, previous releases and checks of packs that are no
+        longer installed go."""
+        installed = {p["id"] for p in with_bundled(self.data.bundled, self.data.packs)}
+        pinned = {p for p in self.pinned if p in installed}
+        previous = {k: v for k, v in self.previous.items() if k in installed}
+        checks = {k: v for k, v in self.checks.items() if k in installed}
+        if (pinned, previous, checks) == (self.pinned, self.previous, self.checks):
+            return
+        self.pinned, self.previous, self.checks = pinned, previous, checks
+        await self._async_save()
+
     async def _async_save(self) -> None:
         await self._store.async_save(
             {

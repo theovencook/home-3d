@@ -329,6 +329,11 @@ export class BuildingController implements ReactiveController {
       clearTimeout(this.saveTimer);
       this.pending = null;
       this.changes = [];
+      // the newer plan is what was to be saved (an editor showing a restored backup again): nothing to keep
+      if (loaded && this.building && samePlan(local, this.building)) {
+        this.saveState = "saved";
+        return;
+      }
       if (!loaded || !all || attempt >= REPLAYS || !this.building) {
         this.conflict = true;
         this.draft = { building: local, savedAt: Date.now(), ...(this.homeId ? { home: this.homeId } : {}) };
@@ -439,6 +444,11 @@ function adoptRecipes(building: Building, recipes: Record<string, PlanRecipe>, b
   building.recipes = { ...recipes, ...Object.fromEntries(kept) };
 }
 
+
+/** Two plans alike but for their recipe copies (the server's own copies are taken over on load anyway). */
+function samePlan(a: Building, b: Building): boolean {
+  return JSON.stringify({ ...a, recipes: undefined }) === JSON.stringify({ ...b, recipes: undefined });
+}
 
 /** The backend refused a save from a plan someone else changed since (#149). */
 function isConflict(err: unknown): boolean {

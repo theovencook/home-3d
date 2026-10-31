@@ -355,6 +355,7 @@ const en = {
   backup_full_confirm: "Replace the plan, the pictures and the packs with the backup? The current state stays as a restore point.",
   backup_full_not_backup: "This is not a full Home 3D backup.",
   backup_full_restored: "Backup restored: {packs} packs, {pictures} pictures.",
+  backup_import_partial: "Restoring stopped at “{home}”: {error}. Restored before it: {done} (each keeps its state before as a restore point). Packs and your own items are unchanged.",
   backup_full_skipped: "Skipped (not verifiable or bound to another installation): {packs}.",
   export_name_full: "full",
   item_actions: "Own actions",

@@ -357,6 +357,7 @@ export const de: Record<I18nKey, string> = {
   backup_full_confirm: "Plan, Bilder und Packs durch das Backup ersetzen? Der aktuelle Stand bleibt als Wiederherstellungspunkt erhalten.",
   backup_full_not_backup: "Das ist kein Komplett-Backup von Home 3D.",
   backup_full_restored: "Backup wiederhergestellt: {packs} Packs, {pictures} Bilder.",
+  backup_import_partial: "Wiederherstellen bei „{home}“ abgebrochen: {error}. Davor wiederhergestellt: {done} (jedes behält seinen vorigen Stand als Wiederherstellungspunkt). Packs und eigene Möbel sind unverändert.",
   backup_full_skipped: "Übersprungen (nicht prüfbar oder für eine andere Installation): {packs}.",
   export_name_full: "komplett",
   item_actions: "Eigene Aktionen",

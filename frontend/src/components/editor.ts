@@ -163,7 +163,7 @@ import { windowGetsWell } from "../geometry/wells.ts";
 import { controls, tokens } from "../styles.ts";
 import "./entity-picker.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
-import { fetchBackup, fetchPackUpdates, getEditors, restoreBackup, setEditors, updatePlacedItems, type BackupFile, type BackupHome } from "../api.ts";
+import { checkBackup, fetchBackup, fetchPackUpdates, getEditors, restoreBackup, setEditors, updatePlacedItems, type BackupFile, type BackupHome } from "../api.ts";
 import { libraryUpdates } from "../pack-updates.ts";
 import { lastAdmin, pickEditor, pickTabletUser, type EditorUser } from "../editors.ts";
 import { load3d } from "../load3d.ts";
@@ -14680,11 +14680,28 @@ export class Fp3dEditor extends LitElement {
       const parts: { images: Record<string, string>; home?: BackupHome }[] = homes
         ? homes.map((h) => ({ home: h, images: h.images ?? (h.id === data.active ? (data.images ?? {}) : {}) }))
         : [{ images: data.images ?? {} }];
+      // the whole file is checked first, so a broken last home stops it before the first is restored (#153); the
+      // packs and custom items come with the last part, after every plan (left out of the file: they stay)
+      const message = (part: (typeof parts)[number], i: number) => {
+        const last = i === parts.length - 1;
+        const one = part.home ? { homes: [{ id: part.home.id, name: part.home.name, building: part.home.building }], ...(last && data.active ? { active: data.active } : {}) } : undefined;
+        return [part.home ? null : data.building, last ? data.packs : undefined, last ? data.items : undefined, one, part.home ? undefined : this.home] as const;
+      };
+      for (const [i, part] of parts.entries()) await checkBackup(this.hass, ...message(part, i));
       let res: Awaited<ReturnType<typeof restoreBackup>> | null = null;
       let pictures = 0;
+      const done: string[] = [];
       for (const [i, part] of parts.entries()) {
-        const one = part.home ? { homes: [{ id: part.home.id, name: part.home.name, building: part.home.building }], ...(i === parts.length - 1 && data.active ? { active: data.active } : {}) } : undefined;
-        res = await restoreBackup(this.hass, part.home ? null : data.building, data.packs ?? [], data.items, one, part.home ? undefined : this.home);
+        try {
+          res = await restoreBackup(this.hass, ...message(part, i));
+        } catch (err) {
+          // the part that failed was undone; the homes before it stay restored, each with a restore point of before
+          if (!done.length) throw err;
+          const e = (err ?? {}) as { message?: string };
+          await this.tell(this.t("backup_import_partial", { home: part.home?.name ?? "", done: done.join(", "), error: String(e.message ?? err) }));
+          return;
+        }
+        if (part.home) done.push(part.home.name);
         for (const [id, picture] of Object.entries(part.images)) {
           try {
             await storeImage(this.hass, id, picture, part.home?.id ?? res.home_id ?? this.home);

@@ -208,3 +208,15 @@ test("a change heard while saving is shown once the save is done", async () => {
   assert.equal(state.revision, 5);
   c.hostDisconnected();
 });
+
+test("a refused save of the very plan the server has now is no conflict (an editor showing a restored backup)", async () => {
+  const { c, state, otherSaves } = await opened(plan("Living"));
+  otherSaves(plan("Restored"), false);
+  c.edit(edited(c, "Restored"));
+  await c.flush();
+  assert.equal(c.conflict, false);
+  assert.equal(c.draft, null);
+  assert.equal(c.saveState, "saved");
+  assert.equal(state.revision, 4);
+  c.hostDisconnected();
+});
