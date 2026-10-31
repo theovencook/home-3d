@@ -82,3 +82,20 @@ test("the Sun and lights button closes the View popover before the sheet opens (
   assert.equal(opened, 1);
   assert.equal(p._optsOpen, false);
 });
+
+test("each Show menu label appears once, with a floor picked or not (#215)", () => {
+  for (const floorId of [null, "f1"]) {
+    const out = flat(panel(floorId).render());
+    const menu = out.slice(out.indexOf("fp3d-show-panel"));
+    const labels = menu.split("<button").slice(1).map((b) => b.split("</button>")[0].replace(/<fn>/g, "").replace(/^[^>]*>/, "").replace(/<[^>]*>/g, "").trim()).filter(Boolean);
+    const seen = new Set<string>();
+    for (const l of labels) {
+      assert.ok(!seen.has(l), `"${l}" is listed twice (floor ${floorId})`);
+      seen.add(l);
+    }
+    assert.equal(labels.filter((l) => l === "Stacked").length, 1, "Stacked once (the Apart / Stacked pair)");
+  }
+  // with a floor picked the floors-below group says what it does
+  const one = flat(panel("f1").render());
+  for (const l of ["Dim below", "Show below", "Hide below"]) assert.ok(one.includes(`>${l}<`) || one.includes(l), l);
+});
