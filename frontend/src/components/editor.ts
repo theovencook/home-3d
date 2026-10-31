@@ -3246,13 +3246,7 @@ export class Fp3dEditor extends LitElement {
       if (this._furnitureId) this.duplicateFurniture();
       else this.duplicateRoom();
     } else if (e.key === "Delete" || (e.key === "Backspace" && (this._tool === "select" || this._tool === "furniture"))) {
-      if (this._deviceId) this.deleteItem("device", this._deviceId);
-      else if (this._outdoorId) this.deleteOutdoor();
-      else if (this._wallId) this.deleteFreeWall();
-      else if (this._openingId) this.deleteOpening();
-      else if (this._furnitureId) this.deleteFurniture();
-      else if (this._vertex !== null) this.deleteVertex(this._vertex);
-      else this.deleteRoom();
+      this.deleteSelected();
     } else if (e.key.toLowerCase() === "l" && !mod && this._tool === "roof" && this.roofSection && !this._doc.settings.lock_plan) {
       this.updateRoofSection({ locked: !this.roofSection.locked });
     } else if (e.key.toLowerCase() === "l" && !mod && this._furnitureId && this.selection().length > 1) {
@@ -6424,9 +6418,49 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+  /**
+   * What the Delete key removes: only what the active tool has selected (#158). The roof and energy tools own a roof
+   * window, solar field or roof section; nothing else, least of all a room drawn earlier, goes with their Delete.
+   * The room is the fallback in the select and furniture tools only.
+   */
+  private deleteSelected(): void {
+    if (this._roofWinId && this._tool === "roof") this.deleteRoofWindow();
+    else if (this._solarId && this.houseTool) this.deleteSolar();
+    else if (this._roofId && this._tool === "roof") this.deleteRoofSection();
+    else if (this._deviceId) this.deleteItem("device", this._deviceId);
+    else if (this._outdoorId) this.deleteOutdoor();
+    else if (this._wallId) this.deleteFreeWall();
+    else if (this._openingId) this.deleteOpening();
+    else if (this._furnitureId) this.deleteFurniture();
+    else if (this._vertex !== null && !this.houseTool) this.deleteVertex(this._vertex);
+    else if (this._tool === "select" || this._tool === "furniture") this.deleteRoom();
+  }
+
+  /** Let go of everything the last tool had selected (#158); the room stays, except for the roof and energy tools. */
+  private clearToolSelection(): void {
+    this._openingId = null;
+    this._furnitureId = null;
+    this._deviceId = null;
+    this._outdoorId = null;
+    this._wallId = null;
+    this._vertex = null;
+    this._multi = [];
+    this._single = false;
+    this._roofId = null;
+    this._solarId = null;
+    this._roofWinId = null;
+    this._cableId = null;
+    this._solarPick = false;
+    this._edgeHi = null;
+  }
+
   /** Switch to a tool (from the tool menu): a fresh drawing, the sidebar for it. */
   private setTool(tool: Tool): void {
     const floor = this.floor;
+    if (tool !== this._tool) {
+      this.clearToolSelection();
+      if (tool === "roof" || tool === "energy") this._roomId = null;
+    }
     this._tool = tool;
     if (tool !== "select" && tool !== "furniture") this.cancelPlacing();
     this._draft = [];
