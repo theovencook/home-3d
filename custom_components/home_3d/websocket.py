@@ -110,13 +110,35 @@ def async_register_commands(hass: HomeAssistant) -> None:
         websocket_api.async_register_command(hass, command)
 
 
+# editors' commands sent over and over while editing: logged at debug, the rest at info (#188)
+_FREQUENT = frozenset({"home_3d/building/save", "home_3d/image/set", "home_3d/image/delete"})
+# what a command names, to say what it changed in the log (never the plan, an item or an image itself)
+_NAMED = ("home_id", "pack_id", "item_id", "snapshot_id", "image_id", "url")
+
+
+def audit(
+    connection: websocket_api.ActiveConnection, msg: dict[str, Any], what: str | None = None, level: int | None = None
+) -> None:
+    """Log who changed what (#188): the user's name and id, the command and what it names."""
+    user = connection.user
+    named = ", ".join(f"{key} {msg[key]}" for key in _NAMED if isinstance(msg.get(key), str))
+    detail = f" ({named})" if named else ""
+    if level is None:
+        level = logging.DEBUG if what is None and msg["type"] in _FREQUENT else logging.INFO
+    _LOGGER.log(level, "%s (%s) %s%s", user.name or "unknown user", user.id, what or msg["type"], detail)
+
+
 def require_editor(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Like `require_admin`, for the editors list (#7): anyone else is refused with "unauthorized"."""
+    """Like `require_admin`, for the editors list (#7): anyone else is refused with "unauthorized".
+
+    Every call by an editor is logged with the user (#188); a refused one is logged as a warning."""
 
     @wraps(func)
     def with_editor(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
         if not can_edit(hass, connection.user):
+            audit(connection, msg, f"was refused {msg['type']}, not an editor", logging.WARNING)
             raise Unauthorized
+        audit(connection, msg)
         func(hass, connection, msg)
 
     return with_editor
@@ -226,9 +248,13 @@ async def ws_save_building(
         )
         return
 
+    changed_actions: list[bool] = []
+
     def guard(current: dict[str, Any]) -> None:
         # checked against the plan as it is when the save runs, not as it was when the message came
-        if not connection.user.is_admin and performed_actions(building) - performed_actions(current):
+        added = performed_actions(building) - performed_actions(current)
+        changed_actions[:] = [bool(added or performed_actions(current) - performed_actions(building))]
+        if not connection.user.is_admin and added:
             raise _NeedsAdmin
 
     try:
@@ -259,6 +285,10 @@ async def ws_save_building(
         # rack gear where it does not fit (#113): the editor refuses it too, so only an outdated or foreign client
         connection.send_error(msg["id"], "invalid_rack", str(err))
         return
+    if any(changed_actions):
+        # a button or action that runs any Home Assistant action changed (#188): saves are too frequent to log
+        # each, but this one says who
+        audit(connection, msg, f"changed the actions or buttons of home {home.id}, revision {revision}, in")
     # the plan's recipe copies as stored (#2): an open editor keeps them with its plan
     connection.send_result(
         msg["id"], {"revision": revision, "home_id": home.id, "recipes": home.building.get("recipes", {})}
@@ -985,6 +1015,9 @@ async def ws_editors_set(hass: HomeAssistant, connection: websocket_api.ActiveCo
     except EditorsError as err:
         connection.send_error(msg["id"], err.code, err.detail)
         return
+    # who may change the plan is a security setting (#188)
+    who = "everyone who is an admin" if msg["editors"] is None else f"{len(msg['editors'])} user(s)"
+    audit(connection, msg, f"set the editors to {who} with")
     await _send_editors(editors, connection, msg)
 
 
