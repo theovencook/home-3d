@@ -22,6 +22,7 @@ import { DOG_BREEDS, PET_EYES, PET_FURS_OF, PET_POSES, type Building, type Pet }
 import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import { askConfirm } from "../ask.ts";
+import { errorText } from "../failure.ts";
 import "./ask-dialog.ts";
 import { planPackFolders } from "../pack-folder.ts";
 import { askingFirst, nextCheck, updateSummary, type ConfirmCode, type PackUpdateStatus } from "../pack-updates.ts";
@@ -601,7 +602,12 @@ export class Extensions extends LitElement {
 
   private async deletePack(pack: FurniturePack): Promise<void> {
     if (!this.hass || !(await this.ask(this.t("pack_remove_confirm", { name: packName(pack, this.hass?.language ?? "de") }), this.t("delete"), true))) return;
-    await removePack(this.hass, pack.id);
+    try {
+      await removePack(this.hass, pack.id);
+    } catch (err) {
+      this._packMsg = { ok: false, text: this.t("pack_remove_failed", { error: errorText(err) }) };
+      return;
+    }
     this._packMsg = null;
     this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
   }

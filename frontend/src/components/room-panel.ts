@@ -4,6 +4,7 @@
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
 import { areaEntities, coverTiltButtons, entityName, groupByDevice, isUnavailable, kindOf, roomClimateSensors, roomClimateValue, roomPanelEntities, fromCelsius, tempUnit, type DeviceKind } from "../devices.ts";
 import { askConfirm } from "../ask.ts";
+import { callServiceSafe } from "../failure.ts";
 import { confirmGroup } from "../confirm-group.ts";
 import "./ask-dialog.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
@@ -111,7 +112,7 @@ export class Fp3dRoomPanel extends LitElement {
 
   private call(domain: string, service: string, data: Record<string, unknown>): void {
     if (this.readOnly) return;
-    void this.hass.callService(domain, service, data);
+    callServiceSafe(this.hass, domain, service, data, (error) => this.t("service_failed", { error }));
   }
 
   private get areaName(): string | undefined {
@@ -630,19 +631,6 @@ export class Fp3dRoomPanel extends LitElement {
         font-size: 13px;
         font-variant-numeric: tabular-nums;
       }
-      @media (pointer: coarse) {
-        .fp3d-rp-close {
-          width: 40px;
-          height: 40px;
-        }
-        .fp3d-rp-swatch {
-          width: 36px;
-          height: 36px;
-        }
-        .fp3d-rp-small {
-          min-height: 36px;
-        }
-      }
       .fp3d-rp-close {
         display: grid;
         place-items: center;
@@ -889,6 +877,23 @@ export class Fp3dRoomPanel extends LitElement {
       input:focus-visible {
         outline: 2px solid var(--fp3d-accent);
         outline-offset: 2px;
+      }
+      /* last, so it wins over the sizes above (#181) */
+      @media (pointer: coarse) {
+        .fp3d-rp-close,
+        .fp3d-rp-icon,
+        .fp3d-rp-swatch {
+          width: 44px;
+          height: 44px;
+        }
+        .fp3d-rp-stepper .fp3d-btn {
+          width: 44px;
+        }
+        .fp3d-rp-small,
+        .fp3d-rp-sheet,
+        .fp3d-rp-chips .fp3d-chip {
+          min-height: 44px;
+        }
       }
     `,
   ];

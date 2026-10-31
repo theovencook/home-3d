@@ -824,15 +824,15 @@ export class Floorplan3dPanel extends LitElement {
                 @home-reload=${() => void this.data.reopen()}
                 @home-open=${(e: CustomEvent<{ home: string | null }>) => this.openHome(e.detail.home ?? undefined)}
               ></fp3d-home-switcher>` : nothing}
-          <div class="fp3d-seg" role="tablist">
-            <button role="tab" aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
+          <div class="fp3d-seg" role="group" aria-label=${this.t("modes")}>
+            <button aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
             ${this.canEdit
-              ? html`<button role="tab" aria-pressed=${this._mode === "editor"} @click=${() => this.setMode("editor")}>${this.t("editor")}</button>
-                  <button role="tab" class="fp3d-tab-ext" aria-pressed=${this._mode === "extensions"} @click=${() => this.setMode("extensions")}>
+              ? html`<button aria-pressed=${this._mode === "editor"} @click=${() => this.setMode("editor")}>${this.t("editor")}</button>
+                  <button class="fp3d-tab-ext" aria-pressed=${this._mode === "extensions"} @click=${() => this.setMode("extensions")}>
                     ✦ ${this.t("ext_tab")}
                   </button>`
               : nothing}
-            <button role="tab" class="fp3d-tab-settings" aria-pressed=${this._mode === "settings"} title=${this.t("settings")} @click=${() => this.openSettings()}>
+            <button class="fp3d-tab-settings" aria-pressed=${this._mode === "settings"} aria-label=${this.t("settings")} title=${this.t("settings")} @click=${() => this.openSettings()}>
               ⚙ <span class="fp3d-tab-word">${this.t("settings")}</span>
             </button>
           </div>
@@ -2089,6 +2089,28 @@ export class Floorplan3dPanel extends LitElement {
         .fp3d-overlay .fp3d-tt-chip {
           min-width: 44px;
           justify-content: center;
+        }
+      }
+      /* touch screens, a tablet as much as a phone (#181): 44 px, and room for three rows of floor chips */
+      @media (pointer: coarse), ${unsafeCSS(PHONE_MEDIA)} {
+        .fp3d-opts-btn,
+        .fp3d-quality button,
+        .fp3d-nav .fp3d-nav-toggle {
+          min-width: 44px;
+        }
+        .fp3d-opts-btn {
+          height: 44px;
+        }
+        .fp3d-header .fp3d-seg button,
+        .fp3d-quality button,
+        .fp3d-overlay .fp3d-chip,
+        .fp3d-overlay .fp3d-seg button,
+        .fp3d-show-panel button,
+        .fp3d-nav .fp3d-chip {
+          min-height: 44px;
+        }
+        .fp3d-nav-wrap {
+          max-height: 176px;
         }
       }
     `,

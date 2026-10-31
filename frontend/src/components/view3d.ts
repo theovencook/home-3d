@@ -47,6 +47,11 @@ import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, type En
 import { fieldFace, fieldSize, roofFaces, roofWindowRoom } from "../solar.ts";
 import { type CustomButton, type EntityRef, DEFAULT_HOLOGRAM, lockAlong, type PoolPipe, type RoofWindow, type SolarField, uid } from "../model.ts";
 
+/** A service call from the 3D view; a refused one shows a short message instead of doing nothing (#171). */
+function safeCall(hass: HomeAssistant, domain: string, service: string, data: Record<string, unknown>): void {
+  callServiceSafe(hass, domain, service, data, (error) => translate(hass, "service_failed", { error }));
+}
+
 /** A hologram card: the house's balance on the main plant, one plant (a balcony plant) on its own, or a device. */
 /** The unit a meter counts in (m³ when it does not say). */
 function meterUnit(hass: HomeAssistant, id: string | null | undefined): string {
@@ -163,6 +168,8 @@ import { flowWidth } from "../viewer/flow-style.ts";
 import { floorCounts, floorInfoText, locatedPersons, personLook, personsInRooms, personsShown } from "../presence.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
+import { activateKey } from "../activate-key.ts";
+import { callServiceSafe } from "../failure.ts";
 import type { BinCue, DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SoundSource, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 import { wallLayout } from "../camera-wall.ts";
 import { watchedEntities } from "../watched.ts";
@@ -2319,7 +2326,7 @@ export class Fp3dView3d extends LitElement {
       else this.mediaFolded.add(c.spot);
       this.requestUpdate();
     };
-    const svc = (domain: string, service: string, id: string) => void hass.callService(domain, service, { entity_id: id });
+    const svc = (domain: string, service: string, id: string) => safeCall(hass, domain, service, { entity_id: id });
     const onOff = (id: string, on: boolean) => (id.startsWith("climate.") ? svc("climate", on ? "turn_on" : "turn_off", id) : svc("homeassistant", on ? "turn_on" : "turn_off", id));
     const lockTap = async () => {
       if (!c.lock) return;
@@ -2339,7 +2346,7 @@ export class Fp3dView3d extends LitElement {
         <div class="fp3d-holo-sheen"></div>
         <div class="fp3d-holo-scan"></div>
         <div class="fp3d-holo-body">
-          <div class="fp3d-holo-head" role="button" tabindex="0" @click=${toggle}>
+          <div class="fp3d-holo-head" role="button" tabindex="0" aria-expanded=${open ? "true" : "false"} @click=${toggle} @keydown=${activateKey(toggle)}>
             <span>🚗 ${card.name}</span><span class="fp3d-holo-live">${c.charging ? `⚡ ${t("car_charging_short")}` : c.locked === null ? "" : c.locked ? "🔒" : "🔓"}</span>
           </div>
           <div class="fp3d-holo-car-main">
@@ -2380,7 +2387,7 @@ export class Fp3dView3d extends LitElement {
         <div class="fp3d-holo-sheen"></div>
         <div class="fp3d-holo-scan"></div>
         <div class="fp3d-holo-body">
-          <div class="fp3d-holo-head" role="button" tabindex="0" @click=${toggle}><span>${m.icon} ${m.title}</span><span class="fp3d-holo-live" style=${styled(m.liveColor)}>${m.live ?? ""}</span></div>
+          <div class="fp3d-holo-head" role="button" tabindex="0" aria-expanded=${open ? "true" : "false"} @click=${toggle} @keydown=${activateKey(toggle)}><span>${m.icon} ${m.title}</span><span class="fp3d-holo-live" style=${styled(m.liveColor)}>${m.live ?? ""}</span></div>
           ${m.status
             ? html`<div class="fp3d-holo-status" style=${m.status.color ? `--st:${m.status.color}` : ""}>
                 ${m.status.icon ? html`<i>${m.status.icon}</i>` : nothing}<b>${m.status.text}</b>${m.status.since ? html`<span>${m.status.since}</span>` : nothing}
@@ -2501,7 +2508,7 @@ export class Fp3dView3d extends LitElement {
       <div class="fp3d-holo-sheen"></div>
       <div class="fp3d-holo-scan"></div>
       <div class="fp3d-holo-body">
-        <div class="fp3d-holo-head" role="button" tabindex="0" @click=${toggle}><span>♪ ${card.name}</span><span class="fp3d-holo-live">${playing ? `● ${t("holo_media_playing")}` : t("holo_media_paused")}</span></div>
+        <div class="fp3d-holo-head" role="button" tabindex="0" aria-expanded=${open ? "true" : "false"} @click=${toggle} @keydown=${activateKey(toggle)}><span>♪ ${card.name}</span><span class="fp3d-holo-live">${playing ? `● ${t("holo_media_playing")}` : t("holo_media_paused")}</span></div>
         <div class="fp3d-holo-track">
           ${m.picture ? html`<img class="fp3d-holo-cover" src=${m.picture} alt="" />` : html`<span class="fp3d-holo-cover fp3d-holo-cover-none">♪</span>`}
           <div class="fp3d-holo-titles"><b>${m.title}</b>${m.artist ? html`<span>${m.artist}</span>` : nothing}</div>
@@ -2686,7 +2693,7 @@ export class Fp3dView3d extends LitElement {
       this.requestUpdate();
     };
     return html`<svg class="fp3d-holo-link" data-holo=${index} hidden aria-hidden="true"><line x1="0" y1="0" x2="0" y2="0" /><circle cx="0" cy="0" r="3" /></svg>
-      <div class="fp3d-holo fp3d-holo-dev ${open ? "" : "fp3d-holo-min"} ${this._low ? "fp3d-holo-plain" : ""}" data-holo=${index} hidden role="button" tabindex="0" aria-label=${card.name} @click=${toggle}>
+      <div class="fp3d-holo fp3d-holo-dev ${open ? "" : "fp3d-holo-min"} ${this._low ? "fp3d-holo-plain" : ""}" data-holo=${index} hidden role="button" tabindex="0" aria-expanded=${open ? "true" : "false"} aria-label=${card.w === null ? card.name : `${card.name}: ${formatPower(hass, card.w)}`} @click=${toggle} @keydown=${activateKey(toggle)}>
       <div class="fp3d-holo-sheen"></div>
       <div class="fp3d-holo-scan"></div>
       <div class="fp3d-holo-body">
@@ -2797,11 +2804,7 @@ export class Fp3dView3d extends LitElement {
       this.holoHoverOff = false;
       this.growHolo(false, index);
     };
-    const key = (ev: KeyboardEvent) => {
-      if (!main || (ev.key !== "Enter" && ev.key !== " ")) return;
-      ev.preventDefault();
-      toggle();
-    };
+    const key = activateKey(toggle);
     const big = main ? (e.solar ?? e.consumption ?? 0) : (card.w ?? 0);
     const bat = main ? (e.battery !== null || e.soc !== null ? { soc: e.soc, w: e.battery } : null) : card.battery;
     return html`<svg class="fp3d-holo-link" data-holo=${index} hidden aria-hidden="true"><line x1="0" y1="0" x2="0" y2="0" /><circle cx="0" cy="0" r="3" /></svg>
@@ -2811,8 +2814,8 @@ export class Fp3dView3d extends LitElement {
         hidden
         role="button"
         tabindex="0"
-        aria-label=${card.name}
-        aria-expanded=${main ? String(grown) : nothing}
+        aria-label=${`${card.name}: ${formatPower(hass, big)}`}
+        aria-expanded=${String(main ? grown : open)}
         @click=${toggle}
         @keydown=${key}
         @pointerdown=${(ev: PointerEvent) => (this.holoPress = ev.pointerType)}
@@ -3102,7 +3105,7 @@ export class Fp3dView3d extends LitElement {
     const lights = [...ids].filter((id) => !this.confirmSet.has(id));
     if (!lights.length) return;
     const anyOn = lights.some((id) => hass.states[id]?.state === "on");
-    void hass.callService("homeassistant", anyOn ? "turn_off" : "turn_on", { entity_id: lights });
+    safeCall(hass, "homeassistant", anyOn ? "turn_off" : "turn_on", { entity_id: lights });
     this.roomFlash = { roomId, until: performance.now() + 350 };
     this.applyTint();
     setTimeout(() => {
@@ -3113,7 +3116,7 @@ export class Fp3dView3d extends LitElement {
 
   private runScene(id: string): void {
     if (this.ro) return;
-    void this.hass.callService(id.split(".")[0], "turn_on", { entity_id: id });
+    safeCall(this.hass, id.split(".")[0], "turn_on", { entity_id: id });
     this._sceneFired = id;
     setTimeout(() => (this._sceneFired = null), 600);
   }
@@ -4346,9 +4349,9 @@ export class Fp3dView3d extends LitElement {
     const s = this._swipe;
     if (!s || !this.hass) return;
     if (s.kind === "light") {
-      if (s.value <= 0) void this.hass.callService("light", "turn_off", { entity_id: s.entity });
-      else void this.hass.callService("light", "turn_on", { entity_id: s.entity, brightness_pct: s.value });
-    } else void this.hass.callService("cover", "set_cover_position", { entity_id: s.entity, position: s.value });
+      if (s.value <= 0) safeCall(this.hass, "light", "turn_off", { entity_id: s.entity });
+      else safeCall(this.hass, "light", "turn_on", { entity_id: s.entity, brightness_pct: s.value });
+    } else safeCall(this.hass, "cover", "set_cover_position", { entity_id: s.entity, position: s.value });
   }
 
   /** Fly to a search result: rooms are selected, devices shown on their floor and flashing. */
@@ -4812,7 +4815,7 @@ export class Fp3dView3d extends LitElement {
                   aria-pressed=${on || this._sceneFired === id}
                   ?disabled=${isUnavailable(st)}
                   @click=${() => {
-                    void hass.callService(domain, service, { entity_id: id });
+                    safeCall(hass, domain, service, { entity_id: id });
                     this._sceneFired = id;
                     setTimeout(() => (this._sceneFired = null), 600);
                   }}
@@ -6251,9 +6254,9 @@ export class Fp3dView3d extends LitElement {
         ? nothing
         : items.map(
             (i) =>
-              html`<div class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}${this._bigTile === i.cls ? " fp3d-energy-big" : ""}" tabindex="0" @click=${() => this.toggleEnergyTile(i.cls)}>
+              html`<button type="button" class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}${this._bigTile === i.cls ? " fp3d-energy-big" : ""}" aria-pressed=${this._bigTile === i.cls ? "true" : "false"} @click=${() => this.toggleEnergyTile(i.cls)}>
                 <span>${i.label}</span><b>${i.value}</b>
-              </div>`,
+              </button>`,
           )}
       ${this.flows !== null
         ? nothing
@@ -8669,6 +8672,11 @@ export class Fp3dView3d extends LitElement {
         position: relative;
         pointer-events: auto;
         cursor: zoom-in;
+        border: 0;
+        border-left: 3px solid var(--fp3d-line);
+        color: inherit;
+        text-align: left;
+        font: inherit;
         transform-origin: top left;
         transition: transform 160ms ease-out;
       }
@@ -8959,6 +8967,31 @@ export class Fp3dView3d extends LitElement {
         .fp3d-thumbs-compact .fp3d-thumb,
         .fp3d-thumb-house {
           min-height: 44px;
+        }
+      }
+      /* touch targets of the viewer's small controls: 44 px (#181) */
+      @media (pointer: coarse) {
+        .fp3d-alert-x,
+        .fp3d-eye,
+        .fp3d-find-close,
+        .fp3d-find-icon,
+        .fp3d-sheet-x,
+        .fp3d-person,
+        .fp3d-thumbs-fold,
+        .fp3d-find-btn,
+        .fp3d-central-btn,
+        .fp3d-holo-media-controls button {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .fp3d-walk-btn,
+        .fp3d-sheet-chip,
+        .fp3d-sheet-input,
+        .fp3d-alert-menu button {
+          min-height: 44px;
+        }
+        .fp3d-find input {
+          height: 44px;
         }
       }
     `,

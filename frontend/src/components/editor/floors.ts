@@ -3,6 +3,7 @@
 
 import { html, nothing, svg } from "lit";
 import { fetchImage, storeImage } from "../../api.ts";
+import { errorText } from "../../failure.ts";
 import { unitLabel } from "../../units.ts";
 import { closeGaps, straightenEdges, suggestedThickness } from "../../geometry/gaps.ts";
 import { activeSections, headroomLines, sectionAbove, sectionCutsBelow } from "../../roof-sections.ts";
@@ -143,6 +144,14 @@ export class FloorsPart {
     const file = input.files?.[0];
     input.value = "";
     if (!file) return;
+    try {
+      await this.storeBackground(file);
+    } catch (err) {
+      await this.tell(this.t("picture_failed", { error: errorText(err) }));
+    }
+  }
+
+  async storeBackground(this: Fp3dEditor, file: File): Promise<void> {
     const bitmap = await createImageBitmap(file);
     const k = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas");
