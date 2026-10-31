@@ -326,7 +326,6 @@
  "camera_reach_short": "Doseg m",
  "camera_tilt": "Nagib navzdol (°)",
  "camera_tilt_short": "Nagib °",
- "camera_aim_hint": "V tlorisu klin kaže, kam gleda kamera. Ročica na njegovi konici obrne kamero in nastavi doseg. V 3D se klin konča pri prvi steni.",
  "camera_detect_found": "Zaznavanje (kamerni kokpit): na napravi najdenih senzorjev: {n} – {kinds}. Ko kateri kaj javi, se v 3D-pogledu pred kamero pojavi oznaka; kamerna stena (stikalo Kamere spodaj v 3D-pogledu) prikaže vse slike v živo.",
  "camera_detect_none": "Zaznavanje (kamerni kokpit): naprava kamere nima senzorjev gibanja ali zaznavanja. Oznake se pojavijo, ko jih integracija zagotovi (Frigate, UniFi Protect, Reolink …).",
  "camera_detect_choose": "Senzorje zaznavanja izberi sam",

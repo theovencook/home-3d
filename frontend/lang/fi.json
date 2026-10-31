@@ -326,7 +326,6 @@
  "camera_reach_short": "Kantama m",
  "camera_tilt": "Kallistus alas (°)",
  "camera_tilt_short": "Kallistus °",
- "camera_aim_hint": "Pohjapiirroksessa kiila näyttää, mihin kamera katsoo. Kiilan kärjen kahva kääntää kameraa ja asettaa sen kantaman. 3D:ssä kiila päättyy ensimmäiseen seinään.",
  "camera_detect_found": "Tunnistus (kameraohjaamo): laitteesta löytyi {n} anturia – {kinds}. Kun jokin niistä havaitsee jotain, kameran eteen ilmestyy nasta 3D-näkymässä; kameraseinä (Kamerat-kytkin 3D-näkymän alareunassa) näyttää kaikki live-kuvat.",
  "camera_detect_none": "Tunnistus (kameraohjaamo): kameran laitteella ei ole liike- tai tunnistusantureita. Nastat näkyvät heti, kun integraatio tarjoaa niitä (Frigate, UniFi Protect, Reolink …).",
  "camera_detect_choose": "Valitse tunnistusanturit itse",

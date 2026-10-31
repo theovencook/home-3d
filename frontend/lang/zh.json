@@ -326,7 +326,6 @@
  "camera_reach_short": "范围 m",
  "camera_tilt": "向下倾斜 (°)",
  "camera_tilt_short": "倾斜 °",
- "camera_aim_hint": "在平面图中，扇形表示摄像头的拍摄方向。拖动扇形顶端的手柄可旋转摄像头并设置其范围。在 3D 中，扇形止于第一面墙。",
  "camera_detect_found": "检测（摄像头驾驶舱）：在该设备上找到 {n} 个传感器——{kinds}。当其中一个报告检测时，3D 视图中摄像头前方会出现一个标记；摄像头墙（3D 视图底部的“摄像头”开关）显示所有实时画面。",
  "camera_detect_none": "检测（摄像头驾驶舱）：该摄像头的设备没有运动或检测传感器。一旦集成提供此类传感器（Frigate、UniFi Protect、Reolink …），就会出现标记。",
  "camera_detect_choose": "自行选择检测传感器",

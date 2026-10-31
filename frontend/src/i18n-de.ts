@@ -510,7 +510,6 @@ export const de: Record<I18nKey, string> = {
   camera_reach_short: "Reichweite m",
   camera_tilt: "Neigung nach unten (°)",
   camera_tilt_short: "Neigung °",
-  camera_aim_hint: "Im Plan zeigt der Kegel, wohin die Kamera schaut. Der Griff an seiner Spitze dreht die Kamera und setzt die Reichweite. In 3D endet der Kegel an der ersten Wand.",
   camera_detect_found: "Erkennung (Kamera-Cockpit): {n} Sensoren am Gerät gefunden – {kinds}. Meldet einer gerade etwas, steht in der 3D-Ansicht ein Pin vor der Kamera; die Kamera-Wand (Schalter „Kameras“ unten in der 3D-Ansicht) zeigt alle Livebilder.",
   camera_detect_none: "Erkennung (Kamera-Cockpit): Am Gerät dieser Kamera gibt es keine Bewegungs- oder Erkennungssensoren. Pins erscheinen, sobald die Integration welche liefert (Frigate, UniFi Protect, Reolink …).",
   camera_detect_choose: "Erkennungs-Sensoren selbst wählen",

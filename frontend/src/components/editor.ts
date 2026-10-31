@@ -223,7 +223,6 @@ type Drag =
   | { kind: "furnset"; ids: string[]; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; pick?: string | null }
   | { kind: "marquee"; start: Vec2; end: Vec2; add: boolean }
   | { kind: "rotate"; id: string; base: Building; moved: boolean }
-  | { kind: "aim"; entityId: string; base: Building; moved: boolean }
   | { kind: "resize"; id: string; corner: [1 | -1, 1 | -1]; base: Building; moved: boolean }
   | { kind: "room"; roomId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "rect"; start: Vec2; end: Vec2; outdoor?: boolean; hole?: boolean; roof?: boolean }
@@ -1727,7 +1726,7 @@ export class Fp3dEditor extends LitElement {
     if (!d) return;
     let target: [FixKind, string] | null = null;
     if (d.kind === "vertex" || d.kind === "room") target = ["room", d.roomId];
-    else if (d.kind === "device" || d.kind === "aim") target = ["device", d.entityId];
+    else if (d.kind === "device") target = ["device", d.entityId];
     else if (d.kind === "opening") target = ["opening", d.id];
     else if (d.kind === "furniture" || d.kind === "rotate" || d.kind === "resize") target = ["furniture", d.id];
     else if (d.kind === "furnset") target = ["furniture", d.ids.find((id) => this.isFixedItem("furniture", id)) ?? d.ids[0]];
@@ -2026,11 +2025,6 @@ export class Fp3dEditor extends LitElement {
     const rotateEl = target.closest("[data-rotate]");
     if (rotateEl && this.isEditor) {
       this.drag = { kind: "rotate", id: rotateEl.getAttribute("data-rotate")!, base: this._doc, moved: false };
-      return;
-    }
-    const aimEl = target.closest("[data-aim]");
-    if (aimEl && this.isEditor) {
-      this.drag = { kind: "aim", entityId: aimEl.getAttribute("data-aim")!, base: this._doc, moved: false };
       return;
     }
     // an item under the press, its drawn shape grown to a minimum target (#72): it wins over the room under it. With
@@ -2681,18 +2675,6 @@ export class Fp3dEditor extends LitElement {
         this.changeFloor((floor) => patchItem(floor.furniture.find((q) => q.id === drag.id), { rotation: a }), drag.base);
         break;
       }
-      case "aim": {
-        drag.moved = true;
-        const pl = drag.base.floors.find((x) => x.id === this._floorId)?.placements.find((x) => x.entity_id === drag.entityId);
-        if (!pl) return;
-        // the handle sits at the far edge of the wedge: it turns the camera and sets how far it reaches
-        let a = (Math.atan2(-(world[0] - pl.x), world[1] - pl.z) * 180) / Math.PI;
-        const step = e.altKey ? 1 : 5;
-        a = ((Math.round(a / step) * step) % 360 + 360) % 360;
-        const reach = Math.min(50, Math.max(0.5, Math.round(Math.hypot(world[0] - pl.x, world[1] - pl.z) * 10) / 10));
-        this.changeFloor((floor) => patchItem(floor.placements.find((q) => q.entity_id === drag.entityId), { rotation: a, reach }), drag.base);
-        break;
-      }
       case "device": {
         if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
         drag.moved = true;
@@ -2783,7 +2765,6 @@ export class Fp3dEditor extends LitElement {
       case "furniture":
       case "furnset":
       case "rotate":
-      case "aim":
       case "resize":
       case "outdoor":
       case "solarmove":
@@ -11438,40 +11419,13 @@ export class Fp3dEditor extends LitElement {
       const on = this.hass?.states[pl.entity_id]?.state === "on";
       const sel = pl.entity_id === this._deviceId;
       const cls = `fp3d-device${on ? " fp3d-device-on" : ""}${sel ? " fp3d-device-sel" : ""}`;
-      return svg`${kind === "camera" ? this.renderCameraWedge(pl, sel) : nothing}<g data-device=${pl.entity_id} class=${cls} transform="translate(${x} ${y})">
+      return svg`<g data-device=${pl.entity_id} class=${cls} transform="translate(${x} ${y})">
         <title>${entityName(this.hass, pl.entity_id)}</title>
         <circle r="18" class="fp3d-hit" /><circle r="12" />
         <path d=${iconPath(kind)} transform="translate(-7.2 -7.2) scale(0.6)" />
       </g>
       ${sel && pl.locked ? svg`<text class="fp3d-lock" x=${x + 16} y=${y - 12}>🔒</text>` : nothing}`;
     })}</g>`;
-  }
-
-  /** A camera's field of view in the plan; when selected, a handle at its far edge turns it and sets its reach. */
-  private renderCameraWedge(pl: Placement, sel: boolean) {
-    const dome = pl.mount === "ceiling";
-    const fov = pl.fov ?? (dome ? 360 : 90);
-    const reach = pl.reach ?? (dome ? 3 : 4.5);
-    const a = ((pl.rotation ?? 0) * Math.PI) / 180;
-    const at = (t: number, r: number): [number, number] => this.toScreen([pl.x - Math.sin(a + t) * r, pl.z + Math.cos(a + t) * r]);
-    const [cx, cy] = this.toScreen([pl.x, pl.z]);
-    const half = ((Math.min(fov, 359.9) * Math.PI) / 180) / 2;
-    const [x0, y0] = at(-half, reach);
-    const [x1, y1] = at(half, reach);
-    const rp = reach * this._view.scale;
-    const path = fov >= 360 ? "" : `M${cx} ${cy}L${x0} ${y0}A${rp} ${rp} 0 ${half > Math.PI / 2 ? 1 : 0} 1 ${x1} ${y1}Z`;
-    const [hx, hy] = at(0, reach);
-    return svg`<g class="fp3d-wedge ${sel ? "fp3d-wedge-sel" : ""}">
-      ${fov >= 360 ? svg`<circle cx=${cx} cy=${cy} r=${rp} />` : svg`<path d=${path} />`}
-      ${sel && this.isEditor && !pl.locked
-        ? svg`<g class="fp3d-rotate" data-aim=${pl.entity_id}>
-            <line x1=${cx} y1=${cy} x2=${hx} y2=${hy} />
-            <circle cx=${hx} cy=${hy} r="16" class="fp3d-hit" />
-            <circle cx=${hx} cy=${hy} r="8" />
-            <path d="M${hx - 4} ${hy - 1}a4 4 0 1 1 2 3.5" />
-          </g>`
-        : nothing}
-    </g>`;
   }
 
   private renderHandles(room: Room) {
@@ -14292,7 +14246,6 @@ export class Fp3dEditor extends LitElement {
               ><input type="checkbox" .checked=${pl.detect_pins !== false} ?disabled=${!admin} @change=${(ev: Event) => this.updateDevice({ detect_pins: (ev.target as HTMLInputElement).checked ? null : false })} />
               ${this.t("camera_detect_pins")}</label
             >
-            <p class="fp3d-sub fp3d-wide">${this.t("camera_aim_hint")}</p>
             ${this.renderCameraDetections(pl.entity_id)}`
           : nothing}
         ${kind && TOGGLE_KINDS.has(kind)
@@ -17996,21 +17949,6 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-device {
         cursor: grab;
-      }
-      .fp3d-wedge path,
-      .fp3d-wedge circle:not(.fp3d-hit) {
-        fill: rgba(55, 224, 255, 0.12);
-        stroke: rgba(55, 224, 255, 0.45);
-        stroke-width: 1;
-        pointer-events: none;
-      }
-      .fp3d-wedge-sel path,
-      .fp3d-wedge-sel > circle {
-        fill: rgba(55, 224, 255, 0.2);
-        stroke: var(--fp3d-accent);
-      }
-      .fp3d-wedge .fp3d-rotate circle {
-        pointer-events: auto;
       }
       .fp3d-device circle:not(.fp3d-hit) {
         fill: #111a2e;

@@ -82,6 +82,7 @@ import { buildOrder } from "./floor-order.ts";
 import { buildRoof, type RoofGeometry, type RoofWindowState } from "./roof.ts";
 import { SunFx } from "./sun-fx.ts";
 import { Realism } from "./realism.ts";
+import { watchContext } from "./context-loss.ts";
 import { deviceTier, shadowPlan, type ShadowPlan } from "../realistic.ts";
 import { houseShadow, shadowBox } from "./sun-shadow.ts";
 import type { SunPath } from "../sun-path.ts";
@@ -661,6 +662,10 @@ export class FloorplanViewer {
   private sunFx = new SunFx();
   private sunPath: SunPath | null = null;
   private shadowSig = "";
+  /** The GL context of the current renderer is gone (#163): no frames until it is back. */
+  private contextLost = false;
+  private contextNote: HTMLElement | null = null;
+  private unwatchContext: (() => void) | null = null;
   private arcSig = "";
   private spillNight = "";
   /** N, E, S, W on the compass ring, in the user's language. */
@@ -887,6 +892,7 @@ export class FloorplanViewer {
     this.options = options;
     this.explode = options.explode ?? true;
     this.renderer = this.makeRenderer(options.quality ?? "auto");
+    this.watchRenderer(this.renderer);
     this.labels = document.createElement("div");
     this.labels.className = "fp3d-labels";
     host.append(this.labels);
@@ -1091,9 +1097,13 @@ export class FloorplanViewer {
   /** A new renderer (another quality) takes over the canvas. */
   private useRenderer(next: WebGLRenderer): void {
     this.renderer.domElement.replaceWith(next.domElement);
+    this.unwatchContext?.();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer = next;
+    this.watchRenderer(next);
+    // results drawn once into the old renderer's targets are gone with it (#163)
+    this.redrawOnce();
     this.applyRealism();
     const view = this.controls.view;
     this.controls.dispose();
@@ -2407,6 +2417,8 @@ export class FloorplanViewer {
       (o.material as Material).dispose();
     }
     this.sunFx.dispose();
+    this.unwatchContext?.();
+    this.showContextNote(false);
     this.resizeObserver.disconnect();
     this.intersection?.disconnect();
     document.removeEventListener("visibilitychange", this.onVisibility);
@@ -2460,6 +2472,50 @@ export class FloorplanViewer {
     renderer.domElement.className = "fp3d-canvas";
     this.host.prepend(renderer.domElement);
     return renderer;
+  }
+
+  /** Context loss and restore on the canvas that is shown (#163); retired renderers are lost on purpose and ignored. */
+  private watchRenderer(renderer: WebGLRenderer): void {
+    this.unwatchContext?.();
+    this.unwatchContext = watchContext(renderer.domElement, {
+      lost: () => {
+        if (this.disposed || this.renderer !== renderer) return;
+        this.contextLost = true;
+        if (this.frame) cancelAnimationFrame(this.frame);
+        this.frame = 0;
+        this.showContextNote(true);
+      },
+      restored: () => {
+        if (this.disposed || this.renderer !== renderer) return;
+        this.contextLost = false;
+        this.showContextNote(false);
+        this.redrawOnce();
+        this.invalidate();
+      },
+    });
+  }
+
+  /** Forgets everything that is drawn only once per change, so the next frame draws it again (#163). */
+  private redrawOnce(): void {
+    this.shadowSig = "";
+    this.projections.resetPoses();
+    this.realism.touch();
+  }
+
+  private showContextNote(on: boolean): void {
+    if (!on) {
+      this.contextNote?.remove();
+      this.contextNote = null;
+      return;
+    }
+    if (this.contextNote) return;
+    const note = document.createElement("div");
+    note.className = "fp3d-context-note";
+    note.setAttribute("role", "status");
+    note.textContent = "The 3D view lost its graphics and is restarting…";
+    note.style.cssText = "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:10px 16px;border-radius:8px;background:rgba(0,0,0,.65);color:#fff;font:14px sans-serif;text-align:center;pointer-events:none";
+    this.host.append(note);
+    this.contextNote = note;
   }
 
   private makeControls(): OrbitControls {
@@ -5465,7 +5521,7 @@ export class FloorplanViewer {
 
   private render(now: number): void {
     this.frame = 0;
-    if (this.disposed) return;
+    if (this.disposed || this.contextLost) return;
     // a new look's shaders still compile: the last frame stays (the next one is asked for when they are ready)
     if (this.warming) return;
     const dt = this.lastFrame ? Math.min(100, now - this.lastFrame) : 16;

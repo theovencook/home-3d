@@ -326,7 +326,6 @@
  "camera_reach_short": "Rækkevidde m",
  "camera_tilt": "Hæld nedad (°)",
  "camera_tilt_short": "Hældning °",
- "camera_aim_hint": "I planen viser kilen, hvor kameraet kigger hen. Håndtaget i spidsen drejer kameraet og indstiller rækkevidden. I 3D ender kilen ved den første væg.",
  "camera_detect_found": "Registrering (kamera-cockpit): {n} sensorer fundet på enheden – {kinds}. Når en af dem melder noget, står en nål foran kameraet i 3D-visningen; kameravæggen (Kameraer-knappen nederst i 3D-visningen) viser alle livebilleder.",
  "camera_detect_none": "Registrering (kamera-cockpit): Kameraets enhed har ingen bevægelses- eller registreringssensorer. Nåle vises, så snart integrationen leverer nogle (Frigate, UniFi Protect, Reolink …).",
  "camera_detect_choose": "Vælg selv registreringssensorerne",

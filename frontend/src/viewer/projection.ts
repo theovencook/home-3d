@@ -82,6 +82,11 @@ export class CameraProjections {
     return this.projectors.size > 0;
   }
 
+  /** Forget every drawn pose so the next update redraws all depth targets (a new GL context has them empty, #163). */
+  resetPoses(): void {
+    for (const p of this.projectors.values()) p.poseKey = "";
+  }
+
   /** The cameras that project now, with their current picture URL. */
   set(list: readonly { id: string; url: string }[]): void {
     const wanted = new Map(list.map((c) => [c.id, c.url]));

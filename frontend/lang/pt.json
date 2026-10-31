@@ -326,7 +326,6 @@
  "camera_reach_short": "Alcance m",
  "camera_tilt": "Inclinação para baixo (°)",
  "camera_tilt_short": "Inclin. °",
- "camera_aim_hint": "Na planta, a cunha mostra para onde a câmara olha. A pega na ponta roda a câmara e define o alcance. Em 3D, a cunha termina na primeira parede.",
  "camera_detect_found": "Deteção (cockpit da câmara): {n} sensores encontrados no dispositivo – {kinds}. Quando um deteta algo, aparece um marcador à frente da câmara na vista 3D; a parede de câmaras (interruptor Câmaras em baixo na vista 3D) mostra todas as imagens ao vivo.",
  "camera_detect_none": "Deteção (cockpit da câmara): o dispositivo da câmara não tem sensores de movimento nem de deteção. Os marcadores aparecem assim que a integração os disponibilizar (Frigate, UniFi Protect, Reolink …).",
  "camera_detect_choose": "Escolher os sensores de deteção manualmente",

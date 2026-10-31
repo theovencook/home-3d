@@ -495,7 +495,7 @@ export class Floorplan3dPanel extends LitElement {
     }, `move:${id}`);
   }
 
-  /** Cameras turn in finer steps than lamps (their wedge shows where they look). */
+  /** Cameras turn in finer steps than lamps (the rotation field sets where they look). */
   private turnStep(): number {
     return kindOf(this._selDevice ?? "") === "camera" ? 15 : 45;
   }
