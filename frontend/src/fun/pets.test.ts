@@ -119,14 +119,18 @@ function coloursOf(o: THREE.Object3D): Set<string> {
 const hsl = (hex: string) => new THREE.Color(`#${hex}`).getHSL({ h: 0, s: 0, l: 0 }, THREE.SRGBColorSpace);
 const hue = (hex: string) => hsl(hex).h * 360;
 
-test("existing pets look exactly as before: their coats with dark eyes", () => {
-  // taken from the models before #42
-  const before: Record<string, string> = {"cat/orange":"78929069612408ba","cat/tabby":"14487aad92c30c29","cat/black":"e1f4aa050b0aec0a","cat/white":"67d643e06f65ad0c","cat/grey":"98771efa9424aa8d","cat/calico":"f51756cdbebdc4dc","cat/cream":"3671e3254659afaa","dog/golden":"6c13ae4f5e741e64","dog/cream":"4b2acb8f4b47f42f","dog/brown":"0573094005d72750","dog/black":"cfd0a841ca608dae","dog/white":"7716d8f4cdcb0095","dog/grey":"b30a589e13c44437","rabbit/white":"54f8cd29812c26de","rabbit/grey":"5ef19b293bef0bf5","rabbit/brown":"7f93677706959033","rabbit/black":"384d4362d97e0d1c","rabbit/cream":"27d77c039d88b7bf"};
+test("existing dogs and rabbits look exactly as before: their coats with dark eyes", () => {
+  // taken from the models before #42 (the cats were redrawn in #205)
+  const before: Record<string, string> = {"dog/golden":"6c13ae4f5e741e64","dog/cream":"4b2acb8f4b47f42f","dog/brown":"0573094005d72750","dog/black":"cfd0a841ca608dae","dog/white":"7716d8f4cdcb0095","dog/grey":"b30a589e13c44437","rabbit/white":"54f8cd29812c26de","rabbit/grey":"5ef19b293bef0bf5","rabbit/brown":"7f93677706959033","rabbit/black":"384d4362d97e0d1c","rabbit/cream":"27d77c039d88b7bf"};
   for (const [key, look] of Object.entries(before)) {
     const [kind, fur] = key.split("/") as [Pet["kind"], string];
     assert.equal(lookOf(buildModel(lib, { id: "p", kind, name: "", fur }).root), look, key);
     assert.equal(lookOf(buildModel(lib, { id: "p", kind, name: "", fur, eyes: "dark" }).root), look, `${key} dark eyes`);
   }
+});
+
+test("a cat with dark eyes looks as one with no eye colour set, in every coat", () => {
+  for (const fur of PET_FURS_OF.cat) assert.equal(lookOf(buildModel(lib, { ...cat, fur, eyes: "dark" }).root), lookOf(buildModel(lib, { ...cat, fur }).root), fur);
 });
 
 test("a pet's eyes can be copper, green, yellow or blue round a dark pupil", () => {
@@ -141,14 +145,14 @@ test("a pet's eyes can be copper, green, yellow or blue round a dark pupil", () 
   }
 });
 
-/** The colours of a model's fur: everything but its eyes, nose and inner ears (pink) and the "z Z" card. */
+/** The colours of a model's fur: everything but its eyes, nose and inner ears (pink), whiskers and the "z Z" card. */
 function furOf(model: ReturnType<typeof buildModel>): Set<string> {
   const eyes = new Set<THREE.Object3D>();
   for (const e of model.eyes) e.traverse((o) => eyes.add(o));
   const out = new Set<string>();
   model.body.traverse((o) => {
     const mat = (o as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
-    if (mat?.color && !eyes.has(o)) out.add(mat.color.getHexString());
+    if (mat?.color && !eyes.has(o) && mat.name !== "whiskers") out.add(mat.color.getHexString());
   });
   out.delete("f08aa0");
   return out;
@@ -313,4 +317,108 @@ test("by day a roaming cat visits the food and water bowls: it stands at them a 
     last = here;
   });
   assert.ok(longest >= 3, `stood at the bowls for ${longest.toFixed(1)} s`);
+});
+
+// The cute cats (#205): a pose of their own each, animated parts, and no dearer to draw than before
+
+/** Whether an object is drawn (it and all its parents visible). */
+const shown = (o: THREE.Object3D): boolean => o.visible && (!o.parent || shown(o.parent));
+
+/** What a model draws now: its meshes (not the "z Z" card), their triangles, and the box round them. */
+function drawn(root: THREE.Object3D): { meshes: number; triangles: number; box: THREE.Box3 } {
+  root.updateMatrixWorld(true);
+  let meshes = 0;
+  let triangles = 0;
+  const box = new THREE.Box3();
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !shown(m) || (m.material as THREE.MeshBasicMaterial).map) return;
+    meshes++;
+    triangles += m.geometry.attributes.position.count / 3;
+    box.expandByObject(m, true);
+  });
+  return { meshes, triangles, box };
+}
+
+test("a cat sits upright, lies like a loaf, and sleeps curled up low and round with its tail wrapped round", () => {
+  const m = buildModel(lib, { ...cat, fur: "dilute_calico", eyes: "copper" });
+  const size = (pose: Parameters<NonNullable<typeof m.set>>[0]) => {
+    m.set!(pose, 0);
+    return drawn(m.root).box.getSize(new THREE.Vector3());
+  };
+  const [stand, sit, lie, curl] = (["stand", "sit", "lie", "curl"] as const).map(size);
+  assert.ok(sit.y > lie.y * 1.3 && sit.z < stand.z * 0.7, `sitting upright: ${sit.toArray()} (standing ${stand.toArray()})`);
+  assert.ok(lie.y < stand.y * 0.85, `lying lower: ${lie.toArray()}`);
+  assert.ok(curl.y < 0.25 && curl.y < lie.y * 0.85, `curled up low: ${curl.toArray()} (lying ${lie.toArray()})`);
+  // round: about as wide as it is long, the tail round the side
+  assert.ok(curl.x > 0.22 && Math.abs(curl.x - curl.z) < 0.06, `curled up round: ${curl.toArray()}`);
+});
+
+test("a walking cat swings its legs and tail and blinks now and then; asleep its eyes are shut", () => {
+  const m = buildModel(lib, cat);
+  const legsAt = (phase: number) => {
+    m.set!("walk", phase);
+    return [...m.legs.map((l) => l.rotation.x), m.tail.rotation.z];
+  };
+  const a = legsAt(1);
+  const b = legsAt(4);
+  a.forEach((v, i) => assert.notEqual(Math.round(v * 100), Math.round(b[i] * 100), `part ${i} moves`));
+  /** Whether the eyes show their shine (open). */
+  const open = () => m.eyes.every((e) => e.children.some((o) => shown(o) && ((o as THREE.Mesh).material as THREE.MeshBasicMaterial).color.getHexString() === "ffffff"));
+  let blinks = 0;
+  for (let phase = 0; phase < 200; phase += 0.5) {
+    m.set!("walk", phase);
+    if (!open()) blinks++;
+  }
+  assert.ok(blinks > 0 && blinks < 40, `blinks ${blinks}`);
+  m.set!("sit", 0);
+  assert.ok(open());
+  m.set!("curl", 0);
+  assert.ok(!open());
+});
+
+test("a roaming cat lies down like a loaf by day and curls up asleep at night", () => {
+  const [day, night] = [false, true].map((night) => {
+    const { group, run } = homeWith([core("cat_bed_donut", 4, 3, 0.5, 0.5, 0.18)], night);
+    playSeeded(120);
+    const size = drawn(group.children[0]).box.getSize(new THREE.Vector3());
+    run.dispose();
+    return size;
+  });
+  const m = buildModel(lib, cat);
+  m.set!("lie", 0);
+  assert.ok(Math.abs(day.y - drawn(m.root).box.getSize(new THREE.Vector3()).y) < 0.005, `day: ${day.toArray()}`);
+  m.set!("curl", 0);
+  assert.ok(Math.abs(night.y - drawn(m.root).box.getSize(new THREE.Vector3()).y) < 0.005, `night: ${night.toArray()}`);
+});
+
+test("a cat costs no more to draw than the old one: triangles and draw calls in every pose", () => {
+  // the old cat (dilute calico, copper eyes): 4224 triangles in 29 meshes
+  const m = buildModel(lib, { ...cat, fur: "dilute_calico", eyes: "copper" });
+  for (const pose of ["walk", "stand", "sit", "lie", "curl"] as const) {
+    m.set!(pose, 0);
+    const d = drawn(m.root);
+    assert.ok(d.triangles <= 4224 && d.meshes <= 30, `${pose}: ${d.triangles} triangles, ${d.meshes} meshes`);
+  }
+});
+
+test("a cat works in every coat and eye colour, in every pose, at most 1.5x the old cat's triangles", () => {
+  for (const fur of PET_FURS_OF.cat) {
+    for (const eyes of PET_EYES) {
+      const m = buildModel(lib, { ...cat, fur, eyes });
+      for (const e of m.eyes) {
+        const cs = [...coloursOf(e)];
+        assert.ok(cs.some((c) => hsl(c).l < 0.15), `${fur} ${eyes} pupil ${cs}`);
+        if (eyes !== "dark") assert.ok(cs.some((c) => hsl(c).s > 0.35), `${fur} ${eyes} iris ${cs}`);
+      }
+      const sizes = (["walk", "stand", "sit", "lie", "curl"] as const).map((pose) => {
+        m.set!(pose, 1);
+        const d = drawn(m.root);
+        assert.ok(d.triangles <= 4224 * 1.5, `${fur} ${eyes} ${pose}: ${d.triangles} triangles`);
+        return d.box.getSize(new THREE.Vector3());
+      });
+      // sitting tall, curled up low
+      assert.ok(sizes[4].y < sizes[2].y * 0.7, `${fur} ${eyes}: curled ${sizes[4].y}, sitting ${sizes[2].y}`);
+    }
+  }
 });
