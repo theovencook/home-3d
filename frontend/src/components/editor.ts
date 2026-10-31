@@ -30,6 +30,7 @@ import { modulePipeRules, type ModuleField, type PipeRules } from "../modules.ts
 import { FURNITURE_SIZE, isLamp, LAMP_MODEL, type OpeningPreset, uid, type Building, type Floor, type Furniture, type FurnitureType, type RoofSection, type OutdoorArea, type OutdoorType, type Placement, type Opening, type Room, type Vec2, setTerrain } from "../model.ts";
 import { controls, tokens } from "../styles.ts";
 import "./entity-picker.ts";
+import "./multi-select.ts";
 import type { HassFloor, HomeAssistant } from "../types.ts";
 import type { EditorUser } from "../editors.ts";
 import { load3d } from "../load3d.ts";
