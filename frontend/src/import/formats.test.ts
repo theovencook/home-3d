@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readDxf, guessRole } from "./dxf.ts";
+import { readDxf, guessRole, decodeDxf } from "./dxf.ts";
 import { readValetudo, isValetudo } from "./valetudo.ts";
 import { readFloorplanner, isFloorplanner } from "./floorplanner.ts";
 import { buildPlan } from "./builder.ts";
@@ -151,4 +151,20 @@ test("furniture names in several languages", () => {
   assert.equal(furnitureType("Wall cabinet"), "kitchen_wall");
   assert.equal(furnitureType("Ceiling light", 0.1, 2.3), "lamp_ceiling");
   assert.equal(furnitureType("Kaminofen"), null);
+});
+
+test("a DXF with a very large polyline reads without overflowing the call stack (#197)", () => {
+  const n = 150000;
+  const out: string[] = ["0", "SECTION", "2", "ENTITIES", "0", "LWPOLYLINE", "8", "A-WALL", "90", String(n), "70", "0"];
+  for (let i = 0; i < n; i++) out.push("10", String(i % 500), "20", String(Math.floor(i / 500)));
+  out.push("0", "ENDSEC", "0", "EOF");
+  const read = readDxf(out.join("\n"));
+  assert.ok(read.plan.floors[0].walls.length > 0);
+});
+
+test("an old DXF saved in Windows-1252 keeps its umlauts, a UTF-8 one too (#197)", () => {
+  const text = ["0", "SECTION", "2", "ENTITIES", "0", "TEXT", "8", "TEXT", "10", "3000", "20", "4000", "1", "Küche", "0", "ENDSEC", "0", "EOF"].join("\n");
+  const cp1252 = Uint8Array.from(text, (ch) => (ch === "ü" ? 0xfc : ch.charCodeAt(0)));
+  assert.equal(decodeDxf(cp1252).includes("Küche"), true);
+  assert.equal(decodeDxf(new TextEncoder().encode(text)).includes("Küche"), true);
 });

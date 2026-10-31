@@ -19,8 +19,9 @@ import { released } from "../features.ts";
 import { EFFECT_DEFAULTS } from "../room-effects.ts";
 import { formatImperial, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 
-export type Scope = "house" | "device";
-/** Who may change it: anyone (device rows), editors (house rows), Home Assistant admins. */
+/** house: saved in this plan. install: kept by Home Assistant for every home (outside the plan). device: this browser only. */
+export type Scope = "house" | "install" | "device";
+/** Who may change it: anyone (device rows), editors (house and install rows), Home Assistant admins. */
 export type Permission = "everyone" | "editor" | "ha_admin";
 export type GroupId = "house" | "live" | "device" | "system";
 export type SectionId =
@@ -1016,7 +1017,7 @@ const VOICE: Setting[] = [
     id: "voice_sentences",
     section: "voice",
     card: "voice",
-    scope: "house",
+    scope: "install",
     permission: "ha_admin",
     label: "voice_sentences",
     hint: "voice_sentences_hint",
@@ -1061,7 +1062,7 @@ const updateSetting = <K extends keyof PackUpdateSettings>(key: K, extra: Omit<S
   id: `pack_updates.${key}`,
   section: "packs",
   card: "updates",
-  scope: "house",
+  scope: "install",
   permission: "editor",
   default: UPDATE_DEFAULTS[key],
   loader: "pack_updates",
@@ -1080,7 +1081,7 @@ const PACKS: Setting[] = [
     id: "pack_updates.weekday",
     section: "packs",
     card: "updates",
-    scope: "house",
+    scope: "install",
     permission: "editor",
     label: "upd_weekday",
     hint: "st_upd_weekday_hint",
@@ -1103,7 +1104,7 @@ const PACKS: Setting[] = [
     id: "pack_updates.open",
     section: "packs",
     card: "updates",
-    scope: "house",
+    scope: "install",
     permission: "editor",
     label: "upd_title",
     hint: "st_upd_open",
@@ -1300,6 +1301,42 @@ export function lengthLabel(env: SettingsEnv, label: string): string {
  */
 export function deviceKeys(): string[] {
   return [...new Set([...SETTINGS.flatMap((s) => s.prefKeys ?? []), "clean"])];
+}
+
+/**
+ * What "Reset this device's preferences" leaves alone: the lab and projection unlocks, unsaved edits of the editor
+ * and the remembered home. Every other `home3d.*` key (the rows' own, and the toggles several parts of the view and
+ * editor write straight to the browser) and every `fp3d-tt-*` time-travel choice goes.
+ */
+export const KEEP_ON_RESET: readonly string[] = ["home3d.lab", "home3d.projection", "home3d.unsaved", "home3d.home."];
+
+/** Whether the browser key is a device preference that a reset removes. */
+export function isDevicePrefKey(key: string): boolean {
+  if (KEEP_ON_RESET.some((k) => (k.endsWith(".") ? key.startsWith(k) : key === k))) return false;
+  return key.startsWith("home3d.") || key.startsWith("fp3d-tt-");
+}
+
+/** The slice of Storage the reset needs. */
+export interface KeyStore {
+  readonly length: number;
+  key(index: number): string | null;
+  removeItem(key: string): void;
+}
+
+/** Removes every device preference from a store (the browser's local and session storage). Storage that throws is skipped. */
+export function resetDevicePrefs(...stores: KeyStore[]): void {
+  for (const store of stores) {
+    try {
+      const doomed: string[] = [];
+      for (let i = 0; i < store.length; i++) {
+        const k = store.key(i);
+        if (k !== null && isDevicePrefKey(k)) doomed.push(k);
+      }
+      for (const k of doomed) store.removeItem(k);
+    } catch {
+      // storage blocked: nothing to reset
+    }
+  }
 }
 
 export function settingById(id: string): Setting | undefined {

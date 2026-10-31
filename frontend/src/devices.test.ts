@@ -13,7 +13,7 @@ test("a lamp switched by a relay takes colour and brightness from its colour ent
   // the bulb unavailable: the relay's own (plain) glow
   assert.deepEqual(lightGlow(relay as never, { ...bulb, state: "unavailable" } as never)!.color, [1, 0.71, 0.28]);
 });
-import { coverTiltButtons, isPulseDrive, isRelevant, apOnline, fanSpeed, climateModeGlow, cooktopLevel, onlyColor, appColor, carLocked, areaEntities, otherAreaEntities, roomClimateSensors, roomClimateValue, unassignedEntities, autoPlace, entityName, fridgeDoors, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, powerSensorsOf, primaryEntities, roomPanelEntities, windowPosition, confirmEntities, robotRoom, robotRoomSensor, roomKey, vacuumCleaning } from "./devices.ts";
+import { climateReading, coverTiltButtons, isPulseDrive, isRelevant, apOnline, fanSpeed, climateModeGlow, cooktopLevel, onlyColor, appColor, carLocked, areaEntities, otherAreaEntities, roomClimateSensors, roomClimateValue, unassignedEntities, autoPlace, entityName, fridgeDoors, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, powerSensorsOf, primaryEntities, roomPanelEntities, windowPosition, confirmEntities, robotRoom, robotRoomSensor, roomKey, vacuumCleaning } from "./devices.ts";
 import type { Floor, Opening, Room } from "./model.ts";
 import { centroid, newFloor, pointInPolygon } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -888,4 +888,30 @@ test("slat buttons only for covers with slats: a KNX roller shutter announcing t
   assert.equal(coverTiltButtons(cover({ device_class: "shutter", supported_features: 127, current_tilt_position: 40 })), true);
   assert.equal(coverTiltButtons(cover({ supported_features: 48 })), true);
   assert.equal(coverTiltButtons(cover({ device_class: "blind", supported_features: 15 })), false);
+});
+
+test("a thermostat without a reading or a sensor with an empty state is no 0 degrees (#199)", () => {
+  const hass = {
+    config: { unit_system: { temperature: "°C" } },
+    states: {
+      "climate.a": { entity_id: "climate.a", state: "heat", attributes: { current_temperature: null, current_humidity: null } },
+      "climate.b": { entity_id: "climate.b", state: "heat", attributes: { current_temperature: 21.5, current_humidity: 40 } },
+      "climate.c": { entity_id: "climate.c", state: "heat", attributes: {} },
+      "sensor.e": { entity_id: "sensor.e", state: "", attributes: { unit_of_measurement: "°C" } },
+      "sensor.f": { entity_id: "sensor.f", state: " ", attributes: {} },
+      "sensor.g": { entity_id: "sensor.g", state: "0", attributes: { unit_of_measurement: "°C" } },
+    },
+  } as unknown as HomeAssistant;
+  assert.ok(Number.isNaN(climateReading(hass, "climate.a", "temperature")));
+  assert.ok(Number.isNaN(climateReading(hass, "climate.a", "humidity")));
+  assert.ok(Number.isNaN(climateReading(hass, "climate.c", "temperature")));
+  assert.equal(climateReading(hass, "climate.b", "temperature"), 21.5);
+  assert.equal(climateReading(hass, "climate.b", "humidity"), 40);
+  assert.ok(Number.isNaN(climateReading(hass, "sensor.e", "temperature")));
+  assert.ok(Number.isNaN(climateReading(hass, "sensor.f", "humidity")));
+  // a real zero is still a reading
+  assert.equal(climateReading(hass, "sensor.g", "temperature"), 0);
+  // and a room with only a blank chosen thermostat shows no value
+  const room: Room = { id: "r", name: "R", area_id: null, points: [[0, 0], [3, 0], [3, 3], [0, 3]], floor_material: "wood", climate: { temperature: "climate.a" } };
+  assert.equal(roomClimateValue(hass, { ...newFloor("eg", "EG", 0), rooms: [room] }, room, "temperature"), null);
 });

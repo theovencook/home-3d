@@ -2,11 +2,17 @@
 // and German, search and deep links find it, and the Settings page draws its row.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { englishTable } from "../i18n.ts";
 import { de } from "../i18n-de.ts";
 import type { Building } from "../model.ts";
 import {
   easterEggsOn,
+  isDevicePrefKey,
+  KEEP_ON_RESET,
+  resetDevicePrefs,
   liveSections,
   mayChange,
   parseSettingsHash,
@@ -206,4 +212,59 @@ test("length rows show and take feet and inches on an imperial plan, metres stay
   // a metric plan keeps plain metres
   assert.equal(shownLength(e, 0.24), "0.24");
   assert.equal(typedLength(e, "0.3"), 0.3);
+});
+
+// ---- #198: labels and the device reset tell the truth
+
+test("rows kept by Home Assistant outside the plan carry the install scope, not 'house' (#198)", () => {
+  for (const s of SETTINGS) {
+    if (s.loader && s.scope !== "device") assert.equal(s.scope, "install", `${s.id}: its value lives outside the plan`);
+  }
+  assert.equal(SETTINGS.find((s) => s.id === "voice_sentences")?.scope, "install");
+  assert.equal(SETTINGS.find((s) => s.id === "pack_updates.frequency")?.scope, "install");
+  assert.ok(SETTINGS_EN.st_scope_install && SETTINGS_DE.st_scope_install && SETTINGS_EN.st_scope_install_hint && SETTINGS_DE.st_scope_install_hint);
+  assert.doesNotMatch(SETTINGS_EN.st_scope_install_hint, /saved in the plan/i);
+});
+
+function fakeStore(keys: string[]) {
+  const m = new Map(keys.map((k) => [k, "x"]));
+  return {
+    m,
+    get length() {
+      return m.size;
+    },
+    key: (i: number) => [...m.keys()][i] ?? null,
+    removeItem: (k: string) => void m.delete(k),
+  };
+}
+
+test("the device reset removes the toggles written straight to the browser and the time-travel choices, keeping unlocks and drafts (#198)", () => {
+  const store = fakeStore([
+    "home3d.flows", "home3d.holos", "home3d.solarDim", "home3d.sidePinned", "home3d.sideWidth", "home3d.sideMin", "home3d.thumbs_compact",
+    "home3d.editorSplit", "home3d.lib.open", "home3d.card_walls", "home3d.wallRecent", "fp3d-tt-follow", "fp3d-tt-stop", "fp3d-tt-closed",
+    "home3d.lab", "home3d.projection", "home3d.unsaved", "home3d.home.u1", "unrelated", "floorplan-3d.unsaved",
+  ]);
+  resetDevicePrefs(store);
+  assert.deepEqual([...store.m.keys()].sort(), ["floorplan-3d.unsaved", "home3d.home.u1", "home3d.lab", "home3d.projection", "home3d.unsaved", "unrelated"]);
+});
+
+test("every home3d.* or fp3d-tt-* key the code writes is removed by the reset unless it is on the keep list (#198)", () => {
+  const root = fileURLToPath(new URL("..", import.meta.url));
+  const found = new Set<string>();
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.ts$/.test(e.name) && !/\.(test|fixture)\.ts$/.test(e.name)) for (const m of readFileSync(p, "utf8").matchAll(/"((?:home3d\.|fp3d-tt-)[A-Za-z0-9_.-]+)"/g)) found.add(m[1]);
+    }
+  };
+  walk(root);
+  assert.ok(found.has("home3d.flows") && found.has("home3d.sideWidth"), "the scan finds the direct keys");
+  for (const k of found) {
+    const kept = KEEP_ON_RESET.some((x) => (x.endsWith(".") ? k.startsWith(x) : k === x));
+    assert.equal(isDevicePrefKey(k), !kept, `${k}`);
+  }
+  // the time-travel keys are built as `fp3d-tt-${key}`: the prefix covers them
+  assert.ok(isDevicePrefKey("fp3d-tt-anything"));
+  for (const k of ["home3d.mic"]) assert.ok(isDevicePrefKey(k));
 });

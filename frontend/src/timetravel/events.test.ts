@@ -200,3 +200,26 @@ test("a camera's detections count day and night, the same camera again after fiv
   assert.deepEqual(ev.filter((e) => e.kind === "camera").map((e) => (e.t / 1000 - DAY - 12 * H) / 60), [0, 10]);
   assert.equal(ev.filter((e) => e.kind === "motion").length, 0);
 });
+
+test("a sensor coming back from unavailable or unknown straight into 'on' is no event; a real off to on still is (#199)", () => {
+  const tl = timeline({
+    "binary_sensor.haustuer": rows([0, "off"], [2 * H, "unavailable"], [2 * H + 60, "on"], [4 * H, "off"], [5 * H, "unknown"], [5 * H + 60, "on"]),
+    "binary_sensor.rauch": rows([0, "unavailable"], [3 * H, "on"], [3 * H + 600, "off"], [6 * H, "unavailable"], [6 * H + 60, "on"], [7 * H, "off"], [8 * H, "on"]),
+    "binary_sensor.kamera": rows([0, "unavailable"], [3 * H, "on"], [3 * H + 600, "off"], [9 * H, "on"]),
+  });
+  const roles = new Map<string, Role>([
+    ["binary_sensor.haustuer", "door"],
+    ["binary_sensor.rauch", "smoke"],
+    ["binary_sensor.kamera", "camera"],
+  ]);
+  const events = findEvents({ timeline: tl, roles, weather: null });
+  const at = (s: number) => (DAY + s) * 1000;
+  assert.deepEqual(
+    events.map((e) => [e.kind, e.t]),
+    [
+      // only the real transitions: door off -> on never happens here, the smoke alarm at 08:00 and the camera at 09:00 do
+      ["smoke", at(8 * H)],
+      ["camera", at(9 * H)],
+    ],
+  );
+});

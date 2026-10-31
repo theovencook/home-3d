@@ -299,11 +299,14 @@ export function climateReading(hass: HomeAssistant, id: string, key: ClimateKey)
   const st = hass.states[id];
   if (id.startsWith("climate.")) {
     const attr = CLIMATE_ATTRS[key];
-    const v = attr ? Number(st?.attributes[attr]) : Number.NaN;
+    // a thermostat without a reading reports null (Number(null) would be 0 degrees)
+    const raw = attr ? st?.attributes[attr] : undefined;
+    const v = typeof raw === "number" ? raw : Number.NaN;
     // a thermostat reports in Home Assistant's unit
     return key === "temperature" ? toCelsius(v, tempUnit(hass)) : v;
   }
-  const v = Number(st?.state);
+  // an empty state is no reading (Number("") is 0)
+  const v = typeof st?.state === "string" && st.state.trim() === "" ? Number.NaN : Number(st?.state);
   return key === "temperature" ? toCelsius(v, st?.attributes.unit_of_measurement) : v;
 }
 

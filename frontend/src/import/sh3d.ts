@@ -21,29 +21,26 @@ function wallPieces(w: XmlNode, wallHeight: number): RawWall[] {
   const height = cm(num(w, "height", wallHeight));
   const arc = num(w, "arcExtent", 0);
   if (Math.abs(arc) < 1e-3) return [{ a, b, thickness, height }];
-  // the arc through a and b with the given extent: its centre lies on the perpendicular bisector
+  // Sweet Home 3D sweeps a positive extent counter-clockwise on screen (y runs down), which is a falling angle in
+  // atan2 terms. The centre lies on the perpendicular bisector, on the left of a->b for a sweep turning left; for a
+  // sweep past a half circle it flips to the other side. Rotating a about the centre by the sweep lands on b.
+  const sweep = -Math.max(-2 * Math.PI + 1e-3, Math.min(2 * Math.PI - 1e-3, arc));
   const chord = Math.hypot(b[0] - a[0], b[1] - a[1]);
-  const radius = chord / (2 * Math.sin(Math.abs(arc) / 2));
+  if (chord < 1e-6) return [{ a, b, thickness, height }];
   const mid: Vec2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-  const h = Math.sqrt(Math.max(0, radius * radius - (chord / 2) ** 2));
   const n: Vec2 = [-(b[1] - a[1]) / chord, (b[0] - a[0]) / chord];
-  const sign = arc > 0 ? 1 : -1;
-  const c: Vec2 = [mid[0] + n[0] * h * sign, mid[1] + n[1] * h * sign];
+  const off = chord / 2 / Math.tan(sweep / 2);
+  const c: Vec2 = [mid[0] + n[0] * off, mid[1] + n[1] * off];
+  const radius = Math.hypot(a[0] - c[0], a[1] - c[1]);
   const a0 = Math.atan2(a[1] - c[1], a[0] - c[0]);
-  const steps = Math.max(2, Math.ceil(Math.abs(arc) / (Math.PI / 12)));
+  const steps = Math.max(2, Math.ceil(Math.abs(sweep) / (Math.PI / 12)));
   const pts: Vec2[] = [];
   for (let i = 0; i <= steps; i++) {
-    const t = a0 - (arc * i) / steps;
+    const t = a0 + (sweep * i) / steps;
     pts.push([c[0] + Math.cos(t) * radius, c[1] + Math.sin(t) * radius]);
   }
-  // the arc must start at a: otherwise it bends the other way
-  if (Math.hypot(pts[0][0] - a[0], pts[0][1] - a[1]) > 0.05) {
-    pts.length = 0;
-    for (let i = 0; i <= steps; i++) {
-      const t = a0 + (arc * i) / steps;
-      pts.push([c[0] + Math.cos(t) * radius, c[1] + Math.sin(t) * radius]);
-    }
-  }
+  pts[0] = a;
+  pts[steps] = b;
   return pts.slice(1).map((p, i) => ({ a: pts[i], b: p, thickness, height }));
 }
 

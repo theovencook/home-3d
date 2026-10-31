@@ -23,6 +23,7 @@ import {
   settingsIn,
   type Control,
   type DevicePrefs,
+  type KeyStore,
   type Option,
   type Section,
   type SectionId,
@@ -32,12 +33,26 @@ import {
   type Viewer,
   type WriteResult,
   deviceKeys,
+  resetDevicePrefs,
   lengthLabel,
   planUnit,
   shownLength,
   typedLength,
 } from "./registry.ts";
 import { settingsTexts } from "./texts.ts";
+
+/** The browser's storages a reset looks through (blocked storage is skipped). */
+function browserStores(): KeyStore[] {
+  const out: KeyStore[] = [];
+  for (const name of ["localStorage", "sessionStorage"] as const) {
+    try {
+      out.push(globalThis[name]);
+    } catch {
+      // blocked
+    }
+  }
+  return out.filter(Boolean);
+}
 
 /** This browser's preferences, as the panel keeps them ("home3d.<key>"). */
 export const localPrefs: DevicePrefs = {
@@ -247,6 +262,8 @@ export class SettingsPage extends LitElement {
     }
     if (action === "reset_device") {
       for (const key of deviceKeys()) localPrefs.set(key, null);
+      // and the toggles the view, editor and time travel keep in the browser outside the rows
+      resetDevicePrefs(...browserStores());
       this._note = this.tr("st_reset_done");
       this.dispatchEvent(new CustomEvent("device-change", { detail: { id: s.id }, bubbles: true, composed: true }));
       this.requestUpdate();
@@ -325,7 +342,7 @@ export class SettingsPage extends LitElement {
   private renderSection(sec: Section) {
     const list = settingsIn(sec.id, this.env);
     const who = this.viewer;
-    const houseLocked = list.some((s) => s.scope === "house" && s.permission === "editor") && !who.editor;
+    const houseLocked = list.some((s) => s.scope !== "device" && s.permission === "editor") && !who.editor;
     const adminOnly = list.length > 0 && list.every((s) => s.permission === "ha_admin") && !who.haAdmin;
     return html`<button class="st-back" @click=${() => (this._drill = false)}>‹ ${this.tr("st_back")}</button>
       <div class="st-title">
@@ -351,7 +368,7 @@ export class SettingsPage extends LitElement {
     return html`<div class="st-row st-k-${s.control.kind} ${s.hint ? "" : "st-nohint"} ${wide ? "st-row-wide" : ""} ${hit || this._flash === s.id ? "st-hit" : ""}" data-id=${s.id}>
       <div class="st-lbl">
         <span class="st-name">${s.control.kind === "number" && s.control.length ? lengthLabel(this.env, this.tr(s.label)) : this.tr(s.label)}</span>
-        ${s.control.kind === "note" ? nothing : html`<span class="st-scope st-scope-${s.scope}" title=${this.tr(s.scope === "house" ? "st_scope_house_hint" : "st_scope_device_hint")}>${this.tr(s.scope === "house" ? "st_scope_house" : "st_scope_device")}</span>`}
+        ${s.control.kind === "note" ? nothing : html`<span class="st-scope st-scope-${s.scope}" title=${this.tr(`st_scope_${s.scope}_hint`)}>${this.tr(`st_scope_${s.scope}`)}</span>`}
         ${s.permission === "ha_admin" ? html`<span class="st-scope st-scope-admin" title=${this.tr("st_admin_hint")}>${this.tr("st_admin")}</span>` : nothing}
       </div>
       ${s.hint ? html`<p class="st-hint">${this.tr(s.hint)}</p>` : nothing}
@@ -799,6 +816,10 @@ export class SettingsPage extends LitElement {
       .st-scope-house {
         color: var(--fp3d-accent);
         background: color-mix(in srgb, var(--fp3d-accent) 12%, transparent);
+      }
+      .st-scope-install {
+        color: var(--fp3d-warm);
+        background: color-mix(in srgb, var(--fp3d-warm) 12%, transparent);
       }
       .st-scope-device {
         color: var(--fp3d-soft);

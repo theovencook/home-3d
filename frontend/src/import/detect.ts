@@ -3,7 +3,7 @@
 import { knownPlanVersion, PLAN_VERSION, type Building } from "../model.ts";
 import { EXPORT_FORMAT } from "../transfer.ts";
 import type { RawPlan, Warning } from "./builder.ts";
-import { readDxf, type DxfLayer, type LayerRole } from "./dxf.ts";
+import { decodeDxf, readDxf, type DxfLayer, type LayerRole } from "./dxf.ts";
 import { isFloorplanner, readFloorplanner } from "./floorplanner.ts";
 import { readGltf, readMesh, readObj, readStl, type MeshInfo, type MeshOptions } from "./mesh.ts";
 import { isRoomPlan, readRoomPlan } from "./roomplan.ts";
@@ -43,7 +43,7 @@ export async function readFile(name: string, bytes: Uint8Array, options: ReadOpt
   const e = ext(name);
   if (e === "sh3d" || (isZip(bytes) && readZip(bytes).some((x) => x.name === "Home.xml"))) return { kind: "sh3d", raw: await readSh3d(bytes), building: null, warnings: [] };
   if (e === "dxf") {
-    const r = readDxf(new TextDecoder("utf-8").decode(bytes), options.roles, options.dxfUnit ?? null, lang);
+    const r = readDxf(decodeDxf(bytes), options.roles, options.dxfUnit ?? null, lang);
     return { kind: "dxf", raw: r.plan, building: null, warnings: [], layers: r.layers, dxfUnit: r.unit };
   }
   if (["glb", "gltf", "obj", "stl"].includes(e)) {

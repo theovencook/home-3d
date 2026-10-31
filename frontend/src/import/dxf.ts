@@ -5,6 +5,7 @@
 
 import type { Vec2 } from "../model.ts";
 import type { RawPlan } from "./builder.ts";
+import { minMax } from "./geom.ts";
 
 export type LayerRole = "wall" | "room" | "door" | "window" | "ignore";
 
@@ -120,6 +121,15 @@ export interface DxfRead {
  * Reads a DXF; `roles` overrides the guessed role of layers, `unit` the drawing unit (metres per unit, null =
  * from the header or guessed from the drawing's size).
  */
+/** DXF bytes as text: UTF-8 (AutoCAD 2007 and newer), else Windows-1252 (older files, whose umlauts are single bytes). */
+export function decodeDxf(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
 export function readDxf(text: string, roles: Record<string, LayerRole> = {}, unit: number | null = null, lang = "de"): DxfRead {
   const p = pairs(text);
   // header: the drawing's units
@@ -163,7 +173,9 @@ export function readDxf(text: string, roles: Record<string, LayerRole> = {}, uni
       // its width: the longer side of the block's extent
       const xs = inner.flatMap((x) => x.pts).map((q) => q[0] * Math.abs(e.sx ?? 1));
       const ys = inner.flatMap((x) => x.pts).map((q) => q[1] * Math.abs(e.sy ?? 1));
-      const width = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+      const [x0, x1] = minMax(xs);
+      const [y0, y1] = minMax(ys);
+      const width = Math.max(x1 - x0, y1 - y0);
       const cx = pts.reduce((s, q) => s + q[0], 0) / pts.length;
       const cy = pts.reduce((s, q) => s + q[1], 0) / pts.length;
       openings.push({ kind: role, at: [cx, cy], width });
@@ -182,7 +194,9 @@ export function readDxf(text: string, roles: Record<string, LayerRole> = {}, uni
 
   // units: the header, else guessed from the size of the drawing (a house spans 5–40 m)
   const all = flat.flatMap((e) => e.pts);
-  const span = all.length ? Math.max(Math.max(...all.map((q) => q[0])) - Math.min(...all.map((q) => q[0])), Math.max(...all.map((q) => q[1])) - Math.min(...all.map((q) => q[1]))) : 0;
+  const [sx0, sx1] = minMax(all.map((q) => q[0]));
+  const [sy0, sy1] = minMax(all.map((q) => q[1]));
+  const span = all.length ? Math.max(sx1 - sx0, sy1 - sy0) : 0;
   const fromHeader: Record<number, number> = { 1: 0.0254, 2: 0.3048, 4: 0.001, 5: 0.01, 6: 1 };
   const u = unit ?? fromHeader[insUnits] ?? (span > 2500 ? 0.001 : span > 150 ? 0.01 : 1);
   // DXF y runs up the drawing, Home 3D's z down the plan

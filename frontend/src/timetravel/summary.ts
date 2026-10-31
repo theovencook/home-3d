@@ -6,7 +6,7 @@ import { energySummary, type DeviceSensors, type EnergySummary } from "../energy
 import type { Building } from "../model.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
 import type { Role } from "./classify.ts";
-import { changes, IMPORTANT, OPEN, spans, type TTEvent } from "./events.ts";
+import { changes, IMPORTANT, NO_READING, OPEN, spans, type TTEvent } from "./events.ts";
 import { seriesValue } from "./numeric.ts";
 import type { RoomEntities } from "./rooms.ts";
 import { indexAt, type Timeline, type Track, type Value } from "./timeline.ts";
@@ -141,7 +141,7 @@ export function awaySummary(input: AwayInput): AwayRow[] {
   for (const id of input.motion) {
     const track = timeline.tracks.get(id);
     if (!track) continue;
-    for (const c of changes(track)) if (c.from !== null && c.t >= from && c.t <= to && c.to === "on" && c.from !== "on") count("motion", id, c.t);
+    for (const c of changes(track)) if (c.from !== null && c.t >= from && c.t <= to && c.to === "on" && c.from !== "on" && !NO_READING.has(c.from)) count("motion", id, c.t);
     // the pulses thinned out of a busy week still count
     if (track.dropped) for (const t of track.dropped) if (t >= from && t <= to) count("motion", id, t);
   }

@@ -11,6 +11,17 @@ export interface Seg {
   gap?: boolean;
 }
 
+/** Smallest and largest of a list, by a loop: Math.min(...big) overflows the call stack on a large drawing. */
+export function minMax(values: Iterable<number>): [number, number] {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const v of values) {
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  return [lo, hi];
+}
+
 const dist = (p: Vec2, q: Vec2) => Math.hypot(q[0] - p[0], q[1] - p[1]);
 
 /** Points closer than `tol` merged, points on a straight line between their neighbours taken out, counter-clockwise. */
