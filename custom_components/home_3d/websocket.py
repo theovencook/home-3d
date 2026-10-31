@@ -202,9 +202,9 @@ async def ws_save_building(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Replace the building. A new or changed `perform_action` item action or service/event menu button needs
-    an admin (#51, #151). With `base_revision`
-    (#149) a save from a plan that someone else changed since is refused with "conflict" and changes nothing: the
-    client then fetches the current plan (building/get) to merge or offer a reload."""
+    an admin (#51, #151). With `base_revision` (#149) a save from a plan that someone else changed since is refused
+    with "conflict" and changes nothing: the client then fetches the current plan (building/get) to merge or offer a
+    reload."""
     if (home := _home(hass, connection, msg)) is None:
         return
 
@@ -222,7 +222,9 @@ async def ws_save_building(
             guard=guard,
         )
     except _NeedsAdmin:
-        connection.send_error(msg["id"], "unauthorized", "Only an admin adds or changes a perform action or a service/event button")
+        connection.send_error(
+            msg["id"], "unauthorized", "Only an admin adds or changes a perform action or a service/event button"
+        )
         return
     except RevisionConflict as err:
         connection.send_error(msg["id"], "conflict", str(err))
