@@ -1,5 +1,5 @@
-// The floor / room chip row (#222, #224): floor chips only under "All floors", and the scroll / expand button has its
-// own place beside the scrolling chips instead of sitting over the last one.
+// The floor bar (#222, #224, #249): the floors in one row and one Rooms picker (option B of the redesign #219) instead
+// of a chip per room; the wrap toggle went with the chips.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding } from "./model.ts";
@@ -40,22 +40,22 @@ function panel(floorId: string | null) {
   return p;
 }
 
-test("All floors lists the floor chips only; a picked floor brings its rooms (#222)", () => {
+test("the floor bar: Whole house and every floor in one row; no room chips, one Rooms picker (#222, #249)", () => {
   const all = flat(panel(null).render());
-  assert.ok(all.includes("All floors") && all.includes("Ground") && all.includes("Upper"));
-  assert.ok(!all.includes("fp3d-room-chip"), "no room chips under All floors");
-  assert.ok(!all.includes("fp3d-sep"), "no divider with nothing after it");
-  const one = flat(panel("f1").render());
-  assert.ok(one.includes("fp3d-room-chip"), "the picked floor shows its rooms");
+  assert.ok(all.includes("Whole house") && all.includes("Ground") && all.includes("Upper"));
+  assert.match(all, /class="fp3d-seg fp3d-floors"/);
+  assert.ok(!all.includes("fp3d-room-chip"), "no room chips");
+  assert.match(all, /fp3d-rooms-btn/);
+  const p = panel("f1");
+  p._roomsOpen = true;
+  const one = flat(p.render());
+  assert.match(one, /<fp3d-rooms-picker/, "the picker opens from its button");
+  // the picked floor's rooms, or every floor's under the whole house (top floor first)
+  assert.deepEqual(p.roomGroups(p.data.building, p.data.building.floors[0]).map((g: { id: string }) => g.id), ["f1"]);
+  assert.deepEqual(p.roomGroups(p.data.building, undefined).map((g: { id: string }) => g.id), ["f2", "f1"]);
 });
 
-test("the scroll / expand button sits beside the chips box, not inside it (#224)", () => {
+test("the wrap toggle is gone: nothing is left to wrap (#224, #249)", () => {
   const out = flat(panel("f1").render());
-  const chips = out.indexOf('class="fp3d-nav-chips');
-  const close = out.indexOf("</div>", out.indexOf("fp3d-room-chip"));
-  const toggle = out.indexOf("fp3d-nav-toggle");
-  assert.ok(chips > -1 && toggle > close, "the toggle follows the end of the scrolling chips box");
-  const css = String((Floorplan3dPanel as unknown as { styles: unknown }).styles instanceof Array ? ((Floorplan3dPanel as unknown as { styles: { cssText?: string }[] }).styles.map((x) => x.cssText ?? "").join("")) : "");
-  const rule = css.match(/\.fp3d-nav-toggle \{[^}]*\}/)?.[0] ?? "";
-  assert.ok(rule && !/sticky/.test(rule), "no sticky overlay");
+  assert.doesNotMatch(out, /fp3d-nav-toggle|fp3d-nav-wrap/);
 });

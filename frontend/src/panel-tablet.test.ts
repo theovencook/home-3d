@@ -62,20 +62,20 @@ test("an editor sees the tabs, the home switcher and the View button without tab
   at("");
   const text = shown(panel(building()));
   assert.match(text, /fp3d-home-switcher/);
-  assert.match(text, /role="group" aria-label=Mode>/);
+  assert.match(text, /<nav class="fp3d-tabs" aria-label=Mode>/);
   assert.match(text, /fp3d-view-btn/);
   assert.match(text, /fp3d-tt-chip/);
 });
 
-test("?tablet shows only the home name, the floors and a View menu: no tabs, switcher, view settings or room chips (#92)", (t) => {
+test("?tablet shows only the home name, the floors and a View menu: no tabs, switcher, view settings or Rooms picker (#92, #249)", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   at("?tablet");
   const text = shown(panel(building()));
   assert.match(text, /Sample Home/);
   assert.doesNotMatch(text, /fp3d-home-switcher/);
-  assert.doesNotMatch(text, /role="group" aria-label=Mode>/);
+  assert.doesNotMatch(text, /<nav class="fp3d-tabs" aria-label=Mode>/);
   assert.doesNotMatch(text, /fp3d-tt-chip/);
-  assert.doesNotMatch(text, /fp3d-room-chip/);
+  assert.doesNotMatch(text, /fp3d-rooms-btn/);
   assert.match(text, /Ground/);
   assert.match(text, /Upstairs/);
   // the one View button (#247): on a tablet its panel holds 3D or 2D and what the 3D shows
@@ -86,11 +86,11 @@ test("a user ticked as a wall tablet gets the locked view, and the Editor stays 
   t.mock.timers.enable({ apis: ["setTimeout"] });
   at("");
   const p = panel(building(["wall"]), "wall");
-  assert.doesNotMatch(shown(p), /role="group" aria-label=Mode>/);
+  assert.doesNotMatch(shown(p), /<nav class="fp3d-tabs" aria-label=Mode>/);
   p.setMode("editor");
   assert.equal(p._mode, "view");
   at("?tablet=0");
-  assert.match(shown(p), /role="group" aria-label=Mode>/);
+  assert.match(shown(p), /<nav class="fp3d-tabs" aria-label=Mode>/);
 });
 
 test("a tablet goes back to the whole house after the plan's idle time; a touch restarts the wait (#92)", (t) => {

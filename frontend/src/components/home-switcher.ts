@@ -4,6 +4,8 @@
 // active home again); only "Show on displays" changes the active home, so an experiment never blanks a wall tablet.
 // Since #132 it is a menu button of its own, not a native <select>: a closed select switched home on every arrow key
 // press (Chrome and Edge on Windows), so the actions below the homes could not be reached from the keyboard.
+// Since #249 (the redesign #219) the chip and the menu button are one control: the home's name, a red dot while the
+// displays show it ("On displays", left out on narrow screens) and the menu's caret.
 
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
@@ -227,40 +229,40 @@ export class Fp3dHomeSwitcher extends LitElement {
     const chip = homeChip(homes, this._active, this.home);
     const shown = homes.find((h) => h.id === this.home);
     const t = (key: I18nKey) => this.t(key);
-    return html`${chip
-        ? html`<span class="chip ${chip.onDisplays ? "live" : "off"}" title=${chip.onDisplays ? this.t("home_active_badge") : this.t("home_not_on_displays")}
-            >${chip.onDisplays ? html`<b class="live" aria-hidden="true"></b>` : nothing}${chip.name}<small>${chip.onDisplays ? this.t("home_live") : this.t("home_not_on_displays")}</small></span
-          >`
-        : nothing}<span class="menu"
-        ><button
-          class="pick"
-          aria-haspopup="listbox"
-          aria-expanded=${this._open}
-          aria-label=${this.t("home")}
-          title=${this.t("home")}
-          @click=${() => (this._open ? (this._open = false) : this.openMenu())}
-          @keydown=${(e: KeyboardEvent) => this.onKey(e)}
-          @blur=${() => (this.blurTimer = setTimeout(() => (this._open = false), 150))}
-        >
-          ${shown ? homeOptionLabel(shown, this._active, t) : this.t("home")}<span class="caret" aria-hidden="true">▾</span></button
-        >${this._open
-          ? html`<ul role="listbox" aria-label=${this.t("home")} @mousedown=${(e: Event) => e.preventDefault()}>
-              ${this.rows().map((r, i) =>
-                r.kind === "sep"
-                  ? html`<li role="separator" class="sep"></li>`
-                  : html`<li
-                      role="option"
-                      aria-selected=${r.value === this.home}
-                      class=${classMap({ cursor: i === this._cursor, action: r.kind === "action", danger: r.kind === "danger", chosen: r.value === this.home })}
-                      @mouseenter=${() => (this._cursor = i)}
-                      @click=${() => this.pick(r.value)}
-                    >
-                      ${r.label}
-                    </li>`,
-              )}
-            </ul>`
-          : nothing}</span
-      >`;
+    const live = !!chip?.onDisplays;
+    const where = chip ? this.t(live ? "home_live" : "home_not_on_displays") : "";
+    return html`<span class="menu"
+      ><button
+        class="pick ${chip ? (live ? "live" : "off") : ""}"
+        aria-haspopup="listbox"
+        aria-expanded=${this._open}
+        aria-label=${chip ? `${this.t("home")}: ${chip.name}, ${where}` : this.t("home")}
+        title=${chip ? `${chip.name} · ${where}` : this.t("home")}
+        @click=${() => (this._open ? (this._open = false) : this.openMenu())}
+        @keydown=${(e: KeyboardEvent) => this.onKey(e)}
+        @blur=${() => (this.blurTimer = setTimeout(() => (this._open = false), 150))}
+      >
+        ${live ? html`<b class="dot" aria-hidden="true"></b>` : nothing}<span class="name">${chip?.name ?? (shown ? homeOptionLabel(shown, this._active, t) : this.t("home"))}</span>${chip
+          ? html`<small aria-hidden="true">${where}</small>`
+          : nothing}<svg class="caret" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></button
+      >${this._open
+        ? html`<ul role="listbox" aria-label=${this.t("home")} @mousedown=${(e: Event) => e.preventDefault()}>
+            ${this.rows().map((r, i) =>
+              r.kind === "sep"
+                ? html`<li role="separator" class="sep"></li>`
+                : html`<li
+                    role="option"
+                    aria-selected=${r.value === this.home}
+                    class=${classMap({ cursor: i === this._cursor, action: r.kind === "action", danger: r.kind === "danger", chosen: r.value === this.home })}
+                    @mouseenter=${() => (this._cursor = i)}
+                    @click=${() => this.pick(r.value)}
+                  >
+                    ${r.label}
+                  </li>`,
+            )}
+          </ul>`
+        : nothing}</span
+    >`;
   }
 
   static styles = css`
@@ -270,64 +272,74 @@ export class Fp3dHomeSwitcher extends LitElement {
       gap: 6px;
       min-width: 0;
     }
-    .chip {
-      display: inline-flex;
-      align-items: baseline;
-      gap: 6px;
-      padding: 3px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--fp3d-line, rgba(127, 127, 127, 0.4));
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 16em;
-      font-weight: 600;
-    }
-    .chip.off {
-      background: rgba(255, 170, 0, 0.18);
-      border-color: rgba(255, 170, 0, 0.6);
-    }
-    .chip small {
-      font-weight: 400;
-      opacity: 0.85;
-    }
-    /* the open home is the one on the displays (#160): a steady marker while it is edited */
-    .chip.live {
-      border-color: rgba(229, 57, 53, 0.7);
-    }
-    .chip .live {
-      align-self: center;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #e53935;
-      flex: none;
-    }
     .menu {
       position: relative;
-      display: inline-block;
+      display: inline-flex;
       min-width: 0;
     }
+    /* one home control (#249): name, the red dot while the displays show it, where it shows, the caret */
     .pick {
       font: inherit;
+      font-size: 13.5px;
       color: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 36px;
+      max-width: 22em;
+      min-width: 0;
+      padding: 0 8px 0 10px;
       background: transparent;
       border: 1px solid var(--fp3d-line, rgba(127, 127, 127, 0.4));
-      border-radius: 8px;
-      padding: 4px 6px;
-      max-width: 14em;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      border-radius: var(--fp3d-radius-control, 6px);
       white-space: nowrap;
       cursor: pointer;
+    }
+    .pick.off {
+      border-color: rgba(255, 170, 0, 0.6);
     }
     .pick:focus-visible {
       outline: 2px solid var(--fp3d-accent, #03a9f4);
       outline-offset: 1px;
     }
+    .name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 600;
+      min-width: 0;
+    }
+    small {
+      color: var(--fp3d-muted, #94a3b8);
+      font-size: 12px;
+    }
+    .pick.off small {
+      color: #ffb547;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ff5d6c;
+      box-shadow: 0 0 0 3px rgba(255, 93, 108, 0.22);
+      flex: none;
+    }
     .caret {
-      margin-left: 6px;
+      flex: none;
       opacity: 0.7;
+    }
+    /* compact and phone screens: the name alone (the dot still says it is on the displays) */
+    @media (max-width: 1024px) {
+      small {
+        display: none;
+      }
+    }
+    @media (max-width: 600px) {
+      .pick {
+        height: 44px;
+        max-width: 120px;
+        padding: 0 6px;
+        gap: 6px;
+      }
     }
     ul {
       position: absolute;

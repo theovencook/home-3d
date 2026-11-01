@@ -57,13 +57,13 @@ const want = (name: string, css: string, selectors: string[]) =>
   });
 
 want("shared controls", text(controls), [".fp3d-seg button", ".fp3d-chip", ".fp3d-btn", ".fp3d-field select", ".fp3d-swatch"]);
-want("panel", text((Floorplan3dPanel as unknown as Styled).styles), [".fp3d-view-btn", ".fp3d-nav .fp3d-nav-toggle", ".fp3d-nav .fp3d-chip", ".fp3d-header .fp3d-seg button"]);
+want("panel", text((Floorplan3dPanel as unknown as Styled).styles), [".fp3d-view-btn", ".fp3d-rooms-btn", ".fp3d-note-badge", ".fp3d-nav .fp3d-chip", ".fp3d-floors button", ".fp3d-tab"]);
 want("View panel", text((Fp3dViewPanel as unknown as Styled).styles), [".vp-select", ".vp-seg button", ".vp-row", ".vp-link", ".vp-quiet", ".vp-close"]);
 want("viewer", text((Fp3dView3d as unknown as Styled).styles), [".fp3d-alert-x", ".fp3d-eye", ".fp3d-find-close", ".fp3d-sheet-x", ".fp3d-walk-btn", ".fp3d-sheet-chip", ".fp3d-holo-media-controls button", ".fp3d-thumbs-fold"]);
 want("room panel", text((Fp3dRoomPanel as unknown as Styled).styles), [".fp3d-rp-close", ".fp3d-rp-icon", ".fp3d-rp-swatch", ".fp3d-rp-small", ".fp3d-rp-sheet", ".fp3d-rp-chips .fp3d-chip", ".fp3d-rp-stepper .fp3d-btn"]);
 want("quick menu", text((Fp3dQuickMenu as unknown as Styled).styles), [".qm-swatch"]);
 want("time bar", text((Fp3dTimeBar as unknown as Styled).styles), [".btn", ".x", ".chip", ".track"]);
-want("editor", text(formStyles), [".fp3d-fix", ".fp3d-help-btn", ".fp3d-strip-btn", ".fp3d-3d-fold", ".fp3d-point .fp3d-btn", ".fp3d-wv-zoom .fp3d-btn", ".fp3d-presets .fp3d-chip"]);
+want("editor", text(formStyles), [".fp3d-fix", ".fp3d-more-btn", ".fp3d-strip-btn", ".fp3d-3d-fold", ".fp3d-point .fp3d-btn", ".fp3d-wv-zoom .fp3d-btn", ".fp3d-presets .fp3d-chip"]);
 
 test("the room panel's coarse rules come after the base sizes, so they are not overridden (#181)", () => {
   const css = text((Fp3dRoomPanel as unknown as Styled).styles);
@@ -72,8 +72,8 @@ test("the room panel's coarse rules come after the base sizes, so they are not o
   assert.ok(base > -1 && last > base, "the coarse block sits before .fp3d-rp-close");
 });
 
-test("the floor chips have room for three 44 px rows on a touch screen (#181)", () => {
+test("the floor bar never wraps: one row of floors that scrolls sideways, and the Rooms picker (#181, #249)", () => {
   const css = text((Floorplan3dPanel as unknown as Styled).styles);
-  const m = css.match(/@media \(pointer: coarse\), [^{]*\{[\s\S]*?\.fp3d-nav-wrap \{\s*max-height: (\d+)px/);
-  assert.ok(m && Number(m[1]) >= 3 * 44 + 2 * 6 + 20, "the wrapped nav is tall enough");
+  assert.doesNotMatch(css, /fp3d-nav-wrap|fp3d-nav-toggle/);
+  assert.match(css, /\.fp3d-floors \{[^}]*overflow-x: auto/);
 });

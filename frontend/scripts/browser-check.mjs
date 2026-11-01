@@ -192,7 +192,7 @@ try {
   }
   await page.keyboard.press("Escape");
   const closed = await run("helpDialog", { step: "closed" });
-  if (closed.open || closed.back !== "?") problems.push(`the help overlay did not give the focus back (${JSON.stringify(closed)}, #196)`);
+  if (closed.open || closed.back !== results.help.opener) problems.push(`the help overlay did not give the focus back (${JSON.stringify(closed)}, #196)`);
   await run("tab", 0);
   // #218: leave the panel for another sidebar page and come back, twice, without a reload: a new panel element each
   // time, which must start (it stayed blank with "Illegal constructor" from the polyfill)

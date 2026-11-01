@@ -52,12 +52,17 @@ export const shellStyles = css`
         margin: 0;
         background: none;
       }
+      /* the toolbar is one row across the plan and the sidebar (#249); the plan and the sidebar share the row below */
       .fp3d-editor {
         position: relative;
         display: grid;
         grid-template-columns: 1fr var(--fp3d-side-w, 320px);
+        grid-template-rows: auto minmax(0, 1fr);
         height: 100%;
         min-height: 0;
+      }
+      .fp3d-editor > .fp3d-toolbar {
+        grid-column: 1 / -1;
       }
       .fp3d-editor:has(> .fp3d-side-strip) {
         grid-template-columns: 1fr 52px;
@@ -87,7 +92,8 @@ export const shellStyles = css`
         right: 0;
         bottom: 0;
         width: min(var(--fp3d-side-w, 340px), 60%);
-        /* open over the 3D pane: above the toolbar too, so its buttons never sit on the sidebar's */
+        /* open over the 3D pane, under the toolbar row (#249: More and Fit stay in reach) */
+        top: var(--fp3d-toolbar-h, 52px);
         z-index: 30;
         box-shadow: -12px 0 32px rgba(0, 0, 0, 0.45);
       }
@@ -122,14 +128,14 @@ export const shellStyles = css`
       }
       .fp3d-editor.fp3d-narrow {
         grid-template-columns: 1fr;
-        grid-template-rows: minmax(360px, 62vh) auto;
+        grid-template-rows: auto minmax(360px, 62vh) auto;
         height: auto;
       }
       .fp3d-main {
         /* nothing of the plan column reaches over the sidebar (its menus still hang down) */
         overflow-x: clip;
         display: grid;
-        grid-template-rows: auto 1fr;
+        grid-template-rows: minmax(0, 1fr);
         /* the column never grows with a wide toolbar (that would push the plan under the sidebar) */
         grid-template-columns: minmax(0, 1fr);
         min-height: 0;
@@ -140,10 +146,105 @@ export const shellStyles = css`
         /* its menus open over the plan below */
         z-index: 20;
         display: flex;
+        /* one row; only a long tool name on a compact screen may push the end onto a second */
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 6px;
         align-items: center;
-        padding: 10px 12px;
+        min-width: 0;
+        min-height: var(--fp3d-toolbar-h, 52px);
+        box-sizing: border-box;
+        padding: 6px 12px;
+        border-bottom: 1px solid var(--fp3d-line);
+        background: var(--fp3d-chrome-solid);
+      }
+      /* the drawn toolbar (#249): flat buttons with an icon and a label, hairlines between the groups; the tool in use
+         has a light tint, not a fill; Fit, 3D beside and More are outlined at the end of the row */
+      .fp3d-toolbar > .fp3d-seg {
+        background: none;
+        box-shadow: none;
+        padding: 0;
+        flex: none;
+      }
+      .fp3d-toolbar > .fp3d-seg > button,
+      .fp3d-toolbar .fp3d-menu-wrap > button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: var(--fp3d-radius-control, 6px);
+        color: var(--fp3d-text);
+        font-weight: 600;
+        padding: 6px 10px;
+      }
+      .fp3d-toolbar > .fp3d-seg > button[aria-pressed="true"],
+      .fp3d-toolbar .fp3d-menu-wrap > button[aria-pressed="true"] {
+        background: color-mix(in srgb, var(--fp3d-accent) 14%, transparent);
+        color: var(--fp3d-accent);
+      }
+      .fp3d-toolbar > .fp3d-seg > button:hover:not(:disabled),
+      .fp3d-toolbar .fp3d-menu-wrap > button:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--fp3d-accent) 8%, transparent);
+      }
+      .fp3d-seg-views > button,
+      .fp3d-seg-more .fp3d-menu-wrap > button,
+      .fp3d-seg-floor .fp3d-menu-wrap > button {
+        border: 1px solid var(--fp3d-line);
+      }
+      .fp3d-seg-more .fp3d-menu-wrap > button[aria-expanded="true"] {
+        border-color: var(--fp3d-accent);
+      }
+      .fp3d-seg-views {
+        gap: 6px;
+      }
+      .fp3d-tb-sep {
+        flex: none;
+        width: 1px;
+        height: 26px;
+        background: var(--fp3d-line);
+      }
+      .fp3d-tb-grow {
+        flex: 1 1 0;
+      }
+      /* 3D beside: in the row on wide screens, in More below that (#249) */
+      .fp3d-more-split {
+        display: none !important;
+      }
+      @media (max-width: 1024px) {
+        .fp3d-toolbar {
+          gap: 3px;
+          padding: 6px 6px;
+        }
+        .fp3d-toolbar > .fp3d-seg > button,
+        .fp3d-toolbar .fp3d-menu-wrap > button {
+          padding: 5px 8px;
+          font-size: 13px;
+        }
+        .fp3d-seg-undo .fp3d-tool-word,
+        .fp3d-toolbar .fp3d-menu-label,
+        .fp3d-tb-sep {
+          display: none;
+        }
+        .fp3d-split-btn {
+          display: none !important;
+        }
+        .fp3d-more-split {
+          display: flex !important;
+        }
+      }
+      /* the toolbar row, while it is drawn below the compact width, scrolls rather than pushing the page wider */
+      @media (min-width: 601px) and (max-width: 1024px) {
+        .fp3d-toolbar .fp3d-seg-tools > button .fp3d-ui-icon,
+        .fp3d-toolbar .fp3d-seg-tools .fp3d-menu-wrap > button .fp3d-ui-icon {
+          display: none;
+        }
+      }
+      /* "Settings for this home" on the floor's page (#249): the old ⚙ menu's places, each a link */
+      .fp3d-home-link-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+      }
+      .fp3d-home-link {
+        min-height: 32px;
       }
       .fp3d-pick-tip {
         position: absolute;

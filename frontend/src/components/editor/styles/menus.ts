@@ -11,10 +11,8 @@ export const menuStyles = css`
         flex-wrap: wrap;
         max-width: 100%;
       }
-      .fp3d-seg > button.fp3d-undo {
-        font-size: 20px;
-        line-height: 1;
-        padding-inline: 12px;
+      .fp3d-seg > button.fp3d-undo .fp3d-ui-icon {
+        font-size: 18px;
       }
       .fp3d-menu-wrap {
         position: relative;
@@ -32,19 +30,9 @@ export const menuStyles = css`
         break-inside: avoid;
         margin: 2px 0;
       }
-      .fp3d-seg-settings {
-        margin-left: auto;
-      }
       .fp3d-menu-right {
         right: 0;
         left: auto;
-      }
-      .fp3d-narrow .fp3d-settings-word {
-        display: none;
-      }
-      .fp3d-help-btn {
-        min-width: 34px;
-        font-weight: 700;
       }
       .fp3d-help-overlay h4 {
         margin: 14px 0 6px;
