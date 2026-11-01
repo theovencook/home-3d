@@ -40,6 +40,9 @@ const prefs: DevicePrefs = {
 /** The tick on a chosen segment, so colour is not the only sign (a line icon in the text colour). */
 const TICK = html`<svg class="vp-tick" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>`;
 
+/** Whether a scrolling box has more below what it shows (1 px of rounding allowed) (#259). */
+export const moreBelow = (top: number, height: number, scrollHeight: number): boolean => top + height < scrollHeight - 1;
+
 export class Fp3dViewPanel extends LitElement {
   static properties = {
     hass: { attribute: false },
@@ -73,13 +76,33 @@ export class Fp3dViewPanel extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this.phoneQuery?.removeEventListener?.("change", this.onPhone);
+    this.sizer?.disconnect();
+    this.sizer = null;
   }
 
   /** A non-modal dialog takes the focus when it opens, so the keyboard and a screen reader are in it at once. */
   protected firstUpdated(changed: PropertyValues): void {
     super.firstUpdated(changed);
     this.renderRoot.querySelector<HTMLElement>(".vp")?.focus({ preventScroll: true });
+    const body = this.renderRoot.querySelector<HTMLElement>(".vp-body");
+    if (body && typeof ResizeObserver === "function") {
+      this.sizer = new ResizeObserver(this.markMore);
+      this.sizer.observe(body);
+    }
   }
+
+  protected updated(changed: PropertyValues): void {
+    super.updated(changed);
+    this.markMore();
+  }
+
+  private sizer: ResizeObserver | null = null;
+
+  /** More of the panel below its foot: the foot fades out (#259, V17). */
+  private readonly markMore = () => {
+    const body = this.renderRoot?.querySelector<HTMLElement>(".vp-body");
+    body?.toggleAttribute("data-more", moreBelow(body.scrollTop, body.clientHeight, body.scrollHeight));
+  };
 
   private t(key: string, vars?: Record<string, string | number>): string {
     return translate(this.hass, key as I18nKey, vars);
@@ -277,7 +300,7 @@ export class Fp3dViewPanel extends LitElement {
         <span class="vp-scope">${this.t("view_scope")}</span>
         <button type="button" class="vp-close" @click=${() => this.emit("view-close")}>${this.t("close")}</button>
       </header>
-      <div class="vp-body">
+      <div class="vp-body" @scroll=${this.markMore}>
         <slot></slot>
         ${sections.map((s) => this.renderSection(s))}
         ${this.context.kiosk ? nothing : this.renderFooter()}
@@ -340,6 +363,20 @@ export class Fp3dViewPanel extends LitElement {
         overflow-y: auto;
         overscroll-behavior: contain;
         padding: 0 var(--fp3d-space-4) var(--fp3d-space-2);
+        /* a panel taller than the screen shows that it scrolls (#259, V17): a visible scroll bar, and the foot fades
+           out while there is more below */
+        scrollbar-width: thin;
+        scrollbar-color: var(--fp3d-muted) transparent;
+      }
+      .vp-body[data-more]::after {
+        content: "";
+        position: sticky;
+        bottom: calc(-1 * var(--fp3d-space-2));
+        display: block;
+        height: 40px;
+        margin-top: -40px;
+        background: linear-gradient(transparent, var(--fp3d-panel, var(--fp3d-chrome-solid)) 85%);
+        pointer-events: none;
       }
       .vp-sec {
         padding: var(--fp3d-space-3) 0;

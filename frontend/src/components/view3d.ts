@@ -4837,11 +4837,23 @@ export class Fp3dView3d extends LitElement {
       </div>`;
   }
 
+  /** Search opens with the field focused, ready for typing (#259, V04). */
+  private openFind(): void {
+    this._find = "";
+    void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLInputElement>(".fp3d-find input")?.focus());
+  }
+
+  /** Search closes back to its button (#259). */
+  private closeFind(): void {
+    this._find = null;
+    void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>(".fp3d-find-btn")?.focus());
+  }
+
   private renderFind() {
     const b = this.building;
     if (!b || !this.hass) return nothing;
     if (this._find === null) {
-      return html`<button class="fp3d-find-btn" title=${translate(this.hass, "find")} aria-label=${translate(this.hass, "find")} @click=${() => (this._find = "")}>
+      return html`<button class="fp3d-find-btn" title=${translate(this.hass, "find")} aria-label=${translate(this.hass, "find")} @click=${() => this.openFind()}>
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></svg>
       </button>`;
     }
@@ -4849,15 +4861,16 @@ export class Fp3dView3d extends LitElement {
     return html`<div class="fp3d-find">
       <input
         type="search"
+        aria-label=${translate(this.hass, "find")}
         placeholder=${translate(this.hass, "find_placeholder")}
         .value=${this._find}
         @input=${(e: Event) => (this._find = (e.target as HTMLInputElement).value)}
         @keydown=${(e: KeyboardEvent) => {
-          if (e.key === "Escape") this._find = null;
+          if (e.key === "Escape") this.closeFind();
           if (e.key === "Enter" && results[0]) this.goTo(results[0]);
         }}
       />
-      <button class="fp3d-find-close" aria-label=${translate(this.hass, "close")} @click=${() => (this._find = null)}>✕</button>
+      <button class="fp3d-find-close" aria-label=${translate(this.hass, "close")} @click=${() => this.closeFind()}>✕</button>
       ${this._find.trim()
         ? html`<div class="fp3d-find-list">
             ${results.length
@@ -4986,7 +4999,7 @@ export class Fp3dView3d extends LitElement {
             </div>`
           : own.length
             ? nothing
-            : html`<p class="fp3d-central-hint">${t("central_no_favorites")}</p>`}
+            : html`<p class="fp3d-central-hint">${t(this.mayEdit ? "central_no_favorites" : "central_no_favorites_viewer")}</p>`}
         ${own.length
           ? html`<div class="fp3d-central-favs">
               ${own.map(
@@ -7504,6 +7517,15 @@ export class Fp3dView3d extends LitElement {
       .fp3d-clock .fp3d-dial .s {
         stroke: var(--fp3d-accent);
       }
+      /* Day (#260, V06): the dark box under dark text was unreadable; the clock takes the Day surface with dark text */
+      :host([light]) .fp3d-clock {
+        background: rgba(255, 255, 255, 0.88);
+        color: #0f1c2e;
+        box-shadow: 0 4px 14px rgba(20, 40, 80, 0.18);
+      }
+      :host([light]) .fp3d-clock span {
+        color: #3d4d63;
+      }
       /* at the top it sits under the energy strip and the walk button */
       .fp3d-clock-tl {
         top: 64px;
@@ -7589,6 +7611,12 @@ export class Fp3dView3d extends LitElement {
         font-size: 15px;
         box-shadow: var(--fp3d-shadow);
         backdrop-filter: blur(8px);
+      }
+      /* one cross: the field's own clear button goes, the close button stays (#259, V08) */
+      .fp3d-find input::-webkit-search-cancel-button {
+        -webkit-appearance: none;
+        appearance: none;
+        display: none;
       }
       .fp3d-find-close {
         position: absolute;
@@ -8975,6 +9003,10 @@ export class Fp3dView3d extends LitElement {
           scrollbar-width: none;
           pointer-events: auto;
         }
+        /* the row stops before the Walk button in the corner instead of running under it (#259, V14) */
+        .fp3d-stage:has(> .fp3d-walk-btn) .fp3d-energy {
+          max-width: calc(100% - 20px - var(--fp3d-walk-right, 12px) - var(--fp3d-walk-w, 96px));
+        }
         /* the scrolling row would clip a scaled tile: there the enlarged tile gets bigger text instead (#90) */
         .fp3d-energy .fp3d-energy-tile {
           transform: none;
@@ -9113,6 +9145,9 @@ export class Fp3dView3d extends LitElement {
       }
       /* phones (#93): Walk as a 44 px symbol that stays above the energy cards; 44 px touch targets */
       @media ${unsafeCSS(PHONE_MEDIA)} {
+        .fp3d-stage {
+          --fp3d-walk-w: 44px;
+        }
         .fp3d-walk-btn {
           z-index: 5;
           width: 44px;

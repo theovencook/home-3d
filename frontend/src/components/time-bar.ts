@@ -22,6 +22,11 @@ const ICONS = {
 const icon = (d: string) => svg`<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d=${d} /></svg>`;
 
 /** Marker colours: danger red, water blue, rain light blue, doors amber, motion violet, machines green, energy yellow. */
+/** Room a tick label needs to the right of its tick (#257). */
+export const TICK_LABEL_ROOM = 60;
+/** Whether a tick label at x (px) fits on a track w px wide; one nearer the end is left out (#257). */
+export const tickLabelFits = (w: number, x: number): boolean => w - x >= TICK_LABEL_ROOM;
+
 const COLOR: Record<EventKind, string> = {
   alarm: "#ff3b4f",
   smoke: "#ff3b4f",
@@ -58,6 +63,7 @@ type Sheet = "events" | "away" | "day";
 export class Fp3dTimeBar extends LitElement {
   static properties = {
     session: { attribute: false },
+    demo: { type: Boolean },
     _w: { state: true },
     _label: { state: true },
     _toast: { state: true },
@@ -68,6 +74,8 @@ export class Fp3dTimeBar extends LitElement {
   };
 
   declare session: Session | null;
+  /** The demo home is shown: its "Demo" tag sits in the clock card, beside the title, not over it (#257). */
+  declare demo: boolean;
   /** Width of the track (px): markers, ticks and the playhead are placed with it. */
   private declare _w: number;
   /** A long-pressed marker's events, shown above it. */
@@ -101,6 +109,7 @@ export class Fp3dTimeBar extends LitElement {
   constructor() {
     super();
     this.session = null;
+    this.demo = false;
     this._w = 0;
     this._label = null;
     this._toast = false;
@@ -377,7 +386,9 @@ export class Fp3dTimeBar extends LitElement {
         : !week && h % every === 0
           ? this.time(at)
           : "";
-      ticks.push(html`<b class="tick ${midnight ? "tick-day" : label ? "tick-major" : ""}" style="left:${pct(at)}">${label ? html`<span>${label}</span>` : nothing}</b>`);
+      // a label too near the end of the track is left out: it would run off the track into the chip beside it (#257)
+      const shown = label && tickLabelFits(w, this.xOf(at)) ? label : "";
+      ticks.push(html`<b class="tick ${midnight ? "tick-day" : label ? "tick-major" : ""}" style="left:${pct(at)}">${shown ? html`<span>${shown}</span>` : nothing}</b>`);
     }
     // only the events on the track (a week loaded before stays in memory in the 24-hour view)
     const sig = `${w}|${s.events.length}|${s.start}|${s.end}|${s.version}|${loaded}`;
@@ -596,7 +607,7 @@ export class Fp3dTimeBar extends LitElement {
     const minutes = Math.round((s.end - s.start) / 60000);
     return html`<div class="frame"></div>
       <div class="clock" role="status" aria-live="off">
-        <span class="badge">⏪ ${t("tt_badge")}</span>
+        <span class="badge">⏪ ${t("tt_badge")}${this.demo ? html`<em class="demo" title=${t("demo_hint")}>${t("demo_chip")}</em>` : nothing}</span>
         ${ready
           ? // filled by onTick (written directly, many times a second while playing – no binding inside)
             html`<b class="clock-time"></b><span class="clock-ago"></span>`
@@ -678,6 +689,18 @@ export class Fp3dTimeBar extends LitElement {
       font-weight: 800;
       letter-spacing: 0.12em;
       color: var(--tt);
+    }
+    .demo {
+      margin-left: 8px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--fp3d-line, rgba(120, 170, 255, 0.16));
+      font-style: normal;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--fp3d-text, #e6eefc);
+      cursor: help;
+      pointer-events: auto;
     }
     .clock-time {
       font-family: var(--fp3d-title-font, inherit);
@@ -805,7 +828,8 @@ export class Fp3dTimeBar extends LitElement {
       flex: 1;
       min-width: 0;
       height: 34px;
-      margin: 0 4px;
+      /* a gutter at the end: the handle and the last label stay clear of the chip beside the track (#257) */
+      margin: 0 12px 0 4px;
       border-radius: 8px;
       background: rgba(255, 255, 255, 0.05);
       cursor: pointer;
@@ -1124,21 +1148,33 @@ export class Fp3dTimeBar extends LitElement {
       text-align: right;
       color: var(--fp3d-muted, #8a9bb8);
     }
-    /* phones and narrow cards: the track on a row of its own above the buttons */
+    /* phones and narrow cards: two rows, the track and the way back to the present on top, the buttons below (#257);
+       the bar grows upwards from the bottom edge (the safe area included), never past it */
     @container fp3dtt ((max-width: 700px) or ((orientation: portrait) and (max-width: 1000px))) {
       .bar {
         flex-wrap: wrap;
         align-content: center;
-        row-gap: 6px;
+        justify-content: center;
+        row-gap: 3px;
+        height: auto;
+        bottom: calc(8px + env(safe-area-inset-bottom, 0px));
         padding: 6px 8px;
       }
-      .track {
+      /* the line break between the two rows */
+      .bar::after {
+        content: "";
         order: -1;
         flex: 1 0 100%;
-        margin: 14px 0 0;
+        height: 0;
+      }
+      .track {
+        order: -2;
+        flex: 1 1 0;
+        margin: 14px 4px 0 0;
       }
       .live {
-        margin-left: auto;
+        order: -1;
+        margin-top: 14px;
       }
       .chip {
         padding: 0 9px;

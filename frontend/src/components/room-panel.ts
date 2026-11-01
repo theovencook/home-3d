@@ -175,6 +175,12 @@ export class Fp3dRoomPanel extends LitElement {
     </p>`;
   }
 
+  /** Focus moves to the room's name when the room was chosen from the Rooms picker (#259, V19). */
+  async focusHeading(): Promise<void> {
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>(".fp3d-rp-head h2")?.focus();
+  }
+
   protected render() {
     const room = this.room;
     if (!room || !this.hass) return nothing;
@@ -214,7 +220,7 @@ export class Fp3dRoomPanel extends LitElement {
     return html`<section class="fp3d-rp ${this.readOnly ? "fp3d-rp-ro" : ""}" aria-label=${room.name}>
       <header class="fp3d-rp-head">
         <div>
-          <h2>${room.name}</h2>
+          <h2 tabindex="-1">${room.name}</h2>
           ${facts.length ? html`<p class="fp3d-rp-facts">${facts.join(" · ")}</p>` : nothing}
           ${this.renderHere(room)}
           ${this.readOnly ? html`<p class="fp3d-rp-facts fp3d-rp-ro-note">⏪ ${this.t("tt_readonly")}</p>` : nothing}
@@ -242,9 +248,9 @@ export class Fp3dRoomPanel extends LitElement {
         <!-- time travel: one disabled fieldset greys out and disables every control inside it, with one tooltip (#210) -->
         <fieldset class="fp3d-rp-controls" ?disabled=${this.readOnly} title=${this.readOnly ? this.t("tt_past_no") : nothing}>
         ${!room.area_id
-          ? html`<p class="fp3d-rp-note">${this.t("panel_no_area")}</p>`
+          ? html`<p class="fp3d-rp-note">${this.t(this.canEdit ? "panel_no_area" : "panel_no_area_viewer")}</p>`
           : !ids.length
-            ? html`<p class="fp3d-rp-note">${this.t("panel_empty")}</p>`
+            ? html`<p class="fp3d-rp-note">${this.t(this.canEdit ? "panel_empty" : "panel_empty_viewer")}</p>`
             : nothing}
         ${editing
           ? html`<fp3d-room-list-edit
@@ -702,6 +708,9 @@ export class Fp3dRoomPanel extends LitElement {
       .fp3d-rp-sheet:hover {
         border-color: var(--fp3d-accent, #37e0ff);
       }
+      h2:focus:not(:focus-visible) {
+        outline: none;
+      }
       h2 {
         margin: 0;
         font: 700 21px var(--fp3d-title-font);
@@ -970,6 +979,10 @@ export class Fp3dRoomPanel extends LitElement {
         }
         .fp3d-rp-stepper .fp3d-btn {
           width: 44px;
+        }
+        /* the 44 px icon gets a column as wide, so it keeps clear of the name (#260, V07) */
+        .fp3d-rp-row {
+          grid-template-columns: 44px 1fr auto auto;
         }
         .fp3d-rp-small,
         .fp3d-rp-sheet,

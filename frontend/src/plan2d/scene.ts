@@ -4,7 +4,7 @@
 
 import { itemColourRoles, roleColour } from "../colour-roles.ts";
 import { generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall, type WallOptions } from "../geometry/walls.ts";
-import { isFrontDoor, openingStyle, sidelightLayout, signedArea, type Building, type Floor, type Furniture, type Vec2 } from "../model.ts";
+import { isFrontDoor, openingStyle, sidelightLayout, signedArea, zonesOf, type Building, type Floor, type Furniture, type Vec2 } from "../model.ts";
 import { packItem } from "../packs.ts";
 import { readRackFrame } from "../rack-frame.ts";
 import { rackDrawOf, type RackDraw } from "../rack-elevation.ts";
@@ -251,6 +251,22 @@ export function fitView(box: { x0: number; z0: number; x1: number; z1: number },
 export function fitInside(box: { x0: number; z0: number; x1: number; z1: number }, size: { w: number; h: number }, inset: { left: number; top: number; bottom: number }, pad = 28): PlanView {
   const v = fitView(box, Math.max(1, size.w - inset.left), Math.max(1, size.h - inset.top - inset.bottom), pad);
   return { k: v.k, tx: v.tx + inset.left, ty: v.ty + inset.top };
+}
+
+/**
+ * Where the plan goes when a room is chosen while a sheet (the room panel on a phone) covers the lower part of the view
+ * (#259, V13): the room, fitted and centred in the part above the sheet, as the 3D view zooms to it. Null when nothing
+ * covers the plan (the room panel beside it on a wide screen: the plan keeps its place) or the room is not on the floor.
+ */
+export function roomFocusView(floor: Floor, roomId: string | null, size: { w: number; h: number }, bottom: number): PlanView | null {
+  if (!roomId || bottom < size.h * 0.3) return null;
+  const room = zonesOf(floor).find((r) => r.id === roomId);
+  if (!room || room.points.length < 3) return null;
+  const xs = room.points.map((p) => p[0]);
+  const zs = room.points.map((p) => p[1]);
+  const box = { x0: Math.min(...xs), z0: Math.min(...zs), x1: Math.max(...xs), z1: Math.max(...zs) };
+  // the room with a margin around it: the walls and the doors next to it stay in sight
+  return fitInside(box, size, { left: 0, top: 60, bottom: Math.min(bottom + 8, size.h * 0.7) }, 36);
 }
 
 /** Zoom by `factor` around the screen point (px, py), which stays where it is. */

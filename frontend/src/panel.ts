@@ -55,6 +55,16 @@ function settingsAddress(hash: string): { section: string | null; id: string | n
 }
 
 /** What counts as someone using a wall tablet: its idle return waits again (#92). */
+/** Whether a sideways-scrolling row has more past its start and its end (1 px of rounding allowed) (#259). */
+export const navEdges = (left: number, scrollWidth: number, clientWidth: number): { start: boolean; end: boolean } => ({
+  start: left > 1,
+  end: left + clientWidth < scrollWidth - 1,
+});
+/** How long (ms) a notice's buttons wait after it appears before a tap acts (#258). */
+export const NOTICE_ARM_MS = 800;
+/** Whether a tap at `now` came too soon after the notices appeared at `shownAt` to have been aimed at them (#258). */
+export const noticeTapTooSoon = (shownAt: number, now: number): boolean => now - shownAt < NOTICE_ARM_MS;
+
 const TOUCHES = ["pointerdown", "keydown", "wheel"] as const;
 
 /** View preferences belong to the device (a wall tablet wants other settings than a desktop). */
@@ -850,6 +860,7 @@ export class Floorplan3dPanel extends LitElement {
       const row = on?.parentElement;
       if (on && row && row.scrollWidth > row.clientWidth) on.scrollIntoView?.({ block: "nearest", inline: "nearest" });
     }
+    this.markNavEdges();
     // the page's language is the one its texts are in (#196): English while a language has no texts here
     const lang = uiLanguage(this.hass);
     if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);
@@ -1049,16 +1060,37 @@ export class Floorplan3dPanel extends LitElement {
     return notices;
   }
 
+  /** When the notices now showing appeared (ms, performance.now()): their buttons wait NOTICE_ARM_MS before they act. */
+  private noticeShownAt = 0;
+  private noticeShownKey = "";
+
   /**
-   * The notices as pop-up messages over the page (#249, was a banner in the flow, #223): they never push the plan down.
-   * "Hide" puts them away until another one comes; the badge on the save line brings them back.
+   * The notices (#249) in a strip of their own under the header (#258): popped up over the page they covered Walk, the
+   * floors row and the editor's toolbar. The plan and the 3D view are only made shorter, never covered. A tap aimed at a
+   * control that the strip has just moved lands on it instead, so its buttons do nothing for NOTICE_ARM_MS after it
+   * appears. "Hide" puts them away until another one comes; the badge on the save line brings them back.
    */
   private renderNotices(notices: { key: string; body: TemplateResult }[]) {
-    if (!notices.length || this._noticesHidden === this.noticeKey) return nothing;
-    return html`<div class="fp3d-notices" role="region" aria-label=${this.t("notices")}>
-      ${notices.map((n) => n.body)}
+    if (!notices.length || this._noticesHidden === this.noticeKey) {
+      this.noticeShownKey = "";
+      return nothing;
+    }
+    if (this.noticeShownKey !== this.noticeKey) {
+      this.noticeShownKey = this.noticeKey;
+      this.noticeShownAt = performance.now();
+    }
+    return html`<div class="fp3d-notices" role="region" aria-label=${this.t("notices")} @click=${{ handleEvent: (e: Event) => this.guardNoticeTap(e), capture: true }}>
+      <div class="fp3d-notices-list">${notices.map((n) => n.body)}</div>
       <button class="fp3d-btn fp3d-notices-hide" @click=${() => (this._noticesHidden = this.noticeKey)}>${this.t("notices_hide")}</button>
     </div>`;
+  }
+
+  /** Swallows a tap on the notices that came too soon after they appeared: it was aimed at what was there before (#258). */
+  private guardNoticeTap(e: Event): void {
+    if (noticeTapTooSoon(this.noticeShownAt, performance.now())) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
   }
 
   /**
@@ -1191,6 +1223,25 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   /** A single-row bar scrolls sideways with the mouse wheel (a desktop has no swipe). */
+  /** Focus goes on to the room panel once the room is chosen, not back to the page (#259, V19). */
+  private async focusRoomPanel(): Promise<void> {
+    await this.updateComplete;
+    await customElements.whenDefined("fp3d-room-panel");
+    await (this.renderRoot.querySelector("fp3d-room-panel") as (HTMLElement & { focusHeading?: () => Promise<void> }) | null)?.focusHeading?.();
+  }
+
+  /**
+   * A floors row wider than its room fades out at the end(s) with more chips (#259, V12/ND-11): a chip half under the
+   * Rooms button reads as "scroll for more", not as a floor called "G". Written straight onto the row, no re-render.
+   */
+  private readonly markNavEdges = () => {
+    const row = this.renderRoot?.querySelector<HTMLElement>(".fp3d-floors");
+    if (!row) return;
+    const more = navEdges(row.scrollLeft, row.scrollWidth, row.clientWidth);
+    row.toggleAttribute("data-more-start", more.start);
+    row.toggleAttribute("data-more-end", more.end);
+  };
+
   private readonly onNavWheel = (e: WheelEvent) => {
     if (!e.deltaY || e.deltaX) return;
     const nav = e.currentTarget as HTMLElement;
@@ -1214,7 +1265,7 @@ export class Floorplan3dPanel extends LitElement {
     const room = this._roomId ? b.floors.flatMap((f) => zonesOf(f)).find((r) => r.id === this._roomId) : undefined;
     return html`<nav class="fp3d-nav" aria-label=${this.t("floors")}>
       ${many
-        ? html`<div class="fp3d-seg fp3d-floors" role="group" aria-label=${this.t("floors")} @wheel=${this.onNavWheel}>
+        ? html`<div class="fp3d-seg fp3d-floors" role="group" aria-label=${this.t("floors")} @wheel=${this.onNavWheel} @scroll=${this.markNavEdges}>
             <button aria-pressed=${this._floorId === null} @click=${() => pickFloor(null)}>${this.t("all_floors")}</button>
             ${[...b.floors].reverse().map((f) => html`<button aria-pressed=${f.id === this._floorId} @click=${() => pickFloor(f.id)}>${f.name}</button>`)}
           </div>`
@@ -1245,6 +1296,7 @@ export class Floorplan3dPanel extends LitElement {
                       if (many) this._floorId = e.detail.floorId;
                       this._roomId = e.detail.roomId;
                       this._roomsOpen = false;
+                      void this.focusRoomPanel();
                     }}
                     @edit-floor=${(e: CustomEvent<{ floorId: string }>) => this.openInEditor(e.detail.floorId, null)}
                     @picker-close=${(e: CustomEvent<{ focus?: boolean } | null>) => this.closeRooms(!!e.detail?.focus)}
@@ -1407,8 +1459,8 @@ export class Floorplan3dPanel extends LitElement {
               @edit-floor=${(e: CustomEvent<{ floorId: string | null }>) => this.openInEditor(e.detail.floorId, null)}
             ></fp3d-room-panel>`)
           : nothing}
-        ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session}></fp3d-time-bar>` : nothing}
-        ${showsDemo(hass) ? html`<div class="fp3d-demo-chip" title=${this.t("demo_hint")}>${this.t("demo_chip")}</div>` : nothing}
+        ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session} ?demo=${showsDemo(hass)}></fp3d-time-bar>` : nothing}
+        ${showsDemo(hass) && !this.tt.session ? html`<div class="fp3d-demo-chip" title=${this.t("demo_hint")}>${this.t("demo_chip")}</div>` : nothing}
         ${this._clean ? nothing : html`<div class="fp3d-overlay">
           ${this._tablet ? nothing : planView}
           <button
@@ -1629,24 +1681,43 @@ export class Floorplan3dPanel extends LitElement {
         margin: 0 4px 0 8px;
         white-space: nowrap;
       }
-      /* notices pop up over the page (#249, #223): they never push the plan down */
+      /* notices in a strip of their own under the header (#258, were pop-ups over the page, #249): they cover no
+         control; the plan and the 3D view below only get shorter */
       .fp3d-notices {
-        position: absolute;
-        top: 64px;
-        right: 12px;
-        z-index: 50;
-        width: min(440px, calc(100% - 24px));
+        flex: none;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 6px 12px;
+        border-bottom: 1px solid var(--fp3d-line);
+        background: var(--fp3d-chrome-solid);
+      }
+      .fp3d-notices-list {
+        flex: 1;
+        min-width: 0;
         display: grid;
         gap: 6px;
       }
-      .fp3d-clean .fp3d-notices {
-        top: 8px;
-      }
-      .fp3d-notices .fp3d-notice {
-        box-shadow: var(--fp3d-shadow);
-      }
       .fp3d-notices-hide {
-        justify-self: end;
+        flex: none;
+      }
+      /* inside the strip a notice is a line of text and its buttons: the strip is its frame */
+      .fp3d-notices .fp3d-notice {
+        flex-wrap: nowrap;
+        padding: 0 0 0 10px;
+        border: 0;
+        border-left: 3px solid var(--fp3d-line);
+        border-radius: 0;
+        background: none;
+      }
+      .fp3d-notices .fp3d-notice span {
+        min-width: 0;
+      }
+      .fp3d-notices .fp3d-notice-warn {
+        border-left-color: rgba(255, 181, 71, 0.8);
+      }
+      .fp3d-notices .fp3d-notice-error {
+        border-left-color: rgba(255, 107, 139, 0.8);
       }
       .fp3d-notice {
         display: flex;
@@ -1784,9 +1855,7 @@ export class Floorplan3dPanel extends LitElement {
           white-space: nowrap;
         }
         .fp3d-notices {
-          top: 60px;
-          right: 8px;
-          width: calc(100% - 16px);
+          padding: 6px 8px;
         }
       }
       .fp3d-save-error {
@@ -1818,6 +1887,19 @@ export class Floorplan3dPanel extends LitElement {
       }
       .fp3d-floors:hover {
         scrollbar-width: thin;
+      }
+      /* more chips past an edge: that edge fades out; the chosen chip scrolls clear of the fade (#259) */
+      .fp3d-floors {
+        scroll-padding-inline: 28px;
+      }
+      .fp3d-floors[data-more-end] {
+        mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+      }
+      .fp3d-floors[data-more-start] {
+        mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+      }
+      .fp3d-floors[data-more-start][data-more-end] {
+        mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
       }
       .fp3d-floors > button {
         flex: none;
@@ -1933,15 +2015,15 @@ export class Floorplan3dPanel extends LitElement {
         .fp3d-room-open fp3d-view3d {
           --fp3d-bottom-inset: calc(55% + 8px);
         }
-        /* phones: the time bar takes two rows; the switches make way for it */
+        /* phones: the time bar takes two rows (its height here, the safe area included); the switches, the time
+           travel chip among them, stay on the screen above it (#257) */
         .fp3d-tt > * {
-          --fp3d-tt-h: 100px;
+          --fp3d-tt-h: calc(120px + env(safe-area-inset-bottom, 0px));
         }
-        .fp3d-tt .fp3d-overlay {
-          display: none;
-        }
-        .fp3d-tt fp3d-view3d {
-          --fp3d-bottom-inset: var(--fp3d-tt-h);
+        @media (pointer: coarse) {
+          .fp3d-tt > * {
+            --fp3d-tt-h: calc(138px + env(safe-area-inset-bottom, 0px));
+          }
         }
       }
       /* search and eye on the right (#285): the bar leaves room there instead */
