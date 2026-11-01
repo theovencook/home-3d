@@ -97,7 +97,7 @@ test("every registered setting renders its own row, hidden ones included (their 
   for (const s of SETTINGS) {
     const text = flat(p.renderRow(s, false));
     assert.ok(text.includes(`data-id=${s.id}`) || text.includes(`data-id="${s.id}"`), `${s.id} row`);
-    assert.ok(text.includes(tr(s.label)), `${s.id} label`);
+    assert.ok(s.id === "editors" || text.includes(tr(s.label)), `${s.id} label`);
     // no badge on every row any more (#248): the page says once who it affects
     assert.doesNotMatch(text, /st-scope/, `${s.id}: no scope badge`);
   }

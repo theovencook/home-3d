@@ -548,9 +548,7 @@ export class SettingsPage extends LitElement {
       data-id=${s.id}
       id=${index >= 0 ? `st-hit-${index}` : nothing}
     >
-      <div class="st-lbl" ?hidden=${s.id === "editors"}>
-        <span class="st-name">${s.control.kind === "number" && s.control.length ? lengthLabel(this.env, this.tr(s.label)) : this.tr(s.label)}</span>
-      </div>
+      ${s.id === "editors" ? nothing : html`<div class="st-lbl"><span class="st-name">${s.control.kind === "number" && s.control.length ? lengthLabel(this.env, this.tr(s.label)) : this.tr(s.label)}</span></div>`}
       ${s.hint || rule ? html`<p class="st-hint">${s.hint ? this.tr(s.hint) : nothing}${rule ? html`<span class="st-rule">${this.tr(rule)}</span>` : nothing}</p>` : nothing}
       <div class="st-ctl">${this.renderControl(s, s.control, !may)}</div>
     </div>`;
@@ -1023,7 +1021,6 @@ export class SettingsPage extends LitElement {
         align-items: center;
         padding: 11px 16px;
         border-top: 1px solid var(--fp3d-line);
-        transition: background 0.4s;
       }
       .st-card h3 + .st-row {
         border-top: 0;
@@ -1236,7 +1233,6 @@ export class SettingsPage extends LitElement {
       }
       .st-save {
         margin: 0;
-        flex: none;
         font-size: 12.5px;
         padding-top: 6px;
       }
@@ -1258,6 +1254,9 @@ export class SettingsPage extends LitElement {
           display: none;
         }
         /* a search in progress keeps its box on screen above the results (#254) */
+        .st-drill.st-query {
+          grid-template-rows: auto 1fr;
+        }
         .st-drill.st-query .st-nav {
           display: flex;
         }

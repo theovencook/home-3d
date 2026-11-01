@@ -409,5 +409,5 @@ test("Household has a calendar icon, the bin days box says always and days, wide
 
 test("who can edit draws one heading: the row's own label is hidden", () => {
   const text = show(page(), "access");
-  assert.match(text, /st-lbl" \?hidden=/);
+  assert.doesNotMatch(text, /class="st-lbl"/);
 });
