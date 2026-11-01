@@ -1,9 +1,11 @@
 // Copies custom_components/home_3d to a Home Assistant config folder (e.g. a Samba share).
 // The target comes from HOME3D_DEPLOY_TARGET or deploy.local.json ({"target": "..."}), which is
-// not committed. Files in the target that no longer exist here are removed.
+// not committed. Files in the target that no longer exist here are removed, except the main bundle's chunks of the
+// last builds, for two days (#223, frontend/src/deploy-keep.ts: a page still running the old bundle draws its plan).
 
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
+import { keepOldFile } from "../frontend/src/deploy-keep.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const source = join(root, "custom_components", "home_3d");
@@ -34,10 +36,11 @@ function files(dir) {
 
 const wanted = new Set(files(source).map((f) => relative(source, f)));
 let removed = 0;
+const now = Date.now();
 if (existsSync(target)) {
   for (const f of files(target)) {
     const rel = relative(target, f);
-    if (!wanted.has(rel)) {
+    if (!wanted.has(rel) && !keepOldFile(rel, statSync(f).mtimeMs, now)) {
       rmSync(f);
       removed++;
     }
