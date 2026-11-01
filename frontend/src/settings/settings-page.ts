@@ -10,6 +10,7 @@ import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import "../components/entity-picker.ts";
 import { entityOptionList } from "../entity-options.ts";
 import { entityName } from "../devices.ts";
+import { freshReload } from "../fresh-reload.ts";
 import type { Building, StartView } from "../model.ts";
 import type { FurniturePack } from "../packs.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -296,7 +297,7 @@ export class SettingsPage extends LitElement {
     if (this.stale) {
       return html`<div class="st-stale" role="status">
         <span>${this.t("update_ready")}</span>
-        <button class="fp3d-btn" @click=${() => location.reload()}>${this.t("reload_page")}</button>
+        <button class="fp3d-btn" @click=${() => void freshReload()}>${this.t("reload_page")}</button>
       </div>`;
     }
     const env = this.env;

@@ -12,6 +12,9 @@ async function running(build: string, backend: { version: string; build: string 
   const host = { addController() {}, removeController() {}, requestUpdate() {}, updateComplete: Promise.resolve(true) };
   const c = new BuildingController(host);
   c.frontend = { version: "1.2.0", build };
+  // #223: the browser cache refresh, counted instead of fetching
+  const refreshed: string[] = [];
+  c.refreshBundles = async () => void refreshed.push("refresh");
   const asked: string[] = [];
   const ready = new Set<() => void>();
   const hass = {
@@ -41,7 +44,7 @@ async function running(build: string, backend: { version: string; build: string 
     for (const cb of ready) cb();
     await tick();
   };
-  return { c, asked, reconnect, listeners: ready };
+  return { c, asked, reconnect, listeners: ready, refreshed };
 }
 
 test("a rebuilt frontend at the same version counts as an update the open page lacks", async () => {
@@ -114,5 +117,65 @@ test("edits that cannot be saved block the reload, so they are not lost", async 
   assert.equal(await c.reloadWhenSaved(() => reloads++), false);
   assert.equal(reloads, 0);
   assert.equal(c.updateNotice, "unsaved");
+  c.hostDisconnected();
+});
+
+// #223: behind a proxy that makes the browser keep home-3d.js (Cloudflare: max-age=14400 in place of no-cache), a plain
+// reload ran the old bundle again and the notice came back, five reloads in a row. The decision and the cure:
+
+test("a page behind the build Home Assistant serves refreshes the cached bundle once, in the background", async () => {
+  const backend = { version: "1.2.0", build: "bbb" as string | null };
+  const { c, refreshed, reconnect } = await running("aaa", backend);
+  assert.equal(c.updateNotice, "ready");
+  assert.deepEqual(refreshed, ["refresh"]);
+  // asked again (Home Assistant came back): still the one refresh
+  await reconnect();
+  assert.deepEqual(refreshed, ["refresh"]);
+  c.hostDisconnected();
+});
+
+test("a page on the served build, or on a backend that names no build, fetches nothing", async () => {
+  assert.deepEqual((await running("aaa", { version: "1.2.0", build: "aaa" })).refreshed, []);
+  assert.deepEqual((await running("aaa", { version: "1.2.0", build: null })).refreshed, []);
+  // a backend older than the page: a restart helps, not a reload
+  const older = await running("aaa", { version: "1.1.0", build: "bbb" });
+  assert.equal(older.c.versionGap, "backend");
+  assert.deepEqual(older.refreshed, []);
+});
+
+test("a newer version counts as an update the page lacks, and refreshes too", async () => {
+  const { c, refreshed } = await running("aaa", { version: "1.3.0", build: "ccc" });
+  assert.equal(c.versionGap, "frontend");
+  assert.deepEqual(refreshed, ["refresh"]);
+});
+
+test("an update found on reconnect refreshes the cache then", async () => {
+  const backend = { version: "1.2.0", build: "aaa" as string | null };
+  const { c, refreshed, reconnect } = await running("aaa", backend);
+  assert.deepEqual(refreshed, []);
+  backend.build = "bbb";
+  await reconnect();
+  assert.deepEqual(refreshed, ["refresh"]);
+  c.hostDisconnected();
+});
+
+test("Reload refreshes the cached bundle first, then reloads once", async () => {
+  const { c, refreshed } = await running("aaa", { version: "1.2.0", build: "bbb" });
+  const order: string[] = [];
+  c.refreshBundles = async () => void order.push("refresh");
+  assert.equal(await c.reloadWhenSaved(() => order.push("reload")), true);
+  assert.deepEqual(order, ["refresh", "reload"]);
+  assert.equal(refreshed.length, 1);
+  c.hostDisconnected();
+});
+
+test("Reload still reloads when the refresh fails", async () => {
+  const { c } = await running("aaa", { version: "1.2.0", build: "bbb" });
+  let reloads = 0;
+  c.refreshBundles = async () => {
+    throw new Error("offline");
+  };
+  assert.equal(await c.reloadWhenSaved(() => reloads++), true);
+  assert.equal(reloads, 1);
   c.hostDisconnected();
 });
