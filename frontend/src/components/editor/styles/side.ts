@@ -54,6 +54,20 @@ export const sideStyles = css`
         margin-bottom: 8px;
       }
       .fp3d-floor-list,
+      /* align and distribute buttons of the multi-selection panel (#235) */
+      .fp3d-align {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .fp3d-align-btn {
+        display: grid;
+        place-items: center;
+        min-width: 40px;
+        min-height: 40px;
+        padding: 0;
+      }
       .fp3d-actions {
         display: flex;
         flex-wrap: wrap;

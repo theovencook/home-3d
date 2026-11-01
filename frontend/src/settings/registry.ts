@@ -12,6 +12,7 @@ import { doorbellCamera, doorbellEntities, HOLD_DEFAULT, HOLD_MAX, HOLD_MIN } fr
 import { isRainSource, weatherEntity } from "../weather.ts";
 import { backdropImage } from "../backdrop.ts";
 import { TABLET_IDLE_DEFAULT } from "../kiosk.ts";
+import { parsePinZoom, PLAN_PIN_ZOOM_DEFAULT, PLAN_PIN_ZOOM_KEY, PLAN_PIN_ZOOM_MAX } from "../plan-pins.ts";
 import { fetchPackUpdates, getVoiceSettings, setPackUpdateSettings, setVoiceSentences, type SentenceMode } from "../api.ts";
 import type { PackUpdateSettings, PackUpdateStatus } from "../pack-updates.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
@@ -1198,6 +1199,21 @@ const LOOK: Setting[] = [
   deviceChoice("controls", "look", "markers", "controls", ["left", "right"], "left", "controls_side", opts([["left", "st_controls_left"], ["right", "st_controls_right"]]), undefined, ["left", "right", "star", "search"]),
   deviceSwitch("keep_view", "look", "markers", "keep_view", false, "keep_view", "keep_view_hint", ["camera", "floor"]),
   deviceSwitch("angle_lock", "look", "markers", "angle_lock", false, "angle_lock", "angle_lock_hint", ["lock", "turn", "rotate"]),
+  {
+    id: "plan_pin_zoom",
+    section: "look",
+    card: "markers",
+    scope: "device",
+    permission: "everyone",
+    label: "st_plan_pin_zoom",
+    hint: "st_plan_pin_zoom_hint",
+    keywords: ["markers", "pins", "zoom", "phone", "plan", "overlap", "hide"],
+    control: { kind: "number", step: 5, min: 0, max: PLAN_PIN_ZOOM_MAX, unit: "px/m", clearable: true },
+    default: PLAN_PIN_ZOOM_DEFAULT,
+    prefKeys: [PLAN_PIN_ZOOM_KEY],
+    read: (env) => parsePinZoom(env.prefs.get(PLAN_PIN_ZOOM_KEY)),
+    write: (env, v) => env.prefs.set(PLAN_PIN_ZOOM_KEY, v === null ? null : String(Math.round(clamp(v, 0, PLAN_PIN_ZOOM_MAX)))),
+  } as Setting<number | null>,
   deviceSwitch("nav_wrap", "look", "markers", "nav_wrap", false, "st_nav_wrap", undefined, ["floors", "rooms", "bar", "chips"]),
   deviceSwitch("plan2d", "look", "show", "plan2d", false, "st_view_2d", undefined, ["2d", "plan", "flat"]),
   deviceChoice("walls", "look", "show", "walls", ["auto", "cut"], "auto", "st_walls", opts([["auto", "walls_auto"], ["cut", "walls_cut"]]), undefined, ["walls", "cut", "tall"]),

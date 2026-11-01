@@ -9,6 +9,7 @@ import { iconPath } from "../../icons.ts";
 import { bounds, centroid, splitAliases, FURNITURE_SIZE, isLamp, pointInPolygon, uid, type Floor, type LampMount, type Placement, type Room, type Vec2 } from "../../model.ts";
 import { detectCameraModel, setCameraLook } from "../../camera-models.ts";
 import { staticPetsOn } from "../../pet-place.ts";
+import { pinsShown, readPinZoom } from "../../plan-pins.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { hiddenUnplaced, setUnplacedHidden, suggestLinks, unplacedByArea, type LinkSuggestion } from "../../unplaced.ts";
 import { ENTITY_DRAG, PAW, round, patchItem } from "./helpers.ts";
@@ -194,7 +195,10 @@ export class DevicePanelPart {
   /** Fun pack "pets": the static pets of this floor (#17), a paw at each one's spot, dragged to move it. */
   renderPets(this: Fp3dEditor, floor: Floor) {
     if (this._doc.settings.pets?.on === false) return nothing;
+    const far = !pinsShown(this._view.scale, readPinZoom());
     return svg`<g>${staticPetsOn(this._doc, floor.id).map((pet) => {
+      // zoomed far out the markers hide (#220); the selected room's stay
+      if (far && !(this.room && pointInPolygon([pet.x!, pet.z!], this.room.points))) return nothing;
       const [x, y] = this.toScreen([pet.x!, pet.z!]);
       return svg`<g data-pet=${pet.id} class="fp3d-device fp3d-pet" transform="translate(${x} ${y})">
         <title>${pet.name || this.t(`pet_kind_${pet.kind}`)}</title>
@@ -205,9 +209,15 @@ export class DevicePanelPart {
   }
 
   renderDevices(this: Fp3dEditor, floor: Floor) {
+    const far = !pinsShown(this._view.scale, readPinZoom());
+    const room = far ? this.room : undefined;
+    const grabbed = this.drag && "id" in this.drag ? this.drag.id : null;
     return svg`<g>${floor.placements.map((pl) => {
       const kind = kindOf(pl.entity_id);
       if (!kind) return nothing;
+      // zoomed far out the markers hide (#220): the rooms read underneath. The selected device, the one being dragged
+      // and those in the selected room stay, so nothing the user is working with vanishes.
+      if (far && pl.entity_id !== this._deviceId && pl.entity_id !== grabbed && !(room && pointInPolygon([pl.x, pl.z], room.points))) return nothing;
       const [x, y] = this.toScreen([pl.x, pl.z]);
       const on = this.hass?.states[pl.entity_id]?.state === "on";
       const sel = pl.entity_id === this._deviceId;

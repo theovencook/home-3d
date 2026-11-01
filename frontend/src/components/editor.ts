@@ -954,11 +954,17 @@ export class Fp3dEditor extends LitElement {
     } else if (e.key.toLowerCase() === "l" && !mod && (this._furnitureId || this._deviceId)) {
       const s = this.selectedFix!;
       this.toggleFixed(s.kind, s.id);
-    } else if (Object.prototype.hasOwnProperty.call(ARROWS, e.key) && !mod && (this._tool === "select" || this._tool === "furniture")) {
+    } else if (Object.prototype.hasOwnProperty.call(ARROWS, e.key) && !mod) {
       // arrow keys nudge the selection: one grid step, Shift 10 cm, Alt 1 cm
       const step = e.altKey ? 0.01 : e.shiftKey ? 0.1 : this._doc.settings.grid;
       const [dx, dz] = ARROWS[e.key];
-      if (this.nudge(dx * step, dz * step)) e.preventDefault();
+      if ((this._tool === "select" || this._tool === "furniture") && this.nudge(dx * step, dz * step)) e.preventDefault();
+      else if (!this.selectedFix) {
+        // nothing chosen: the arrows move the view instead (#234), a quarter of the plan a press with Shift
+        const px = e.shiftKey ? 240 : 60;
+        this.panBy(-dx * px, -dz * px);
+        e.preventDefault();
+      }
     } else if (e.key.toLowerCase() === "r" && !mod && this._furnitureId) {
       this.rotateFurniture(e.shiftKey ? -90 : 90);
     } else if (e.key === "Tab" && !mod && !e.altKey && this._furnitureId && (this._tool === "select" || this._tool === "furniture") && this.keysFree(path)) {
@@ -1123,6 +1129,7 @@ export class Fp3dEditor extends LitElement {
               ${floor ? this.renderKerb(floor) : nothing}
             </svg>
             ${this.renderContext()}
+            ${this.renderNav()}
             ${this.renderHint()}
           </div>
           ${this._split && !this.narrow
