@@ -10,6 +10,7 @@ import { getEditors, setEditors } from "../../api.ts";
 import { lastAdmin, personUserIds, pickTabletUser, userChoices, type EditorUser } from "../../editors.ts";
 import { round, numberish } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
+import { need, loadMultiSelect } from "./lazy.ts";
 
 /** SettingsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class SettingsPart {
@@ -261,6 +262,7 @@ export class SettingsPart {
 
   /** A user list as a searchable multi-select (#227): real people first, service users (no person) behind a toggle. */
   userSelect(this: Fp3dEditor, users: EditorUser[], picked: string[], locked: string[], label: string, onChange: (ids: string[]) => void) {
+    need(loadMultiSelect);
     return html`<fp3d-multi-select
       class="fp3d-wide"
       .options=${userChoices(users, personUserIds(this.hass?.states), this.t("editors_admin"))}

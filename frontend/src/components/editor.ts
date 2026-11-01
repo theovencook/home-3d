@@ -30,8 +30,6 @@ import { modulePipeRules, type ModuleField, type PipeRules } from "../modules.ts
 import { FURNITURE_SIZE, isLamp, LAMP_MODEL, type OpeningPreset, uid, type Building, type Floor, type Furniture, type FurnitureType, type RoofSection, type OutdoorArea, type OutdoorType, type Placement, type Opening, type Room, type Vec2, setTerrain } from "../model.ts";
 import { controls, tokens } from "../styles.ts";
 import "./entity-picker.ts";
-import "./multi-select.ts";
-import "./time-field.ts";
 import type { HassFloor, HomeAssistant } from "../types.ts";
 import type { EditorUser } from "../editors.ts";
 import { load3d } from "../load3d.ts";
@@ -39,8 +37,6 @@ import { ensureRecipes, packTypesIn } from "../pack-recipes.ts";
 import "./ask-dialog.ts";
 import { isHelpKey } from "../help.ts";
 import type { Tool } from "../editor-hint.ts";
-import "./library.ts";
-import "./rack-sheet.ts";
 import type { RackElevation } from "../rack-elevation.ts";
 import type { LibraryEntry } from "../library-index.ts";
 import { detectCameraModel, setCameraLook } from "../camera-models.ts";
@@ -78,6 +74,7 @@ import { PipesPart } from "./editor/pipes.ts";
 import { PoolPart } from "./editor/pool.ts";
 import { FieldsPart } from "./editor/fields.ts";
 import { SettingsPart } from "./editor/settings.ts";
+import { preloadParts } from "./editor/lazy.ts";
 import { BackupPart } from "./editor/backup.ts";
 export type { EditorTopic };
 
@@ -795,6 +792,8 @@ export class Fp3dEditor extends LitElement {
   }
 
   protected firstUpdated(): void {
+    // the library, rack sheet, pickers and Extensions page are chunks of their own (#245): loaded once the editor is idle
+    preloadParts();
     const stage = this.renderRoot.querySelector(".fp3d-canvas-wrap") as HTMLElement | null;
     if (!stage) return;
     this.resizeObserver = new ResizeObserver(() => {
@@ -1239,5 +1238,5 @@ mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart
 
 defineElement("fp3d-editor", Fp3dEditor);
 
-// the extensions page is part of this bundle: the panel loads it the same way as the editor
-import "./extensions.ts";
+// the extensions page is a chunk of this bundle (#245): the panel loads it with this, once the bundle is there
+export { loadExtensions } from "./editor/lazy.ts";

@@ -6,7 +6,7 @@ import { unitLabel } from "../../units.ts";
 import { itemsByRoom } from "../../item-list.ts";
 import type { ItemRow } from "../item-list-view.ts";
 import { SHOW_PRESENCE } from "../../flags.ts";
-import { ISSUES_URL } from "../extensions.ts";
+import { ISSUES_URL } from "../../help.ts";
 import { type Floor, type Furniture } from "../../model.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { type EditorTopic } from "./helpers.ts";

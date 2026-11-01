@@ -21,6 +21,7 @@ import { furnitureName } from "../../furniture-names.ts";
 import { furnitureSize, isElectric, isRobotVacuum, packItemName, packName, packType, type FurniturePack } from "../../packs.ts";
 import { MAX_MOUNT_Y, round, isEnergyDevice, EN_HASS, type PlaceTarget } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
+import { need, loadLibrary } from "./lazy.ts";
 
 /** FurniturePart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class FurniturePart {
@@ -501,6 +502,7 @@ export class FurniturePart {
   renderFurnitureLibrary(this: Fp3dEditor) {
     const room = this.room;
     const lang = this.hass?.language ?? "en";
+    need(loadLibrary);
     return html`<section>
       <h3>${this.t("furniture_add")}</h3>
       <p class="fp3d-sub">${room ? this.t("furniture_into", { room: room.name }) : this.t("furniture_pick_room")}</p>

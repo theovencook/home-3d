@@ -6,8 +6,9 @@ import { confirmEntities } from "./devices.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { uiIcon } from "./ui-icons.ts";
 import { BuildingController, type PlanChange } from "./building-controller.ts";
-import "./components/room-panel.ts";
 import { loadView, readyView } from "./load-view.ts";
+import { loadRoomPanel } from "./load-parts.ts";
+import { need } from "./lazy-part.ts";
 import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -539,7 +540,7 @@ clearTimeout(this.cleanTimer);
             ></fp3d-view3d>`
           : html`<p class="fp3d-card-msg">${this.data.error ?? (b ? translate(this.hass, "no_building") : translate(this.hass, "loading"))}</p>`}
         ${this._roomId && b && this._config?.room_panel !== false
-          ? html`<fp3d-room-panel
+          ? (need(loadRoomPanel), html`<fp3d-room-panel
               @camera-look=${(e: CustomEvent<{ entity: string }>) => this.view3d()?.lookThrough(e.detail.entity)}
               class="fp3d-card-panel"
               .hass=${hass}
@@ -554,7 +555,7 @@ clearTimeout(this.cleanTimer);
               .sheets=${this._roomId ? (this.view3d()?.roomSheets(this._roomId) ?? null) : null}
               @sheet-open=${(e: CustomEvent<{ id: string }>) => this._roomId && this.view3d()?.openRoomSheet(this._roomId, e.detail.id)}
               @close=${() => (this._roomId = null)}
-            ></fp3d-room-panel>`
+            ></fp3d-room-panel>`)
           : nothing}
         ${bar && b
           ? html`<div class="fp3d-card-controls">

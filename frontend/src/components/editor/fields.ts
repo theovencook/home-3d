@@ -16,6 +16,7 @@ import { round } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 import { callServiceSafe } from "../../failure.ts";
 import { uses12Hours } from "../../time-of-day.ts";
+import { need, loadTimeField } from "./lazy.ts";
 
 /** FieldsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class FieldsPart {
@@ -274,6 +275,7 @@ export class FieldsPart {
 
   /** A time of day picker (#225) in the profile's 12 or 24 hours; "" is no time. */
   timeField(this: Fp3dEditor, label: string, value: string, disabled: boolean, onChange: (v: string) => void) {
+    need(loadTimeField);
     return html`<fp3d-time-field
       .value=${value}
       .hour12=${uses12Hours(this.hass?.locale, this.hass?.language)}

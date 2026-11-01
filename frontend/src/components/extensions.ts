@@ -25,6 +25,7 @@ import { DOG_BREEDS, PET_EYES, PET_FURS_OF, PET_POSES, type Building, type Pet }
 import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
 import { languageCode, loadLanguage, translate, type I18nKey } from "../i18n.ts";
 import { askConfirm } from "../ask.ts";
+import { ISSUES_URL } from "../help.ts";
 import { errorText } from "../failure.ts";
 import "./ask-dialog.ts";
 import { planPackFolders } from "../pack-folder.ts";
@@ -42,9 +43,6 @@ import {
 import { packName, packOrigin, type FurniturePack } from "../packs.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
-
-/** Where problems and ideas go. */
-export const ISSUES_URL = "https://github.com/theovencook/home-3d/issues";
 
 export class Extensions extends LitElement {
   static properties = {

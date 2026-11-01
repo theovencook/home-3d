@@ -14,7 +14,8 @@
 //   npm run speed                     the speed check at 1x
 //   npm run speed -- --throttle 4     with DevTools CPU throttling (about a budget wall tablet)
 //   options: --plan <file.json>  --bundles <dir>  --browser <path>  --gpu / --swiftshader (the GPU, or WebGL on the
-//   CPU)  --json (one line of JSON instead of the table)
+//   CPU)  --json (one line of JSON instead of the table)  --latency <ms> (each request takes that much longer, as
+//   through a proxy: a bundle split into more files shows in the editor's first open, #245)
 //
 // The browser is found at HOME3D_BROWSER, else the usual Chrome, Chromium or Edge paths. Nothing here talks to a real
 // Home Assistant.
@@ -36,6 +37,7 @@ const bundles = resolve(opt("bundles", resolve(here, "../../custom_components/ho
 const flag = (name) => args.includes(`--${name}`);
 const speed = flag("speed");
 const throttle = Number(opt("throttle", "1"));
+const latency = Number(opt("latency", "0"));
 // the smoke check draws with SwiftShader (CI has no GPU); the speed check uses the machine's GPU, as the numbers in
 // docs/performance.md do (SwiftShader draws every 3D frame on the CPU, which swamps the measures)
 const gpu = speed ? !flag("swiftshader") : flag("gpu");
@@ -132,6 +134,10 @@ async function openPage(copies) {
   });
   const cdp = await page.createCDPSession();
   if (throttle > 1) await cdp.send("Emulation.setCPUThrottlingRate", { rate: throttle });
+  if (latency > 0) {
+    await cdp.send("Network.enable");
+    await cdp.send("Network.emulateNetworkConditions", { offline: false, latency, downloadThroughput: -1, uploadThroughput: -1 });
+  }
   await page.goto(`${origin}/?copies=${copies}`, { waitUntil: "load" });
   await page.waitForFunction(() => !!window.check, { timeout: 30000 });
   const run = (name, arg) => page.evaluate((n, a) => window.check[n](a), name, arg);
@@ -159,6 +165,7 @@ try {
   // every lazy part once: a bundle or chunk that fails to load shows as a failed request or a console error, a
   // shader that does not compile as a console error
   await run("walk");
+  await run("roomPanel");
   await run("looks");
   // #213: a timing wrapper around the renderer's render, "restored" with delete, on the first renderer and on the one
   // a quality change swaps in; a renderer left without render throws on the next frame (a page error)
@@ -197,6 +204,8 @@ try {
     const other = await openPage(copies);
     try {
       checkKnown(await other.run("start"), other.where);
+      // #245: the editor's first open, timed on a page that has not loaded it yet
+      if (copies === "one") results.editorOpen = await other.run("editorOpen");
       await other.run("reenter", { times: 2 });
     } catch (err) {
       problems.push(`check failed${other.where}: ${err.message}`);
@@ -241,6 +250,7 @@ else {
     row(`View mode (${label}): long frames`, `${r.longFramesPerS}/s, ${r.longFrameMsPerS} ms/s`);
   }
   if (results.renderTrap) row("3D: renderer.render, auto / low quality (median / worst)", results.renderTrap.map((r) => `${r.frames.median} / ${r.frames.worst} ms`).join(", "));
+  if (results.editorOpen !== undefined) row(`Editor first open (button to plan drawn${latency ? `, +${latency} ms a request` : ""})`, `${results.editorOpen} ms`);
   if (results.select) row("Editor selection, linked / plain (median / worst)", `${results.select.linked.median} / ${results.select.linked.worst} ms, ${results.select.plain.median} / ${results.select.plain.worst} ms`);
   if (results.unknownCalls?.length) console.log(`\nCalls the fake backend has no answer for: ${results.unknownCalls.join(", ")}`);
   for (const p of problems) console.log(`PROBLEM ${p}`);

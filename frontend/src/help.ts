@@ -4,6 +4,9 @@
 import { CLIPBOARD_SHORTCUTS } from "./clipboard.ts";
 import type { I18nKey } from "./i18n.ts";
 
+/** Where a problem is reported (the help overlay and the Extensions page); here, not in the lazy extensions.ts (#245). */
+export const ISSUES_URL = "https://github.com/theovencook/home-3d/issues";
+
 export interface Shortcut {
   /** The keys as printed, one group per alternative ("Ctrl+Y" or "Ctrl+Shift+Z"). */
   keys: string[];

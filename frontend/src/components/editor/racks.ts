@@ -16,6 +16,7 @@ import { furnitureName } from "../../furniture-names.ts";
 import { packItem, packItemName, packType } from "../../packs.ts";
 import { rackItemOf } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
+import { need, loadRackSheet } from "./lazy.ts";
 
 /** RacksPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class RacksPart {
@@ -267,6 +268,7 @@ export class RacksPart {
   renderRackSheet(this: Fp3dEditor) {
     const p = this.rackSheetProps();
     if (!p) return nothing;
+    need(loadRackSheet);
     return html`<fp3d-rack-sheet
       .heading=${p.heading}
       .space=${p.space}

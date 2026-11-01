@@ -51,11 +51,16 @@ test("a failed or hanging refresh never stops the reload", async () => {
   assert.deepEqual(order, ["refresh", "reload"]);
 });
 
-test("a deploy keeps the main bundle's old chunks for a while, nothing else", () => {
+test("a deploy keeps the old chunks of the main bundle and the editor for a while, nothing else", () => {
   const now = Date.UTC(2026, 10, 1);
   assert.equal(keepOldFile("frontend/home-3d-view3d-GBZ4N25E.js", now - 3600_000, now), true);
   assert.equal(keepOldFile("frontend\\home-3d-chunk-A24XFX3G.js", now - 3600_000, now), true);
   assert.equal(keepOldFile("frontend/home-3d-view3d-GBZ4N25E.js", now - KEEP_CHUNKS_MS - 1, now), false);
+  // #245: the editor's chunks (an open editor loads its lazy ones later) and a chunk named after a hyphenated module
+  assert.equal(keepOldFile("frontend/home-3d-editor-chunk-SXVCZ63C.js", now - 3600_000, now), true);
+  assert.equal(keepOldFile("frontend/home-3d-editor-rack-sheet-3NSOP4HY.js", now - 3600_000, now), true);
+  assert.equal(keepOldFile("frontend/home-3d-room-panel-ECKIMZIM.js", now - 3600_000, now), true);
+  assert.equal(keepOldFile("frontend/home-3d-card-editor.js", now, now), false);
   // removed Python, a renamed bundle, a language pack: gone at once
   assert.equal(keepOldFile("websocket_old.py", now, now), false);
   assert.equal(keepOldFile("frontend/home-3d-old.js", now, now), false);

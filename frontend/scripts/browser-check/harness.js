@@ -204,6 +204,20 @@ const check = {
     return true;
   },
 
+  /** A tapped room shows its room panel (#245: the panel's code is a chunk of its own that loads then or when idle). */
+  async roomPanel() {
+    const room = panel.data.building.floors.flatMap((f) => f.rooms)[0];
+    if (!room) return false;
+    panel._roomId = room.id;
+    await panel.updateComplete;
+    const el = await waitFor(() => customElements.get("fp3d-room-panel") && panel.shadowRoot.querySelector("fp3d-room-panel"), 30000, "the room panel");
+    await el.updateComplete;
+    if (!el.shadowRoot?.childElementCount) throw new Error("the room panel drew nothing");
+    panel._roomId = null;
+    await panel.updateComplete;
+    return true;
+  },
+
   /** Click a mode button of the panel by its position (0 View, 1 Editor, 2 Extensions; a group of pressed buttons since
    * #180) or the Settings button. */
   async tab(which) {
@@ -224,6 +238,23 @@ const check = {
     await ed.updateComplete;
     await sleep(300);
     return ed;
+  },
+
+  /**
+   * The editor's first open on a page that has not loaded it yet (#245): ms from the Editor button to its plan drawn,
+   * its bundle and chunks fetched on the way. Back in the view afterwards.
+   */
+  async editorOpen() {
+    const t0 = performance.now();
+    await check.tab(1);
+    const ed = await waitFor(() => panel.shadowRoot.querySelector("fp3d-editor"), 60000, "the editor");
+    await waitFor(() => ed.shadowRoot?.querySelector("svg.fp3d-plan"), 60000, "the editor's plan");
+    await ed.updateComplete;
+    await nextFrame();
+    const ms = Math.round(performance.now() - t0);
+    await sleep(300);
+    await check.tab(0);
+    return ms;
   },
 
   /**

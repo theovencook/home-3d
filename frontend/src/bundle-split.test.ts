@@ -53,7 +53,7 @@ test("the main bundle and what it imports carry neither the 3D view nor walking;
 
 test("the room panel's 'Edit list' mode is a lazy chunk, not loaded on every page (#229)", async () => {
   const m = await meta("src/main.ts", true);
-  assert.ok(staticInputs(m).has("src/components/room-panel.ts"));
+  // the room panel itself is a lazy chunk since #245; its Edit list mode stays one of its own
   assert.ok(!staticInputs(m).has("src/components/listedit.ts"), "components/listedit.ts is loaded on every page");
   assert.ok(Object.values(m.outputs).some((o) => "src/components/listedit.ts" in o.inputs), "the lazy chunk is built");
 });
@@ -86,4 +86,36 @@ test("a bundle that borrows the table reads the page's English and shares its la
   // the core module holds no texts of its own
   const { readFileSync } = await import("node:fs");
   for (const f of ["./i18n-core.ts", "./i18n-borrowed.ts"]) assert.ok(!readFileSync(new URL(f, import.meta.url), "utf8").includes("Edit rack"), f);
+});
+
+test("the editor's first open carries neither the library, the rack sheet, the Extensions page nor the settings pickers; they are lazy chunks (#245)", async () => {
+  const m = await meta("src/components/editor.ts", true, [borrowEnglish]);
+  const loaded = staticInputs(m);
+  const all = new Set(Object.values(m.outputs).flatMap((o) => Object.keys(o.inputs)));
+  assert.ok(loaded.has("src/components/editor.ts") && loaded.has("src/components/entity-picker.ts"));
+  for (const lazy of ["library", "rack-sheet", "extensions", "multi-select", "time-field"]) {
+    const file = `src/components/${lazy}.ts`;
+    assert.ok(!loaded.has(file), `${file} is loaded when the editor opens`);
+    assert.ok(all.has(file), `${file}: its chunk is built`);
+  }
+});
+
+test("every page carries neither the room panel nor the home switcher; they are lazy chunks (#245)", async () => {
+  const m = await meta("src/main.ts", true);
+  const loaded = staticInputs(m);
+  const all = new Set(Object.values(m.outputs).flatMap((o) => Object.keys(o.inputs)));
+  for (const file of ["src/components/room-panel.ts", "src/components/home-switcher.ts"]) {
+    assert.ok(!loaded.has(file), `${file} is loaded on every page`);
+    assert.ok(all.has(file), `${file}: its chunk is built`);
+  }
+});
+
+test("the Settings page's first open carries neither the time nor the entity picker; they are lazy chunks (#245)", async () => {
+  const m = await meta("src/settings/entry.ts", true);
+  const loaded = staticInputs(m);
+  const all = new Set(Object.values(m.outputs).flatMap((o) => Object.keys(o.inputs)));
+  for (const file of ["src/components/time-field.ts", "src/components/entity-picker.ts"]) {
+    assert.ok(!loaded.has(file), `${file} is loaded when Settings opens`);
+    assert.ok(all.has(file), `${file}: its chunk is built`);
+  }
 });
