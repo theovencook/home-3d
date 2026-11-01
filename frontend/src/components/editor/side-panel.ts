@@ -189,7 +189,7 @@ export class SidePanelPart {
     }
     if (room && this._tool !== "measure") {
       return html`${nextKind}<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", null)}>‹ ${this.t("back_to_floor")}</button>
-        ${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}`;
+        ${this.renderRoomForm(room, areas)}`;
     }
     // "Add rooms from HA areas": on top while the floor has no rooms (the quick start), else after the floor's fields (#262)
     const areaImport =
@@ -284,7 +284,7 @@ export class SidePanelPart {
           : this.device
             ? this.renderDeviceForm(this.device)
           : room
-            ? html`${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}`
+            ? html`${this.renderRoomForm(room, areas)}`
             : floor
               ? html`${this.renderRoomList(floor)} ${this.renderItemsList(floor.furniture, true)} ${this.renderUnplaced()} ${this.renderHomeLinks()}`
               : nothing}

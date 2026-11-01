@@ -300,10 +300,28 @@ export const formStyles = css`
         border: 0;
         background: none;
         padding: 2px 6px;
+        min-width: 36px;
+        min-height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         font-size: 17px;
         line-height: 1;
         color: var(--fp3d-muted);
         cursor: pointer;
+      }
+      .fp3d-dev-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+        margin: 0 0 8px;
+        font-size: 12px;
+        color: var(--fp3d-muted);
+      }
+      .fp3d-dev-legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
       }
       .fp3d-pin-on {
         color: var(--fp3d-warm);
@@ -815,6 +833,10 @@ export const formStyles = css`
         .fp3d-seg .fp3d-menu-sub .fp3d-chip,
         .fp3d-presets .fp3d-chip,
         .fp3d-settings-link {
+          min-height: 44px;
+        }
+        .fp3d-pin {
+          min-width: 44px;
           min-height: 44px;
         }
         .fp3d-more-btn,
