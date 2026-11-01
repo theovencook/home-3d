@@ -94,7 +94,8 @@ export class PlanViewPart {
   }
 
   localPoint(this: Fp3dEditor, e: PointerEvent | WheelEvent): [number, number] {
-    const rect = (this.renderRoot.querySelector("svg") as SVGSVGElement).getBoundingClientRect();
+    // the plan, not the first svg: the toolbar icons come first since #249 (#253)
+    const rect = (this.renderRoot.querySelector("svg.fp3d-plan") as SVGSVGElement).getBoundingClientRect();
     return [e.clientX - rect.left, e.clientY - rect.top];
   }
 
