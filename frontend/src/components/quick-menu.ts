@@ -3,7 +3,7 @@
 
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
-import { type CarState, coverTiltButtons, entityName, isUnavailable, kindOf } from "../devices.ts";
+import { type CarState, coverControls, coverTiltButtons, entityName, isUnavailable, kindOf } from "../devices.ts";
 import { askConfirm } from "../ask.ts";
 import { callServiceSafe } from "../failure.ts";
 import "./ask-dialog.ts";
@@ -34,6 +34,29 @@ export function lightAbilities(st: HassEntity): { dim: boolean; color: boolean; 
   const modes = (st.attributes.supported_color_modes as string[] | undefined) ?? [];
   const color = modes.some((m) => COLOR_MODES.includes(m));
   return { dim: modes.some((m) => m !== "onoff"), color, temp: modes.includes("color_temp") };
+}
+
+/**
+ * What the big cover button does (#251), from coverControls: open or close for covers that can, else the slats of a
+ * tilt-only blind (by its tilt position), else position 0 or 100; null when the cover can do none of those (no button).
+ */
+export function coverToggle(st: HassEntity): { service: string; data?: Record<string, unknown>; open: boolean } | null {
+  const c = coverControls(st);
+  const num = (v: unknown) => (typeof v === "number" ? v : null);
+  const pos = num(st.attributes.current_position);
+  const tilt = num(st.attributes.current_tilt_position);
+  const closedState = st.state === "closed";
+  if (c.open || c.close) {
+    const want = pos !== null ? pos < 50 : closedState;
+    return (want ? c.open : !c.close) ? { service: "open_cover", open: true } : { service: "close_cover", open: false };
+  }
+  if (c.position) return pos! < 50 ? { service: "set_cover_position", data: { position: 100 }, open: true } : { service: "set_cover_position", data: { position: 0 }, open: false };
+  if (c.tiltOpen || c.tiltClose) {
+    const want = tilt !== null ? tilt < 50 : closedState;
+    return (want ? c.tiltOpen : !c.tiltClose) ? { service: "open_cover_tilt", open: true } : { service: "close_cover_tilt", open: false };
+  }
+  if (c.tiltPosition) return tilt! < 50 ? { service: "set_cover_tilt_position", data: { tilt_position: 100 }, open: true } : { service: "set_cover_tilt_position", data: { tilt_position: 0 }, open: false };
+  return null;
 }
 
 /** Whether a cover can be moved to a position. */
@@ -178,31 +201,35 @@ export class Fp3dQuickMenu extends LitElement {
     const pos = typeof st.attributes.current_position === "number" ? (st.attributes.current_position as number) : null;
     const moving = st.state === "opening" || st.state === "closing";
     const setPos = coverPositionable(st);
+    const c = coverControls(st);
+    const toggle = coverToggle(st);
     // like the colour ring of lights: open and close, positions in between and stop around the blind
     const slot = (label: string, aria: string, action: () => void, active = false) =>
       html`<button class="qm-swatch qm-slot ${active ? "qm-slot-on" : ""}" aria-label=${aria} @click=${action}>${label}</button>`;
     const at = (p: number) => pos !== null && Math.abs(pos - p) < 3;
     const ring = [
       // moving asks first when the blind is marked so; stopping never asks
-      slot("▲", this.t("cover_open"), () => void this.guarded(() => this.call("cover", "open_cover")), at(100)),
+      ...(c.open ? [slot("▲", this.t("cover_open"), () => void this.guarded(() => this.call("cover", "open_cover")), at(100))] : []),
       ...(setPos ? [75, 50].map((p) => slot(`${p}`, `${p} %`, () => void this.guarded(() => this.call("cover", "set_cover_position", { position: p })), at(p))) : []),
-      slot("▼", this.t("cover_close"), () => void this.guarded(() => this.call("cover", "close_cover")), at(0)),
+      ...(c.close ? [slot("▼", this.t("cover_close"), () => void this.guarded(() => this.call("cover", "close_cover")), at(0))] : []),
       ...(setPos ? [25].map((p) => slot(`${p}`, `${p} %`, () => void this.guarded(() => this.call("cover", "set_cover_position", { position: p })), at(p))) : []),
-      slot("■", this.t("cover_stop"), () => this.call("cover", "stop_cover"), moving),
+      ...(c.stop ? [slot("■", this.t("cover_stop"), () => this.call("cover", "stop_cover"), moving)] : []),
     ];
     // the centre shows the blind: its closed part fills from the top
     const closed = pos === null ? (st.state === "closed" ? 100 : 0) : 100 - pos;
     return html`<div class="qm-ring">
         ${this.ring(ring)}
-        <button
+        ${toggle || (moving && c.stop)
+          ? html`<button
           class="qm-power qm-blind ${closed < 100 ? "qm-on" : ""}"
           style="--closed:${closed}%"
-          aria-label=${moving ? this.t("cover_stop") : closed > 50 ? this.t("cover_open") : this.t("cover_close")}
-          @click=${() => (moving ? this.call("cover", "stop_cover") : void this.guarded(() => this.call("cover", closed > 50 ? "open_cover" : "close_cover")))}
+          aria-label=${moving && c.stop ? this.t("cover_stop") : toggle!.service.includes("tilt") ? this.t(toggle!.open ? "cover_tilt_open" : "cover_tilt_close") : toggle!.open ? this.t("cover_open") : this.t("cover_close")}
+          @click=${() => (moving && c.stop ? this.call("cover", "stop_cover") : void this.guarded(() => this.call("cover", toggle!.service, toggle!.data)))}
         >
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h16M5 4v15M19 4v15M7 8h10M7 12h10M7 16h10" /></svg>
           <b>${pos !== null ? `${pos} %` : stateText(this.hass, st)}</b>
-        </button>
+        </button>`
+          : nothing}
       </div>
       ${setPos
         ? html`<input
