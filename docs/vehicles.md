@@ -16,8 +16,8 @@ model that is on sale now; the Source column starts the reason with "Swap".
 Totals: 89 verified, 90 single source, 16 unverified, out of 195 cars.
 Brands with fewer than ten rows (Tesla sells seven different shapes, MG eight) are listed as they are.
 
-The Nissan Leaf and its colourways, the first bicycles, mopeds and scooters were made by hand earlier and are not part
-of this table.
+The Nissan Leaf (second generation, 2018 on) and its colourways come from `tools/gen_leaf.py` (#242); they and the first
+bicycles, mopeds and scooters are not part of this table.
 
 ## Ford
 

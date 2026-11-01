@@ -515,8 +515,9 @@ export function buildFloorGeometry(
     } else {
       const s0 = shadow.p.length / 9;
       pushFurniture(wallBuf, lines, shadow, f, base, false, !gear);
-      // a wardrobe or a stair reaching above the cut height is cut with the walls, so it hides nothing behind it
-      if (base + f.h > cut + 0.05) {
+      // a wardrobe or a stair reaching above the cut height is cut with the walls, so it hides nothing behind it; a
+      // vehicle stays whole: cut, it is an open shell with its pillars standing up out of it (#242)
+      if (base + f.h > cut + 0.05 && !packItem(f.type)?.vehicle) {
         cutAbove(wallBuf, t0, cut, FURN_OFFSET);
         cutLinesAbove(lines, l0, cut, FURN_OFFSET);
       }

@@ -6,7 +6,7 @@ The cars come from tools/vehicles_data.py (brand, model, body type and the real 
 body shapes (hatchback, saloon, estate, SUV, MPV, pickup, coupe, van) scaled to those sizes, 20 to 30 parts each,
 with the body in the `paint` colour role so the item panel's paint picker works. Bikes, motorbikes, snowmobiles,
 golf carts and the like are built here too, from simple shapes. No logos, no maker images, no 3D files.
-Existing hand-made vehicles in the folder (the Leaf, the first bikes) are left alone.
+Existing hand-made vehicles in the folder (the first bikes) are left alone; the Leaf comes from tools/gen_leaf.py.
 """
 
 from __future__ import annotations
@@ -146,8 +146,11 @@ def car(brand_id: str, brand: str, model: str, body: str, length_mm: int, width_
             for sx in (-1, 1):
                 v.box(sx * body_w * 0.33, zc((rzr1 + fzf1) / 2), 0.04, (fzf1 - rzr1) * L, H - rails, rails, "metal")
         if body != "coupe":
+            # the B pillar leans in with the side glass (from 0.45 to 0.37 of the body's width), standing just proud of it:
+            # upright, its top stood out beside the roof (#242)
             for sx in (-1, 1):
-                v.box(sx * body_w * 0.395, zc((rzr0 + rzr1 + fzf1 + fzf0) / 4), 0.025, 0.05, belt, roof_y - belt, "paint")
+                bz = zc((rzr0 + rzr1 + fzf1 + fzf0) / 4)
+                v.loft(sx * (body_w * 0.45 - 0.008), bz, 0.025, 0.05, belt, roof_y - belt, "paint", tcx=sx * (body_w * 0.37 - 0.008))
         # bonnet sloping down to the front
         v.loft(0, zc((fzf0 - 0.03 + 1) / 2), body_w * 0.94, (1 - fzf0 + 0.03) * L, belt - 0.02, 0.06 * H + 0.03, "paint", tcz=zc((fzf0 + 1 - 0.06) / 2), td=(1 - 0.06 - fzf0) * L)
         if body == "pickup":
@@ -479,8 +482,8 @@ def checklist() -> str:
         f"Totals: {sum(1 for c in CHECKS.values() if c[0] == 'verified')} verified, {sum(1 for c in CHECKS.values() if c[0] == 'single source')} single source, {sum(1 for c in CHECKS.values() if c[0] == 'unverified')} unverified, out of {len(CHECKS)} cars.",
         "Brands with fewer than ten rows (Tesla sells seven different shapes, MG eight) are listed as they are.",
         "",
-        "The Nissan Leaf and its colourways, the first bicycles, mopeds and scooters were made by hand earlier and are not part",
-        "of this table.",
+        "The Nissan Leaf (second generation, 2018 on) and its colourways come from `tools/gen_leaf.py` (#242); they and the first",
+        "bicycles, mopeds and scooters are not part of this table.",
         "",
     ]
     for brand_id, brand, site, models in BRANDS:
