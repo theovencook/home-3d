@@ -16,7 +16,7 @@ import { showsPlan2d, type CardConfig, type CardControl } from "./card-config.ts
 import { nightActive } from "./kiosk.ts";
 import { lookOf } from "./themes.ts";
 import { contrastChrome, lightChrome } from "./scheme.ts";
-import { shownAccent, shownLook, textOn } from "./ha-theme.ts";
+import { accentVars, shownAccent, shownLook } from "./ha-theme.ts";
 import { loadCardEditor } from "./load-card-editor.ts";
 import type { WallMode } from "./viewer/viewer3d.ts";
 import { TimeTravel } from "./load-timetravel.ts";
@@ -453,7 +453,7 @@ clearTimeout(this.cleanTimer);
     const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
     // the card's own accent, else (while the look follows the HA theme) the theme's primary colour (#38)
     const accent = shownAccent(lookOf(c?.theme), c?.accent, this.hass, (n) => getComputedStyle(this).getPropertyValue(n));
-    return html`<ha-card class="${this._night ? "fp3d-night" : ""} ${this._pseudoFull ? "fp3d-pseudo-full" : ""}" style=${accent ? `--fp3d-accent:${accent};--fp3d-accent-text:${textOn(accent)}` : ""} @pointerdown=${this.touch} @keydown=${this.onKey} @wheel=${this.touch}>
+    return html`<ha-card class="${this._night ? "fp3d-night" : ""} ${this._pseudoFull ? "fp3d-pseudo-full" : ""}" style=${accentVars(accent)} @pointerdown=${this.touch} @keydown=${this.onKey} @wheel=${this.touch}>
       <div class="fp3d-card-body ${tt ? "fp3d-tt" : ""}" style="height:${size}">
         ${b && b.floors.some((f) => f.rooms.length)
           ? html`<fp3d-view3d

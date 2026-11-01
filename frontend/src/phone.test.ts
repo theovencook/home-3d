@@ -24,3 +24,21 @@ test("the narrow-phone rule is 480 px and the View menu folds after a pick only 
   assert.equal(closesViewMenuAfterPick(390), true);
   assert.equal(closesViewMenuAfterPick(1024), false);
 });
+
+test("size classes come from one place: phone to 600, compact to 1024, wide above, short up to 500 high (#246)", async () => {
+  const { sizeClass, isShortHeight, COMPACT_MEDIA, WIDE_MEDIA, SHORT_MEDIA, PHONE_MEDIA } = await import("./phone.ts");
+  assert.equal(sizeClass(390), "phone");
+  assert.equal(sizeClass(600), "phone");
+  assert.equal(sizeClass(601), "compact");
+  assert.equal(sizeClass(800), "compact");
+  assert.equal(sizeClass(1024), "compact");
+  assert.equal(sizeClass(1025), "wide");
+  assert.equal(sizeClass(1440), "wide");
+  assert.equal(isShortHeight(390), true);
+  assert.equal(isShortHeight(500), true);
+  assert.equal(isShortHeight(844), false);
+  assert.equal(PHONE_MEDIA, "(max-width: 600px)");
+  assert.equal(COMPACT_MEDIA, "(min-width: 601px) and (max-width: 1024px)");
+  assert.equal(WIDE_MEDIA, "(min-width: 1025px)");
+  assert.equal(SHORT_MEDIA, "(max-height: 500px)");
+});

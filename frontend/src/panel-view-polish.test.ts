@@ -41,9 +41,11 @@ function panel(floorId: string | null) {
   return p;
 }
 
-test("each Markers button has its own name (#214)", () => {
+test("Device icons is one named drop-down with each choice in full (#214, renamed from Markers in #246)", () => {
   const out = flat(panel(null).render());
-  for (const label of ["None", "In the room", "Important", "All"]) assert.ok(out.includes(`aria-label=Markers: ${label}`), label);
+  assert.ok(out.includes(`class="fp3d-opt-select"
+                aria-label=Device icons`));
+  for (const [value, label] of [["none", "None"], ["room", "Only in the room I open"], ["important", "Important only"], ["all", "All devices"]]) assert.ok(out.includes(`<option value=${value} ?selected=${value === "important"}>${label}</option>`), label);
 });
 
 test("with one floor picked, Apart / Stacked / Roof stays are there but disabled, with the hint (#214)", () => {
@@ -133,4 +135,26 @@ test("the Sun and lights button always shows something: the view's sheet, else t
   assert.equal(missing._optsOpen, false);
   assert.equal(missing._mode, "settings");
   assert.deepEqual(missing._settingsAt, { section: "scene", id: "sun" });
+});
+
+test("the View menu has no Controls row and no Quality buttons: a read-only quality line links to Settings (#246)", () => {
+  const p = panel(null);
+  p._quality = "low";
+  const out = flat(p.render());
+  for (const glyph of ["📌", "⌖", "🔒", ">FPS<", "Controls on the"]) assert.ok(!out.includes(glyph), glyph);
+  assert.ok(out.includes("Quality: Tablet"));
+  let opened: unknown[] = [];
+  p.openSettings = (...a: unknown[]) => (opened = a);
+  const line = p.renderQualityLine();
+  const go = (line.values as unknown[]).find((v) => typeof v === "function") as () => void;
+  go();
+  assert.deepEqual(opened, ["screen", "quality"]);
+});
+
+test("on a wall tablet the 3D view's menu chip is called View (#246)", () => {
+  const p = panel(null);
+  p._tablet = true;
+  const out = flat(p.renderView(p.data.building));
+  assert.ok(out.includes(`>View <span class="fp3d-caret">`));
+  assert.ok(!out.includes(`>3D <span class="fp3d-caret">`));
 });

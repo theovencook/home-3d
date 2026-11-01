@@ -38,6 +38,7 @@ export type SectionId =
   | "household"
   | "favourites"
   | "look"
+  | "screen"
   | "voice"
   | "access"
   | "packs"
@@ -277,6 +278,18 @@ export const SECTIONS: Section[] = [
       { id: "markers", title: "st_card_markers" },
       { id: "show", title: "st_card_show" },
       { id: "cards", title: "st_cards_title" },
+    ],
+  },
+  /* the old View menu's Controls row, Quality and FPS, with full labels (#246) */
+  {
+    id: "screen",
+    group: "device",
+    icon: "▭",
+    title: "st_sec_screen",
+    hint: "st_sec_screen_hint",
+    cards: [
+      { id: "screen", title: "st_card_screen" },
+      { id: "controls", title: "st_card_controls" },
     ],
   },
   { id: "voice", group: "device", icon: "◖", title: "st_sec_voice", hint: "st_sec_voice_hint", cards: [{ id: "voice", title: "st_card_voice" }] },
@@ -532,9 +545,9 @@ const GENERAL: Setting[] = [
     card: "opening",
     scope: "house",
     permission: "editor",
-    label: "start_view",
+    label: "st_start_view",
     hint: "st_start_view_hint",
-    keywords: ["camera", "angle", "opens"],
+    keywords: ["camera", "angle", "opens", "remember", "pin"],
     control: { kind: "action", button: "st_start_view_use", action: "start_view" },
     default: null,
     read: (env) => settingsOf(env).start_view ?? null,
@@ -1195,17 +1208,13 @@ const LOOK: Setting[] = [
     },
     write: (env, v) => env.prefs.set("accent", v),
   } as Setting<string | null>,
-  deviceChoice("quality", "look", "look", "quality", ["auto", "low", "high"], "auto", "quality", opts([["auto", "quality_auto"], ["low", "quality_low"], ["high", "quality_high"]]), undefined, ["performance", "tablet", "speed", "graphics"]),
   deviceChoice("clock", "look", "look", "clock", ["off", "tl", "tr", "bl", "br"], "off", "st_clock", opts([["off", "st_clock_off"], ["tl", "st_clock_tl"], ["tr", "st_clock_tr"], ["bl", "st_clock_bl"], ["br", "st_clock_br"]]), undefined, ["time", "clock", "corner"], "select"),
   deviceChoice("clock_hours", "look", "look", "clock_hours", ["auto", "12", "24"], "auto", "st_clock_hours", opts([["auto", "clock_hours_auto"], ["12", "clock_hours_12"], ["24", "clock_hours_24"]]), undefined, ["time", "clock", "12", "24", "am", "pm"]),
   deviceChoice("clock_style", "look", "look", "clock_style", ["digital", "analogue"], "digital", "st_clock_face", opts([["digital", "clock_digital"], ["analogue", "clock_analogue"]]), undefined, ["time", "clock", "dial", "hands", "face"]),
   deviceSwitch("clock_seconds", "look", "look", "clock_seconds", false, "st_clock_seconds", undefined, ["time", "clock", "seconds"]),
   deviceSwitch("clock_date", "look", "look", "clock_date", true, "st_clock_date", undefined, ["time", "clock", "date", "day"]),
-  deviceChoice("markers", "look", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), undefined, ["pins", "icons", "symbols", "devices"]),
+  deviceChoice("markers", "look", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), undefined, ["pins", "icons", "symbols", "devices", "markers"], "select"),
   deviceChoice("pinSize", "look", "markers", "pinSize", ["small", "normal", "large"], "normal", "pin_size", opts([["small", "pin_size_small"], ["normal", "pin_size_normal"], ["large", "pin_size_large"]]), undefined, ["pins", "icons", "symbols", "size"]),
-  deviceChoice("controls", "look", "markers", "controls", ["left", "right"], "left", "controls_side", opts([["left", "st_controls_left"], ["right", "st_controls_right"]]), undefined, ["left", "right", "star", "search"]),
-  deviceSwitch("keep_view", "look", "markers", "keep_view", false, "keep_view", "keep_view_hint", ["camera", "floor"]),
-  deviceSwitch("angle_lock", "look", "markers", "angle_lock", false, "angle_lock", "angle_lock_hint", ["lock", "turn", "rotate"]),
   {
     id: "plan_pin_zoom",
     section: "look",
@@ -1221,7 +1230,6 @@ const LOOK: Setting[] = [
     read: (env) => parsePinZoom(env.prefs.get(PLAN_PIN_ZOOM_KEY)),
     write: (env, v) => env.prefs.set(PLAN_PIN_ZOOM_KEY, v === null ? null : String(Math.round(clamp(v, 0, PLAN_PIN_ZOOM_MAX)))),
   } as Setting<number | null>,
-  deviceSwitch("nav_wrap", "look", "markers", "nav_wrap", false, "st_nav_wrap", undefined, ["floors", "rooms", "bar", "chips"]),
   deviceSwitch("plan2d", "look", "show", "plan2d", false, "st_view_2d", undefined, ["2d", "plan", "flat"]),
   deviceChoice("walls", "look", "show", "walls", ["auto", "cut"], "auto", "st_walls", opts([["auto", "walls_auto"], ["cut", "walls_cut"]]), undefined, ["walls", "cut", "tall"]),
   deviceChoice("explode", "look", "show", "explode", ["1", "0"], "1", "st_floors", opts([["1", "floors_apart"], ["0", "floors_stacked"]]), undefined, ["floors", "apart", "stacked", "explode"]),
@@ -1233,8 +1241,20 @@ const LOOK: Setting[] = [
   deviceSwitch("weather", "look", "show", "weather", true, "st_weather", "weather_hint", ["rain", "snow", "weather"]),
 ];
 
+/**
+ * Screen and controls (#246): what the old View menu's unlabelled Controls row (◧ ◨ ⌖ 🔒 FPS), Quality and the floor
+ * bar's wrap toggle set, each with its full name. Same stored keys as before, so nobody loses a choice.
+ */
+const SCREEN: Setting[] = [
+  deviceChoice("quality", "screen", "screen", "quality", ["auto", "low", "high"], "auto", "quality", opts([["auto", "quality_auto"], ["low", "st_quality_low"], ["high", "quality_high"]]), "card_quality_hint", ["performance", "tablet", "speed", "graphics", "slow"]),
+  deviceSwitch("stats", "screen", "screen", "stats", false, "st_fps", "fps_title", ["fps", "performance", "frames", "speed"]),
+  deviceChoice("controls", "screen", "controls", "controls", ["left", "right"], "left", "controls_side", opts([["left", "st_controls_left"], ["right", "st_controls_right"]]), "st_controls_side_hint", ["left", "right", "star", "search", "eye", "buttons"]),
+  deviceSwitch("keep_view", "screen", "controls", "keep_view", false, "keep_view", "keep_view_hint", ["camera", "floor"]),
+  deviceSwitch("angle_lock", "screen", "controls", "angle_lock", false, "angle_lock", "angle_lock_hint", ["lock", "turn", "rotate", "angle"]),
+  deviceSwitch("nav_wrap", "screen", "controls", "nav_wrap", false, "st_nav_wrap", undefined, ["floors", "rooms", "bar", "chips"]),
+];
+
 const ADVANCED: Setting[] = [
-  deviceSwitch("stats", "advanced", "advanced", "stats", false, "st_fps", "fps_title", ["fps", "performance", "frames", "speed"]),
   {
     id: "reset_device",
     section: "advanced",
@@ -1318,7 +1338,7 @@ const CARDS: Setting[] = [
 ];
 
 /** Every setting, in the order the page shows them. */
-export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...ENERGY, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...CARDS, ...VOICE, ...ACCESS, ...PACKS, ...BACKUP, ...ADVANCED] as Setting[];
+export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...ENERGY, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...CARDS, ...SCREEN, ...VOICE, ...ACCESS, ...PACKS, ...BACKUP, ...ADVANCED] as Setting[];
 
 // ---------------------------------------------------------------------------------------------------- lengths
 
@@ -1461,8 +1481,9 @@ export function parseSettingsHash(hash: string): { section: SectionId | null; id
   const section = m[1] && sectionOf(m[1]) ? (m[1] as SectionId) : null;
   let id = m[2] ? decodeURIComponent(m[2]) : null;
   if (id && !settingById(id)) id = null;
-  // a setting's link alone (#settings/x/<id> with an unknown section) still finds its section
-  return { section: section ?? (id ? (settingById(id)?.section ?? null) : null), id };
+  // a setting's link alone (#settings/x/<id> with an unknown section) still finds its section, and so does an old link
+  // to a row that moved (#settings/look/quality, #246)
+  return { section: (id ? settingById(id)?.section : null) ?? section, id };
 }
 
 // for the page: entity options lists and the weather effects' choices

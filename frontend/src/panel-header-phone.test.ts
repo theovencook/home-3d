@@ -40,9 +40,9 @@ function panel(floorId: string | null) {
   return p;
 }
 
-test("on a phone the View menu folds after a quality, look, clock, marker or size pick (#216)", () => {
+test("on a phone the View menu folds after a look, clock, marker or size pick (#216)", () => {
   (g.window as Record<string, unknown>).innerWidth = 390;
-  for (const pick of [(p: any) => p.setQuality("low"), (p: any) => p.setLook("day")]) {
+  for (const pick of [(p: any) => p.setLook("day")]) {
     const p = panel(null);
     p._optsOpen = true;
     pick(p);
@@ -57,7 +57,7 @@ test("on a wide screen the View menu stays open to change several things (#216)"
   (g.window as Record<string, unknown>).innerWidth = 1280;
   const p = panel(null);
   p._optsOpen = true;
-  p.setQuality("high");
+  p.setLook("day");
   p.setLook("neon");
   assert.equal(p._optsOpen, true);
 });

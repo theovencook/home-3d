@@ -13,6 +13,11 @@ try {
 }
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+/** The quality, set the way Settings › Screen and controls sets it (#246): the device pref, then the panel reads it. */
+const setQuality = (q) => {
+  localStorage.setItem("home3d.quality", q);
+  panel.readPrefs();
+};
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const median = (xs) => {
   const s = [...xs].sort((a, b) => a - b);
@@ -316,7 +321,7 @@ const check = {
   async renderTrap({ n = 10, quality } = {}) {
     const view = panel.shadowRoot.querySelector("fp3d-view3d");
     if (quality) {
-      panel.setQuality(quality);
+      setQuality(quality);
       await panel.updateComplete;
       await waitFor(() => !view.viewer.busy(), 60000, `the ${quality} quality`);
       await nextFrame();
@@ -344,7 +349,7 @@ const check = {
     await nextFrame();
     const thumbs = viewer.floorThumbnails(150, 112).length;
     if (quality) {
-      panel.setQuality("auto");
+      setQuality("auto");
       await panel.updateComplete;
       await waitFor(() => !view.viewer.busy(), 60000, "the auto quality");
     }

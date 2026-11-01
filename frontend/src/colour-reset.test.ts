@@ -21,9 +21,9 @@ const flat = (v: unknown): string => {
 test("a colour is the default when its hex text is, whatever the case (#230)", () => {
   assert.ok(sameColour("#37E0FF", "#37e0ff"));
   assert.ok(sameColour(null, undefined));
-  assert.ok(!sameColour("#37e0fe", ACCENT_DEFAULT));
+  assert.ok(!sameColour("#48cdea", ACCENT_DEFAULT));
   assert.ok(!colourDiffers(null, ACCENT_DEFAULT), "nothing set: nothing to reset");
-  assert.ok(!colourDiffers("#37E0FF", ACCENT_DEFAULT), "set to the default: nothing to reset");
+  assert.ok(!colourDiffers("#48CDEB", ACCENT_DEFAULT), "set to the default: nothing to reset");
   assert.ok(colourDiffers("#ff0000", ACCENT_DEFAULT));
   assert.ok(colourDiffers("#ff0000", null), "a default of no colour of its own: any colour can go back");
 });
@@ -69,7 +69,7 @@ test("an item's colour roles and paint reset to the look (#230)", async () => {
   ed.updateFurniture({ colors: setRoleColour(ed.furnitureItem.colors, role, "#123456") });
   const own = flat(ed.renderColourRoles(ed.furnitureItem));
   assert.equal(resetsIn(own), 1, "a colour of its own: one reset");
-  assert.match(own, /aria-label=From the look/);
+  assert.match(own, /aria-label=From the appearance/);
 });
 
 test("every colour picker in the source has a reset beside it (#230)", () => {

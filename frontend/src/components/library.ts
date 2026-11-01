@@ -538,8 +538,8 @@ export class FurnitureLibrary extends LitElement {
         white-space: nowrap;
       }
       .fp3d-chip.on {
-        background: var(--fp3d-accent);
-        color: #041018;
+        background: var(--fp3d-primary);
+        color: var(--fp3d-primary-text);
         border-color: var(--fp3d-accent);
         font-weight: 600;
       }

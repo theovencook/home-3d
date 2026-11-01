@@ -231,7 +231,7 @@ export const menuStyles = css`
         font-size: 0.92em;
       }
       .fp3d-seg .fp3d-menu-sub .fp3d-menu-on {
-        background: var(--fp3d-accent);
-        color: var(--fp3d-accent-text);
+        background: var(--fp3d-primary);
+        color: var(--fp3d-primary-text);
       }
 `;

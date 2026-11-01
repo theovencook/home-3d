@@ -287,3 +287,44 @@ test("every home3d.* or fp3d-tt-* key the code writes is removed by the reset un
   assert.ok(isDevicePrefKey("fp3d-tt-anything"));
   for (const k of ["home3d.mic"]) assert.ok(isDevicePrefKey(k));
 });
+
+// ---- Screen and controls (#246) ----
+
+test("Screen and controls holds the old View menu's Controls row, Quality and FPS, under the same stored keys (#246)", () => {
+  const screen = SETTINGS.filter((s) => s.section === "screen");
+  assert.deepEqual(
+    screen.map((s) => s.id),
+    ["quality", "stats", "controls", "keep_view", "angle_lock", "nav_wrap"],
+  );
+  assert.equal(SECTIONS.find((s) => s.id === "screen")?.group, "device");
+  for (const s of screen) {
+    assert.equal(s.scope, "device", s.id);
+    assert.deepEqual(s.prefKeys, [s.id], `${s.id} keeps its key`);
+  }
+  // full labels, no glyphs
+  assert.equal(text(settingById("controls")!.label), "On-screen buttons");
+  assert.equal(text(settingById("keep_view")!.label), "Keep the camera when changing floor");
+  assert.equal(text(settingById("angle_lock")!.label), "Lock the viewing angle");
+  assert.equal(text(settingById("stats")!.label), "Show the frame rate (FPS)");
+  assert.equal(text(settingById("quality")!.label), "Quality");
+  for (const s of screen) assert.ok(!/[◧◨⌖🔒📌]/u.test(text(s.label)), s.id);
+  // and nowhere else any more
+  for (const id of ["quality", "stats", "controls", "keep_view", "angle_lock"]) assert.equal(SETTINGS.filter((s) => s.id === id).length, 1);
+  assert.ok(!SETTINGS.some((s) => s.section === "look" && ["quality", "controls", "keep_view", "angle_lock"].includes(s.id)));
+  assert.ok(!SETTINGS.some((s) => s.section === "advanced" && s.id === "stats"));
+});
+
+test("an old deep link to a moved row still finds it in Screen and controls (#246)", () => {
+  assert.deepEqual(parseSettingsHash("#settings/look/quality"), { section: "screen", id: "quality" });
+  assert.deepEqual(parseSettingsHash("#settings/x/keep_view"), { section: "screen", id: "keep_view" });
+  assert.equal(searchSettings("frame rate", env(), text)[0]?.id, "stats");
+});
+
+test("Start view is a labelled row for the whole home: house scope, editors only, no pin glyph (#246)", () => {
+  const s = settingById("start_view")!;
+  assert.equal(s.scope, "house");
+  assert.equal(s.permission, "editor");
+  assert.equal(text(s.label), "Start view");
+  assert.match(text(s.hint!), /whole home/);
+  assert.equal(searchSettings("remember start", env(), text)[0]?.id, "start_view");
+});
