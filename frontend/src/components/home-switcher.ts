@@ -353,8 +353,9 @@ export class Fp3dHomeSwitcher extends LitElement {
       margin: 0;
       padding: 4px;
       list-style: none;
-      color: var(--primary-text-color, #111);
-      background: var(--card-background-color, #fff);
+      /* the app's own solid menu surface, as the other menus (#260, V09: it was Home Assistant's white card) */
+      color: var(--fp3d-text, var(--primary-text-color, #111));
+      background: var(--fp3d-chrome-solid, var(--card-background-color, #fff));
       border: 1px solid var(--fp3d-line, rgba(127, 127, 127, 0.4));
       border-radius: 10px;
       box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
@@ -372,7 +373,16 @@ export class Fp3dHomeSwitcher extends LitElement {
       font-weight: 600;
     }
     li.danger {
-      color: var(--error-color, #db4437);
+      color: var(--fp3d-danger, var(--error-color, #db4437));
+    }
+    /* 44 px rows on a touch screen (#260) */
+    @media (pointer: coarse) {
+      li:not(.sep) {
+        display: flex;
+        align-items: center;
+        min-height: 44px;
+        box-sizing: border-box;
+      }
     }
     li.sep {
       height: 1px;

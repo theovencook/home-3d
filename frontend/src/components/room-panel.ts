@@ -248,9 +248,9 @@ export class Fp3dRoomPanel extends LitElement {
         <!-- time travel: one disabled fieldset greys out and disables every control inside it, with one tooltip (#210) -->
         <fieldset class="fp3d-rp-controls" ?disabled=${this.readOnly} title=${this.readOnly ? this.t("tt_past_no") : nothing}>
         ${!room.area_id
-          ? html`<p class="fp3d-rp-note">${this.t("panel_no_area")}</p>`
+          ? html`<p class="fp3d-rp-note">${this.t(this.canEdit ? "panel_no_area" : "panel_no_area_viewer")}</p>`
           : !ids.length
-            ? html`<p class="fp3d-rp-note">${this.t("panel_empty")}</p>`
+            ? html`<p class="fp3d-rp-note">${this.t(this.canEdit ? "panel_empty" : "panel_empty_viewer")}</p>`
             : nothing}
         ${editing
           ? html`<fp3d-room-list-edit
@@ -979,6 +979,10 @@ export class Fp3dRoomPanel extends LitElement {
         }
         .fp3d-rp-stepper .fp3d-btn {
           width: 44px;
+        }
+        /* the 44 px icon gets a column as wide, so it keeps clear of the name (#260, V07) */
+        .fp3d-rp-row {
+          grid-template-columns: 44px 1fr auto auto;
         }
         .fp3d-rp-small,
         .fp3d-rp-sheet,

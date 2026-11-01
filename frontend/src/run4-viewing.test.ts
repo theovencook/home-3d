@@ -276,3 +276,61 @@ test("#259 V19: a room chosen from the Rooms picker takes the focus to the room 
   assert.match(src("./components/room-panel.ts"), /<h2 tabindex="-1">\$\{room\.name\}<\/h2>/);
   assert.match(src("./panel.ts"), /this\._roomsOpen = false;\s*void this\.focusRoomPanel\(\);/);
 });
+
+// ---- #260: the Day look and the room panel ----
+
+/** Relative luminance and contrast (WCAG 2). */
+const lum = (hex: string) => {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+};
+const contrast = (a: string, b: string) => {
+  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+};
+
+test("#260 V06: in the Day look the clock is dark text on a light box that clears 4.5:1", () => {
+  const day = block(view3dCss, ":host([light]) .fp3d-clock {");
+  assert.match(day, /background: rgba\(255, 255, 255, 0\.88\)/);
+  assert.match(day, /color: #0f1c2e/);
+  assert.match(block(view3dCss, ":host([light]) .fp3d-clock span"), /color: #3d4d63/);
+  // the box over the palest Day sky (white at 88 % over #c8d4e4 is about #f6f8fb)
+  assert.ok(contrast("#0f1c2e", "#f6f8fb") >= 4.5);
+  assert.ok(contrast("#3d4d63", "#f6f8fb") >= 4.5);
+});
+
+test("#260 V09: the home menu uses the app's solid menu surface and 44 px rows on a touch screen", async () => {
+  const { Fp3dHomeSwitcher } = (await import("./components/home-switcher.ts")) as unknown as { Fp3dHomeSwitcher: Styled };
+  const css = text(Fp3dHomeSwitcher.styles);
+  const ul = block(css, "ul {");
+  assert.match(ul, /background: var\(--fp3d-chrome-solid/);
+  assert.match(ul, /color: var\(--fp3d-text/);
+  assert.match(block(css, "@media (pointer: coarse)"), /li:not\(\.sep\) \{[^}]*min-height: 44px/);
+});
+
+test("#260 V07: on a touch screen the room panel's 44 px icon has a column as wide, clear of the name", async () => {
+  const { Fp3dRoomPanel } = await import("./components/room-panel.ts");
+  const css = text((Fp3dRoomPanel as unknown as Styled).styles);
+  const coarse = css.slice(css.lastIndexOf("@media (pointer: coarse)"));
+  assert.match(coarse, /\.fp3d-rp-icon[^{]*\{\s*width: 44px;/);
+  assert.match(coarse, /\.fp3d-rp-row \{\s*grid-template-columns: 44px 1fr auto auto;/);
+});
+
+test("#260 V16: people who cannot edit are not told to use the editor; editors still are", async () => {
+  for (const k of ["panel_no_area_viewer", "panel_empty_viewer", "central_no_favorites_viewer"]) {
+    assert.ok(en[k], k);
+    assert.doesNotMatch(en[k], /editor/i, k);
+  }
+  assert.match(en.panel_no_area, /editor/);
+  const { Fp3dRoomPanel } = await import("./components/room-panel.ts");
+  const rp = new Fp3dRoomPanel() as unknown as Record<string, any>;
+  rp.hass = { language: "en", states: {}, entities: {}, devices: {}, areas: {} };
+  rp.room = { id: "r", name: "Den", points: [[0, 0], [1, 0], [1, 1]], area_id: null };
+  rp.floor = { id: "f", rooms: [rp.room], placements: [], furniture: [], openings: [], walls: [], outdoor: [] };
+  rp.canEdit = false;
+  const viewer = flat(rp.render());
+  assert.ok(viewer.includes(en.panel_no_area_viewer), "viewer wording");
+  rp.canEdit = true;
+  assert.ok(flat(rp.render()).includes(en.panel_no_area), "editor wording");
+  assert.match(src("./components/view3d.ts"), /t\(this\.mayEdit \? "central_no_favorites" : "central_no_favorites_viewer"\)/);
+});

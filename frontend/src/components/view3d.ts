@@ -4999,7 +4999,7 @@ export class Fp3dView3d extends LitElement {
             </div>`
           : own.length
             ? nothing
-            : html`<p class="fp3d-central-hint">${t("central_no_favorites")}</p>`}
+            : html`<p class="fp3d-central-hint">${t(this.mayEdit ? "central_no_favorites" : "central_no_favorites_viewer")}</p>`}
         ${own.length
           ? html`<div class="fp3d-central-favs">
               ${own.map(
@@ -7516,6 +7516,15 @@ export class Fp3dView3d extends LitElement {
       }
       .fp3d-clock .fp3d-dial .s {
         stroke: var(--fp3d-accent);
+      }
+      /* Day (#260, V06): the dark box under dark text was unreadable; the clock takes the Day surface with dark text */
+      :host([light]) .fp3d-clock {
+        background: rgba(255, 255, 255, 0.88);
+        color: #0f1c2e;
+        box-shadow: 0 4px 14px rgba(20, 40, 80, 0.18);
+      }
+      :host([light]) .fp3d-clock span {
+        color: #3d4d63;
       }
       /* at the top it sits under the energy strip and the walk button */
       .fp3d-clock-tl {
