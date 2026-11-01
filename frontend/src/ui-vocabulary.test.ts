@@ -34,7 +34,8 @@ test("“Settings” on its own names only the Settings tab; nothing else is cal
     .map(([k]) => k)
     .sort();
   assert.deepEqual(settingsOnly, ["settings", "st_title"]);
-  const bad = Object.entries(en).filter(([, v]) => /\bView settings\b|\bview settings\b|⚙ menu|⚙ tab/.test(v));
+  // "More view settings" (#247) is the drawing's link from the View panel to Settings › Appearance, not a place of its own
+  const bad = Object.entries(en).filter(([k, v]) => k !== "view_more_settings" && /\bView settings\b|\bview settings\b|⚙ menu|⚙ tab/.test(v));
   assert.deepEqual(bad, []);
 });
 

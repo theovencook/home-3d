@@ -4,7 +4,6 @@
 // setting is one entry here. Pure data and functions: no Lit, no texts table (labels are text keys), so tests run it
 // and the page's own bundle stays small.
 
-import { ACCENT_DEFAULT } from "../colour-reset.ts";
 import type { Building, BuildingSettings, StartView } from "../model.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS } from "../model.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -13,7 +12,6 @@ import { doorbellCamera, doorbellEntities, HOLD_DEFAULT, HOLD_MAX, HOLD_MIN } fr
 import { isRainSource, weatherEntity } from "../weather.ts";
 import { backdropImage } from "../backdrop.ts";
 import { TABLET_IDLE_DEFAULT } from "../kiosk.ts";
-import { parsePinZoom, PLAN_PIN_ZOOM_DEFAULT, PLAN_PIN_ZOOM_KEY, PLAN_PIN_ZOOM_MAX } from "../plan-pins.ts";
 import { fetchPackUpdates, getVoiceSettings, setPackUpdateSettings, setVoiceSentences, type SentenceMode } from "../api.ts";
 import type { PackUpdateSettings, PackUpdateStatus } from "../pack-updates.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
@@ -21,6 +19,10 @@ import { released } from "../features.ts";
 import { SEASON_IDS } from "../season-ids.ts";
 import { EFFECT_DEFAULTS } from "../room-effects.ts";
 import { formatImperial, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
+// this device's look and screen rows live with the View panel's list (#247), which the panel loads without this file
+import { deviceSwitch, LOOK, SCREEN } from "./view-settings.ts";
+
+export { deviceChoice, deviceSwitch } from "./view-settings.ts";
 
 /** house: saved in this plan. install: kept by Home Assistant for every home (outside the plan). device: this browser only. */
 export type Scope = "house" | "install" | "device";
@@ -85,6 +87,10 @@ export interface Option {
   /** A text key, or the text itself with `raw`. */
   label: TextKey;
   raw?: boolean;
+  /** A drop-down's group heading (a text key): options with the same group are listed together (#247). */
+  group?: TextKey;
+  /** The look a "follow" choice shows now (a text key): the choice reads "Follow the sun (now Day)" (#247). */
+  now?: TextKey;
 }
 
 export type Control =
@@ -378,50 +384,6 @@ function houseEntity(id: string, section: SectionId, card: string, key: keyof Bu
     default: null,
     read: (env) => (settingsOf(env)[key] as string | null | undefined) ?? null,
     write: (env, v) => withSettings(env.building!, { [key]: v }),
-  };
-}
-
-/** A device switch kept as "home3d.<key>" = "1" / "0". */
-export function deviceSwitch(id: string, section: SectionId, card: string, key: string, def: boolean, label: TextKey, hint?: TextKey, keywords?: string[]): Setting<boolean> {
-  return {
-    id,
-    section,
-    card,
-    scope: "device",
-    permission: "everyone",
-    label,
-    hint,
-    keywords,
-    control: { kind: "switch" },
-    default: def,
-    prefKeys: [key],
-    read: (env) => {
-      const v = env.prefs.get(key);
-      return v === null ? def : v === "1";
-    },
-    write: (env, v) => env.prefs.set(key, v ? "1" : "0"),
-  };
-}
-
-/** A device choice of a few values kept as "home3d.<key>" (anything else reads as the default). */
-export function deviceChoice(id: string, section: SectionId, card: string, key: string, values: readonly string[], def: string, label: TextKey, options: Option[], hint?: TextKey, keywords?: string[], kind: "segment" | "select" = "segment"): Setting<string> {
-  return {
-    id,
-    section,
-    card,
-    scope: "device",
-    permission: "everyone",
-    label,
-    hint,
-    keywords,
-    control: kind === "segment" ? { kind: "segment", options } : { kind: "select", options: () => options },
-    default: def,
-    prefKeys: [key],
-    read: (env) => {
-      const v = env.prefs.get(key);
-      return v !== null && values.includes(v) ? v : def;
-    },
-    write: (env, v) => env.prefs.set(key, v),
   };
 }
 
@@ -1184,75 +1146,6 @@ const ENERGY: Setting[] = [
 ];
 
 const BACKUP: Setting[] = [embedded("backup", "backup", "backup", "backup", "backup", undefined, ["restore", "export", "import", "file", "history"])];
-
-const opts = (pairs: [string, TextKey][]): Option[] => pairs.map(([value, label]) => ({ value, label }));
-
-/** This device's look and what its 3D view shows (the ⚙ View menu and the Show chip keep the quick ones). */
-const LOOK: Setting[] = [
-  deviceChoice("theme", "look", "look", "theme", ["theme", "neon", "blueprint", "day", "realistic", "auto"], "theme", "theme", opts([["theme", "theme_theme"], ["neon", "theme_neon"], ["blueprint", "theme_blueprint"], ["day", "theme_day"], ["realistic", "theme_realistic"], ["auto", "theme_auto"]]), undefined, ["dark", "light", "day", "night", "neon", "theme", "colour scheme"], "select"),
-  {
-    id: "accent",
-    section: "look",
-    card: "look",
-    scope: "device",
-    permission: "everyone",
-    label: "accent",
-    hint: "accent_hint",
-    keywords: ["colour", "color", "cyan", "highlight"],
-    control: { kind: "colour", fallback: ACCENT_DEFAULT, clearable: true },
-    default: null,
-    prefKeys: ["accent"],
-    read: (env) => {
-      const v = env.prefs.get("accent");
-      return v && /^#[0-9a-f]{6}$/i.test(v) ? v : null;
-    },
-    write: (env, v) => env.prefs.set("accent", v),
-  } as Setting<string | null>,
-  deviceChoice("clock", "look", "look", "clock", ["off", "tl", "tr", "bl", "br"], "off", "st_clock", opts([["off", "st_clock_off"], ["tl", "st_clock_tl"], ["tr", "st_clock_tr"], ["bl", "st_clock_bl"], ["br", "st_clock_br"]]), undefined, ["time", "clock", "corner"], "select"),
-  deviceChoice("clock_hours", "look", "look", "clock_hours", ["auto", "12", "24"], "auto", "st_clock_hours", opts([["auto", "clock_hours_auto"], ["12", "clock_hours_12"], ["24", "clock_hours_24"]]), undefined, ["time", "clock", "12", "24", "am", "pm"]),
-  deviceChoice("clock_style", "look", "look", "clock_style", ["digital", "analogue"], "digital", "st_clock_face", opts([["digital", "clock_digital"], ["analogue", "clock_analogue"]]), undefined, ["time", "clock", "dial", "hands", "face"]),
-  deviceSwitch("clock_seconds", "look", "look", "clock_seconds", false, "st_clock_seconds", undefined, ["time", "clock", "seconds"]),
-  deviceSwitch("clock_date", "look", "look", "clock_date", true, "st_clock_date", undefined, ["time", "clock", "date", "day"]),
-  deviceChoice("markers", "look", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), undefined, ["pins", "icons", "symbols", "devices", "markers"], "select"),
-  deviceChoice("pinSize", "look", "markers", "pinSize", ["small", "normal", "large"], "normal", "pin_size", opts([["small", "pin_size_small"], ["normal", "pin_size_normal"], ["large", "pin_size_large"]]), undefined, ["pins", "icons", "symbols", "size"]),
-  {
-    id: "plan_pin_zoom",
-    section: "look",
-    card: "markers",
-    scope: "device",
-    permission: "everyone",
-    label: "st_plan_pin_zoom",
-    hint: "st_plan_pin_zoom_hint",
-    keywords: ["markers", "pins", "zoom", "phone", "plan", "overlap", "hide"],
-    control: { kind: "number", step: 5, min: 0, max: PLAN_PIN_ZOOM_MAX, unit: "px/m", clearable: true },
-    default: PLAN_PIN_ZOOM_DEFAULT,
-    prefKeys: [PLAN_PIN_ZOOM_KEY],
-    read: (env) => parsePinZoom(env.prefs.get(PLAN_PIN_ZOOM_KEY)),
-    write: (env, v) => env.prefs.set(PLAN_PIN_ZOOM_KEY, v === null ? null : String(Math.round(clamp(v, 0, PLAN_PIN_ZOOM_MAX)))),
-  } as Setting<number | null>,
-  deviceSwitch("plan2d", "look", "show", "plan2d", false, "st_view_2d", undefined, ["2d", "plan", "flat"]),
-  deviceChoice("walls", "look", "show", "walls", ["auto", "cut"], "auto", "st_walls", opts([["auto", "walls_auto"], ["cut", "walls_cut"]]), undefined, ["walls", "cut", "tall"]),
-  deviceChoice("explode", "look", "show", "explode", ["1", "0"], "1", "st_floors", opts([["1", "floors_apart"], ["0", "floors_stacked"]]), undefined, ["floors", "apart", "stacked", "explode"]),
-  deviceChoice("floor_stack", "look", "show", "floor_stack", ["dim", "stacked", "single"], "dim", "st_floor_stack", opts([["dim", "floor_stack_short_dim"], ["stacked", "floor_stack_short_stacked"], ["single", "floor_stack_short_single"]]), undefined, ["floors", "below", "dimmed"]),
-  deviceSwitch("roof", "look", "show", "roof", false, "st_keep_roof", "roof_keep_hint", ["roof", "zoom"]),
-  deviceChoice("heat", "look", "show", "heat", ["none", "temperature", "humidity", "co2", "values"], "none", "st_heat", opts([["none", "heat_off"], ["temperature", "heat_short_temperature"], ["humidity", "heat_short_humidity"], ["co2", "heat_short_co2"], ["values", "heat_short_values"]]), undefined, ["heatmap", "temperature", "humidity", "co2"]),
-  deviceSwitch("room_names", "look", "show", "room_names", true, "st_room_names", undefined, ["labels", "names", "rooms"]),
-  deviceSwitch("trail", "look", "show", "trail", false, "st_trail", "trail_hint", ["motion", "trail", "history"]),
-  deviceSwitch("weather", "look", "show", "weather", true, "st_weather", "weather_hint", ["rain", "snow", "weather"]),
-];
-
-/**
- * Screen and controls (#246): what the old View menu's unlabelled Controls row (◧ ◨ ⌖ 🔒 FPS), Quality and the floor
- * bar's wrap toggle set, each with its full name. Same stored keys as before, so nobody loses a choice.
- */
-const SCREEN: Setting[] = [
-  deviceChoice("quality", "screen", "screen", "quality", ["auto", "low", "high"], "auto", "quality", opts([["auto", "quality_auto"], ["low", "st_quality_low"], ["high", "quality_high"]]), "card_quality_hint", ["performance", "tablet", "speed", "graphics", "slow"]),
-  deviceSwitch("stats", "screen", "screen", "stats", false, "st_fps", "fps_title", ["fps", "performance", "frames", "speed"]),
-  deviceChoice("controls", "screen", "controls", "controls", ["left", "right"], "left", "controls_side", opts([["left", "st_controls_left"], ["right", "st_controls_right"]]), "st_controls_side_hint", ["left", "right", "star", "search", "eye", "buttons"]),
-  deviceSwitch("keep_view", "screen", "controls", "keep_view", false, "keep_view", "keep_view_hint", ["camera", "floor"]),
-  deviceSwitch("angle_lock", "screen", "controls", "angle_lock", false, "angle_lock", "angle_lock_hint", ["lock", "turn", "rotate", "angle"]),
-  deviceSwitch("nav_wrap", "screen", "controls", "nav_wrap", false, "st_nav_wrap", undefined, ["floors", "rooms", "bar", "chips"]),
-];
 
 const ADVANCED: Setting[] = [
   {

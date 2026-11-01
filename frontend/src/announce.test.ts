@@ -56,5 +56,5 @@ test("picking a look says it, and that the follow switch it turned off is off (F
   const t = (k: string, vars: Record<string, string> = {}) => Object.entries(vars).reduce((s, [a, b]) => s.replace(`{${a}}`, b), en[k] ?? k);
   assert.equal(lookAnnouncement("neon", "day", t), "Appearance: Day");
   assert.equal(lookAnnouncement("theme", "day", t), "Appearance: Day. Follow Home Assistant is off");
-  assert.equal(lookAnnouncement("auto", "realistic", t), "Appearance: Realistic. By the sun is off");
+  assert.equal(lookAnnouncement("auto", "realistic", t), "Appearance: Realistic. Follow the sun is off");
 });

@@ -35,8 +35,7 @@ function panel(floorId: string | null) {
   p.data.building = b;
   p.data.canEdit = true;
   p.willUpdate(new Map());
-  p._showOpen = true;
-  p._optsOpen = true;
+  p._viewOpen = true;
   p._floorId = floorId;
   return p;
 }

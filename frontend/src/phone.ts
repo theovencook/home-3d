@@ -27,11 +27,6 @@ export const NO_FIT_MARGIN = { x: 0, y: 0 } as const;
 export const PHONE_NARROW_MAX_PX = 480;
 export const PHONE_NARROW_MEDIA = `(max-width: ${PHONE_NARROW_MAX_PX}px)`;
 
-/** Whether the View menu folds after one of its choices is picked: where it floats over the view (a phone). */
-export function closesViewMenuAfterPick(width: number): boolean {
-  return isPhoneWidth(width);
-}
-
 /**
  * Size classes (#246, the menus redesign #219): every layout rule picks one of these instead of its own width.
  * phone up to 600 px, compact 601 to 1024 px (a tablet in landscape, a small laptop), wide above that; short is any

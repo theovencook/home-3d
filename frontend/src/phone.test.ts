@@ -17,12 +17,11 @@ test("on a phone the floor pictures start folded to plain buttons; the user's ow
   assert.equal(thumbsCompact("1", false), true);
 });
 
-test("the narrow-phone rule is 480 px and the View menu folds after a pick only where it floats (#216)", async () => {
-  const { PHONE_NARROW_MAX_PX, PHONE_NARROW_MEDIA, closesViewMenuAfterPick } = await import("./phone.ts");
-  assert.equal(PHONE_NARROW_MAX_PX, 480);
-  assert.equal(PHONE_NARROW_MEDIA, "(max-width: 480px)");
-  assert.equal(closesViewMenuAfterPick(390), true);
-  assert.equal(closesViewMenuAfterPick(1024), false);
+test("the narrow-phone rule is 480 px (#216); the View panel no longer folds after a pick (#247)", async () => {
+  const phone = await import("./phone.ts");
+  assert.equal(phone.PHONE_NARROW_MAX_PX, 480);
+  assert.equal(phone.PHONE_NARROW_MEDIA, "(max-width: 480px)");
+  assert.ok(!("closesViewMenuAfterPick" in phone));
 });
 
 test("size classes come from one place: phone to 600, compact to 1024, wide above, short up to 500 high (#246)", async () => {

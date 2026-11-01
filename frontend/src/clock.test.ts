@@ -21,10 +21,12 @@ function flat(v: unknown): string {
 const env = (o: Partial<ClockEnv> = {}): ClockEnv => ({ now: new Date("2026-06-10T13:30:45Z"), lang: "en-GB", timeZone: "Europe/London", ...o });
 const look = (o: Partial<ClockLook> = {}): ClockLook => ({ ...CLOCK_LOOK, ...o });
 
-test("the View menu's clock row has no emoji; the corner arrows stay", () => {
+test("the View panel's clock row has no emoji: a drop-down of named corners and a Clock style link (#247)", () => {
   const panel = readFileSync(new URL("./panel.ts", import.meta.url), "utf8");
-  assert.ok(!panel.includes("🕐"));
-  assert.ok(panel.includes('CLOCK_ARROW'));
+  const view = readFileSync(new URL("./components/view-panel.ts", import.meta.url), "utf8");
+  for (const src of [panel, view]) assert.ok(!src.includes("🕐"));
+  assert.ok(!panel.includes("CLOCK_ARROW"), "no corner arrows: the corners are named");
+  assert.ok(view.includes(`this.openSettings("look", "clock_hours")`), "Clock style opens the clock settings");
 });
 
 test("the look comes from the device preferences and defaults to digits with the date", () => {
