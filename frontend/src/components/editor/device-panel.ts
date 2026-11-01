@@ -374,6 +374,7 @@ export class DevicePanelPart {
               class="fp3d-pin ${hidden.has(id) ? "fp3d-pin-on" : ""}"
               aria-pressed=${hidden.has(id)}
               title=${this.t(hidden.has(id) ? "panel_unhide" : "panel_hide")}
+              aria-label=${this.t(hidden.has(id) ? "panel_unhide" : "panel_hide")}
               @click=${() => this.updateRoom({ hidden: hidden.has(id) ? [...hidden].filter((x) => x !== id) : [...hidden, id] })}
             >
               ${hidden.has(id) ? "🙈" : "👁"}
@@ -384,6 +385,7 @@ export class DevicePanelPart {
               class="fp3d-pin ${noState.has(id) ? "fp3d-pin-on" : ""}"
               aria-pressed=${noState.has(id)}
               title=${this.t(noState.has(id) ? "panel_state_show" : "panel_state_hide")}
+              aria-label=${this.t(noState.has(id) ? "panel_state_show" : "panel_state_hide")}
               @click=${() => this.updateRoom({ no_state: noState.has(id) ? [...noState].filter((x) => x !== id) : [...noState, id] })}
             >
               ${noState.has(id) ? "∅" : "Aa"}
@@ -394,6 +396,7 @@ export class DevicePanelPart {
               class="fp3d-pin ${pinned.has(id) ? "fp3d-pin-on" : ""}"
               aria-pressed=${pinned.has(id)}
               title=${this.t(pinned.has(id) ? "panel_unpin" : "panel_pin")}
+              aria-label=${this.t(pinned.has(id) ? "panel_unpin" : "panel_pin")}
               @click=${() => this.updateRoom({ panel: pinned.has(id) ? [...pinned].filter((x) => x !== id) : [...pinned, id] })}
             >
               ${pinned.has(id) ? "★" : "☆"}

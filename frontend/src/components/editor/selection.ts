@@ -458,7 +458,7 @@ export class SelectionPart {
     const some = !fixed && items.some((m) => this.isFixedItem("furniture", m.id));
     return html`<section>
       <div class="fp3d-h3row"><h3>${block ? `▣ ${this.t("block_title")}` : this.t("multi_title", { n: items.length })}</h3></div>
-      <p class="fp3d-sub">${touchWording(touchOnly(), block ? "block_hint" : "multi_hint", (k, p) => this.t(k, p))}</p>
+      <p class="fp3d-sub">${touchOnly() && !block && this._multiMode ? this.t("multi_hint_on_touch") : touchWording(touchOnly(), block ? "block_hint" : "multi_hint", (k, p) => this.t(k, p))}</p>
       ${some ? html`<p class="fp3d-sub fp3d-wv-fixnote">${this.t("block_some_fixed")}</p>` : nothing}
       <div class="fp3d-block-parts">
         ${items.map(

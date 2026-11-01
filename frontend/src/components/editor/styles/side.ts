@@ -61,12 +61,35 @@ export const sideStyles = css`
         gap: 6px;
         margin-top: 8px;
       }
+      .fp3d-align-head {
+        flex: 0 0 100%;
+        font-size: 12px;
+        font-weight: 600;
+        opacity: 0.75;
+      }
+      .fp3d-align-txt {
+        display: none;
+      }
       .fp3d-align-btn {
         display: grid;
         place-items: center;
         min-width: 40px;
         min-height: 40px;
         padding: 0;
+      }
+      @media (pointer: coarse) {
+        .fp3d-align-btn {
+          flex: 1 1 45%;
+          grid-auto-flow: column;
+          justify-content: start;
+          gap: 8px;
+          padding: 0 10px;
+          text-align: left;
+          font-size: 13px;
+        }
+        .fp3d-align-txt {
+          display: inline;
+        }
       }
       .fp3d-actions {
         display: flex;

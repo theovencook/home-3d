@@ -37,7 +37,7 @@ import { load3d } from "../load3d.ts";
 import { ensureRecipes, packTypesIn } from "../pack-recipes.ts";
 import "./ask-dialog.ts";
 import { isHelpKey } from "../help.ts";
-import type { Tool } from "../editor-hint.ts";
+import { touchOnly, touchWording, type Tool } from "../editor-hint.ts";
 import type { RackElevation } from "../rack-elevation.ts";
 import type { LibraryEntry } from "../library-index.ts";
 import { detectCameraModel, setCameraLook } from "../camera-models.ts";
@@ -853,7 +853,7 @@ export class Fp3dEditor extends LitElement {
   protected updated(changed: PropertyValues): void {
     this.afterPhoneRender(changed);
     // another item (room, door, floor …) opens its panel at the top: the fields are where they always are (#71)
-    if (selectionMoved(changed, this)) for (const side of this.renderRoot.querySelectorAll<HTMLElement>(".fp3d-side")) side.scrollTop = 0;
+    if (selectionMoved(changed, this) || changed.has("_tool")) for (const side of this.renderRoot.querySelectorAll<HTMLElement>(".fp3d-side")) side.scrollTop = 0;
     // a part on the Settings page (#139) shows its section unfolded (its summary is hidden there)
     if (this.topic) for (const d of this.renderRoot.querySelectorAll<HTMLDetailsElement>(".fp3d-embed details")) if (!d.open) d.open = true;
     // the item preview is placed in window coordinates; with the 3D view beside the plan an ancestor becomes its
@@ -1100,7 +1100,7 @@ export class Fp3dEditor extends LitElement {
       <div class="fp3d-editor ${this.narrow ? "fp3d-narrow" : ""} ${this._phone ? "fp3d-phone" : ""} ${this._sheeted ? "fp3d-sheeted" : ""} ${this._sheeted && this._typing ? "fp3d-typing" : ""}" style=${`--fp3d-side-w:${this._sideWidth}px`}>
         <!-- one toolbar row across the plan and the sidebar (#249) -->
         <div class="fp3d-toolbar">
-          ${this._wallPick ? html`<div class="fp3d-pick-tip" style=${`left:${this.wallPickTip[0]}px;top:${this.wallPickTip[1]}px`} @click=${() => (this._wallPick = false)}>${this.t("hint_wall_pick")}</div>` : nothing}
+          ${this._wallPick && !(this._phone && this.showsPhoneHint()) ? html`<div class="fp3d-pick-tip" style=${`left:${this.wallPickTip[0]}px;top:${this.wallPickTip[1]}px`} @click=${() => (this._wallPick = false)}>${touchWording(touchOnly(), "hint_wall_pick", (k, p) => this.t(k, p))}</div>` : nothing}
           ${this.renderFloorMenu()} ${this.renderToolBar(floor, walls?.warnings.length ? html`<span class="fp3d-warn">${this.t("overlap_warning")}</span>` : nothing)}
         </div>
         <div class="fp3d-main">

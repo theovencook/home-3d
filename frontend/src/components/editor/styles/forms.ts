@@ -615,17 +615,19 @@ export const formStyles = css`
         position: sticky;
         top: 0;
         z-index: 2;
-        background-color: var(--fp3d-panel, #0d1424);
+        background-color: var(--fp3d-chrome-solid);
         width: 100%;
         box-sizing: border-box;
         font: inherit;
         font-size: 14px;
         color: var(--fp3d-text);
-        background: rgba(255, 255, 255, 0.04);
+        /* opaque: the rows scrolling under it must not show through (#262) */
+        background: linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), var(--fp3d-chrome-solid);
         border: 1px solid var(--fp3d-line);
         border-radius: 8px;
         padding: 7px 9px;
-        margin: 2px 0 6px;
+        margin: 0 0 6px;
+        box-shadow: 0 -8px 0 var(--fp3d-chrome-solid), 0 6px 0 var(--fp3d-chrome-solid);
       }
       .fp3d-dev-all {
         display: block;

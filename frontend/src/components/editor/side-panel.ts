@@ -191,14 +191,28 @@ export class SidePanelPart {
       return html`${nextKind}<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", null)}>‹ ${this.t("back_to_floor")}</button>
         ${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}`;
     }
+    // "Add rooms from HA areas": on top while the floor has no rooms (the quick start), else after the floor's fields (#262)
+    const areaImport =
+      admin && floor && this.unplacedAreas(floor).length
+        ? html`<p class="fp3d-sub fp3d-wide fp3d-area-import">
+            ${this.t("area_rooms_label")}
+            <button class="fp3d-link" title=${this.t("area_rooms_hint")} @click=${() => this.addAreaRooms(floor)}>
+              ${this.t("area_rooms", { n: this.unplacedAreas(floor).length })}
+            </button>
+            ${this.homeName ? html`<br /><small class="fp3d-area-home">${this.t("area_rooms_note", { home: this.homeName })}</small>` : nothing}
+          </p>`
+        : nothing;
     return html`
       ${nextKind} ${admin ? nothing : html`<p class="fp3d-note">${this.t("read_only")}</p>`}
       <section>
         <h3>${floor ? this.t("floor_settings_of", { floor: floor.name }) : this.t("floors")}</h3>
         ${floors.length
           ? nothing
-          : html`${admin ? html`<button class="fp3d-btn fp3d-primary" @click=${() => this.addFloor()}>${this.t("first_floor_add")}</button>` : nothing}
+          : this.startShowing()
+            ? nothing // the "Start your home" list has this first step already (#262)
+            : html`${admin ? html`<button class="fp3d-btn fp3d-primary" @click=${() => this.addFloor()}>${this.t("first_floor_add")}</button>` : nothing}
               <p class="fp3d-sub">${this.t("floor_none_hint")}</p>`}
+        ${floor && !floor.rooms.length ? areaImport : nothing}
         ${admin && floor ? this.renderSettingsLink("general", "lock_plan", this._doc.settings.lock_plan ? "plan_locked" : "plan_lock", this._doc.settings.lock_plan ? "🔒" : "🔓") : nothing}
         ${floor
           ? html`<div class="fp3d-form">
@@ -236,15 +250,7 @@ export class SidePanelPart {
                     </select></label
                   >`
                 : nothing}
-              ${admin && this.unplacedAreas(floor).length
-                ? html`<p class="fp3d-sub fp3d-wide fp3d-area-import">
-                    ${this.t("area_rooms_label")}
-                    <button class="fp3d-link" title=${this.t("area_rooms_hint")} @click=${() => this.addAreaRooms(floor)}>
-                      ${this.t("area_rooms", { n: this.unplacedAreas(floor).length })}
-                    </button>
-                    ${this.homeName ? html`<br /><small class="fp3d-area-home">${this.t("area_rooms_note", { home: this.homeName })}</small>` : nothing}
-                  </p>`
-                : nothing}
+              ${floor.rooms.length ? areaImport : nothing}
               ${admin
                 ? html`<div class="fp3d-actions fp3d-wide">
                     <button class="fp3d-btn" title=${this.t("floor_order_hint")} @click=${() => this.moveFloor(1)}>${this.t("move_up")}</button>
