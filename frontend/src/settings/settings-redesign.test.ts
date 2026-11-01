@@ -97,8 +97,17 @@ test("the fun switches left the menu for the Extensions tab, but search still fi
   assert.ok(SECTIONS.find((s) => s.id === "fun")?.hidden);
   assert.ok(liveSections(env()).some((s) => s.id === "fun"), "its page still opens from a link");
   assert.ok(searchSettings("ghost", env(), t).some((s) => s.id === "halloween.ghost"));
-  const text = show(page(), "fun");
-  assert.ok(text.includes(t("st_fun_moved")) && text.includes(t("st_open_extensions")));
+  // the old link goes to the Extensions tab and does not open a second copy of the switches (#256)
+  const p = page();
+  p.section = "fun";
+  p.willUpdate(new Map([["section", null]]));
+  assert.ok(p.events.some((e: { detail: { action?: string } }) => e.detail.action === "extensions"));
+  assert.notEqual(p._section, "fun");
+  // an unknown name opens the menu, not the first page
+  const q = page();
+  q.section = "bogus";
+  q.willUpdate(new Map([["section", null]]));
+  assert.equal(q._drill, false);
 });
 
 test("every section has a line icon of the one family, no glyphs, and the page draws no glyph icons", () => {
@@ -114,9 +123,9 @@ test("every section has a line icon of the one family, no glyphs, and the page d
 
 test("search: the arrow keys move through the hits, Enter opens the one marked at its row, Escape clears", () => {
   const p = page();
-  p._query = "clock";
+  p._query = "sun";
   p.willUpdate(new Map());
-  const hits = p.hits("clock");
+  const hits = p.hits("sun");
   assert.ok(hits.length > 2);
   let text = flat(p.render());
   assert.match(text, /id=st-hit-0/);
@@ -323,7 +332,7 @@ test("search matches word starts, and a hint only by whole words", () => {
 
 test("a search hit group says whose a row is once per run of the same answer", () => {
   const p = page();
-  p._query = "clock";
+  p._query = "sun";
   p.willUpdate(new Map());
   const text = flat(p.render());
   const rows = (text.match(/class="st-row /g) ?? []).length;
@@ -370,4 +379,35 @@ test("someone who cannot change the home starts on This device", () => {
   linked.section = "household";
   linked.willUpdate(new Map([["hass", null], ["section", null]]));
   assert.equal(linked._section, "household", "a link still opens its page");
+});
+
+// ---- layout and wording polish (#256)
+
+test("the clock's details show only while the clock does", () => {
+  const rows = ["clock_hours", "clock_style", "clock_seconds", "clock_date"];
+  const on = (v: string | null): SettingsEnv => ({ ...env(), prefs: { get: (k: string) => (k === "clock" ? v : null), set: () => undefined } });
+  for (const id of rows) {
+    assert.equal(settingById(id)!.visible!(on(null)), false, id);
+    assert.equal(settingById(id)!.visible!(on("off")), false, id);
+    assert.equal(settingById(id)!.visible!(on("tr")), true, id);
+  }
+});
+
+test("Household has a calendar icon, the bin days box says always and days, wide controls stack, chips have big targets", () => {
+  assert.equal(sectionOf("household")!.icon, "calendar");
+  const days = settingById("household.bin_days")!.control as { empty?: string; unit?: string };
+  assert.equal(days.empty, "bin_days_always");
+  assert.equal(days.unit, "st_days");
+  assert.match(src("./settings-page.ts"), /c\.kind === "segment" && this\.options\(c\)\.length > 2/);
+  const chips = src("../components/multi-select.ts");
+  assert.match(chips, /\.chip button::after \{\s*content: ""[^}]*inset: -8px -4px/);
+  assert.match(chips, /min-height: 32px/);
+  assert.equal(settingById("pack_updates.frequency")!.control.kind, "select");
+  assert.ok(!t("st_sun_shadow_hint").includes("sun.sun") && !t("st_sun_patches_hint").includes("sun.sun") && !t("st_weather_hint").includes("sun.sun"));
+  assert.equal(t("editors_reset"), "Let every admin edit");
+});
+
+test("who can edit draws one heading: the row's own label is hidden", () => {
+  const text = show(page(), "access");
+  assert.match(text, /st-lbl" \?hidden=/);
 });

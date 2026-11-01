@@ -11,9 +11,7 @@ import type { Building } from "../model.ts";
 import {
   audienceOf,
   easterEggsOn,
-  isDevicePrefKey,
-  KEEP_ON_RESET,
-  resetDevicePrefs,
+
   liveSections,
   mayChange,
   parseSettingsHash,
@@ -28,6 +26,7 @@ import {
   type Setting,
   type SettingsEnv,
 } from "./registry.ts";
+import { isDevicePrefKey, KEEP_ON_RESET, resetDevicePrefs } from "./reset.ts";
 import { sampleBuilding, sampleHass } from "./settings.fixture.ts";
 
 const en = englishTable() as Record<string, string>;

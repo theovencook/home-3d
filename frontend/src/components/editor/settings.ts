@@ -261,7 +261,7 @@ export class SettingsPart {
   }
 
   /** A user list as a searchable multi-select (#227): real people first, service users (no person) behind a toggle. */
-  userSelect(this: Fp3dEditor, users: EditorUser[], picked: string[], locked: string[], label: string, onChange: (ids: string[]) => void) {
+  userSelect(this: Fp3dEditor, users: EditorUser[], picked: string[], locked: string[], label: string, onChange: (ids: string[]) => void, none?: string) {
     need(loadMultiSelect);
     return html`<fp3d-multi-select
       class="fp3d-wide"
@@ -269,6 +269,7 @@ export class SettingsPart {
       .value=${picked}
       .locked=${locked}
       .label=${label}
+      .placeholder=${none ?? ""}
       .searchLabel=${this.t("multi_search")}
       .emptyText=${this.t("multi_none")}
       .secondaryLabel=${this.t("users_show_service")}
@@ -279,7 +280,7 @@ export class SettingsPart {
 
   /** Wall tablets (#92): users whose panel opens locked (no editor, no settings); the idle return is a row of its own. */
   renderTabletUsers(this: Fp3dEditor, users: EditorUser[]) {
-    return this.userSelect(users, this._doc.settings.tablet_users ?? [], [], this.t("tablet_users"), (ids) => this.change((d) => (d.settings.tablet_users = ids)));
+    return this.userSelect(users, this._doc.settings.tablet_users ?? [], [], this.t("tablet_users"), (ids) => this.change((d) => (d.settings.tablet_users = ids)), this.t("tablet_users_none"));
   }
 
   setTabletUser(this: Fp3dEditor, id: string, on: boolean): void {

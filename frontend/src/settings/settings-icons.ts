@@ -16,7 +16,7 @@ const PATHS: Record<string, TemplateResult> = {
   alert: svg`<path d="M12 3 2 20h20zm0 6v5m0 3v.1"/>`,
   waves: svg`<path d="M2 8q3.5-3 7 0t7 0 6 0M2 15q3.5-3 7 0t7 0 6 0"/>`,
   camera: svg`<path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3.5"/>`,
-  bin: svg`<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15m-8 4v7m4-7v7"/>`,
+  calendar: svg`<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4m8-4v4"/>`,
   users: svg`<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7m2 3a6.5 6.5 0 0 1 3.5 5.5"/>`,
   key: svg`<circle cx="8" cy="15" r="4.5"/><path d="m11.5 11.5 8.5-8.5M16 7l3 3"/>`,
   tablet: svg`<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M11 18h2"/>`,

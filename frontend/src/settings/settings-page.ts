@@ -17,7 +17,6 @@ import type { Building, StartView } from "../model.ts";
 import type { FurniturePack } from "../packs.ts";
 import type { HomeAssistant } from "../types.ts";
 import { colourReset } from "../colour-reset.ts";
-import { askConfirm } from "../ask.ts";
 import { optionGroups, optionText } from "./view-settings.ts";
 import { controls, tokens } from "../styles.ts";
 import {
@@ -33,7 +32,6 @@ import {
   settingsIn,
   type Control,
   type DevicePrefs,
-  type KeyStore,
   type Option,
   type Section,
   type SectionId,
@@ -43,7 +41,6 @@ import {
   type Viewer,
   type WriteResult,
   deviceKeys,
-  resetDevicePrefs,
   lengthLabel,
   planUnit,
   shownLength,
@@ -59,19 +56,6 @@ const loadEntityPicker = loadTimeField;
 function icon(name: string, small = false) {
   need(loadTimeField);
   return html`<fp3d-line-icon class=${small ? "s" : ""} .name=${name}></fp3d-line-icon>`;
-}
-
-/** The browser's storages a reset looks through (blocked storage is skipped). */
-function browserStores(): KeyStore[] {
-  const out: KeyStore[] = [];
-  for (const name of ["localStorage", "sessionStorage"] as const) {
-    try {
-      out.push(globalThis[name]);
-    } catch {
-      // blocked
-    }
-  }
-  return out.filter(Boolean);
 }
 
 /** This browser's preferences, as the panel keeps them ("home3d.<key>"). */
@@ -220,19 +204,21 @@ export class SettingsPage extends LitElement {
       // a link to a row that moved (Quality to Appearance, the people rows out of Advanced, #248) opens the row's section
       const row = this.focusId ? settingById(this.focusId) : undefined;
       const id = row?.section ?? this.section ?? this._section;
-      if (sectionOf(id)) this._section = id;
+      if (sectionOf(id) && !sectionOf(id)!.hidden) this._section = id;
       this._query = "";
-      this._drill = true;
       this._note = null;
-      if (this.focusId) this.flash(this.focusId);
+      if (sectionOf(id)?.hidden) this.toExtensions();
+      else if (sectionOf(id)) {
+        // an unknown name opens the menu, not the first page (#256)
+        this._drill = true;
+        if (this.focusId) this.flash(this.focusId);
+      }
     }
     // people who cannot change the home's settings start on the device side, where they can change something (#255)
     if (!this.startPicked && this.hass && (changed.has("hass") || changed.has("canEdit"))) {
       this.startPicked = true;
-      if (!this.section && !this.focusId && !this.viewer.editor && audienceOf(sectionOf(this._section)!) === "home") {
-        const first = liveSections(this.env).find((s) => !s.hidden && audienceOf(s) === "device");
-        if (first) this._section = first.id;
-      }
+      const first = liveSections(this.env).find((s) => !s.hidden && audienceOf(s) === "device");
+      if (first && !this.section && !this.focusId && !this.viewer.editor) this._section = first.id;
     }
     const sections = liveSections(this.env);
     if (sections.length && !sections.some((s) => s.id === this._section)) this._section = sections[0].id;
@@ -323,25 +309,25 @@ export class SettingsPage extends LitElement {
       return;
     }
     if (action === "reset_device") {
-      // one tap used to wipe the device's choices at once (#255): ask first
-      void askConfirm(this.tr("st_reset_ask"), { ok: this.tr("st_reset"), cancel: this.tr("cancel"), danger: true }).then((yes) => {
-        if (yes) this.resetDevice(s);
+      // one tap used to wipe the device's choices at once (#255): it asks first (reset.ts, loaded now)
+      void import("./reset.ts").then(async (m) => {
+        if (!(await m.resetDevice(localPrefs, deviceKeys(), { ask: this.tr("st_reset_ask"), ok: this.tr("st_reset"), cancel: this.tr("cancel") }))) return;
+        this._note = this.tr("st_reset_done");
+        this.dispatchEvent(new CustomEvent("device-change", { detail: { id: s.id }, bubbles: true, composed: true }));
+        this.requestUpdate();
       });
       return;
     }
     this.dispatchEvent(new CustomEvent("settings-action", { detail: { action, id: s.id }, bubbles: true, composed: true }));
   }
 
-  private resetDevice(s: Setting): void {
-    for (const key of deviceKeys()) localPrefs.set(key, null);
-    // and the toggles the view, editor and time travel keep in the browser outside the rows
-    resetDevicePrefs(...browserStores());
-    this._note = this.tr("st_reset_done");
-    this.dispatchEvent(new CustomEvent("device-change", { detail: { id: s.id }, bubbles: true, composed: true }));
-    this.requestUpdate();
+  /** The old "fun" page: its switches live on the Extensions tab alone (#256). */
+  private toExtensions(): void {
+    this.dispatchEvent(new CustomEvent("settings-action", { detail: { action: "extensions", id: null }, bubbles: true, composed: true }));
   }
 
   private open(section: SectionId, focus: string | null = null): void {
+    if (sectionOf(section)?.hidden) return this.toExtensions();
     this._section = section;
     this._audience = audienceOf(sectionOf(section)!);
     if (focus) this.flash(focus);
@@ -535,15 +521,9 @@ export class SettingsPage extends LitElement {
           <h2>${this.tr(sec.title)}</h2>
           <p>${this.tr(sentence)}</p>
         </div>
-        ${this.renderSave(side, sec.id)}
+        ${lock ? nothing : this.renderSave(side, sec.id)}
       </div>
       ${lock ? html`<p class="st-lock">${icon("lock", true)} ${this.tr(lock)}</p>` : nothing}
-      ${sec.hidden
-        ? html`<p class="st-note">
-            ${this.tr("st_fun_moved")}
-            <button class="st-link" @click=${() => this.dispatchEvent(new CustomEvent("settings-action", { detail: { action: "extensions", id: null }, bubbles: true, composed: true }))}>${this.tr("st_open_extensions")} ›</button>
-          </p>`
-        : nothing}
       ${this._note ? html`<p class="st-note" role="status">${this._note}</p>` : nothing}
       ${sec.cards.map((card) => {
         const rows = list.filter((s) => s.card === card.id);
@@ -559,14 +539,16 @@ export class SettingsPage extends LitElement {
   private renderRow(s: Setting, hit: boolean, index = -1, cursor = -1, page = { side: audienceOf(sectionOf(s.section)!), install: false, admin: false }, showRule = true) {
     const may = mayChange(s, this.viewer);
     // the start view's two buttons and its state line go under the label, so the label keeps its width (#246)
-    const wide = s.control.kind === "embed" || s.control.kind === "list" || s.control.kind === "checks" || s.control.kind === "entity" || (s.control.kind === "action" && s.control.action === "start_view");
+    // a segment of three or more choices and a select with long choices go under their label too, so the hint keeps its width (#256)
+    const c = s.control;
+    const wide = (c.kind === "select" && c.options(this.env).some((o) => this.label(o).length > 24)) || (c.kind === "segment" && this.options(c).length > 2) || s.control.kind === "embed" || s.control.kind === "list" || s.control.kind === "checks" || s.control.kind === "entity" || (s.control.kind === "action" && s.control.action === "start_view");
     const rule = showRule ? this.rule(s, hit, page) : null;
     return html`<div
       class="st-row st-k-${s.control.kind} ${s.hint || rule ? "" : "st-nohint"} ${wide ? "st-row-wide" : ""} ${(hit && index === cursor) || this._flash === s.id ? "st-hit" : ""} ${hit && index === cursor ? "st-active" : ""}"
       data-id=${s.id}
       id=${index >= 0 ? `st-hit-${index}` : nothing}
     >
-      <div class="st-lbl">
+      <div class="st-lbl" ?hidden=${s.id === "editors"}>
         <span class="st-name">${s.control.kind === "number" && s.control.length ? lengthLabel(this.env, this.tr(s.label)) : this.tr(s.label)}</span>
       </div>
       ${s.hint || rule ? html`<p class="st-hint">${s.hint ? this.tr(s.hint) : nothing}${rule ? html`<span class="st-rule">${this.tr(rule)}</span>` : nothing}</p>` : nothing}
@@ -630,7 +612,7 @@ export class SettingsPage extends LitElement {
             min=${c.min ?? ""}
             max=${c.max ?? ""}
             .value=${shown}
-            placeholder=${c.clearable ? String(s.default ?? "") : ""}
+            placeholder=${c.empty ? this.tr(c.empty) : c.clearable ? String(s.default ?? "") : ""}
             aria-label=${aria}
             ?disabled=${disabled}
             @change=${(e: Event) => {
@@ -852,17 +834,23 @@ export class SettingsPage extends LitElement {
         gap: 2px;
       }
       .st-backto,
+      .st-other,
+      .st-side,
+      .st-link,
+      .st-nav-btn {
+        border: 0;
+        background: none;
+        font: inherit;
+        cursor: pointer;
+      }
+      .st-backto,
       .st-other {
         display: flex;
         align-items: center;
         gap: 6px;
         min-height: 40px;
         padding: 0 8px;
-        border: 0;
-        background: none;
         color: var(--fp3d-accent);
-        font: inherit;
-        cursor: pointer;
       }
       .st-other {
         margin-top: 12px;
@@ -883,14 +871,10 @@ export class SettingsPage extends LitElement {
         gap: 6px;
         min-height: 44px;
         padding: 6px;
-        border: 0;
         border-radius: 6px;
-        background: none;
         color: var(--fp3d-muted);
-        font: inherit;
         font-size: 11.5px;
         text-align: left;
-        cursor: pointer;
       }
       .st-side b {
         display: block;
@@ -942,14 +926,10 @@ export class SettingsPage extends LitElement {
         gap: 10px;
         min-height: 38px;
         padding: 0 8px;
-        border: 0;
         border-radius: 8px;
-        background: none;
         color: var(--fp3d-text);
-        font: inherit;
         font-size: 14px;
         text-align: left;
-        cursor: pointer;
       }
       .st-nav-btn:hover {
         background: var(--fp3d-bg2);
@@ -962,7 +942,6 @@ export class SettingsPage extends LitElement {
       .st-ic {
         display: inline-flex;
         width: 18px;
-        opacity: 0.9;
       }
       .st-chev {
         margin-left: auto;
@@ -1031,14 +1010,10 @@ export class SettingsPage extends LitElement {
         color: var(--fp3d-muted);
       }
       .st-link {
-        border: 0;
-        background: none;
         padding: 0;
         color: var(--fp3d-accent);
-        font: inherit;
         letter-spacing: inherit;
         text-transform: inherit;
-        cursor: pointer;
         min-height: 36px;
       }
       .st-row {
@@ -1147,6 +1122,7 @@ export class SettingsPage extends LitElement {
         font-size: 13px;
       }
       .st-num input[type="number"],
+      .st-num .st-len,
       .st-text,
       .st-select {
         font: inherit;
@@ -1161,14 +1137,6 @@ export class SettingsPage extends LitElement {
       }
       .st-num .st-len {
         width: 110px;
-        font: inherit;
-        font-size: 14px;
-        color: var(--fp3d-text);
-        background: var(--fp3d-bg2);
-        border: 1px solid var(--fp3d-line);
-        border-radius: 8px;
-        padding: 0 9px;
-        min-height: 36px;
       }
       .st-num input[type="number"] {
         width: 90px;
@@ -1257,6 +1225,7 @@ export class SettingsPage extends LitElement {
       fp3d-entity-picker {
         display: block;
         max-width: 420px;
+        font-size: 14px;
       }
       .st-embed {
         display: block;
@@ -1291,7 +1260,6 @@ export class SettingsPage extends LitElement {
         /* a search in progress keeps its box on screen above the results (#254) */
         .st-drill.st-query .st-nav {
           display: flex;
-          padding-bottom: 0;
         }
         .st-drill.st-query .st-nav > :not(.st-search) {
           display: none;
