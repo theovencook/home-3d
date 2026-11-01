@@ -1707,8 +1707,6 @@
  "hh_service_hint": "F.eks. filter, salt eller skyllemiddel: en binær sensor (på = trengs), et tall (prosent eller dager igjen) eller en dato. Når det trengs, lyser apparatet gult og står i «I dag i hjemmet».",
  "card_household": "I dag i hjemmet",
  "card_household_hint": "Husholdning: kort med dunker, post, ferdige apparater, tørste planter og vedlikehold",
- "bin_from": "Lys fra (klokka, dagen før)",
- "bin_until": "til (klokka, tømmedagen)",
  "bin_out": "Satt ut (hjelper)",
  "bin_out_hint": "Valgfritt: på mens dunken står ute (input_boolean, bryter eller binærsensor). Da lyser den ikke lenger, og skiltet sier «satt ut ✓»; et trykk på dunken slår hjelperen eller bryteren om. En nattlig automasjon nullstiller den.",
  "bin_out_done": "satt ut ✓",

@@ -1707,8 +1707,6 @@
  "hh_service_hint": "Ad es. filtro, sale o brillantante: un sensore binario (acceso = da fare), un numero (% o giorni rimasti) o una data. Quando serve, l'apparecchio si illumina di giallo e compare in «Oggi in casa».",
  "card_household": "Oggi in casa",
  "card_household_hint": "Casa: scheda con bidoni, posta, apparecchi finiti, piante assetate e manutenzione",
- "bin_from": "Accendere dalle (ora, giorno prima)",
- "bin_until": "fino alle (ora, giorno di raccolta)",
  "bin_out": "Esposto (helper)",
  "bin_out_hint": "Facoltativo: acceso finché il bidone è fuori (input_boolean, interruttore o sensore binario). Allora non si illumina più e la sua etichetta dice «esposto ✓»; un tocco sul bidone commuta l'helper o l'interruttore. Un'automazione notturna lo azzera.",
  "bin_out_done": "esposto ✓",

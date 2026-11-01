@@ -1707,8 +1707,6 @@
  "hh_service_hint": "T.ex. filter, salt eller sköljmedel: en binär sensor (på = behövs), ett tal (procent eller dagar kvar) eller ett datum. När det behövs lyser apparaten gult och visas i \"Idag i hemmet\".",
  "card_household": "Idag i hemmet",
  "card_household_hint": "Hushåll: kort med tunnor, post, klara apparater, törstiga växter och underhåll",
- "bin_from": "Lys från (klockan, dagen före)",
- "bin_until": "till (klockan, tömningsdagen)",
  "bin_out": "Utställd (hjälpare)",
  "bin_out_hint": "Valfritt: på medan kärlet står ute (input_boolean, brytare eller binär sensor). Då lyser det inte längre och skylten säger ”utställd ✓”; ett tryck på kärlet växlar hjälparen eller brytaren. En nattlig automation återställer den.",
  "bin_out_done": "utställd ✓",

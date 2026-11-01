@@ -1707,8 +1707,6 @@
  "hh_service_hint": "Bijv. filter, zout of glansspoelmiddel: een binaire sensor (aan = nodig), een getal (procent of dagen over) of een datum. Is het nodig, dan licht het apparaat geel op en staat het in „Vandaag in huis”.",
  "card_household": "Vandaag in huis",
  "card_household_hint": "Huishouden: kaart met containers, post, klare apparaten, dorstige planten en onderhoud",
- "bin_from": "Oplichten vanaf (uur, dag ervoor)",
- "bin_until": "tot (uur, ophaaldag)",
  "bin_out": "Buitengezet (helper)",
  "bin_out_hint": "Optioneel: aan zolang de container buiten staat (input_boolean, schakelaar of binaire sensor). Dan licht hij niet meer op en zegt zijn label „buitengezet ✓”; een tik op de container schakelt de helper of schakelaar om. Een nachtelijke automatisering zet hem terug.",
  "bin_out_done": "buitengezet ✓",

@@ -1707,8 +1707,6 @@
  "hh_service_hint": "Např. filtr, sůl nebo leštidlo: binární senzor (zapnuto = nutné), číslo (procent nebo dní zbývá) nebo datum. Když je to nutné, spotřebič svítí žlutě a objeví se v „Dnes v domácnosti“.",
  "card_household": "Dnes v domácnosti",
  "card_household_hint": "Domácnost: karta s popelnicemi, poštou, hotovými spotřebiči, žíznivými rostlinami a údržbou",
- "bin_from": "Svítit od (hodin, den předem)",
- "bin_until": "do (hodin, v den svozu)",
  "bin_out": "Vystaveno (pomocník)",
  "bin_out_hint": "Volitelné: zapnuto, dokud nádoba stojí venku (input_boolean, spínač nebo binární senzor). Pak už nesvítí a její štítek ukazuje „vystaveno ✓“; klepnutí na nádobu přepne pomocníka nebo spínač. Noční automatizace ho vrátí zpět.",
  "bin_out_done": "vystaveno ✓",

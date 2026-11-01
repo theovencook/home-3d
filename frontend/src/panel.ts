@@ -30,6 +30,7 @@ import { mountLocateLab } from "./locate-lab.ts";
 import { directorOnHere } from "./director.ts";
 import { loadVoice, micProbeDone, screenName, voiceOnHere } from "./load-voice.ts";
 import type { ClockPos } from "./card-config.ts";
+import { clockLookOf, type ClockLook } from "./clock.ts";
 import { TimeTravel } from "./load-timetravel.ts";
 import { IdleClock, tabletIdleSeconds, tabletMode } from "./kiosk.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
@@ -96,6 +97,7 @@ export class Floorplan3dPanel extends LitElement {
     _heat: { state: true },
     _theme: { state: true },
     _clock: { state: true },
+    _clockLook: { state: true },
     _furnish: { state: true },
     _selFurniture: { state: true },
     _selDevice: { state: true },
@@ -164,6 +166,7 @@ export class Floorplan3dPanel extends LitElement {
   private declare _heat: HeatMode;
   private declare _theme: Look;
   private declare _clock: ClockPos;
+  private declare _clockLook: ClockLook;
   private declare _furnish: boolean;
   private declare _selFurniture: string | null;
   private declare _selDevice: string | null;
@@ -271,6 +274,7 @@ export class Floorplan3dPanel extends LitElement {
     this._heat = heat === "temperature" || heat === "humidity" || heat === "co2" || heat === "values" ? heat : "none";
     this._theme = lookOf(prefs.get("theme"));
     const clock = prefs.get("clock");
+    this._clockLook = clockLookOf((k) => prefs.get(k));
     this._clock = clock === "tl" || clock === "tr" || clock === "bl" || clock === "br" ? clock : "off";
     const accent = prefs.get("accent");
     this._accent = accent && /^#[0-9a-f]{6}$/i.test(accent) ? accent : null;
@@ -802,6 +806,31 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   /** A follow toggle in the view settings (#87): Home Assistant's theme or the sun; it names the look it shows now. */
+  /** The clock's look (#232): hours, face, seconds, date; saved on this device. */
+  private renderClockLook() {
+    const look = this._clockLook;
+    const set = (key: string, value: string, patch: Partial<ClockLook>) => {
+      prefs.set(key, value);
+      this._clockLook = { ...look, ...patch };
+      this.picked();
+    };
+    const seg = (label: string, buttons: [string, boolean, () => void][]) =>
+      html`<div class="fp3d-seg fp3d-quality" role="group" aria-label=${label} title=${label}>${buttons.map(([text, on, go]) => html`<button aria-pressed=${on} @click=${go}>${text}</button>`)}</div>`;
+    return html`${seg(this.t("clock_hours"), [
+      [this.t("clock_hours_auto"), look.hours === "auto", () => set("clock_hours", "auto", { hours: "auto" })],
+      [this.t("clock_hours_12"), look.hours === "12", () => set("clock_hours", "12", { hours: "12" })],
+      [this.t("clock_hours_24"), look.hours === "24", () => set("clock_hours", "24", { hours: "24" })],
+    ])}
+    ${seg(this.t("clock_face"), [
+      [this.t("clock_digital"), !look.analogue, () => set("clock_style", "digital", { analogue: false })],
+      [this.t("clock_analogue"), look.analogue, () => set("clock_style", "analogue", { analogue: true })],
+    ])}
+    ${seg(this.t("clock"), [
+      [this.t("clock_seconds"), look.seconds, () => set("clock_seconds", look.seconds ? "0" : "1", { seconds: !look.seconds })],
+      [this.t("clock_date"), look.date, () => set("clock_date", look.date ? "0" : "1", { date: !look.date })],
+    ])}`;
+  }
+
   private renderFollow(follow: "theme" | "auto", label: "follow_ha" | "follow_sun") {
     const on = this._theme === follow;
     const now = this.t(`theme_${shownLook(follow, this.hass)}`);
@@ -1004,7 +1033,6 @@ export class Floorplan3dPanel extends LitElement {
               <section class="fp3d-opt-group">
               <h3>${this.t("clock")}</h3>
               <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("clock")} title=${this.t("clock")}>
-                <span class="fp3d-seg-label" aria-hidden="true">🕐</span>
                 ${(["off", "tl", "tr", "bl", "br"] as ClockPos[]).map(
                   (p) =>
                     html`<button aria-pressed=${this._clock === p} title=${this.t(`clock_${p}`)} aria-label=${this.t(`clock_${p}`)} @click=${() => {
@@ -1016,6 +1044,7 @@ export class Floorplan3dPanel extends LitElement {
                     </button>`,
                 )}
               </div>
+              ${this._clock === "off" ? nothing : this.renderClockLook()}
               </section>
               <section class="fp3d-opt-group">
               <h3>${this.t("markers")}</h3>
@@ -1442,6 +1471,7 @@ export class Floorplan3dPanel extends LitElement {
           .heatMode=${this._heat}
           .theme=${this._theme}
           .clock=${this._clock}
+          .clockLook=${this._clockLook}
           .accent=${this.shownAccent()}
           ?furnish=${this._furnish && !tt}
           .selectedFurniture=${this._selFurniture}

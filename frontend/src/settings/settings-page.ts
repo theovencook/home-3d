@@ -528,7 +528,6 @@ export class SettingsPage extends LitElement {
       .label=${aria}
       .hourLabel=${this.tr("time_hour")}
       .minuteLabel=${this.tr("time_minute")}
-      .periodLabel=${this.tr("time_period")}
       ?disabled=${disabled}
       @change=${(e: CustomEvent<{ value: string }>) => set(e.detail.value)}
     ></fp3d-time-field>`;

@@ -1707,8 +1707,6 @@
  "hh_service_hint": "Pl. szűrő, só vagy öblítő: bináris érzékelő (be = esedékes), szám (százalék vagy hátralévő nap) vagy dátum. Ha esedékes, a készülék sárgán világít és megjelenik a „Ma a háztartásban” kártyán.",
  "card_household": "Ma a háztartásban",
  "card_household_hint": "Háztartás: kártya kukákkal, postával, kész készülékekkel, szomjas növényekkel és karbantartással",
- "bin_from": "Világítás kezdete (óra, előző nap)",
- "bin_until": "vége (óra, gyűjtés napján)",
  "bin_out": "Kitéve (segéd)",
  "bin_out_hint": "Opcionális: bekapcsolva, amíg a kuka kint áll (input_boolean, kapcsoló vagy bináris érzékelő). Ilyenkor már nem világít, és a címkéje „kitéve ✓”; a kukára koppintás átkapcsolja a segédet vagy kapcsolót. Egy éjszakai automatizálás visszaállítja.",
  "bin_out_done": "kitéve ✓",

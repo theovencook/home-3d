@@ -267,7 +267,6 @@ export class SettingsPart {
       .value=${picked}
       .locked=${locked}
       .label=${label}
-      .placeholder=${this.t("users_none")}
       .searchLabel=${this.t("multi_search")}
       .emptyText=${this.t("multi_none")}
       .secondaryLabel=${this.t("users_show_service")}

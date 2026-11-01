@@ -1707,8 +1707,6 @@
  "hh_service_hint": "P. ex. filtro, sal ou abrilhantador: um sensor binário (ligado = necessário), um número (% ou dias restantes) ou uma data. Quando necessário, o aparelho acende a amarelo e aparece em «Hoje em casa».",
  "card_household": "Hoje em casa",
  "card_household_hint": "Casa: cartão com contentores, correio, aparelhos prontos, plantas com sede e manutenção",
- "bin_from": "Acender a partir de (hora, na véspera)",
- "bin_until": "até (hora, no dia da recolha)",
  "bin_out": "Posto na rua (auxiliar)",
  "bin_out_hint": "Opcional: ligado enquanto o contentor está lá fora (input_boolean, interruptor ou sensor binário). Deixa então de brilhar e a etiqueta diz «posto na rua ✓»; tocar no contentor alterna o auxiliar ou interruptor. Uma automação noturna repõe-no.",
  "bin_out_done": "posto na rua ✓",

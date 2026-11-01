@@ -281,7 +281,6 @@ export class FieldsPart {
       .label=${label}
       .hourLabel=${this.t("time_hour")}
       .minuteLabel=${this.t("time_minute")}
-      .periodLabel=${this.t("time_period")}
       ?disabled=${disabled}
       @change=${(e: CustomEvent<{ value: string }>) => onChange(e.detail.value)}
     ></fp3d-time-field>`;
