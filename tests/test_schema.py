@@ -96,6 +96,16 @@ def test_easter_eggs_are_one_house_wide_switch_on_by_default() -> None:
         SETTINGS_SCHEMA({**base, "easter_eggs": "sometimes"})
 
 
+def test_seasons_switch_off_single_holidays() -> None:
+    """Seasonal themes (#239): a holiday switched off is False under its id; none by default, only booleans."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    assert "seasons" not in SETTINGS_SCHEMA(base)
+    assert SETTINGS_SCHEMA({**base, "seasons": {"christmas": False}})["seasons"] == {"christmas": False}
+    assert SETTINGS_SCHEMA({**base, "seasons": None})["seasons"] is None
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "seasons": {"christmas": "maybe"}})
+
+
 def test_furniture_block() -> None:
     """Furniture blocks: items with the same group id move together; none by default."""
     item = {"id": "f1", "type": "kitchen", "x": 0, "z": 0, "rotation": 0, "w": 0.6, "d": 0.6, "h": 0.9, "variant": None}

@@ -176,6 +176,21 @@ test("the easter eggs switch is house-wide and on by default; off hides the ghos
   assert.equal(shown(settingById("halloween.ghost")!, e), true);
 });
 
+test("each holiday has its own switch, on by default, stored as false when off (#239)", () => {
+  const e = env();
+  const id = "seasons.christmas";
+  assert.equal(settingById(id)!.read(e), true);
+  const off = settingById(id)!.write!(e, false) as Building;
+  assert.deepEqual(off.settings.seasons, { christmas: false });
+  assert.equal(settingById(id)!.read({ ...e, building: off }), false);
+  assert.equal(settingById("seasons.easter")!.read({ ...e, building: off }), true, "the others stay on");
+  const on = settingById(id)!.write!({ ...e, building: off }, true) as Building;
+  assert.deepEqual(on.settings.seasons, {});
+  assert.equal(shown(settingById(id)!, { ...e, building: off }), true);
+  const noEggs = settingById("easter_eggs")!.write!(e, false) as Building;
+  assert.equal(shown(settingById(id)!, { ...e, building: noEggs }), false);
+});
+
 test("settings shown only when they apply: the doorbell's entity only with the doorbell on", () => {
   const e = env();
   const bell = settingById("director.doorbell_entity")!;

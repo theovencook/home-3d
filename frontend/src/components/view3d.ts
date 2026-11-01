@@ -154,6 +154,7 @@ import { load2d } from "../load2d.ts";
 import { pinIn2d } from "../plan2d/pins.ts";
 import type { ViewerSurface } from "../viewer-surface.ts";
 import { loadFun } from "../load-fun.ts";
+import { seasonNow } from "../seasons.ts";
 import { detectionKind, scaleGlow, buildMarkers, cameraMotionSensors, cameraRedUntil, openMoreInfo, setCameraSensors, stateText, toggleEntity } from "../markers.ts";
 import { RACK_STATUS_COLOURS, rackLedStates, slotEntities, slotStatus } from "../rack-links.ts";
 import { fetchRackSpark, RACK_HOTTEST, RACK_ONLINE, rackCardValues, rackSpark, type RackCardValue } from "../rack-card.ts";
@@ -689,6 +690,10 @@ export class Fp3dView3d extends LitElement {
   /** Fun pack "Halloween": the ghost floating through the house now and then. */
   private ghost: { update(b: Building): void; dispose(): void } | null = null;
   private ghostLoading = false;
+  /** Seasonal themes (#239): the holiday's glow, greeting and effect over the view (the fun bundle). */
+  private season: { refresh(): void; dispose(): void } | null = null;
+  private seasonLoading = false;
+  private seasonTimer: ReturnType<typeof setTimeout> | undefined;
   private walkKeys: ((e: KeyboardEvent) => void) | null = null;
   /** The outline of the room one walks in (its glass cards show). */
   private walkRoomPts: [number, number][] | null = null;
@@ -935,6 +940,9 @@ export class Fp3dView3d extends LitElement {
     this.petsFor = null;
     this.ghost?.dispose();
     this.ghost = null;
+    this.season?.dispose();
+    this.season = null;
+    clearTimeout(this.seasonTimer);
     this.unlistenReplay?.();
     this.unlistenReplay = null;
     this.unwatchAsk();
@@ -1086,6 +1094,7 @@ export class Fp3dView3d extends LitElement {
       this.syncDevices(true);
       void this.syncPets();
       void this.syncGhost();
+      void this.syncSeason();
       this.viewer.setFloor(this.floorId, false);
       if (this.roomId) this.viewer.selectRoom(this.roomId);
     } catch (err) {
@@ -1202,6 +1211,7 @@ export class Fp3dView3d extends LitElement {
       }
       if (changed.has("building") || changed.has("packs") || changed.has("petsOn")) void this.syncPets();
       if (changed.has("building") || changed.has("packs") || changed.has("ghostOn")) void this.syncGhost();
+      if (changed.has("building") || changed.has("ghostOn")) void this.syncSeason();
       if (changed.has("startView") && changed.get("startView") !== undefined) {
         v.setStartView(this.startViewOf());
         if (this.floorId === null) v.resetView();
@@ -4673,6 +4683,48 @@ export class Fp3dView3d extends LitElement {
       console.error("Home 3D: the ghost failed to load", err);
     } finally {
       this.ghostLoading = false;
+    }
+  }
+
+  /**
+   * Seasonal themes (#239): on a UK holiday the view gets a glow, a greeting and a light effect (a lazy bundle, only
+   * loaded on such a day). The house-wide easter eggs switch and the holiday's own switch (Fun) turn it off; a card
+   * that leaves the ghost out leaves this out too. Wakes again after midnight on a screen that stays open.
+   */
+  private async syncSeason(): Promise<void> {
+    clearTimeout(this.seasonTimer);
+    const b = this.building;
+    const on = !!b && !!this.viewer && b.settings.easter_eggs !== false && this.ghostOn !== false && !!seasonNow(b.settings.seasons);
+    if (!on) {
+      this.season?.dispose();
+      this.season = null;
+      // not a holiday today: look again after midnight
+      if (b && this.viewer && b.settings.easter_eggs !== false) {
+        const d = new Date();
+        this.seasonTimer = setTimeout(() => void this.syncSeason(), new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 5).getTime() - d.getTime());
+      }
+      return;
+    }
+    if (this.season) {
+      this.season.refresh();
+      return;
+    }
+    if (this.seasonLoading) return;
+    this.seasonLoading = true;
+    try {
+      const fun = await loadFun();
+      const stage = this.renderRoot.querySelector<HTMLElement>(".fp3d-stage");
+      if (!this.viewer || this.season || !stage) return;
+      this.season = fun.startSeason({
+        host: stage,
+        now: () => (this.building?.settings.easter_eggs === false || this.ghostOn === false ? null : seasonNow(this.building?.settings.seasons)),
+        text: (key, vars) => translate(this.hass, key as I18nKey, vars),
+        low: () => this._low,
+      });
+    } catch (err) {
+      console.error("Home 3D: the seasonal theme failed to load", err);
+    } finally {
+      this.seasonLoading = false;
     }
   }
 

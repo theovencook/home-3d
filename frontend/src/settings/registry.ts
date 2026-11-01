@@ -16,6 +16,7 @@ import { fetchPackUpdates, getVoiceSettings, setPackUpdateSettings, setVoiceSent
 import type { PackUpdateSettings, PackUpdateStatus } from "../pack-updates.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
 import { released } from "../features.ts";
+import { SEASON_IDS } from "../season-ids.ts";
 import { EFFECT_DEFAULTS } from "../room-effects.ts";
 import { formatImperial, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 
@@ -212,6 +213,7 @@ export const SECTIONS: Section[] = [
     cards: [
       { id: "eggs", title: "st_card_eggs" },
       { id: "pets", title: "st_card_pets" },
+      { id: "seasons", title: "st_card_seasons" },
     ],
   },
   {
@@ -699,6 +701,29 @@ export function easterEggsOn(settings: Pick<BuildingSettings, "easter_eggs"> | n
   return settings?.easter_eggs !== false;
 }
 
+/** One switch per holiday (#239): off is stored as false under its id, on removes it. */
+const SEASON_SETTINGS: Setting<boolean>[] = SEASON_IDS.map((id) => ({
+  id: `seasons.${id}`,
+  section: "fun",
+  card: "seasons",
+  scope: "house",
+  permission: "editor",
+  label: `season_name_${id}` as TextKey,
+  keywords: ["holiday", "season", "christmas", "easter", "theme", id.replace(/_/g, " ")],
+  control: { kind: "switch" },
+  default: true,
+  visible: (env) => released("fun_seasons") && easterEggsOn(env.building?.settings),
+  read: (env) => env.building?.settings.seasons?.[id] !== false,
+  write: (env, v) => {
+    const next = structuredClone(env.building!);
+    const seasons = { ...(next.settings.seasons ?? {}) };
+    if (v) delete seasons[id];
+    else seasons[id] = false;
+    next.settings.seasons = seasons;
+    return next;
+  },
+}));
+
 const FUN: Setting[] = [
   houseSwitch("easter_eggs", "fun", "eggs", "easter_eggs", true, "st_easter_eggs", "st_easter_eggs_hint", ["surprise", "halloween", "ghost", "fun", "egg"]),
   {
@@ -716,6 +741,7 @@ const FUN: Setting[] = [
     read: (env) => env.building?.settings.halloween?.ghost !== false,
     write: (env, v) => withPart(env.building!, "halloween", { ghost: v }),
   } as Setting<boolean>,
+  ...(SEASON_SETTINGS as Setting[]),
   {
     id: "pets.on",
     section: "fun",

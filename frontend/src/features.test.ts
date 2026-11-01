@@ -4,7 +4,7 @@ import { released, UNRELEASED } from "./features.ts";
 
 test("no feature gate: everything whose code is here is released, only the pool stays behind the lab switch", () => {
   assert.deepEqual([...UNRELEASED], ["pool"]);
-  for (const f of ["diagnostics", "locate", "fun_pets", "fun_halloween"] as const) assert.equal(released(f), true, f);
+  for (const f of ["diagnostics", "locate", "fun_pets", "fun_halloween", "fun_seasons"] as const) assert.equal(released(f), true, f);
   assert.equal(released("pool"), false);
 });
 

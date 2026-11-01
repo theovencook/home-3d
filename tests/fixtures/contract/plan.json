@@ -776,6 +776,9 @@
     "halloween": {
       "ghost": true
     },
+    "seasons": {
+      "twixmas": false
+    },
     "terrain": {
       "level": -10,
       "earth": true
