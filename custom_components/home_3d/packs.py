@@ -686,6 +686,7 @@ KNOWN_FEATURES = [
     # fun extras (pets, seasonal decorations)
     "fun_pets",
     "fun_halloween",
+    "fun_seasons",
 ]
 
 # An old pack's payload. Top-level keys this version does not read (the fields of the old signed shop packs) are

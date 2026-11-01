@@ -21,7 +21,21 @@ export function errorText(err: unknown): string {
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-/** Shows `text` for a few seconds (a second one replaces the first). */
+/** Longest message shown at once; a tap on a longer one shows it whole (#243). */
+export const FAILURE_CHARS = 160;
+
+/** The message as shown first: cut at a word near FAILURE_CHARS, with "…" (the whole text is in its tooltip). */
+export function shortFailure(text: string): string {
+  if (text.length <= FAILURE_CHARS) return text;
+  const cut = text.slice(0, FAILURE_CHARS);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > FAILURE_CHARS * 0.6 ? cut.slice(0, space) : cut).trimEnd()} …`;
+}
+
+/**
+ * Shows `text` for a few seconds (a second one replaces the first). It sits at the top, clear of Home Assistant's own
+ * toasts at the bottom centre (#243: the two were drawn over each other); a long one is cut short, a tap shows it whole.
+ */
 export function showFailure(text: string): void {
   if (g.__fp3dFailureSink) return g.__fp3dFailureSink(text);
   if (typeof document === "undefined") return;
@@ -34,23 +48,31 @@ export function showFailure(text: string): void {
     el.className = "fp3d-failure";
     el.setAttribute("role", "alert");
     el.style.cssText =
-      "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483000;max-width:min(92vw,520px);padding:12px 16px;border-radius:12px;" +
+      "position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top, 0px));transform:translateX(-50%);cursor:pointer;z-index:2147483000;max-width:min(92vw,520px);padding:12px 16px;border-radius:12px;" +
       "background:#8a1f1f;color:#fff;font:14px/1.35 system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.45);";
     root.appendChild(el);
   }
-  el.textContent = text;
+  const box = el;
+  box.textContent = shortFailure(text);
+  box.title = text;
+  box.onclick = () => {
+    box.textContent = text;
+    clearTimeout(timer);
+    timer = setTimeout(() => box.remove(), 12000);
+  };
   clearTimeout(timer);
-  timer = setTimeout(() => el.remove(), 6000);
+  timer = setTimeout(() => box.remove(), 6000);
 }
 
 /**
  * Calls a Home Assistant service and shows `message({error})` when it is refused or never arrives. Never throws: a
- * press that does nothing used to look exactly like one that worked.
+ * press that does nothing used to look exactly like one that worked. Home Assistant is asked not to show its own toast
+ * as well (#243: one failed press, one message).
  */
 export function callServiceSafe(hass: HomeAssistant, domain: string, service: string, data: Record<string, unknown>, message: (error: string) => string): void {
   const fail = (err: unknown) => showFailure(message(errorText(err)));
   try {
-    void Promise.resolve(hass.callService(domain, service, data)).catch(fail);
+    void Promise.resolve(hass.callService(domain, service, data, undefined, false)).catch(fail);
   } catch (err) {
     fail(err);
   }

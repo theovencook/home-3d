@@ -1,4 +1,5 @@
 import { css, unsafeCSS } from "lit";
+import { colourResetCss } from "./colour-reset.ts";
 import { DARK, HIGH, LIGHT, schemeVars, type Scheme } from "./scheme.ts";
 
 /**
@@ -86,6 +87,28 @@ export const controls = css`
   .fp3d-btn:hover {
     border-color: var(--fp3d-accent);
   }
+  /* a link or a file label drawn as a button centres its text like a real button does (#236) */
+  a.fp3d-btn,
+  label.fp3d-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    text-decoration: none;
+    line-height: 1.2;
+  }
+  /* buttons under a hint line or a form get room above them (#236) */
+  .fp3d-sub + .fp3d-actions,
+  .fp3d-sub + .fp3d-ext-actions {
+    margin-top: 12px;
+  }
+  .fp3d-form + .fp3d-actions {
+    margin-top: 12px;
+  }
+  .fp3d-help .fp3d-btn,
+  .fp3d-ext-actions .fp3d-btn {
+    padding: 8px 16px;
+  }
   .fp3d-btn.fp3d-danger {
     color: var(--fp3d-danger);
   }
@@ -146,8 +169,22 @@ export const controls = css`
   }
   .fp3d-colour-pick {
     display: grid;
-    grid-template-columns: 44px 1fr;
+    grid-template-columns: auto 1fr;
     gap: 6px;
+  }
+  .fp3d-colour-swatch {
+    display: grid;
+    grid-template-columns: 44px auto;
+    align-items: center;
+  }
+  /* a picker with its reset (#230) on a line of its own: the swatch takes the width */
+  .fp3d-colour-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .fp3d-colour-row input[type="color"] {
+    flex: 1;
   }
   /* its material (#40) on a line of its own under the colour */
   .fp3d-colour-pick .fp3d-material {
@@ -229,4 +266,5 @@ export const controls = css`
       height: 44px;
     }
   }
+  ${colourResetCss}
 `;

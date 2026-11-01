@@ -1,0 +1,27 @@
+// Parts of the editor that its first paint does not need are one chunk of their own (#245, build.mjs splits the editor
+// bundle, lazy-part.ts): the furniture library, the rack sheet, the Extensions page and the settings pickers (time of
+// day, the searchable user list). One chunk, not one each: every chunk adds shared chunks the editor's first open has
+// to fetch, and on a slow link each extra file is another wait. The editor draws a tag at once and starts loading the
+// chunk; once the editor has drawn and the page is idle it loads anyway, so a panel that needs a part rarely waits.
+
+import { once } from "../../lazy-part.ts";
+
+export { need } from "../../lazy-part.ts";
+const loadParts = once(() => import("./lazy-parts.ts"));
+export const loadLibrary = loadParts;
+export const loadRackSheet = loadParts;
+export const loadMultiSelect = loadParts;
+export const loadTimeField = loadParts;
+/** The Extensions page (fp3d-extensions), drawn by the panel once the editor bundle and this chunk are there. */
+export const loadExtensions = loadParts;
+
+let preloaded = false;
+
+/** Loads the lazy parts once the page is idle after the editor's first paint (Safari has no requestIdleCallback). */
+export function preloadParts(): void {
+  if (preloaded) return;
+  preloaded = true;
+  const all = () => void loadParts().catch(() => (preloaded = false));
+  if (typeof requestIdleCallback === "function") requestIdleCallback(all, { timeout: 3000 });
+  else setTimeout(all, 1000);
+}

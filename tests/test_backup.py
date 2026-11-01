@@ -77,6 +77,33 @@ async def test_backup_round_trip(hass: HomeAssistant, hass_ws_client) -> None:
     assert not result["success"] and result["error"]["code"] == "invalid_format"
 
 
+async def test_a_room_panel_layout_is_saved_and_kept_in_backups(hass: HomeAssistant, hass_ws_client) -> None:
+    """What an editor chose for a room's panel (#229) is part of the plan: saved, exported and restored with it."""
+    await async_setup_component(hass, "http", {})
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    client = await hass_ws_client(hass)
+
+    layout = {"pinned": ["light.sample_lounge"], "order": ["switch.sample_fan"], "groups": ["switches", "lights"]}
+    building = json.loads(json.dumps(BUILDING))
+    building["floors"][0]["rooms"][0] |= {"panel_layout": layout, "hidden": ["sensor.sample_battery"]}
+    await client.send_json_auto_id({"type": "home_3d/building/save", "building": building})
+    assert (await client.receive_json())["success"]
+
+    await client.send_json_auto_id({"type": "home_3d/backup/export"})
+    backup = (await client.receive_json())["result"]
+    room = backup["building"]["floors"][0]["rooms"][0]
+    assert room["panel_layout"] == layout and room["hidden"] == ["sensor.sample_battery"]
+
+    room["panel_layout"] = {"pinned": ["light.sample_hall"]}
+    await client.send_json_auto_id({"type": "home_3d/backup/import", "building": backup["building"], "packs": []})
+    result = await client.receive_json()
+    assert result["success"], result
+    assert result["result"]["building"]["floors"][0]["rooms"][0]["panel_layout"] == {"pinned": ["light.sample_hall"]}
+
+
 # ---------------------------------------------------------------------------- non-destructive import (#153)
 
 

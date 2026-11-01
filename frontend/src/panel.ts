@@ -5,12 +5,12 @@ import { formatImperial, lengthUnit, parseLength, unitLabel } from "./units.ts";
 import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { closesViewMenuAfterPick, PHONE_MEDIA, PHONE_NARROW_MEDIA } from "./phone.ts";
 import { BuildingController, type PlanChange } from "./building-controller.ts";
-import { loadEditor } from "./load-editor.ts";
+import { loadEditor, loadExtensionsPage } from "./load-editor.ts";
 import { loadSettings } from "./load-settings.ts";
 import { loadLocate } from "./load-locate.ts";
-import "./components/room-panel.ts";
 import { loadView, readyView } from "./load-view.ts";
-import "./components/home-switcher.ts";
+import { loadHomeSwitcher, loadRoomPanel } from "./load-parts.ts";
+import { need } from "./lazy-part.ts";
 import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
 import type { Building, StartView } from "./model.ts";
 import { controls, tokens } from "./styles.ts";
@@ -30,15 +30,18 @@ import { mountLocateLab } from "./locate-lab.ts";
 import { directorOnHere } from "./director.ts";
 import { loadVoice, micProbeDone, screenName, voiceOnHere } from "./load-voice.ts";
 import type { ClockPos } from "./card-config.ts";
+import { clockLookOf, type ClockLook } from "./clock.ts";
 import { TimeTravel } from "./load-timetravel.ts";
 import { IdleClock, tabletIdleSeconds, tabletMode } from "./kiosk.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
+import { uiIcon } from "./ui-icons.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 import { UndoHistory } from "./undo-history.ts";
 import { showsDemo, withDemo } from "./demo.ts";
 import { forwardHass, HASS_CHILDREN, HassWatch } from "./hass-watch.ts";
 import { loadSampleHome } from "./api.ts";
 import { tell } from "./ask.ts";
+import { ACCENT_DEFAULT, colourReset } from "./colour-reset.ts";
 import { announce, lookAnnouncement, viewChange, type ViewSpot } from "./announce.ts";
 
 /** The corners of the clock, as arrows in the view menu (the full name is the button's title). */
@@ -96,6 +99,7 @@ export class Floorplan3dPanel extends LitElement {
     _heat: { state: true },
     _theme: { state: true },
     _clock: { state: true },
+    _clockLook: { state: true },
     _furnish: { state: true },
     _selFurniture: { state: true },
     _selDevice: { state: true },
@@ -164,6 +168,7 @@ export class Floorplan3dPanel extends LitElement {
   private declare _heat: HeatMode;
   private declare _theme: Look;
   private declare _clock: ClockPos;
+  private declare _clockLook: ClockLook;
   private declare _furnish: boolean;
   private declare _selFurniture: string | null;
   private declare _selDevice: string | null;
@@ -271,6 +276,7 @@ export class Floorplan3dPanel extends LitElement {
     this._heat = heat === "temperature" || heat === "humidity" || heat === "co2" || heat === "values" ? heat : "none";
     this._theme = lookOf(prefs.get("theme"));
     const clock = prefs.get("clock");
+    this._clockLook = clockLookOf((k) => prefs.get(k));
     this._clock = clock === "tl" || clock === "tr" || clock === "bl" || clock === "br" ? clock : "off";
     const accent = prefs.get("accent");
     this._accent = accent && /^#[0-9a-f]{6}$/i.test(accent) ? accent : null;
@@ -521,6 +527,7 @@ export class Floorplan3dPanel extends LitElement {
     const { action } = e.detail;
     if (action === "extensions") this.setMode("extensions");
     else if (action === "editor") this.setMode("editor");
+    else if (action === "kerb") this.openBinKerb();
     else if (action === "mic_probe") void loadVoice().then(() => (this._micProbe = true)).catch(() => undefined);
     else if (action === "locate" && this.hass && this.data.building) {
       const b = this.data.building;
@@ -531,6 +538,23 @@ export class Floorplan3dPanel extends LitElement {
         }),
       );
     }
+  }
+
+  /**
+   * The Settings page's way to a bin's kerb spot (#226): the editor with the first bin selected, where "Set kerb spot"
+   * is at the top of its panel. Without a bin it is the editor alone (add one from the Household items).
+   */
+  private openBinKerb(): void {
+    const bin = this.data.building?.floors.flatMap((f) => f.furniture).find((m) => m.type === "waste_bin");
+    this.setMode("editor");
+    if (!bin) return;
+    void loadEditor().then(async () => {
+      this._editorReady = true;
+      await this.updateComplete;
+      const ed = this.renderRoot.querySelector<HTMLElement & { goToFurniture(id: string): boolean; updateComplete: Promise<unknown> }>("fp3d-editor");
+      await ed?.updateComplete;
+      ed?.goToFurniture(bin.id);
+    }, () => undefined);
   }
 
   /** A change from the 3D view's settings or a module (#149): saved by the controller, which makes it again on a newer
@@ -797,11 +821,46 @@ export class Floorplan3dPanel extends LitElement {
     this.editPlan({ ...b, settings: { ...b.settings, start_view: view ?? null } });
   }
 
+  /**
+   * "Sun and lights …" (#87, #231): the 3D view's ⚙ sheet. When the view is not there to open it (its code has not
+   * arrived, or it is not drawn), the button must still do something you can see: the Settings page at its sun card.
+   */
+  private openSunAndLights(): void {
+    const view = this.view3d();
+    if (view) view.openSettings();
+    else this.openSettings("scene", "sun");
+  }
+
   private view3d() {
     return readyView(this.renderRoot) as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; openSettings(): void }) | null;
   }
 
   /** A follow toggle in the view settings (#87): Home Assistant's theme or the sun; it names the look it shows now. */
+  /** The clock's look (#232): hours, face, seconds, date; saved on this device. */
+  private renderClockLook() {
+    const look = this._clockLook;
+    const set = (key: string, value: string, patch: Partial<ClockLook>) => {
+      prefs.set(key, value);
+      this._clockLook = { ...look, ...patch };
+      this.picked();
+    };
+    const seg = (label: string, buttons: [string, boolean, () => void][]) =>
+      html`<div class="fp3d-seg fp3d-quality" role="group" aria-label=${label} title=${label}>${buttons.map(([text, on, go]) => html`<button aria-pressed=${on} @click=${go}>${text}</button>`)}</div>`;
+    return html`${seg(this.t("clock_hours"), [
+      [this.t("clock_hours_auto"), look.hours === "auto", () => set("clock_hours", "auto", { hours: "auto" })],
+      [this.t("clock_hours_12"), look.hours === "12", () => set("clock_hours", "12", { hours: "12" })],
+      [this.t("clock_hours_24"), look.hours === "24", () => set("clock_hours", "24", { hours: "24" })],
+    ])}
+    ${seg(this.t("clock_face"), [
+      [this.t("clock_digital"), !look.analogue, () => set("clock_style", "digital", { analogue: false })],
+      [this.t("clock_analogue"), look.analogue, () => set("clock_style", "analogue", { analogue: true })],
+    ])}
+    ${seg(this.t("clock"), [
+      [this.t("clock_seconds"), look.seconds, () => set("clock_seconds", look.seconds ? "0" : "1", { seconds: !look.seconds })],
+      [this.t("clock_date"), look.date, () => set("clock_date", look.date ? "0" : "1", { date: !look.date })],
+    ])}`;
+  }
+
   private renderFollow(follow: "theme" | "auto", label: "follow_ha" | "follow_sun") {
     const on = this._theme === follow;
     const now = this.t(`theme_${shownLook(follow, this.hass)}`);
@@ -908,6 +967,7 @@ export class Floorplan3dPanel extends LitElement {
     if (this.hass && !languageReady(this.hass.language)) return nothing;
     const b = this.data.building;
     const saveState = this.data.saveState;
+    if (this.canEdit && this.hass) need(loadHomeSwitcher);
     return html`
       <div class="fp3d-app ${this._clean && this._mode === "view" ? "fp3d-clean" : ""}" style=${this.accentStyle()}>
         ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.rawHass} .building=${b} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
@@ -968,26 +1028,22 @@ export class Floorplan3dPanel extends LitElement {
                 <label class="fp3d-accent-pick" title=${this.t("accent_hint")}>
                   <input
                     type="color"
-                    .value=${this._accent ?? "#37e0ff"}
+                    .value=${this._accent ?? ACCENT_DEFAULT}
                     aria-label=${this.t("accent")}
                     @input=${(e: Event) => {
                       this._accent = (e.target as HTMLInputElement).value;
                       prefs.set("accent", this._accent);
                     }}
                   />
-                  ${this._accent
-                    ? html`<button
-                        class="fp3d-accent-reset"
-                        title=${this.t("accent_reset")}
-                        aria-label=${this.t("accent_reset")}
-                        @click=${() => {
-                          this._accent = null;
-                          prefs.set("accent", "");
-                        }}
-                      >
-                        ↺
-                      </button>`
-                    : nothing}
+                  ${colourReset({
+                    value: this._accent,
+                    fallback: ACCENT_DEFAULT,
+                    label: this.t("accent_reset"),
+                    onReset: () => {
+                      this._accent = null;
+                      prefs.set("accent", "");
+                    },
+                  })}
                 </label>
               </div>
               ${this.renderFollow("theme", "follow_ha")}
@@ -998,13 +1054,12 @@ export class Floorplan3dPanel extends LitElement {
               <button class="fp3d-chip fp3d-opt-more" @click=${() => {
                 // the sheet opens over the page: the popover that led to it closes (#214)
                 this._optsOpen = false;
-                this.view3d()?.openSettings();
+                this.openSunAndLights();
               }}>${this.t("sun_and_lights")}</button>
               </section>
               <section class="fp3d-opt-group">
               <h3>${this.t("clock")}</h3>
               <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("clock")} title=${this.t("clock")}>
-                <span class="fp3d-seg-label" aria-hidden="true">🕐</span>
                 ${(["off", "tl", "tr", "bl", "br"] as ClockPos[]).map(
                   (p) =>
                     html`<button aria-pressed=${this._clock === p} title=${this.t(`clock_${p}`)} aria-label=${this.t(`clock_${p}`)} @click=${() => {
@@ -1016,6 +1071,7 @@ export class Floorplan3dPanel extends LitElement {
                     </button>`,
                 )}
               </div>
+              ${this._clock === "off" ? nothing : this.renderClockLook()}
               </section>
               <section class="fp3d-opt-group">
               <h3>${this.t("markers")}</h3>
@@ -1069,7 +1125,7 @@ export class Floorplan3dPanel extends LitElement {
                         prefs.set("controls", right ? "right" : "left");
                       }}
                     >
-                      ${right ? "◨" : "◧"}
+                      ${uiIcon(right ? "panel-right" : "panel-left")}
                     </button>`,
                 )}
                 ${this.canEdit
@@ -1235,6 +1291,14 @@ export class Floorplan3dPanel extends LitElement {
     void this.data.loadLibrary();
     const pending = this.editorPending();
     if (pending) return pending;
+    // a chunk of the editor bundle (#245): the page shows once its code is there
+    if (!customElements.get("fp3d-extensions")) {
+      loadExtensionsPage().then(
+        () => this.requestUpdate(),
+        (err: unknown) => console.error("Home 3D: the Extensions page failed to load", err),
+      );
+      return html`<div class="fp3d-empty"><p>${this.t("loading")}</p></div>`;
+    }
     return html`<fp3d-extensions
       class="fp3d-body"
       .hass=${this.rawHass}
@@ -1333,7 +1397,8 @@ export class Floorplan3dPanel extends LitElement {
       </div>`;
     }
     const floor = b.floors.find((f) => f.id === this._floorId);
-    const roomFloors = floor ? [floor] : b.floors;
+    // "All floors" shows the floor chips only; the rooms come once one floor is picked (#222)
+    const roomFloors = floor ? [floor] : b.floors.length > 1 ? [] : b.floors;
     const tt = this.tt.active;
     // a sample / demo home: devices this Home Assistant lacks show fixed demo states (#100)
     const hass = this.viewHass(this.rawHass!, b);
@@ -1344,7 +1409,8 @@ export class Floorplan3dPanel extends LitElement {
       <button aria-pressed=${this._plan2d} @click=${() => this.setPlan2d(true)}>${this.t("view_2d")}</button>
     </div>`;
     return html`
-      ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : html`<nav class="fp3d-nav ${this._navWrap ? "fp3d-nav-wrap" : ""}" @wheel=${this.onNavWheel}>
+      ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : html`<nav class="fp3d-nav">
+        <div class="fp3d-nav-chips ${this._navWrap ? "fp3d-nav-wrap" : ""}" @wheel=${this.onNavWheel}>
         ${b.floors.length > 1
           ? html`<button class="fp3d-chip" aria-pressed=${this._floorId === null} @click=${() => {
                 this._floorId = null;
@@ -1364,12 +1430,10 @@ export class Floorplan3dPanel extends LitElement {
                   ${f.name}
                 </button>`,
               )}
-              <span class="fp3d-sep"></span>`
+              ${roomFloors.length && !this._tablet ? html`<span class="fp3d-sep"></span>` : nothing}`
           : nothing}
         ${(this._tablet ? [] : roomFloors).flatMap((f) => [
-          // in the house view the rooms of every floor follow a small floor label; a room without a name has
-          // no button (an empty chip would only take space, #370)
-          roomFloors.length > 1 && zonesOf(f).some((r) => r.name.trim()) ? html`<span class="fp3d-nav-floor">${f.name}</span>` : nothing,
+          // a room without a name has no button (an empty chip would only take space, #370)
           // the rooms, then the outdoor areas acting as rooms (garden, terrace – #100)
           // several areas of one garden (front and back lawn with the same area and name) share one chip
           ...zonesOf(f)
@@ -1387,6 +1451,7 @@ export class Floorplan3dPanel extends LitElement {
             </button>`,
           ),
         ])}
+        </div>
         ${this._tablet ? nothing : html`<button
           class="fp3d-chip fp3d-nav-toggle"
           title=${this.t(this._navWrap ? "nav_row" : "nav_wrap")}
@@ -1442,6 +1507,7 @@ export class Floorplan3dPanel extends LitElement {
           .heatMode=${this._heat}
           .theme=${this._theme}
           .clock=${this._clock}
+          .clockLook=${this._clockLook}
           .accent=${this.shownAccent()}
           ?furnish=${this._furnish && !tt}
           .selectedFurniture=${this._selFurniture}
@@ -1461,12 +1527,14 @@ export class Floorplan3dPanel extends LitElement {
           @plan-change=${this.onPlanChange}
         ></fp3d-view3d>
         ${this._roomId
-          ? html`<fp3d-room-panel
+          ? (need(loadRoomPanel), html`<fp3d-room-panel
               class="fp3d-room-panel"
               @camera-look=${(e: CustomEvent<{ entity: string }>) => this.view3d()?.lookThrough(e.detail.entity)}
               .hass=${hass}
               ?readOnly=${tt}
               ?noLook=${this._plan2d}
+              ?canEdit=${this.canEdit && !this._tablet}
+              @plan-change=${this.onPlanChange}
               .room=${b.floors.flatMap((f) => zonesOf(f)).find((r) => r.id === this._roomId) ?? null}
               .floor=${b.floors.find((f) => zonesOf(f).some((r) => r.id === this._roomId)) ?? null}
               .building=${b}
@@ -1474,7 +1542,7 @@ export class Floorplan3dPanel extends LitElement {
               .sheets=${this._roomId ? (this.view3d()?.roomSheets(this._roomId) ?? null) : null}
               @sheet-open=${(e: CustomEvent<{ id: string }>) => this._roomId && this.view3d()?.openRoomSheet(this._roomId, e.detail.id)}
               @close=${() => (this._roomId = null)}
-            ></fp3d-room-panel>`
+            ></fp3d-room-panel>`)
           : nothing}
         ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session}></fp3d-time-bar>` : nothing}
         ${showsDemo(hass) ? html`<div class="fp3d-demo-chip" title=${this.t("demo_hint")}>${this.t("demo_chip")}</div>` : nothing}
@@ -1917,25 +1985,25 @@ export class Floorplan3dPanel extends LitElement {
         border: none;
         border-radius: 50%;
       }
-      .fp3d-accent-reset {
-        border: none;
-        background: none;
-        color: var(--fp3d-muted);
-        cursor: pointer;
-        font-size: 14px;
-        padding: 0 2px;
-      }
       .fp3d-nav {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        padding: 10px 14px;
+        flex: none;
+      }
+      /* the chips scroll in their own box; the scroll / expand button beside it has its own room (#224) */
+      .fp3d-nav-chips {
         display: flex;
         align-items: center;
         gap: 6px;
-        padding: 10px 14px;
+        flex: 1 1 auto;
+        min-width: 0;
         overflow-x: auto;
         scrollbar-width: none;
-        flex: none;
       }
       /* a desktop shows a thin scrollbar while the pointer rests on the bar */
-      .fp3d-nav:hover {
+      .fp3d-nav-chips:hover {
         scrollbar-width: thin;
       }
       /* wrapped: several lines, at most about three before the bar itself scrolls */
@@ -1945,20 +2013,8 @@ export class Floorplan3dPanel extends LitElement {
         overflow-y: auto;
         max-height: 132px;
       }
-      .fp3d-nav-floor {
-        flex: none;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--fp3d-muted);
-        margin-left: 6px;
-      }
       .fp3d-nav-toggle {
         flex: none;
-        margin-left: auto;
-        position: sticky;
-        right: 0;
         min-width: 34px;
         padding-left: 8px;
         padding-right: 8px;

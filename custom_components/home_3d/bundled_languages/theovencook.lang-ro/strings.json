@@ -1707,8 +1707,6 @@
  "hh_service_hint": "De ex. filtru, sare sau agent de clătire: un senzor binar (pornit = necesar), un număr (procent sau zile rămase) sau o dată. Când e necesar, aparatul luminează galben și apare în „Azi în casă”.",
  "card_household": "Azi în casă",
  "card_household_hint": "Gospodărie: card cu pubele, poștă, aparate gata, plante însetate și întreținere",
- "bin_from": "Lumină de la (ora, cu o zi înainte)",
- "bin_until": "până la (ora, în ziua colectării)",
  "bin_out": "Scoasă (ajutor)",
  "bin_out_hint": "Opțional: pornit cât timp pubela stă afară (input_boolean, comutator sau senzor binar). Atunci nu mai luminează și eticheta ei spune „scoasă ✓”; o atingere pe pubelă comută ajutorul sau comutatorul. O automatizare de noapte îl resetează.",
  "bin_out_done": "scoasă ✓",

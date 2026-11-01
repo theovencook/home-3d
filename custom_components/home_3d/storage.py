@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 import copy
+import json
 import logging
 import time
 from typing import Any
@@ -301,6 +302,8 @@ class Home:
         self._lock = asyncio.Lock()
         self._images: dict[str, str] = {}
         self._history: list[dict[str, Any]] = []
+        # a restore point never changes: its size in bytes is worked out once (#240)
+        self._sizes: dict[str, int] = {}
         # what is wrong with the stored plan (#165, see check_plan): None when nothing is
         self.problem: dict[str, Any] | None = None
         # deleted (#167): a save or restore that waited for the lock while the home was deleted writes nothing
@@ -529,18 +532,26 @@ class Home:
             return []
 
     def history(self) -> list[dict[str, Any]]:
-        """Restore points, newest first, without their buildings; `missing_pictures`: how many of the pictures a
-        restore point names are gone (#154), so it restores without them."""
+        """Restore points, newest first, without their buildings; `size`: the bytes of the saved plan (#240; the
+        pictures are kept apart and shared); `missing_pictures`: how many of the pictures a restore point names are
+        gone (#154), so it restores without them."""
         return [
             {
                 "id": h["id"],
                 "revision": h["revision"],
                 "saved_at": h["saved_at"],
                 **_summary(h["building"]),
+                "size": self._size(h),
                 "missing_pictures": len(self.missing_images(h["building"])),
             }
             for h in reversed(self._history)
         ]
+
+    def _size(self, point: dict[str, Any]) -> int:
+        """The size of a restore point's plan as stored, in bytes."""
+        if (size := self._sizes.get(point["id"])) is None:
+            size = self._sizes[point["id"]] = len(json.dumps(point["building"], separators=(",", ":")).encode())
+        return size
 
     def snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
         """Building of a restore point."""

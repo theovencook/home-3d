@@ -6,11 +6,12 @@
 /** How long a chunk the new build no longer ships stays (from the last deploy that shipped it). */
 export const KEEP_CHUNKS_MS = 2 * 24 * 3600 * 1000;
 
-/** A chunk of the main bundle (build.mjs CHUNK), by its path in the integration folder. */
-const CHUNK = /^frontend[\\/]home-3d-[\w]+-[A-Z0-9]{8}\.js$/;
+/** A chunk of the main bundle or of the editor (#245: an open editor loads its lazy chunks later; build.mjs CHUNK), by
+ * its path in the integration folder. */
+const CHUNK = /^frontend[\\/]home-3d-[\w-]+-[A-Z0-9]{8}\.js$/;
 
 /**
- * Whether a file the new build lacks stays: only a main-bundle chunk, and only while it is younger than KEEP_CHUNKS_MS.
+ * Whether a file the new build lacks stays: only a chunk, and only while it is younger than KEEP_CHUNKS_MS.
  * Its modification time is when a deploy last copied it, so the time counts from the last build that shipped it.
  */
 export function keepOldFile(rel: string, modified: number, now: number): boolean {

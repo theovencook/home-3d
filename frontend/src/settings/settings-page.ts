@@ -7,13 +7,15 @@
 
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
-import "../components/entity-picker.ts";
+import { need, once } from "../lazy-part.ts";
+import { hoursToTime, timeToHours, uses12Hours } from "../time-of-day.ts";
 import { entityOptionList } from "../entity-options.ts";
 import { entityName } from "../devices.ts";
 import { freshReload } from "../fresh-reload.ts";
 import type { Building, StartView } from "../model.ts";
 import type { FurniturePack } from "../packs.ts";
 import type { HomeAssistant } from "../types.ts";
+import { colourReset } from "../colour-reset.ts";
 import { controls, tokens } from "../styles.ts";
 import {
   GROUPS,
@@ -41,6 +43,10 @@ import {
   shownLength,
   typedLength,
 } from "./registry.ts";
+
+// the two pickers are one chunk of this bundle (#245, pickers.ts): it loads when a row first draws one
+const loadTimeField = once(() => import("./pickers.ts"));
+const loadEntityPicker = loadTimeField;
 
 /** The browser's storages a reset looks through (blocked storage is skipped). */
 function browserStores(): KeyStore[] {
@@ -487,18 +493,14 @@ export class SettingsPage extends LitElement {
           @change=${(e: Event) => this.write(s as Setting<string>, (e.target as HTMLInputElement).value.trim())}
         />`;
       case "time":
-        return html`<input
-          class="st-text st-time"
-          type="time"
-          .value=${String(value ?? "")}
-          aria-label=${aria}
-          ?disabled=${disabled}
-          @change=${(e: Event) => this.write(s as Setting<string | null>, (e.target as HTMLInputElement).value || null)}
-        />`;
+        return this.timeField(String(value ?? ""), aria, disabled, (v) => this.write(s as Setting<string | null>, v || null), true);
+      case "hour":
+        // stored as hours (the bins' glow): the field shows and gives back a time of day
+        return this.timeField(hoursToTime(value as number | null), aria, disabled, (v) => timeToHours(v) !== null && this.write(s as Setting<number>, timeToHours(v)!), false);
       case "colour":
         return html`<span class="st-colour">
           <input type="color" .value=${String(value ?? c.fallback)} aria-label=${aria} ?disabled=${disabled} @input=${(e: Event) => this.write(s as Setting<string | null>, (e.target as HTMLInputElement).value)} />
-          ${c.clearable && value ? html`<button class="fp3d-btn" ?disabled=${disabled} title=${this.tr("st_accent_default")} @click=${() => this.write(s as Setting<string | null>, null)}>↺</button>` : nothing}
+          ${colourReset({ value: value as string | null, fallback: c.fallback, label: this.tr(c.clearable ? "st_accent_default" : "colour_reset"), disabled, onReset: () => this.write(s as Setting<string | null>, null) })}
         </span>`;
       case "range":
         return html`<span class="st-num">
@@ -537,6 +539,21 @@ export class SettingsPage extends LitElement {
     }
   }
 
+  /** A time of day picker (#225) in the profile's 12 or 24 hours. */
+  private timeField(value: string, aria: string, disabled: boolean, set: (v: string) => unknown, clearable: boolean) {
+    need(loadTimeField);
+    return html`<fp3d-time-field
+      .value=${value}
+      .hour12=${uses12Hours(this.hass?.locale, this.hass?.language)}
+      .clearable=${clearable}
+      .label=${aria}
+      .hourLabel=${this.tr("time_hour")}
+      .minuteLabel=${this.tr("time_minute")}
+      ?disabled=${disabled}
+      @change=${(e: CustomEvent<{ value: string }>) => set(e.detail.value)}
+    ></fp3d-time-field>`;
+  }
+
   private renderEntity(s: Setting<string | null>, c: Extract<Control, { kind: "entity" }>, disabled: boolean) {
     const env = this.env;
     const value = s.read(env);
@@ -544,6 +561,7 @@ export class SettingsPage extends LitElement {
     const autoLabel = auto === undefined ? null : auto ? this.t("entity_auto", { name: this.hass ? entityName(this.hass, auto) : auto }) : this.t("entity_auto_none");
     const fixed = [...(autoLabel !== null ? [{ id: "__auto", label: autoLabel }] : []), { id: "none", label: this.t("entity_none") }];
     const options = entityOptionList(this.hass, (id) => c.filter(id, env));
+    need(loadEntityPicker);
     return html`<fp3d-entity-picker
       .options=${options}
       .fixed=${fixed}
@@ -928,9 +946,6 @@ export class SettingsPage extends LitElement {
       }
       .st-text {
         width: min(280px, 100%);
-      }
-      .st-time {
-        width: auto;
       }
       .st-select {
         max-width: 280px;

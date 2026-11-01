@@ -60,3 +60,28 @@ test("a background that cannot be stored is told", async () => {
   assert.match(told[0], /could not be saved: not an image/);
   assert.equal(ed.floor.background ?? null, null);
 });
+
+test("Home Assistant is asked not to toast as well: one failed press, one message (#243)", async () => {
+  const args: unknown[][] = [];
+  const hass = { callService: (...a: unknown[]) => (args.push(a), Promise.reject({ message: "Validation error" })) } as unknown as HomeAssistant;
+  callServiceSafe(hass, "cover", "close_cover", { entity_id: "cover.sample_blind" }, (e) => `That did not work: ${e}`);
+  await later();
+  assert.deepEqual(args, [["cover", "close_cover", { entity_id: "cover.sample_blind" }, undefined, false]]);
+  assert.deepEqual(shown, ["That did not work: Validation error"]);
+});
+
+test("a long message is cut short at a word; a short one stays whole (#243)", async () => {
+  const { shortFailure, FAILURE_CHARS } = await import("./failure.ts");
+  assert.equal(shortFailure("Entity is unavailable"), "Entity is unavailable");
+  const long = `Validation error: ${"word ".repeat(80)}end`;
+  const short = shortFailure(long);
+  assert.ok(short.length <= FAILURE_CHARS + 2 && short.endsWith(" …"), short);
+  assert.ok(long.startsWith(short.slice(0, -2)));
+});
+
+test("our message sits at the top, clear of Home Assistant's toasts at the bottom centre (#243)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("./failure.ts", import.meta.url), "utf8");
+  assert.match(src, /position:fixed;left:50%;top:/);
+  assert.doesNotMatch(src, /bottom:24px/);
+});

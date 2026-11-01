@@ -77,6 +77,17 @@ export const PLAN_CONTRACT = {
           "no_state": [
             "text"
           ],
+          "panel_layout": {
+            "pinned": [
+              "text"
+            ],
+            "order": [
+              "text"
+            ],
+            "groups": [
+              "text"
+            ]
+          },
           "wall_splits": [
             [
               50.037499999999994
@@ -518,6 +529,17 @@ export const PLAN_CONTRACT = {
           "no_state": [
             "text"
           ],
+          "panel_layout": {
+            "pinned": [
+              "text"
+            ],
+            "order": [
+              "text"
+            ],
+            "groups": [
+              "text"
+            ]
+          },
           "mods": {
             "key1": {}
           }
@@ -794,6 +816,9 @@ export const PLAN_CONTRACT = {
     "easter_eggs": true,
     "halloween": {
       "ghost": true
+    },
+    "seasons": {
+      "twixmas": false
     },
     "terrain": {
       "level": -10.0,

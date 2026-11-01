@@ -23,7 +23,11 @@ import { energyRole, isElectric, isRobotVacuum, mountBase, packInfo, packItemNam
 import { isThermostatItem, linkField, linkFilter } from "../../furniture-links.ts";
 import { setIntervalPart } from "../../show-when.ts";
 import { MAX_MOUNT_Y, round, NO_STATE_TYPES, isEnergyDevice, volumeMeter, numberish, binaryish } from "./helpers.ts";
+import { colourReset } from "../../colour-reset.ts";
 import type { Fp3dEditor } from "../editor.ts";
+
+/** The colour an item shown "only in this colour" starts with. */
+const ONLY_COLOUR_DEFAULT = "#ffd400";
 
 /** ItemFormPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class ItemFormPart {
@@ -54,6 +58,7 @@ export class ItemFormPart {
         <div class="fp3d-h3row"><h3>${f.name || this.t("furniture")}</h3>${this.fixButton("furniture", f.id)}</div>
         <div class="fp3d-form">${panel.head.map((field) => this.furnitureField(f, field))}</div>
       </div>
+      ${f.type === "waste_bin" ? this.renderBinKerb(f) : nothing}
       ${this.renderLinkBlock(f)}
       ${f.group
         ? html`<p class="fp3d-sub fp3d-block-note">▣ ${this.t("block_part")} <button class="fp3d-link" @click=${() => {
@@ -367,8 +372,11 @@ export class ItemFormPart {
         return html`<div class="fp3d-field fp3d-colour-role">
           <span>${this.t(`colour_role_${role}` as I18nKey)}</span>
           <span class="fp3d-colour-pick">
-            <input type="color" class=${own ? "" : "fp3d-colour-unset"} aria-label=${this.t(`colour_role_${role}` as I18nKey)} .value=${own ?? "#808080"} ?disabled=${!admin}
-              @change=${(e: Event) => set(role, (e.target as HTMLInputElement).value)} />
+            <span class="fp3d-colour-swatch">
+              <input type="color" class=${own ? "" : "fp3d-colour-unset"} aria-label=${this.t(`colour_role_${role}` as I18nKey)} .value=${own ?? "#808080"} ?disabled=${!admin}
+                @change=${(e: Event) => set(role, (e.target as HTMLInputElement).value)} />
+              ${colourReset({ value: own, fallback: null, label: this.t("colour_theme"), disabled: !admin, onReset: () => set(role, null) })}
+            </span>
             <select ?disabled=${!admin} @change=${(e: Event) => set(role, (e.target as HTMLSelectElement).value || null)}>
               <option value="" ?selected=${!own}>${this.t("colour_theme")}</option>
               ${own && !preset ? html`<option value=${own} selected>${this.t("colour_own")}</option>` : nothing}
@@ -402,7 +410,7 @@ export class ItemFormPart {
           @change=${(e: Event) => this.setPaint(f, (e.target as HTMLInputElement).value)} />
         <input type="color" class=${own ? "" : "fp3d-colour-unset"} aria-label=${this.t("paint_hex")} .value=${own ?? "#808080"} ?disabled=${!admin}
           @change=${(e: Event) => this.setPaint(f, (e.target as HTMLInputElement).value)} />
-        ${own ? html`<button type="button" ?disabled=${!admin} @click=${() => this.setPaint(f, "")}>${this.t("colour_theme")}</button>` : nothing}
+        ${colourReset({ value: own, fallback: null, label: this.t("colour_theme"), disabled: !admin, onReset: () => this.setPaint(f, "") })}
       </span>
     </div>`;
   }
@@ -412,6 +420,26 @@ export class ItemFormPart {
     const hex = parseHex(text);
     if (text.trim() && !hex) return;
     this.updateFurniture({ colors: setRoleColour(f.colors, "paint", hex) });
+  }
+
+  /**
+   * A bin's kerb spot (#226): right under its position, not below the collection fields where it was out of sight on a
+   * laptop screen. The household bins settings link here.
+   */
+  renderBinKerb(this: Fp3dEditor, f: Furniture) {
+    const admin = this.isEditor;
+    return html`<div class="fp3d-form fp3d-links fp3d-bin-kerb">
+      <div class="fp3d-field fp3d-wide">
+        <span>${this.t("bin_kerb")}</span>
+        <div class="fp3d-actions">
+          <button class="fp3d-btn" aria-pressed=${this._kerbPick} ?disabled=${!admin} @click=${() => (this._kerbPick = !this._kerbPick)}>
+            ${this._kerbPick ? "✓ " : ""}${this.t(f.bin_kerb ? "bin_kerb_move" : "bin_kerb_set")}
+          </button>
+          ${f.bin_kerb ? html`<button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ bin_kerb: null })}>${this.t("bin_kerb_clear")}</button>` : nothing}
+        </div>
+      </div>
+      <p class="fp3d-sub fp3d-wide">${this.t(this._kerbPick ? "hint_kerb_pick" : "bin_kerb_hint")}</p>
+    </div>`;
   }
 
   /**
@@ -444,12 +472,16 @@ export class ItemFormPart {
         })}
         <label class="fp3d-field"
           >${this.t("bin_color")}
-          <input type="color" .value=${body} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ bin_color: (e.target as HTMLInputElement).value })}
-        /></label>
+          <span class="fp3d-colour-row"
+            ><input type="color" .value=${body} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ bin_color: (e.target as HTMLInputElement).value })} />
+            ${colourReset({ value: body, fallback: binColors({ ...f, bin_color: null })[0], label: this.t("colour_reset"), disabled: !admin, onReset: () => this.updateFurniture({ bin_color: null }) })}</span
+          ></label>
         <label class="fp3d-field"
           >${this.t("bin_lid")}
-          <input type="color" .value=${lid} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ bin_lid: (e.target as HTMLInputElement).value })}
-        /></label>
+          <span class="fp3d-colour-row"
+            ><input type="color" .value=${lid} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ bin_lid: (e.target as HTMLInputElement).value })} />
+            ${colourReset({ value: lid, fallback: binColors({ ...f, bin_lid: null })[1], label: this.t("colour_reset"), disabled: !admin, onReset: () => this.updateFurniture({ bin_lid: null }) })}</span
+          ></label>
         ${html`${this.entitySelect(this.t("bin_source"), f.bin_source ?? null, undefined, sources, (v) => this.updateFurniture({ bin_source: v === "none" ? null : v }))}
               <label class="fp3d-field fp3d-wide"
                 >${this.t("bin_match")}
@@ -457,16 +489,6 @@ export class ItemFormPart {
                   @change=${(e: Event) => this.updateFurniture({ bin_match: (e.target as HTMLInputElement).value.trim() || null })} /></label>
               ${this.entitySelect(this.t("bin_out"), f.bin_out ?? null, undefined, this.entityOptions((id) => /^(input_boolean|switch|binary_sensor)\./.test(id)), (v) => this.updateFurniture({ bin_out: v === "none" ? null : v }))}
               <p class="fp3d-sub fp3d-wide">${this.t("bin_out_hint")}</p>
-              <div class="fp3d-field fp3d-wide">
-                <span>${this.t("bin_kerb")}</span>
-                <div class="fp3d-actions">
-                  <button class="fp3d-btn" aria-pressed=${this._kerbPick} ?disabled=${!admin} @click=${() => (this._kerbPick = !this._kerbPick)}>
-                    ${this._kerbPick ? "✓ " : ""}${this.t(f.bin_kerb ? "bin_kerb_move" : "bin_kerb_set")}
-                  </button>
-                  ${f.bin_kerb ? html`<button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ bin_kerb: null })}>${this.t("bin_kerb_clear")}</button>` : nothing}
-                </div>
-              </div>
-              <p class="fp3d-sub fp3d-wide">${this.t(this._kerbPick ? "hint_kerb_pick" : "bin_kerb_hint")}</p>
               ${this.renderSettingsLink("household", "household.bin_from", "settings_moved_bins")}`}
       </div>`;
     }
@@ -714,13 +736,16 @@ export class ItemFormPart {
         ${lamp ? this.glowScaleField(f.glow_scale, (v) => this.updateFurniture({ glow_scale: v })) : nothing}
         ${lamp && f.entity && f.entity !== "none"
           ? html`<label class="fp3d-check fp3d-wide" title=${this.t("furn_only_color_hint")}
-                ><input type="checkbox" .checked=${!!f.only_color} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ only_color: (ev.target as HTMLInputElement).checked ? "#ffd400" : null })} />
+                ><input type="checkbox" .checked=${!!f.only_color} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ only_color: (ev.target as HTMLInputElement).checked ? ONLY_COLOUR_DEFAULT : null })} />
                 ${this.t("furn_only_color")}</label
               >
               ${f.only_color
                 ? html`<label class="fp3d-field"
                       >${this.t("furn_only_color_pick")}
-                      <input type="color" .value=${f.only_color} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ only_color: (ev.target as HTMLInputElement).value })} /></label>
+                      <span class="fp3d-colour-row"
+                        ><input type="color" .value=${f.only_color} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ only_color: (ev.target as HTMLInputElement).value })} />
+                        ${colourReset({ value: f.only_color, fallback: ONLY_COLOUR_DEFAULT, label: this.t("colour_reset"), disabled: !this.isEditor, onReset: () => this.updateFurniture({ only_color: ONLY_COLOUR_DEFAULT }) })}</span
+                      ></label>
                     <p class="fp3d-sub fp3d-wide">${this.t("furn_only_color_hint")}</p>`
                 : nothing}`
           : nothing}

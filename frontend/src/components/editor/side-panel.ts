@@ -6,7 +6,7 @@ import { unitLabel } from "../../units.ts";
 import { itemsByRoom } from "../../item-list.ts";
 import type { ItemRow } from "../item-list-view.ts";
 import { SHOW_PRESENCE } from "../../flags.ts";
-import { ISSUES_URL } from "../extensions.ts";
+import { ISSUES_URL } from "../../help.ts";
 import { type Floor, type Furniture } from "../../model.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { type EditorTopic } from "./helpers.ts";
@@ -207,8 +207,10 @@ export class SidePanelPart {
               ${admin
                 ? html`<div class="fp3d-field fp3d-wide fp3d-shift" title=${this.t("floor_shift_hint")}>
                     <span>${unitLabel(this.t("floor_shift"), this.unit)}</span>
-                    <input type=${this.unit === "imperial" ? "text" : "number"} step="0.05" .value=${this.lenValue(this._shiftX)} aria-label="X" @change=${(e: Event) => (this._shiftX = this.readLen((e.target as HTMLInputElement).value) ?? 0)} />
-                    <input type=${this.unit === "imperial" ? "text" : "number"} step="0.05" .value=${this.lenValue(this._shiftZ)} aria-label="Z" @change=${(e: Event) => (this._shiftZ = this.readLen((e.target as HTMLInputElement).value) ?? 0)} />
+                    <div class="fp3d-shift-xz">
+                      <input type=${this.unit === "imperial" ? "text" : "number"} step="0.05" .value=${this.lenValue(this._shiftX)} aria-label="X" placeholder="X" @change=${(e: Event) => (this._shiftX = this.readLen((e.target as HTMLInputElement).value) ?? 0)} />
+                      <input type=${this.unit === "imperial" ? "text" : "number"} step="0.05" .value=${this.lenValue(this._shiftZ)} aria-label="Z" placeholder="Z" @change=${(e: Event) => (this._shiftZ = this.readLen((e.target as HTMLInputElement).value) ?? 0)} />
+                    </div>
                     <button class="fp3d-btn" ?disabled=${!this._shiftX && !this._shiftZ} @click=${() => this.shiftFloor(this._shiftX, this._shiftZ)}>${this.t("floor_shift_apply")}</button>
                     <button class="fp3d-btn" title=${this.t("floor_turn_hint")} @click=${() => this.turnFloor()}>${this.t("floor_turn")}</button>
                     <button class="fp3d-btn" title=${this.t("floor_start_view_hint")} @click=${() => this.rememberFloorView()}>${this.t("floor_start_view")}</button>

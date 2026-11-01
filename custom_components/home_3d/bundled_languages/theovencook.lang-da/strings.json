@@ -1707,8 +1707,6 @@
  "hh_service_hint": "Fx filter, salt eller afspændingsmiddel: en binær sensor (tændt = påkrævet), et tal (procent eller dage tilbage) eller en dato. Når det er påkrævet, lyser apparatet gult og står i \"I dag i hjemmet\".",
  "card_household": "I dag i hjemmet",
  "card_household_hint": "Husholdning: kort med spande, post, færdige apparater, tørstige planter og vedligehold",
- "bin_from": "Lys fra (klokken, dagen før)",
- "bin_until": "til (klokken, tømningsdagen)",
  "bin_out": "Sat ud (hjælper)",
  "bin_out_hint": "Valgfrit: tændt, mens spanden står ude (input_boolean, kontakt eller binær sensor). Så lyser den ikke længere, og dens skilt siger \"sat ud ✓\"; et tryk på spanden skifter en hjælper eller kontakt. En natlig automatisering nulstiller den.",
  "bin_out_done": "sat ud ✓",

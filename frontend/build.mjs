@@ -44,10 +44,19 @@ const de = JSON.parse(readFileSync("../custom_components/home_3d/bundled_languag
 const cardEditorConfig = { ...common, entryPoints: ["src/card-editor.ts"], outfile: `${out}/home-3d-card-editor.js` };
 // the editor is only needed by admins who open it, so it is a bundle of its own as well
 // (it draws furniture previews with the 3D bundle, so it knows that bundle's hash too)
+// #245: it is split like the main bundle. The entry (home-3d-editor.js) and its shared chunks (home-3d-editor-chunk-
+// <hash>.js) are what the editor's first paint needs; the library, the rack sheet, the Extensions page and the settings
+// pickers are one lazy chunk (home-3d-editor-lazy-parts-<hash>.js, components/editor/lazy.ts) that loads when one is
+// first drawn or once the editor is idle. One lazy chunk, not one each: each adds shared chunks to the first open, and a
+// file more is a round trip more on a slow link. The main bundle loads the entry by its hash (it changes with any chunk's
+// name) and fetches the shared chunks alongside it (load-editor.ts).
+const EDITOR = `${out}/home-3d-editor.js`;
 const editorConfig = (viewerHash, locateHash, itemsHash, alignHash) => ({
   ...common,
-  entryPoints: ["src/components/editor.ts"],
-  outfile: `${out}/home-3d-editor.js`,
+  entryPoints: { "home-3d-editor": "src/components/editor.ts" },
+  outdir: out,
+  splitting: true,
+  chunkNames: "home-3d-editor-[name]-[hash]",
   define: { __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash), __FP3D_LOCATE_HASH__: JSON.stringify(locateHash), __FP3D_ITEMS_HASH__: JSON.stringify(itemsHash), __FP3D_ALIGN_HASH__: JSON.stringify(alignHash) },
 });
 // the item editor (#13) only loads when an editor opens it; it draws its live picture with the 3D bundle
@@ -65,7 +74,9 @@ const voiceConfig = { ...common, entryPoints: ["src/voice/entry.ts"], outfile: `
 // the locating setup assistant only loads when an admin opens it
 const locateConfig = { ...common, entryPoints: ["src/locate/entry.ts"], outfile: `${out}/home-3d-locate.js` };
 // the Settings page (#139) only loads when someone opens its tab; its labels come from the main bundle (`t`)
-const settingsConfig = { ...common, entryPoints: ["src/settings/entry.ts"], outfile: `${out}/home-3d-settings.js` };
+// #245: split like the editor: its time and entity pickers are one chunk of their own (home-3d-settings-pickers-<hash>.js)
+const SETTINGS = `${out}/home-3d-settings.js`;
+const settingsConfig = { ...common, entryPoints: { "home-3d-settings": "src/settings/entry.ts" }, outdir: out, splitting: true, chunkNames: "home-3d-settings-[name]-[hash]" };
 // The main bundle loads the 3D bundle with a hash of its content in the URL, so a new 3D bundle is
 // never taken from the browser cache (the integration version only changes after a restart).
 // the frontend knows its own version, to notice a backend that still runs an older one
@@ -84,7 +95,8 @@ const buildId = (() => {
 // (components/view3d.ts, the biggest part) is a chunk of its own (#179): it loads where the panel or a card shows.
 // Chunks share the main bundle's modules (one pack registry, one language table: modules several of them use are in
 // shared chunks, home-3d-chunk-<hash>.js); a chunk's name carries its content hash, so it is never taken stale.
-const CHUNK = /^home-3d-[\w]+-[A-Z0-9]{8}\.js$/;
+// #245: the editor's chunks too, and a chunk named after a module with a hyphen (home-3d-room-panel-<hash>.js)
+const CHUNK = /^home-3d-[\w-]+-[A-Z0-9]{8}\.js$/;
 const mainConfig = (hashes) => ({
   ...common,
   // the one bundle with the English table (its chunks share it)
@@ -103,6 +115,9 @@ const mainConfig = (hashes) => ({
     __FP3D_LOCATE_HASH__: JSON.stringify(hashes.locate),
     __FP3D_PLAN2D_HASH__: JSON.stringify(hashes.plan2d),
     __FP3D_SETTINGS_HASH__: JSON.stringify(hashes.settings),
+    // #245: the editor's shared chunks, fetched together with its entry (load-editor.ts): no second round trip
+    __FP3D_EDITOR_CHUNKS__: JSON.stringify(hashes.editorChunks ?? []),
+    __FP3D_SETTINGS_CHUNKS__: JSON.stringify(hashes.settingsChunks ?? []),
     __FP3D_VERSION__: JSON.stringify(version),
     __FP3D_BUILD__: JSON.stringify(buildId),
   },
@@ -146,7 +161,15 @@ function copyFonts() {
 // (18 KB more on every page, 4 KB gzip) and the 16 lang/*.json tables into language packs; the lazy bundles lost their own
 // copies (locate 151 -> 40 KB, items 69 -> 62, settings 101 -> 87), so their budgets came down to just above, and the
 // "every page" path went from 410 to 425 KB (gzip 140 -> 146). The main bundle itself did not change: the table is in a shared chunk.
-const BUDGET = { "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
+// #229: the room panel's "Edit list" mode is a lazy chunk of its own (home-3d-listedit-<hash>.js, 9 KB): only an editor
+// who opens it loads it. A new budget, not a raised one.
+// #245: the editor and the Settings page are split (editorConfig, settingsConfig). With run4-221/227/229/231 merged the
+// editor was 877 KB (over its 860), Settings 95.3 (over its 95), "every page" 433 (over its 425) and "wall tablet" 1633
+// (over its 1630). Now the editor's first open (entry + shared chunk, the "editor first open" path) is 800 KB under the
+// editor's 860, Settings' first open 87 KB under its 95; their lazy chunks (the editor's lazy parts: library, rack sheet,
+// Extensions page, pickers; Settings' pickers) and the main bundle's new ones (the room panel, loaded when a room is
+// tapped or once the 3D view is there and the page idle, and the editors' home switcher) have budgets just above their sizes. No budget went up.
+const BUDGET = { "home-3d-room-panel.js": 30 * 1024, "home-3d-home-switcher.js": 12 * 1024, "home-3d-editor-lazy-parts.js": 85 * 1024, "home-3d-settings-pickers.js": 12 * 1024, "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-listedit.js": 12 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
 const GZIP_BUDGET = { "home-3d.js": 45 * 1024, "home-3d-view3d.js": 100 * 1024, "home-3d-3d.js": 280 * 1024 };
 
 // What is loaded before something shows, raw and as sent (gzip), with everything those files import (#179): a module
@@ -155,6 +178,10 @@ const GZIP_BUDGET = { "home-3d.js": 45 * 1024, "home-3d-view3d.js": 100 * 1024, 
 const PATHS = {
   "every page": { files: ["home-3d.js"], raw: 425 * 1024, gzip: 146 * 1024 },
   "wall tablet": { files: ["home-3d.js", "home-3d-view3d.js", "home-3d-3d.js"], raw: 1630 * 1024, gzip: 500 * 1024 },
+  // #245: the editor's entry and its shared chunks, under the editor's old budget (the lazy chunks have their own)
+  "editor first open": { files: ["home-3d-editor.js"], raw: 860 * 1024 },
+  // #245: the Settings page split the same way, under its old 95 KB
+  "settings first open": { files: ["home-3d-settings.js"], raw: 95 * 1024 },
 };
 
 /** The file a budget name stands for: a chunk's is found by its name without the hash. */
@@ -201,8 +228,7 @@ if (watch) {
   const items = itemsConfig(hashOf(viewerConfig.outfile));
   await run(items);
   await run(alignConfig);
-  const editor = editorConfig(hashOf(viewerConfig.outfile), hashOf(locateConfig.outfile), hashOf(items.outfile), hashOf(alignConfig.outfile));
-  await run(editor);
+  await run(editorConfig(hashOf(viewerConfig.outfile), hashOf(locateConfig.outfile), hashOf(items.outfile), hashOf(alignConfig.outfile)));
   await run(cardEditorConfig);
   await run(timeTravelConfig);
   await run(funConfig);
@@ -212,14 +238,16 @@ if (watch) {
   await run(
     mainConfig({
       viewer: hashOf(viewerConfig.outfile),
-      editor: hashOf(editor.outfile),
+      editor: hashOf(EDITOR),
       cardEditor: hashOf(cardEditorConfig.outfile),
       timeTravel: hashOf(timeTravelConfig.outfile),
       fun: hashOf(funConfig.outfile),
       voice: hashOf(voiceConfig.outfile),
       locate: hashOf(locateConfig.outfile),
       plan2d: hashOf(plan2dConfig.outfile),
-      settings: hashOf(settingsConfig.outfile),
+      settings: hashOf(SETTINGS),
+      settingsChunks: withImports(metafiles, ["home-3d-settings.js"]).filter((f) => f !== "home-3d-settings.js"),
+      editorChunks: withImports(metafiles, ["home-3d-editor.js"]).filter((f) => f !== "home-3d-editor.js"),
     }),
   );
   writeFileSync(`${out}/build.json`, `${JSON.stringify({ build: buildId, version })}
@@ -265,17 +293,17 @@ if (watch) {
   // a bundle of these that holds the table carries the whole English table a second time
   {
     const { englishTable } = await import("./src/i18n.ts");
-    for (const file of ["home-3d-settings.js", "home-3d-editor.js", "home-3d-card-editor.js"]) {
+    for (const file of ["home-3d-card-editor.js", ...shipped.filter((f) => f.startsWith("home-3d-editor") || f.startsWith("home-3d-settings"))]) {
       const text = readFileSync(`${out}/${file}`, "utf8");
       if (text.includes(JSON.stringify(englishTable().no_building_admin).slice(1, -1))) {
         over = true;
-        console.log(`ENGLISH ${file}: holds the main texts – ${file === "home-3d-settings.js" ? "take them from the panel (t), never import i18n.ts" : "the borrow-english plugin must swap i18n.ts for i18n-borrowed.ts"}`);
+        console.log(`ENGLISH ${file}: holds the main texts – ${file.startsWith("home-3d-settings") ? "take them from the panel (t), never import i18n.ts" : "the borrow-english plugin must swap i18n.ts for i18n-borrowed.ts"}`);
       }
     }
   }
   // a lazy import gets a budget of its own; a shared chunk (modules two of them use) is counted in the paths
   for (const f of readdirSync(out)) {
-    if (CHUNK.test(f) && !f.startsWith("home-3d-chunk-") && !Object.keys(BUDGET).some((name) => shippedFile(name) === f)) {
+    if (CHUNK.test(f) && !/^home-3d-(?:editor-|settings-)?chunk-/.test(f) && !Object.keys(BUDGET).some((name) => shippedFile(name) === f)) {
       over = true;
       console.log(`CHUNK ${f}: a lazy import without a budget`);
     }
@@ -295,9 +323,9 @@ if (watch) {
     const all = withImports(metafiles, files.map(shippedFile));
     const size = all.reduce((n, f) => n + statSync(`${out}/${f}`).size, 0);
     const zipped = all.reduce((n, f) => n + gz(f), 0);
-    const ok = size <= raw && zipped <= gzip;
+    const ok = size <= raw && (gzip === undefined || zipped <= gzip);
     over ||= !ok;
-    console.log(`${ok ? "ok  " : "OVER"} ${path} (${all.join(" + ")}): ${kb(size)} (budget ${raw / 1024} KB), gzip ${kb(zipped)} (budget ${gzip / 1024} KB)`);
+    console.log(`${ok ? "ok  " : "OVER"} ${path} (${all.join(" + ")}): ${kb(size)} (budget ${raw / 1024} KB), gzip ${kb(zipped)}${gzip ? ` (budget ${gzip / 1024} KB)` : ""}`);
   }
   if (report) {
     for (const name of Object.keys(BUDGET)) {

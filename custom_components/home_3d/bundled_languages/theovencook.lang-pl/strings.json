@@ -1707,8 +1707,6 @@
  "hh_service_hint": "Np. filtr, sól lub nabłyszczacz: czujnik binarny (włączony = wymagane), liczba (procent lub dni) lub data. Gdy wymagane, urządzenie świeci na żółto i pojawia się w „Dziś w domu”.",
  "card_household": "Dziś w domu",
  "card_household_hint": "Dom: karta z pojemnikami, pocztą, gotowymi urządzeniami, spragnionymi roślinami i konserwacją",
- "bin_from": "Świecenie od (godz., dzień wcześniej)",
- "bin_until": "do (godz., w dniu odbioru)",
  "bin_out": "Wystawiony (pomocnik)",
  "bin_out_hint": "Opcjonalnie: włączony, dopóki pojemnik stoi na zewnątrz (input_boolean, przełącznik lub czujnik binarny). Wtedy przestaje świecić, a jego etykieta mówi „wystawiony ✓”; dotknięcie pojemnika przełącza pomocnika lub przełącznik. Nocna automatyzacja go resetuje.",
  "bin_out_done": "wystawiony ✓",

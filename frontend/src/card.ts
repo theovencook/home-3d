@@ -4,9 +4,11 @@ import { defineElement } from "./define.ts";
 import { zonesOf, type Building } from "./model.ts";
 import { confirmEntities } from "./devices.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
+import { uiIcon } from "./ui-icons.ts";
 import { BuildingController, type PlanChange } from "./building-controller.ts";
-import "./components/room-panel.ts";
 import { loadView, readyView } from "./load-view.ts";
+import { loadRoomPanel } from "./load-parts.ts";
+import { need } from "./lazy-part.ts";
 import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -538,12 +540,14 @@ clearTimeout(this.cleanTimer);
             ></fp3d-view3d>`
           : html`<p class="fp3d-card-msg">${this.data.error ?? (b ? translate(this.hass, "no_building") : translate(this.hass, "loading"))}</p>`}
         ${this._roomId && b && this._config?.room_panel !== false
-          ? html`<fp3d-room-panel
+          ? (need(loadRoomPanel), html`<fp3d-room-panel
               @camera-look=${(e: CustomEvent<{ entity: string }>) => this.view3d()?.lookThrough(e.detail.entity)}
               class="fp3d-card-panel"
               .hass=${hass}
               ?readOnly=${tt}
               ?noLook=${flat}
+              ?canEdit=${this.data.canEdit}
+              @plan-change=${this.onPlanChange}
               .room=${b.floors.flatMap((f) => zonesOf(f)).find((r) => r.id === this._roomId) ?? null}
               .floor=${b.floors.find((f) => zonesOf(f).some((r) => r.id === this._roomId)) ?? null}
               .building=${b}
@@ -551,7 +555,7 @@ clearTimeout(this.cleanTimer);
               .sheets=${this._roomId ? (this.view3d()?.roomSheets(this._roomId) ?? null) : null}
               @sheet-open=${(e: CustomEvent<{ id: string }>) => this._roomId && this.view3d()?.openRoomSheet(this._roomId, e.detail.id)}
               @close=${() => (this._roomId = null)}
-            ></fp3d-room-panel>`
+            ></fp3d-room-panel>`)
           : nothing}
         ${bar && b
           ? html`<div class="fp3d-card-controls">
@@ -595,7 +599,7 @@ clearTimeout(this.cleanTimer);
         ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session}></fp3d-time-bar>` : nothing}
         ${c?.fullscreen_button && !this._clean && !(this._roomId && c.room_panel !== false)
           ? html`<button class="fp3d-card-full" title=${t(this._fullscreen ? "fullscreen_exit" : "fullscreen")} aria-label=${t(this._fullscreen ? "fullscreen_exit" : "fullscreen")} @click=${() => this.toggleFullscreen()}>
-              ${this._fullscreen ? "✕" : "⛶"}
+              ${this._fullscreen ? "✕" : uiIcon("expand")}
             </button>`
           : nothing}
         ${c?.dashboard && !this._clean && !(this._roomId && c.room_panel !== false)

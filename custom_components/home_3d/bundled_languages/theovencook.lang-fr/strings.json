@@ -1707,8 +1707,6 @@
  "hh_service_hint": "P. ex. filtre, sel ou liquide de rinçage : un capteur binaire (actif = à faire), un nombre (% ou jours restants) ou une date. À faire, l'appareil s'allume en jaune et figure dans « Aujourd'hui à la maison ».",
  "card_household": "Aujourd'hui à la maison",
  "card_household_hint": "Ménage : carte avec poubelles, courrier, appareils terminés, plantes assoiffées et entretien",
- "bin_from": "Allumer dès (heure, la veille)",
- "bin_until": "jusqu'à (heure, jour du ramassage)",
  "bin_out": "Sortie (entrée)",
  "bin_out_hint": "Facultatif : actif tant que la poubelle est dehors (input_boolean, interrupteur ou capteur binaire). Elle ne s'allume alors plus et son étiquette indique « sortie ✓ » ; un appui sur la poubelle bascule l'entrée ou l'interrupteur. Une automatisation nocturne la remet à zéro.",
  "bin_out_done": "sortie ✓",

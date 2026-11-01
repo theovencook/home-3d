@@ -43,6 +43,7 @@ import { effectSettings, itemShade, motionRooms, tempShade } from "../room-effec
 import { alertEntities, alertKey, alertSources, alertText, alertTint, clearedSnoozes, dismissAlert, findAlerts, HOUSE_ALERTS, isOutage, mayIgnoreAlert, restoreAlert, shownAlerts, snoozeKey, type Alert, type AlertSources } from "../alerts.ts";
 import { ignoredAlerts } from "./ignored-alerts.ts";
 import { iconPath, iconSvg, mdiIcon } from "../icons.ts";
+import { uiIcon } from "../ui-icons.ts";
 import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binPlace, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
 import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, type EnergyPrefs, fieldLevels, fieldPowers, findConsumers, flowDots, isLoad, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type SolarDay, type FlowKind, type StatRow } from "../energy.ts";
 import { fieldFace, fieldSize, roofFaces, roofWindowRoom } from "../solar.ts";
@@ -154,6 +155,7 @@ import { load2d } from "../load2d.ts";
 import { pinIn2d } from "../plan2d/pins.ts";
 import type { ViewerSurface } from "../viewer-surface.ts";
 import { loadFun } from "../load-fun.ts";
+import { seasonNow } from "../seasons.ts";
 import { detectionKind, scaleGlow, buildMarkers, cameraMotionSensors, cameraRedUntil, openMoreInfo, setCameraSensors, stateText, toggleEntity } from "../markers.ts";
 import { RACK_STATUS_COLOURS, rackLedStates, slotEntities, slotStatus } from "../rack-links.ts";
 import { fetchRackSpark, RACK_HOTTEST, RACK_ONLINE, rackCardValues, rackSpark, type RackCardValue } from "../rack-card.ts";
@@ -183,6 +185,7 @@ import { loadVoice, micProbeAsked, micProbeDone, voicePipeline } from "../load-v
 import { answerAsk, subscribeAsk, type Ask } from "../api.ts";
 import { pipePlanner } from "../pipe-planner.ts";
 import type { ClockPos } from "../card-config.ts";
+import { CLOCK_LOOK, renderClock, type ClockLook } from "../clock.ts";
 import { Director, HOLD_DEFAULT, directorAny, doorbellCamera, doorbellEntities, doorbellRang, triggerFired, type DirectorSettings, type Shot } from "../director.ts";
 import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
 import { sunPath, type SunPath } from "../sun-path.ts";
@@ -266,6 +269,7 @@ export class Fp3dView3d extends LitElement {
     heatMode: { attribute: false },
     theme: { attribute: false },
     clock: { attribute: false },
+    clockLook: { attribute: false },
     _clockTick: { state: true },
     accent: { attribute: false },
     packs: { attribute: false },
@@ -425,8 +429,11 @@ export class Fp3dView3d extends LitElement {
   declare theme: Look;
   /** Date and time in a corner of the view (D631); null or "off": none. */
   declare clock: ClockPos | null;
+  /** What the clock looks like (#232); the default is digits with the date. */
+  declare clockLook: ClockLook | null;
   private declare _clockTick: number;
   private clockTimer: ReturnType<typeof setInterval> | undefined;
+  private clockEvery = 0;
   /** Seasonal and conditional items (#15): the plan the viewer shows (hidden items left out), what it was made of, and the minute tick. */
   private shownPlan: { from: Building; hidden: string; plan: Building } | null = null;
   private showTimer: ReturnType<typeof setTimeout> | undefined;
@@ -689,6 +696,10 @@ export class Fp3dView3d extends LitElement {
   /** Fun pack "Halloween": the ghost floating through the house now and then. */
   private ghost: { update(b: Building): void; dispose(): void } | null = null;
   private ghostLoading = false;
+  /** Seasonal themes (#239): the holiday's glow, greeting and effect over the view (the fun bundle). */
+  private season: { refresh(): void; dispose(): void } | null = null;
+  private seasonLoading = false;
+  private seasonTimer: ReturnType<typeof setTimeout> | undefined;
   private walkKeys: ((e: KeyboardEvent) => void) | null = null;
   /** The outline of the room one walks in (its glass cards show). */
   private walkRoomPts: [number, number][] | null = null;
@@ -773,6 +784,7 @@ export class Fp3dView3d extends LitElement {
     this.heatMode = "none";
     this.theme = "neon";
     this.clock = null;
+    this.clockLook = null;
     this._clockTick = 0;
     this.accent = null;
     this.furnish = false;
@@ -935,6 +947,9 @@ export class Fp3dView3d extends LitElement {
     this.petsFor = null;
     this.ghost?.dispose();
     this.ghost = null;
+    this.season?.dispose();
+    this.season = null;
+    clearTimeout(this.seasonTimer);
     this.unlistenReplay?.();
     this.unlistenReplay = null;
     this.unwatchAsk();
@@ -1086,6 +1101,7 @@ export class Fp3dView3d extends LitElement {
       this.syncDevices(true);
       void this.syncPets();
       void this.syncGhost();
+      void this.syncSeason();
       this.viewer.setFloor(this.floorId, false);
       if (this.roomId) this.viewer.selectRoom(this.roomId);
     } catch (err) {
@@ -1202,6 +1218,7 @@ export class Fp3dView3d extends LitElement {
       }
       if (changed.has("building") || changed.has("packs") || changed.has("petsOn")) void this.syncPets();
       if (changed.has("building") || changed.has("packs") || changed.has("ghostOn")) void this.syncGhost();
+      if (changed.has("building") || changed.has("ghostOn")) void this.syncSeason();
       if (changed.has("startView") && changed.get("startView") !== undefined) {
         v.setStartView(this.startViewOf());
         if (this.floorId === null) v.resetView();
@@ -4534,18 +4551,13 @@ export class Fp3dView3d extends LitElement {
       }
       return nothing;
     }
-    this.clockTimer ??= setInterval(() => (this._clockTick = Date.now()), 30000);
-    const now = new Date(this.now());
-    const lang = (this.hass.language || "en").replace("_", "-");
-    const tz = this.hass.config?.time_zone;
-    const fmt = (o: Intl.DateTimeFormatOptions) => {
-      try {
-        return now.toLocaleString(lang, tz ? { ...o, timeZone: tz } : o);
-      } catch {
-        return now.toLocaleString(lang, o);
-      }
-    };
-    return html`<div class="fp3d-clock fp3d-clock-${pos}" aria-hidden="true"><b>${fmt({ hour: "2-digit", minute: "2-digit" })}</b><span>${fmt({ weekday: "short", day: "numeric", month: "short" })}</span></div>`;
+    const look = this.clockLook ?? CLOCK_LOOK;
+    // ticks every second while seconds show, else twice a minute
+    const every = look.seconds ? 1000 : 30000;
+    if (this.clockTimer && this.clockEvery !== every) clearInterval(this.clockTimer), (this.clockTimer = undefined);
+    this.clockEvery = every;
+    this.clockTimer ??= setInterval(() => (this._clockTick = Date.now()), every);
+    return renderClock(pos, { now: new Date(this.now()), lang: (this.hass.language || "en").replace("_", "-"), timeZone: this.hass.config?.time_zone, locale: this.hass.locale }, look);
   }
 
   private renderAlerts() {
@@ -4673,6 +4685,48 @@ export class Fp3dView3d extends LitElement {
       console.error("Home 3D: the ghost failed to load", err);
     } finally {
       this.ghostLoading = false;
+    }
+  }
+
+  /**
+   * Seasonal themes (#239): on a UK holiday the view gets a glow, a greeting and a light effect (a lazy bundle, only
+   * loaded on such a day). The house-wide easter eggs switch and the holiday's own switch (Fun) turn it off; a card
+   * that leaves the ghost out leaves this out too. Wakes again after midnight on a screen that stays open.
+   */
+  private async syncSeason(): Promise<void> {
+    clearTimeout(this.seasonTimer);
+    const b = this.building;
+    const on = !!b && !!this.viewer && b.settings.easter_eggs !== false && this.ghostOn !== false && !!seasonNow(b.settings.seasons);
+    if (!on) {
+      this.season?.dispose();
+      this.season = null;
+      // not a holiday today: look again after midnight
+      if (b && this.viewer && b.settings.easter_eggs !== false) {
+        const d = new Date();
+        this.seasonTimer = setTimeout(() => void this.syncSeason(), new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 5).getTime() - d.getTime());
+      }
+      return;
+    }
+    if (this.season) {
+      this.season.refresh();
+      return;
+    }
+    if (this.seasonLoading) return;
+    this.seasonLoading = true;
+    try {
+      const fun = await loadFun();
+      const stage = this.renderRoot.querySelector<HTMLElement>(".fp3d-stage");
+      if (!this.viewer || this.season || !stage) return;
+      this.season = fun.startSeason({
+        host: stage,
+        now: () => (this.building?.settings.easter_eggs === false || this.ghostOn === false ? null : seasonNow(this.building?.settings.seasons)),
+        text: (key, vars) => translate(this.hass, key as I18nKey, vars),
+        low: () => this._low,
+      });
+    } catch (err) {
+      console.error("Home 3D: the seasonal theme failed to load", err);
+    } finally {
+      this.seasonLoading = false;
     }
   }
 
@@ -6040,7 +6094,7 @@ export class Fp3dView3d extends LitElement {
           aria-label=${translate(this.hass, "through_blend")}
           @input=${(e: Event) => (this._blend = Number((e.target as HTMLInputElement).value) / 100)}
         />
-        <button class="fp3d-chip" title=${translate(this.hass, "through_full_hint")} @click=${() => this.throughFull(t.entity)}>⛶ ${translate(this.hass, "through_full")}</button>
+        <button class="fp3d-chip" title=${translate(this.hass, "through_full_hint")} @click=${() => this.throughFull(t.entity)}>${uiIcon("expand")} ${translate(this.hass, "through_full")}</button>
         <button class="fp3d-chip" @click=${() => this.endThrough()}>${translate(this.hass, "through_back")}</button>
       </div>
     </div>`;
@@ -6393,12 +6447,12 @@ export class Fp3dView3d extends LitElement {
       ${this.flows !== null
         ? nothing
         : html`<button class="fp3d-energy-item fp3d-flow-toggle" aria-pressed=${this._flows} title=${`${t("flows_hint")} (${t(this._flows ? "flow_on" : "flow_off")})`} aria-label=${t("flows")} @click=${() => this.toggleFlows()}>
-        <span>${t("flows")}</span><b>⚡</b>
+        <span>${t("flows")}</span><b>${uiIcon("flow")}</b>
       </button>`}
       ${this.holograms !== null || !this._holos.length
         ? nothing
         : html`<button class="fp3d-energy-item fp3d-flow-toggle" aria-pressed=${this._holoShow} title=${t("holos_hint")} aria-label=${t("holos")} @click=${() => this.toggleHolos()}>
-        <span>${t("holos")}</span><b>◫</b>
+        <span>${t("holos")}</span><b>${uiIcon("holo")}</b>
       </button>`}
     </div>`;
   }
@@ -7544,6 +7598,14 @@ export class Fp3dView3d extends LitElement {
       .fp3d-clock span {
         font-size: 13px;
         color: var(--fp3d-muted);
+      }
+      .fp3d-clock .fp3d-dial {
+        width: 96px;
+        height: 96px;
+        align-self: center;
+      }
+      .fp3d-clock .fp3d-dial .s {
+        stroke: var(--fp3d-accent);
       }
       /* at the top it sits under the energy strip and the walk button */
       .fp3d-clock-tl {
@@ -9177,6 +9239,13 @@ export class Fp3dView3d extends LitElement {
         color: var(--fp3d-muted);
         font-variant-numeric: tabular-nums;
         pointer-events: none;
+        /* the buttons (search, hide, star) fill the corner on the controls' side: the line keeps clear of them and wraps (#241) */
+        max-width: calc(100% - 126px);
+        text-align: right;
+        text-wrap: balance;
+      }
+      .fp3d-side-right .fp3d-stats {
+        right: 116px;
       }
       .fp3d-error {
         position: absolute;

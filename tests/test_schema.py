@@ -96,6 +96,16 @@ def test_easter_eggs_are_one_house_wide_switch_on_by_default() -> None:
         SETTINGS_SCHEMA({**base, "easter_eggs": "sometimes"})
 
 
+def test_seasons_switch_off_single_holidays() -> None:
+    """Seasonal themes (#239): a holiday switched off is False under its id; none by default, only booleans."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    assert "seasons" not in SETTINGS_SCHEMA(base)
+    assert SETTINGS_SCHEMA({**base, "seasons": {"christmas": False}})["seasons"] == {"christmas": False}
+    assert SETTINGS_SCHEMA({**base, "seasons": None})["seasons"] is None
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "seasons": {"christmas": "maybe"}})
+
+
 def test_furniture_block() -> None:
     """Furniture blocks: items with the same group id move together; none by default."""
     item = {"id": "f1", "type": "kitchen", "x": 0, "z": 0, "rotation": 0, "w": 0.6, "d": 0.6, "h": 0.9, "variant": None}
@@ -370,6 +380,32 @@ def test_room_hides_hundreds_of_segment_lights() -> None:
     assert len(room["hidden"]) == 600
     area = OUTDOOR_SCHEMA({"id": "o1", "type": "lawn", "points": [[0, 0], [2, 0], [2, 2]], "hidden": many})
     assert len(area["hidden"]) == 600
+
+
+def test_room_panel_layout_is_kept_and_checked() -> None:
+    """Pinned rows, row order and group order of a room's panel, chosen by an editor (#229)."""
+    assert "panel_layout" not in ROOM_SCHEMA(ROOM)
+    layout = {
+        "pinned": ["light.sample_lounge"],
+        "order": ["switch.sample_fan", "light.sample_lounge"],
+        "groups": ["covers", "lights"],
+    }
+    assert ROOM_SCHEMA({**ROOM, "panel_layout": layout})["panel_layout"] == layout
+    assert ROOM_SCHEMA({**ROOM, "panel_layout": None})["panel_layout"] is None
+    area = {"id": "o1", "type": "lawn", "points": [[0, 0], [2, 0], [2, 2]], "area_id": "garden"}
+    assert OUTDOOR_SCHEMA({**area, "panel_layout": layout})["panel_layout"] == layout
+    # a field a newer Home 3D adds is kept, like everywhere in the plan (the schema allows extra keys)
+    assert ROOM_SCHEMA({**ROOM, "panel_layout": {"later": 1}})["panel_layout"] == {"later": 1}
+    # ids of entities that are gone stay in the list: the panel ignores them
+    stale = {"order": [f"light.sample_gone_{i}" for i in range(600)]}
+    assert len(ROOM_SCHEMA({**ROOM, "panel_layout": stale})["panel_layout"]["order"]) == 600
+    for bad in (
+        {"pinned": "light.sample_lounge"},
+        {"pinned": ["x"] * 101},
+        {"groups": ["lights"] * 17},
+    ):
+        with pytest.raises(vol.Invalid):
+            ROOM_SCHEMA({**ROOM, "panel_layout": bad})
 
 
 def test_roof_section_keeps_its_end_shapes() -> None:

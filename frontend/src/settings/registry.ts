@@ -4,6 +4,7 @@
 // setting is one entry here. Pure data and functions: no Lit, no texts table (labels are text keys), so tests run it
 // and the page's own bundle stays small.
 
+import { ACCENT_DEFAULT } from "../colour-reset.ts";
 import type { Building, BuildingSettings, StartView } from "../model.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS } from "../model.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -17,6 +18,7 @@ import { fetchPackUpdates, getVoiceSettings, setPackUpdateSettings, setVoiceSent
 import type { PackUpdateSettings, PackUpdateStatus } from "../pack-updates.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
 import { released } from "../features.ts";
+import { SEASON_IDS } from "../season-ids.ts";
 import { EFFECT_DEFAULTS } from "../room-effects.ts";
 import { formatImperial, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 
@@ -108,6 +110,8 @@ export type Control =
     }
   | { kind: "text"; placeholder?: TextKey; maxLength?: number }
   | { kind: "time" }
+  /** A time of day stored as a number of hours (14.5 = 14:30), picked with the time field (#225). */
+  | { kind: "hour" }
   | { kind: "colour"; fallback: string; clearable?: boolean }
   | { kind: "range"; min: number; max: number; step: number }
   | { kind: "checks"; options: Option[] }
@@ -213,6 +217,7 @@ export const SECTIONS: Section[] = [
     cards: [
       { id: "eggs", title: "st_card_eggs" },
       { id: "pets", title: "st_card_pets" },
+      { id: "seasons", title: "st_card_seasons" },
     ],
   },
   {
@@ -700,6 +705,29 @@ export function easterEggsOn(settings: Pick<BuildingSettings, "easter_eggs"> | n
   return settings?.easter_eggs !== false;
 }
 
+/** One switch per holiday (#239): off is stored as false under its id, on removes it. */
+const SEASON_SETTINGS: Setting<boolean>[] = SEASON_IDS.map((id) => ({
+  id: `seasons.${id}`,
+  section: "fun",
+  card: "seasons",
+  scope: "house",
+  permission: "editor",
+  label: `season_name_${id}` as TextKey,
+  keywords: ["holiday", "season", "christmas", "easter", "theme", id.replace(/_/g, " ")],
+  control: { kind: "switch" },
+  default: true,
+  visible: (env) => released("fun_seasons") && easterEggsOn(env.building?.settings),
+  read: (env) => env.building?.settings.seasons?.[id] !== false,
+  write: (env, v) => {
+    const next = structuredClone(env.building!);
+    const seasons = { ...(next.settings.seasons ?? {}) };
+    if (v) delete seasons[id];
+    else seasons[id] = false;
+    next.settings.seasons = seasons;
+    return next;
+  },
+}));
+
 const FUN: Setting[] = [
   houseSwitch("easter_eggs", "fun", "eggs", "easter_eggs", true, "st_easter_eggs", "st_easter_eggs_hint", ["surprise", "halloween", "ghost", "fun", "egg"]),
   {
@@ -717,6 +745,7 @@ const FUN: Setting[] = [
     read: (env) => env.building?.settings.halloween?.ghost !== false,
     write: (env, v) => withPart(env.building!, "halloween", { ghost: v }),
   } as Setting<boolean>,
+  ...(SEASON_SETTINGS as Setting[]),
   {
     id: "pets.on",
     section: "fun",
@@ -871,7 +900,7 @@ const SCENE: Setting[] = [
 ];
 
 const householdOf = (env: SettingsEnv) => env.building?.settings.household ?? {};
-/** An hour of the bins' glow (Household): 0–24 in half hours, for every bin. */
+/** A time of day of the bins' glow (Household), stored as hours (14.5 = 14:30), for every bin. */
 const binHour = (id: "bin_from" | "bin_until", label: TextKey, def: number, hint?: TextKey): Setting<number> => ({
   id: `household.${id}`,
   section: "household",
@@ -881,7 +910,7 @@ const binHour = (id: "bin_from" | "bin_until", label: TextKey, def: number, hint
   label,
   hint,
   keywords: ["bin", "waste", "rubbish", "glow", "pickup"],
-  control: { kind: "number", step: 0.5, min: 0, max: 24, unit: "h" },
+  control: { kind: "hour" },
   default: def,
   read: (env) => householdOf(env)[id] ?? def,
   write: (env, v) => withPart(env.building!, "household", { [id]: clamp(v, 0, 24) }),
@@ -926,7 +955,7 @@ const HOUSEHOLD: Setting[] = [
     label: "bin_kerb",
     hint: "st_kerb_note",
     keywords: ["bin", "kerb", "street", "calendar"],
-    control: { kind: "action", button: "st_open_editor", action: "editor" },
+    control: { kind: "action", button: "st_kerb_go", action: "kerb" },
     default: null,
     read: () => null,
   },
@@ -1157,7 +1186,7 @@ const LOOK: Setting[] = [
     label: "accent",
     hint: "accent_hint",
     keywords: ["colour", "color", "cyan", "highlight"],
-    control: { kind: "colour", fallback: "#37e0ff", clearable: true },
+    control: { kind: "colour", fallback: ACCENT_DEFAULT, clearable: true },
     default: null,
     prefKeys: ["accent"],
     read: (env) => {
@@ -1168,6 +1197,10 @@ const LOOK: Setting[] = [
   } as Setting<string | null>,
   deviceChoice("quality", "look", "look", "quality", ["auto", "low", "high"], "auto", "quality", opts([["auto", "quality_auto"], ["low", "quality_low"], ["high", "quality_high"]]), undefined, ["performance", "tablet", "speed", "graphics"]),
   deviceChoice("clock", "look", "look", "clock", ["off", "tl", "tr", "bl", "br"], "off", "st_clock", opts([["off", "st_clock_off"], ["tl", "st_clock_tl"], ["tr", "st_clock_tr"], ["bl", "st_clock_bl"], ["br", "st_clock_br"]]), undefined, ["time", "clock", "corner"], "select"),
+  deviceChoice("clock_hours", "look", "look", "clock_hours", ["auto", "12", "24"], "auto", "st_clock_hours", opts([["auto", "clock_hours_auto"], ["12", "clock_hours_12"], ["24", "clock_hours_24"]]), undefined, ["time", "clock", "12", "24", "am", "pm"]),
+  deviceChoice("clock_style", "look", "look", "clock_style", ["digital", "analogue"], "digital", "st_clock_face", opts([["digital", "clock_digital"], ["analogue", "clock_analogue"]]), undefined, ["time", "clock", "dial", "hands", "face"]),
+  deviceSwitch("clock_seconds", "look", "look", "clock_seconds", false, "st_clock_seconds", undefined, ["time", "clock", "seconds"]),
+  deviceSwitch("clock_date", "look", "look", "clock_date", true, "st_clock_date", undefined, ["time", "clock", "date", "day"]),
   deviceChoice("markers", "look", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), undefined, ["pins", "icons", "symbols", "devices"]),
   deviceChoice("pinSize", "look", "markers", "pinSize", ["small", "normal", "large"], "normal", "pin_size", opts([["small", "pin_size_small"], ["normal", "pin_size_normal"], ["large", "pin_size_large"]]), undefined, ["pins", "icons", "symbols", "size"]),
   deviceChoice("controls", "look", "markers", "controls", ["left", "right"], "left", "controls_side", opts([["left", "st_controls_left"], ["right", "st_controls_right"]]), undefined, ["left", "right", "star", "search"]),

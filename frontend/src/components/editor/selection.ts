@@ -6,6 +6,7 @@ import { firmHit, itemsAt, minHitPx } from "../../geometry/pick.ts";
 import { itemsByRoom } from "../../item-list.ts";
 import { furnitureFootprint } from "../../model.ts";
 import { copyItems, pasteItems, withKeys, type ItemClip } from "../../clipboard.ts";
+import { touchOnly, touchWording } from "../../editor-hint.ts";
 import { isFixed, uid, type Floor, type Vec2 } from "../../model.ts";
 import { askConfirm, tell } from "../../ask.ts";
 import { loadAlign } from "../../load-align.ts";
@@ -249,6 +250,17 @@ export class SelectionPart {
     if (kind === "opening" && id) this._roomId = this.floor?.openings.find((o) => o.id === id)?.room_id ?? this._roomId;
   }
 
+  /** Shows an item of any floor and selects it (a link from the Settings page, #226); false when it is not there. */
+  goToFurniture(this: Fp3dEditor, id: string): boolean {
+    const fl = this._doc.floors.find((f) => f.furniture.some((m) => m.id === id));
+    const m = fl?.furniture.find((x) => x.id === id);
+    if (!fl || !m) return false;
+    this._floorId = fl.id;
+    this.selectItem("furniture", id);
+    this.showPoint(m.x, m.z);
+    return true;
+  }
+
   /** Ctrl+C (#74): the chosen items (block, multi selection) go to the editor's clipboard; false when none is chosen. */
   copySelection(this: Fp3dEditor): boolean {
     const floor = this.floor;
@@ -446,7 +458,7 @@ export class SelectionPart {
     const some = !fixed && items.some((m) => this.isFixedItem("furniture", m.id));
     return html`<section>
       <div class="fp3d-h3row"><h3>${block ? `▣ ${this.t("block_title")}` : this.t("multi_title", { n: items.length })}</h3></div>
-      <p class="fp3d-sub">${this.t(block ? "block_hint" : "multi_hint")}</p>
+      <p class="fp3d-sub">${touchWording(touchOnly(), block ? "block_hint" : "multi_hint", (k, p) => this.t(k, p))}</p>
       ${some ? html`<p class="fp3d-sub fp3d-wv-fixnote">${this.t("block_some_fixed")}</p>` : nothing}
       <div class="fp3d-block-parts">
         ${items.map(
