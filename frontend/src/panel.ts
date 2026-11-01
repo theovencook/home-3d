@@ -2,17 +2,19 @@
 
 import { defineElement } from "./define.ts";
 import { formatImperial, lengthUnit, parseLength, unitLabel } from "./units.ts";
-import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues } from "lit";
-import { PHONE_MEDIA, PHONE_NARROW_MEDIA } from "./phone.ts";
+import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues, type TemplateResult } from "lit";
+import { uiIcon, type UiIcon } from "./ui-icons.ts";
+import { COMPACT_MAX_PX, PHONE_MEDIA } from "./phone.ts";
 import { BuildingController, type PlanChange } from "./building-controller.ts";
 import { loadEditor, loadExtensionsPage } from "./load-editor.ts";
 import { loadSettings } from "./load-settings.ts";
 import { loadLocate } from "./load-locate.ts";
 import { loadView, readyView } from "./load-view.ts";
-import { loadHomeSwitcher, loadRoomPanel, loadViewPanel } from "./load-parts.ts";
+import { loadHomeSwitcher, loadRoomPanel, loadRoomsPicker, loadViewPanel } from "./load-parts.ts";
 import { need } from "./lazy-part.ts";
 import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
-import type { Building, StartView } from "./model.ts";
+import type { Building, Floor, StartView } from "./model.ts";
+import type { RoomGroup } from "./components/rooms-picker.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
 import type { MarkerMode } from "./components/view3d.ts";
@@ -107,7 +109,8 @@ export class Floorplan3dPanel extends LitElement {
     _trail: { state: true },
     _cameraWall: { state: true },
     _clean: { state: true },
-    _navWrap: { state: true },
+    _roomsOpen: { state: true },
+    _noticesHidden: { state: true },
     _accent: { state: true },
     _weather: { state: true },
     _director: { state: true },
@@ -178,8 +181,10 @@ export class Floorplan3dPanel extends LitElement {
   private declare _cameraWall: boolean;
   /** Clean view (the eye): only the stage, remembered on this device. */
   private declare _clean: boolean;
-  /** The floor and room bar wraps onto several lines instead of scrolling sideways (remembered on this device). */
-  private declare _navWrap: boolean;
+  /** The Rooms picker on the floor bar is open (#249, option B of #219: one searchable list instead of a chip per room). */
+  private declare _roomsOpen: boolean;
+  /** The notices (update, save failed …) the person put away (#249): their badge on the save line brings them back. */
+  private declare _noticesHidden: string;
   /** Accent colour of the user's choice ("#rrggbb"), null for the stock cyan; remembered on this device. */
   private declare _accent: string | null;
   /** Weather outside the house in 3D. */
@@ -237,6 +242,8 @@ export class Floorplan3dPanel extends LitElement {
     this._cameraWall = false;
     this._micProbe = false;
     this._tablet = false;
+    this._roomsOpen = false;
+    this._noticesHidden = "";
     this._settingsReady = !!customElements.get("fp3d-settings-page");
     this._settingsError = null;
     const address = settingsAddress(location.hash);
@@ -278,7 +285,6 @@ export class Floorplan3dPanel extends LitElement {
     this._angleLock = prefs.get("angle_lock") === "1";
     this._trail = prefs.get("trail") === "1";
     this._clean = prefs.get("clean") === "1";
-    this._navWrap = prefs.get("nav_wrap") === "1";
     this._weather = prefs.get("weather") !== "0";
     this._director = directorOnHere();
     this._voiceHere = voiceOnHere();
@@ -826,8 +832,15 @@ export class Floorplan3dPanel extends LitElement {
     else if (change === "floor") announce(now.floor ? this.t("announce_floor", { name: b.floors.find((f) => f.id === now.floor)?.name ?? "" }) : this.t("all_floors"));
   }
 
-  protected updated(): void {
+  protected updated(changed: PropertyValues): void {
     this.announceView();
+    // the floor row scrolls sideways on a phone: the chosen floor stays in view (#249), also when the Rooms button
+    // beside it grows with a room's name
+    if (changed.has("_floorId") || changed.has("_roomId")) {
+      const on = this.renderRoot.querySelector<HTMLElement>(".fp3d-floors [aria-pressed='true']");
+      const row = on?.parentElement;
+      if (on && row && row.scrollWidth > row.clientWidth) on.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    }
     // the page's language is the one its texts are in (#196): English while a language has no texts here
     const lang = uiLanguage(this.hass);
     if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);
@@ -890,39 +903,14 @@ export class Floorplan3dPanel extends LitElement {
   protected render() {
     if (this.hass && !languageReady(this.hass.language)) return nothing;
     const b = this.data.building;
-    const saveState = this.data.saveState;
     if (this.canEdit && this.hass) need(loadHomeSwitcher);
+    const notices = this.noticeList(this._clean && this._mode === "view");
+    this.noticeKey = notices.map((n) => n.key).join("|");
     return html`
       <div class="fp3d-app ${this._clean && this._mode === "view" ? "fp3d-clean" : ""}" style=${this.accentStyle()}>
         ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.rawHass} .building=${b} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
-        ${this._clean && this._mode === "view" ? nothing : this._tablet ? this.renderTabletHeader() : html`<header class="fp3d-header">
-          <ha-menu-button .hass=${this.rawHass} .narrow=${this.narrow}></ha-menu-button>
-          <h1>Home 3D</h1>
-          ${this.canEdit && this.hass ? html`<fp3d-home-switcher
-                .hass=${this.rawHass}
-                .home=${this.data.homeId}
-                @home-reload=${() => void this.data.reopen()}
-                @home-open=${(e: CustomEvent<{ home: string | null }>) => this.openHome(e.detail.home ?? undefined)}
-              ></fp3d-home-switcher>` : nothing}
-          <div class="fp3d-seg" role="group" aria-label=${this.t("modes")}>
-            <button aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
-            ${this.canEdit
-              ? html`<button aria-pressed=${this._mode === "editor"} @click=${() => this.setMode("editor")}>${this.t("editor")}</button>
-                  <button class="fp3d-tab-ext" aria-pressed=${this._mode === "extensions"} aria-label=${this.t("ext_tab")} title=${this.t("ext_tab")} @click=${() => this.setMode("extensions")}>
-                    ✦ <span class="fp3d-tab-ext-word">${this.t("ext_tab")}</span>
-                  </button>`
-              : nothing}
-            <button class="fp3d-tab-settings" aria-pressed=${this._mode === "settings"} aria-label=${this.t("settings")} title=${this.t("settings")} @click=${() => this.openSettings()}>
-              ⚙ <span class="fp3d-tab-word">${this.t("settings")}</span>
-            </button>
-          </div>
-          <span class="fp3d-grow"></span>
-          ${this._mode === "editor" && saveState !== "idle"
-            ? html`<span class="fp3d-save fp3d-save-${saveState}">${this.t(saveState === "saving" ? "saving" : saveState === "saved" ? "saved" : "save_error")}</span>`
-            : nothing}
-          <span class="fp3d-version" title=${this.t("version_hint", { backend: this.data.backendVersion ?? "?" })}>v${this.data.frontendVersion}</span>
-        </header>`}
-        ${this._clean && this._mode === "view" ? this.renderCleanNotice() : this.renderNotices()}
+        ${this._clean && this._mode === "view" ? nothing : this._tablet ? this.renderTabletHeader() : this.renderHeader(notices.length)}
+        ${this.renderNotices(notices)}
         ${this.data.error && !b ? html`<p class="fp3d-message">${this.t("load_error")}: ${this.data.error}</p>` : nothing}
         ${!b && !this.data.error ? html`<p class="fp3d-message">${this.t("loading")}</p>` : nothing}
         ${b
@@ -953,41 +941,114 @@ export class Floorplan3dPanel extends LitElement {
     return accentVars(this.shownAccent());
   }
 
-  private renderNotices() {
+  /**
+   * One header row (#249, the redesign #219): Home Assistant's menu, the title, one home control (name, a dot while the
+   * displays show it, its menu), the tabs as underlined navigation and the save line. The version is in Settings ›
+   * Advanced › About; a notice is a badge on the save line plus a pop-up message, never a banner pushing the plan down.
+   */
+  private renderHeader(noticeCount: number) {
+    const tab = (mode: Mode, cls: string, icon: UiIcon, label: string, short: string | null, go: () => void) =>
+      html`<button class="fp3d-tab ${cls}" aria-current=${this._mode === mode ? "page" : nothing} aria-label=${label} title=${short === null ? label : nothing} @click=${go}>
+        ${uiIcon(icon)}<span class="fp3d-tab-word">${label}</span>${short ? html`<span class="fp3d-tab-short" aria-hidden="true">${short}</span>` : nothing}
+      </button>`;
+    return html`<header class="fp3d-header">
+      <ha-menu-button .hass=${this.rawHass} .narrow=${this.narrow}></ha-menu-button>
+      <h1>Home 3D</h1>
+      ${this.canEdit && this.hass
+        ? html`<fp3d-home-switcher
+            .hass=${this.rawHass}
+            .home=${this.data.homeId}
+            @home-reload=${() => void this.data.reopen()}
+            @home-open=${(e: CustomEvent<{ home: string | null }>) => this.openHome(e.detail.home ?? undefined)}
+          ></fp3d-home-switcher>`
+        : nothing}
+      <nav class="fp3d-tabs" aria-label=${this.t("modes")}>
+        ${tab("view", "fp3d-tab-view", "cube", this.t("view"), "", () => this.setMode("view"))}
+        ${this.canEdit
+          ? html`${tab("editor", "fp3d-tab-editor", "pencil", this.t("editor"), this.t("editor_short"), () => this.setMode("editor"))}
+            ${tab("extensions", "fp3d-tab-ext", "puzzle", this.t("ext_tab"), null, () => this.setMode("extensions"))}`
+          : nothing}
+        ${tab("settings", "fp3d-tab-settings", "gear", this.t("settings"), null, () => this.openSettings())}
+      </nav>
+      <span class="fp3d-grow"></span>
+      ${this.renderSaveLine(noticeCount)}
+    </header>`;
+  }
+
+  /**
+   * The save line (#249): who the last change was saved for, a dot alone on a phone; the Settings page has its own
+   * (#248). A badge with the number of notices brings back the messages put away.
+   */
+  private renderSaveLine(noticeCount: number) {
+    const state = this.data.saveState;
+    const text = state === "idle" || this._mode === "settings" ? "" : this.t(state === "saving" ? "saving" : state === "saved" ? "st_saved_home" : "save_error");
+    const shown = noticeCount > 0 && this._noticesHidden !== this.noticeKey;
+    return html`<span class="fp3d-save fp3d-save-${text ? state : "idle"}" role="status" aria-live="polite">
+        ${text ? html`<span class="fp3d-save-dot" aria-hidden="true"></span><span class="fp3d-save-text">${text}</span>` : nothing}
+      </span>
+      ${noticeCount
+        ? html`<button
+            class="fp3d-note-badge"
+            aria-expanded=${shown ? "true" : "false"}
+            aria-label=${this.t("notices_badge", { n: noticeCount })}
+            title=${this.t("notices_badge", { n: noticeCount })}
+            @click=${() => (this._noticesHidden = shown ? this.noticeKey : "")}
+          >
+            <span>${noticeCount}</span>
+          </button>`
+        : nothing}`;
+  }
+
+  /** Which notices show now: a new one (another key) pops up again after the last ones were put away. */
+  private noticeKey = "";
+
+  /**
+   * The notices (#249): update ready, restart needed, a repaired plan, a failed save, unsaved edits from an earlier
+   * session. The clean view keeps only the update notice (#60). Each has a key, so a new one pops up again.
+   */
+  private noticeList(clean: boolean): { key: string; body: TemplateResult }[] {
     const d = this.data;
-    const notices = [];
+    const notices: { key: string; body: TemplateResult }[] = [];
     // an old bundle in the browser or the companion app: a reload helps, a restart does not
     const update = this.renderUpdateNotice();
-    if (update) notices.push(update);
+    if (update) notices.push({ key: `update:${d.updateNotice}`, body: update });
+    if (clean) return notices;
     if (d.needsRestart && d.versionGap !== "frontend") {
-      notices.push(html`<div class="fp3d-notice fp3d-notice-warn">${d.backendVersion ? this.t("needs_restart", { version: d.backendVersion, frontend: d.frontendVersion }) : this.t("needs_restart_old")}</div>`);
+      notices.push({ key: "restart", body: html`<div class="fp3d-notice fp3d-notice-warn"><span>${d.backendVersion ? this.t("needs_restart", { version: d.backendVersion, frontend: d.frontendVersion }) : this.t("needs_restart_old")}</span></div>` });
     }
     // a stored plan the backend repaired or cannot read (#165)
     const problem = d.planProblem;
     if (problem && !this._tablet) {
       const text = problem.code === "plan_repaired" ? this.t("plan_repaired", { parts: (problem.dropped ?? []).length }) : problem.code === "plan_too_new" ? this.t("plan_too_new") : this.t("plan_invalid", { error: problem.message });
-      notices.push(html`<div class="fp3d-notice fp3d-notice-${problem.code === "plan_repaired" ? "warn" : "error"}" role="status">${text}</div>`);
+      notices.push({ key: `plan:${problem.code}`, body: html`<div class="fp3d-notice fp3d-notice-${problem.code === "plan_repaired" ? "warn" : "error"}" role="status"><span>${text}</span></div>` });
     }
     if (d.saveState === "error" && d.saveError) {
-      notices.push(html`<div class="fp3d-notice fp3d-notice-error">${this.t("save_failed_detail", { error: d.saveError })}</div>`);
+      notices.push({ key: "save", body: html`<div class="fp3d-notice fp3d-notice-error"><span>${this.t("save_failed_detail", { error: d.saveError })}</span></div>` });
     }
     if (d.draft && this.canEdit && !this._tablet) {
       const at = new Date(d.draft.savedAt).toLocaleString(this.hass?.language);
-      notices.push(
-        html`<div class="fp3d-notice">
+      notices.push({
+        key: `draft:${d.draft.savedAt}`,
+        body: html`<div class="fp3d-notice">
           <span>${d.conflict ? this.t("save_conflict") : this.t(d.draft.home ? "draft_found" : "draft_found_old", { time: at })}</span>
           <button class="fp3d-btn fp3d-primary" @click=${() => void d.restoreDraft()}>${this.t(d.conflict ? "draft_restore_conflict" : "draft_restore")}</button>
           <button class="fp3d-btn" @click=${() => d.discardDraft()}>${this.t("draft_discard")}</button>
         </div>`,
-      );
+      });
     }
-    return notices.length ? html`<div class="fp3d-notices">${notices}</div>` : nothing;
+    return notices;
   }
 
-  /** The clean view shows only the update notice (#60). */
-  private renderCleanNotice() {
-    const update = this.renderUpdateNotice();
-    return update ? html`<div class="fp3d-notices">${update}</div>` : nothing;
+  /**
+   * The notices as pop-up messages over the page (#249, was a banner in the flow, #223): they never push the plan down.
+   * "Hide" puts them away until another one comes; the badge on the save line brings them back.
+   */
+  private renderNotices(notices: { key: string; body: TemplateResult }[]) {
+    if (!notices.length || this._noticesHidden === this.noticeKey) return nothing;
+    return html`<div class="fp3d-notices" role="region" aria-label=${this.t("notices")}>
+      ${notices.map((n) => n.body)}
+      <button class="fp3d-btn fp3d-notices-hide" @click=${() => (this._noticesHidden = this.noticeKey)}>${this.t("notices_hide")}</button>
+    </div>`;
   }
 
   /**
@@ -1121,12 +1182,114 @@ export class Floorplan3dPanel extends LitElement {
 
   /** A single-row bar scrolls sideways with the mouse wheel (a desktop has no swipe). */
   private readonly onNavWheel = (e: WheelEvent) => {
-    if (this._navWrap || !e.deltaY || e.deltaX) return;
+    if (!e.deltaY || e.deltaX) return;
     const nav = e.currentTarget as HTMLElement;
     if (nav.scrollWidth <= nav.clientWidth) return;
     nav.scrollLeft += e.deltaY;
     e.preventDefault();
   };
+
+  /**
+   * The floor bar (#249, option B of #219): the floors in one row ("Whole house" first, the top floor next), scrolling
+   * sideways where it is too long, and one Rooms picker instead of a chip per room, so the bar never wraps. The picker
+   * lists the picked floor's rooms, or every floor's under the whole house. Wall tablets get the floors only, as before.
+   */
+  private renderFloorBar(b: Building, floor: Floor | undefined) {
+    const many = b.floors.length > 1;
+    const pickFloor = (id: string | null) => {
+      this._floorId = id;
+      this._roomId = null;
+      this._roomsOpen = false;
+    };
+    const room = this._roomId ? b.floors.flatMap((f) => zonesOf(f)).find((r) => r.id === this._roomId) : undefined;
+    return html`<nav class="fp3d-nav" aria-label=${this.t("floors")}>
+      ${many
+        ? html`<div class="fp3d-seg fp3d-floors" role="group" aria-label=${this.t("floors")} @wheel=${this.onNavWheel}>
+            <button aria-pressed=${this._floorId === null} @click=${() => pickFloor(null)}>${this.t("all_floors")}</button>
+            ${[...b.floors].reverse().map((f) => html`<button aria-pressed=${f.id === this._floorId} @click=${() => pickFloor(f.id)}>${f.name}</button>`)}
+          </div>`
+        : nothing}
+      ${this._tablet
+        ? nothing
+        : html`${many ? html`<span class="fp3d-sep"></span>` : nothing}
+            <div class="fp3d-rooms">
+              <button
+                class="fp3d-chip fp3d-rooms-btn ${room ? "fp3d-rooms-on" : ""}"
+                aria-haspopup="dialog"
+                aria-expanded=${this._roomsOpen}
+                aria-label=${room ? this.t("rooms_open", { room: room.name }) : this.t("rooms")}
+                @pointerenter=${() => need(loadRoomsPicker)}
+                @focus=${() => need(loadRoomsPicker)}
+                @click=${() => (this._roomsOpen = !this._roomsOpen)}
+              >
+                ${room?.name ?? this.t("rooms")} ${uiIcon("down")}
+              </button>
+              ${this._roomsOpen
+                ? (need(loadRoomsPicker),
+                  html`<fp3d-rooms-picker
+                    .groups=${this.roomGroups(b, floor)}
+                    .selected=${this._roomId}
+                    .t=${this.translator}
+                    .editFloor=${floor && this.canEdit ? floor.id : null}
+                    @room-pick=${(e: CustomEvent<{ floorId: string; roomId: string }>) => {
+                      if (many) this._floorId = e.detail.floorId;
+                      this._roomId = e.detail.roomId;
+                      this._roomsOpen = false;
+                    }}
+                    @edit-floor=${(e: CustomEvent<{ floorId: string }>) => this.openInEditor(e.detail.floorId, null)}
+                    @picker-close=${(e: CustomEvent<{ focus?: boolean } | null>) => this.closeRooms(!!e.detail?.focus)}
+                  ></fp3d-rooms-picker>`)
+                : nothing}
+            </div>`}
+    </nav>`;
+  }
+
+  private roomGroupsMemo: { b: Building; floor: Floor | undefined; groups: RoomGroup[] } | null = null;
+
+  /**
+   * The Rooms picker's list: the picked floor's rooms, else every floor's (top floor first). A room without a name is
+   * left out (#370); the outdoor areas acting as rooms follow the rooms (#100), several areas of one garden with the same
+   * area and name as one line.
+   */
+  private roomGroups(b: Building, floor: Floor | undefined): RoomGroup[] {
+    const m = this.roomGroupsMemo;
+    if (m && m.b === b && m.floor === floor) return m.groups;
+    const floors = floor ? [floor] : [...b.floors].reverse();
+    const groups = floors
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        rooms: zonesOf(f)
+          .filter((r, i, all) => r.name.trim() && !(r.outdoor && all.findIndex((x) => x.outdoor && x.area_id === r.area_id && x.name === r.name) < i))
+          .map((r) => ({ id: r.id, name: r.name })),
+      }))
+      .filter((g) => g.rooms.length);
+    this.roomGroupsMemo = { b, floor, groups };
+    return groups;
+  }
+
+  /** Closes the Rooms picker; from the keyboard (Escape) the focus goes back to its button. */
+  private closeRooms(focus: boolean): void {
+    this._roomsOpen = false;
+    if (focus) void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>(".fp3d-rooms-btn")?.focus());
+  }
+
+  /**
+   * "Edit room" and "Edit floor" (#249) from the room panel and the Rooms picker: the editor opens on that floor with the
+   * room chosen (it used to take about five taps and lost the place). Replaces the editor's old ⚙ menu as the way in.
+   */
+  private openInEditor(floorId: string | null, roomId: string | null): void {
+    if (!this.canEdit || this._tablet) return;
+    this._roomsOpen = false;
+    this.setMode("editor");
+    void loadEditor().then(async () => {
+      this._editorReady = true;
+      await this.updateComplete;
+      const ed = this.renderRoot.querySelector<HTMLElement & { goToRoom(floor: string | null, room: string | null): boolean; updateComplete: Promise<unknown> }>("fp3d-editor");
+      await ed?.updateComplete;
+      ed?.goToRoom(floorId, roomId);
+    }, () => undefined);
+  }
 
   private renderView(b: Building) {
     if (!b.floors.length || !b.floors.some((f) => f.rooms.length)) {
@@ -1140,8 +1303,6 @@ export class Floorplan3dPanel extends LitElement {
       </div>`;
     }
     const floor = b.floors.find((f) => f.id === this._floorId);
-    // "All floors" shows the floor chips only; the rooms come once one floor is picked (#222)
-    const roomFloors = floor ? [floor] : b.floors.length > 1 ? [] : b.floors;
     const tt = this.tt.active;
     // a sample / demo home: devices this Home Assistant lacks show fixed demo states (#100)
     const hass = this.viewHass(this.rawHass!, b);
@@ -1152,63 +1313,9 @@ export class Floorplan3dPanel extends LitElement {
       <button aria-pressed=${this._plan2d} @click=${() => this.setPlan2d(true)}>${this.t("view_2d")}</button>
     </div>`;
     return html`
-      ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : html`<nav class="fp3d-nav">
-        <div class="fp3d-nav-chips ${this._navWrap ? "fp3d-nav-wrap" : ""}" @wheel=${this.onNavWheel}>
-        ${b.floors.length > 1
-          ? html`<button class="fp3d-chip" aria-pressed=${this._floorId === null} @click=${() => {
-                this._floorId = null;
-                this._roomId = null;
-              }}>
-                ${this.t("all_floors")}
-              </button>
-              ${[...b.floors].reverse().map(
-                (f) => html`<button
-                  class="fp3d-chip"
-                  aria-pressed=${f.id === this._floorId}
-                  @click=${() => {
-                    this._floorId = f.id;
-                    this._roomId = null;
-                  }}
-                >
-                  ${f.name}
-                </button>`,
-              )}
-              ${roomFloors.length && !this._tablet ? html`<span class="fp3d-sep"></span>` : nothing}`
-          : nothing}
-        ${(this._tablet ? [] : roomFloors).flatMap((f) => [
-          // a room without a name has no button (an empty chip would only take space, #370)
-          // the rooms, then the outdoor areas acting as rooms (garden, terrace – #100)
-          // several areas of one garden (front and back lawn with the same area and name) share one chip
-          ...zonesOf(f)
-            .filter((r, i, all) => r.name.trim() && !(r.outdoor && all.findIndex((x) => x.outdoor && x.area_id === r.area_id && x.name === r.name) < i))
-            .map(
-            (r) => html`<button
-              class="fp3d-chip fp3d-room-chip"
-              aria-pressed=${r.id === this._roomId}
-              @click=${() => {
-                if (b.floors.length > 1) this._floorId = f.id;
-                this._roomId = r.id === this._roomId ? null : r.id;
-              }}
-            >
-              ${r.name}
-            </button>`,
-          ),
-        ])}
-        </div>
-        ${this._tablet ? nothing : html`<button
-          class="fp3d-chip fp3d-nav-toggle"
-          title=${this.t(this._navWrap ? "nav_row" : "nav_wrap")}
-          aria-label=${this.t(this._navWrap ? "nav_row" : "nav_wrap")}
-          aria-pressed=${this._navWrap}
-          @click=${() => {
-            this._navWrap = !this._navWrap;
-            prefs.set("nav_wrap", this._navWrap ? "1" : "0");
-          }}
-        >
-          ${this._navWrap ? "\u2194" : "\u2261"}
-        </button>`}
-      </nav>`}
+      ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : this.renderFloorBar(b, floor)}
       <div class="fp3d-stage-wrap ${this._roomId ? "fp3d-room-open" : ""} ${this._controlsRight ? "fp3d-side-right" : ""} ${tt ? "fp3d-tt" : ""}">
+        <!-- the floor bar picks the floor: the floor pictures beside the 3D view were a second picker (#249; the card keeps them) -->
         <fp3d-view3d
           class="fp3d-body"
           .canEdit=${this.data.canEdit && !this._tablet}
@@ -1219,6 +1326,7 @@ export class Floorplan3dPanel extends LitElement {
           .building=${b}
           .packs=${this.data.packs}
           .plan2d=${this._plan2d}
+          .floorThumbs=${false}
           .floorStack=${this._floorStack}
           .roomLabels=${this._roomNames}
           .controlsRight=${this._controlsRight}
@@ -1284,6 +1392,8 @@ export class Floorplan3dPanel extends LitElement {
               .sheets=${this._roomId ? (this.view3d()?.roomSheets(this._roomId) ?? null) : null}
               @sheet-open=${(e: CustomEvent<{ id: string }>) => this._roomId && this.view3d()?.openRoomSheet(this._roomId, e.detail.id)}
               @close=${() => (this._roomId = null)}
+              @edit-room=${(e: CustomEvent<{ floorId: string | null; roomId: string }>) => this.openInEditor(e.detail.floorId, e.detail.roomId)}
+              @edit-floor=${(e: CustomEvent<{ floorId: string | null }>) => this.openInEditor(e.detail.floorId, null)}
             ></fp3d-room-panel>`)
           : nothing}
         ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session}></fp3d-time-bar>` : nothing}
@@ -1386,20 +1496,116 @@ export class Floorplan3dPanel extends LitElement {
         }
       }
       .fp3d-app {
+        position: relative;
         display: flex;
         flex-direction: column;
         height: 100%;
         min-height: 0;
       }
+      /* one header row (#249): 56 px, nothing wraps; the tabs reach its foot for their underline */
       .fp3d-header {
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 6px 14px 6px 4px;
-        min-height: 52px;
+        padding: 0 12px 0 4px;
+        height: 56px;
+        box-sizing: border-box;
         border-bottom: 1px solid var(--fp3d-line);
         background: var(--fp3d-chrome-solid);
-        flex-wrap: wrap;
+        flex: none;
+        min-width: 0;
+      }
+      .fp3d-tablet-head {
+        padding-left: 14px;
+      }
+      fp3d-home-switcher {
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+      /* the tabs are navigation (aria-current), so they are underlined, not filled like a choice (#219) */
+      .fp3d-tabs {
+        display: flex;
+        align-self: stretch;
+        gap: 2px;
+        flex: none;
+      }
+      .fp3d-tab {
+        font: inherit;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 3px 12px 0;
+        min-width: 44px;
+        justify-content: center;
+        border: none;
+        border-bottom: 3px solid transparent;
+        background: none;
+        color: var(--fp3d-muted);
+        font-weight: 600;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .fp3d-tab:hover {
+        color: var(--fp3d-text);
+      }
+      .fp3d-tab[aria-current="page"] {
+        color: var(--fp3d-text);
+        border-bottom-color: var(--fp3d-accent);
+      }
+      .fp3d-tab[aria-current="page"] .fp3d-ui-icon {
+        color: var(--fp3d-accent);
+      }
+      .fp3d-tab:focus-visible {
+        outline-offset: -2px;
+      }
+      .fp3d-tab-short {
+        display: none;
+      }
+      /* the save line (#249): who it saved for, a dot before it; a notice is a badge beside it */
+      .fp3d-save {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .fp3d-save-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--fp3d-ok, #4ade80);
+        flex: none;
+      }
+      .fp3d-save-saving .fp3d-save-dot {
+        background: var(--fp3d-muted);
+      }
+      .fp3d-save-error .fp3d-save-dot {
+        background: var(--fp3d-danger);
+      }
+      .fp3d-note-badge {
+        font: inherit;
+        flex: none;
+        display: inline-grid;
+        place-items: center;
+        min-width: 32px;
+        height: 32px;
+        padding: 0;
+        border: none;
+        background: none;
+        cursor: pointer;
+      }
+      .fp3d-note-badge span {
+        min-width: 22px;
+        height: 22px;
+        padding: 0 6px;
+        box-sizing: border-box;
+        border-radius: 999px;
+        background: #ffb547;
+        color: #1a1204;
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 22px;
+        text-align: center;
       }
       ha-menu-button {
         color: var(--fp3d-text);
@@ -1412,10 +1618,24 @@ export class Floorplan3dPanel extends LitElement {
         margin: 0 4px 0 8px;
         white-space: nowrap;
       }
+      /* notices pop up over the page (#249, #223): they never push the plan down */
       .fp3d-notices {
+        position: absolute;
+        top: 64px;
+        right: 12px;
+        z-index: 50;
+        width: min(440px, calc(100% - 24px));
         display: grid;
         gap: 6px;
-        padding: 8px 14px 0;
+      }
+      .fp3d-clean .fp3d-notices {
+        top: 8px;
+      }
+      .fp3d-notices .fp3d-notice {
+        box-shadow: var(--fp3d-shadow);
+      }
+      .fp3d-notices-hide {
+        justify-self: end;
       }
       .fp3d-notice {
         display: flex;
@@ -1497,43 +1717,66 @@ export class Floorplan3dPanel extends LitElement {
         font-size: 12.5px;
         color: var(--fp3d-muted);
       }
-      /* phones: version and grow move with it; the Settings tab keeps only its gear */
-      @media (max-width: 700px) {
-        .fp3d-tab-word {
-          display: none;
-        }
-        .fp3d-version {
-          order: 4;
-        }
-        .fp3d-header .fp3d-grow {
-          display: none;
-        }
-      }
-      /* narrow phones (#216): a slim header, one row where it fits: no title (the page is named by HA's own bar), no
-         version, the Extensions tab as its symbol, tighter gaps */
-      @media ${unsafeCSS(PHONE_NARROW_MEDIA)} {
+      /* compact (#246 size classes): no title, the home's name alone, a short save line */
+      @media (max-width: ${unsafeCSS(String(COMPACT_MAX_PX))}px) {
         .fp3d-header {
-          gap: 4px;
-          padding: 2px 8px 2px 0;
-          min-height: 44px;
+          gap: 8px;
+          padding-right: 8px;
         }
-        .fp3d-header h1,
-        .fp3d-header .fp3d-version,
-        .fp3d-tab-ext-word {
+        .fp3d-header h1 {
           display: none;
         }
-        .fp3d-header .fp3d-seg button {
+        .fp3d-tab {
           padding-left: 9px;
           padding-right: 9px;
         }
+        .fp3d-tab .fp3d-ui-icon {
+          display: none;
+        }
+        .fp3d-save-text {
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
       }
-      /* the installed version, at the far right of the header */
-      .fp3d-version {
-        margin-left: auto;
-        font-size: 11.5px;
-        color: var(--fp3d-muted);
-        white-space: nowrap;
-        opacity: 0.8;
+      /* phones (#249): one 52 px row: "3D" and "Edit" as words, Extensions and Settings as named icons (the open one
+         shows its word), the save line a dot */
+      @media ${unsafeCSS(PHONE_MEDIA)} {
+        .fp3d-header {
+          height: 52px;
+          gap: 2px;
+          padding: 0 4px 0 0;
+        }
+        .fp3d-tab {
+          padding-left: 8px;
+          padding-right: 8px;
+          gap: 5px;
+        }
+        .fp3d-tab .fp3d-ui-icon {
+          display: inline;
+        }
+        .fp3d-tab-view .fp3d-ui-icon,
+        .fp3d-tab-editor .fp3d-ui-icon,
+        .fp3d-tab-editor .fp3d-tab-word,
+        .fp3d-tab-ext:not([aria-current]) .fp3d-tab-word,
+        .fp3d-tab-settings:not([aria-current]) .fp3d-tab-word {
+          display: none;
+        }
+        .fp3d-tab-editor .fp3d-tab-short {
+          display: inline;
+        }
+        .fp3d-save-text {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        .fp3d-notices {
+          top: 60px;
+          right: 8px;
+          width: calc(100% - 16px);
+        }
       }
       .fp3d-save-error {
         color: var(--fp3d-danger);
@@ -1542,43 +1785,52 @@ export class Floorplan3dPanel extends LitElement {
         flex: 1;
         min-height: 0;
       }
+      /* the floor bar (#249): the floors in one row that scrolls sideways, then the Rooms picker; it never wraps */
       .fp3d-nav {
         display: flex;
-        align-items: flex-start;
-        gap: 6px;
-        padding: 10px 14px;
-        flex: none;
-      }
-      /* the chips scroll in their own box; the scroll / expand button beside it has its own room (#224) */
-      .fp3d-nav-chips {
-        display: flex;
         align-items: center;
-        gap: 6px;
-        flex: 1 1 auto;
+        gap: 8px;
+        padding: 6px 12px;
+        min-height: 50px;
+        box-sizing: border-box;
+        flex: none;
+        min-width: 0;
+        border-bottom: 1px solid var(--fp3d-line);
+        background: var(--fp3d-chrome-solid);
+      }
+      .fp3d-floors {
+        flex: 0 1 auto;
         min-width: 0;
         overflow-x: auto;
         scrollbar-width: none;
+        box-shadow: none;
       }
-      /* a desktop shows a thin scrollbar while the pointer rests on the bar */
-      .fp3d-nav-chips:hover {
+      .fp3d-floors:hover {
         scrollbar-width: thin;
       }
-      /* wrapped: several lines, at most about three before the bar itself scrolls */
-      .fp3d-nav-wrap {
-        flex-wrap: wrap;
-        overflow-x: visible;
-        overflow-y: auto;
-        max-height: 132px;
-      }
-      .fp3d-nav-toggle {
+      .fp3d-floors > button {
         flex: none;
-        min-width: 34px;
-        padding-left: 8px;
-        padding-right: 8px;
+      }
+      .fp3d-rooms {
+        position: relative;
+        flex: none;
       }
       .fp3d-nav .fp3d-chip {
         box-shadow: none;
         border: 1px solid var(--fp3d-line);
+      }
+      .fp3d-rooms-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 14em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .fp3d-rooms-on,
+      .fp3d-rooms-btn[aria-expanded="true"] {
+        color: var(--fp3d-accent);
+        border-color: var(--fp3d-accent) !important;
       }
       .fp3d-sep {
         flex: none;
@@ -1754,10 +2006,18 @@ export class Floorplan3dPanel extends LitElement {
         .fp3d-tt-label {
           display: none;
         }
-        .fp3d-nav .fp3d-nav-toggle {
-          min-width: 44px;
+        .fp3d-nav {
+          position: relative;
+          padding: 4px 8px;
         }
-        .fp3d-header .fp3d-seg button,
+        /* the Rooms picker opens from the bar's left edge, so it stays on the screen */
+        .fp3d-rooms {
+          position: static;
+        }
+        fp3d-rooms-picker {
+          left: 8px;
+        }
+        .fp3d-tab,
         .fp3d-overlay .fp3d-chip,
         .fp3d-overlay .fp3d-seg button,
         fp3d-view-panel .fp3d-seg button,
@@ -1772,18 +2032,20 @@ export class Floorplan3dPanel extends LitElement {
       /* touch screens, a tablet as much as a phone (#181): 44 px, and room for three rows of floor chips */
       @media (pointer: coarse), ${unsafeCSS(PHONE_MEDIA)} {
         .fp3d-view-btn,
-        .fp3d-nav .fp3d-nav-toggle {
+        .fp3d-rooms-btn,
+        .fp3d-note-badge {
           min-width: 44px;
         }
-        .fp3d-header .fp3d-seg button,
+        .fp3d-note-badge {
+          height: 44px;
+        }
+        .fp3d-tab,
+        .fp3d-floors button,
         .fp3d-overlay .fp3d-chip,
         .fp3d-overlay .fp3d-seg button,
         fp3d-view-panel .fp3d-seg button,
         .fp3d-nav .fp3d-chip {
           min-height: 44px;
-        }
-        .fp3d-nav-wrap {
-          max-height: 176px;
         }
       }
     `,

@@ -806,29 +806,38 @@ export const formStyles = css`
          whatever the toolbar wraps to, and the toolbar packs tighter */
       @media ${unsafeCSS(PHONE_MEDIA)} {
         .fp3d-editor.fp3d-narrow {
-          grid-template-rows: auto auto;
+          grid-template-rows: auto auto auto;
         }
         .fp3d-narrow .fp3d-canvas-wrap {
           min-height: max(320px, 52vh);
         }
         .fp3d-toolbar {
+          flex-wrap: wrap;
           gap: 4px 6px;
           padding: 6px 8px;
+        }
+        .fp3d-toolbar .fp3d-tb-grow {
+          display: none;
         }
         .fp3d-toolbar .fp3d-seg > button,
         .fp3d-toolbar .fp3d-menu-wrap > button {
           padding: 6px 10px;
           font-size: 13.5px;
         }
-        /* the floor menu and ⚙ share the first row; the tools, undo and the view buttons follow */
+        /* the floor menu and More share the first row; the tools, undo and Fit follow (the phone editor is #250) */
         .fp3d-toolbar > * {
           order: 2;
         }
         .fp3d-toolbar > .fp3d-seg-floor {
           order: 0;
         }
-        .fp3d-toolbar > .fp3d-seg-settings {
+        .fp3d-toolbar > .fp3d-seg-more {
           order: 1;
+        }
+        /* More sits near the left there: its menu opens rightwards, on the screen */
+        .fp3d-seg-more .fp3d-menu-right {
+          left: 0;
+          right: auto;
         }
       }
 
@@ -844,7 +853,7 @@ export const formStyles = css`
         .fp3d-settings-link {
           min-height: 44px;
         }
-        .fp3d-help-btn,
+        .fp3d-more-btn,
         .fp3d-wv-zoom .fp3d-btn,
         .fp3d-strip-btn {
           min-width: 44px;

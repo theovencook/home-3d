@@ -9,3 +9,5 @@ export const loadRoomPanel = once(() => import("./components/room-panel.ts"));
 export const loadHomeSwitcher = once(() => import("./components/home-switcher.ts"));
 /** The View panel (<fp3d-view-panel>, #247) on the 3D view: loaded when the View button is first pointed at or pressed. */
 export const loadViewPanel = once(() => import("./components/view-panel.ts"));
+/** The Rooms picker (<fp3d-rooms-picker>, #249) on the floor bar: loaded when the Rooms button is first pointed at or pressed. */
+export const loadRoomsPicker = once(() => import("./components/rooms-picker.ts"));

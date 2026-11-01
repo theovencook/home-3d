@@ -227,6 +227,7 @@ export class Fp3dRoomPanel extends LitElement {
                 )}
               </div>`
             : nothing}
+          ${this.renderEditLinks(room)}
         </div>
         ${editable
           ? html`<button class="fp3d-btn fp3d-rp-small fp3d-rp-edit" aria-pressed=${editing ? "true" : "false"} @click=${() => this.toggleEdit()}>
@@ -606,6 +607,20 @@ export class Fp3dRoomPanel extends LitElement {
     </div>`;
   }
 
+  /**
+   * "Edit room" and "Edit floor" (#249, editors): the editor opens on this floor with the room chosen, or at the floor's
+   * settings. Not while travelling in time or on a wall tablet (the panel hands canEdit false there).
+   */
+  private renderEditLinks(room: Room) {
+    if (!this.canEdit || this.readOnly) return nothing;
+    const floorId = this.floor?.id ?? null;
+    const go = (type: string, detail: object) => this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+    return html`<div class="fp3d-rp-links">
+      <button class="fp3d-btn fp3d-rp-small fp3d-edit-room" @click=${() => go("edit-room", { floorId, roomId: room.id })}>${this.t("edit_room")}</button>
+      ${floorId ? html`<button class="fp3d-btn fp3d-rp-small fp3d-edit-floor" @click=${() => go("edit-floor", { floorId })}>${this.t("edit_floor")}</button>` : nothing}
+    </div>`;
+  }
+
   private fire(type: string): void {
     this.dispatchEvent(new CustomEvent(type, { bubbles: true, composed: true }));
   }
@@ -657,6 +672,12 @@ export class Fp3dRoomPanel extends LitElement {
       .fp3d-rp-head > div {
         flex: 1;
         min-width: 0;
+      }
+      .fp3d-rp-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
       }
       .fp3d-rp-sheets {
         display: flex;

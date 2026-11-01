@@ -62,10 +62,10 @@ test("after a switch the menu button names the home the view loaded, not the one
   el.chosen({ target: select });
   await tick();
   // the view is still loading: the button keeps naming the loaded home
-  assert.match(flat(el.render()), /class="pick"[^>]*>\s*Home · /);
+  assert.match(flat(el.render()), /class="pick live"[^]*?<span class="name">Home<\/span>/);
   // the view has loaded the other home
   el.home = "flat";
-  assert.match(flat(el.render()), /class="pick"[^>]*>\s*Flat/);
+  assert.match(flat(el.render()), /class="pick off"[^]*?<span class="name">Flat<\/span>/);
 });
 
 const key = (k: string) => ({ key: k, preventDefault() {} });
@@ -273,12 +273,12 @@ test("Delete sits in a block of its own at the end of the menu, apart from Renam
   assert.equal(menuRows(HOMES.slice(0, 1), "home", "home", (k) => k).filter((r) => r.kind === "sep").length, 1);
 });
 
-test("the header chip marks the open home as live while it is the one on the displays (#160)", async () => {
+test("the one home control marks the open home with a red dot while it is the one on the displays (#160, #249)", async () => {
   const { hass } = backend();
   const { el } = await switcher(hass, "home");
-  assert.match(flat(el.render()), /class="chip live"[^]*live on displays/);
+  assert.match(flat(el.render()), /class="pick live"[^]*class="dot"[^]*On displays/);
   el.home = "flat";
   const other = flat(el.render());
-  assert.match(other, /class="chip off"[^]*not shown on displays/);
-  assert.doesNotMatch(other, /live on displays/);
+  assert.match(other, /class="pick off"[^]*Not on displays/);
+  assert.doesNotMatch(other, /class="dot"/);
 });

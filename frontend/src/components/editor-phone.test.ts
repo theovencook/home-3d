@@ -49,8 +49,8 @@ test("the 'works best on a PC or tablet' banner stays on phones (#94)", () => {
   assert.match(rule(".fp3d-phone-hint"), /display: flex/);
 });
 
-test("on a phone the floor menu and ⚙ share the first toolbar row, the tools follow (#94)", () => {
+test("on a phone the floor menu and More share the first toolbar row, the tools follow (#94, #249: the ⚙ menu is gone)", () => {
   assert.match(rule(".fp3d-toolbar > *"), /order: 2/);
   assert.match(rule(".fp3d-toolbar > .fp3d-seg-floor"), /order: 0/);
-  assert.match(rule(".fp3d-toolbar > .fp3d-seg-settings"), /order: 1/);
+  assert.match(rule(".fp3d-toolbar > .fp3d-seg-more"), /order: 1/);
 });

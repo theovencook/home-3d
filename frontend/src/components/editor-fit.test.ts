@@ -38,30 +38,35 @@ const onScreen = (el: Record<string, any>, p: [number, number]) => {
   return x >= 0 && y >= 0 && x <= el._size.w && y <= el._size.h;
 };
 
-test("'Whole plan' frames the house; the garden reaches past it (#91)", () => {
+test("'Fit' (was Whole plan) frames the house; the garden reaches past it (#91)", () => {
   const el = editor();
   el.fit();
   assert.ok(onScreen(el, [8, 6]));
   assert.ok(!onScreen(el, [-10, -8]));
 });
 
-test("'Fit everything' frames the whole plot and the items standing in the garden (#91)", () => {
+test("'Fit with garden' (was Fit everything) frames the whole plot and the items standing in the garden (#91)", () => {
   const el = editor();
   el.fit(true);
   for (const p of [[-10, -8], [20, 16], [23, 18], [0, 0], [8, 6]] as [number, number][]) assert.ok(onScreen(el, p), `${p} is off the plan`);
 });
 
-test("the toolbar offers 'Fit everything' beside 'Whole plan', and 'Wall view' sits apart from them (#91)", () => {
+test("one Fit in the row; 'Fit with garden' is in More, only when something stands outside; Wall view sits apart (#91, #249)", () => {
   const el = editor();
   const bar = flat(el.renderToolBar());
-  assert.match(bar, /Fit everything/);
-  // the group holding the view buttons (3D beside, Whole plan, Fit everything) no longer holds Wall view
   const groups = bar.split(/<div class="fp3d-seg/);
-  const views = groups.find((g) => g.includes("Whole plan"))!;
+  const views = groups.find((g) => g.includes("fp3d-fit-btn"))!;
+  assert.match(views, / Fit<\/button>/);
   assert.match(views, /3D beside/);
-  assert.match(views, /Fit everything/);
   assert.doesNotMatch(views, /Wall view/);
   assert.match(bar, /Wall view/);
+  assert.doesNotMatch(bar, /Fit with garden|Whole plan|Fit everything/, "no second look-alike button in the row");
+  el._toolMenu = "more";
+  assert.match(flat(el.renderToolBar()), /Fit with garden/, "the plot has a lawn and a shed outside");
+  // nothing outside the rooms: nothing more to fit
+  el._doc.floors[0].outdoor = [];
+  el._doc.floors[0].furniture = [];
+  assert.doesNotMatch(flat(el.renderToolBar()), /Fit with garden/);
 });
 
 test("the 3D pane beside the plan has its own button to fold it away (#91)", () => {

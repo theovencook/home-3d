@@ -173,7 +173,6 @@ export class Fp3dEditor extends LitElement {
     _wallsOpen: { state: true },
     _tool: { state: true },
     _toolMenu: { state: true },
-    _settingsMenu: { state: true },
     _sideWidth: { state: true },
     _toolOpen: { state: true },
     _viewMenu: { state: true },
@@ -459,8 +458,6 @@ export class Fp3dEditor extends LitElement {
   declare _tool: Tool;
   /** The toolbar menu open (its group), and which tool's choices are unfolded in it. */
   declare _toolMenu: string | null;
-  /** The ⚙ menu in the toolbar is open; the global settings dialog shown (its topic). */
-  declare _settingsMenu: boolean;
   /** Width of the side bar (px), dragged at its left edge and remembered per browser (#620). */
   declare _sideWidth: number;
   /** What the last module import said (the ⚙ Module dialog). */
@@ -643,7 +640,6 @@ export class Fp3dEditor extends LitElement {
     this._rectName = "";
     this._tool = "select";
     this._toolMenu = null;
-    this._settingsMenu = false;
     let width = 320;
     try {
       width = Number(localStorage.getItem("home3d.sideWidth")) || 320;
@@ -1073,12 +1069,12 @@ export class Fp3dEditor extends LitElement {
     return html`
       ${this.renderPreview()} ${this.renderWallView()} ${this.renderPartCard()} ${this.renderHelp()} ${this.renderRackSheet()}
       <div class="fp3d-editor ${this.narrow ? "fp3d-narrow" : ""}" style=${`--fp3d-side-w:${this._sideWidth}px`}>
+        <!-- one toolbar row across the plan and the sidebar (#249) -->
+        <div class="fp3d-toolbar">
+          ${this._wallPick ? html`<div class="fp3d-pick-tip" style=${`left:${this.wallPickTip[0]}px;top:${this.wallPickTip[1]}px`} @click=${() => (this._wallPick = false)}>${this.t("hint_wall_pick")}</div>` : nothing}
+          ${this.renderFloorMenu()} ${this.renderToolBar(floor, walls?.warnings.length ? html`<span class="fp3d-warn">${this.t("overlap_warning")}</span>` : nothing)}
+        </div>
         <div class="fp3d-main">
-          <div class="fp3d-toolbar">
-            ${this._wallPick ? html`<div class="fp3d-pick-tip" style=${`left:${this.wallPickTip[0]}px;top:${this.wallPickTip[1]}px`} @click=${() => (this._wallPick = false)}>${this.t("hint_wall_pick")}</div>` : nothing}
-            ${this.renderFloorMenu()} ${this.renderToolBar(floor)}
-            ${walls?.warnings.length ? html`<span class="fp3d-warn">${this.t("overlap_warning")}</span>` : nothing}
-          </div>
           <div class="fp3d-stage-pair ${this._split ? "fp3d-split" : ""}" style=${this._split && !this.narrow ? `--fp3d-split:${Math.round(this._splitRatio * 100)}%` : ""}>
           <div class="fp3d-canvas-wrap">
             ${this._phoneHint

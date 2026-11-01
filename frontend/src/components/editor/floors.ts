@@ -180,6 +180,25 @@ export class FloorsPart {
   }
 
   /**
+   * "Edit room" / "Edit floor" from the 3D view (#249): this floor with "Select", the room (or an outdoor area acting as
+   * one) chosen and its panel open; without a room, the floor's settings. A floor or room no longer there: false.
+   */
+  goToRoom(this: Fp3dEditor, floorId: string | null, roomId: string | null): boolean {
+    const floors = this._doc.floors;
+    const fl = floors.find((f) => f.id === floorId) ?? floors.find((f) => !!roomId && (f.rooms.some((r) => r.id === roomId) || f.outdoor.some((o) => o.id === roomId)));
+    if (!fl) return false;
+    this._toolMenu = null;
+    this.setTool("select");
+    this.selectFloor(fl.id);
+    if (roomId && fl.rooms.some((r) => r.id === roomId)) this.selectItem("room", roomId);
+    else if (roomId && fl.outdoor.some((o) => o.id === roomId)) this.selectItem("outdoor", roomId);
+    else this.selectItem("room", null);
+    this._sideOpen = true;
+    this.setSideFolded(false);
+    return !roomId || this._roomId === roomId || this._outdoorId === roomId;
+  }
+
+  /**
    * The floor worked on, always at hand at the left of the toolbar whatever the tool: a menu with every floor (top
    * floor first), "New floor" (from a Home Assistant floor or empty) and the floor's settings in the sidebar.
    */
@@ -191,12 +210,12 @@ export class FloorsPart {
     const close = () => ((this._toolMenu = null), (this._floorMenu = false));
     return html`<div class="fp3d-seg fp3d-seg-menu fp3d-seg-floor">
       <div class="fp3d-menu-wrap">
-        <button aria-haspopup="menu" aria-expanded=${open} @click=${() => ((this._toolMenu = open ? null : "floor"), (this._floorMenu = false), (this._viewMenu = false))}>
+        <button aria-haspopup="menu" aria-expanded=${open} @click=${() => this.openToolMenu(open ? null : "floor")}>
           <span class="fp3d-menu-label">${this.t("floor_label")}</span> ${floor?.name ?? this.t("floors")} <span class="fp3d-caret">▾</span>
         </button>
         ${open
           ? html`<div class="fp3d-menu-veil" @click=${close}></div>
-              <div class="fp3d-menu" role="menu">
+              <div class="fp3d-menu" role="menu" @keydown=${(e: KeyboardEvent) => this.menuKeys(e)}>
                 ${[...floors].reverse().map(
                   (f) => html`<button role="menuitem" class="fp3d-menu-item ${f.id === this._floorId ? "fp3d-menu-on" : ""}" @click=${() => (close(), this.selectFloor(f.id))}>
                     ${f.name}<span class="fp3d-menu-more">${f.id === this._floorId ? "✓" : ""}</span>

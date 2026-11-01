@@ -24,7 +24,7 @@ function flat(v: unknown): string {
   return String(v);
 }
 
-test("the mode switcher is a named group of pressed buttons, not a half-built tab list (#180)", () => {
+test("the tabs are named navigation, the open one aria-current=page, not a half-built tab list (#180, #249)", () => {
   const p = new (Floorplan3dPanel as any)();
   p.hass = { language: "en", user: { id: "u", is_admin: true, name: "x" }, states: {}, themes: { darkMode: true } };
   p.data.building = { floors: [], settings: {} };
@@ -32,9 +32,10 @@ test("the mode switcher is a named group of pressed buttons, not a half-built ta
   p.willUpdate(new Map());
   const out = flat(p.render());
   assert.doesNotMatch(out, /role="tab/);
-  assert.match(out, /<div class="fp3d-seg" role="group" aria-label=Mode>/);
-  assert.match(out, /<button aria-pressed=true @click=>3D<[/]button>/);
-  assert.match(out, /fp3d-tab-settings" aria-pressed=false aria-label=Settings/);
+  assert.match(out, /<nav class="fp3d-tabs" aria-label=Mode>/);
+  assert.match(out, /class="fp3d-tab fp3d-tab-view" aria-current=page aria-label=3D/);
+  assert.match(out, /class="fp3d-tab fp3d-tab-settings" aria-current= aria-label=Settings/);
+  assert.doesNotMatch(out, /fp3d-tab[^>]*aria-pressed/, "tabs are not toggles");
 });
 
 test("a card opens on Enter and Space, but a key on a control inside it is left alone (#180)", () => {

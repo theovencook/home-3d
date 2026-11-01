@@ -48,15 +48,21 @@ test("the View panel stays open while several things change, on a phone as on a 
   }
 });
 
-test("the header is slim on screens up to 480 px: no title, version or Extensions word (#216)", async () => {
+test("the phone header is one row: no title, '3D' and 'Edit' as words, Extensions and Settings as named icons (#216, #249)", async () => {
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("./panel.ts", import.meta.url), "utf8");
-  const at = src.indexOf("PHONE_NARROW_MEDIA)} {");
-  assert.ok(at > 0, "a narrow-phone block");
-  const block = src.slice(at, src.indexOf("/* the installed version", at));
-  for (const sel of [".fp3d-header h1", ".fp3d-header .fp3d-version", ".fp3d-tab-ext-word"]) assert.ok(block.includes(sel), sel);
-  assert.match(block, /display: none/);
-  // the Extensions tab keeps its name for screen readers and long-press
+  const at = src.indexOf("@media ${unsafeCSS(PHONE_MEDIA)} {\n        .fp3d-header {");
+  assert.ok(at > 0, "a phone block for the header");
+  const block = src.slice(at, src.indexOf("\n      }\n", src.indexOf(".fp3d-notices {", at)));
+  for (const sel of [".fp3d-tab-editor .fp3d-tab-word", ".fp3d-tab-ext:not([aria-current]) .fp3d-tab-word", ".fp3d-tab-settings:not([aria-current]) .fp3d-tab-word"]) assert.ok(block.includes(sel), sel);
+  assert.match(block, /height: 52px/);
+  assert.match(block, /\.fp3d-tab-editor \.fp3d-tab-short \{\s*display: inline/);
+  // the title goes below the wide size class; the version left the header for Settings › Advanced › About
+  assert.match(src, /@media \(max-width: \$\{unsafeCSS\(String\(COMPACT_MAX_PX\)\)\}px\) \{\s*\.fp3d-header \{[^}]*\}\s*\.fp3d-header h1 \{\s*display: none/);
   const tab = flat(panel(null).render());
-  assert.match(tab, /class="fp3d-tab-ext"[^>]*aria-label=Extensions/);
+  assert.doesNotMatch(tab, /fp3d-version/);
+  // the icon-only tabs keep their names for screen readers and long-press
+  assert.match(tab, /class="fp3d-tab fp3d-tab-ext"[^>]*aria-label=Extensions title=Extensions/);
+  assert.match(tab, /class="fp3d-tab fp3d-tab-settings"[^>]*aria-label=Settings title=Settings/);
+  assert.match(tab, /class="fp3d-tab fp3d-tab-editor"[^>]*aria-label=Editor/);
 });

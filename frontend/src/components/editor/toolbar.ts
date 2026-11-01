@@ -4,12 +4,11 @@ import { html, nothing, svg } from "lit";
 import { live } from "lit/directives/live.js";
 import { modalFocus } from "../../dialog-focus.ts";
 import { released } from "../../features.ts";
-import { loadLocate } from "../../load-locate.ts";
 import type { I18nKey } from "../../i18n.ts";
 import { OUTDOOR_TYPES, type Floor } from "../../model.ts";
 import { LEGEND, SHORTCUTS } from "../../help.ts";
 import { hintKey, touchOnly, touchWording, type Tool } from "../../editor-hint.ts";
-import { uiIcon } from "../../ui-icons.ts";
+import { uiIcon, type UiIcon } from "../../ui-icons.ts";
 import { startChecklist, type StartStep } from "../../start-checklist.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import type { Fp3dEditor } from "../editor.ts";
@@ -80,12 +79,14 @@ export class ToolbarPart {
   }
 
   /**
-   * The toolbar, tidied up: "Select" stays a button; the drawing tools sit in menus by what they are for – "Build"
-   * (room, wall, door & window, floor opening, roof), "Outside" (areas, pool) – with "Furniture" and "Energy" as
-   * buttons of their own. Tools with choices (room, outdoor, pool) unfold them in the menu; a group's button names the
-   * tool in use. Undo and redo stay, the view switches (fit, 3D beside, wall view, lock) are in a view menu.
+   * One toolbar row (#249, drawn for #219): the floor menu, then the tools with an icon and a label – "Select", the
+   * drawing tools in menus by what they are for, "Build" (room, wall, door & window, floor opening, roof) and "Outside"
+   * (areas, pool), "Furniture" and "Energy" – Wall view (a mode), Undo and Redo, and at the end one "Fit", "3D beside"
+   * and More (Fit with garden when something stands outside, Help and shortcuts, Settings for this home). Tools with
+   * choices unfold them in the menu; a group's button names the tool in use. The old ⚙ menu is gone: the panels link to
+   * their settings, the room panel's "Edit room" opens the editor at the room, and Locating is in Settings › People.
    */
-  renderToolBar(this: Fp3dEditor, floor: Floor | undefined) {
+  renderToolBar(this: Fp3dEditor, floor: Floor | undefined, warn: unknown = nothing) {
     const admin = this.isEditor;
     const off = !floor || !admin;
     type Choice = { label: string; on: boolean; pick: () => void };
@@ -145,21 +146,24 @@ export class ToolbarPart {
     const detail = (e: Entry) =>
       e === pool ? (this._pipeMode ? this.t("pool_pipe_draw") : this.t(`pool_shape_${this._poolShape ?? "rect"}` as I18nKey)) : e === outdoor ? this.t(`out_${this._outdoorType ?? "lawn"}` as I18nKey) : e === room ? this.t(`tool_${this._tool}` as I18nKey) : "";
     const close = () => ((this._toolMenu = null), (this._toolOpen = null));
-    const plain = (tool: Tool, label: string) =>
-      html`<button aria-pressed=${this._tool === tool} ?disabled=${off} @click=${() => (close(), this.setTool(tool))}>${label}</button>`;
-    return html`<div class="fp3d-seg fp3d-seg-menu" role="group">
-        <button aria-pressed=${this._tool === "select"} ?disabled=${!floor} @click=${() => (close(), this.setTool("select"))}>${this.t("tool_select")}</button>
+    const plain = (tool: Tool, label: string, icon: UiIcon) =>
+      html`<button aria-pressed=${this._tool === tool} ?disabled=${off} @click=${() => (close(), this.setTool(tool))}>${uiIcon(icon)} ${label}</button>`;
+    const groupIcon: Record<string, UiIcon> = { build: "wall", outside: "tree" };
+    // one Fit at the end of the row fits the floor plan; fitting the garden too is in More, when something stands outside
+    return html`<span class="fp3d-tb-sep"></span>
+      <div class="fp3d-seg fp3d-seg-menu fp3d-seg-tools" role="group" aria-label=${this.t("tools")}>
+        <button aria-pressed=${this._tool === "select"} ?disabled=${!floor} @click=${() => (close(), this.setTool("select"))}>${uiIcon("pointer")} ${this.t("tool_select")}</button>
         ${groups.map((g) => {
           const active = g.entries.find(inEntry);
           const open = this._toolMenu === g.id;
           const text = active ? `${active.label}${detail(active) ? `: ${detail(active)}` : ""}` : g.label;
           return html`<div class="fp3d-menu-wrap">
-            <button aria-pressed=${!!active} aria-haspopup="menu" aria-expanded=${open} ?disabled=${off} @click=${() => ((this._toolMenu = open ? null : g.id), (this._toolOpen = null), (this._viewMenu = false))}>
-              ${text} <span class="fp3d-caret">▾</span>
+            <button aria-pressed=${!!active} aria-haspopup="menu" aria-expanded=${open} ?disabled=${off} @click=${() => this.openToolMenu(open ? null : g.id)}>
+              ${uiIcon(groupIcon[g.id] ?? "wall")} ${text} <span class="fp3d-caret">▾</span>
             </button>
             ${open
               ? html`<div class="fp3d-menu-veil" @click=${close}></div>
-                  <div class="fp3d-menu" role="menu">
+                  <div class="fp3d-menu" role="menu" @keydown=${(e: KeyboardEvent) => this.menuKeys(e)}>
                     ${g.entries.map((x) => {
                       const choices = x.choices?.() ?? [];
                       const unfolded = this._toolOpen === x.tool;
@@ -199,74 +203,93 @@ export class ToolbarPart {
               : nothing}
           </div>`;
         })}
-        ${plain("furniture", this.t("tool_furniture"))} ${plain("energy", this.t("tool_energy"))}
+        ${plain("furniture", this.t("tool_furniture"), "sofa")} ${plain("energy", this.t("tool_energy"), "bolt")}
       </div>
+      <span class="fp3d-tb-sep"></span>
       <!-- Wall view is a mode: beside the tools, kept away from the view buttons by undo / redo (#91) -->
       <div class="fp3d-seg fp3d-seg-menu">
         <button aria-pressed=${this._wallPick} title=${this.t("wall_view_open")} @click=${(e: Event) => (close(), this.toggleWallPick(e.currentTarget as HTMLElement))}>${this.t("wall_view")}</button>
       </div>
-      <div class="fp3d-seg fp3d-seg-menu">
-        <button class="fp3d-undo" ?disabled=${!this._canUndo} @click=${() => this.undo()} title=${`${this.t("undo")} (Ctrl+Z)`} aria-label=${this.t("undo")}>${uiIcon("undo")}</button>
-        <button class="fp3d-undo" ?disabled=${!this._canRedo} @click=${() => this.redo()} title=${`${this.t("redo")} (Ctrl+Y)`} aria-label=${this.t("redo")}>${uiIcon("redo")}</button>
+      <span class="fp3d-tb-sep"></span>
+      <div class="fp3d-seg fp3d-seg-menu fp3d-seg-undo">
+        <button class="fp3d-undo" ?disabled=${!this._canUndo} @click=${() => this.undo()} title=${`${this.t("undo")} (Ctrl+Z)`} aria-label=${this.t("undo")}>${uiIcon("undo")}<span class="fp3d-tool-word">${this.t("undo")}</span></button>
+        <button class="fp3d-undo" ?disabled=${!this._canRedo} @click=${() => this.redo()} title=${`${this.t("redo")} (Ctrl+Y)`} aria-label=${this.t("redo")}>${uiIcon("redo")}<span class="fp3d-tool-word">${this.t("redo")}</span></button>
       </div>
+      ${warn}
+      <span class="fp3d-tb-grow"></span>
       <div class="fp3d-seg fp3d-seg-menu fp3d-seg-views">
+        <button class="fp3d-fit-btn" title=${this.t("fit_hint")} @click=${() => (close(), this.fit())}>${uiIcon("expand")} ${this.t("fit")}</button>
         <button class="fp3d-split-btn" aria-pressed=${this._split} title=${this.t("split_3d_hint")} @click=${() => (close(), this.toggleSplit())}>${uiIcon(this._split ? "split-on" : "split-off")} ${this.t("split_3d")}</button>
-        <button title=${this.t("fit_hint")} @click=${() => (close(), this.fit())}>${this.t("fit")}</button>
-        <button title=${this.t("fit_all_hint")} @click=${() => (close(), this.fit(true))}>${this.t("fit_all")}</button>
-        <button class="fp3d-help-btn" aria-pressed=${this._help} aria-label=${this.t("help_open")} title=${this.t("help_open")} @click=${() => (close(), (this._help = !this._help))}>?</button>
       </div>
-      ${this.renderSettingsMenu(close)}`;
+      ${this.renderMoreMenu(close)}`;
+  }
+
+  /** A tool menu opened or closed (null); the focus goes to its first line, as menus do (#249, drawings' notes). */
+  openToolMenu(this: Fp3dEditor, id: string | null): void {
+    this._toolMenu = id;
+    this._toolOpen = null;
+    this._floorMenu = false;
+    this._viewMenu = false;
+    if (id) void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>(".fp3d-toolbar .fp3d-menu [role^='menuitem']")?.focus());
+  }
+
+  /** The keys of an open toolbar menu: arrows, Home and End move through its lines; Escape closes it, back on its button. */
+  menuKeys(this: Fp3dEditor, e: KeyboardEvent): void {
+    const menu = e.currentTarget as HTMLElement;
+    const items = [...menu.querySelectorAll<HTMLElement>("[role^='menuitem']")];
+    const root = menu.getRootNode() as Document | ShadowRoot;
+    const at = items.indexOf(root.activeElement as HTMLElement);
+    const to = e.key === "ArrowDown" ? (at + 1) % items.length : e.key === "ArrowUp" ? (at - 1 + items.length) % items.length : e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : -1;
+    if (to >= 0 && items.length) {
+      e.preventDefault();
+      items[to]!.focus();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      const button = menu.closest(".fp3d-menu-wrap")?.querySelector<HTMLElement>(":scope > button");
+      this._toolMenu = null;
+      this._toolOpen = null;
+      this._floorMenu = false;
+      button?.focus();
+    }
+  }
+
+  /** Something stands outside the rooms of the floor (a garden, a path, an item past the walls): "Fit with garden" shows more. */
+  hasOutside(this: Fp3dEditor, floor: Floor | undefined): boolean {
+    if (!floor) return false;
+    if (floor.outdoor.length) return true;
+    const pts = floor.rooms.flatMap((r) => r.points);
+    if (!pts.length) return floor.furniture.length > 0 || floor.placements.length > 0;
+    const xs = pts.map((p) => p[0]);
+    const zs = pts.map((p) => p[1]);
+    const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
+    const out = (x: number, z: number) => x < x0 || x > x1 || z < z0 || z > z1;
+    return floor.furniture.some((f) => out(f.x, f.z)) || floor.placements.some((p) => out(p.x, p.z));
   }
 
   /**
-   * ⚙ Settings: everything that belongs to the whole plan, not to a floor, a room or an item. Each topic opens the
-   * Settings page (#139) at its section; locating keeps its own assistant (a bundle of its own).
+   * More (#249): Fit with garden (only when something stands outside), 3D beside on narrower screens (on wide ones it
+   * is in the row), Help and shortcuts, and Settings for this home.
    */
-  renderSettingsMenu(this: Fp3dEditor, closeTools: () => void) {
-    const admin = this.isEditor;
-    const open = this._settingsMenu;
-    const all: { key: string; section: string | null; id?: string; icon: string; label: string; admin: boolean }[] = [
-      { key: "all", section: null, icon: "⚙", label: this.t("all_settings"), admin: false },
-      { key: "house", section: "general", icon: "🏠", label: this.t("settings_house"), admin: true },
-      { key: "weather", section: "scene", id: "weather_entity", icon: "🌦", label: this.t("settings_weather"), admin: true },
-      { key: "director", section: "cameras", id: "director.doorbell", icon: "🎬", label: this.t("card_director"), admin: true },
-      { key: "voice", section: "voice", icon: "🎙", label: this.t("voice"), admin: false },
-      ...(released("locate") && this.isHaAdmin ? [{ key: "locate", section: null, icon: "📡", label: this.t("locate"), admin: true }] : []),
-      { key: "favorites", section: "favourites", icon: "⭐", label: this.t("favorites"), admin: true },
-      { key: "backdrop", section: "scene", id: "backdrop.kind", icon: "🖼", label: this.t("backdrop"), admin: true },
-      { key: "terrain", section: "scene", id: "terrain.level", icon: "⛰", label: this.t("terrain"), admin: true },
-      { key: "backup", section: "backup", icon: "💾", label: this.t("backup"), admin: true },
-      ...(this.isHaAdmin ? [{ key: "editors", section: "access", icon: "👥", label: this.t("editors_title"), admin: true }] : []),
-    ];
-    const topics = all.filter((t) => admin || !t.admin);
-    const toggle = () => {
-      closeTools();
-      this._settingsMenu = !open;
-    };
-    return html`<div class="fp3d-seg fp3d-seg-menu fp3d-seg-settings">
+  renderMoreMenu(this: Fp3dEditor, close: () => void) {
+    const open = this._toolMenu === "more";
+    const item = (icon: UiIcon, label: string, note: string, run: () => void, cls = "") =>
+      html`<button role="menuitem" class="fp3d-menu-item ${cls}" @click=${() => (close(), run())}>${uiIcon(icon)} ${label}<span class="fp3d-menu-more">${note}</span></button>`;
+    return html`<div class="fp3d-seg fp3d-seg-menu fp3d-seg-more">
       <div class="fp3d-menu-wrap">
-        <button aria-haspopup="menu" aria-expanded=${open} title=${this.t("settings")} @click=${toggle}>
-          ⚙ <span class="fp3d-settings-word">${this.t("settings")}</span> <span class="fp3d-caret">▾</span>
+        <button class="fp3d-more-btn" aria-haspopup="menu" aria-expanded=${open} @click=${() => this.openToolMenu(open ? null : "more")}>
+          ${uiIcon("more")} <span class="fp3d-tool-word">${this.t("more")}</span> <span class="fp3d-caret">${open ? "▴" : "▾"}</span>
         </button>
         ${open
-          ? html`<div class="fp3d-menu-veil" @click=${() => (this._settingsMenu = false)}></div>
-              <div class="fp3d-menu fp3d-menu-right" role="menu">
-                ${topics.map(
-                  (t) => html`<button
-                    role="menuitem"
-                    class="fp3d-menu-item"
-                    @click=${() => {
-                      this._settingsMenu = false;
-                      if (t.key === "locate") {
-                        if (this.hass) void loadLocate().then((m) => m.openLocateSetup(this.hass!, this._doc, () => this.hass, (look) => this.setSettings({ person_look: look === "figure" ? null : look })));
-                        return;
-                      }
-                      this.openSettings(t.section, t.id ?? null);
-                    }}
-                  >
-                    ${t.icon} ${t.label}
-                  </button>`,
-                )}
+          ? html`<div class="fp3d-menu-veil" @click=${close}></div>
+              <div class="fp3d-menu fp3d-menu-right" role="menu" @keydown=${(e: KeyboardEvent) => this.menuKeys(e)}>
+                ${this.hasOutside(this.floor) ? item("tree", this.t("fit_all"), "", () => this.fit(true)) : nothing}
+                <button role="menuitemcheckbox" aria-checked=${this._split ? "true" : "false"} class="fp3d-menu-item fp3d-more-split" @click=${() => (close(), this.toggleSplit())}>
+                  ${uiIcon(this._split ? "split-on" : "split-off")} ${this.t("split_3d")}<span class="fp3d-menu-more">${this._split ? "✓" : ""}</span>
+                </button>
+                ${item("help", this.t("help_and_shortcuts"), touchOnly() ? "" : "?", () => (this._help = true))}
+                <div class="fp3d-menu-sep" role="separator"></div>
+                ${item("gear", this.t("settings_home"), "›", () => this.openSettings("general"))}
               </div>`
           : nothing}
       </div>
@@ -281,6 +304,33 @@ export class ToolbarPart {
     return html`<button class="fp3d-settings-link fp3d-wide" @click=${() => this.openSettings(section, id)}>
       <span>${icon} ${this.t(text)}</span><b>${this.t("settings")} ›</b>
     </button>`;
+  }
+
+  /**
+   * "Settings for this home" on the floor's page (#249): the links that replace the old ⚙ menu of the toolbar, each
+   * opening the Settings page at its place (Locating is in Settings › People now). Editors see the home's; the HA
+   * admin's lines (People, Editors) only HA admins.
+   */
+  renderHomeLinks(this: Fp3dEditor) {
+    const editor = this.isEditor;
+    const links: { section: string; id: string | null; label: I18nKey; show: boolean }[] = [
+      { section: "general", id: null, label: "st_sec_general", show: editor },
+      { section: "scene", id: "weather_entity", label: "settings_weather", show: editor },
+      { section: "cameras", id: "director.doorbell", label: "card_director", show: editor },
+      { section: "voice", id: null, label: "voice", show: true },
+      { section: "people", id: "locate", label: "st_sec_people", show: editor && this.isHaAdmin },
+      { section: "favourites", id: null, label: "favorites", show: editor },
+      { section: "scene", id: "backdrop.kind", label: "backdrop", show: editor },
+      { section: "scene", id: "terrain.level", label: "terrain", show: editor },
+      { section: "backup", id: null, label: "backup", show: editor },
+      { section: "access", id: null, label: "editors_title", show: editor && this.isHaAdmin },
+    ];
+    return html`<section class="fp3d-home-links">
+      <h3>${this.t("settings_home")}</h3>
+      <div class="fp3d-home-link-list">
+        ${links.filter((l) => l.show).map((l) => html`<button class="fp3d-link fp3d-home-link" @click=${() => this.openSettings(l.section, l.id)}>${this.t(l.label)} ›</button>`)}
+      </div>
+    </section>`;
   }
 
   /** Opens the Settings page (#139) at a section and setting; the panel listens. */

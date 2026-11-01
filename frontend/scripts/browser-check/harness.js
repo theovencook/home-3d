@@ -223,11 +223,11 @@ const check = {
     return true;
   },
 
-  /** Click a mode button of the panel by its position (0 View, 1 Editor, 2 Extensions; a group of pressed buttons since
-   * #180) or the Settings button. */
+  /** Click a tab of the panel by its position (0 View, 1 Editor, 2 Extensions; underlined navigation since #249) or the
+   * Settings tab. */
   async tab(which) {
     const root = panel.shadowRoot;
-    const button = which === "settings" ? root.querySelector(".fp3d-tab-settings") : root.querySelectorAll("header .fp3d-seg > button:not(.fp3d-tab-settings)")[which];
+    const button = which === "settings" ? root.querySelector(".fp3d-tab-settings") : root.querySelectorAll("header .fp3d-tabs > button:not(.fp3d-tab-settings)")[which];
     if (!button) throw new Error(`no tab ${which}`);
     button.click();
     await panel.updateComplete;
@@ -400,7 +400,7 @@ const check = {
   },
 
   /**
-   * The editor's help overlay (#196), opened from its "?" button: whether it took the focus, and (`step: "where"`)
+   * The editor's help overlay (#196), opened from the hint bar's Help button (the toolbar's "?" went in #249): whether it took the focus, and (`step: "where"`)
    * whether the focus is still inside it, or (`step: "closed"`) back on the button. The Node script presses the keys.
    */
   async helpDialog({ step }) {
@@ -408,14 +408,14 @@ const check = {
     const root = ed.shadowRoot;
     const box = () => root.querySelector(".fp3d-help-overlay");
     if (step === "open") {
-      const button = root.querySelector(".fp3d-help-btn");
+      const button = root.querySelector(".fp3d-hint-help");
       if (!button) throw new Error("no help button");
       button.focus();
       button.click();
       await ed.updateComplete;
       await waitFor(() => box() && root.activeElement && box().contains(root.activeElement), 5000, "the help overlay to take the focus");
       // the editor bundle borrows the main bundle's English texts (#196): a missing table would show the key
-      return { modal: box().getAttribute("aria-modal"), lang: panel.getAttribute("lang"), title: box().querySelector("h3")?.textContent ?? "" };
+      return { modal: box().getAttribute("aria-modal"), lang: panel.getAttribute("lang"), title: box().querySelector("h3")?.textContent ?? "", opener: button.textContent.trim() };
     }
     if (step === "where") return { inside: !!box() && box().contains(root.activeElement), on: root.activeElement?.className ?? root.activeElement?.tagName };
     await ed.updateComplete;
