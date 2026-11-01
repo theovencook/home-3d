@@ -15,6 +15,16 @@ import { hiddenUnplaced, setUnplacedHidden, suggestLinks, unplacedByArea, type L
 import { ENTITY_DRAG, PAW, round, patchItem } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
+const DEV_ICONS = {
+  eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z",
+  slash: "M4 4l16 16",
+  text: "M4 7h16M4 12h10M4 17h13",
+  star: "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z",
+};
+/** A 18 px line icon for the device-row buttons; `slash` strikes it through, `fill` fills it (a set star). */
+const devIcon = (path: string, slash = false, fill = false) =>
+  svg`<svg viewBox="0 0 24 24" width="18" height="18" fill=${fill ? "currentColor" : "none"} stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${path} />${slash ? svg`<path d=${DEV_ICONS.slash} />` : nothing}</svg>`;
+
 /** DevicePanelPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class DevicePanelPart {
   /** Place entities in the selected room; an entity already placed elsewhere moves here. */
@@ -377,7 +387,7 @@ export class DevicePanelPart {
               aria-label=${this.t(hidden.has(id) ? "panel_unhide" : "panel_hide")}
               @click=${() => this.updateRoom({ hidden: hidden.has(id) ? [...hidden].filter((x) => x !== id) : [...hidden, id] })}
             >
-              ${hidden.has(id) ? "🙈" : "👁"}
+              ${devIcon(DEV_ICONS.eye, hidden.has(id))}
             </button>`
           : nothing}
         ${admin && !extra && !hidden.has(id)
@@ -388,7 +398,7 @@ export class DevicePanelPart {
               aria-label=${this.t(noState.has(id) ? "panel_state_show" : "panel_state_hide")}
               @click=${() => this.updateRoom({ no_state: noState.has(id) ? [...noState].filter((x) => x !== id) : [...noState, id] })}
             >
-              ${noState.has(id) ? "∅" : "Aa"}
+              ${devIcon(DEV_ICONS.text, noState.has(id))}
             </button>`
           : nothing}
         ${admin && !placed
@@ -399,7 +409,7 @@ export class DevicePanelPart {
               aria-label=${this.t(pinned.has(id) ? "panel_unpin" : "panel_pin")}
               @click=${() => this.updateRoom({ panel: pinned.has(id) ? [...pinned].filter((x) => x !== id) : [...pinned, id] })}
             >
-              ${pinned.has(id) ? "★" : "☆"}
+              ${devIcon(DEV_ICONS.star, false, pinned.has(id))}
             </button>`
           : nothing}
         ${admin
@@ -427,6 +437,13 @@ export class DevicePanelPart {
     return html`<section>
       <h3>${this.t("devices")}</h3>
       <p class="fp3d-sub">${this.t("devices_panel_hint")}</p>
+      ${admin && source === "area" && ids.length
+        ? html`<p class="fp3d-dev-legend">
+            <span>${devIcon(DEV_ICONS.eye)}${this.t("devices_legend_hide")}</span>
+            <span>${devIcon(DEV_ICONS.text)}${this.t("devices_legend_state")}</span>
+            <span>${devIcon(DEV_ICONS.star)}${this.t("devices_legend_pin")}</span>
+          </p>`
+        : nothing}
       ${admin
         ? html`<div class="fp3d-seg fp3d-dev-source">
             <button aria-pressed=${source === "area"} @click=${() => setSource("area")}>${this.t("devices_src_area")}${ids.length ? ` (${groups.length})` : ""}</button>

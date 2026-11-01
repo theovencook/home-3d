@@ -522,6 +522,9 @@ export class RoomsPart {
             ${this.len(this.t("depth"), b.z1 - b.z0, (v) => this.setRect("d", v), 0.01, 0.05)}`
           : nothing}
       </div>
+    </section>
+    ${this.renderDeviceList(room)}
+    <section>
       <button class="fp3d-btn fp3d-wv-open" title=${this.t("wall_view_open")} @click=${() => this.openRoomWalls(room)}>▦ ${this.t("wall_view_room")}</button>
       ${this.renderEdgeHeights(room)}
       <div class="fp3d-form">
