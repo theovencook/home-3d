@@ -226,11 +226,11 @@ export const phoneStyles = css`
       .fp3d-sheet-title b {
         font-size: 15px;
       }
-      .fp3d-sheet-hint {
+      .fp3d-phone .fp3d-sheet-hint {
         display: block;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
         font-size: 12.5px;
         color: var(--fp3d-muted);
       }
@@ -253,6 +253,14 @@ export const phoneStyles = css`
         flex-direction: column;
         gap: 18px;
         padding: 4px 14px 24px;
+      }
+      /* "Back to the floor" is a small link here, so the name and area come first (#262) */
+      .fp3d-sheet-body > .fp3d-back {
+        align-self: flex-start;
+        min-height: 32px;
+        margin-bottom: -10px;
+        padding: 2px 10px;
+        font-size: 13px;
       }
       .fp3d-sheet[data-sheet="peek"] > .fp3d-sheet-body {
         display: none;

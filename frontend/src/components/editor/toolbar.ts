@@ -362,11 +362,15 @@ export class ToolbarPart {
     return this.freeHaFloors.length > 0 || (!!floor && this.unplacedAreas(floor).length > 0);
   }
 
+  /** Whether the empty home's checklist is up (the side panel leaves the first-floor call to it, #262). */
+  startShowing(this: Fp3dEditor): boolean {
+    return this.isEditor && this._tool === "select" && !this._placing && startChecklist(this._doc).show;
+  }
+
   /** The empty home's checklist (#193): replaces the hint pill until the first room exists. */
   renderStart(this: Fp3dEditor) {
-    if (!this.isEditor || this._tool !== "select" || this._placing) return null;
+    if (!this.startShowing()) return null;
     const list = startChecklist(this._doc);
-    if (!list.show) return null;
     const t = this.t.bind(this);
     const hasFloor = this._doc.floors.length > 0;
     const drawRoom = () => {

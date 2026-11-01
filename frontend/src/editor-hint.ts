@@ -68,6 +68,8 @@ export const TOUCH_HINTS: Partial<Record<I18nKey, I18nKey>> = {
   hint_kerb_pick: "hint_kerb_pick_touch",
   fixed_drag_hint: "fixed_drag_hint_touch",
   multi_hint: "multi_hint_touch",
+  hint_furniture: "hint_furniture_touch",
+  hint_opening: "hint_opening_touch",
 };
 
 /** A hint for the device in hand: reworded for touch where there is a text for it, else without its key parts. */

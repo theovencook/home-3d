@@ -100,7 +100,8 @@ export class PhonePart {
     const sel = this.sheetSelection();
     const sameTool = before?.split("|")[0] === key.split("|")[0];
     if (!sel && sameTool) return;
-    this._sheet = this._tool === "furniture" && !sel ? "half" : "peek";
+    // peek, also for the library: it tells you to tap the plan, so the plan stays in view (#262)
+    this._sheet = "peek";
   }
 
   /** Opens the sheet at a height (the floor menu's "Floor settings", a bar tool pressed again). */
@@ -122,7 +123,7 @@ export class PhonePart {
   phoneTool(this: Fp3dEditor, tool: Tool): void {
     this.openToolMenu(null);
     this.setTool(tool);
-    if (this._sheet === "closed" && tool !== "select") this.showSheet(tool === "furniture" ? "half" : "peek");
+    if (this._sheet === "closed" && tool !== "select") this.showSheet("peek");
   }
 
   /** The sheet's title row: what is chosen (name, kind, a room's area), else the tool and its hint, else the floor. */
@@ -133,6 +134,8 @@ export class PhonePart {
     const many = this.selection().length;
     if (many > 1 && f) return { title: this._multi.length ? this.t("multi_title", { n: many }) : `▣ ${this.t("block_title")}`, kind: this._multi.length ? "" : String(many), sub: "" };
     if (f) return { title: furnitureName(this.hass, f.type), kind: this.t("furniture"), sub: "" };
+    // the library is what the Furniture tool shows, whatever lies under the last tap (#262)
+    if (this._tool === "furniture" && !f) return { title: this.t("tool_furniture"), kind: room?.name ?? "", sub: this.hintText() };
     if (this.opening) return { title: this.t("sheet_opening"), kind: "", sub: "" };
     if (this.device) {
       const id = this.device.entity_id;

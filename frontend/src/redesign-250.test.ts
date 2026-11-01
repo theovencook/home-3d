@@ -43,6 +43,7 @@ const { defineElement } = await import("./define.ts");
 const { openBackLayer, BackLayers } = await import("./back-stack.ts");
 const { settingById, SETTINGS } = await import("./settings/registry.ts");
 const { englishTable } = await import("./i18n.ts");
+const { touchWording } = await import("./editor-hint.ts");
 
 const PhoneBar = definePhoneBar({ LitElement, html, css, nothing, uiIcon, defineElement }) as unknown as new () => Record<string, any>;
 const en = englishTable() as Record<string, string>;
@@ -226,9 +227,9 @@ test("choosing something pulls the sheet up to its title row; Details goes to ha
   assert.ok(head.includes(flat(el.renderSide(el.floor))));
   el.renderSheet(el.floor);
   el._sheet = "half";
-  assert.match(flat(el.renderSheet(el.floor)), />Taller</);
+  assert.match(flat(el.renderSheet(el.floor)), />Expand panel</);
   el._sheet = "full";
-  assert.match(flat(el.renderSheet(el.floor)), />Smaller</);
+  assert.match(flat(el.renderSheet(el.floor)), />Shrink panel</);
   // another selection keeps the height
   el.selectItem("furniture", "lamp");
   el.syncSheet();
@@ -252,15 +253,16 @@ test("the sheet shows every kind of selection and every tool's panel (devices, g
   assert.match(flat(el.renderSheet(el.floor)), /Garden<\/b> <span class="fp3d-sub">· Outside area/);
   el.closeSheet();
   el.syncSheet();
-  // the furniture tool: its library at half height
+  // the furniture tool: its library at peek, so the plan it tells you to tap stays in view (#262)
   el.phoneTool("furniture");
   el.syncSheet();
-  assert.equal(el._sheet, "half");
+  assert.equal(el._sheet, "peek");
+  assert.match(flat(el.renderSheet(el.floor)), /<b>Furniture<\/b>/, "titled Furniture, not by what lies under the last tap (#262)");
   el.closeSheet();
   el.syncSheet();
   assert.equal(el._sheet, "closed", "shut by hand, it stays shut while the tool stays");
   el.phoneTool("furniture");
-  assert.equal(el._sheet, "half", "the bar's Furniture brings it back");
+  assert.equal(el._sheet, "peek", "the bar's Furniture brings it back");
   // a drawing tool: its name and hint in the title row
   el.closeSheet();
   el.phoneTool("wall");
@@ -420,4 +422,27 @@ test("with several items chosen the sheet says how many, and the hint matches th
   const head = flat(el.renderSheet(el.floor));
   assert.match(head, /aria-label=2 items selected/);
   assert.doesNotMatch(head.slice(0, head.indexOf("fp3d-sheet-body")), /Furniture/, "no single item's name in the header");
+});
+
+test("phone wording and first-run steps of the editor (#262)", () => {
+  // the library and door hints speak of what is below, not "on the right", on a touch device
+  const touch = (k: string) => touchWording(true, k as never, (key, p) => (englishTable() as Record<string, string>)[key]!.replace(/\{(\w+)\}/g, (_: string, n: string) => String(p?.[n] ?? "")), { kind: "Door" });
+  assert.doesNotMatch(touch("hint_furniture"), /right/);
+  assert.doesNotMatch(touch("hint_opening"), /right/);
+  // a new floor leaves a leftover tool: Select, whose hint is the next step
+  const el = editor();
+  el.setTool("opening");
+  el.addFloor();
+  assert.equal(el._tool, "select");
+  // the floor chip of an empty home says so
+  const empty = editor();
+  empty._doc.floors.length = 0;
+  empty._floorId = null;
+  assert.match(flat(empty.renderFloorMenu()), /No floor yet/);
+  // the checklist and the sidebar do not both offer the first floor
+  assert.equal(empty.startShowing(), true);
+  assert.doesNotMatch(flat(empty.renderSide(undefined)), /Add your first floor/);
+  // the sheet size button is named for the sheet
+  assert.equal(en.sheet_taller, "Expand panel");
+  assert.equal(en.floor_settings_of, "{floor}");
 });

@@ -35,6 +35,8 @@ export class FloorsPart {
     this._floorId = id;
     this._roomId = null;
     this._floorMenu = false;
+    // a new floor starts with Select, so the next-step hint shows instead of the last tool's (#262)
+    if (this._tool !== "select") this.setTool("select");
     this.fit();
   }
 
@@ -211,7 +213,7 @@ export class FloorsPart {
     return html`<div class="fp3d-seg fp3d-seg-menu fp3d-seg-floor">
       <div class="fp3d-menu-wrap">
         <button aria-haspopup="menu" aria-expanded=${open} @click=${() => this.openToolMenu(open ? null : "floor")}>
-          <span class="fp3d-menu-label">${this.t("floor_label")}</span> ${floor?.name ?? this.t("floors")} <span class="fp3d-caret">▾</span>
+          <span class="fp3d-menu-label">${this.t("floor_label")}</span> ${floor?.name ?? this.t(floors.length ? "floors" : "floor_none")} <span class="fp3d-caret">▾</span>
         </button>
         ${open
           ? html`<div class="fp3d-menu-veil" @click=${close}></div>
