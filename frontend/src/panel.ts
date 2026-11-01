@@ -47,7 +47,7 @@ type Mode = "view" | "editor" | "extensions" | "settings";
 
 /** "#settings/<section>/<id>" (#139): the Settings page's own address; the page checks the names. */
 function settingsAddress(hash: string): { section: string | null; id: string | null } | null {
-  const m = /^#settings(?:\/([a-z_]+))?(?:\/([^/?#]+))?\/?$/.exec(hash);
+  const m = /^#settings(?:\/([a-z0-9_]+))?(?:\/([^/?#]+))?\/?$/.exec(hash);
   return m ? { section: m[1] ?? null, id: m[2] ? decodeURIComponent(m[2]) : null } : null;
 }
 
@@ -201,6 +201,8 @@ export class Floorplan3dPanel extends LitElement {
   private declare _settingsError: string | null;
   /** The section and setting the Settings page opens at (a deep link, a "Settings" link elsewhere). */
   private declare _settingsAt: { section: string | null; id: string | null };
+  /** The tab the Settings page was opened from: its "Back to …" link returns there (#248). */
+  private settingsFrom: Mode = "view";
   /** The 3D view as it was when the view tab was left: the Settings page's "start view" takes it. */
   private lastView: StartView | null = null;
 
@@ -468,6 +470,7 @@ export class Floorplan3dPanel extends LitElement {
     // the Settings page keeps its address (#settings/…); leaving it clears it
     if (this._mode === "settings" && mode !== "settings") this.setAddress("");
     if (mode === "settings") this.setAddress(this.settingsLink(this._settingsAt.section, this._settingsAt.id));
+    if (mode === "settings") this.settingsFrom = this._mode;
     this._mode = mode;
   }
 
@@ -500,6 +503,13 @@ export class Floorplan3dPanel extends LitElement {
     e.stopPropagation();
     e.preventDefault();
     this.openSettings(d.section ?? null, d.id ?? null);
+  };
+
+  /** A module sheet's "Extension settings ›" (#248): its settings are on the Extensions tab (editors only). */
+  private readonly onOpenExtensions = (e: Event) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (this.canEdit) this.setMode("extensions");
   };
 
   /** A link to #settings/… typed or clicked while the panel is open. */
@@ -861,6 +871,7 @@ export class Floorplan3dPanel extends LitElement {
     window.addEventListener("hashchange", this.onHash);
     window.addEventListener("location-changed", this.onHash);
     this.addEventListener("open-settings", this.onOpenSettings);
+    this.addEventListener("open-extensions", this.onOpenExtensions);
   }
 
   disconnectedCallback(): void {
@@ -869,6 +880,7 @@ export class Floorplan3dPanel extends LitElement {
     window.removeEventListener("hashchange", this.onHash);
     window.removeEventListener("location-changed", this.onHash);
     this.removeEventListener("open-settings", this.onOpenSettings);
+    this.removeEventListener("open-extensions", this.onOpenExtensions);
     this.listenTouches(false);
     this.tt.stop();
     this.locateLab?.();
@@ -1056,11 +1068,24 @@ export class Floorplan3dPanel extends LitElement {
       .homeName=${this.data.homeName ?? ""}
       .lastView=${this.lastView}
       .loadEditor=${loadEditor}
+      .backTo=${this.settingsFrom === "settings" ? "view" : this.settingsFrom}
+      .version=${this.versions()}
+      @settings-back=${() => this.setMode(this.settingsFrom === "settings" ? "view" : this.settingsFrom)}
       @settings-edit=${(e: CustomEvent<{ building: Building; key: string | null }>) => this.editPlan(e.detail.building, e.detail.key)}
       @device-change=${() => this.readPrefs()}
       @settings-action=${this.settingsAction}
       @settings-nav=${(e: CustomEvent<{ section: string; id: string | null }>) => this.setAddress(this.settingsLink(e.detail.section, e.detail.id))}
     ></fp3d-settings-page>`;
+  }
+
+  private versionsMemo: { frontend: string; backend: string | null } | undefined;
+
+  /** The versions for Settings › Advanced › About (#248), the same object while they stay the same. */
+  private versions(): { frontend: string; backend: string | null } {
+    const frontend = String(this.data.frontendVersion);
+    const backend = this.data.backendVersion ?? null;
+    if (this.versionsMemo?.frontend !== frontend || this.versionsMemo.backend !== backend) this.versionsMemo = { frontend, backend };
+    return this.versionsMemo;
   }
 
   /** The main texts for the Settings page's bundle (it has no table of its own beyond its new texts). */

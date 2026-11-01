@@ -109,7 +109,7 @@ test("segmented choices are radio groups with a tick on the chosen one; the arro
   assert.equal(store.get("home3d.walls"), "cut");
 });
 
-test("the footer: Quality is read-only and opens Screen and controls; the links open Settings (#246, #247)", () => {
+test("the footer: Quality is read-only and opens Appearance; the links open Settings (#246, #247, #248)", () => {
   store.clear();
   store.set("home3d.quality", "low");
   const el = viewPanel();
@@ -119,8 +119,8 @@ test("the footer: Quality is read-only and opens Screen and controls; the links 
   assert.deepEqual(
     el.events.filter((e: { type: string }) => e.type === "open-settings").map((e: { detail: unknown }) => e.detail),
     [
-      { section: "screen", id: "quality" },
-      { section: "look", id: null },
+      { section: "look", id: "quality" },
+      { section: "view3d", id: null },
       { section: "scene", id: null },
     ],
   );

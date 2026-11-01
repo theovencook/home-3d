@@ -85,7 +85,7 @@ export function optionGroups(options: Option[]): { group: TextKey | null; option
   return out;
 }
 
-/** This device's look and what its 3D view shows (the View panel shows the quick ones, #247). */
+/** This device's Appearance (with the clock) and what its 3D view shows (the View panel shows the quick ones, #247; two Settings pages since #248). */
 export const LOOK: Setting[] = [
   {
     ...deviceChoice("theme", "look", "look", "theme", ["theme", "neon", "blueprint", "day", "realistic", "auto"], "theme", "theme", [], "theme_hint", ["dark", "light", "day", "night", "neon", "theme", "colour scheme", "sun", "automatic"], "select"),
@@ -109,16 +109,16 @@ export const LOOK: Setting[] = [
     },
     write: (env, v) => env.prefs.set("accent", v),
   } as Setting<string | null>,
-  deviceChoice("clock", "look", "look", "clock", ["off", "tl", "tr", "bl", "br"], "off", "st_clock", opts([["off", "st_clock_off"], ["tl", "st_clock_tl"], ["tr", "st_clock_tr"], ["bl", "st_clock_bl"], ["br", "st_clock_br"]]), undefined, ["time", "clock", "corner"], "select"),
-  deviceChoice("clock_hours", "look", "look", "clock_hours", ["auto", "12", "24"], "auto", "st_clock_hours", opts([["auto", "clock_hours_auto"], ["12", "clock_hours_12"], ["24", "clock_hours_24"]]), undefined, ["time", "clock", "12", "24", "am", "pm"]),
-  deviceChoice("clock_style", "look", "look", "clock_style", ["digital", "analogue"], "digital", "st_clock_face", opts([["digital", "clock_digital"], ["analogue", "clock_analogue"]]), undefined, ["time", "clock", "dial", "hands", "face"]),
-  deviceSwitch("clock_seconds", "look", "look", "clock_seconds", false, "st_clock_seconds", undefined, ["time", "clock", "seconds"]),
-  deviceSwitch("clock_date", "look", "look", "clock_date", true, "st_clock_date", undefined, ["time", "clock", "date", "day"]),
-  deviceChoice("markers", "look", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), "markers_important_hint", ["pins", "icons", "symbols", "devices", "markers"], "select"),
-  deviceChoice("pinSize", "look", "markers", "pinSize", ["small", "normal", "large"], "normal", "pin_size", opts([["small", "pin_size_small"], ["normal", "pin_size_normal"], ["large", "pin_size_large"]]), undefined, ["pins", "icons", "symbols", "size"]),
+  deviceChoice("clock", "look", "clock", "clock", ["off", "tl", "tr", "bl", "br"], "off", "st_clock", opts([["off", "st_clock_off"], ["tl", "st_clock_tl"], ["tr", "st_clock_tr"], ["bl", "st_clock_bl"], ["br", "st_clock_br"]]), undefined, ["time", "clock", "corner"], "select"),
+  deviceChoice("clock_hours", "look", "clock", "clock_hours", ["auto", "12", "24"], "auto", "st_clock_hours", opts([["auto", "clock_hours_auto"], ["12", "clock_hours_12"], ["24", "clock_hours_24"]]), undefined, ["time", "clock", "12", "24", "am", "pm"]),
+  deviceChoice("clock_style", "look", "clock", "clock_style", ["digital", "analogue"], "digital", "st_clock_face", opts([["digital", "clock_digital"], ["analogue", "clock_analogue"]]), undefined, ["time", "clock", "dial", "hands", "face"]),
+  deviceSwitch("clock_seconds", "look", "clock", "clock_seconds", false, "st_clock_seconds", undefined, ["time", "clock", "seconds"]),
+  deviceSwitch("clock_date", "look", "clock", "clock_date", true, "st_clock_date", undefined, ["time", "clock", "date", "day"]),
+  deviceChoice("markers", "view3d", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), "markers_important_hint", ["pins", "icons", "symbols", "devices", "markers"], "select"),
+  deviceChoice("pinSize", "view3d", "markers", "pinSize", ["small", "normal", "large"], "normal", "pin_size", opts([["small", "pin_size_small"], ["normal", "pin_size_normal"], ["large", "pin_size_large"]]), undefined, ["pins", "icons", "symbols", "size"]),
   {
     id: "plan_pin_zoom",
-    section: "look",
+    section: "view3d",
     card: "markers",
     scope: "device",
     permission: "everyone",
@@ -131,23 +131,24 @@ export const LOOK: Setting[] = [
     read: (env) => parsePinZoom(env.prefs.get(PLAN_PIN_ZOOM_KEY)),
     write: (env, v) => env.prefs.set(PLAN_PIN_ZOOM_KEY, v === null ? null : String(Math.round(clamp(v, 0, PLAN_PIN_ZOOM_MAX)))),
   } as Setting<number | null>,
-  deviceSwitch("plan2d", "look", "show", "plan2d", false, "st_view_2d", undefined, ["2d", "plan", "flat"]),
-  deviceChoice("walls", "look", "show", "walls", ["auto", "cut"], "auto", "st_walls", opts([["auto", "walls_auto"], ["cut", "walls_cut"]]), undefined, ["walls", "cut", "tall"]),
-  deviceChoice("explode", "look", "show", "explode", ["1", "0"], "1", "st_floors", opts([["1", "floors_apart"], ["0", "floors_stacked"]]), undefined, ["floors", "apart", "stacked", "explode"]),
-  deviceChoice("floor_stack", "look", "show", "floor_stack", ["dim", "stacked", "single"], "dim", "st_floor_stack", opts([["dim", "floor_stack_short_dim"], ["stacked", "floor_stack_short_stacked"], ["single", "floor_stack_short_single"]]), undefined, ["floors", "below", "dimmed"]),
-  deviceSwitch("roof", "look", "show", "roof", false, "st_keep_roof", "roof_keep_hint", ["roof", "zoom"]),
-  deviceChoice("heat", "look", "show", "heat", ["none", "temperature", "humidity", "co2", "values"], "none", "st_heat", opts([["none", "heat_nothing"], ["temperature", "heat_temperature"], ["humidity", "heat_humidity"], ["co2", "heat_co2"], ["values", "heat_values"]]), undefined, ["heatmap", "temperature", "humidity", "co2", "colour"], "select"),
-  deviceSwitch("room_names", "look", "show", "room_names", true, "st_room_names", undefined, ["labels", "names", "rooms"]),
-  deviceSwitch("trail", "look", "show", "trail", false, "st_trail", "trail_hint", ["motion", "trail", "history"]),
-  deviceSwitch("weather", "look", "show", "weather", true, "st_weather", "weather_hint", ["rain", "snow", "weather"]),
+  deviceSwitch("plan2d", "view3d", "show", "plan2d", false, "st_view_2d", undefined, ["2d", "plan", "flat"]),
+  deviceChoice("walls", "view3d", "show", "walls", ["auto", "cut"], "auto", "st_walls", opts([["auto", "walls_auto"], ["cut", "walls_cut"]]), undefined, ["walls", "cut", "tall"]),
+  deviceChoice("explode", "view3d", "show", "explode", ["1", "0"], "1", "st_floors", opts([["1", "floors_apart"], ["0", "floors_stacked"]]), undefined, ["floors", "apart", "stacked", "explode"]),
+  deviceChoice("floor_stack", "view3d", "show", "floor_stack", ["dim", "stacked", "single"], "dim", "st_floor_stack", opts([["dim", "floor_stack_short_dim"], ["stacked", "floor_stack_short_stacked"], ["single", "floor_stack_short_single"]]), undefined, ["floors", "below", "dimmed"]),
+  deviceSwitch("roof", "view3d", "show", "roof", false, "st_keep_roof", "roof_keep_hint", ["roof", "zoom"]),
+  deviceChoice("heat", "view3d", "show", "heat", ["none", "temperature", "humidity", "co2", "values"], "none", "st_heat", opts([["none", "heat_nothing"], ["temperature", "heat_temperature"], ["humidity", "heat_humidity"], ["co2", "heat_co2"], ["values", "heat_values"]]), undefined, ["heatmap", "temperature", "humidity", "co2", "colour"], "select"),
+  deviceSwitch("room_names", "view3d", "show", "room_names", true, "st_room_names", undefined, ["labels", "names", "rooms"]),
+  deviceSwitch("trail", "view3d", "show", "trail", false, "st_trail", "trail_hint", ["motion", "trail", "history"]),
+  deviceSwitch("weather", "view3d", "show", "weather", true, "st_weather", "weather_hint", ["rain", "snow", "weather"]),
 ];
 
 /**
- * Screen and controls (#246): what the old View menu's unlabelled Controls row (◧ ◨ ⌖ 🔒 FPS), Quality and the floor
- * bar's wrap toggle set, each with its full name. Same stored keys as before, so nobody loses a choice.
+ * Screen and controls (#246): what the old View menu's unlabelled Controls row (◧ ◨ ⌖ 🔒 FPS) and the floor bar's wrap
+ * toggle set, each with its full name. Quality sits on Appearance, as drawn (#248). Same stored keys as before, so
+ * nobody loses a choice.
  */
 export const SCREEN: Setting[] = [
-  deviceChoice("quality", "screen", "screen", "quality", ["auto", "low", "high"], "auto", "quality", opts([["auto", "quality_auto"], ["low", "st_quality_low"], ["high", "quality_high"]]), "card_quality_hint", ["performance", "tablet", "speed", "graphics", "slow"]),
+  deviceChoice("quality", "look", "look", "quality", ["auto", "low", "high"], "auto", "quality", opts([["auto", "quality_auto"], ["low", "st_quality_low"], ["high", "quality_high"]]), "card_quality_hint", ["performance", "tablet", "speed", "graphics", "slow"]),
   deviceSwitch("stats", "screen", "screen", "stats", false, "st_fps", "fps_title", ["fps", "performance", "frames", "speed"]),
   deviceChoice("controls", "screen", "controls", "controls", ["left", "right"], "left", "controls_side", opts([["left", "st_controls_left"], ["right", "st_controls_right"]]), "st_controls_side_hint", ["left", "right", "star", "search", "eye", "buttons"]),
   deviceSwitch("keep_view", "screen", "controls", "keep_view", false, "keep_view", "keep_view_hint", ["camera", "floor"]),
