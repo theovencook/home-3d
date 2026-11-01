@@ -146,7 +146,9 @@ function copyFonts() {
 // (18 KB more on every page, 4 KB gzip) and the 16 lang/*.json tables into language packs; the lazy bundles lost their own
 // copies (locate 151 -> 40 KB, items 69 -> 62, settings 101 -> 87), so their budgets came down to just above, and the
 // "every page" path went from 410 to 425 KB (gzip 140 -> 146). The main bundle itself did not change: the table is in a shared chunk.
-const BUDGET = { "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
+// #229: the room panel's "Edit list" mode is a lazy chunk of its own (home-3d-listedit-<hash>.js, 9 KB): only an editor
+// who opens it loads it. A new budget, not a raised one.
+const BUDGET = { "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-listedit.js": 12 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
 const GZIP_BUDGET = { "home-3d.js": 45 * 1024, "home-3d-view3d.js": 100 * 1024, "home-3d-3d.js": 280 * 1024 };
 
 // What is loaded before something shows, raw and as sent (gzip), with everything those files import (#179): a module

@@ -3,7 +3,7 @@
 
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
-import { areaEntities, coverTiltButtons, entityName, groupByDevice, isUnavailable, kindOf, roomClimateSensors, roomClimateValue, roomPanelEntities, fromCelsius, tempUnit, type DeviceKind } from "../devices.ts";
+import { areaEntities, coverControls, entityName, groupByDevice, isUnavailable, kindOf, roomClimateSensors, roomClimateValue, roomPanelEntities, fromCelsius, tempUnit, type DeviceKind } from "../devices.ts";
 import { askConfirm } from "../ask.ts";
 import { callServiceSafe } from "../failure.ts";
 import { confirmGroup } from "../confirm-group.ts";
@@ -15,12 +15,11 @@ import { iconPath } from "../icons.ts";
 import { openMoreInfo, stateText } from "../markers.ts";
 import type { Building, Floor, Room } from "../model.ts";
 import { roofWindowsOver } from "../solar.ts";
+import { arrangePanel, groupOrder, type ArrangedPanel, type PanelGroup } from "../panel-layout.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
 
-const COVER_SET_POSITION = 4;
 const CAMERA_REFRESH_MS = 3000;
-const COVER_STOP = 8;
 
 /** Colour presets offered for colour lights (warm white first). */
 const SWATCHES: [number, number, number][] = [
@@ -57,7 +56,9 @@ export class Fp3dRoomPanel extends LitElement {
     sheets: { attribute: false },
     readOnly: { type: Boolean },
     noLook: { type: Boolean },
+    canEdit: { type: Boolean },
     _showAll: { state: true },
+    _editing: { state: true },
     _tick: { state: true },
   };
 
@@ -75,6 +76,10 @@ export class Fp3dRoomPanel extends LitElement {
   declare noLook: boolean;
   /** What modules offer in this room (📢 an announcement …): a button each, a tap fires "sheet-open" with its id. */
   declare sheets: { id: string; icon: string; title: string }[] | null;
+  /** On the editors list (#229): may change what the panel lists ("Edit list"), for every viewer. */
+  declare canEdit: boolean;
+  /** "Edit list" is open (#229); true once its lazy chunk has loaded. */
+  private declare _editing: boolean;
   /** Show the other devices of the area as well (their main entities). */
   private declare _showAll: boolean;
   /** Bumped every few seconds while the panel is open, so camera snapshots refresh. */
@@ -90,6 +95,8 @@ export class Fp3dRoomPanel extends LitElement {
     this.building = null;
     this.sheets = null;
     this.readOnly = false;
+    this.canEdit = false;
+    this._editing = false;
     this._showAll = false;
     this._tick = 0;
   }
@@ -186,25 +193,24 @@ export class Fp3dRoomPanel extends LitElement {
             ...(this.floor ? roomPanelEntities(this.hass, this.floor, room, this.building ? roofWindowsOver(this.building, room.id) : []) : { shown: all, more: [] }),
           });
     const extra = groupByDevice(this.hass, more).map((g) => g.primary);
-    const hiddenCount = extra.length;
-    const ids = this._showAll ? [...shown, ...extra] : shown;
+    const layout = room.panel_layout;
+    const pins = new Set(layout?.pinned ?? []);
+    // a pinned device of the area shows without "More devices" (#229)
+    const hiddenCount = extra.filter((id) => !pins.has(id)).length;
+    const ids = this._showAll ? [...shown, ...extra] : [...shown, ...extra.filter((id) => pins.has(id))];
     // an entity placed in the plan but since removed from Home Assistant has no state: left out (the panel threw)
-    const by = (kinds: DeviceKind[]) =>
-      ids
-        .filter((id) => kinds.includes(kindOf(id)!))
-        .map((id) => this.hass.states[id])
-        .filter((st): st is NonNullable<typeof st> => !!st);
-    const lights = by(["light"]);
-    const covers = by(["cover"]);
-    const climates = by(["climate"]);
-    const media = by(["media"]);
-    const switches = by(["switch", "fan", "lock"]);
-    const sensors = by(["sensor", "binary"]);
-    const cameras = by(["camera"]);
-    this.hasCameras = cameras.length > 0;
-    const scenes = by(["scene", "script"]);
+    const live = ids.filter((id) => !!this.hass.states[id]);
+    // pinned rows on top, then the groups, in the order an editor chose (#229)
+    const arranged = arrangePanel(live, kindOf, layout);
+    const of = (kinds: DeviceKind[]) => live.filter((id) => kinds.includes(kindOf(id)!)).map((id) => this.hass.states[id]);
+    const lights = of(["light"]);
+    const covers = of(["cover"]);
+    const climates = of(["climate"]);
+    this.hasCameras = of(["camera"]).length > 0;
     const facts = this.facts(climates);
     const lightsOn = lights.filter((l) => l.state === "on");
+    const editable = this.canEdit && !this.readOnly && !!room.area_id;
+    const editing = editable && this._editing;
     return html`<section class="fp3d-rp ${this.readOnly ? "fp3d-rp-ro" : ""}" aria-label=${room.name}>
       <header class="fp3d-rp-head">
         <div>
@@ -222,6 +228,11 @@ export class Fp3dRoomPanel extends LitElement {
               </div>`
             : nothing}
         </div>
+        ${editable
+          ? html`<button class="fp3d-btn fp3d-rp-small fp3d-rp-edit" aria-pressed=${editing ? "true" : "false"} @click=${() => this.toggleEdit()}>
+              ${this.t(editing ? "done" : "panel_edit_list")}
+            </button>`
+          : nothing}
         <button class="fp3d-rp-close" aria-label=${this.t("close")} @click=${() => this.fire("close")}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
@@ -234,57 +245,23 @@ export class Fp3dRoomPanel extends LitElement {
           : !ids.length
             ? html`<p class="fp3d-rp-note">${this.t("panel_empty")}</p>`
             : nothing}
-        ${lights.length
-          ? this.section(
-              "panel_lights",
-              lights.map((st) => this.lightRow(st)),
-              html`${lightsOn.length < lights.length
-                ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("light", "turn_on", lights.filter((l) => !isUnavailable(l)).map((l) => l.entity_id))}>
-                    ${this.t("panel_all_on")}
-                  </button>`
-                : nothing}${lightsOn.length
-                ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("light", "turn_off", lightsOn.map((l) => l.entity_id))}>
-                    ${this.t("panel_all_off")}
-                  </button>`
-                : nothing}`,
-            )
-          : nothing}
-        ${covers.length
-          ? this.section(
-              "panel_covers",
-              covers.map((st) => this.coverRow(st)),
-              covers.length > 1
-                ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("cover", "open_cover", covers.filter((c) => !isUnavailable(c)).map((c) => c.entity_id))}>
-                      ${this.t("panel_all_open")}</button
-                    ><button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("cover", "close_cover", covers.filter((c) => !isUnavailable(c)).map((c) => c.entity_id))}>
-                      ${this.t("panel_all_close")}
-                    </button>`
-                : nothing,
-            )
-          : nothing}
-        ${climates.length ? this.section("panel_climate", climates.map((st) => this.climateRow(st))) : nothing}
-        ${media.length ? this.section("panel_media", media.map((st) => this.mediaRow(st))) : nothing}
-        ${switches.length ? this.section("panel_switches", switches.map((st) => this.switchRow(st))) : nothing}
-        ${cameras.length ? this.section("panel_cameras", cameras.map((st) => this.cameraTile(st))) : nothing}
-        ${sensors.length ? this.section("panel_sensors", sensors.map((st) => this.sensorRow(st))) : nothing}
-        ${scenes.length
-          ? this.section(
-              "panel_scenes",
-              [
-                html`<div class="fp3d-rp-scenes">
-                  ${scenes.map(
-                    (st) => html`<button
-                      class="fp3d-btn"
-                      ?disabled=${isUnavailable(st)}
-                      @click=${() => this.call(kindOf(st.entity_id) === "scene" ? "scene" : "script", "turn_on", { entity_id: st.entity_id })}
-                    >
-                      ${this.name(st.entity_id)}
-                    </button>`,
-                  )}
-                </div>`,
-              ],
-            )
-          : nothing}
+        ${editing
+          ? html`<fp3d-room-list-edit
+              .hass=${this.hass}
+              .roomId=${room.id}
+              .arranged=${this.editList(room)}
+              .hiddenIds=${room.hidden ?? []}
+              .layout=${layout ?? null}
+              .allGroups=${groupOrder(layout)}
+              .nameOf=${(id: string) => this.name(id)}
+              .iconOf=${(id: string) => {
+                const kind = kindOf(id);
+                return kind ? iconPath(kind) : null;
+              }}
+              .t=${(key: I18nKey) => this.t(key)}
+            ></fp3d-room-list-edit>`
+          : html`${arranged.pinned.length ? this.section("panel_pinned", arranged.pinned.map((id) => this.rowOf(this.hass.states[id]))) : nothing}
+            ${arranged.groups.map((g) => this.groupSection(g.group, g.ids, lights, lightsOn, covers))}`}
         </fieldset>
         ${hiddenCount
           ? html`<button class="fp3d-btn fp3d-rp-small fp3d-rp-more" @click=${() => (this._showAll = !this._showAll)}>
@@ -293,6 +270,85 @@ export class Fp3dRoomPanel extends LitElement {
           : nothing}
       </div>
     </section>`;
+  }
+
+  /** Opens "Edit list" (its chunk loads the first time) or closes it (#229). */
+  private toggleEdit(): void {
+    if (this._editing) {
+      this._editing = false;
+      return;
+    }
+    void import("./listedit.ts").then(() => (this._editing = true));
+  }
+
+  /** What "Edit list" lists: what the panel can show, hidden entities too (#229). */
+  private editList(room: Room): ArrangedPanel {
+    const open = { ...room, hidden: [] };
+    const { shown, more } = this.floor ? roomPanelEntities(this.hass, this.floor, open, this.building ? roofWindowsOver(this.building, room.id) : []) : { shown: areaEntities(this.hass, room.area_id), more: [] };
+    const keep = new Set([...(room.hidden ?? []), ...(room.panel_layout?.pinned ?? [])]);
+    const extra = groupByDevice(this.hass, more)
+      .map((g) => g.primary)
+      .filter((id) => this._showAll || keep.has(id));
+    return arrangePanel([...new Set([...shown, ...extra])].filter((id) => !!this.hass.states[id]), kindOf, room.panel_layout);
+  }
+
+  /** One row of the panel, by the entity's kind (a pinned row looks like the row in its group). */
+  private rowOf(st: HassEntity): TemplateResult {
+    const kind = kindOf(st.entity_id);
+    if (kind === "light") return this.lightRow(st);
+    if (kind === "cover") return this.coverRow(st);
+    if (kind === "climate") return this.climateRow(st);
+    if (kind === "media") return this.mediaRow(st);
+    if (kind === "camera") return this.cameraTile(st);
+    if (kind === "sensor" || kind === "binary") return this.sensorRow(st);
+    if (kind === "scene" || kind === "script") return html`<div class="fp3d-rp-scenes">${this.sceneButton(st)}</div>`;
+    return this.switchRow(st);
+  }
+
+  private sceneButton(st: HassEntity) {
+    return html`<button class="fp3d-btn" ?disabled=${isUnavailable(st)} @click=${() => this.call(kindOf(st.entity_id) === "scene" ? "scene" : "script", "turn_on", { entity_id: st.entity_id })}>
+      ${this.name(st.entity_id)}
+    </button>`;
+  }
+
+  /** A group's section; "All on/off" and "All up/down" act on every light or cover shown, pinned ones too. */
+  private groupSection(group: PanelGroup, ids: string[], lights: HassEntity[], lightsOn: HassEntity[], covers: HassEntity[]) {
+    const states = ids.map((id) => this.hass.states[id]);
+    if (group === "lights")
+      return this.section(
+        "panel_lights",
+        states.map((st) => this.lightRow(st)),
+        html`${lightsOn.length < lights.length
+          ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("light", "turn_on", lights.filter((l) => !isUnavailable(l)).map((l) => l.entity_id))}>
+              ${this.t("panel_all_on")}
+            </button>`
+          : nothing}${lightsOn.length
+          ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("light", "turn_off", lightsOn.map((l) => l.entity_id))}>
+              ${this.t("panel_all_off")}
+            </button>`
+          : nothing}`,
+      );
+    if (group === "covers")
+      return this.section(
+        "panel_covers",
+        states.map((st) => this.coverRow(st)),
+        covers.filter((c) => coverControls(c).open || coverControls(c).close).length > 1
+          ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("cover", "open_cover", covers.filter((c) => !isUnavailable(c) && coverControls(c).open).map((c) => c.entity_id))}>
+                ${this.t("panel_all_open")}</button
+              ><button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("cover", "close_cover", covers.filter((c) => !isUnavailable(c) && coverControls(c).close).map((c) => c.entity_id))}>
+                ${this.t("panel_all_close")}
+              </button>`
+          : nothing,
+      );
+    if (group === "scenes") return this.section("panel_scenes", [html`<div class="fp3d-rp-scenes">${states.map((st) => this.sceneButton(st))}</div>`]);
+    const title: Record<Exclude<PanelGroup, "lights" | "covers" | "scenes">, I18nKey> = {
+      climate: "panel_climate",
+      media: "panel_media",
+      switches: "panel_switches",
+      cameras: "panel_cameras",
+      sensors: "panel_sensors",
+    };
+    return this.section(title[group], states.map((st) => this.rowOf(st)));
   }
 
   /** Header facts: the room's temperature and humidity from its climate sensors (chosen or automatic). */
@@ -377,51 +433,39 @@ export class Fp3dRoomPanel extends LitElement {
     </div>`;
   }
 
+  /** A cover's row: only the buttons and sliders its supported_features allow (#243, coverControls). */
   private coverRow(st: HassEntity) {
     const a = st.attributes;
-    const features = (a.supported_features as number | undefined) ?? 0;
+    const c = coverControls(st);
     const id = st.entity_id;
     const na = isUnavailable(st);
+    const button = (label: I18nKey, service: string, ask = false) =>
+      html`<button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${async () => (!ask || (await this.askFor(id))) && this.call("cover", service, { entity_id: id })}>${this.t(label)}</button>`;
+    const slider = (label: I18nKey, value: number, service: string, key: string) =>
+      html`<label class="fp3d-rp-slider"
+        ><span>${this.t(label)}</span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          ?disabled=${na}
+          .value=${String(value)}
+          @change=${(e: Event) => this.call("cover", service, { entity_id: id, [key]: Number((e.target as HTMLInputElement).value) })}
+      /></label>`;
     return html`<div class="fp3d-rp-row">
       <span class="fp3d-rp-icon">${icon("cover")}</span>
       ${this.nameButton(id)}
       <span class="fp3d-rp-state">${this.stateOf(st)}</span>
       <div class="fp3d-rp-buttons">
-        <button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${async () => (await this.askFor(id)) && this.call("cover", "open_cover", { entity_id: id })}>${this.t("cover_open")}</button>
-        ${features & COVER_STOP
-          ? html`<button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.call("cover", "stop_cover", { entity_id: id })}>${this.t("cover_stop")}</button>`
-          : nothing}
-        <button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${async () => (await this.askFor(id)) && this.call("cover", "close_cover", { entity_id: id })}>${this.t("cover_close")}</button>
+        ${c.open ? button("cover_open", "open_cover", true) : nothing}${c.stop ? button("cover_stop", "stop_cover") : nothing}${c.close ? button("cover_close", "close_cover", true) : nothing}
       </div>
-      ${features & COVER_SET_POSITION && typeof a.current_position === "number"
-        ? html`<label class="fp3d-rp-slider"
-            ><span>${this.t("position")}</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              ?disabled=${na}
-              .value=${String(a.current_position)}
-              @change=${(e: Event) => this.call("cover", "set_cover_position", { entity_id: id, position: Number((e.target as HTMLInputElement).value) })}
-          /></label>`
+      ${c.position ? slider("position", a.current_position as number, "set_cover_position", "position") : nothing}
+      ${c.tiltOpen || c.tiltStop || c.tiltClose
+        ? html`<div class="fp3d-rp-buttons fp3d-rp-wide">
+            ${c.tiltOpen ? button("cover_tilt_open", "open_cover_tilt") : nothing}${c.tiltStop ? button("cover_stop", "stop_cover_tilt") : nothing}${c.tiltClose ? button("cover_tilt_close", "close_cover_tilt") : nothing}
+          </div>`
         : nothing}
-      ${features & 128 && typeof a.current_tilt_position === "number"
-        ? html`<label class="fp3d-rp-slider"
-            ><span>${this.t("cover_tilt")}</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              ?disabled=${na}
-              .value=${String(a.current_tilt_position)}
-              @change=${(e: Event) => this.call("cover", "set_cover_tilt_position", { entity_id: id, tilt_position: Number((e.target as HTMLInputElement).value) })}
-          /></label>`
-        : coverTiltButtons(this.hass?.states[id])
-          ? html`<div class="fp3d-rp-buttons">
-              ${features & 16 ? html`<button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.call("cover", "open_cover_tilt", { entity_id: id })}>${this.t("cover_tilt_open")}</button>` : nothing}
-              ${features & 32 ? html`<button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.call("cover", "close_cover_tilt", { entity_id: id })}>${this.t("cover_tilt_close")}</button>` : nothing}
-            </div>`
-          : nothing}
+      ${c.tiltPosition ? slider("cover_tilt", a.current_tilt_position as number, "set_cover_tilt_position", "tilt_position") : nothing}
     </div>`;
   }
 

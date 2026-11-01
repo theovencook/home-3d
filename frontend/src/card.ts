@@ -545,6 +545,8 @@ clearTimeout(this.cleanTimer);
               .hass=${hass}
               ?readOnly=${tt}
               ?noLook=${flat}
+              ?canEdit=${this.data.canEdit}
+              @plan-change=${this.onPlanChange}
               .room=${b.floors.flatMap((f) => zonesOf(f)).find((r) => r.id === this._roomId) ?? null}
               .floor=${b.floors.find((f) => zonesOf(f).some((r) => r.id === this._roomId)) ?? null}
               .building=${b}
