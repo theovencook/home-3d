@@ -5,6 +5,11 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+### Seasonal themes (#239)
+
+- **The main UK holidays:** New Year's Eve (a countdown to midnight, fireworks from 20:00) and New Year, Advent (the sleeps to Christmas from 1 December), Christmas Eve, Christmas, Boxing Day, Twixmas, Bonfire Night, Remembrance Sunday, Valentine's Day, Pancake Day, Mother's Day (UK), Easter (Good Friday to Easter Monday) and Father's Day. On its day the 3D view and the flat plan get a soft colour glow, a short greeting and a light effect (snow, hearts, fireworks, poppies, flowers …). Moving dates are worked out: Easter by the computus, Pancake Day 47 days and Mother's Day 21 days before it, Father's Day the third Sunday of June, Remembrance Sunday the second Sunday of November.
+- **Each holiday has its own switch** under Fun (Settings and Extensions); the house-wide easter eggs switch and a card's `ghost: false` turn them all off. The effect is one small canvas in the lazy fun bundle (no three.js, nothing on a normal day) and stands still with "reduce motion". `?fp3d_season=christmas` in the address bar shows a holiday on any day.
+
 ### High contrast, room labels, lamps and the phone header (#216)
 
 - **High contrast meets 7:1:** edges are pure white on dark blue fills kept under a relative luminance of 0.1 (every floor, the lawn, walls, items, ground and sky); the chrome turns near-black glass with white text, a yellow accent and strong outlines (every text colour 7:1); the plan's walls, room outlines and items are white. Tests state the standard.

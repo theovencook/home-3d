@@ -21,6 +21,7 @@ import { customItems } from "../custom-items.ts";
 import { KINDS, ROOMS } from "../library-index.ts";
 import { loadItems } from "../load-items.ts";
 import { FUN, released } from "../features.ts";
+import { SEASON_IDS, type SeasonId } from "../season-ids.ts";
 import { DOG_BREEDS, PET_EYES, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
 import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
 import { languageCode, loadLanguage, translate, type I18nKey } from "../i18n.ts";
@@ -43,6 +44,24 @@ import {
 import { packName, packOrigin, type FurniturePack } from "../packs.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
+
+/** The little picture of each holiday in the Fun list. */
+const SEASON_ICONS: Record<SeasonId, string> = {
+  nye: "🎆",
+  new_year: "🎉",
+  christmas_eve: "🎅",
+  christmas: "🎄",
+  boxing_day: "🎁",
+  twixmas: "❄️",
+  advent: "🕯️",
+  bonfire: "🔥",
+  remembrance: "🌺",
+  valentines: "❤️",
+  pancake_day: "🥞",
+  mothers_day: "🌸",
+  easter: "🐣",
+  fathers_day: "⭐",
+};
 
 export class Extensions extends LitElement {
   static properties = {
@@ -350,7 +369,9 @@ export class Extensions extends LitElement {
       ${shown.map((f) =>
         f === "fun_halloween"
           ? this.renderHalloween()
-          : html`<div class="fp3d-ext-feature fp3d-ext-on">
+          : f === "fun_seasons"
+            ? this.renderSeasons()
+            : html`<div class="fp3d-ext-feature fp3d-ext-on">
               <b>✓ ${this.t("fun_name_pets")}</b>
               <span class="fp3d-sub">${this.t("fun_feature_pets")}</span>
               ${this.isEditor && this.building
@@ -448,6 +469,37 @@ export class Extensions extends LitElement {
       <span class="fp3d-sub">${this.t("fun_feature_halloween")}</span>
       ${this.isEditor && this.building ? this.settingsLink("halloween.ghost", ghost && this.building.settings.easter_eggs !== false ? "✓" : "–", this.t("halloween_ghost")) : nothing}
       <span class="fp3d-sub">${this.t("halloween_deco_hint")}</span>
+    </div>`;
+  }
+
+  /** Fun pack "Holidays" (#239): each UK holiday has its own switch (editors); it shows on its day. */
+  private renderSeasons() {
+    const off = this.building?.settings.seasons ?? {};
+    const eggs = this.building?.settings.easter_eggs !== false;
+    return html`<div class="fp3d-ext-feature fp3d-ext-on">
+      <b>✓ 🎄 ${this.t("fun_name_seasons")}</b>
+      <span class="fp3d-sub">${this.t("fun_feature_seasons")}</span>
+      ${this.isEditor && this.building
+        ? SEASON_IDS.map(
+            (id) => html`<label class="fp3d-ext-season">
+              <input
+                type="checkbox"
+                .checked=${off[id] !== false && eggs}
+                ?disabled=${!eggs}
+                @change=${(e: Event) => {
+                  const on = (e.target as HTMLInputElement).checked;
+                  this.editBuilding((b) => {
+                    const seasons = { ...(b.settings.seasons ?? {}) };
+                    if (on) delete seasons[id];
+                    else seasons[id] = false;
+                    b.settings.seasons = seasons;
+                  });
+                }}
+              />
+              ${SEASON_ICONS[id]} ${this.t(`season_name_${id}` as I18nKey)}
+            </label>`,
+          )
+        : nothing}
     </div>`;
   }
 
@@ -864,6 +916,13 @@ export class Extensions extends LitElement {
         text-transform: uppercase;
         letter-spacing: 0.06em;
         color: var(--fp3d-text);
+      }
+      .fp3d-ext-season {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 36px;
+        cursor: pointer;
       }
       .fp3d-ext-setting {
         justify-self: start;

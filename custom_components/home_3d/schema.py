@@ -1084,6 +1084,8 @@ SETTINGS_SCHEMA = vol.Schema(
         vol.Optional("halloween", default=None): vol.Any(
             None, vol.Schema({vol.Optional("ghost", default=True): bool}, extra=vol.ALLOW_EXTRA)
         ),
+        # seasonal themes (#239): a holiday switched off is False here (missing = on); the ids are in seasons.ts
+        vol.Optional("seasons"): vol.Any(None, vol.Schema({vol.Optional(str): bool}, extra=vol.ALLOW_EXTRA)),
         # the ground around the house: its height and the earth around cellars
         vol.Optional("terrain", default=None): vol.Any(
             None,

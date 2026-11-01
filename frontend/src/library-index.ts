@@ -167,6 +167,7 @@ const PACK_ROOMS: Record<string, Room[]> = {
   smarthome: [],
   architecture: [],
   fun_halloween: [],
+  fun_seasons: [],
   fun_pets: [],
 };
 

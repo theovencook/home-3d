@@ -817,6 +817,9 @@ export const PLAN_CONTRACT = {
     "halloween": {
       "ghost": true
     },
+    "seasons": {
+      "twixmas": false
+    },
     "terrain": {
       "level": -10.0,
       "earth": true
