@@ -3,6 +3,7 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { fetchBuilding, fetchVersion, listPacks, saveBuilding, subscribeBuilding, takeSnapshot, type PlanProblem } from "./api.ts";
 import { normalizeBuilding, type Building } from "./model.ts";
+import { freshReload, refreshBundles } from "./fresh-reload.ts";
 import { saveAutomaticOpeningLinks } from "./opening-links.ts";
 import { recipeHashes, setPacks, setPlanRecipes, type FurniturePack, type PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -76,6 +77,10 @@ export class BuildingController implements ReactiveController {
   backendBuild: string | null = null;
   /** The frontend running in this page (the tests set another one). */
   frontend = { version: FRONTEND_VERSION, build: FRONTEND_BUILD };
+  /** Puts the new main bundle in the browser cache (#223, fresh-reload.ts; the tests set another one). */
+  refreshBundles: () => Promise<void> = refreshBundles;
+  /** The cache was refreshed for this page's gap already (once is enough). */
+  private refreshed = false;
   /** Unsaved edits from an earlier session, offered for restoring. */
   draft: Draft | null = null;
   /** The last save was refused because someone else changed the plan meanwhile (#149): the plan now shows their
@@ -203,6 +208,7 @@ export class BuildingController implements ReactiveController {
       this.backendVersion = res.version ?? null;
       this.backendProtocol = res.protocol ?? 0;
       this.backendBuild = res.build ?? null;
+      this.refreshOnGap();
       this.host.requestUpdate();
     } catch {
       // an older backend without the command: the versions come with the next load of the building
@@ -281,8 +287,19 @@ export class BuildingController implements ReactiveController {
   async reloadWhenSaved(reload: () => void = () => location.reload()): Promise<boolean> {
     await this.flush();
     if (this.pending || this.saveState === "error") return false;
-    reload();
+    // #223: a proxy may have told the browser to keep the old main bundle; one reload must get the new one
+    await freshReload(reload, this.refreshBundles);
     return true;
+  }
+
+  /**
+   * This page runs older JavaScript than Home Assistant serves (#223): the new main bundle is put in the browser cache
+   * at once, in the background, so the next load (the notice's Reload, or just opening Home Assistant again) runs it.
+   */
+  private refreshOnGap(): void {
+    if (this.refreshed || this.versionGap !== "frontend") return;
+    this.refreshed = true;
+    void this.refreshBundles().catch(() => undefined);
   }
 
   /**
@@ -589,6 +606,7 @@ export class BuildingController implements ReactiveController {
     this.backendVersion = res.version ?? null;
     this.backendProtocol = res.protocol ?? 0;
     this.backendBuild = res.build ?? null;
+    this.refreshOnGap();
     this.canEdit = res.can_edit ?? !!this.hass?.user?.is_admin;
     this.planProblem = res.problem ?? null;
     if (!plan) return;
