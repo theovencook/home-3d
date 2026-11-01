@@ -55,6 +55,11 @@ function settingsAddress(hash: string): { section: string | null; id: string | n
 }
 
 /** What counts as someone using a wall tablet: its idle return waits again (#92). */
+/** How long (ms) a notice's buttons wait after it appears before a tap acts (#258). */
+export const NOTICE_ARM_MS = 800;
+/** Whether a tap at `now` came too soon after the notices appeared at `shownAt` to have been aimed at them (#258). */
+export const noticeTapTooSoon = (shownAt: number, now: number): boolean => now - shownAt < NOTICE_ARM_MS;
+
 const TOUCHES = ["pointerdown", "keydown", "wheel"] as const;
 
 /** View preferences belong to the device (a wall tablet wants other settings than a desktop). */
@@ -1049,16 +1054,37 @@ export class Floorplan3dPanel extends LitElement {
     return notices;
   }
 
+  /** When the notices now showing appeared (ms, performance.now()): their buttons wait NOTICE_ARM_MS before they act. */
+  private noticeShownAt = 0;
+  private noticeShownKey = "";
+
   /**
-   * The notices as pop-up messages over the page (#249, was a banner in the flow, #223): they never push the plan down.
-   * "Hide" puts them away until another one comes; the badge on the save line brings them back.
+   * The notices (#249) in a strip of their own under the header (#258): popped up over the page they covered Walk, the
+   * floors row and the editor's toolbar. The plan and the 3D view are only made shorter, never covered. A tap aimed at a
+   * control that the strip has just moved lands on it instead, so its buttons do nothing for NOTICE_ARM_MS after it
+   * appears. "Hide" puts them away until another one comes; the badge on the save line brings them back.
    */
   private renderNotices(notices: { key: string; body: TemplateResult }[]) {
-    if (!notices.length || this._noticesHidden === this.noticeKey) return nothing;
-    return html`<div class="fp3d-notices" role="region" aria-label=${this.t("notices")}>
-      ${notices.map((n) => n.body)}
+    if (!notices.length || this._noticesHidden === this.noticeKey) {
+      this.noticeShownKey = "";
+      return nothing;
+    }
+    if (this.noticeShownKey !== this.noticeKey) {
+      this.noticeShownKey = this.noticeKey;
+      this.noticeShownAt = performance.now();
+    }
+    return html`<div class="fp3d-notices" role="region" aria-label=${this.t("notices")} @click=${{ handleEvent: (e: Event) => this.guardNoticeTap(e), capture: true }}>
+      <div class="fp3d-notices-list">${notices.map((n) => n.body)}</div>
       <button class="fp3d-btn fp3d-notices-hide" @click=${() => (this._noticesHidden = this.noticeKey)}>${this.t("notices_hide")}</button>
     </div>`;
+  }
+
+  /** Swallows a tap on the notices that came too soon after they appeared: it was aimed at what was there before (#258). */
+  private guardNoticeTap(e: Event): void {
+    if (noticeTapTooSoon(this.noticeShownAt, performance.now())) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
   }
 
   /**
@@ -1629,24 +1655,43 @@ export class Floorplan3dPanel extends LitElement {
         margin: 0 4px 0 8px;
         white-space: nowrap;
       }
-      /* notices pop up over the page (#249, #223): they never push the plan down */
+      /* notices in a strip of their own under the header (#258, were pop-ups over the page, #249): they cover no
+         control; the plan and the 3D view below only get shorter */
       .fp3d-notices {
-        position: absolute;
-        top: 64px;
-        right: 12px;
-        z-index: 50;
-        width: min(440px, calc(100% - 24px));
+        flex: none;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 6px 12px;
+        border-bottom: 1px solid var(--fp3d-line);
+        background: var(--fp3d-chrome-solid);
+      }
+      .fp3d-notices-list {
+        flex: 1;
+        min-width: 0;
         display: grid;
         gap: 6px;
       }
-      .fp3d-clean .fp3d-notices {
-        top: 8px;
-      }
-      .fp3d-notices .fp3d-notice {
-        box-shadow: var(--fp3d-shadow);
-      }
       .fp3d-notices-hide {
-        justify-self: end;
+        flex: none;
+      }
+      /* inside the strip a notice is a line of text and its buttons: the strip is its frame */
+      .fp3d-notices .fp3d-notice {
+        flex-wrap: nowrap;
+        padding: 0 0 0 10px;
+        border: 0;
+        border-left: 3px solid var(--fp3d-line);
+        border-radius: 0;
+        background: none;
+      }
+      .fp3d-notices .fp3d-notice span {
+        min-width: 0;
+      }
+      .fp3d-notices .fp3d-notice-warn {
+        border-left-color: rgba(255, 181, 71, 0.8);
+      }
+      .fp3d-notices .fp3d-notice-error {
+        border-left-color: rgba(255, 107, 139, 0.8);
       }
       .fp3d-notice {
         display: flex;
@@ -1784,9 +1829,7 @@ export class Floorplan3dPanel extends LitElement {
           white-space: nowrap;
         }
         .fp3d-notices {
-          top: 60px;
-          right: 8px;
-          width: calc(100% - 16px);
+          padding: 6px 8px;
         }
       }
       .fp3d-save-error {

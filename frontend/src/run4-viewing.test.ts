@@ -110,3 +110,72 @@ test("#257 V22: a timeline label too near the end of the track is left out, and 
   assert.equal(tickLabelFits(288, 280), false);
   assert.match(block(barCss, ".track {"), /margin:\s*0 12px 0 4px/);
 });
+
+// ---- #258: notices never cover a control ----
+
+const { Floorplan3dPanel, noticeTapTooSoon, NOTICE_ARM_MS } = await import("./panel.ts");
+const { emptyBuilding } = await import("./model.ts");
+const panelCss = text((Floorplan3dPanel as unknown as Styled).styles);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function panel(): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = new (Floorplan3dPanel as any)();
+  p.hass = { language: "en", user: { id: "u", is_admin: true, name: "x" }, states: {}, themes: { darkMode: true } };
+  const b = emptyBuilding();
+  const room = (id: string, name: string) => ({ id, name, points: [[0, 0], [4, 0], [4, 3], [0, 3]], area_id: null });
+  b.floors = [
+    { id: "f1", name: "Ground", rooms: [room("k", "Kitchen"), room("b1", "Bedroom")], furniture: [], placements: [], openings: [], walls: [], outdoor: [], height: 2.5, elevation: 0 },
+    { id: "f2", name: "Upper", rooms: [room("b2", "Bedroom"), room("s", "Study")], furniture: [], placements: [], openings: [], walls: [], outdoor: [], height: 2.5, elevation: 2.5 },
+  ] as unknown as typeof b.floors;
+  p.data.building = b;
+  p.data.canEdit = true;
+  p.willUpdate(new Map());
+  return p;
+}
+
+test("#258 V02/V03/E03: notices sit in a strip of their own under the header, never over the page's controls", () => {
+  const strip = block(panelCss, ".fp3d-notices {");
+  assert.match(strip, /flex:\s*none/);
+  assert.doesNotMatch(strip, /position:\s*absolute/);
+  assert.doesNotMatch(panelCss, /\.fp3d-notices \{[^}]*position:\s*(absolute|fixed)/);
+  const p = panel();
+  p.data.saveState = "error";
+  p.data.saveError = "offline";
+  const out = flat(p.render());
+  // in the page's flow between the header and the view: the floors row, Walk and the editor's toolbar come below it
+  const header = out.indexOf('<header class="fp3d-header');
+  const notices = out.indexOf('<div class="fp3d-notices"');
+  const nav = out.indexOf('<nav class="fp3d-nav"');
+  assert.ok(header >= 0 && notices > header && nav > notices, `${header} ${notices} ${nav}`);
+});
+
+test("#258 V03: a tap that lands on a notice just after it appeared does nothing (it was aimed at what was there)", () => {
+  assert.equal(noticeTapTooSoon(1000, 1000 + NOTICE_ARM_MS - 1), true);
+  assert.equal(noticeTapTooSoon(1000, 1000 + NOTICE_ARM_MS), false);
+  assert.ok(NOTICE_ARM_MS >= 500 && NOTICE_ARM_MS <= 1500);
+  const p = panel();
+  p.data.saveState = "error";
+  p.data.saveError = "offline";
+  p.noticeKey = "save";
+  const before = performance.now();
+  const tpl = p.renderNotices([{ key: "save", body: "x" }]) as { values: unknown[] };
+  assert.ok(p.noticeShownAt >= before, "the time it appeared is kept");
+  // the strip listens in the capture phase, so the swallowed tap never reaches its buttons
+  const listener = tpl.values.find((v) => v && typeof v === "object" && "handleEvent" in (v as object)) as { capture: boolean; handleEvent(e: unknown): void };
+  assert.equal(listener.capture, true);
+  let stopped = 0;
+  const ev = { stopPropagation: () => stopped++, preventDefault: () => undefined };
+  listener.handleEvent(ev);
+  assert.equal(stopped, 1, "too soon: swallowed");
+  p.noticeShownAt -= NOTICE_ARM_MS;
+  listener.handleEvent(ev);
+  assert.equal(stopped, 1, "later: the tap goes through");
+  // the same notices again keep their time; a new one starts it afresh
+  const at = p.noticeShownAt;
+  p.renderNotices([{ key: "save", body: "x" }]);
+  assert.equal(p.noticeShownAt, at);
+  p.noticeKey = "save|restart";
+  p.renderNotices([{ key: "save", body: "x" }]);
+  assert.ok(p.noticeShownAt > at);
+});

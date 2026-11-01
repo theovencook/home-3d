@@ -107,7 +107,7 @@ test("the save line says who it saved for on every tab but Settings (which has i
   assert.doesNotMatch(flat(p.renderHeader(0)), /Saved for the whole home/);
 });
 
-test("notices are a badge on the save line plus a pop-up over the page; Hide puts them away, the badge brings them back (#223)", () => {
+test("notices are a badge on the save line plus a strip under the header (#258); Hide puts them away, the badge brings them back (#223)", () => {
   const p = panel();
   p.data.saveState = "error";
   p.data.saveError = "offline";
@@ -115,9 +115,10 @@ test("notices are a badge on the save line plus a pop-up over the page; Hide put
   assert.match(out, /class="fp3d-note-badge"[^>]*aria-expanded=true/);
   assert.match(out, /<div class="fp3d-notices" role="region"/);
   assert.match(out, /Saving failed: offline/);
-  // the pop-up floats over the page: it never pushes the plan down
+  // since #258 the notices sit in a strip of their own under the header (as pop-ups they covered controls): the plan
+  // only gets shorter, it is never covered (run4-viewing.test.ts)
   const css = (Floorplan3dPanel as unknown as { styles: { cssText?: string }[] }).styles.map((s) => s.cssText ?? "").join("");
-  assert.match(css, /\.fp3d-notices \{\s*position: absolute;/);
+  assert.match(css, /\.fp3d-notices \{\s*flex: none;/);
   for (const h of handlers(p.renderNotices(p.noticeList(false)), /fp3d-notices-hide" @click=$/)) h();
   out = flat(p.render());
   assert.doesNotMatch(out, /<div class="fp3d-notices"/);
