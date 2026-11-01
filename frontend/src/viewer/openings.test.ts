@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Opening } from "../model.ts";
 import type { OpeningInfo } from "./build.ts";
-import { buildOpeningParts, sillBoards, stackedOnOpening } from "./openings.ts";
+import { ALWAYS } from "./geo.ts";
+import { buildOpeningParts, type OpeningState, sillBoards, stackedOnOpening } from "./openings.ts";
 
 /** A window (or door) on the wall along x from (sx, sz), as the floor builder describes it. */
 function info(id: string, sx: number, width: number, sill: number, top: number, extra: Partial<Opening> & { axis?: [number, number]; exterior?: boolean; sz?: number } = {}): OpeningInfo {
@@ -109,4 +110,55 @@ test("an up-and-over garage door hangs in its opening when shut and tilts up int
   // a sectional door rolls up into the garage and never sticks out
   const sectional = garageLeaf(null, 0);
   assert.ok(Math.min(...sectional.z) > -0.2);
+});
+
+/**
+ * Vertices of an opening's frames and glass standing above the cut height that do not fold away with the walls
+ * (up to the door frame's head: the small light over an outside door is not part of the opening).
+ */
+function standingAboveCut(o: OpeningInfo, st: OpeningState, cut: number): number {
+  const parts = buildOpeningParts([o], new Map([[o.opening.id, st]]), cut);
+  let n = 0;
+  for (const geo of [parts.frames, parts.glass]) {
+    const pos = geo.getAttribute("position");
+    const fold = geo.getAttribute("fold");
+    for (let i = 0; i < pos.count; i++) if (pos.getY(i) > cut + 1e-6 && pos.getY(i) < o.top + 0.05 && fold.getX(i) === ALWAYS) n++;
+  }
+  return n;
+}
+
+test("with cut walls, door leaves and window sashes are cut at the wall height whether shut, opening or open (#244)", () => {
+  const cut = 1.2;
+  const states = [0, 0.03, 0.3, 0.7, 1];
+  for (const style of ["interior", "front", "front_glass", "sidelight", "sidelights", "glass", "sliding"] as const) {
+    for (const leaves of [1, 2] as const) {
+      for (const swing of ["in", "out"] as const) {
+        const door = info("d", 1, 1.6, 0, 2.05, { type: "door", style, leaves, swing });
+        for (const open of states) assert.equal(standingAboveCut(door, { open, open2: open, tilt: 0, cover: null, sensed: true }, cut), 0, `${style} x${leaves} ${swing} at ${open}`);
+      }
+    }
+  }
+  // a door standing open by its own angle without a sensor, and an unlocked one with its glowing edge
+  const angled = info("a", 1, 0.9, 0, 2.05, { type: "door", open_angle: 90 });
+  assert.equal(standingAboveCut(angled, { open: 0.5, tilt: 0, cover: null, sensed: false, unlocked: true }, cut), 0);
+  for (const style of ["standard", "bars"] as const) {
+    for (const leaves of [1, 2] as const) {
+      const win = info("w", 1, 1.4, 0.9, 2.2, { style, leaves });
+      for (const open of states) {
+        assert.equal(standingAboveCut(win, { open, open2: open, tilt: 0, cover: 0.5 }, cut), 0, `${style} x${leaves} open ${open}`);
+        assert.equal(standingAboveCut(win, { open: 0, tilt: open, tilt2: open, cover: null }, cut), 0, `${style} x${leaves} tilted ${open}`);
+      }
+    }
+  }
+});
+
+test("a tilted sash is cut at the wall's cut height in the room, not along its own slant (#244)", () => {
+  const cut = 1.5;
+  const win = info("w", 1, 1.2, 0.9, 2.2);
+  const parts = buildOpeningParts([win], new Map([["w", { open: 0, tilt: 1, cover: null }]]), cut);
+  const pos = parts.frames.getAttribute("position");
+  const fold = parts.frames.getAttribute("fold");
+  let lowestFolding = Infinity;
+  for (let i = 0; i < pos.count; i++) if (fold.getX(i) !== ALWAYS) lowestFolding = Math.min(lowestFolding, pos.getY(i));
+  assert.ok(Math.abs(lowestFolding - cut) < 1e-6, `the folding part starts at ${lowestFolding}`);
 });
