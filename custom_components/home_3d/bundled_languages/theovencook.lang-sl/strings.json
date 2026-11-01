@@ -1707,8 +1707,6 @@
  "hh_service_hint": "Npr. filter, sol ali sredstvo za izpiranje: binarni senzor (vklopljen = potrebno), število (odstotki ali dnevi) ali datum. Ko je potrebno, naprava sveti rumeno in je v »Danes v gospodinjstvu«.",
  "card_household": "Danes v gospodinjstvu",
  "card_household_hint": "Gospodinjstvo: kartica s smetnjaki, pošto, končanimi napravami, žejnimi rastlinami in vzdrževanjem",
- "bin_from": "Svetenje od (ura, dan prej)",
- "bin_until": "do (ura, na dan odvoza)",
  "bin_out": "Postavljen ven (pomočnik)",
  "bin_out_hint": "Neobvezno: vklopljeno, dokler je posoda zunaj (input_boolean, stikalo ali binarni senzor). Takrat ne sveti več in njena oznaka pravi »postavljen ven ✓«; dotik posode preklopi pomočnika ali stikalo. Nočna avtomatizacija ga ponastavi.",
  "bin_out_done": "postavljen ven ✓",

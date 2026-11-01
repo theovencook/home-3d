@@ -184,6 +184,7 @@ import { loadVoice, micProbeAsked, micProbeDone, voicePipeline } from "../load-v
 import { answerAsk, subscribeAsk, type Ask } from "../api.ts";
 import { pipePlanner } from "../pipe-planner.ts";
 import type { ClockPos } from "../card-config.ts";
+import { CLOCK_LOOK, renderClock, type ClockLook } from "../clock.ts";
 import { Director, HOLD_DEFAULT, directorAny, doorbellCamera, doorbellEntities, doorbellRang, triggerFired, type DirectorSettings, type Shot } from "../director.ts";
 import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
 import { sunPath, type SunPath } from "../sun-path.ts";
@@ -267,6 +268,7 @@ export class Fp3dView3d extends LitElement {
     heatMode: { attribute: false },
     theme: { attribute: false },
     clock: { attribute: false },
+    clockLook: { attribute: false },
     _clockTick: { state: true },
     accent: { attribute: false },
     packs: { attribute: false },
@@ -426,8 +428,11 @@ export class Fp3dView3d extends LitElement {
   declare theme: Look;
   /** Date and time in a corner of the view (D631); null or "off": none. */
   declare clock: ClockPos | null;
+  /** What the clock looks like (#232); the default is digits with the date. */
+  declare clockLook: ClockLook | null;
   private declare _clockTick: number;
   private clockTimer: ReturnType<typeof setInterval> | undefined;
+  private clockEvery = 0;
   /** Seasonal and conditional items (#15): the plan the viewer shows (hidden items left out), what it was made of, and the minute tick. */
   private shownPlan: { from: Building; hidden: string; plan: Building } | null = null;
   private showTimer: ReturnType<typeof setTimeout> | undefined;
@@ -774,6 +779,7 @@ export class Fp3dView3d extends LitElement {
     this.heatMode = "none";
     this.theme = "neon";
     this.clock = null;
+    this.clockLook = null;
     this._clockTick = 0;
     this.accent = null;
     this.furnish = false;
@@ -4535,18 +4541,13 @@ export class Fp3dView3d extends LitElement {
       }
       return nothing;
     }
-    this.clockTimer ??= setInterval(() => (this._clockTick = Date.now()), 30000);
-    const now = new Date(this.now());
-    const lang = (this.hass.language || "en").replace("_", "-");
-    const tz = this.hass.config?.time_zone;
-    const fmt = (o: Intl.DateTimeFormatOptions) => {
-      try {
-        return now.toLocaleString(lang, tz ? { ...o, timeZone: tz } : o);
-      } catch {
-        return now.toLocaleString(lang, o);
-      }
-    };
-    return html`<div class="fp3d-clock fp3d-clock-${pos}" aria-hidden="true"><b>${fmt({ hour: "2-digit", minute: "2-digit" })}</b><span>${fmt({ weekday: "short", day: "numeric", month: "short" })}</span></div>`;
+    const look = this.clockLook ?? CLOCK_LOOK;
+    // ticks every second while seconds show, else twice a minute
+    const every = look.seconds ? 1000 : 30000;
+    if (this.clockTimer && this.clockEvery !== every) clearInterval(this.clockTimer), (this.clockTimer = undefined);
+    this.clockEvery = every;
+    this.clockTimer ??= setInterval(() => (this._clockTick = Date.now()), every);
+    return renderClock(pos, { now: new Date(this.now()), lang: (this.hass.language || "en").replace("_", "-"), timeZone: this.hass.config?.time_zone, locale: this.hass.locale }, look);
   }
 
   private renderAlerts() {
@@ -7545,6 +7546,14 @@ export class Fp3dView3d extends LitElement {
       .fp3d-clock span {
         font-size: 13px;
         color: var(--fp3d-muted);
+      }
+      .fp3d-clock .fp3d-dial {
+        width: 96px;
+        height: 96px;
+        align-self: center;
+      }
+      .fp3d-clock .fp3d-dial .s {
+        stroke: var(--fp3d-accent);
       }
       /* at the top it sits under the energy strip and the walk button */
       .fp3d-clock-tl {

@@ -7,7 +7,7 @@ import type { DirectorSettings } from "../../director.ts";
 import type { I18nKey } from "../../i18n.ts";
 import { type StartView, BUTTON_ACTIONS, type ButtonAction, type CustomButton, type MediaPreset, uid, type Building } from "../../model.ts";
 import { getEditors, setEditors } from "../../api.ts";
-import { lastAdmin, pickEditor, pickTabletUser, type EditorUser } from "../../editors.ts";
+import { lastAdmin, personUserIds, pickTabletUser, userChoices, type EditorUser } from "../../editors.ts";
 import { round, numberish } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
@@ -230,16 +230,12 @@ export class SettingsPart {
     return html`<div class="fp3d-form">
       <p class="fp3d-sub fp3d-wide">${this.t("editors_hint")}</p>
       ${list
-        ? list.users.map(
-            (u) => html`<label class="fp3d-check fp3d-wide"
-              ><input
-                type="checkbox"
-                .checked=${u.editor}
-                ?disabled=${u.editor && lastAdmin(list.users, u.id)}
-                @change=${(e: Event) => void answer(setEditors(hass, pickEditor(list.users, u.id, (e.target as HTMLInputElement).checked)))}
-              />
-              ${u.name || u.id}${u.is_admin ? html` <span class="fp3d-sub">(${this.t("editors_admin")})</span>` : nothing}</label
-            >`,
+        ? this.userSelect(
+            list.users,
+            list.users.filter((u) => u.editor).map((u) => u.id),
+            list.users.filter((u) => u.editor && lastAdmin(list.users, u.id)).map((u) => u.id),
+            this.t("editors_title"),
+            (ids) => void answer(setEditors(hass, ids)),
           )
         : html`<p class="fp3d-sub fp3d-wide">${this.t("loading")}</p>`}
       ${this.editorsMsg ? html`<p class="fp3d-sub fp3d-wide fp3d-pack-error">${this.editorsMsg}</p>` : nothing}
@@ -263,15 +259,25 @@ export class SettingsPart {
         .finally(() => this.requestUpdate());
   }
 
+  /** A user list as a searchable multi-select (#227): real people first, service users (no person) behind a toggle. */
+  userSelect(this: Fp3dEditor, users: EditorUser[], picked: string[], locked: string[], label: string, onChange: (ids: string[]) => void) {
+    return html`<fp3d-multi-select
+      class="fp3d-wide"
+      .options=${userChoices(users, personUserIds(this.hass?.states), this.t("editors_admin"))}
+      .value=${picked}
+      .locked=${locked}
+      .label=${label}
+      .searchLabel=${this.t("multi_search")}
+      .emptyText=${this.t("multi_none")}
+      .secondaryLabel=${this.t("users_show_service")}
+      .removeLabel=${this.t("multi_remove")}
+      @change=${(e: CustomEvent<{ value: string[] }>) => onChange(e.detail.value)}
+    ></fp3d-multi-select>`;
+  }
+
   /** Wall tablets (#92): users whose panel opens locked (no editor, no settings); the idle return is a row of its own. */
   renderTabletUsers(this: Fp3dEditor, users: EditorUser[]) {
-    const ticked = this._doc.settings.tablet_users ?? [];
-    return html`${users.map(
-        (u) => html`<label class="fp3d-check fp3d-wide"
-          ><input type="checkbox" .checked=${ticked.includes(u.id)} @change=${(e: Event) => this.setTabletUser(u.id, (e.target as HTMLInputElement).checked)} />
-          ${u.name || u.id}</label
-        >`,
-      )}`;
+    return this.userSelect(users, this._doc.settings.tablet_users ?? [], [], this.t("tablet_users"), (ids) => this.change((d) => (d.settings.tablet_users = ids)));
   }
 
   setTabletUser(this: Fp3dEditor, id: string, on: boolean): void {

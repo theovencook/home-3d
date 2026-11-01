@@ -575,14 +575,14 @@ export class EnergyPart {
       <p class="fp3d-sub">${this.t("energy_meters_hint")}</p>
       <div class="fp3d-form">
         ${this.entitySelect(this.t("energy_cheap_rate"), e.cheap_rate ?? null, undefined, cheap, (v) => this.setEnergy({ cheap_rate: v === "none" ? null : v }))}
-        <label class="fp3d-field"
-          >${this.t("energy_cheap_from")}
-          <input type="time" .value=${e.cheap_from ?? ""} ?disabled=${!admin} @change=${(ev: Event) => this.setEnergy({ cheap_from: (ev.target as HTMLInputElement).value || null })}
-        /></label>
-        <label class="fp3d-field"
-          >${this.t("energy_cheap_to")}
-          <input type="time" .value=${e.cheap_to ?? ""} ?disabled=${!admin} @change=${(ev: Event) => this.setEnergy({ cheap_to: (ev.target as HTMLInputElement).value || null })}
-        /></label>
+        <div class="fp3d-field">
+          <span>${this.t("energy_cheap_from")}</span>
+          ${this.timeField(this.t("energy_cheap_from"), e.cheap_from ?? "", !admin, (v) => this.setEnergy({ cheap_from: v || null }))}
+        </div>
+        <div class="fp3d-field">
+          <span>${this.t("energy_cheap_to")}</span>
+          ${this.timeField(this.t("energy_cheap_to"), e.cheap_to ?? "", !admin, (v) => this.setEnergy({ cheap_to: v || null }))}
+        </div>
       </div>
       <p class="fp3d-sub">${this.t("energy_cheap_hint")}</p>
       <div class="fp3d-actions">

@@ -1707,8 +1707,6 @@
  "hh_service_hint": "Esim. suodatin, suola tai huuhtelukirkaste: binäärianturi (päällä = tarpeen), luku (prosenttia tai päiviä jäljellä) tai päivämäärä. Kun on tarpeen, laite hehkuu keltaisena ja näkyy kortissa ”Tänään kotona”.",
  "card_household": "Tänään kotona",
  "card_household_hint": "Kotitalous: kortti, jossa astiat, posti, valmiit laitteet, janoiset kasvit ja huollot",
- "bin_from": "Hehku alkaen (klo, edellisenä päivänä)",
- "bin_until": "asti (klo, tyhjennyspäivänä)",
  "bin_out": "Viety ulos (apuri)",
  "bin_out_hint": "Valinnainen: päällä, kun astia on ulkona (input_boolean, kytkin tai binäärianturi). Silloin se ei enää hehku ja sen kyltti sanoo ”viety ulos ✓”; astian napautus vaihtaa apurin tai kytkimen. Yöllinen automaatio nollaa sen.",
  "bin_out_done": "viety ulos ✓",

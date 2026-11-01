@@ -1707,8 +1707,6 @@
  "hh_service_hint": "P. ej. filtro, sal o abrillantador: un sensor binario (activo = pendiente), un número (% o días restantes) o una fecha. Si toca, el aparato brilla en amarillo y aparece en «Hoy en casa».",
  "card_household": "Hoy en casa",
  "card_household_hint": "Hogar: tarjeta con contenedores, correo, aparatos terminados, plantas sedientas y mantenimiento",
- "bin_from": "Brillar desde (hora, el día antes)",
- "bin_until": "hasta (hora, día de recogida)",
  "bin_out": "Sacado (ayudante)",
  "bin_out_hint": "Opcional: encendido mientras el cubo está fuera (input_boolean, interruptor o sensor binario). Entonces deja de brillar y su etiqueta dice «sacado ✓»; tocar el cubo conmuta un ayudante o interruptor. Una automatización nocturna lo restablece.",
  "bin_out_done": "sacado ✓",

@@ -15,6 +15,7 @@ import type { EntityOption } from "../../entity-options.ts";
 import { round } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 import { callServiceSafe } from "../../failure.ts";
+import { uses12Hours } from "../../time-of-day.ts";
 
 /** FieldsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class FieldsPart {
@@ -269,6 +270,20 @@ export class FieldsPart {
     const f = this.furnitureItem;
     const roomId = f ? (this.roomAt([f.x, f.z]) ?? this._roomId) : this._roomId;
     return (roomId && this.floor?.rooms.find((r) => r.id === roomId)?.area_id) || null;
+  }
+
+  /** A time of day picker (#225) in the profile's 12 or 24 hours; "" is no time. */
+  timeField(this: Fp3dEditor, label: string, value: string, disabled: boolean, onChange: (v: string) => void) {
+    return html`<fp3d-time-field
+      .value=${value}
+      .hour12=${uses12Hours(this.hass?.locale, this.hass?.language)}
+      .clearable=${true}
+      .label=${label}
+      .hourLabel=${this.t("time_hour")}
+      .minuteLabel=${this.t("time_minute")}
+      ?disabled=${disabled}
+      @change=${(e: CustomEvent<{ value: string }>) => onChange(e.detail.value)}
+    ></fp3d-time-field>`;
   }
 
   /** `domains`: the link's likely entity domains, best first (#132); with the room's area they lead the list. */

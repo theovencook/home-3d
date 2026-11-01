@@ -8,6 +8,8 @@
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import "../components/entity-picker.ts";
+import "../components/time-field.ts";
+import { hoursToTime, timeToHours, uses12Hours } from "../time-of-day.ts";
 import { entityOptionList } from "../entity-options.ts";
 import { entityName } from "../devices.ts";
 import { freshReload } from "../fresh-reload.ts";
@@ -487,14 +489,10 @@ export class SettingsPage extends LitElement {
           @change=${(e: Event) => this.write(s as Setting<string>, (e.target as HTMLInputElement).value.trim())}
         />`;
       case "time":
-        return html`<input
-          class="st-text st-time"
-          type="time"
-          .value=${String(value ?? "")}
-          aria-label=${aria}
-          ?disabled=${disabled}
-          @change=${(e: Event) => this.write(s as Setting<string | null>, (e.target as HTMLInputElement).value || null)}
-        />`;
+        return this.timeField(String(value ?? ""), aria, disabled, (v) => this.write(s as Setting<string | null>, v || null), true);
+      case "hour":
+        // stored as hours (the bins' glow): the field shows and gives back a time of day
+        return this.timeField(hoursToTime(value as number | null), aria, disabled, (v) => timeToHours(v) !== null && this.write(s as Setting<number>, timeToHours(v)!), false);
       case "colour":
         return html`<span class="st-colour">
           <input type="color" .value=${String(value ?? c.fallback)} aria-label=${aria} ?disabled=${disabled} @input=${(e: Event) => this.write(s as Setting<string | null>, (e.target as HTMLInputElement).value)} />
@@ -535,6 +533,20 @@ export class SettingsPage extends LitElement {
       case "note":
         return nothing;
     }
+  }
+
+  /** A time of day picker (#225) in the profile's 12 or 24 hours. */
+  private timeField(value: string, aria: string, disabled: boolean, set: (v: string) => unknown, clearable: boolean) {
+    return html`<fp3d-time-field
+      .value=${value}
+      .hour12=${uses12Hours(this.hass?.locale, this.hass?.language)}
+      .clearable=${clearable}
+      .label=${aria}
+      .hourLabel=${this.tr("time_hour")}
+      .minuteLabel=${this.tr("time_minute")}
+      ?disabled=${disabled}
+      @change=${(e: CustomEvent<{ value: string }>) => set(e.detail.value)}
+    ></fp3d-time-field>`;
   }
 
   private renderEntity(s: Setting<string | null>, c: Extract<Control, { kind: "entity" }>, disabled: boolean) {
@@ -928,9 +940,6 @@ export class SettingsPage extends LitElement {
       }
       .st-text {
         width: min(280px, 100%);
-      }
-      .st-time {
-        width: auto;
       }
       .st-select {
         max-width: 280px;
