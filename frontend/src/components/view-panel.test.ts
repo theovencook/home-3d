@@ -1,0 +1,166 @@
+// The View panel element (#247): a non-modal dialog, its sections from view-settings.ts, its rows written where the
+// Settings page writes them, a radio group for each segmented choice, and the read-only quality line with the ways on
+// to Settings.
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+const g = globalThis as Record<string, unknown>;
+for (const k of ["VIEWER", "EDITOR", "LOCATE", "ITEMS", "LANG", "PLAN2D", "FUN", "VOICE", "TIMETRAVEL", "CARD_EDITOR", "SETTINGS"]) g[`__FP3D_${k}_HASH__`] = "test";
+g.__FP3D_VERSION__ = "0";
+const store = new Map<string, string>();
+g.localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+
+const { Fp3dViewPanel } = await import("./view-panel.ts");
+const { viewSetting } = await import("../settings/view-settings.ts");
+
+/** A template as text, with each function value as <fn>. */
+function flat(v: unknown): string {
+  if (v === null || v === undefined || typeof v === "symbol") return "";
+  if (typeof v === "function") return "<fn>";
+  if (Array.isArray(v)) return v.map(flat).join("");
+  if (typeof v === "object" && "strings" in (v as object)) {
+    const r = v as { strings: readonly string[]; values: unknown[] };
+    return r.strings.map((s, i) => s + (i < r.values.length ? flat(r.values[i]) : "")).join("");
+  }
+  return String(v);
+}
+
+/** The click handlers in a template whose static text just before them matches `re`. */
+function handlers(v: unknown, re: RegExp, out: (() => void)[] = []): (() => void)[] {
+  if (Array.isArray(v)) v.forEach((x) => handlers(x, re, out));
+  else if (v && typeof v === "object" && "strings" in (v as object)) {
+    const r = v as { strings: readonly string[]; values: unknown[] };
+    r.values.forEach((x, i) => {
+      if (typeof x === "function" && re.test(r.strings[i])) out.push(x as () => void);
+      handlers(x, re, out);
+    });
+  }
+  return out;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function viewPanel(o: Record<string, unknown> = {}): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const el = new Fp3dViewPanel() as any;
+  el.hass = { language: "en", states: {}, themes: { darkMode: true } };
+  el.context = { floors: 2, floorOpen: false, roof: true, plan2d: false, kiosk: false, ...o };
+  const events: { type: string; detail: unknown }[] = [];
+  el.dispatchEvent = (e: CustomEvent) => (events.push({ type: e.type, detail: e.detail }), true);
+  el.events = events;
+  return el;
+}
+
+test("a non-modal dialog named View, saying who it is saved for (#247)", () => {
+  store.clear();
+  const out = flat(viewPanel().render());
+  assert.match(out, /role="dialog" aria-modal="false" aria-labelledby="vp-title"/);
+  assert.match(out, /<h2 id="vp-title">View<\/h2>/);
+  assert.ok(out.includes("Saved for this device"));
+});
+
+test("wide screens: Appearance, What the 3D shows, Device icons and Clock, then the footer", () => {
+  store.clear();
+  const out = flat(viewPanel().render());
+  const order = ["Appearance", "What the 3D view shows", "Device icons", "Clock", "Quality: Auto", "More view settings ›", "Sun, window light and warnings are home settings"];
+  let at = 0;
+  for (const text of order) {
+    const i = out.indexOf(text, at);
+    assert.ok(i >= at, `${text} after the one before`);
+    at = i;
+  }
+  assert.ok(out.includes(`<optgroup label=Automatic>`) && out.includes(`<optgroup label=Fixed>`));
+  assert.ok(out.includes("Follow Home Assistant (now Neon)"));
+  assert.ok(out.includes("Important: devices with no 3D model"));
+  for (const label of ["Colour rooms by", "Keep the roof on when zooming in", "Motion trail (last 30 minutes)", "Weather outside", "Camera wall", "Room names"]) assert.ok(out.includes(label), label);
+});
+
+test("a change is written under the setting's own key and the panel is told; the panel stays open", () => {
+  store.clear();
+  const el = viewPanel();
+  el.write(viewSetting("walls"), "cut");
+  el.write(viewSetting("markers"), "all");
+  el.write(viewSetting("theme"), "auto");
+  assert.equal(store.get("home3d.walls"), "cut");
+  assert.equal(store.get("home3d.markers"), "all");
+  assert.equal(store.get("home3d.theme"), "auto");
+  assert.deepEqual(
+    el.events.map((e: { type: string }) => e.type),
+    ["view-change", "view-change", "view-change"],
+  );
+  assert.ok(!el.events.some((e: { type: string }) => e.type === "view-close"));
+  // the accent's reset removes the key (back to the default)
+  el.write(viewSetting("accent"), "#ff7a59");
+  assert.equal(store.get("home3d.accent"), "#ff7a59");
+  el.write(viewSetting("accent"), null);
+  assert.equal(store.has("home3d.accent"), false);
+});
+
+test("segmented choices are radio groups with a tick on the chosen one; the arrow keys move the choice", () => {
+  store.clear();
+  const el = viewPanel();
+  const tpl = el.renderSegment(viewSetting("walls"), "Walls", false);
+  const out = flat(tpl);
+  assert.match(out, /role="radiogroup" aria-label=Walls/);
+  assert.match(out, /role="radio" aria-checked=true tabindex=0/);
+  assert.match(out, /role="radio" aria-checked=false tabindex=-1/);
+  assert.ok(out.includes(`class="vp-tick"`));
+  const onKey = (tpl.values as unknown[]).find((v) => typeof v === "function") as (e: unknown) => void;
+  onKey({ key: "ArrowRight", preventDefault: () => undefined });
+  assert.equal(store.get("home3d.walls"), "cut");
+});
+
+test("the footer: Quality is read-only and opens Screen and controls; the links open Settings (#246, #247)", () => {
+  store.clear();
+  store.set("home3d.quality", "low");
+  const el = viewPanel();
+  const foot = el.renderFooter();
+  assert.ok(flat(foot).includes("Quality: Tablet"));
+  for (const h of handlers(foot, /@click=$/)) h();
+  assert.deepEqual(
+    el.events.filter((e: { type: string }) => e.type === "open-settings").map((e: { detail: unknown }) => e.detail),
+    [
+      { section: "screen", id: "quality" },
+      { section: "look", id: null },
+      { section: "scene", id: null },
+    ],
+  );
+});
+
+test("Close and the camera wall row tell the panel (it owns both)", () => {
+  store.clear();
+  const el = viewPanel();
+  const tpl = el.render();
+  for (const h of handlers(tpl, /class="vp-close" @click=$/)) h();
+  el.renderRow({ id: "camera_wall" });
+  for (const h of handlers(el.renderRow({ id: "camera_wall" }), /@click=$/)) h();
+  assert.deepEqual(
+    el.events.map((e: { type: string }) => e.type),
+    ["view-close", "camera-wall-toggle"],
+  );
+});
+
+test("a wall tablet gets What the 3D shows only, no footer (#92)", () => {
+  store.clear();
+  const out = flat(viewPanel({ kiosk: true }).render());
+  assert.ok(out.includes("What the 3D view shows"));
+  for (const text of ["Device icons", "Quality:", "More view settings", "<optgroup"]) assert.ok(!out.includes(text), text);
+});
+
+test("phones: a bottom sheet whose Appearance and Device icons start open, the rest folded with a summary", () => {
+  store.clear();
+  const el = viewPanel();
+  el._phone = true;
+  const out = flat(el.render());
+  assert.match(out, /<details class="vp-sec vp-look" \?open=true>/);
+  assert.match(out, /<details class="vp-sec vp-markers" \?open=true>/);
+  assert.match(out, /<details class="vp-sec vp-show" \?open=false>/);
+  assert.match(out, /<details class="vp-sec vp-clock" \?open=false>/);
+  // What the 3D shows sums up its rows: the walls, and the switches that are on
+  assert.ok(out.includes("Tall walls · Room names · Weather outside"));
+});
+
+test("the sheet respects reduced motion, keeps the safe area, and every control is 44 px on touch", () => {
+  const css = (Fp3dViewPanel as unknown as { styles: { cssText: string }[] }).styles.map((s) => s.cssText).join("\n");
+  assert.match(css, /prefers-reduced-motion: reduce\)\s*\{\s*\.vp\s*\{\s*animation: none;/);
+  assert.match(css, /env\(safe-area-inset-bottom, 0px\), 16px/);
+});

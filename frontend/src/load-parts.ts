@@ -7,3 +7,5 @@ import { once } from "./lazy-part.ts";
 export const loadRoomPanel = once(() => import("./components/room-panel.ts"));
 /** The home switcher (<fp3d-home-switcher>) in the panel's header, for editors. */
 export const loadHomeSwitcher = once(() => import("./components/home-switcher.ts"));
+/** The View panel (<fp3d-view-panel>, #247) on the 3D view: loaded when the View button is first pointed at or pressed. */
+export const loadViewPanel = once(() => import("./components/view-panel.ts"));

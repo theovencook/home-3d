@@ -1,8 +1,12 @@
-// Small polish of the view and show menus (#214): the View popover closes when the sheet opens, each Markers button
-// has its own name, and Apart / Stacked / Roof stays are disabled with a hint instead of vanishing on one floor.
+// The one View panel on the 3D view (#247, the menus redesign #219): it replaces the header's View popover and the
+// stage's Show popover, its rows are the Settings page's own (registry.ts), and the rules of the old menus carry over
+// (#214: whole-house rows disabled with a hint while one floor is open; #215: each choice once).
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding } from "./model.ts";
+import { englishTable } from "./i18n.ts";
+import { settingById, SETTINGS } from "./settings/registry.ts";
+import { appearanceOptions, CAMERA_WALL, LOOK, optionGroups, optionText, viewSections, type ViewContext } from "./settings/view-settings.ts";
 
 const g = globalThis as Record<string, unknown>;
 for (const k of ["VIEWER", "EDITOR", "LOCATE", "ITEMS", "LANG", "PLAN2D", "FUN", "VOICE", "TIMETRAVEL", "CARD_EDITOR", "SETTINGS"]) g[`__FP3D_${k}_HASH__`] = "test";
@@ -13,6 +17,8 @@ g.location = { search: "", hash: "", pathname: "/home_3d" };
 g.history = { state: null, replaceState: () => undefined };
 
 const { Floorplan3dPanel } = await import("./panel.ts");
+const en = englishTable() as Record<string, string>;
+const t = (k: string, v?: Record<string, string | number>) => Object.entries(v ?? {}).reduce((s, [n, x]) => s.replace(`{${n}}`, String(x)), en[k] ?? k);
 
 function flat(v: unknown): string {
   if (v === null || v === undefined || typeof v === "symbol") return "";
@@ -26,6 +32,7 @@ function flat(v: unknown): string {
 }
 
 function panel(floorId: string | null) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const p = new (Floorplan3dPanel as any)();
   p.hass = { language: "en", user: { id: "u", is_admin: true, name: "x" }, states: {}, themes: { darkMode: true } };
   const b = emptyBuilding();
@@ -35,126 +42,123 @@ function panel(floorId: string | null) {
   p.data.building = b;
   p.data.canEdit = true;
   p.willUpdate(new Map());
-  p._showOpen = true;
-  p._optsOpen = true;
   p._floorId = floorId;
   return p;
 }
 
-test("Device icons is one named drop-down with each choice in full (#214, renamed from Markers in #246)", () => {
+const ctx = (o: Partial<ViewContext> = {}): ViewContext => ({ floors: 2, floorOpen: false, roof: true, plan2d: false, kiosk: false, ...o });
+const rows = (c: ViewContext, section: string) => viewSections(c).find((s) => s.id === section)?.rows ?? [];
+
+test("one View button on the 3D view: no header popover, no Show chip (#247)", () => {
   const out = flat(panel(null).render());
-  assert.ok(out.includes(`class="fp3d-opt-select"
-                aria-label=Device icons`));
-  for (const [value, label] of [["none", "None"], ["room", "Only in the room I open"], ["important", "Important only"], ["all", "All devices"]]) assert.ok(out.includes(`<option value=${value} ?selected=${value === "important"}>${label}</option>`), label);
-});
-
-test("with one floor picked, Apart / Stacked / Roof stays are there but disabled, with the hint (#214)", () => {
-  const one = flat(panel("f1").render());
-  assert.match(one, /\?disabled=true @click=<fn>>Apart</);
-  assert.match(one, /\?disabled=true @click=<fn>>Stacked</);
-  assert.match(one, /\?disabled=true[^@]*@click=<fn>>Roof stays</);
-  assert.ok(one.includes("Pick All floors"));
-  const all = flat(panel(null).render());
-  assert.match(all, /\?disabled=false @click=<fn>>Apart</);
-  assert.match(all, /\?disabled=false[^@]*@click=<fn>>Roof stays</);
-  assert.ok(!all.includes("Pick All floors"));
-});
-
-test("the Sun and lights button closes the View popover before the sheet opens (#214)", () => {
+  assert.ok(!out.includes("fp3d-opts-btn") && !out.includes("fp3d-view-opts"), "the header has no View popover");
+  assert.ok(!out.includes("fp3d-show-wrap") && !out.includes(">Show <"), "the stage has no Show chip");
+  assert.match(out, /class="fp3d-chip fp3d-view-btn"\s+aria-haspopup="dialog"\s+aria-expanded=false\s+aria-controls="fp3d-view-panel"/);
+  assert.ok(!out.includes("<fp3d-view-panel"), "closed: no panel");
   const p = panel(null);
-  let opened = 0;
-  p.view3d = () => ({ openSettings: () => opened++ });
-  const tpl = p.render();
-  // find the click handler of the button in the rendered template values
-  const handlers: unknown[] = [];
-  const walk = (v: unknown): void => {
-    if (Array.isArray(v)) return v.forEach(walk);
-    if (v && typeof v === "object" && "strings" in (v as object)) {
-      const r = v as { strings: readonly string[]; values: unknown[] };
-      r.values.forEach((x, i) => {
-        if (typeof x === "function" && /fp3d-opt-more" @click=$/.test(r.strings[i])) handlers.push(x);
-        walk(x);
-      });
-    }
-  };
-  walk(tpl);
-  assert.equal(handlers.length, 1, "the Sun and lights button is rendered once");
-  assert.equal(p._optsOpen, true);
-  (handlers[0] as () => void)();
-  assert.equal(opened, 1);
-  assert.equal(p._optsOpen, false);
+  p.setViewOpen(true);
+  const open = flat(p.render());
+  assert.match(open, /aria-expanded=true/);
+  assert.match(open, /<fp3d-view-panel\s+id="fp3d-view-panel"/);
 });
 
-test("each Show menu label appears once, with a floor picked or not (#215)", () => {
-  for (const floorId of [null, "f1"]) {
-    const out = flat(panel(floorId).render());
-    const menu = out.slice(out.indexOf("fp3d-show-panel"));
-    const labels = menu.split("<button").slice(1).map((b) => b.split("</button>")[0].replace(/<fn>/g, "").replace(/^[^>]*>/, "").replace(/<[^>]*>/g, "").trim()).filter(Boolean);
-    const seen = new Set<string>();
-    for (const l of labels) {
-      assert.ok(!seen.has(l), `"${l}" is listed twice (floor ${floorId})`);
-      seen.add(l);
-    }
-    assert.equal(labels.filter((l) => l === "Stacked").length, 1, "Stacked once (the Apart / Stacked pair)");
+test("Escape closes the View panel first and goes no further up; the next Escape goes up a level (#247)", () => {
+  const p = panel("f1");
+  p._roomId = "f1r";
+  p._viewOpen = true;
+  p.onKey({ key: "Escape" });
+  assert.equal(p._viewOpen, false);
+  assert.equal(p._roomId, "f1r", "the room stays open");
+  p.onKey({ key: "Escape" });
+  assert.equal(p._roomId, null);
+});
+
+test("leaving the 3D view and a wall tablet's quiet return close the View panel", () => {
+  const p = panel(null);
+  p._viewOpen = true;
+  p.setMode("settings");
+  assert.equal(p._viewOpen, false);
+  const q = panel(null);
+  q._viewOpen = true;
+  q.returnHome();
+  assert.equal(q._viewOpen, false);
+});
+
+test("its rows are the Settings page's own entries, under the same stored keys (#247)", () => {
+  const keys: string[] = [];
+  for (const kiosk of [false, true])
+    for (const s of viewSections(ctx({ kiosk, floorOpen: true })))
+      for (const r of s.rows) {
+        if (r.id === CAMERA_WALL) continue;
+        const entry = settingById(r.id);
+        assert.ok(entry, r.id);
+        assert.ok(SETTINGS.includes(entry!), `${r.id} is in the registry's list`);
+        assert.equal(entry, LOOK.find((x) => x.id === r.id), `${r.id}: the very same object`);
+        keys.push(...(entry!.prefKeys ?? []));
+      }
+  for (const k of ["theme", "accent", "walls", "explode", "floor_stack", "heat", "room_names", "roof", "trail", "weather", "markers", "pinSize", "clock"]) assert.ok(keys.includes(k), k);
+});
+
+test("with one floor open, Floors apart and Keep the roof are there but disabled, with the hint (#214)", () => {
+  const whole = rows(ctx(), "show");
+  assert.deepEqual(whole.find((r) => r.id === "explode"), { id: "explode", disabled: false });
+  assert.deepEqual(whole.find((r) => r.id === "roof"), { id: "roof", disabled: false });
+  assert.ok(!whole.some((r) => r.id === "floor_stack"), "Floors below only with a floor open");
+  assert.equal(viewSections(ctx()).find((s) => s.id === "show")?.hint, undefined);
+  const one = rows(ctx({ floorOpen: true }), "show");
+  assert.equal(one.find((r) => r.id === "explode")?.disabled, true);
+  assert.equal(one.find((r) => r.id === "roof")?.disabled, true);
+  assert.ok(one.some((r) => r.id === "floor_stack"));
+  assert.equal(viewSections(ctx({ floorOpen: true })).find((s) => s.id === "show")?.hint, "pick_all_floors");
+});
+
+test("each row once (#215); the 2D plan drops the 3D-only rows; one floor and no roof drop theirs", () => {
+  for (const c of [ctx(), ctx({ floorOpen: true }), ctx({ plan2d: true }), ctx({ floors: 1, roof: false })]) {
+    const ids = viewSections(c).flatMap((s) => s.rows.map((r) => r.id));
+    assert.equal(new Set(ids).size, ids.length, JSON.stringify(c));
   }
-  // with a floor picked the floors-below group says what it does
-  const one = flat(panel("f1").render());
-  for (const l of ["Dim below", "Show below", "Hide below"]) assert.ok(one.includes(`>${l}<`) || one.includes(l), l);
+  const flatPlan = rows(ctx({ plan2d: true }), "show").map((r) => r.id);
+  for (const id of ["walls", "explode", "roof", "floor_stack"]) assert.ok(!flatPlan.includes(id), id);
+  const single = rows(ctx({ floors: 1, roof: false }), "show").map((r) => r.id);
+  assert.deepEqual(single, ["walls", "heat", "room_names", "trail", "weather", CAMERA_WALL]);
 });
 
-/** The click handler of the "Sun and lights" button in a rendered panel. */
-function sunHandler(p: ReturnType<typeof panel>): () => void {
-  const handlers: unknown[] = [];
-  const walk = (v: unknown): void => {
-    if (Array.isArray(v)) return v.forEach(walk);
-    if (v && typeof v === "object" && "strings" in (v as object)) {
-      const r = v as { strings: readonly string[]; values: unknown[] };
-      r.values.forEach((x, i) => {
-        if (typeof x === "function" && /fp3d-opt-more" @click=$/.test(r.strings[i])) handlers.push(x);
-        walk(x);
-      });
-    }
-  };
-  walk(p.render());
-  assert.equal(handlers.length, 1);
-  return handlers[0] as () => void;
-}
-
-test("the Sun and lights button always shows something: the view's sheet, else the Settings page at the sun card (#231)", () => {
-  // the view is there: its sheet opens, the Settings page stays shut
-  const ready = panel(null);
-  let opened = 0;
-  ready.view3d = () => ({ openSettings: () => opened++ });
-  sunHandler(ready)();
-  assert.equal(opened, 1);
-  assert.equal(ready._mode, "view");
-  // the view's code has not arrived (or it is not drawn): the click is not lost
-  const missing = panel(null);
-  missing.view3d = () => null;
-  sunHandler(missing)();
-  assert.equal(missing._optsOpen, false);
-  assert.equal(missing._mode, "settings");
-  assert.deepEqual(missing._settingsAt, { section: "scene", id: "sun" });
-});
-
-test("the View menu has no Controls row and no Quality buttons: a read-only quality line links to Settings (#246)", () => {
-  const p = panel(null);
-  p._quality = "low";
-  const out = flat(p.render());
-  for (const glyph of ["📌", "⌖", "🔒", ">FPS<", "Controls on the"]) assert.ok(!out.includes(glyph), glyph);
-  assert.ok(out.includes("Quality: Tablet"));
-  let opened: unknown[] = [];
-  p.openSettings = (...a: unknown[]) => (opened = a);
-  const line = p.renderQualityLine();
-  const go = (line.values as unknown[]).find((v) => typeof v === "function") as () => void;
-  go();
-  assert.deepEqual(opened, ["screen", "quality"]);
-});
-
-test("on a wall tablet the 3D view's menu chip is called View (#246)", () => {
+test("a wall tablet's View panel offers only what the 3D shows (and 3D or 2D, slotted in) (#92)", () => {
+  assert.deepEqual(viewSections(ctx({ kiosk: true })).map((s) => s.id), ["show"]);
   const p = panel(null);
   p._tablet = true;
+  p._viewOpen = true;
   const out = flat(p.renderView(p.data.building));
-  assert.ok(out.includes(`>View <span class="fp3d-caret">`));
-  assert.ok(!out.includes(`>3D <span class="fp3d-caret">`));
+  const at = out.indexOf("<fp3d-view-panel");
+  assert.ok(at > 0);
+  assert.ok(out.slice(at).includes("aria-label=2D or 3D"), "3D or 2D inside the panel");
+  assert.match(out, />\s*View <span class="fp3d-caret"/, "the chip is called View");
+});
+
+test("Appearance is one drop-down: Automatic (each saying what it shows now) and Fixed (#247)", () => {
+  const sunUp = { themes: { darkMode: true }, states: { "sun.sun": { state: "above_horizon" } } } as never;
+  const groups = optionGroups(appearanceOptions({ hass: sunUp }));
+  assert.deepEqual(
+    groups.map((x) => [x.group, x.options.map((o) => o.value)]),
+    [
+      ["theme_group_auto", ["theme", "auto"]],
+      ["theme_group_fixed", ["neon", "blueprint", "day", "realistic"]],
+    ],
+  );
+  assert.deepEqual(groups[0].options.map((o) => optionText(o, t)), ["Follow Home Assistant (now Neon)", "Follow the sun (now Day)"]);
+  assert.deepEqual(groups[1].options.map((o) => optionText(o, t)), ["Neon", "High contrast", "Day", "Realistic"]);
+  assert.equal(en.theme_group_auto, "Automatic");
+  assert.equal(en.theme_group_fixed, "Fixed");
+  // the Settings page's Appearance row is the same drop-down
+  const theme = settingById("theme")!;
+  assert.equal(theme.control.kind, "select");
+  assert.equal(theme.prefKeys?.[0], "theme");
+});
+
+test("Device icons has its four choices in full and a sentence saying what “important” means (#247)", () => {
+  const markers = settingById("markers")!;
+  const labels = markers.control.kind === "select" ? markers.control.options({} as never).map((o) => en[o.label]) : [];
+  assert.deepEqual(labels, ["None", "Only in the room I open", "Important only", "All devices"]);
+  assert.equal(viewSections(ctx()).find((s) => s.id === "markers")?.hint, "markers_important_hint");
+  assert.match(en.markers_important_hint, /^Important: /);
 });

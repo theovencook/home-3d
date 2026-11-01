@@ -16,6 +16,7 @@ import type { Building, StartView } from "../model.ts";
 import type { FurniturePack } from "../packs.ts";
 import type { HomeAssistant } from "../types.ts";
 import { colourReset } from "../colour-reset.ts";
+import { optionGroups, optionText } from "./view-settings.ts";
 import { controls, tokens } from "../styles.ts";
 import {
   GROUPS,
@@ -478,7 +479,10 @@ export class SettingsPage extends LitElement {
         </div>`;
       case "select":
         return html`<select class="st-select" aria-label=${aria} ?disabled=${disabled} @change=${(e: Event) => this.write(s as Setting<string>, (e.target as HTMLSelectElement).value)}>
-          ${c.options(env).map((o) => html`<option value=${o.value} ?selected=${value === o.value}>${this.label(o)}</option>`)}
+          ${optionGroups(c.options(env)).map(({ group, options }) => {
+            const list = options.map((o) => html`<option value=${o.value} ?selected=${value === o.value}>${optionText(o, (k, v) => this.tr(k, v))}</option>`);
+            return group ? html`<optgroup label=${this.tr(group)}>${list}</optgroup>` : list;
+          })}
         </select>`;
       case "entity":
         return this.renderEntity(s as Setting<string | null>, c, disabled);

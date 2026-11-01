@@ -58,12 +58,13 @@ function shown(p: { willUpdate(c: Map<string, unknown>): void; render(): unknown
   return flat(p.render());
 }
 
-test("an editor sees the tabs, the home switcher and the view settings without tablet mode", () => {
+test("an editor sees the tabs, the home switcher and the View button without tablet mode", () => {
   at("");
   const text = shown(panel(building()));
   assert.match(text, /fp3d-home-switcher/);
   assert.match(text, /role="group" aria-label=Mode>/);
-  assert.match(text, /fp3d-opts-btn/);
+  assert.match(text, /fp3d-view-btn/);
+  assert.match(text, /fp3d-tt-chip/);
 });
 
 test("?tablet shows only the home name, the floors and a View menu: no tabs, switcher, view settings or room chips (#92)", (t) => {
@@ -73,12 +74,12 @@ test("?tablet shows only the home name, the floors and a View menu: no tabs, swi
   assert.match(text, /Sample Home/);
   assert.doesNotMatch(text, /fp3d-home-switcher/);
   assert.doesNotMatch(text, /role="group" aria-label=Mode>/);
-  assert.doesNotMatch(text, /fp3d-opts-btn/);
   assert.doesNotMatch(text, /fp3d-tt-chip/);
   assert.doesNotMatch(text, /fp3d-room-chip/);
   assert.match(text, /Ground/);
   assert.match(text, /Upstairs/);
-  assert.match(text, /fp3d-show-wrap/);
+  // the one View button (#247): on a tablet its panel holds 3D or 2D and what the 3D shows
+  assert.match(text, /fp3d-view-btn/);
 });
 
 test("a user ticked as a wall tablet gets the locked view, and the Editor stays shut for them (#92)", (t) => {
@@ -99,7 +100,7 @@ test("a tablet goes back to the whole house after the plan's idle time; a touch 
   shown(p);
   p._floorId = "f1";
   p._roomId = "r2";
-  p._showOpen = true;
+  p._viewOpen = true;
   t.mock.timers.tick(20000);
   fire("pointerdown");
   t.mock.timers.tick(20000);
@@ -107,7 +108,7 @@ test("a tablet goes back to the whole house after the plan's idle time; a touch 
   t.mock.timers.tick(10000);
   assert.equal(p._roomId, null);
   assert.equal(p._floorId, null);
-  assert.equal(p._showOpen, false);
+  assert.equal(p._viewOpen, false);
   const heard = listeners.get("pointerdown")?.size ?? 0;
   at("?tablet=0");
   shown(p);

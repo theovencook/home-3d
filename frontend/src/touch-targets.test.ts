@@ -42,6 +42,7 @@ function coarseSize(css: string, selector: string): { prop: string; px: number }
 const { Floorplan3dPanel } = await import("./panel.ts");
 const { Fp3dView3d } = await import("./components/view3d.ts");
 const { Fp3dRoomPanel } = await import("./components/room-panel.ts");
+const { Fp3dViewPanel } = await import("./components/view-panel.ts");
 const { Fp3dQuickMenu } = await import("./components/quick-menu.ts");
 const { Fp3dTimeBar } = await import("./components/time-bar.ts");
 const { formStyles } = await import("./components/editor/styles/forms.ts");
@@ -56,7 +57,8 @@ const want = (name: string, css: string, selectors: string[]) =>
   });
 
 want("shared controls", text(controls), [".fp3d-seg button", ".fp3d-chip", ".fp3d-btn", ".fp3d-field select", ".fp3d-swatch"]);
-want("panel", text((Floorplan3dPanel as unknown as Styled).styles), [".fp3d-opts-btn", ".fp3d-quality button", ".fp3d-nav .fp3d-nav-toggle", ".fp3d-nav .fp3d-chip", ".fp3d-header .fp3d-seg button"]);
+want("panel", text((Floorplan3dPanel as unknown as Styled).styles), [".fp3d-view-btn", ".fp3d-nav .fp3d-nav-toggle", ".fp3d-nav .fp3d-chip", ".fp3d-header .fp3d-seg button"]);
+want("View panel", text((Fp3dViewPanel as unknown as Styled).styles), [".vp-select", ".vp-seg button", ".vp-row", ".vp-link", ".vp-quiet", ".vp-close"]);
 want("viewer", text((Fp3dView3d as unknown as Styled).styles), [".fp3d-alert-x", ".fp3d-eye", ".fp3d-find-close", ".fp3d-sheet-x", ".fp3d-walk-btn", ".fp3d-sheet-chip", ".fp3d-holo-media-controls button", ".fp3d-thumbs-fold"]);
 want("room panel", text((Fp3dRoomPanel as unknown as Styled).styles), [".fp3d-rp-close", ".fp3d-rp-icon", ".fp3d-rp-swatch", ".fp3d-rp-small", ".fp3d-rp-sheet", ".fp3d-rp-chips .fp3d-chip", ".fp3d-rp-stepper .fp3d-btn"]);
 want("quick menu", text((Fp3dQuickMenu as unknown as Styled).styles), [".qm-swatch"]);

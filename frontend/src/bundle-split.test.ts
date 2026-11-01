@@ -100,11 +100,11 @@ test("the editor's first open carries neither the library, the rack sheet, the E
   }
 });
 
-test("every page carries neither the room panel nor the home switcher; they are lazy chunks (#245)", async () => {
+test("every page carries neither the room panel, the home switcher nor the View panel; they are lazy chunks (#245, #247)", async () => {
   const m = await meta("src/main.ts", true);
   const loaded = staticInputs(m);
   const all = new Set(Object.values(m.outputs).flatMap((o) => Object.keys(o.inputs)));
-  for (const file of ["src/components/room-panel.ts", "src/components/home-switcher.ts"]) {
+  for (const file of ["src/components/room-panel.ts", "src/components/home-switcher.ts", "src/components/view-panel.ts", "src/settings/view-settings.ts"]) {
     assert.ok(!loaded.has(file), `${file} is loaded on every page`);
     assert.ok(all.has(file), `${file}: its chunk is built`);
   }

@@ -1,4 +1,4 @@
-// The slim phone header and the View menu folding after a pick (#216).
+// The slim phone header (#216); the View panel stays open while you change things (#247).
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding } from "./model.ts";
@@ -34,32 +34,18 @@ function panel(floorId: string | null) {
   p.data.building = b;
   p.data.canEdit = true;
   p.willUpdate(new Map());
-  p._showOpen = true;
-  p._optsOpen = true;
   p._floorId = floorId;
   return p;
 }
 
-test("on a phone the View menu folds after a look, clock, marker or size pick (#216)", () => {
-  (g.window as Record<string, unknown>).innerWidth = 390;
-  for (const pick of [(p: any) => p.setLook("day")]) {
+test("the View panel stays open while several things change, on a phone as on a wide screen (#247 ends #216's fold)", () => {
+  for (const width of [390, 1280]) {
+    (g.window as Record<string, unknown>).innerWidth = width;
     const p = panel(null);
-    p._optsOpen = true;
-    pick(p);
-    assert.equal(p._optsOpen, false);
+    p._viewOpen = true;
+    for (const id of ["theme", "markers", "pinSize", "clock"]) p.onViewChange({ detail: { id } });
+    assert.equal(p._viewOpen, true, `${width} px`);
   }
-  // the clock, markers and size buttons call the same fold
-  const src = flat(panel(null).render());
-  assert.ok(src.includes("fp3d-view-opts"));
-});
-
-test("on a wide screen the View menu stays open to change several things (#216)", () => {
-  (g.window as Record<string, unknown>).innerWidth = 1280;
-  const p = panel(null);
-  p._optsOpen = true;
-  p.setLook("day");
-  p.setLook("neon");
-  assert.equal(p._optsOpen, true);
 });
 
 test("the header is slim on screens up to 480 px: no title, version or Extensions word (#216)", async () => {
