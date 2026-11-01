@@ -4,6 +4,7 @@
 // setting is one entry here. Pure data and functions: no Lit, no texts table (labels are text keys), so tests run it
 // and the page's own bundle stays small.
 
+import { ACCENT_DEFAULT } from "../colour-reset.ts";
 import type { Building, BuildingSettings, StartView } from "../model.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS } from "../model.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -928,7 +929,7 @@ const HOUSEHOLD: Setting[] = [
     label: "bin_kerb",
     hint: "st_kerb_note",
     keywords: ["bin", "kerb", "street", "calendar"],
-    control: { kind: "action", button: "st_open_editor", action: "editor" },
+    control: { kind: "action", button: "st_kerb_go", action: "kerb" },
     default: null,
     read: () => null,
   },
@@ -1159,7 +1160,7 @@ const LOOK: Setting[] = [
     label: "accent",
     hint: "accent_hint",
     keywords: ["colour", "color", "cyan", "highlight"],
-    control: { kind: "colour", fallback: "#37e0ff", clearable: true },
+    control: { kind: "colour", fallback: ACCENT_DEFAULT, clearable: true },
     default: null,
     prefKeys: ["accent"],
     read: (env) => {

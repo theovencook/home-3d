@@ -101,3 +101,26 @@ test("a backup that fails the check restores nothing (#153)", async () => {
   assert.equal(sent.filter((m) => !m.check_only).length, 0);
   assert.match(told[0], /bad plan/);
 });
+
+test("each restore point shows its size next to the date and the counts (#240)", async () => {
+  const { bytesText } = await import("./editor/backup.ts");
+  assert.equal(bytesText(900, "en"), "900 B");
+  assert.equal(bytesText(1536, "en"), "1.5 KB");
+  assert.equal(bytesText(42 * 1024, "en"), "42 KB");
+  assert.equal(bytesText(1.3 * 1024 * 1024, "en"), "1.3 MB");
+  const ed = await makeEditor([square("r", 0, 0, 4, 4)]);
+  ed._history = [
+    { id: "a", revision: 3, saved_at: 1_700_000_000, floors: 1, rooms: 4, furniture: 9, size: 43_008 },
+    { id: "b", revision: 2, saved_at: 1_600_000_000, floors: 1, rooms: 3, furniture: 2 },
+  ];
+  const flat = (v: unknown): string => {
+    if (v == null || typeof v === "boolean") return "";
+    if (Array.isArray(v)) return v.map(flat).join("");
+    const t = v as { strings?: readonly string[]; values?: unknown[] };
+    return typeof v === "object" ? (t.strings ? t.strings.map((s, i) => s + (i < t.values!.length ? flat(t.values![i]) : "")).join("") : "") : String(v);
+  };
+  const out = flat(ed.renderBackup());
+  assert.match(out, /4 rooms, 9 items · 42 KB/);
+  // a point from a server that sent no size shows none
+  assert.match(out, /3 rooms, 2 items<\/span>/);
+});

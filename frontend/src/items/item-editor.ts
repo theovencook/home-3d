@@ -31,7 +31,11 @@ import { load3d } from "../load3d.ts";
 import type { PackPart } from "../packs.ts";
 import { askConfirm, showText } from "../ask.ts";
 import "../components/ask-dialog.ts";
+import { colourReset } from "../colour-reset.ts";
 import { controls, tokens } from "../styles.ts";
+
+/** The colour of a part set to "own colour" starts at this grey. */
+const OWN_COLOUR_DEFAULT = "#888888";
 import type { HomeAssistant } from "../types.ts";
 import { llmBrief } from "./llm-brief.ts";
 
@@ -577,13 +581,13 @@ export class ItemEditor extends LitElement {
           aria-label=${this.t("ie_colour")}
           @change=${(e: Event) => {
             const v = (e.target as HTMLSelectElement).value;
-            change({ color: v === "own" ? "#888888" : v });
+            change({ color: v === "own" ? OWN_COLOUR_DEFAULT : v });
           }}
         >
           ${this.options.roles.map((r) => html`<option value=${r} ?selected=${p.color === r}>${this.t(`colour_role_${r}`)}</option>`)}
           <option value="own" ?selected=${own}>${this.t("ie_colour_own")}</option>
         </select>
-        ${own ? html`<input type="color" aria-label=${this.t("ie_colour_own")} .value=${p.color} @change=${(e: Event) => change({ color: (e.target as HTMLInputElement).value })} />` : nothing}
+        ${own ? html`<input type="color" aria-label=${this.t("ie_colour_own")} .value=${p.color} @change=${(e: Event) => change({ color: (e.target as HTMLInputElement).value })} />${colourReset({ value: p.color, fallback: OWN_COLOUR_DEFAULT, label: this.t("colour_reset"), onReset: () => change({ color: OWN_COLOUR_DEFAULT }) })}` : nothing}
         <button class="fp3d-btn" ?disabled=${draft.parts.length >= MAX_PARTS} @click=${() => this.edit(duplicatePart(draft, i))}>${this.t("ie_duplicate")}</button>
         <button class="fp3d-btn fp3d-danger" title=${this.t("ie_remove_part")} aria-label=${this.t("ie_remove_part")} ?disabled=${draft.parts.length <= 1} @click=${() => this.edit(removePart(draft, i))}>✕</button>
       </div>

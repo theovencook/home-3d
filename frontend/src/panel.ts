@@ -41,6 +41,7 @@ import { showsDemo, withDemo } from "./demo.ts";
 import { forwardHass, HASS_CHILDREN, HassWatch } from "./hass-watch.ts";
 import { loadSampleHome } from "./api.ts";
 import { tell } from "./ask.ts";
+import { ACCENT_DEFAULT, colourReset } from "./colour-reset.ts";
 import { announce, lookAnnouncement, viewChange, type ViewSpot } from "./announce.ts";
 
 /** The corners of the clock, as arrows in the view menu (the full name is the button's title). */
@@ -526,6 +527,7 @@ export class Floorplan3dPanel extends LitElement {
     const { action } = e.detail;
     if (action === "extensions") this.setMode("extensions");
     else if (action === "editor") this.setMode("editor");
+    else if (action === "kerb") this.openBinKerb();
     else if (action === "mic_probe") void loadVoice().then(() => (this._micProbe = true)).catch(() => undefined);
     else if (action === "locate" && this.hass && this.data.building) {
       const b = this.data.building;
@@ -536,6 +538,23 @@ export class Floorplan3dPanel extends LitElement {
         }),
       );
     }
+  }
+
+  /**
+   * The Settings page's way to a bin's kerb spot (#226): the editor with the first bin selected, where "Set kerb spot"
+   * is at the top of its panel. Without a bin it is the editor alone (add one from the Household items).
+   */
+  private openBinKerb(): void {
+    const bin = this.data.building?.floors.flatMap((f) => f.furniture).find((m) => m.type === "waste_bin");
+    this.setMode("editor");
+    if (!bin) return;
+    void loadEditor().then(async () => {
+      this._editorReady = true;
+      await this.updateComplete;
+      const ed = this.renderRoot.querySelector<HTMLElement & { goToFurniture(id: string): boolean; updateComplete: Promise<unknown> }>("fp3d-editor");
+      await ed?.updateComplete;
+      ed?.goToFurniture(bin.id);
+    }, () => undefined);
   }
 
   /** A change from the 3D view's settings or a module (#149): saved by the controller, which makes it again on a newer
@@ -802,6 +821,16 @@ export class Floorplan3dPanel extends LitElement {
     this.editPlan({ ...b, settings: { ...b.settings, start_view: view ?? null } });
   }
 
+  /**
+   * "Sun and lights …" (#87, #231): the 3D view's ⚙ sheet. When the view is not there to open it (its code has not
+   * arrived, or it is not drawn), the button must still do something you can see: the Settings page at its sun card.
+   */
+  private openSunAndLights(): void {
+    const view = this.view3d();
+    if (view) view.openSettings();
+    else this.openSettings("scene", "sun");
+  }
+
   private view3d() {
     return readyView(this.renderRoot) as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; openSettings(): void }) | null;
   }
@@ -998,26 +1027,22 @@ export class Floorplan3dPanel extends LitElement {
                 <label class="fp3d-accent-pick" title=${this.t("accent_hint")}>
                   <input
                     type="color"
-                    .value=${this._accent ?? "#37e0ff"}
+                    .value=${this._accent ?? ACCENT_DEFAULT}
                     aria-label=${this.t("accent")}
                     @input=${(e: Event) => {
                       this._accent = (e.target as HTMLInputElement).value;
                       prefs.set("accent", this._accent);
                     }}
                   />
-                  ${this._accent
-                    ? html`<button
-                        class="fp3d-accent-reset"
-                        title=${this.t("accent_reset")}
-                        aria-label=${this.t("accent_reset")}
-                        @click=${() => {
-                          this._accent = null;
-                          prefs.set("accent", "");
-                        }}
-                      >
-                        ↺
-                      </button>`
-                    : nothing}
+                  ${colourReset({
+                    value: this._accent,
+                    fallback: ACCENT_DEFAULT,
+                    label: this.t("accent_reset"),
+                    onReset: () => {
+                      this._accent = null;
+                      prefs.set("accent", "");
+                    },
+                  })}
                 </label>
               </div>
               ${this.renderFollow("theme", "follow_ha")}
@@ -1028,7 +1053,7 @@ export class Floorplan3dPanel extends LitElement {
               <button class="fp3d-chip fp3d-opt-more" @click=${() => {
                 // the sheet opens over the page: the popover that led to it closes (#214)
                 this._optsOpen = false;
-                this.view3d()?.openSettings();
+                this.openSunAndLights();
               }}>${this.t("sun_and_lights")}</button>
               </section>
               <section class="fp3d-opt-group">
@@ -1948,14 +1973,6 @@ export class Floorplan3dPanel extends LitElement {
       .fp3d-accent-pick input[type="color"]::-webkit-color-swatch {
         border: none;
         border-radius: 50%;
-      }
-      .fp3d-accent-reset {
-        border: none;
-        background: none;
-        color: var(--fp3d-muted);
-        cursor: pointer;
-        font-size: 14px;
-        padding: 0 2px;
       }
       .fp3d-nav {
         display: flex;

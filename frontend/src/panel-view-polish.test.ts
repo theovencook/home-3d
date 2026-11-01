@@ -99,3 +99,38 @@ test("each Show menu label appears once, with a floor picked or not (#215)", () 
   const one = flat(panel("f1").render());
   for (const l of ["Dim below", "Show below", "Hide below"]) assert.ok(one.includes(`>${l}<`) || one.includes(l), l);
 });
+
+/** The click handler of the "Sun and lights" button in a rendered panel. */
+function sunHandler(p: ReturnType<typeof panel>): () => void {
+  const handlers: unknown[] = [];
+  const walk = (v: unknown): void => {
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (v && typeof v === "object" && "strings" in (v as object)) {
+      const r = v as { strings: readonly string[]; values: unknown[] };
+      r.values.forEach((x, i) => {
+        if (typeof x === "function" && /fp3d-opt-more" @click=$/.test(r.strings[i])) handlers.push(x);
+        walk(x);
+      });
+    }
+  };
+  walk(p.render());
+  assert.equal(handlers.length, 1);
+  return handlers[0] as () => void;
+}
+
+test("the Sun and lights button always shows something: the view's sheet, else the Settings page at the sun card (#231)", () => {
+  // the view is there: its sheet opens, the Settings page stays shut
+  const ready = panel(null);
+  let opened = 0;
+  ready.view3d = () => ({ openSettings: () => opened++ });
+  sunHandler(ready)();
+  assert.equal(opened, 1);
+  assert.equal(ready._mode, "view");
+  // the view's code has not arrived (or it is not drawn): the click is not lost
+  const missing = panel(null);
+  missing.view3d = () => null;
+  sunHandler(missing)();
+  assert.equal(missing._optsOpen, false);
+  assert.equal(missing._mode, "settings");
+  assert.deepEqual(missing._settingsAt, { section: "scene", id: "sun" });
+});

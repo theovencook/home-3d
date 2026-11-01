@@ -112,6 +112,8 @@ export interface Snapshot {
   floors: number;
   rooms: number;
   furniture: number;
+  /** Bytes of the saved plan (#240); absent from a server before it was sent. */
+  size?: number;
   /** How many stored pictures it names are no longer kept (#154): it restores without them. */
   missing_pictures?: number;
 }
