@@ -2297,6 +2297,7 @@ const en = {
   colours: "Colours and materials",
   colours_hint: "Each colour role follows the look until you give it a colour of its own. \"From the look\" sets it back. The material beside it shows in the realistic look.",
   colour_theme: "From the look",
+  colour_reset: "Back to the default colour",
   colour_own: "Own colour",
   material_of: "Material: {role}",
   material_usual: "Usual ({material})",

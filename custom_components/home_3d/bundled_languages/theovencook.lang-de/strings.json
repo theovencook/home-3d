@@ -2289,6 +2289,7 @@
  "colours": "Farben und Materialien",
  "colours_hint": "Jede Farbrolle folgt der Darstellung, bis du ihr eine eigene Farbe gibst. „Wie die Darstellung“ setzt sie zurück. Das Material daneben zeigt die realistische Darstellung.",
  "colour_theme": "Wie die Darstellung",
+ "colour_reset": "Zurück zur Standardfarbe",
  "colour_own": "Eigene Farbe",
  "material_of": "Material: {role}",
  "material_usual": "Üblich ({material})",

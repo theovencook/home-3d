@@ -13,6 +13,7 @@ import { entityName } from "../devices.ts";
 import type { Building, StartView } from "../model.ts";
 import type { FurniturePack } from "../packs.ts";
 import type { HomeAssistant } from "../types.ts";
+import { colourReset } from "../colour-reset.ts";
 import { controls, tokens } from "../styles.ts";
 import {
   GROUPS,
@@ -482,7 +483,7 @@ export class SettingsPage extends LitElement {
       case "colour":
         return html`<span class="st-colour">
           <input type="color" .value=${String(value ?? c.fallback)} aria-label=${aria} ?disabled=${disabled} @input=${(e: Event) => this.write(s as Setting<string | null>, (e.target as HTMLInputElement).value)} />
-          ${c.clearable && value ? html`<button class="fp3d-btn" ?disabled=${disabled} title=${this.tr("st_accent_default")} @click=${() => this.write(s as Setting<string | null>, null)}>↺</button>` : nothing}
+          ${colourReset({ value: value as string | null, fallback: c.fallback, label: this.tr(c.clearable ? "st_accent_default" : "colour_reset"), disabled, onReset: () => this.write(s as Setting<string | null>, null) })}
         </span>`;
       case "range":
         return html`<span class="st-num">

@@ -4,6 +4,7 @@
 // setting is one entry here. Pure data and functions: no Lit, no texts table (labels are text keys), so tests run it
 // and the page's own bundle stays small.
 
+import { ACCENT_DEFAULT } from "../colour-reset.ts";
 import type { Building, BuildingSettings, StartView } from "../model.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS } from "../model.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -1156,7 +1157,7 @@ const LOOK: Setting[] = [
     label: "accent",
     hint: "accent_hint",
     keywords: ["colour", "color", "cyan", "highlight"],
-    control: { kind: "colour", fallback: "#37e0ff", clearable: true },
+    control: { kind: "colour", fallback: ACCENT_DEFAULT, clearable: true },
     default: null,
     prefKeys: ["accent"],
     read: (env) => {

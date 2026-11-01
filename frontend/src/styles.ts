@@ -1,4 +1,5 @@
 import { css, unsafeCSS } from "lit";
+import { colourResetCss } from "./colour-reset.ts";
 import { DARK, HIGH, LIGHT, schemeVars, type Scheme } from "./scheme.ts";
 
 /**
@@ -146,8 +147,22 @@ export const controls = css`
   }
   .fp3d-colour-pick {
     display: grid;
-    grid-template-columns: 44px 1fr;
+    grid-template-columns: auto 1fr;
     gap: 6px;
+  }
+  .fp3d-colour-swatch {
+    display: grid;
+    grid-template-columns: 44px auto;
+    align-items: center;
+  }
+  /* a picker with its reset (#230) on a line of its own: the swatch takes the width */
+  .fp3d-colour-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .fp3d-colour-row input[type="color"] {
+    flex: 1;
   }
   /* its material (#40) on a line of its own under the colour */
   .fp3d-colour-pick .fp3d-material {
@@ -229,4 +244,5 @@ export const controls = css`
       height: 44px;
     }
   }
+  ${colourResetCss}
 `;

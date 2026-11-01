@@ -39,6 +39,7 @@ import { showsDemo, withDemo } from "./demo.ts";
 import { forwardHass, HASS_CHILDREN, HassWatch } from "./hass-watch.ts";
 import { loadSampleHome } from "./api.ts";
 import { tell } from "./ask.ts";
+import { ACCENT_DEFAULT, colourReset } from "./colour-reset.ts";
 import { announce, lookAnnouncement, viewChange, type ViewSpot } from "./announce.ts";
 
 /** The corners of the clock, as arrows in the view menu (the full name is the button's title). */
@@ -996,26 +997,22 @@ export class Floorplan3dPanel extends LitElement {
                 <label class="fp3d-accent-pick" title=${this.t("accent_hint")}>
                   <input
                     type="color"
-                    .value=${this._accent ?? "#37e0ff"}
+                    .value=${this._accent ?? ACCENT_DEFAULT}
                     aria-label=${this.t("accent")}
                     @input=${(e: Event) => {
                       this._accent = (e.target as HTMLInputElement).value;
                       prefs.set("accent", this._accent);
                     }}
                   />
-                  ${this._accent
-                    ? html`<button
-                        class="fp3d-accent-reset"
-                        title=${this.t("accent_reset")}
-                        aria-label=${this.t("accent_reset")}
-                        @click=${() => {
-                          this._accent = null;
-                          prefs.set("accent", "");
-                        }}
-                      >
-                        ↺
-                      </button>`
-                    : nothing}
+                  ${colourReset({
+                    value: this._accent,
+                    fallback: ACCENT_DEFAULT,
+                    label: this.t("accent_reset"),
+                    onReset: () => {
+                      this._accent = null;
+                      prefs.set("accent", "");
+                    },
+                  })}
                 </label>
               </div>
               ${this.renderFollow("theme", "follow_ha")}
@@ -1944,14 +1941,6 @@ export class Floorplan3dPanel extends LitElement {
       .fp3d-accent-pick input[type="color"]::-webkit-color-swatch {
         border: none;
         border-radius: 50%;
-      }
-      .fp3d-accent-reset {
-        border: none;
-        background: none;
-        color: var(--fp3d-muted);
-        cursor: pointer;
-        font-size: 14px;
-        padding: 0 2px;
       }
       .fp3d-nav {
         display: flex;

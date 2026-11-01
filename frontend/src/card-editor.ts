@@ -4,6 +4,7 @@
 import { defineElement } from "./define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import { fetchBuilding, listHomes, type HomeInfo } from "./api.ts";
+import { ACCENT_DEFAULT, colourReset, colourResetCss } from "./colour-reset.ts";
 import { labOn, UNRELEASED } from "./features.ts";
 import { CARD_CONTROLS, type CardConfig, type CardControl } from "./card-config.ts";
 import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
@@ -362,8 +363,10 @@ export class Floorplan3dCardEditor extends LitElement {
         ${this.select("clock", "clock", [["off", "clock_off"], ["tl", "clock_tl"], ["tr", "clock_tr"], ["bl", "clock_bl"], ["br", "clock_br"]], v.clock ?? "off")}
         <label class="field"
           >${this.t("accent")}
-          <input type="color" .value=${this._config.accent ?? "#37e0ff"} @input=${(e: Event) => this.set("accent", (e.target as HTMLInputElement).value)} />
-          ${this._config.accent ? html`<button type="button" class="link" @click=${() => this.set("accent", undefined)}>${this.t("accent_reset")}</button>` : nothing}
+          <span class="accent-pick"
+            ><input type="color" .value=${this._config.accent ?? ACCENT_DEFAULT} @input=${(e: Event) => this.set("accent", (e.target as HTMLInputElement).value)} />
+            ${colourReset({ value: this._config.accent, fallback: ACCENT_DEFAULT, label: this.t("accent_reset"), onReset: () => this.set("accent", undefined) })}</span
+          >
         </label>
         ${this.select("view", "card_view", [["3d", "card_view_3d"], ["2d", "card_view_2d"]], v.view)}
         ${this.select("walls", "card_walls", [["auto", "walls_auto"], ["cut", "walls_cut"]], v.walls)}
@@ -412,6 +415,12 @@ export class Floorplan3dCardEditor extends LitElement {
   }
 
   static styles = css`
+    .accent-pick {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    ${colourResetCss}
     :host {
       display: block;
       color: var(--primary-text-color);
