@@ -9,6 +9,7 @@ import { englishTable } from "../i18n.ts";
 import { de } from "../german.fixture.ts";
 import type { Building } from "../model.ts";
 import {
+  audienceOf,
   easterEggsOn,
   isDevicePrefKey,
   KEEP_ON_RESET,
@@ -241,8 +242,9 @@ test("rows kept by Home Assistant outside the plan carry the install scope, not 
   }
   assert.equal(SETTINGS.find((s) => s.id === "voice_sentences")?.scope, "install");
   assert.equal(SETTINGS.find((s) => s.id === "pack_updates.frequency")?.scope, "install");
-  assert.ok(SETTINGS_EN.st_scope_install && SETTINGS_DE.st_scope_install && SETTINGS_EN.st_scope_install_hint && SETTINGS_DE.st_scope_install_hint);
-  assert.doesNotMatch(SETTINGS_EN.st_scope_install_hint, /saved in the plan/i);
+  // said in words since #248 (no badges): the page's sentence or the row's own line
+  assert.ok(SETTINGS_EN.st_page_install && SETTINGS_DE.st_page_install && SETTINGS_EN.st_row_install && SETTINGS_DE.st_row_install);
+  assert.doesNotMatch(SETTINGS_EN.st_row_install, /saved in the plan/i);
 });
 
 function fakeStore(keys: string[]) {
@@ -290,13 +292,16 @@ test("every home3d.* or fp3d-tt-* key the code writes is removed by the reset un
 
 // ---- Screen and controls (#246) ----
 
-test("Screen and controls holds the old View menu's Controls row, Quality and FPS, under the same stored keys (#246)", () => {
+test("Screen and controls holds the old View menu's Controls row and FPS, Appearance its Quality, under the same stored keys (#246, #248)", () => {
   const screen = SETTINGS.filter((s) => s.section === "screen");
   assert.deepEqual(
     screen.map((s) => s.id),
-    ["quality", "stats", "controls", "keep_view", "angle_lock", "nav_wrap"],
+    ["stats", "controls", "keep_view", "angle_lock", "nav_wrap"],
   );
-  assert.equal(SECTIONS.find((s) => s.id === "screen")?.group, "device");
+  // Quality sits on Appearance, as drawn (#248)
+  assert.equal(settingById("quality")!.section, "look");
+  assert.deepEqual(settingById("quality")!.prefKeys, ["quality"]);
+  assert.equal(audienceOf(SECTIONS.find((s) => s.id === "screen")!), "device");
   for (const s of screen) {
     assert.equal(s.scope, "device", s.id);
     assert.deepEqual(s.prefKeys, [s.id], `${s.id} keeps its key`);
@@ -310,12 +315,13 @@ test("Screen and controls holds the old View menu's Controls row, Quality and FP
   for (const s of screen) assert.ok(!/[◧◨⌖🔒📌]/u.test(text(s.label)), s.id);
   // and nowhere else any more
   for (const id of ["quality", "stats", "controls", "keep_view", "angle_lock"]) assert.equal(SETTINGS.filter((s) => s.id === id).length, 1);
-  assert.ok(!SETTINGS.some((s) => s.section === "look" && ["quality", "controls", "keep_view", "angle_lock"].includes(s.id)));
+  assert.ok(!SETTINGS.some((s) => s.section === "look" && ["controls", "keep_view", "angle_lock"].includes(s.id)));
   assert.ok(!SETTINGS.some((s) => s.section === "advanced" && s.id === "stats"));
 });
 
-test("an old deep link to a moved row still finds it in Screen and controls (#246)", () => {
-  assert.deepEqual(parseSettingsHash("#settings/look/quality"), { section: "screen", id: "quality" });
+test("an old deep link to a moved row still finds its row (#246, #248)", () => {
+  assert.deepEqual(parseSettingsHash("#settings/look/quality"), { section: "look", id: "quality" });
+  assert.deepEqual(parseSettingsHash("#settings/screen/quality"), { section: "look", id: "quality" });
   assert.deepEqual(parseSettingsHash("#settings/x/keep_view"), { section: "screen", id: "keep_view" });
   assert.equal(searchSettings("frame rate", env(), text)[0]?.id, "stats");
 });

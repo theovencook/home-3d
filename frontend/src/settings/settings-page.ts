@@ -1,8 +1,9 @@
-// The Settings page (#139): every setting of Home 3D in one place. A sidebar of sections in four groups (House, Live,
-// This device, System) with search on top, the section's settings on the right in cards. Each row says whether it
-// belongs to the house (saved in the plan, every screen sees it) or to this device, house rows are locked for viewers
-// who aren't editors, and Home Assistant admin rows carry a badge. Changes save as they are made. Under 760 px the
-// sidebar is a list that drills into a section. It is a bundle of its own (home-3d-settings.js), loaded when someone
+// The Settings page (#139): every setting of Home 3D in one place. The menu (#248, option B of the menus redesign #219)
+// shows who a change affects first: This home (saved in the plan, every screen sees it) or This device (this browser
+// only), then topics on that side, with a search over both (arrow keys, Enter, Escape). Each page says once who it
+// affects (a row with a different rule says so under its label), house rows are locked for viewers who aren't editors,
+// and one save line says who a change was saved for. Changes save as they are made. A Back link returns to the 3D view
+// or the editor it was opened from. Under 760 px the menu is a list that drills into a section. It is a bundle of its own (home-3d-settings.js), loaded when someone
 // opens the Settings tab; it brings no texts table of its own beyond its few new texts (the panel lends `t`).
 
 import { defineElement } from "../define.ts";
@@ -21,10 +22,13 @@ import { controls, tokens } from "../styles.ts";
 import {
   GROUPS,
   LOADERS,
+  audienceOf,
+  type Audience,
   liveSections,
   mayChange,
   searchSettings,
   sectionOf,
+  settingById,
   settingsIn,
   type Control,
   type DevicePrefs,
@@ -45,9 +49,16 @@ import {
   typedLength,
 } from "./registry.ts";
 
-// the two pickers are one chunk of this bundle (#245, pickers.ts): it loads when a row first draws one
+// the two pickers are one chunk of this bundle (#245, pickers.ts): it loads when a row first draws one, or the first
+// line icon (#248)
 const loadTimeField = once(() => import("./pickers.ts"));
 const loadEntityPicker = loadTimeField;
+
+/** A line icon of the menu (#248, settings-icons.ts); `small` draws it at 16 px. Its code comes with the pickers. */
+function icon(name: string, small = false) {
+  need(loadTimeField);
+  return html`<fp3d-line-icon class=${small ? "s" : ""} .name=${name}></fp3d-line-icon>`;
+}
 
 /** The browser's storages a reset looks through (blocked storage is skipped). */
 function browserStores(): KeyStore[] {
@@ -101,7 +112,12 @@ export class SettingsPage extends LitElement {
     lastView: { attribute: false },
     loadEditor: { attribute: false },
     loaders: { attribute: false },
+    backTo: { attribute: false },
+    version: { attribute: false },
     _section: { state: true },
+    _audience: { state: true },
+    _cursor: { state: true },
+    _saved: { state: true },
     _query: { state: true },
     _drill: { state: true },
     _flash: { state: true },
@@ -126,7 +142,17 @@ export class SettingsPage extends LitElement {
   /** Loads the editor bundle (it draws the embedded parts: favourites, backup …). */
   declare loadEditor: (() => Promise<unknown>) | undefined;
   declare loaders: Loaders | undefined;
+  /** Where the page was opened from: its Back link returns there (#248); null: no link. */
+  declare backTo: "view" | "editor" | "extensions" | null;
+  /** The versions running, for the About card (#248). */
+  declare version: { frontend: string; backend: string | null } | undefined;
   private declare _section: SectionId;
+  /** The side of the menu shown: This home or This device (#248). */
+  private declare _audience: Audience;
+  /** The search hit the arrow keys are on (#248). */
+  private declare _cursor: number;
+  /** Who the last change on this page was saved for (the save line, #248); null: nothing changed yet. */
+  private declare _saved: Audience | null;
   private declare _query: string;
   /** Phones: a section is open (else the list of sections). */
   private declare _drill: boolean;
@@ -149,6 +175,10 @@ export class SettingsPage extends LitElement {
     this.lastView = null;
     this.t = (key) => key;
     this._section = "general";
+    this._audience = "home";
+    this._cursor = 0;
+    this._saved = null;
+    this.backTo = null;
     this._query = "";
     this._drill = false;
     this._flash = null;
@@ -168,7 +198,7 @@ export class SettingsPage extends LitElement {
   }
 
   private get env(): SettingsEnv {
-    return { building: this.building, hass: this.hass, prefs: localPrefs, lastView: this.lastView, remote: this._remote };
+    return { building: this.building, hass: this.hass, prefs: localPrefs, lastView: this.lastView, remote: this._remote, version: this.version };
   }
 
   private get viewer(): Viewer {
@@ -182,7 +212,9 @@ export class SettingsPage extends LitElement {
 
   protected willUpdate(changed: PropertyValues): void {
     if ((changed.has("section") || changed.has("focusId")) && (this.section || this.focusId)) {
-      const id = this.section ?? this._section;
+      // a link to a row that moved (Quality to Appearance, the people rows out of Advanced, #248) opens the row's section
+      const row = this.focusId ? settingById(this.focusId) : undefined;
+      const id = row?.section ?? this.section ?? this._section;
       if (sectionOf(id)) this._section = id;
       this._query = "";
       this._drill = true;
@@ -190,10 +222,16 @@ export class SettingsPage extends LitElement {
     }
     const sections = liveSections(this.env);
     if (sections.length && !sections.some((s) => s.id === this._section)) this._section = sections[0].id;
+    // the menu shows the open section's side
+    if (changed.has("section") || changed.has("focusId") || !this.hasUpdated) this._audience = audienceOf(sectionOf(this._section)!);
     this.askRemote();
   }
 
   protected updated(): void {
+    if (this.cursorMoved) {
+      this.cursorMoved = false;
+      this.renderRoot.querySelector?.(".st-active")?.scrollIntoView?.({ block: "nearest" });
+    }
     if (!this._flash) return;
     const row = this.renderRoot.querySelector(`[data-id="${CSS.escape(this._flash)}"]`);
     if (row && !row.hasAttribute("data-seen")) {
@@ -247,6 +285,7 @@ export class SettingsPage extends LitElement {
   }
 
   private apply(s: Setting, result: WriteResult): void {
+    this._saved = s.scope === "device" ? "device" : "home";
     if (result && typeof (result as Promise<unknown>).then === "function") {
       void (result as Promise<unknown>)
         .then(() => (s.loader ? this.reload(s.loader) : undefined))
@@ -280,13 +319,15 @@ export class SettingsPage extends LitElement {
     this.dispatchEvent(new CustomEvent("settings-action", { detail: { action, id: s.id }, bubbles: true, composed: true }));
   }
 
-  private open(section: SectionId): void {
+  private open(section: SectionId, focus: string | null = null): void {
     this._section = section;
+    this._audience = audienceOf(sectionOf(section)!);
+    if (focus) this.flash(focus);
     this._query = "";
     this._drill = true;
     this._note = null;
-    this.dispatchEvent(new CustomEvent("settings-nav", { detail: { section, id: null }, bubbles: true, composed: true }));
-    this.renderRoot.querySelector(".st-main")?.scrollTo?.({ top: 0 });
+    this.dispatchEvent(new CustomEvent("settings-nav", { detail: { section, id: focus }, bubbles: true, composed: true }));
+    if (!focus) this.renderRoot.querySelector?.(".st-main")?.scrollTo?.({ top: 0 });
   }
 
   // ------------------------------------------------------------------------------------------------ render
@@ -308,94 +349,199 @@ export class SettingsPage extends LitElement {
       </div>`;
     }
     const env = this.env;
-    const sections = liveSections(env);
+    const sections = liveSections(env).filter((s) => !s.hidden);
     const query = this._query.trim();
-    const hits = query ? searchSettings(query, env, (k) => this.tr(k)) : null;
+    const hits = query ? this.hits(query) : null;
+    const side = this._audience;
+    const other: Audience = side === "home" ? "device" : "home";
+    const cursor = hits?.length ? Math.min(this._cursor, hits.length - 1) : -1;
     return html`<div class="st ${this._drill || query ? "st-drill" : ""}">
       <nav class="st-nav" aria-label=${this.tr("st_title")}>
+        ${this.renderBackTo()}
+        <div class="st-sides" role="group" aria-label=${this.tr("st_audience")}>
+          ${(["home", "device"] as const).map(
+            (a) => html`<button class="st-side" aria-pressed=${a === side} @click=${() => this.showSide(a)}>
+              <span><b>${this.tr(a === "home" ? "st_audience_home" : "st_group_device")}</b>${this.tr(a === "home" ? "st_audience_home_sub" : "st_audience_device_sub")}</span>
+            </button>`,
+          )}
+        </div>
         <label class="st-search">
-          <span aria-hidden="true">⌕</span>
+          ${icon("search")}
           <input
             type="search"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded=${hits ? "true" : "false"}
+            aria-controls="st-hits"
+            aria-activedescendant=${cursor >= 0 ? `st-hit-${cursor}` : ""}
             .value=${this._query}
-            placeholder=${this.tr("st_search")}
-            aria-label=${this.tr("st_search")}
-            @input=${(e: Event) => (this._query = (e.target as HTMLInputElement).value)}
-            @keydown=${(e: KeyboardEvent) => e.key === "Escape" && (this._query = "")}
+            placeholder=${this.tr("st_search_all")}
+            aria-label=${this.tr("st_search_all")}
+            @input=${(e: Event) => {
+              this._query = (e.target as HTMLInputElement).value;
+              this._cursor = 0;
+            }}
+            @keydown=${this.searchKey}
           />
         </label>
-        ${GROUPS.map((g) => {
+        ${GROUPS.filter((g) => g.audience === side).map((g) => {
           const list = sections.filter((s) => s.group === g.id);
           return list.length
             ? html`<div class="st-group">${this.tr(g.title)}</div>
                 ${list.map(
                   (s) => html`<button class="st-nav-btn" aria-current=${!query && s.id === this._section ? "page" : "false"} @click=${() => this.open(s.id)}>
-                    <span class="st-ic" aria-hidden="true">${s.icon}</span><span>${this.tr(s.title)}</span><span class="st-chev" aria-hidden="true">›</span>
+                    <span class="st-ic">${icon(s.icon)}</span><span>${this.tr(s.title)}</span><span class="st-chev">${icon("next", true)}</span>
                   </button>`,
                 )}`
             : nothing;
         })}
+        <button class="st-other" @click=${() => this.showSide(other)}><span>${this.tr(other === "home" ? "st_other_home" : "st_other_device")}</span>${icon("next", true)}</button>
       </nav>
-      <main class="st-main">
-        ${hits ? this.renderResults(query, hits) : this.renderSection(sectionOf(this._section)!)}
-        <footer class="st-foot">
-          <span>${this.homeName ? this.tr("st_home", { name: this.homeName }) : ""}</span>
-          <span class="st-save st-save-${this.saveState}" role="status">
-            ${this.saveState === "saving" ? this.tr("st_saving") : this.saveState === "error" ? this.tr("st_save_error") : this.tr("st_saved")}
-          </span>
-        </footer>
-      </main>
+      <main class="st-main">${hits ? this.renderResults(query, hits, cursor) : this.renderSection(sectionOf(this._section)!)}</main>
     </div>`;
   }
 
-  private renderResults(query: string, hits: Setting[]) {
+  /** The search's hits in the order they show (by section): the arrow keys walk this list. */
+  private hits(query: string): Setting[] {
     const bySection = new Map<SectionId, Setting[]>();
-    for (const s of hits) bySection.set(s.section, [...(bySection.get(s.section) ?? []), s]);
-    return html`<button class="st-back" @click=${() => (this._query = "")}>‹ ${this.tr("st_back")}</button>
-      <div class="st-title"><h2>${hits.length ? this.tr("st_results", { n: hits.length, q: query }) : this.tr("st_search_none", { q: query })}</h2></div>
-      ${[...bySection].map(([id, list]) => {
-        const sec = sectionOf(id)!;
-        return html`<section class="st-card">
-          <h3><button class="st-link" @click=${() => this.open(id)}>${sec.icon} ${this.tr(sec.title)} ›</button></h3>
-          ${list.map((s) => this.renderRow(s, true))}
-        </section>`;
-      })}`;
+    for (const s of searchSettings(query, this.env, (k) => this.tr(k))) bySection.set(s.section, [...(bySection.get(s.section) ?? []), s]);
+    return [...bySection.values()].flat();
+  }
+
+  /** The search box's keys (#248): arrows move through the hits, Enter opens the one marked, Escape clears. */
+  private readonly searchKey = (e: KeyboardEvent): void => {
+    if (e.key === "Escape") {
+      if (!this._query) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this._query = "";
+      this._cursor = 0;
+      return;
+    }
+    const hits = this._query.trim() ? this.hits(this._query.trim()) : [];
+    if (!hits.length) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const at = Math.min(this._cursor, hits.length - 1);
+      this._cursor = (at + (e.key === "ArrowDown" ? 1 : hits.length - 1)) % hits.length;
+      this.cursorMoved = true;
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const s = hits[Math.min(this._cursor, hits.length - 1)];
+      this._query = "";
+      this._cursor = 0;
+      this.open(s.section, s.id);
+    }
+  };
+
+  private cursorMoved = false;
+
+  /** One side of the menu (#248): on a wide screen its first page opens beside it, unless one of its pages is open. */
+  private showSide(a: Audience): void {
+    this._audience = a;
+    this._query = "";
+    if (audienceOf(sectionOf(this._section)!) === a) return;
+    const first = liveSections(this.env).find((s) => !s.hidden && audienceOf(s) === a);
+    if (first) this._section = first.id;
+  }
+
+  /** "‹ Back to 3D / Editor" (#248): where the page was opened from. */
+  private renderBackTo() {
+    const to = this.backTo;
+    if (!to) return nothing;
+    return html`<button class="st-backto" @click=${() => this.dispatchEvent(new CustomEvent("settings-back", { detail: { mode: to }, bubbles: true, composed: true }))}>
+      ${icon("back", true)}<span>${this.tr(`st_back_to_${to === "view" ? "3d" : to}`)}</span>
+    </button>`;
+  }
+
+  /** The one save line (#248): who the last change was saved for, read out politely when it changes. */
+  private renderSave(side: Audience) {
+    const who = this._saved ?? side;
+    const state = who === "home" ? this.saveState : "saved";
+    const text = state === "saving" ? this.tr("st_saving") : state === "error" ? this.tr("st_save_error") : this.tr(who === "device" ? "st_saved_device" : "st_saved_home");
+    return html`<p class="st-save st-save-${state}" aria-live="polite">${text}</p>`;
+  }
+
+  /** Whose a row is, in words, when it differs from its page's sentence (or on a search hit, where there is no page). */
+  private rule(s: Setting, hit: boolean, page: { side: Audience; install: boolean; admin: boolean }): TextKey | null {
+    if (s.control.kind === "note" || s.control.kind === "info") return null;
+    if (hit) return s.scope === "device" ? "st_row_device" : s.scope === "install" ? "st_row_install" : "st_row_home";
+    if (s.scope === "device" && page.side !== "device") return "st_row_device";
+    if (s.scope === "house" && page.side === "device") return "st_row_home";
+    if (s.scope === "install" && !page.install) return "st_row_install";
+    if (s.permission === "ha_admin" && !page.admin) return "st_row_admin";
+    return null;
+  }
+
+  private renderResults(query: string, hits: Setting[], cursor: number) {
+    // the hits come by section (hits()): a card per run of one section
+    const runs: Setting[][] = [];
+    for (const s of hits) (runs.at(-1)?.[0].section === s.section ? runs.at(-1)! : (runs[runs.length] = [])).push(s);
+    let i = 0;
+    return html`<button class="st-back" @click=${() => (this._query = "")}>${icon("back", true)} ${this.tr("st_back")}</button>
+      <div class="st-title" role="status"><h2>${hits.length ? this.tr("st_results", { n: hits.length, q: query }) : this.tr("st_search_none", { q: query })}</h2></div>
+      <div id="st-hits">
+        ${runs.map((list) => {
+          const sec = sectionOf(list[0].section)!;
+          return html`<section class="st-card">
+            <h3><button class="st-link" @click=${() => this.open(sec.id)}>${icon(sec.icon, true)} ${this.tr(sec.title)} ›</button></h3>
+            ${list.map((s) => this.renderRow(s, true, i++, cursor))}
+          </section>`;
+        })}
+      </div>`;
   }
 
   private renderSection(sec: Section) {
     const list = settingsIn(sec.id, this.env);
     const who = this.viewer;
+    const side = audienceOf(sec);
+    const admin = list.length > 0 && list.every((s) => s.permission === "ha_admin" || s.control.kind === "note");
+    const install = list.length > 0 && list.every((s) => s.scope === "install");
     const houseLocked = list.some((s) => s.scope !== "device" && s.permission === "editor") && !who.editor;
-    const adminOnly = list.length > 0 && list.every((s) => s.permission === "ha_admin") && !who.haAdmin;
-    return html`<button class="st-back" @click=${() => (this._drill = false)}>‹ ${this.tr("st_back")}</button>
+    const page = { side, install, admin };
+    const sentence = side === "device" ? "st_page_device" : install ? "st_page_install" : admin ? "st_page_home_admin" : "st_page_home";
+    const lock = admin && !who.haAdmin ? "st_admin_locked" : houseLocked ? "st_locked" : null;
+    return html`<button class="st-back" @click=${() => (this._drill = false)}>${icon("back", true)} ${this.tr("st_back")}</button>
       <div class="st-title">
-        <h2>${this.tr(sec.title)}</h2>
-        <p>${this.tr(sec.hint)}</p>
+        <div>
+          <h2>${this.tr(sec.title)}</h2>
+          <p>${this.tr(sentence)}</p>
+        </div>
+        ${this.renderSave(side)}
       </div>
-      ${adminOnly ? html`<p class="st-lock">🔒 ${this.tr("st_admin_locked")}</p>` : houseLocked ? html`<p class="st-lock">🔒 ${this.tr("st_locked")}</p>` : nothing}
+      ${lock ? html`<p class="st-lock">${icon("lock", true)} ${this.tr(lock)}</p>` : nothing}
+      ${sec.hidden
+        ? html`<p class="st-note">
+            ${this.tr("st_fun_moved")}
+            <button class="st-link" @click=${() => this.dispatchEvent(new CustomEvent("settings-action", { detail: { action: "extensions", id: null }, bubbles: true, composed: true }))}>${this.tr("st_open_extensions")} ›</button>
+          </p>`
+        : nothing}
       ${this._note ? html`<p class="st-note" role="status">${this._note}</p>` : nothing}
       ${sec.cards.map((card) => {
         const rows = list.filter((s) => s.card === card.id);
         return rows.length
           ? html`<section class="st-card">
               <h3>${this.tr(card.title)}</h3>
-              ${rows.map((s) => this.renderRow(s, false))}
+              ${rows.map((s) => this.renderRow(s, false, -1, -1, page))}
             </section>`
           : nothing;
       })}`;
   }
 
-  private renderRow(s: Setting, hit: boolean) {
+  private renderRow(s: Setting, hit: boolean, index = -1, cursor = -1, page = { side: audienceOf(sectionOf(s.section)!), install: false, admin: false }) {
     const may = mayChange(s, this.viewer);
     // the start view's two buttons and its state line go under the label, so the label keeps its width (#246)
     const wide = s.control.kind === "embed" || s.control.kind === "list" || s.control.kind === "checks" || s.control.kind === "entity" || (s.control.kind === "action" && s.control.action === "start_view");
-    return html`<div class="st-row st-k-${s.control.kind} ${s.hint ? "" : "st-nohint"} ${wide ? "st-row-wide" : ""} ${hit || this._flash === s.id ? "st-hit" : ""}" data-id=${s.id}>
+    const rule = this.rule(s, hit, page);
+    return html`<div
+      class="st-row st-k-${s.control.kind} ${s.hint || rule ? "" : "st-nohint"} ${wide ? "st-row-wide" : ""} ${(hit && index === cursor) || this._flash === s.id ? "st-hit" : ""} ${hit && index === cursor ? "st-active" : ""}"
+      data-id=${s.id}
+      id=${index >= 0 ? `st-hit-${index}` : nothing}
+    >
       <div class="st-lbl">
         <span class="st-name">${s.control.kind === "number" && s.control.length ? lengthLabel(this.env, this.tr(s.label)) : this.tr(s.label)}</span>
-        ${s.control.kind === "note" ? nothing : html`<span class="st-scope st-scope-${s.scope}" title=${this.tr(`st_scope_${s.scope}_hint`)}>${this.tr(`st_scope_${s.scope}`)}</span>`}
-        ${s.permission === "ha_admin" ? html`<span class="st-scope st-scope-admin" title=${this.tr("st_admin_hint")}>${this.tr("st_admin")}</span>` : nothing}
       </div>
-      ${s.hint ? html`<p class="st-hint">${this.tr(s.hint)}</p>` : nothing}
+      ${s.hint || rule ? html`<p class="st-hint">${s.hint ? this.tr(s.hint) : nothing}${rule ? html`<span class="st-rule">${this.tr(rule)}</span>` : nothing}</p>` : nothing}
       <div class="st-ctl">${this.renderControl(s, s.control, !may)}</div>
     </div>`;
   }
@@ -541,6 +687,8 @@ export class SettingsPage extends LitElement {
         return this.renderEmbed(s, c.topic);
       case "note":
         return nothing;
+      case "info":
+        return html`<span class="st-info">${String(value ?? "–")}</span>`;
     }
   }
 
@@ -613,7 +761,7 @@ export class SettingsPage extends LitElement {
 
   /** A part the editor draws (its bundle loads the first time one is shown). */
   private renderEmbed(s: Setting, topic: string) {
-    if (!this.viewer.editor && s.permission !== "everyone") return html`<p class="st-sub">🔒</p>`;
+    if (!this.viewer.editor && s.permission !== "everyone") return html`<p class="st-sub">${icon("lock", true)}</p>`;
     if (this._embedState !== "ready") {
       if (this._embedState === "idle" && this.loadEditor) {
         this._embedState = "loading";
@@ -675,6 +823,56 @@ export class SettingsPage extends LitElement {
         flex-direction: column;
         gap: 2px;
       }
+      .st-backto,
+      .st-other {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 40px;
+        padding: 0 8px;
+        border: 0;
+        background: none;
+        color: var(--fp3d-accent);
+        font: inherit;
+        cursor: pointer;
+      }
+      .st-other {
+        margin-top: 12px;
+        border-top: 1px solid var(--fp3d-line);
+        justify-content: space-between;
+      }
+      .st-sides {
+        display: flex;
+        gap: 4px;
+        padding: 4px;
+        margin: 4px 0 10px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 8px;
+      }
+      .st-side {
+        flex: 1;
+        display: flex;
+        gap: 6px;
+        min-height: 44px;
+        padding: 6px;
+        border: 0;
+        border-radius: 6px;
+        background: none;
+        color: var(--fp3d-muted);
+        font: inherit;
+        font-size: 11.5px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .st-side b {
+        display: block;
+        font-size: 13.5px;
+        color: var(--fp3d-text);
+      }
+      .st-side[aria-pressed="true"] {
+        background: color-mix(in srgb, var(--fp3d-accent) 14%, transparent);
+        color: var(--fp3d-accent);
+      }
       .st-search {
         display: flex;
         align-items: center;
@@ -731,11 +929,12 @@ export class SettingsPage extends LitElement {
       .st-nav-btn[aria-current="page"] {
         background: color-mix(in srgb, var(--fp3d-accent) 14%, transparent);
         color: var(--fp3d-accent);
+        font-weight: 600;
       }
       .st-ic {
+        display: inline-flex;
         width: 18px;
-        text-align: center;
-        opacity: 0.85;
+        opacity: 0.9;
       }
       .st-chev {
         margin-left: auto;
@@ -744,18 +943,25 @@ export class SettingsPage extends LitElement {
       }
       .st-main {
         overflow: auto;
-        padding: 20px 24px 0;
+        padding: 20px 24px 24px;
         display: flex;
         flex-direction: column;
         gap: 16px;
         min-width: 0;
       }
       .st-main > * {
-        max-width: 860px;
+        max-width: 760px;
         width: 100%;
       }
       .st-back {
         display: none;
+      }
+      .st-title {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 8px 16px;
+        flex-wrap: wrap;
       }
       .st-title h2 {
         margin: 0;
@@ -784,7 +990,7 @@ export class SettingsPage extends LitElement {
       }
       .st-card {
         border: 1px solid var(--fp3d-line);
-        border-radius: 14px;
+        border-radius: var(--fp3d-radius-card);
         background: var(--fp3d-chrome);
       }
       .st-card h3 {
@@ -822,6 +1028,14 @@ export class SettingsPage extends LitElement {
       .st-row.st-hit {
         background: color-mix(in srgb, var(--fp3d-accent) 8%, transparent);
       }
+      .st-row.st-active {
+        box-shadow: inset 3px 0 0 var(--fp3d-accent);
+      }
+      .st-lock {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
       .st-lbl {
         display: flex;
         flex-wrap: wrap;
@@ -851,29 +1065,12 @@ export class SettingsPage extends LitElement {
         grid-row: auto;
         justify-self: stretch;
       }
-      .st-scope {
-        font-size: 10.5px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        padding: 1px 6px;
-        border-radius: 4px;
+      .st-rule {
+        display: block;
+        font-style: italic;
       }
-      .st-scope-house {
-        color: var(--fp3d-accent);
-        background: color-mix(in srgb, var(--fp3d-accent) 12%, transparent);
-      }
-      .st-scope-install {
-        color: var(--fp3d-warm);
-        background: color-mix(in srgb, var(--fp3d-warm) 12%, transparent);
-      }
-      .st-scope-device {
-        color: var(--fp3d-soft);
-        background: color-mix(in srgb, var(--fp3d-soft) 14%, transparent);
-      }
-      .st-scope-admin {
-        color: var(--fp3d-warm);
-        background: color-mix(in srgb, var(--fp3d-warm) 12%, transparent);
+      .st-info {
+        font-size: 14px;
       }
       .st-sw {
         position: relative;
@@ -1040,18 +1237,11 @@ export class SettingsPage extends LitElement {
       .fp3d-btn {
         min-height: 36px;
       }
-      .st-foot {
-        position: sticky;
-        bottom: 0;
-        margin-top: auto;
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
-        padding: 10px 2px 14px;
+      .st-save {
+        margin: 0;
+        flex: none;
         font-size: 12.5px;
-        color: var(--fp3d-muted);
-        background: linear-gradient(to bottom, transparent, var(--fp3d-bg) 40%);
+        padding-top: 6px;
       }
       .st-save-saved,
       .st-save-idle {
@@ -1081,6 +1271,8 @@ export class SettingsPage extends LitElement {
         }
         .st-back {
           display: inline-flex;
+          align-items: center;
+          gap: 4px;
           align-self: flex-start;
           width: auto;
           border: 0;
@@ -1093,7 +1285,7 @@ export class SettingsPage extends LitElement {
           cursor: pointer;
         }
         .st-main {
-          padding: 12px 16px 0;
+          padding: 12px 16px 24px;
         }
         /* a switch or a number stays at the right; wider controls go under their label */
         .st-row:not(.st-k-switch):not(.st-k-number) {

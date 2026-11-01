@@ -3,7 +3,6 @@
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, svg, unsafeCSS, type PropertyValues } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { linesField } from "./lines-field.ts";
 import { actionIndex, gestureAction, runItemAction, TapSequencer, type ActionOwner, type ItemAction } from "../item-actions.ts";
 import { carState, type CarState, heatSensorOn, roomClimateValue,
   appColor,
@@ -38,10 +37,8 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
   isPulseDrive,
   entityAreaId,
 } from "../devices.ts";
-import { effectFields } from "./effect-fields.ts";
 import { effectSettings, itemShade, motionRooms, tempShade } from "../room-effects.ts";
-import { alertEntities, alertKey, alertSources, alertText, alertTint, clearedSnoozes, dismissAlert, findAlerts, HOUSE_ALERTS, isOutage, mayIgnoreAlert, restoreAlert, shownAlerts, snoozeKey, type Alert, type AlertSources } from "../alerts.ts";
-import { ignoredAlerts } from "./ignored-alerts.ts";
+import { alertEntities, alertKey, alertSources, alertText, alertTint, clearedSnoozes, dismissAlert, findAlerts, HOUSE_ALERTS, isOutage, mayIgnoreAlert, shownAlerts, snoozeKey, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg, mdiIcon } from "../icons.ts";
 import { uiIcon } from "../ui-icons.ts";
 import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binPlace, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
@@ -134,7 +131,7 @@ type RackView = RackElevation & { name: string };
 import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { holdTarget } from "../hold.ts";
-import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packName, packsVersion, recipeHashes } from "../packs.ts";
+import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
@@ -144,7 +141,7 @@ import { projectionOn, released } from "../features.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import type { Shown } from "../voice/targets.ts";
 import type { SpokenRack } from "../voice/racks.ts";
-import { anyModule, moduleAlerts, moduleCards, moduleMenuSheets, modulePools, moduleRoomSheets, moduleScene, moduleSettings, modulesWithSettings, moduleVoice, moduleWatched, syncModules, type ModuleCard, type ModuleField, type ModuleHost, type ModuleSheet, type ScenePiece, type SpokenAlert, type SpokenCar, type SpokenDevice, type SpokenOpening, type VoiceAnswer } from "../modules.ts";
+import { anyModule, moduleAlerts, moduleCards, moduleMenuSheets, modulePools, moduleRoomSheets, moduleScene, modulesWithSettings, moduleVoice, moduleWatched, syncModules, type ModuleCard, type ModuleHost, type ModuleSheet, type ScenePiece, type SpokenAlert, type SpokenCar, type SpokenDevice, type SpokenOpening, type VoiceAnswer } from "../modules.ts";
 import { lineFlows, majorOnly, markerEmoji, markerPath, sparkPoints } from "../module-scene.ts";
 import { generateWalls, openingHost, placeWallPlate, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { signedArea } from "../model.ts";
@@ -324,7 +321,6 @@ export class Fp3dView3d extends LitElement {
     ghostOn: { attribute: false },
     _central: { state: true },
     _sheet: { state: true },
-    _settingsOpen: { state: true },
     _rackView: { state: true },
     _note: { state: true },
     _thumbsCompact: { state: true },
@@ -655,8 +651,6 @@ export class Fp3dView3d extends LitElement {
   private declare _central: boolean;
   /** A module's sheet that is open (an announcement …): from a room's panel (with its room) or from the ⭐ menu. */
   private declare _sheet: { id: string; floorId: string | null; roomId: string | null } | null;
-  /** The ⚙ settings over the view are open. */
-  private declare _settingsOpen: boolean;
   /** The rack whose front view is open (#115; its furniture id and its drawing, from a tap in 2D or 3D) and the gear whose details show (#119). */
   private declare _rackView: { id: string; draw: RackDraw; slot: string | null } | null;
   /** That front view, by what it was drawn from: built on the tap, not per render (#115). */
@@ -821,7 +815,6 @@ export class Fp3dView3d extends LitElement {
     this._find = null;
     this._central = false;
     this._sheet = null;
-    this._settingsOpen = false;
     this._rackView = null;
     this._note = null;
     try {
@@ -4939,10 +4932,11 @@ export class Fp3dView3d extends LitElement {
           <b>${floor ? floor.name : t("central_house")}</b>
           ${this.noSettings
             ? nothing
-            : html`<button class="fp3d-btn fp3d-central-gear" title=${t("view_settings")} aria-label=${t("view_settings")} @click=${() => {
+            : html`<button class="fp3d-btn fp3d-central-gear" @click=${() => {
+                // the "Sun and lights" sheet is gone (#248): its settings are on the Settings page
                 this._central = false;
-                this._settingsOpen = true;
-              }}>⚙ ${t("view_settings")}</button>`}
+                this.openTab("open-settings", "/home_3d#settings");
+              }}>${t("settings")} ›</button>`}
         </div>
         ${sheets.length
           ? html`<div class="fp3d-central-favs">
@@ -5675,11 +5669,10 @@ export class Fp3dView3d extends LitElement {
         ${sheet.lines?.length ? html`<div class="fp3d-sheet-lines">${sheet.lines.map((l) => html`<p>${l}</p>`)}</div>` : nothing}
         ${this.mayEdit && modulesWithSettings().length
           ? html`<button class="fp3d-sheet-gear" @click=${() => {
-              // the sentences and speakers are set in the ⚙ menu: open it at the modules' sections
+              // the sentences and speakers are set on the extension's card on the Extensions tab (#248)
               close();
-              this._settingsOpen = true;
-              void this.updateComplete.then(() => this.renderRoot.querySelector(".fp3d-set-module")?.scrollIntoView({ block: "start" }));
-            }}>⚙ ${t("view_settings")}</button>`
+              this.openTab("open-extensions", "/home_3d");
+            }}>${t("ext_module_settings")} ›</button>`
           : nothing}
       </div>`;
   }
@@ -5716,13 +5709,15 @@ export class Fp3dView3d extends LitElement {
   }
 
   /**
-   * ⚙ over the 3D view: what most people look for without opening the editor – the look of the house (sun & night,
-   * window light, sun patches), the warnings, and every module's own settings. Changes count for the whole house
-   * and only administrators make them; the editor keeps the full set.
+   * Another tab of the panel (#248: Settings for the central menu's link, Extensions for a module sheet's): the panel
+   * opens it; a dashboard card has no panel around it, so it goes to the panel's page.
    */
-  /** Opens the ⚙ sheet (sun, window glow, alerts …): the panel's "Sun and lights" button (#87). */
-  openSettings(): void {
-    this._settingsOpen = true;
+  private openTab(event: "open-settings" | "open-extensions", url: string): void {
+    const asked = new CustomEvent(event, { detail: { section: null, id: null }, bubbles: true, composed: true, cancelable: true });
+    if (this.dispatchEvent(asked)) {
+      history.pushState(null, "", url);
+      window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+    }
   }
 
   // ------------------------------------------------------------------------------------------ racks (#115)
@@ -5803,104 +5798,6 @@ export class Fp3dView3d extends LitElement {
         ${this.renderRackDetail(hass, f)}
         <div class="fp3d-rack-view-box" @click=${tap}>${unsafeHTML(view.svg)}</div>
       </div>`;
-  }
-
-  private renderSettings() {
-    const hass = this.hass;
-    const b = this.building;
-    if (!hass || !b || !this._settingsOpen) return nothing;
-    const t = (k: I18nKey) => translate(hass, k);
-    const admin = this.mayEdit;
-    const st = b.settings;
-    const check = (key: I18nKey, on: boolean, patch: (v: boolean) => Partial<Building["settings"]>, hint?: I18nKey) =>
-      html`<label class="fp3d-set-check" title=${hint ? t(hint) : ""}
-        ><input type="checkbox" .checked=${on} ?disabled=${!admin} @change=${(e: Event) => this.setPlanSettings(patch((e.target as HTMLInputElement).checked))} /> ${t(key)}</label
-      >`;
-    const host = this.sceneHost(hass, b);
-    // every module's section starts with a heading: its own, else the pack's name (Wärme Pro brings none)
-    const packs = getPacks();
-    const modules = modulesWithSettings()
-      .map((id): ModuleField[] => {
-        const fields = moduleSettings(id, host);
-        if (!fields.length || fields[0].kind === "heading") return fields;
-        const pack = packs.find((p) => p.id === id);
-        const name = pack ? packName(pack, hass.language ?? "en").replace(/^(Modul|Module):\s*/i, "") : id;
-        return [{ kind: "heading", text: name }, ...fields];
-      })
-      .filter((f) => f.length);
-    return html`<div class="fp3d-sheet-backdrop" @click=${() => (this._settingsOpen = false)}></div>
-      <div class="fp3d-sheet fp3d-settings" role="dialog" aria-label=${t("view_settings")}>
-        <header>
-          <b>⚙ ${t("view_settings")}</b>
-          <button class="fp3d-sheet-x" aria-label=${t("close")} @click=${() => (this._settingsOpen = false)}>✕</button>
-        </header>
-        ${admin ? nothing : html`<p class="fp3d-set-note">${t("view_settings_admin")}</p>`}
-        <h4>${t("view_settings_look")}</h4>
-        ${check("sun_shadow", st.sun_shadow !== false, (v) => ({ sun_shadow: v }), "sun_shadow_hint")}
-        ${check("window_glow", st.window_glow !== false, (v) => ({ window_glow: v }), "window_glow_hint")}
-        ${check("sun_patches", st.sun_patches !== false, (v) => ({ sun_patches: v }))}
-        <h4>${t("view_settings_alerts")}</h4>
-        ${check("rain_warning", st.rain_warning !== false, (v) => ({ rain_warning: v }))}
-        ${check("alert_unavailable", !!st.alert_unavailable, (v) => ({ alert_unavailable: v }))}
-        ${check("alert_names", st.alert_names !== false, (v) => ({ alert_names: v }))}
-        ${ignoredAlerts(hass, st.alert_ignored, !admin, (a) => this.setPlanSettings({ alert_ignored: restoreAlert(st.alert_ignored, a) }))}
-        <h4 title=${t("effects_hint")}>${t("effects")}</h4>
-        ${effectFields(hass, st.effects, !admin, (effects) => this.setPlanSettings({ effects }))}
-        ${modules.map((fields) => html`<div class="fp3d-set-module">${fields.map((f) => this.renderViewField(hass, f, admin))}</div>`)}
-        <p class="fp3d-set-note">${t("view_settings_more")}</p>
-        <button
-          class="fp3d-btn"
-          @click=${() => {
-            this._settingsOpen = false;
-            // the panel opens its Settings tab (#139); a dashboard card has no panel around it: go to the panel's page
-            const asked = new CustomEvent("open-settings", { detail: { section: null, id: null }, bubbles: true, composed: true, cancelable: true });
-            if (this.dispatchEvent(asked)) {
-              history.pushState(null, "", "/home_3d#settings");
-              window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
-            }
-          }}
-        >
-          ⚙ ${t("all_settings")} ›
-        </button>
-      </div>`;
-  }
-
-  /** A module's field in the ⚙ menu, drawn like the editor's (the lists of entities are short native lists here). */
-  private renderViewField(hass: HomeAssistant, f: ModuleField, admin: boolean) {
-    switch (f.kind) {
-      case "heading":
-        return html`<h4>${f.text}</h4>`;
-      case "text":
-        return html`<p class="fp3d-set-note">${f.text}</p>`;
-      case "check":
-        return html`<label class="fp3d-set-check"><input type="checkbox" .checked=${f.value} ?disabled=${!admin} @change=${(e: Event) => f.set((e.target as HTMLInputElement).checked)} /> ${f.label}</label>`;
-      case "select":
-        return html`<label class="fp3d-set-field"
-          >${f.label}
-          <select ?disabled=${!admin} @change=${(e: Event) => f.set((e.target as HTMLSelectElement).value)}>
-            ${f.options.map((o) => html`<option value=${o.id} ?selected=${o.id === f.value}>${o.label}</option>`)}
-          </select></label
-        >`;
-      case "entity": {
-        const ids = Object.keys(hass.states)
-          .filter((id) => f.filter(id))
-          .sort((a, c) => entityName(hass, a).localeCompare(entityName(hass, c)));
-        return html`<label class="fp3d-set-field"
-          >${f.label}
-          <select ?disabled=${!admin} @change=${(e: Event) => {
-            const v = (e.target as HTMLSelectElement).value;
-            f.set(v === "" ? null : v);
-          }}>
-            <option value="" ?selected=${!f.value}>${f.auto ? translate(hass, "entity_auto", { name: entityName(hass, f.auto) }) : "—"}</option>
-            ${ids.map((id) => html`<option value=${id} ?selected=${id === f.value}>${entityName(hass, id)}</option>`)}
-          </select></label
-        >`;
-      }
-      case "lines":
-        return linesField(f.value, !admin, { label: f.label, placeholder: f.placeholder ?? translate(hass, "lines_new"), add: translate(hass, "lines_add"), remove: translate(hass, "delete") }, (v) => f.set(v));
-      case "button":
-        return html`<button class="fp3d-btn ${f.primary ? "fp3d-primary" : ""}" ?disabled=${!admin} title=${f.title ?? ""} @click=${() => f.onTap()}>${f.label}</button>`;
-    }
   }
 
   private renderNote() {
@@ -6539,7 +6436,7 @@ export class Fp3dView3d extends LitElement {
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderWires()} ${this.clean ? nothing : this.renderLegend()}
-      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderSettings()} ${this.renderRackView()} ${this.renderNote()}
+      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderRackView()} ${this.renderNote()}
       ${this.renderMenu()} ${this.renderEye()} ${this.renderRoomList()}
       ${this.renderMic()}
       ${this.pivotMark && !this._walk ? html`<span class="fp3d-pivot" aria-hidden="true"></span>` : nothing}
@@ -7992,41 +7889,10 @@ export class Fp3dView3d extends LitElement {
         color: inherit;
         font: inherit;
       }
-      .fp3d-sheet-lines p,
-      .fp3d-set-note {
+      .fp3d-sheet-lines p {
         margin: 0;
         color: var(--fp3d-muted);
         font-size: 12px;
-      }
-      .fp3d-settings h4 {
-        margin: 6px 0 0;
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--fp3d-muted);
-      }
-      .fp3d-set-check {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 14px;
-      }
-      .fp3d-set-field {
-        display: grid;
-        gap: 4px;
-        font-size: 13px;
-        color: var(--fp3d-muted);
-      }
-      .fp3d-set-field select,
-      .fp3d-set-field input,
-      .fp3d-set-field textarea {
-        font: inherit;
-        font-size: 14px;
-        color: var(--fp3d-text);
-        background: rgba(0, 0, 0, 0.18);
-        border: 1px solid var(--fp3d-line);
-        border-radius: 8px;
-        padding: 6px 8px;
       }
       .fp3d-sheet-gear {
         align-self: flex-start;
@@ -8040,13 +7906,6 @@ export class Fp3dView3d extends LitElement {
       }
       .fp3d-sheet-gear:hover {
         color: var(--fp3d-accent);
-      }
-      .fp3d-set-module {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        padding-top: 4px;
-        border-top: 1px solid var(--fp3d-line);
       }
       .fp3d-note {
         position: absolute;

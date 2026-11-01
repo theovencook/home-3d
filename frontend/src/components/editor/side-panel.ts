@@ -10,6 +10,7 @@ import { ISSUES_URL } from "../../help.ts";
 import { type Floor, type Furniture } from "../../model.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { type EditorTopic } from "./helpers.ts";
+import { moduleSettings } from "../../modules.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** SidePanelPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
@@ -44,6 +45,8 @@ export class SidePanelPart {
     else if (topic === "energy_balance") body = this.renderEnergyBalance();
     else if (topic === "hologram") body = this.renderHologramSettings();
     else if (topic === "presence") body = this.renderPresenceSettings();
+    // an extension's own settings, on its card on the Extensions tab (#248)
+    else if (topic.startsWith("module:")) body = this.renderFields(this.memoFields(doc, () => moduleSettings(topic.slice(7), this.editorHost())));
     return html`<div class="fp3d-embed">${body}</div>`;
   }
 

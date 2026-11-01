@@ -28,7 +28,9 @@ export { deviceChoice, deviceSwitch } from "./view-settings.ts";
 export type Scope = "house" | "install" | "device";
 /** Who may change it: anyone (device rows), editors (house and install rows), Home Assistant admins. */
 export type Permission = "everyone" | "editor" | "ha_admin";
-export type GroupId = "house" | "live" | "device" | "system";
+export type GroupId = "house" | "live" | "device" | "device_use" | "system";
+/** Who a Settings page affects (#248, the menus redesign #219): the menu shows one side at a time, then topics. */
+export type Audience = "home" | "device";
 export type SectionId =
   | "general"
   | "scene"
@@ -45,7 +47,10 @@ export type SectionId =
   | "access"
   | "packs"
   | "backup"
-  | "advanced";
+  | "advanced"
+  | "view3d"
+  | "people"
+  | "tablets";
 
 /** A text key: the page's own ("st_…") or a main one (i18n.ts). */
 export type TextKey = string;
@@ -58,10 +63,13 @@ export interface Card {
 export interface Section {
   id: SectionId;
   group: GroupId;
+  /** A line icon's name (settings-icons.ts), drawn beside the section's name (#248: no glyphs). */
   icon: string;
   title: TextKey;
   hint: TextKey;
   cards: Card[];
+  /** Not in the menu (search and links still reach it): the fun switches live on the Extensions tab (#248). */
+  hidden?: boolean;
 }
 
 /** This device's preferences ("home3d.<key>" in localStorage). */
@@ -80,6 +88,8 @@ export interface SettingsEnv {
   lastView?: StartView | null;
   /** Answers of settings kept outside the plan (pack updates, voice sentences …), by loader id; filled by the page. */
   remote?: Record<string, unknown>;
+  /** The versions running (the About card, #248): this page's code and Home Assistant's side. */
+  version?: { frontend: string; backend: string | null };
 }
 
 export interface Option {
@@ -129,7 +139,9 @@ export type Control =
   /** A block the editor bundle draws (lists with their own logic: favourites, own buttons, backup …). */
   | { kind: "embed"; topic: EmbedTopic }
   /** Only words: where something is set instead (the card options, the modules' settings). */
-  | { kind: "note" };
+  | { kind: "note" }
+  /** A line to read, not change: what `read` gives (the installed version on the About card, #248). */
+  | { kind: "info" };
 
 /** The editor parts the page shows as they are (`<fp3d-editor topic=…>`, see editor.ts renderTopic). */
 export type EmbedTopic =
@@ -173,18 +185,28 @@ export interface Setting<V = unknown> {
 
 // ---------------------------------------------------------------------------------------------------- sections
 
-export const GROUPS: { id: GroupId; title: TextKey }[] = [
-  { id: "house", title: "st_group_house" },
-  { id: "live", title: "st_group_live" },
-  { id: "device", title: "st_group_device" },
-  { id: "system", title: "st_group_system" },
+/**
+ * The menu (#248, option B of the redesign #219): who a change affects first (This home, This device), then topics.
+ * Each group belongs to one side.
+ */
+export const GROUPS: { id: GroupId; audience: Audience; title: TextKey }[] = [
+  { id: "house", audience: "home", title: "st_group_house" },
+  { id: "live", audience: "home", title: "st_group_live" },
+  { id: "system", audience: "home", title: "st_group_system" },
+  { id: "device", audience: "device", title: "st_group_looks" },
+  { id: "device_use", audience: "device", title: "st_group_works" },
 ];
+
+/** The side of the menu a section is on. */
+export function audienceOf(sec: Pick<Section, "group">): Audience {
+  return GROUPS.find((g) => g.id === sec.group)?.audience ?? "home";
+}
 
 export const SECTIONS: Section[] = [
   {
     id: "general",
     group: "house",
-    icon: "⌂",
+    icon: "home",
     title: "st_sec_general",
     hint: "st_sec_general_hint",
     cards: [
@@ -195,7 +217,7 @@ export const SECTIONS: Section[] = [
   {
     id: "scene",
     group: "house",
-    icon: "◐",
+    icon: "sun",
     title: "st_sec_scene",
     hint: "st_sec_scene_hint",
     cards: [
@@ -207,7 +229,7 @@ export const SECTIONS: Section[] = [
   {
     id: "energy",
     group: "house",
-    icon: "ϟ",
+    icon: "zap",
     title: "st_sec_energy",
     hint: "st_sec_energy_hint",
     cards: [
@@ -216,11 +238,25 @@ export const SECTIONS: Section[] = [
     ],
   },
   {
+    id: "favourites",
+    group: "house",
+    icon: "star",
+    title: "st_sec_favourites",
+    hint: "st_sec_favourites_hint",
+    cards: [
+      { id: "favourites", title: "st_card_favourites" },
+      { id: "buttons", title: "st_card_buttons" },
+      { id: "presets", title: "st_card_presets" },
+    ],
+  },
+  /* the fun switches sit on the Extensions tab (#248); search and old links still find them here */
+  {
     id: "fun",
     group: "house",
-    icon: "✦",
+    icon: "sparkles",
     title: "st_sec_fun",
     hint: "st_sec_fun_hint",
+    hidden: true,
     cards: [
       { id: "eggs", title: "st_card_eggs" },
       { id: "pets", title: "st_card_pets" },
@@ -230,7 +266,7 @@ export const SECTIONS: Section[] = [
   {
     id: "warnings",
     group: "live",
-    icon: "⚠",
+    icon: "alert",
     title: "st_sec_warnings",
     hint: "st_sec_warnings_hint",
     cards: [
@@ -238,11 +274,11 @@ export const SECTIONS: Section[] = [
       { id: "dismissed", title: "st_card_dismissed" },
     ],
   },
-  { id: "effects", group: "live", icon: "≋", title: "st_sec_effects", hint: "st_sec_effects_hint", cards: [{ id: "motion", title: "st_card_motion" }] },
+  { id: "effects", group: "live", icon: "waves", title: "st_sec_effects", hint: "st_sec_effects_hint", cards: [{ id: "motion", title: "st_card_motion" }] },
   {
     id: "cameras",
     group: "live",
-    icon: "◉",
+    icon: "camera",
     title: "st_sec_cameras",
     hint: "st_sec_cameras_hint",
     cards: [
@@ -253,7 +289,7 @@ export const SECTIONS: Section[] = [
   {
     id: "household",
     group: "live",
-    icon: "♻",
+    icon: "bin",
     title: "st_sec_household",
     hint: "st_sec_household_hint",
     cards: [
@@ -261,36 +297,53 @@ export const SECTIONS: Section[] = [
       { id: "pinboard", title: "st_card_pinboard" },
     ],
   },
+  /* the Locating assistant, how located people show and presence (were under Advanced, #248) */
+  { id: "people", group: "live", icon: "users", title: "st_sec_people", hint: "st_sec_people_hint", cards: [{ id: "people", title: "st_card_people" }] },
+  /* "Tablets & access" split in two (#248) */
+  { id: "access", group: "system", icon: "key", title: "st_sec_editors", hint: "st_sec_access_hint", cards: [{ id: "editors", title: "st_card_editors" }] },
+  { id: "tablets", group: "system", icon: "tablet", title: "st_sec_tablets", hint: "st_sec_tablets_hint", cards: [{ id: "tablets", title: "st_card_tablets" }] },
+  { id: "packs", group: "system", icon: "package", title: "st_sec_packs", hint: "st_sec_packs_hint", cards: [{ id: "updates", title: "st_card_updates" }] },
+  { id: "backup", group: "system", icon: "history", title: "st_sec_backup", hint: "st_sec_backup_hint", cards: [{ id: "backup", title: "st_card_backup" }] },
   {
-    id: "favourites",
-    group: "live",
-    icon: "★",
-    title: "st_sec_favourites",
-    hint: "st_sec_favourites_hint",
+    id: "advanced",
+    group: "system",
+    icon: "sliders",
+    title: "st_sec_advanced",
+    hint: "st_sec_advanced_hint",
     cards: [
-      { id: "favourites", title: "st_card_favourites" },
-      { id: "buttons", title: "st_card_buttons" },
-      { id: "presets", title: "st_card_presets" },
+      { id: "advanced", title: "st_card_advanced" },
+      { id: "about", title: "st_card_about" },
     ],
   },
+  /* this device: how it looks (Appearance with the clock, the 3D view) and how it works (#248) */
   {
     id: "look",
     group: "device",
-    icon: "◑",
+    icon: "palette",
     title: "st_sec_look",
     hint: "st_sec_look_hint",
     cards: [
       { id: "look", title: "st_card_look" },
-      { id: "markers", title: "st_card_markers" },
+      { id: "clock", title: "st_clock" },
+    ],
+  },
+  {
+    id: "view3d",
+    group: "device",
+    icon: "cube",
+    title: "st_sec_view3d",
+    hint: "st_sec_view3d_hint",
+    cards: [
       { id: "show", title: "st_card_show" },
+      { id: "markers", title: "st_card_markers" },
       { id: "cards", title: "st_cards_title" },
     ],
   },
-  /* the old View menu's Controls row, Quality and FPS, with full labels (#246) */
+  /* the old View menu's Controls row and FPS, with full labels (#246) */
   {
     id: "screen",
-    group: "device",
-    icon: "▭",
+    group: "device_use",
+    icon: "monitor",
     title: "st_sec_screen",
     hint: "st_sec_screen_hint",
     cards: [
@@ -298,31 +351,7 @@ export const SECTIONS: Section[] = [
       { id: "controls", title: "st_card_controls" },
     ],
   },
-  { id: "voice", group: "device", icon: "◖", title: "st_sec_voice", hint: "st_sec_voice_hint", cards: [{ id: "voice", title: "st_card_voice" }] },
-  {
-    id: "access",
-    group: "system",
-    icon: "⛨",
-    title: "st_sec_access",
-    hint: "st_sec_access_hint",
-    cards: [
-      { id: "editors", title: "st_card_editors" },
-      { id: "tablets", title: "st_card_tablets" },
-    ],
-  },
-  { id: "packs", group: "system", icon: "▦", title: "st_sec_packs", hint: "st_sec_packs_hint", cards: [{ id: "updates", title: "st_card_updates" }] },
-  { id: "backup", group: "system", icon: "⟲", title: "st_sec_backup", hint: "st_sec_backup_hint", cards: [{ id: "backup", title: "st_card_backup" }] },
-  {
-    id: "advanced",
-    group: "system",
-    icon: "⚙",
-    title: "st_sec_advanced",
-    hint: "st_sec_advanced_hint",
-    cards: [
-      { id: "advanced", title: "st_card_advanced" },
-      { id: "people", title: "st_card_people" },
-    ],
-  },
+  { id: "voice", group: "device_use", icon: "mic", title: "st_sec_voice", hint: "st_sec_voice_hint", cards: [{ id: "voice", title: "st_card_voice" }] },
 ];
 
 export function sectionOf(id: string): Section | undefined {
@@ -401,7 +430,7 @@ function effect(id: EffectKey, section: SectionId, card: string, label: TextKey,
     label,
     hint,
     keywords,
-    control: { kind: "number", step: temperature ? 1 : 5, min: temperature ? -20 : 0, max: temperature ? 212 : 3600, clearable: true, unit: (env) => (temperature ? (env.hass ? tempUnit(env.hass) : "°C") : "s") },
+    control: { kind: "number", step: temperature ? 1 : 5, min: temperature ? -20 : 0, max: temperature ? 212 : 3600, clearable: true, unit: (env) => (temperature ? (env.hass ? tempUnit(env.hass) : "°C") : "st_seconds") },
     default: toShownDefault(id),
     read: (env) => {
       const v = env.building?.settings.effects?.[id];
@@ -655,7 +684,7 @@ const CAMERAS: Setting[] = [
     label: "director_hold",
     hint: "director_back_hint",
     keywords: ["back", "return", "seconds"],
-    control: { kind: "number", step: 5, min: HOLD_MIN, max: HOLD_MAX, unit: "s" },
+    control: { kind: "number", step: 5, min: HOLD_MIN, max: HOLD_MAX, unit: "st_seconds" },
     default: HOLD_DEFAULT,
     read: (env) => directorPart(env).hold ?? HOLD_DEFAULT,
     write: (env, v) => withPart(env.building!, "director", { hold: clamp(Math.round(v), HOLD_MIN, HOLD_MAX) }),
@@ -1122,16 +1151,16 @@ const PACKS: Setting[] = [
 
 const ACCESS: Setting[] = [
   embedded("editors", "access", "editors", "editors", "editors_title", undefined, ["edit", "permission", "users", "admin"], "ha_admin"),
-  embedded("tablet_users", "access", "tablets", "tablet_users", "tablet_users", "st_tablet_users_hint", ["kiosk", "wall", "locked", "tablet"], "ha_admin", (env) => env.building?.settings.tablet_users ?? []),
+  embedded("tablet_users", "tablets", "tablets", "tablet_users", "tablet_users", "st_tablet_users_hint", ["kiosk", "wall", "locked", "tablet"], "ha_admin", (env) => env.building?.settings.tablet_users ?? []),
   {
     id: "tablet_idle",
-    section: "access",
+    section: "tablets",
     card: "tablets",
     scope: "house",
     permission: "editor",
     label: "tablet_idle",
     keywords: ["kiosk", "idle", "return", "whole house"],
-    control: { kind: "number", step: 10, min: 0, max: 86400, unit: "s", clearable: true },
+    control: { kind: "number", step: 10, min: 0, max: 86400, unit: "st_seconds", clearable: true },
     default: TABLET_IDLE_DEFAULT,
     read: (env) => settingsOf(env).tablet_idle ?? null,
     write: (env, v) => withSettings(env.building!, { tablet_idle: v === null ? null : clamp(Math.round(v), 0, 86400) }),
@@ -1170,14 +1199,15 @@ const ADVANCED: Setting[] = [
     permission: "editor",
     label: "st_modules",
     hint: "st_modules_note",
-    keywords: ["module", "pack", "plugin", "sentences", "speakers"],
-    control: { kind: "note" },
+    keywords: ["module", "pack", "plugin", "sentences", "speakers", "extension"],
+    // each extension's own settings are on its card on the Extensions tab (#248)
+    control: { kind: "action", button: "st_open_extensions", action: "extensions" },
     default: null,
     read: () => null,
   },
   {
     id: "locate",
-    section: "advanced",
+    section: "people",
     card: "people",
     scope: "house",
     permission: "ha_admin",
@@ -1191,7 +1221,7 @@ const ADVANCED: Setting[] = [
   },
   {
     id: "person_look",
-    section: "advanced",
+    section: "people",
     card: "people",
     scope: "house",
     permission: "editor",
@@ -1210,14 +1240,27 @@ const ADVANCED: Setting[] = [
     write: (env, v) => withSettings(env.building!, { person_look: v === "pin" || v === "off" ? v : null }),
   } as Setting<string>,
   // presence sensors per person: built, not released yet (flags.ts SHOW_PRESENCE)
-  { ...embedded("presence", "advanced", "people", "presence", "presence", "presence_hint", ["presence", "espresense", "bermuda", "room sensor"]), visible: () => SHOW_PRESENCE },
+  { ...embedded("presence", "people", "people", "presence", "presence", "presence_hint", ["presence", "espresense", "bermuda", "room sensor"]), visible: () => SHOW_PRESENCE },
+  // the installed version (#248: the header's version moves here in #249)
+  {
+    id: "about.version",
+    section: "advanced",
+    card: "about",
+    scope: "install",
+    permission: "editor",
+    label: "st_version",
+    keywords: ["about", "version", "release", "update", "build"],
+    control: { kind: "info" },
+    default: null,
+    read: (env) => (env.version ? (env.version.backend && env.version.backend !== env.version.frontend ? `v${env.version.frontend} (Home Assistant: v${env.version.backend})` : `v${env.version.frontend}`) : null),
+  },
 ];
 
 /** Where the dashboard cards' options are (they stay in each card's editor, as decided on #139). */
 const CARDS: Setting[] = [
   {
     id: "dashboard_cards",
-    section: "look",
+    section: "view3d",
     card: "cards",
     scope: "device",
     permission: "everyone",
@@ -1369,7 +1412,7 @@ export function settingsHash(section?: string | null, id?: string | null): strin
 
 /** The section and setting a "#settings/…" address opens (null: not a settings address). */
 export function parseSettingsHash(hash: string): { section: SectionId | null; id: string | null } | null {
-  const m = /^#settings(?:\/([a-z_]+))?(?:\/([^/?#]+))?\/?$/.exec(hash);
+  const m = /^#settings(?:\/([a-z0-9_]+))?(?:\/([^/?#]+))?\/?$/.exec(hash);
   if (!m) return null;
   const section = m[1] && sectionOf(m[1]) ? (m[1] as SectionId) : null;
   let id = m[2] ? decodeURIComponent(m[2]) : null;

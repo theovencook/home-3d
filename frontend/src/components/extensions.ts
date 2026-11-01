@@ -1,5 +1,6 @@
 // The "Extensions" page of the panel: the built-in features, the fun extras and the installed furniture packs.
-// It lives in the editor bundle (loaded with it) and is shown to admins only.
+// It lives in the editor bundle (loaded with it) and is shown to admins only. Since #248 it is also where each
+// extension's own settings are (a card per extension, opened in place), and the fun extras' switches sit here alone.
 
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
@@ -41,7 +42,8 @@ import {
   type PackPreview,
   type PackUpdateStatus,
 } from "../pack-updates.ts";
-import { packName, packOrigin, type FurniturePack } from "../packs.ts";
+import { getPacks, packName, packOrigin, type FurniturePack } from "../packs.ts";
+import { modulesWithSettings } from "../modules.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
 
@@ -335,7 +337,7 @@ export class Extensions extends LitElement {
           <a class="fp3d-btn" href=${ISSUES_URL} target="_blank" rel="noopener">🐞 ${this.t("help_issue")}</a>
         </div>
       </header>
-      ${this.renderFun()} ${this.renderItems()} ${this.renderUpdates()} ${this.renderPacks()} ${this.renderLanguages()}
+      ${this.renderFun()} ${this.renderModules()} ${this.renderItems()} ${this.renderUpdates()} ${this.renderPacks()} ${this.renderLanguages()}
     </div>`;
   }
 
@@ -366,6 +368,9 @@ export class Extensions extends LitElement {
     return html`<section class="fp3d-ext-card">
       <h3>🎈 ${this.t("fun_title")}</h3>
       <p class="fp3d-sub">${this.t("fun_intro")}</p>
+      ${this.isEditor && this.building
+        ? this.funSwitch(this.building.settings.easter_eggs !== false, this.t("st_easter_eggs"), (on) => this.editBuilding((b) => (b.settings.easter_eggs = on)))
+        : nothing}
       ${shown.map((f) =>
         f === "fun_halloween"
           ? this.renderHalloween()
@@ -375,7 +380,7 @@ export class Extensions extends LitElement {
               <b>✓ ${this.t("fun_name_pets")}</b>
               <span class="fp3d-sub">${this.t("fun_feature_pets")}</span>
               ${this.isEditor && this.building
-                ? html`${this.settingsLink("pets.on", on ? "✓" : "–", this.t("pets_show"))}
+                ? html`${this.funSwitch(on, this.t("pets_show"), (v) => set((p) => (p.on = v)))}
                     ${list.map(
                       (pet) => html`<div class="fp3d-pet-row">
                         <select
@@ -448,17 +453,9 @@ export class Extensions extends LitElement {
     </section>`;
   }
 
-  /**
-   * A switch that moved to the Settings page (#139: the ghost and the pets sit under "Easter eggs & fun" there, beside
-   * the house-wide easter eggs switch): its state, and a link that opens it there.
-   */
-  private settingsLink(id: string, state: string, label: string) {
-    return html`<button
-      class="fp3d-link fp3d-ext-setting"
-      @click=${() => this.dispatchEvent(new CustomEvent("open-settings", { detail: { section: "fun", id }, bubbles: true, composed: true }))}
-    >
-      ${state} ${label} · ⚙ ${this.t("settings")} ›
-    </button>`;
+  /** A fun extra's switch (#248: they live here alone; Settings' search still finds them). */
+  private funSwitch(on: boolean, label: string, set: (on: boolean) => void) {
+    return html`<label class="fp3d-ext-season"><input type="checkbox" .checked=${on} @change=${(e: Event) => set((e.target as HTMLInputElement).checked)} /> ${label}</label>`;
   }
 
   /** Fun pack "Halloween": decorations in the furniture library, and the ghost (switched in Settings). */
@@ -467,7 +464,9 @@ export class Extensions extends LitElement {
     return html`<div class="fp3d-ext-feature fp3d-ext-on">
       <b>✓ 🎃 ${this.t("fun_name_halloween")}</b>
       <span class="fp3d-sub">${this.t("fun_feature_halloween")}</span>
-      ${this.isEditor && this.building ? this.settingsLink("halloween.ghost", ghost && this.building.settings.easter_eggs !== false ? "✓" : "–", this.t("halloween_ghost")) : nothing}
+      ${this.isEditor && this.building
+        ? this.funSwitch(ghost, this.t("halloween_ghost"), (v) => this.editBuilding((b) => (b.settings.halloween = { ...(b.settings.halloween ?? {}), ghost: v })))
+        : nothing}
       <span class="fp3d-sub">${this.t("halloween_deco_hint")}</span>
     </div>`;
   }
@@ -501,6 +500,42 @@ export class Extensions extends LitElement {
           )
         : nothing}
     </div>`;
+  }
+
+  /**
+   * Each extension's own settings (#248, were in the 3D view's "Sun and lights" sheet): a card per extension with
+   * settings, opened in place. The editor draws the fields, as it draws a module's fields in its forms (this page comes
+   * with the editor bundle, so <fp3d-editor> is there).
+   */
+  private renderModules() {
+    const hass = this.hass;
+    const ids = hass && this.building ? modulesWithSettings() : [];
+    if (!hass || !ids.length) return nothing;
+    return ids.map((id) => {
+      const pack = getPacks().find((p) => p.id === id);
+      const name = pack ? packName(pack, hass.language ?? "en").replace(/^(Modul|Module):\s*/i, "") : id;
+      const key = `mod:${id}`;
+      const open = this._open.has(key);
+      return html`<section class="fp3d-ext-card fp3d-ext-module" id=${`ext-${id}`}>
+        <h3>${name}</h3>
+        <button class="fp3d-link fp3d-ext-setting" aria-expanded=${open} @click=${() => this.toggleOpen(key)}>${this.t("ext_module_settings")} ${open ? "▴" : "▾"}</button>
+        ${open
+          ? html`<fp3d-editor
+              class="fp3d-ext-fields"
+              .topic=${`module:${id}`}
+              .hass=${hass}
+              .building=${this.building}
+              .canEdit=${this.canEdit}
+              .packs=${this.packs}
+              .narrow=${true}
+              @building-changed=${(e: CustomEvent<{ building: Building }>) => {
+                e.stopPropagation();
+                this.dispatchEvent(new CustomEvent("building-edit", { detail: e.detail.building, bubbles: true, composed: true }));
+              }}
+            ></fp3d-editor>`
+          : nothing}
+      </section>`;
+    });
   }
 
   /** The household's own items (#13): made, imported and exported in the item editor, editors only. */
@@ -916,6 +951,10 @@ export class Extensions extends LitElement {
         text-transform: uppercase;
         letter-spacing: 0.06em;
         color: var(--fp3d-text);
+      }
+      .fp3d-ext-fields {
+        display: block;
+        height: auto;
       }
       .fp3d-ext-season {
         display: flex;

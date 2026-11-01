@@ -258,8 +258,8 @@ export class Fp3dViewPanel extends LitElement {
     const quality = viewSetting("quality")?.read(this.env) ?? "auto";
     return html`<footer class="vp-foot">
       <div class="vp-line">
-        <button type="button" class="vp-quiet" title=${this.t("st_sec_screen")} @click=${() => this.openSettings("screen", "quality")}>${this.t("view_quality_line", { quality: this.t(`quality_${String(quality)}`) })}</button>
-        <button type="button" class="vp-link" @click=${() => this.openSettings("look")}>${this.t("view_more_settings")} ›</button>
+        <button type="button" class="vp-quiet" title=${this.t("st_sec_look")} @click=${() => this.openSettings("look", "quality")}>${this.t("view_quality_line", { quality: this.t(`quality_${String(quality)}`) })}</button>
+        <button type="button" class="vp-link" @click=${() => this.openSettings("view3d")}>${this.t("view_more_settings")} ›</button>
       </div>
       <div class="vp-line">
         <span class="vp-help">${this.t("view_home_settings")}</span>

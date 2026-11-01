@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { englishTable } from "./i18n.ts";
-import { SECTIONS } from "./settings/registry.ts";
+import { audienceOf, SECTIONS } from "./settings/registry.ts";
 
 const en = englishTable() as Record<string, string>;
 
@@ -51,8 +51,8 @@ test("the device look is “Appearance”: no text names a setting “Look” (#
   assert.deepEqual(bad.filter(([k]) => !allowed.has(k)), []);
 });
 
-test("the Settings page's This device group has Appearance and Screen and controls (#246)", () => {
-  const device = SECTIONS.filter((s) => s.group === "device").map((s) => en[s.title]);
+test("the Settings page's This device side has Appearance and Screen and controls (#246, #248)", () => {
+  const device = SECTIONS.filter((s) => audienceOf(s) === "device").map((s) => en[s.title]);
   assert.ok(device.includes("Appearance"));
   assert.ok(device.includes("Screen and controls"));
 });

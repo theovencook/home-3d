@@ -50,7 +50,7 @@ function sectionText(p: { _section: string; willUpdate(c: Map<string, unknown>):
   return flat(p.render());
 }
 
-test("every section draws a row for each of its settings, with its label and scope", () => {
+test("every section draws a row for each of its settings, with its label", () => {
   const p = page();
   const env: SettingsEnv = { building: p.building, hass: p.hass, prefs: { get: () => null, set: () => undefined }, remote: {} };
   for (const sec of liveSections(env)) {
@@ -97,9 +97,8 @@ test("every registered setting renders its own row, hidden ones included (their 
     const text = flat(p.renderRow(s, false));
     assert.ok(text.includes(`data-id=${s.id}`) || text.includes(`data-id="${s.id}"`), `${s.id} row`);
     assert.ok(text.includes(tr(s.label)), `${s.id} label`);
-    if (s.control.kind === "note") assert.doesNotMatch(text, /st-scope-/, `${s.id}: a note has no scope badge`);
-    else assert.match(text, new RegExp(`st-scope-${s.scope}`), `${s.id} scope badge`);
-    if (s.permission === "ha_admin") assert.match(text, /st-scope-admin/, `${s.id} admin badge`);
+    // no badge on every row any more (#248): the page says once who it affects
+    assert.doesNotMatch(text, /st-scope/, `${s.id}: no scope badge`);
   }
 });
 
