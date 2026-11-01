@@ -232,14 +232,17 @@ export class MultiSelect extends LitElement {
         display: inline-flex;
         align-items: center;
         gap: 2px;
-        padding: 2px 4px 2px 10px;
+        box-sizing: border-box;
+        min-height: 32px;
+        padding: 0 2px 0 10px;
         font-size: 13px;
         border-radius: 999px;
         background: color-mix(in srgb, var(--fp3d-accent) 20%, transparent);
       }
       .chip button {
-        width: 24px;
-        height: 24px;
+        position: relative;
+        width: 28px;
+        height: 28px;
         padding: 0;
         font: inherit;
         line-height: 1;
@@ -248,6 +251,11 @@ export class MultiSelect extends LitElement {
         border: 0;
         border-radius: 50%;
         cursor: pointer;
+      }
+      .chip button::after {
+        content: "";
+        position: absolute;
+        inset: -8px -4px;
       }
       .chip button:hover,
       .chip button:focus-visible {

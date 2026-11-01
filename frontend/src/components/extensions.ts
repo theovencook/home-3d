@@ -260,7 +260,7 @@ export class Extensions extends LitElement {
           class="fp3d-link fp3d-ext-setting"
           @click=${() => this.dispatchEvent(new CustomEvent("open-settings", { detail: { section: "packs", id: "pack_updates.frequency" }, bubbles: true, composed: true }))}
         >
-          ${this.t("upd_frequency")}: ${this.t(`upd_freq_${settings.frequency}`)}${settings.auto_update ? ` · ${this.t("upd_auto")}` : ""} · ⚙ ${this.t("settings")} ›
+          ${this.t("upd_frequency")}: ${this.t(`upd_freq_${settings.frequency}`)}${settings.auto_update ? ` · ${this.t("upd_auto")}` : ""} · ${this.t("settings")} ›
         </button>
         ${editor
           ? html`<button class="fp3d-btn" ?disabled=${this._checking} @click=${() => this.checkNow()}>${this._checking ? this.t("upd_checking") : this.t("upd_check_now")}</button>`
@@ -377,7 +377,7 @@ export class Extensions extends LitElement {
           : f === "fun_seasons"
             ? this.renderSeasons()
             : html`<div class="fp3d-ext-feature fp3d-ext-on">
-              <b>✓ ${this.t("fun_name_pets")}</b>
+              <b>${this.t("fun_name_pets")}</b>
               <span class="fp3d-sub">${this.t("fun_feature_pets")}</span>
               ${this.isEditor && this.building
                 ? html`${this.funSwitch(on, this.t("pets_show"), (v) => set((p) => (p.on = v)))}
@@ -454,15 +454,15 @@ export class Extensions extends LitElement {
   }
 
   /** A fun extra's switch (#248: they live here alone; Settings' search still finds them). */
-  private funSwitch(on: boolean, label: string, set: (on: boolean) => void) {
-    return html`<label class="fp3d-ext-season"><input type="checkbox" .checked=${on} @change=${(e: Event) => set((e.target as HTMLInputElement).checked)} /> ${label}</label>`;
+  private funSwitch(on: boolean, label: string, set: (on: boolean) => void, disabled = false) {
+    return html`<div class="fp3d-ext-season"><span>${label}</span><button type="button" class="fp3d-ext-sw" role="switch" aria-checked=${on} aria-label=${label} ?disabled=${disabled} @click=${() => set(!on)}></button></div>`;
   }
 
   /** Fun pack "Halloween": decorations in the furniture library, and the ghost (switched in Settings). */
   private renderHalloween() {
     const ghost = this.building?.settings.halloween?.ghost !== false;
     return html`<div class="fp3d-ext-feature fp3d-ext-on">
-      <b>✓ 🎃 ${this.t("fun_name_halloween")}</b>
+      <b>🎃 ${this.t("fun_name_halloween")}</b>
       <span class="fp3d-sub">${this.t("fun_feature_halloween")}</span>
       ${this.isEditor && this.building
         ? this.funSwitch(ghost, this.t("halloween_ghost"), (v) => this.editBuilding((b) => (b.settings.halloween = { ...(b.settings.halloween ?? {}), ghost: v })))
@@ -476,27 +476,23 @@ export class Extensions extends LitElement {
     const off = this.building?.settings.seasons ?? {};
     const eggs = this.building?.settings.easter_eggs !== false;
     return html`<div class="fp3d-ext-feature fp3d-ext-on">
-      <b>✓ 🎄 ${this.t("fun_name_seasons")}</b>
+      <b>🎄 ${this.t("fun_name_seasons")}</b>
       <span class="fp3d-sub">${this.t("fun_feature_seasons")}</span>
       ${this.isEditor && this.building
         ? SEASON_IDS.map(
-            (id) => html`<label class="fp3d-ext-season">
-              <input
-                type="checkbox"
-                .checked=${off[id] !== false && eggs}
-                ?disabled=${!eggs}
-                @change=${(e: Event) => {
-                  const on = (e.target as HTMLInputElement).checked;
+            (id) =>
+              this.funSwitch(
+                off[id] !== false && eggs,
+                `${SEASON_ICONS[id]} ${this.t(`season_name_${id}` as I18nKey)}`,
+                (on) =>
                   this.editBuilding((b) => {
                     const seasons = { ...(b.settings.seasons ?? {}) };
                     if (on) delete seasons[id];
                     else seasons[id] = false;
                     b.settings.seasons = seasons;
-                  });
-                }}
-              />
-              ${SEASON_ICONS[id]} ${this.t(`season_name_${id}` as I18nKey)}
-            </label>`,
+                  }),
+                !eggs,
+              ),
           )
         : nothing}
     </div>`;
@@ -959,9 +955,42 @@ export class Extensions extends LitElement {
       .fp3d-ext-season {
         display: flex;
         align-items: center;
-        gap: 8px;
-        min-height: 36px;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 44px;
+      }
+      .fp3d-ext-sw {
+        position: relative;
+        flex: none;
+        width: 46px;
+        height: 28px;
+        padding: 0;
+        border: 0;
+        border-radius: 999px;
+        background: var(--fp3d-line);
         cursor: pointer;
+      }
+      .fp3d-ext-sw::after {
+        content: "";
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--fp3d-muted);
+        transition: transform 0.15s;
+      }
+      .fp3d-ext-sw[aria-checked="true"] {
+        background: var(--fp3d-primary);
+      }
+      .fp3d-ext-sw[aria-checked="true"]::after {
+        transform: translateX(18px);
+        background: var(--fp3d-primary-text);
+      }
+      .fp3d-ext-sw:disabled {
+        opacity: 0.4;
+        cursor: default;
       }
       .fp3d-ext-setting {
         justify-self: start;

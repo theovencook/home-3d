@@ -114,6 +114,8 @@ export type Control =
       unit?: string | ((env: SettingsEnv) => string);
       /** An empty field is allowed and means the default (null). */
       clearable?: boolean;
+      /** What an empty field means, shown in it (a text key): "always" (#256). */
+      empty?: TextKey;
       /** A length: stored in metres, shown and typed in the plan's unit (feet and inches when imperial, #117). */
       length?: boolean;
     }
@@ -289,7 +291,7 @@ export const SECTIONS: Section[] = [
   {
     id: "household",
     group: "live",
-    icon: "bin",
+    icon: "calendar",
     title: "st_sec_household",
     hint: "st_sec_household_hint",
     cards: [
@@ -802,8 +804,8 @@ const backdropColour = (id: string, key: "color" | "color2", label: TextKey, fal
 });
 
 const SCENE: Setting[] = [
-  houseSwitch("sun_shadow", "scene", "sun", "sun_shadow", true, "sun_shadow", "sun_shadow_hint", ["sun", "arc", "shadow"]),
-  houseSwitch("sun_patches", "scene", "sun", "sun_patches", true, "sun_patches", "sun_patches_hint", ["sun", "floor", "light"]),
+  houseSwitch("sun_shadow", "scene", "sun", "sun_shadow", true, "sun_shadow", "st_sun_shadow_hint", ["sun", "arc", "shadow"]),
+  houseSwitch("sun_patches", "scene", "sun", "sun_patches", true, "sun_patches", "st_sun_patches_hint", ["sun", "floor", "light"]),
   houseSwitch("window_glow", "scene", "sun", "window_glow", true, "window_glow", "window_glow_hint", ["night", "glow", "light"]),
   houseEntity("weather_entity", "scene", "weather", "weather_entity", "weather_entity", "weather_entity_hint", (id) => id.startsWith("weather."), (env) => (env.hass ? weatherEntity(env.hass, null) : undefined), ["forecast", "rain", "snow"]),
   {
@@ -942,10 +944,10 @@ const HOUSEHOLD: Setting[] = [
     card: "bins",
     scope: "house",
     permission: "editor",
-    label: "bin_days",
+    label: "st_bin_days",
     hint: "bin_tags_hint",
     keywords: ["bin", "tag", "days", "before"],
-    control: { kind: "number", step: 1, min: 0, max: 60, clearable: true },
+    control: { kind: "number", step: 1, min: 0, max: 60, clearable: true, unit: "st_days", empty: "bin_days_always" },
     default: null,
     read: (env) => householdOf(env).bin_days ?? null,
     write: (env, v) => withPart(env.building!, "household", { bin_days: v === null ? null : clamp(Math.round(v), 0, 60) }),
@@ -1109,7 +1111,7 @@ const PACKS: Setting[] = [
   updateSetting("frequency", {
     label: "upd_frequency",
     keywords: ["packs", "updates", "github", "release", "schedule"],
-    control: { kind: "segment", options: (["off", "daily", "weekly", "monthly"] as const).map((f) => ({ value: f, label: `upd_freq_${f}` })) },
+    control: { kind: "select", options: () => (["off", "daily", "weekly", "monthly"] as const).map((f) => ({ value: f, label: `upd_freq_${f}` })) },
   }) as Setting,
   {
     id: "pack_updates.weekday",
@@ -1308,42 +1310,6 @@ export function deviceKeys(): string[] {
   return [...new Set([...SETTINGS.flatMap((s) => s.prefKeys ?? []), "clean"])];
 }
 
-/**
- * What "Reset this device's preferences" leaves alone: the lab and projection unlocks, unsaved edits of the editor
- * and the remembered home. Every other `home3d.*` key (the rows' own, and the toggles several parts of the view and
- * editor write straight to the browser) and every `fp3d-tt-*` time-travel choice goes.
- */
-export const KEEP_ON_RESET: readonly string[] = ["home3d.lab", "home3d.projection", "home3d.unsaved", "home3d.home."];
-
-/** Whether the browser key is a device preference that a reset removes. */
-export function isDevicePrefKey(key: string): boolean {
-  if (KEEP_ON_RESET.some((k) => (k.endsWith(".") ? key.startsWith(k) : key === k))) return false;
-  return key.startsWith("home3d.") || key.startsWith("fp3d-tt-");
-}
-
-/** The slice of Storage the reset needs. */
-export interface KeyStore {
-  readonly length: number;
-  key(index: number): string | null;
-  removeItem(key: string): void;
-}
-
-/** Removes every device preference from a store (the browser's local and session storage). Storage that throws is skipped. */
-export function resetDevicePrefs(...stores: KeyStore[]): void {
-  for (const store of stores) {
-    try {
-      const doomed: string[] = [];
-      for (let i = 0; i < store.length; i++) {
-        const k = store.key(i);
-        if (k !== null && isDevicePrefKey(k)) doomed.push(k);
-      }
-      for (const k of doomed) store.removeItem(k);
-    } catch {
-      // storage blocked: nothing to reset
-    }
-  }
-}
-
 export function settingById(id: string): Setting | undefined {
   return SETTINGS.find((s) => s.id === id);
 }
@@ -1398,8 +1364,12 @@ export function searchSettings(query: string, env: SettingsEnv, text: (key: Text
     if (!shown(s, env)) return false;
     const sec = sectionOf(s.section);
     const card = sec?.cards.find((c) => c.id === s.card);
-    const hay = fold([text(s.label), s.hint ? text(s.hint) : "", ...(s.keywords ?? []), sec ? text(sec.title) : "", card ? text(card.title) : "", s.id].join(" "));
-    return words.every((w) => hay.includes(w));
+    // a typed word must start a word of the name, keywords, section or card; in the hint it must be a whole word, so
+    // "clock" finds "clock" rows but not a hint that says "clockwise" (#254)
+    const split = (t: string): string[] => fold(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    const names = split([text(s.label), ...(s.keywords ?? []), sec ? text(sec.title) : "", card ? text(card.title) : "", s.id].join(" "));
+    const hint = new Set(s.hint ? split(text(s.hint)) : []);
+    return words.every((w) => names.some((h) => h.startsWith(w)) || hint.has(w));
   });
 }
 

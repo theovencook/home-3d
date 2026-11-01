@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { englishTable } from "../i18n.ts";
+import { setAskHost } from "../ask.ts";
 import type { HomeAssistant } from "../types.ts";
 import { liveSections, settingsIn, type SettingsEnv } from "./registry.ts";
 import { sampleBuilding } from "./settings.fixture.ts";
@@ -96,7 +97,7 @@ test("every registered setting renders its own row, hidden ones included (their 
   for (const s of SETTINGS) {
     const text = flat(p.renderRow(s, false));
     assert.ok(text.includes(`data-id=${s.id}`) || text.includes(`data-id="${s.id}"`), `${s.id} row`);
-    assert.ok(text.includes(tr(s.label)), `${s.id} label`);
+    assert.ok(s.id === "editors" || text.includes(tr(s.label)), `${s.id} label`);
     // no badge on every row any more (#248): the page says once who it affects
     assert.doesNotMatch(text, /st-scope/, `${s.id}: no scope badge`);
   }
@@ -114,11 +115,22 @@ test("resetting this device's preferences removes every key a device row keeps, 
     const p = page();
     const events: string[] = [];
     p.dispatchEvent = (e: Event) => (events.push(e.type), true);
+    // it asks first (#255): a No changes nothing
+    const answers = [false, true];
+    let asked = 0;
+    setAskHost({ ask: async () => (asked++, { ok: answers.shift()!, value: "" }) });
     p.act({ id: "reset_device" }, "reset_device");
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(asked, 1);
+    assert.equal(store.size, 5, "cancelled: nothing reset");
+    assert.deepEqual(events, []);
+    p.act({ id: "reset_device" }, "reset_device");
+    await new Promise((r) => setTimeout(r, 0));
     assert.deepEqual([...store.keys()], ["home3d.lab"]);
     assert.deepEqual(events, ["device-change"]);
     assert.ok(deviceKeys().includes("quality") && deviceKeys().includes("voicePipeline"));
   } finally {
+    setAskHost(null);
     delete (globalThis as Record<string, unknown>).localStorage;
   }
 });

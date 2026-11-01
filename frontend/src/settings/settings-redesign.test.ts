@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { englishTable } from "../i18n.ts";
 import { clearModules, registerModule, type NeonModule } from "../modules.ts";
 import type { HomeAssistant } from "../types.ts";
-import { audienceOf, GROUPS, liveSections, parseSettingsHash, searchSettings, SECTIONS, SETTINGS, settingById, type SettingsEnv } from "./registry.ts";
+import { audienceOf, GROUPS, liveSections, parseSettingsHash, searchSettings, SECTIONS, sectionOf, SETTINGS, settingById, type SettingsEnv } from "./registry.ts";
 import { SETTINGS_ICONS } from "./settings-icons.ts";
 import { sampleBuilding, sampleHass } from "./settings.fixture.ts";
 
@@ -97,8 +97,17 @@ test("the fun switches left the menu for the Extensions tab, but search still fi
   assert.ok(SECTIONS.find((s) => s.id === "fun")?.hidden);
   assert.ok(liveSections(env()).some((s) => s.id === "fun"), "its page still opens from a link");
   assert.ok(searchSettings("ghost", env(), t).some((s) => s.id === "halloween.ghost"));
-  const text = show(page(), "fun");
-  assert.ok(text.includes(t("st_fun_moved")) && text.includes(t("st_open_extensions")));
+  // the old link goes to the Extensions tab and does not open a second copy of the switches (#256)
+  const p = page();
+  p.section = "fun";
+  p.willUpdate(new Map([["section", null]]));
+  assert.ok(p.events.some((e: { detail: { action?: string } }) => e.detail.action === "extensions"));
+  assert.notEqual(p._section, "fun");
+  // an unknown name opens the menu, not the first page
+  const q = page();
+  q.section = "bogus";
+  q.willUpdate(new Map([["section", null]]));
+  assert.equal(q._drill, false);
 });
 
 test("every section has a line icon of the one family, no glyphs, and the page draws no glyph icons", () => {
@@ -114,9 +123,9 @@ test("every section has a line icon of the one family, no glyphs, and the page d
 
 test("search: the arrow keys move through the hits, Enter opens the one marked at its row, Escape clears", () => {
   const p = page();
-  p._query = "clock";
+  p._query = "sun";
   p.willUpdate(new Map());
-  const hits = p.hits("clock");
+  const hits = p.hits("sun");
   assert.ok(hits.length > 2);
   let text = flat(p.render());
   assert.match(text, /id=st-hit-0/);
@@ -174,6 +183,7 @@ test("one save line says who the change was saved for, read out politely", () =>
   p.apply(settingById("lock_plan")!, sampleBuilding());
   p.saveState = "saving";
   assert.ok(show(p, "screen").includes(t("st_saving")), "the line follows the last change, whatever the page");
+  p._section = "general";
   p.apply(settingById("stats")!, undefined);
   assert.ok(show(p, "general").includes(t("st_saved_device")));
   assert.equal((text.match(/st-save /g) ?? []).length, 1, "one save line");
@@ -296,4 +306,108 @@ test("the fun extras' switches sit on the Extensions tab alone (no link back to 
   const code = src("../components/extensions.ts");
   assert.ok(!code.includes('section: "fun"'), "no Settings link for the fun switches");
   assert.match(code, /funSwitch\(this\.building\.settings\.easter_eggs/);
+});
+
+// ---- search on a phone, word starts, scope once (#254)
+
+test("search keeps its box: the page carries the search state so the phone layout shows the box above the results", () => {
+  const p = page();
+  p._query = "c";
+  p.willUpdate(new Map());
+  assert.match(flat(p.render()), /st-drill\s+st-query/);
+  p._query = "";
+  assert.doesNotMatch(flat(p.render()), /st-query/);
+  const code = src("./settings-page.ts");
+  assert.match(code, /\.st-drill\.st-query \.st-nav \{\s*display: flex/);
+  assert.match(code, /\.st-drill\.st-query \.st-nav > :not\(\.st-search\) \{\s*display: none/);
+});
+
+test("search matches word starts, and a hint only by whole words", () => {
+  const ids = (q: string) => searchSettings(q, env(), t).map((s) => s.id);
+  assert.ok(ids("cloc").length > 0, "a word start matches");
+  assert.equal(ids("lock").filter((id) => settingById(id)!.label.includes("clock")).length, 0, "no match inside a word");
+  const north = SETTINGS.find((s) => s.hint && /clockwise/i.test(t(s.hint)));
+  if (north) assert.ok(!ids("clock").includes(north.id), "a hint that says clockwise is not a clock hit");
+});
+
+test("a search hit group says whose a row is once per run of the same answer", () => {
+  const p = page();
+  p._query = "sun";
+  p.willUpdate(new Map());
+  const text = flat(p.render());
+  const rows = (text.match(/class="st-row /g) ?? []).length;
+  const said = (text.match(/class="st-rule"/g) ?? []).length;
+  assert.ok(rows > 1 && said < rows, `${said} scope lines for ${rows} rows`);
+});
+
+// ---- the save line, the reset note and where people start (#255)
+
+test("the save line names the page's own side, and a change only on the page it was made on", () => {
+  const p = page();
+  p._saved = "device";
+  p._savedOn = "look";
+  assert.ok(show(p, "household").includes(t("st_saved_home")), "a whole-home page does not say 'this device'");
+  assert.ok(show(p, "look").includes(t("st_saved_device")));
+  p._savedOn = "household";
+  p._saved = "home";
+  assert.ok(show(p, "look").includes(t("st_saved_device")), "a device page keeps its own side");
+});
+
+test("the reset note and the search clear when the side or page changes", () => {
+  const p = page();
+  p._note = "x";
+  p.showSide("device");
+  assert.equal(p._note, null);
+  p._note = "x";
+  p.renderRoot = {};
+  p.open("look");
+  assert.equal(p._note, null);
+});
+
+test("someone who cannot change the home starts on This device", () => {
+  const viewer = page();
+  viewer.canEdit = false;
+  viewer.hass = { ...viewer.hass, user: { id: "u", name: "v", is_admin: false } };
+  viewer.willUpdate(new Map([["hass", null]]));
+  assert.equal(viewer._audience, "device");
+  assert.equal(audienceOf(sectionOf(viewer._section)!), "device");
+  const editor = page();
+  editor.willUpdate(new Map([["hass", null]]));
+  assert.equal(editor._audience, "home");
+  const linked = page();
+  linked.canEdit = false;
+  linked.section = "household";
+  linked.willUpdate(new Map([["hass", null], ["section", null]]));
+  assert.equal(linked._section, "household", "a link still opens its page");
+});
+
+// ---- layout and wording polish (#256)
+
+test("the clock's details show only while the clock does", () => {
+  const rows = ["clock_hours", "clock_style", "clock_seconds", "clock_date"];
+  const on = (v: string | null): SettingsEnv => ({ ...env(), prefs: { get: (k: string) => (k === "clock" ? v : null), set: () => undefined } });
+  for (const id of rows) {
+    assert.equal(settingById(id)!.visible!(on(null)), false, id);
+    assert.equal(settingById(id)!.visible!(on("off")), false, id);
+    assert.equal(settingById(id)!.visible!(on("tr")), true, id);
+  }
+});
+
+test("Household has a calendar icon, the bin days box says always and days, wide controls stack, chips have big targets", () => {
+  assert.equal(sectionOf("household")!.icon, "calendar");
+  const days = settingById("household.bin_days")!.control as { empty?: string; unit?: string };
+  assert.equal(days.empty, "bin_days_always");
+  assert.equal(days.unit, "st_days");
+  assert.match(src("./settings-page.ts"), /c\.kind === "segment" && this\.options\(c\)\.length > 2/);
+  const chips = src("../components/multi-select.ts");
+  assert.match(chips, /\.chip button::after \{\s*content: ""[^}]*inset: -8px -4px/);
+  assert.match(chips, /min-height: 32px/);
+  assert.equal(settingById("pack_updates.frequency")!.control.kind, "select");
+  assert.ok(!t("st_sun_shadow_hint").includes("sun.sun") && !t("st_sun_patches_hint").includes("sun.sun") && !t("st_weather_hint").includes("sun.sun"));
+  assert.equal(t("editors_reset"), "Let every admin edit");
+});
+
+test("who can edit draws one heading: the row's own label is hidden", () => {
+  const text = show(page(), "access");
+  assert.doesNotMatch(text, /class="st-lbl"/);
 });

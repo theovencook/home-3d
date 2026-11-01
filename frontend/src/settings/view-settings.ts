@@ -110,10 +110,12 @@ export const LOOK: Setting[] = [
     write: (env, v) => env.prefs.set("accent", v),
   } as Setting<string | null>,
   deviceChoice("clock", "look", "clock", "clock", ["off", "tl", "tr", "bl", "br"], "off", "st_clock", opts([["off", "st_clock_off"], ["tl", "st_clock_tl"], ["tr", "st_clock_tr"], ["bl", "st_clock_bl"], ["br", "st_clock_br"]]), undefined, ["time", "clock", "corner"], "select"),
+  ...[
   deviceChoice("clock_hours", "look", "clock", "clock_hours", ["auto", "12", "24"], "auto", "st_clock_hours", opts([["auto", "clock_hours_auto"], ["12", "clock_hours_12"], ["24", "clock_hours_24"]]), undefined, ["time", "clock", "12", "24", "am", "pm"]),
   deviceChoice("clock_style", "look", "clock", "clock_style", ["digital", "analogue"], "digital", "st_clock_face", opts([["digital", "clock_digital"], ["analogue", "clock_analogue"]]), undefined, ["time", "clock", "dial", "hands", "face"]),
   deviceSwitch("clock_seconds", "look", "clock", "clock_seconds", false, "st_clock_seconds", undefined, ["time", "clock", "seconds"]),
   deviceSwitch("clock_date", "look", "clock", "clock_date", true, "st_clock_date", undefined, ["time", "clock", "date", "day"]),
+  ].map((s): Setting => ({ ...s, visible: (env) => ["tl", "tr", "bl", "br"].includes(env.prefs.get("clock") ?? "") })), // the clock's details only while it shows (#256)
   deviceChoice("markers", "view3d", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), "markers_important_hint", ["pins", "icons", "symbols", "devices", "markers"], "select"),
   deviceChoice("pinSize", "view3d", "markers", "pinSize", ["small", "normal", "large"], "normal", "pin_size", opts([["small", "pin_size_small"], ["normal", "pin_size_normal"], ["large", "pin_size_large"]]), undefined, ["pins", "icons", "symbols", "size"]),
   {
@@ -139,7 +141,7 @@ export const LOOK: Setting[] = [
   deviceChoice("heat", "view3d", "show", "heat", ["none", "temperature", "humidity", "co2", "values"], "none", "st_heat", opts([["none", "heat_nothing"], ["temperature", "heat_temperature"], ["humidity", "heat_humidity"], ["co2", "heat_co2"], ["values", "heat_values"]]), undefined, ["heatmap", "temperature", "humidity", "co2", "colour"], "select"),
   deviceSwitch("room_names", "view3d", "show", "room_names", true, "st_room_names", undefined, ["labels", "names", "rooms"]),
   deviceSwitch("trail", "view3d", "show", "trail", false, "st_trail", "trail_hint", ["motion", "trail", "history"]),
-  deviceSwitch("weather", "view3d", "show", "weather", true, "st_weather", "weather_hint", ["rain", "snow", "weather"]),
+  deviceSwitch("weather", "view3d", "show", "weather", true, "st_weather", "st_weather_hint", ["rain", "snow", "weather"]),
 ];
 
 /**
