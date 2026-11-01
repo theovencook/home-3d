@@ -109,6 +109,7 @@ const en = {
   align_bottom: "Align bottom edges",
   distribute_across: "Space evenly across",
   distribute_down: "Space evenly down",
+  align_group: "Line up",
   nav_zoom_in: "Zoom in",
   nav_zoom_out: "Zoom out",
   fit_hint: "Bring the whole floor plan of the floor into view (with the garden when outside)",
@@ -2968,6 +2969,7 @@ const en = {
   hint_wall_pick_touch: "Wall view: tap into the room (or near a wall)",
   hint_kerb_pick_touch: "Kerb spot: tap where the bin stands on collection day",
   fixed_drag_hint_touch: "🔒 Fixed – release it first to move it (lock in the form)",
+  multi_hint_on_touch: "Tap items to add or remove them, or drag over empty ground to draw a frame. Move, turn or copy them together, or join them into a block.",
   multi_hint_touch: "Turn on “Select several” to tap items or draw a frame over empty ground. Move, turn or copy them together, or join them into a block.",
   // the header, the floor bar's Rooms picker, Edit room / Edit floor and the editor's toolbar (#249)
   editor_short: "Edit",

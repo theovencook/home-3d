@@ -21,9 +21,24 @@ const TOOLS: [AlignOp, I18nKey, string][] = [
 ];
 
 export class AlignTools extends HTMLElement {
-  host: Fp3dEditor | null = null;
+  // Accessors, not class fields: the editor sets these on the bare element before this bundle has defined it, and a
+  // field would overwrite that value on upgrade (#261).
+  private _host: Fp3dEditor | null = null;
   private n = 0;
   private locked = false;
+
+  get host(): Fp3dEditor | null {
+    return this._host;
+  }
+
+  set host(v: Fp3dEditor | null) {
+    this._host = v;
+    this.draw();
+  }
+
+  get count(): number {
+    return this.n;
+  }
 
   set count(v: number) {
     if (v === this.n) return;
@@ -38,6 +53,13 @@ export class AlignTools extends HTMLElement {
   }
 
   connectedCallback(): void {
+    // Properties set before the upgrade sit on the element itself and hide the accessors above: take them back.
+    for (const k of ["host", "count", "fixed"] as const) {
+      if (!Object.prototype.hasOwnProperty.call(this, k)) continue;
+      const v = (this as unknown as Record<string, unknown>)[k];
+      delete (this as unknown as Record<string, unknown>)[k];
+      (this as unknown as Record<string, unknown>)[k] = v;
+    }
     this.draw();
   }
 
@@ -63,6 +85,10 @@ export class AlignTools extends HTMLElement {
     this.className = "fp3d-align";
     this.setAttribute("role", "group");
     this.setAttribute("aria-label", t("align_title"));
+    const head = document.createElement("span");
+    head.className = "fp3d-align-head";
+    head.textContent = t("align_group");
+    this.append(head);
     for (const [op, key, icon] of TOOLS) {
       if (this.n < needs(op)) continue;
       const b = document.createElement("button");
@@ -71,6 +97,10 @@ export class AlignTools extends HTMLElement {
       b.title = b.ariaLabel = t(key);
       b.disabled = this.locked;
       b.innerHTML = icon;
+      const txt = document.createElement("span");
+      txt.className = "fp3d-align-txt";
+      txt.textContent = t(key);
+      b.append(txt);
       b.addEventListener("click", () => this.run(op));
       this.append(b);
     }

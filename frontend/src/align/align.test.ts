@@ -90,3 +90,17 @@ test("the multi-selection panel offers the tools for a plain selection, not a jo
   assert.match(src, /\$\{block \? nothing : this\.renderAlignTools\(items\.length, fixed \|\| some\)\}/);
   assert.match(src, /<fp3d-align \.host=\$\{this\} \.count=\$\{count\} \.fixed=\$\{fixed\}>/);
 });
+
+test("values set before the bundle defined the element are kept on upgrade, so the first multi-select has its buttons (#261)", async () => {
+  const { AlignTools } = await import("./tools.ts");
+  // the editor sets .host and .count on the bare <fp3d-align> before this lazy bundle has run: those land on the element
+  // itself and must be taken over by the accessors, not lost to a class field or left shadowing them
+  const el = Object.create(AlignTools.prototype) as { host: unknown; count: number; connectedCallback(): void };
+  const host = { t: (k: string) => k };
+  Object.defineProperty(el, "host", { value: host, writable: true, configurable: true, enumerable: true });
+  Object.defineProperty(el, "count", { value: 3, writable: true, configurable: true, enumerable: true });
+  el.connectedCallback();
+  assert.equal(Object.prototype.hasOwnProperty.call(el, "host"), false, "the accessor is not shadowed");
+  assert.equal(el.host, host);
+  assert.equal(el.count, 3);
+});

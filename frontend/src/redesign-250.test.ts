@@ -407,3 +407,17 @@ test("the phone bar is a lazy chunk of its own that borrows Lit from the editor;
     assert.ok(de[k], `de: ${k}`);
   }
 });
+
+test("with several items chosen the sheet says how many, and the hint matches the Select several switch (#261)", () => {
+  const el = editor();
+  el.floor.furniture.push({ id: "lamp2", type: "lamp_floor", x: 3, z: 1, rotation: 0, w: 0.4, d: 0.4, h: 1.6, variant: null, entity: null, power: null } as never);
+  el.selectItem("furniture", "lamp");
+  el._tool = "select";
+  el._multi = ["lamp", "lamp2"];
+  el._multiMode = true;
+  el._sheet = "peek";
+  el.renderAlignTools = () => nothing; // the lazy bundle does not exist under test
+  const head = flat(el.renderSheet(el.floor));
+  assert.match(head, /aria-label=2 items selected/);
+  assert.doesNotMatch(head.slice(0, head.indexOf("fp3d-sheet-body")), /Furniture/, "no single item's name in the header");
+});

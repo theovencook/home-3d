@@ -129,6 +129,9 @@ export class PhonePart {
   sheetHead(this: Fp3dEditor, floor: Floor | undefined): { title: string; kind: string; sub: string } {
     const f = this.furnitureItem;
     const room = this.room;
+    // several items chosen: the sheet is about all of them, not about the one the panel happens to hold (#261)
+    const many = this.selection().length;
+    if (many > 1 && f) return { title: this._multi.length ? this.t("multi_title", { n: many }) : `▣ ${this.t("block_title")}`, kind: this._multi.length ? "" : String(many), sub: "" };
     if (f) return { title: furnitureName(this.hass, f.type), kind: this.t("furniture"), sub: "" };
     if (this.opening) return { title: this.t("sheet_opening"), kind: "", sub: "" };
     if (this.device) {
