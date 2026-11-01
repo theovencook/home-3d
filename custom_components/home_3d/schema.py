@@ -55,6 +55,18 @@ def _drop_safety_alerts(entries: list[dict]) -> list[dict]:
     return [e for e in entries if e["kind"] not in SAFETY_ALERTS]
 
 
+# how a room's panel lists its entities (#229): pinned ones on top, the order of the rows and of the groups; ids of
+# entities no longer in the room are ignored by the panel, so they need no cleaning up here
+_ENTITY_IDS = [vol.All(str, vol.Length(max=255))]
+PANEL_LAYOUT_SCHEMA = vol.Any(
+    None,
+    {
+        vol.Optional("pinned"): vol.All(_ENTITY_IDS, vol.Length(max=100)),
+        vol.Optional("order"): vol.All(_ENTITY_IDS, vol.Length(max=MAX_HIDDEN)),
+        vol.Optional("groups"): vol.All([vol.All(str, vol.Length(max=32))], vol.Length(max=16)),
+    },
+)
+
 START_VIEW_SCHEMA = vol.Schema(
     {
         # the camera may have turned round several times: the angle counts once round (#416)
@@ -106,6 +118,8 @@ ROOM_SCHEMA = vol.Schema(
         vol.Optional("no_state", default=list): vol.All(
             [vol.All(str, vol.Length(max=255))], vol.Length(max=MAX_HIDDEN)
         ),
+        # how the room panel lists them (#229)
+        vol.Optional("panel_layout"): PANEL_LAYOUT_SCHEMA,
         # split points on each edge (metres from the edge's start) that cut the wall into parts of their own
         vol.Optional("wall_splits"): vol.All(
             [vol.Any(None, vol.All([vol.All(vol.Coerce(float), vol.Range(min=0.05, max=200))], vol.Length(max=16)))],
@@ -676,6 +690,7 @@ OUTDOOR_SCHEMA = vol.Schema(
         vol.Optional("panel"): vol.All([vol.All(str, vol.Length(max=255))], vol.Length(max=100)),
         vol.Optional("hidden"): vol.All([vol.All(str, vol.Length(max=255))], vol.Length(max=MAX_HIDDEN)),
         vol.Optional("no_state"): vol.All([vol.All(str, vol.Length(max=255))], vol.Length(max=MAX_HIDDEN)),
+        vol.Optional("panel_layout"): PANEL_LAYOUT_SCHEMA,
         # a module's own data for this area
         vol.Optional("mods"): _MODULE_DATA,
     },

@@ -26,6 +26,20 @@ export interface RoomLive {
   motion?: EntityRef;
 }
 
+/**
+ * How a room's panel lists its entities (#229), chosen by an editor for every viewer. Entity ids that are no longer in
+ * the room (renamed or removed) are ignored where the panel is drawn; entities not named here keep the usual order
+ * after the named ones.
+ */
+export interface PanelLayout {
+  /** Entities shown in a "Pinned" section at the top of the panel, in this order. */
+  pinned?: string[];
+  /** The order of the rows within their group (lights, covers …). */
+  order?: string[];
+  /** The order of the groups ("lights", "covers", "climate", "media", "switches", "cameras", "sensors", "scenes"). */
+  groups?: string[];
+}
+
 export interface Room {
   /** An outdoor area acting as a room (made by outdoorZones, never stored among the rooms). */
   outdoor?: boolean;
@@ -48,6 +62,8 @@ export interface Room {
   hidden?: string[];
   /** Entities whose state text the room panel leaves out (a cover that only reports "unknown", D154). */
   no_state?: string[];
+  /** How the room panel lists its entities (#229): pinned ones on top, the order of the rows and of the groups. */
+  panel_layout?: PanelLayout | null;
   /**
    * Height of the wall on each edge (index = edge points[i] -> points[i + 1]); null = full floor height, 0 = no
    * wall. An edge that other rooms split into parts may carry a list instead: one height per part, in order.
@@ -930,7 +946,7 @@ export function outdoorStanding(type: OutdoorType): boolean {
 export function outdoorZones(floor: Floor): Room[] {
   return (floor.outdoor ?? [])
     .filter((a) => a.area_id && a.points.length >= 3 && !outdoorStanding(a.type))
-    .map((a) => ({ id: a.id, name: (a.name ?? "").trim(), area_id: a.area_id ?? null, points: a.points, floor_material: "wood", outdoor: true, panel: a.panel, hidden: a.hidden, no_state: a.no_state }));
+    .map((a) => ({ id: a.id, name: (a.name ?? "").trim(), area_id: a.area_id ?? null, points: a.points, floor_material: "wood", outdoor: true, panel: a.panel, hidden: a.hidden, no_state: a.no_state, panel_layout: a.panel_layout }));
 }
 
 /** The rooms of a floor and its outdoor areas that act as rooms. */
@@ -1072,6 +1088,7 @@ export interface OutdoorArea {
   panel?: string[];
   hidden?: string[];
   no_state?: string[];
+  panel_layout?: PanelLayout | null;
 }
 
 /** Pool Pro: the entities of a pool; a role left empty is searched by name ("pool"), "none" switches it off. */

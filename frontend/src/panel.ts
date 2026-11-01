@@ -1467,6 +1467,8 @@ export class Floorplan3dPanel extends LitElement {
               .hass=${hass}
               ?readOnly=${tt}
               ?noLook=${this._plan2d}
+              ?canEdit=${this.canEdit && !this._tablet}
+              @plan-change=${this.onPlanChange}
               .room=${b.floors.flatMap((f) => zonesOf(f)).find((r) => r.id === this._roomId) ?? null}
               .floor=${b.floors.find((f) => zonesOf(f).some((r) => r.id === this._roomId)) ?? null}
               .building=${b}

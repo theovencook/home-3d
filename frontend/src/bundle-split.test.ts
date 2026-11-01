@@ -51,6 +51,13 @@ test("the main bundle and what it imports carry neither the 3D view nor walking;
   assert.ok(all.has("src/components/view3d.ts") && all.has("src/viewer/walk.ts"), "the lazy chunks are built");
 });
 
+test("the room panel's 'Edit list' mode is a lazy chunk, not loaded on every page (#229)", async () => {
+  const m = await meta("src/main.ts", true);
+  assert.ok(staticInputs(m).has("src/components/room-panel.ts"));
+  assert.ok(!staticInputs(m).has("src/components/listedit.ts"), "components/listedit.ts is loaded on every page");
+  assert.ok(Object.values(m.outputs).some((o) => "src/components/listedit.ts" in o.inputs), "the lazy chunk is built");
+});
+
 test("the 3D bundle does not carry walking through the house (#179)", async () => {
   const m = await meta("src/viewer/viewer3d.ts", false);
   const inputs = new Set(Object.values(m.outputs).flatMap((o) => Object.keys(o.inputs)));
