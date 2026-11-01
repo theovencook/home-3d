@@ -355,7 +355,7 @@ export class SettingsPage extends LitElement {
     const side = this._audience;
     const other: Audience = side === "home" ? "device" : "home";
     const cursor = hits?.length ? Math.min(this._cursor, hits.length - 1) : -1;
-    return html`<div class="st ${this._drill || query ? "st-drill" : ""}">
+    return html`<div class="st ${this._drill || query ? "st-drill" : ""} ${query ? "st-query" : ""}">
       <nav class="st-nav" aria-label=${this.tr("st_title")}>
         ${this.renderBackTo()}
         <div class="st-sides" role="group" aria-label=${this.tr("st_audience")}>
@@ -485,7 +485,11 @@ export class SettingsPage extends LitElement {
           const sec = sectionOf(list[0].section)!;
           return html`<section class="st-card">
             <h3><button class="st-link" @click=${() => this.open(sec.id)}>${icon(sec.icon, true)} ${this.tr(sec.title)} ›</button></h3>
-            ${list.map((s) => this.renderRow(s, true, i++, cursor))}
+            ${list.map((s, n) => {
+              // whose a hit is, said once per run of the same answer (#254), not on every row
+              const same = n > 0 && this.rule(s, true, undefined as never) === this.rule(list[n - 1], true, undefined as never);
+              return this.renderRow(s, true, i++, cursor, undefined, !same);
+            })}
           </section>`;
         })}
       </div>`;
@@ -528,11 +532,11 @@ export class SettingsPage extends LitElement {
       })}`;
   }
 
-  private renderRow(s: Setting, hit: boolean, index = -1, cursor = -1, page = { side: audienceOf(sectionOf(s.section)!), install: false, admin: false }) {
+  private renderRow(s: Setting, hit: boolean, index = -1, cursor = -1, page = { side: audienceOf(sectionOf(s.section)!), install: false, admin: false }, showRule = true) {
     const may = mayChange(s, this.viewer);
     // the start view's two buttons and its state line go under the label, so the label keeps its width (#246)
     const wide = s.control.kind === "embed" || s.control.kind === "list" || s.control.kind === "checks" || s.control.kind === "entity" || (s.control.kind === "action" && s.control.action === "start_view");
-    const rule = this.rule(s, hit, page);
+    const rule = showRule ? this.rule(s, hit, page) : null;
     return html`<div
       class="st-row st-k-${s.control.kind} ${s.hint || rule ? "" : "st-nohint"} ${wide ? "st-row-wide" : ""} ${(hit && index === cursor) || this._flash === s.id ? "st-hit" : ""} ${hit && index === cursor ? "st-active" : ""}"
       data-id=${s.id}
@@ -1258,6 +1262,14 @@ export class SettingsPage extends LitElement {
           border-right: 0;
         }
         .st-drill .st-nav {
+          display: none;
+        }
+        /* a search in progress keeps its box on screen above the results (#254) */
+        .st-drill.st-query .st-nav {
+          display: flex;
+          padding-bottom: 0;
+        }
+        .st-drill.st-query .st-nav > :not(.st-search) {
           display: none;
         }
         .st:not(.st-drill) .st-main {

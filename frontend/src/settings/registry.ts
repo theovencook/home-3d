@@ -1398,8 +1398,12 @@ export function searchSettings(query: string, env: SettingsEnv, text: (key: Text
     if (!shown(s, env)) return false;
     const sec = sectionOf(s.section);
     const card = sec?.cards.find((c) => c.id === s.card);
-    const hay = fold([text(s.label), s.hint ? text(s.hint) : "", ...(s.keywords ?? []), sec ? text(sec.title) : "", card ? text(card.title) : "", s.id].join(" "));
-    return words.every((w) => hay.includes(w));
+    // a typed word must start a word of the name, keywords, section or card; in the hint it must be a whole word, so
+    // "clock" finds "clock" rows but not a hint that says "clockwise" (#254)
+    const split = (t: string): string[] => fold(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    const names = split([text(s.label), ...(s.keywords ?? []), sec ? text(sec.title) : "", card ? text(card.title) : "", s.id].join(" "));
+    const hint = new Set(s.hint ? split(text(s.hint)) : []);
+    return words.every((w) => names.some((h) => h.startsWith(w)) || hint.has(w));
   });
 }
 

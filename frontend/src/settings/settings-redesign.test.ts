@@ -297,3 +297,35 @@ test("the fun extras' switches sit on the Extensions tab alone (no link back to 
   assert.ok(!code.includes('section: "fun"'), "no Settings link for the fun switches");
   assert.match(code, /funSwitch\(this\.building\.settings\.easter_eggs/);
 });
+
+// ---- search on a phone, word starts, scope once (#254)
+
+test("search keeps its box: the page carries the search state so the phone layout shows the box above the results", () => {
+  const p = page();
+  p._query = "c";
+  p.willUpdate(new Map());
+  assert.match(flat(p.render()), /st-drill\s+st-query/);
+  p._query = "";
+  assert.doesNotMatch(flat(p.render()), /st-query/);
+  const code = src("./settings-page.ts");
+  assert.match(code, /\.st-drill\.st-query \.st-nav \{\s*display: flex/);
+  assert.match(code, /\.st-drill\.st-query \.st-nav > :not\(\.st-search\) \{\s*display: none/);
+});
+
+test("search matches word starts, and a hint only by whole words", () => {
+  const ids = (q: string) => searchSettings(q, env(), t).map((s) => s.id);
+  assert.ok(ids("cloc").length > 0, "a word start matches");
+  assert.equal(ids("lock").filter((id) => settingById(id)!.label.includes("clock")).length, 0, "no match inside a word");
+  const north = SETTINGS.find((s) => s.hint && /clockwise/i.test(t(s.hint)));
+  if (north) assert.ok(!ids("clock").includes(north.id), "a hint that says clockwise is not a clock hit");
+});
+
+test("a search hit group says whose a row is once per run of the same answer", () => {
+  const p = page();
+  p._query = "clock";
+  p.willUpdate(new Map());
+  const text = flat(p.render());
+  const rows = (text.match(/class="st-row /g) ?? []).length;
+  const said = (text.match(/class="st-rule"/g) ?? []).length;
+  assert.ok(rows > 1 && said < rows, `${said} scope lines for ${rows} rows`);
+});
