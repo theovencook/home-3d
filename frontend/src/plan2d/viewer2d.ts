@@ -10,6 +10,7 @@ import { generateWalls, type Wall } from "../geometry/walls.ts";
 import { centroid, type Building, type Floor, type StartView, type Vec2 } from "../model.ts";
 import { setPacks, setPlanRecipes } from "../packs.ts";
 import type { OpeningState } from "../viewer/openings.ts";
+import { pinsShown, readPinZoom } from "../plan-pins.ts";
 import { lowEndDevice } from "../viewer/pace.ts";
 import type { DeviceMarker, FlowPiece, ScreenState, Theme, ViewerOptions } from "../viewer/viewer3d.ts";
 import type { ViewerSurface } from "../viewer-surface.ts";
@@ -50,6 +51,8 @@ export class Plan2dViewer implements ViewerSurface {
   private anchorCb: AnchorCallback = null;
   private anchors: Anchors = [];
   private view: PlanView = { k: 40, tx: 0, ty: 0 };
+  /** The zoom (px per metre) from which pins show, this device's preference (#220); read at every draw. */
+  private pinCut = readPinZoom();
   private inset = 0;
   private size = { w: 0, h: 0 };
   /** What covers the plan's lower edge (the bottom bar, time travel), measured by an empty probe element (#91). */
@@ -372,6 +375,9 @@ export class Plan2dViewer implements ViewerSurface {
     s.setProperty("--k", String(v.k));
     s.setProperty("--tx", `${v.tx}px`);
     s.setProperty("--ty", `${v.ty}px`);
+    // zoomed far out the pins would cover each other and the rooms (#220): they hide, except those of the chosen room,
+    // the ones set to always show and the one flashing; zooming in brings them back
+    this.layer.classList.toggle("fp3d-p2d-far", !pinsShown(v.k, this.pinCut));
     this.placeAnchors();
   }
 
@@ -408,6 +414,11 @@ export class Plan2dViewer implements ViewerSurface {
     const openings = planOpenings(floor, { exterior: b.settings.wall_exterior, interior: b.settings.wall_interior }, this.openingTargets, this.openingStates, walls);
     const flows = flowLines(this.flows, floor.id);
     const markers = planMarkers(this.devices, floor.id);
+    const cut = readPinZoom();
+    if (cut !== this.pinCut) {
+      this.pinCut = cut;
+      this.layer.classList.toggle("fp3d-p2d-far", !pinsShown(this.view.k, cut));
+    }
     const now = performance.now();
     const tint = (id: string) => {
       const c = this.roomTint?.get(id);
@@ -748,5 +759,6 @@ export const PLAN2D_CSS = `
   font: 500 11px var(--fp3d-font, sans-serif);
 }
 .fp3d-p2d-pin { pointer-events: auto; }
+.fp3d-p2d-far .fp3d-p2d-pin:not(.fp3d-dev-full):not(.fp3d-p2d-flash) { display: none; }
 .fp3d-p2d-flash { outline: 3px solid var(--fp3d-accent); outline-offset: 3px; }
 `;

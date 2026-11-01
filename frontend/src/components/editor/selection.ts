@@ -8,6 +8,7 @@ import { furnitureFootprint } from "../../model.ts";
 import { copyItems, pasteItems, withKeys, type ItemClip } from "../../clipboard.ts";
 import { isFixed, uid, type Floor, type Vec2 } from "../../model.ts";
 import { askConfirm, tell } from "../../ask.ts";
+import { loadAlign } from "../../load-align.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { type FixKind, round } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
@@ -466,8 +467,15 @@ export class SelectionPart {
         <button class="fp3d-btn ${some ? "fp3d-primary" : ""}" title=${withKeys(this.t(fixed || some ? "unfix" : "fix"), ["L"])} @click=${() => this.lockSelection(!fixed && !some)}>${fixed ? `🔓 ${this.t("unfix")}` : some ? `🔓 ${this.t("unfix_all")}` : `🔒 ${this.t("fix")}`}</button>
         <button class="fp3d-btn fp3d-danger" title=${withKeys(this.t("delete"), ["Del"])} @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
       </div>
+      ${block ? nothing : this.renderAlignTools(items.length, fixed || some)}
       ${this.renderMultiToggle()}
     </section>`;
+  }
+
+  /** Align and distribute buttons (#235): a bundle of their own, loaded the first time several items are chosen. */
+  renderAlignTools(this: Fp3dEditor, count: number, fixed: boolean) {
+    void loadAlign();
+    return html`<fp3d-align .host=${this} .count=${count} .fixed=${fixed}></fp3d-align>`;
   }
 
   /** Touch has no shift key: this switch makes taps add items and a drag on empty ground draw a frame. */

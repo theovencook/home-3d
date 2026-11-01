@@ -44,14 +44,16 @@ const de = JSON.parse(readFileSync("../custom_components/home_3d/bundled_languag
 const cardEditorConfig = { ...common, entryPoints: ["src/card-editor.ts"], outfile: `${out}/home-3d-card-editor.js` };
 // the editor is only needed by admins who open it, so it is a bundle of its own as well
 // (it draws furniture previews with the 3D bundle, so it knows that bundle's hash too)
-const editorConfig = (viewerHash, locateHash, itemsHash) => ({
+const editorConfig = (viewerHash, locateHash, itemsHash, alignHash) => ({
   ...common,
   entryPoints: ["src/components/editor.ts"],
   outfile: `${out}/home-3d-editor.js`,
-  define: { __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash), __FP3D_LOCATE_HASH__: JSON.stringify(locateHash), __FP3D_ITEMS_HASH__: JSON.stringify(itemsHash) },
+  define: { __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash), __FP3D_LOCATE_HASH__: JSON.stringify(locateHash), __FP3D_ITEMS_HASH__: JSON.stringify(itemsHash), __FP3D_ALIGN_HASH__: JSON.stringify(alignHash) },
 });
 // the item editor (#13) only loads when an editor opens it; it draws its live picture with the 3D bundle
 const itemsConfig = (viewerHash) => ({ ...common, entryPoints: ["src/items/entry.ts"], outfile: `${out}/home-3d-items.js`, define: { __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash) } });
+// the align and distribute tools of the multi-selection panel (#235) load when the editor first selects several items
+const alignConfig = { ...common, entryPoints: ["src/align/entry.ts"], outfile: `${out}/home-3d-align.js` };
 // the time travel (Pro) only loads when it starts; its texts come from the main bundle
 const timeTravelConfig = { ...common, entryPoints: ["src/timetravel/entry.ts"], outfile: `${out}/home-3d-timetravel.js` };
 // the fun packs (pets …) only load when one is unlocked and switched on; three.js is lent by the 3D bundle
@@ -144,7 +146,7 @@ function copyFonts() {
 // (18 KB more on every page, 4 KB gzip) and the 16 lang/*.json tables into language packs; the lazy bundles lost their own
 // copies (locate 151 -> 40 KB, items 69 -> 62, settings 101 -> 87), so their budgets came down to just above, and the
 // "every page" path went from 410 to 425 KB (gzip 140 -> 146). The main bundle itself did not change: the table is in a shared chunk.
-const BUDGET = { "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
+const BUDGET = { "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
 const GZIP_BUDGET = { "home-3d.js": 45 * 1024, "home-3d-view3d.js": 100 * 1024, "home-3d-3d.js": 280 * 1024 };
 
 // What is loaded before something shows, raw and as sent (gzip), with everything those files import (#179): a module
@@ -188,7 +190,7 @@ function topInputs(metafile, file, n = 15) {
 copyFonts();
 if (watch) {
   // in watch mode the hash is not tracked; a dev reload fetches the bundle anyway
-  for (const c of [viewerConfig, itemsConfig("dev"), editorConfig("dev", "dev", "dev"), cardEditorConfig, timeTravelConfig, funConfig, voiceConfig, locateConfig, plan2dConfig, settingsConfig, mainConfig(Object.fromEntries(HASHED.map((name) => [name, "dev"])))]) await (await context(c)).watch();
+  for (const c of [viewerConfig, itemsConfig("dev"), editorConfig("dev", "dev", "dev", "dev"), alignConfig, cardEditorConfig, timeTravelConfig, funConfig, voiceConfig, locateConfig, plan2dConfig, settingsConfig, mainConfig(Object.fromEntries(HASHED.map((name) => [name, "dev"])))]) await (await context(c)).watch();
 } else {
   // the main bundle's chunks of an earlier build go (their names change with their content)
   for (const f of readdirSync(out)) if (CHUNK.test(f)) rmSync(`${out}/${f}`);
@@ -198,7 +200,8 @@ if (watch) {
   await run(locateConfig);
   const items = itemsConfig(hashOf(viewerConfig.outfile));
   await run(items);
-  const editor = editorConfig(hashOf(viewerConfig.outfile), hashOf(locateConfig.outfile), hashOf(items.outfile));
+  await run(alignConfig);
+  const editor = editorConfig(hashOf(viewerConfig.outfile), hashOf(locateConfig.outfile), hashOf(items.outfile), hashOf(alignConfig.outfile));
   await run(editor);
   await run(cardEditorConfig);
   await run(timeTravelConfig);
