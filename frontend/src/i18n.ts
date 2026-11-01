@@ -2716,6 +2716,7 @@ const en = {
   st_reset_device_hint: "Appearance, device icons, screen and controls and what the 3D view shows go back to the defaults, on this browser only.",
   st_reset: "Reset",
   st_reset_done: "This device's preferences are back to the defaults.",
+  st_reset_ask: "Put this device's preferences back to the defaults? Appearance, icons, screen and controls and what the 3D view shows are reset on this browser. This can't be undone.",
   st_demo_hint: "Linked devices this Home Assistant doesn't have show made-up states (some lights on, heating on, solar producing): for screenshots and the sample home. Real entities always win.",
   st_modules_note: "Each extension's settings are on its card on the Extensions tab.",
   st_upd_weekday_hint: "Only for a weekly check.",

@@ -17,6 +17,7 @@ import type { Building, StartView } from "../model.ts";
 import type { FurniturePack } from "../packs.ts";
 import type { HomeAssistant } from "../types.ts";
 import { colourReset } from "../colour-reset.ts";
+import { askConfirm } from "../ask.ts";
 import { optionGroups, optionText } from "./view-settings.ts";
 import { controls, tokens } from "../styles.ts";
 import {
@@ -153,6 +154,10 @@ export class SettingsPage extends LitElement {
   private declare _cursor: number;
   /** Who the last change on this page was saved for (the save line, #248); null: nothing changed yet. */
   private declare _saved: Audience | null;
+  /** The page that change was made on: the save line says it only there (#255). */
+  private _savedOn: SectionId | null = null;
+  /** The starting side was chosen for this viewer (once, when the viewer is first known, #255). */
+  private startPicked = false;
   private declare _query: string;
   /** Phones: a section is open (else the list of sections). */
   private declare _drill: boolean;
@@ -218,7 +223,16 @@ export class SettingsPage extends LitElement {
       if (sectionOf(id)) this._section = id;
       this._query = "";
       this._drill = true;
+      this._note = null;
       if (this.focusId) this.flash(this.focusId);
+    }
+    // people who cannot change the home's settings start on the device side, where they can change something (#255)
+    if (!this.startPicked && this.hass && (changed.has("hass") || changed.has("canEdit"))) {
+      this.startPicked = true;
+      if (!this.section && !this.focusId && !this.viewer.editor && audienceOf(sectionOf(this._section)!) === "home") {
+        const first = liveSections(this.env).find((s) => !s.hidden && audienceOf(s) === "device");
+        if (first) this._section = first.id;
+      }
     }
     const sections = liveSections(this.env);
     if (sections.length && !sections.some((s) => s.id === this._section)) this._section = sections[0].id;
@@ -286,6 +300,7 @@ export class SettingsPage extends LitElement {
 
   private apply(s: Setting, result: WriteResult): void {
     this._saved = s.scope === "device" ? "device" : "home";
+    this._savedOn = this._section;
     if (result && typeof (result as Promise<unknown>).then === "function") {
       void (result as Promise<unknown>)
         .then(() => (s.loader ? this.reload(s.loader) : undefined))
@@ -308,15 +323,22 @@ export class SettingsPage extends LitElement {
       return;
     }
     if (action === "reset_device") {
-      for (const key of deviceKeys()) localPrefs.set(key, null);
-      // and the toggles the view, editor and time travel keep in the browser outside the rows
-      resetDevicePrefs(...browserStores());
-      this._note = this.tr("st_reset_done");
-      this.dispatchEvent(new CustomEvent("device-change", { detail: { id: s.id }, bubbles: true, composed: true }));
-      this.requestUpdate();
+      // one tap used to wipe the device's choices at once (#255): ask first
+      void askConfirm(this.tr("st_reset_ask"), { ok: this.tr("st_reset"), cancel: this.tr("cancel"), danger: true }).then((yes) => {
+        if (yes) this.resetDevice(s);
+      });
       return;
     }
     this.dispatchEvent(new CustomEvent("settings-action", { detail: { action, id: s.id }, bubbles: true, composed: true }));
+  }
+
+  private resetDevice(s: Setting): void {
+    for (const key of deviceKeys()) localPrefs.set(key, null);
+    // and the toggles the view, editor and time travel keep in the browser outside the rows
+    resetDevicePrefs(...browserStores());
+    this._note = this.tr("st_reset_done");
+    this.dispatchEvent(new CustomEvent("device-change", { detail: { id: s.id }, bubbles: true, composed: true }));
+    this.requestUpdate();
   }
 
   private open(section: SectionId, focus: string | null = null): void {
@@ -440,6 +462,7 @@ export class SettingsPage extends LitElement {
   private showSide(a: Audience): void {
     this._audience = a;
     this._query = "";
+    this._note = null;
     if (audienceOf(sectionOf(this._section)!) === a) return;
     const first = liveSections(this.env).find((s) => !s.hidden && audienceOf(s) === a);
     if (first) this._section = first.id;
@@ -455,8 +478,9 @@ export class SettingsPage extends LitElement {
   }
 
   /** The one save line (#248): who the last change was saved for, read out politely when it changes. */
-  private renderSave(side: Audience) {
-    const who = this._saved ?? side;
+  private renderSave(side: Audience, section: SectionId) {
+    // a change is named on the page it was made on; every other page says its own side (#255)
+    const who = this._saved && this._savedOn === section ? this._saved : side;
     const state = who === "home" ? this.saveState : "saved";
     const text = state === "saving" ? this.tr("st_saving") : state === "error" ? this.tr("st_save_error") : this.tr(who === "device" ? "st_saved_device" : "st_saved_home");
     return html`<p class="st-save st-save-${state}" aria-live="polite">${text}</p>`;
@@ -511,7 +535,7 @@ export class SettingsPage extends LitElement {
           <h2>${this.tr(sec.title)}</h2>
           <p>${this.tr(sentence)}</p>
         </div>
-        ${this.renderSave(side)}
+        ${this.renderSave(side, sec.id)}
       </div>
       ${lock ? html`<p class="st-lock">${icon("lock", true)} ${this.tr(lock)}</p>` : nothing}
       ${sec.hidden

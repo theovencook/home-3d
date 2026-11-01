@@ -2704,6 +2704,7 @@
  "st_reset_device_hint": "Darstellung, Gerätesymbole, Bildschirm und Bedienung und was die 3D-Ansicht zeigt gehen auf die Standardwerte zurück, nur in diesem Browser.",
  "st_reset": "Zurücksetzen",
  "st_reset_done": "Die Einstellungen dieses Geräts sind zurückgesetzt.",
+  "st_reset_ask": "Die Einstellungen dieses Geräts auf die Standardwerte zurücksetzen? Aussehen, Symbole, Bildschirm und Bedienung sowie die Anzeige der 3D-Ansicht werden in diesem Browser zurückgesetzt. Das lässt sich nicht rückgängig machen.",
  "st_demo_hint": "Verknüpfte Geräte, die dieses Home Assistant nicht hat, zeigen ausgedachte Zustände (einige Lichter an, Heizung an, Solar liefert): für Screenshots und das Beispielhaus. Echte Entitäten gewinnen immer.",
  "st_modules_note": "Die Einstellungen jeder Erweiterung stehen auf ihrer Karte im Tab Erweiterungen.",
  "st_upd_weekday_hint": "Nur bei wöchentlicher Suche.",

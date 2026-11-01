@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { englishTable } from "../i18n.ts";
 import { clearModules, registerModule, type NeonModule } from "../modules.ts";
 import type { HomeAssistant } from "../types.ts";
-import { audienceOf, GROUPS, liveSections, parseSettingsHash, searchSettings, SECTIONS, SETTINGS, settingById, type SettingsEnv } from "./registry.ts";
+import { audienceOf, GROUPS, liveSections, parseSettingsHash, searchSettings, SECTIONS, sectionOf, SETTINGS, settingById, type SettingsEnv } from "./registry.ts";
 import { SETTINGS_ICONS } from "./settings-icons.ts";
 import { sampleBuilding, sampleHass } from "./settings.fixture.ts";
 
@@ -174,6 +174,7 @@ test("one save line says who the change was saved for, read out politely", () =>
   p.apply(settingById("lock_plan")!, sampleBuilding());
   p.saveState = "saving";
   assert.ok(show(p, "screen").includes(t("st_saving")), "the line follows the last change, whatever the page");
+  p._section = "general";
   p.apply(settingById("stats")!, undefined);
   assert.ok(show(p, "general").includes(t("st_saved_device")));
   assert.equal((text.match(/st-save /g) ?? []).length, 1, "one save line");
@@ -328,4 +329,45 @@ test("a search hit group says whose a row is once per run of the same answer", (
   const rows = (text.match(/class="st-row /g) ?? []).length;
   const said = (text.match(/class="st-rule"/g) ?? []).length;
   assert.ok(rows > 1 && said < rows, `${said} scope lines for ${rows} rows`);
+});
+
+// ---- the save line, the reset note and where people start (#255)
+
+test("the save line names the page's own side, and a change only on the page it was made on", () => {
+  const p = page();
+  p._saved = "device";
+  p._savedOn = "look";
+  assert.ok(show(p, "household").includes(t("st_saved_home")), "a whole-home page does not say 'this device'");
+  assert.ok(show(p, "look").includes(t("st_saved_device")));
+  p._savedOn = "household";
+  p._saved = "home";
+  assert.ok(show(p, "look").includes(t("st_saved_device")), "a device page keeps its own side");
+});
+
+test("the reset note and the search clear when the side or page changes", () => {
+  const p = page();
+  p._note = "x";
+  p.showSide("device");
+  assert.equal(p._note, null);
+  p._note = "x";
+  p.renderRoot = {};
+  p.open("look");
+  assert.equal(p._note, null);
+});
+
+test("someone who cannot change the home starts on This device", () => {
+  const viewer = page();
+  viewer.canEdit = false;
+  viewer.hass = { ...viewer.hass, user: { id: "u", name: "v", is_admin: false } };
+  viewer.willUpdate(new Map([["hass", null]]));
+  assert.equal(viewer._audience, "device");
+  assert.equal(audienceOf(sectionOf(viewer._section)!), "device");
+  const editor = page();
+  editor.willUpdate(new Map([["hass", null]]));
+  assert.equal(editor._audience, "home");
+  const linked = page();
+  linked.canEdit = false;
+  linked.section = "household";
+  linked.willUpdate(new Map([["hass", null], ["section", null]]));
+  assert.equal(linked._section, "household", "a link still opens its page");
 });
