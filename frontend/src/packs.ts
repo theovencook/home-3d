@@ -478,7 +478,7 @@ const ENERGY_FAMILIES: Record<string, EnergyRole> = {
 export function energyRole(type: string): EnergyRole | null {
   if (type === "meter" || type === "inverter" || type === "home_battery" || type === "wallbox") return type;
   const item = packInfo(type);
-  const role = item?.family ? (ENERGY_FAMILIES[item.family] ?? null) : null;
+  const role = item?.family ? (ENERGY_FAMILIES[item.family] ?? (/^ev_charger_/.test(item.family) ? "wallbox" : null)) : null;
   if (role === "meter" && (item!.tags ?? []).some((t) => /^(gas|water|wasser)$/i.test(t))) return null;
   return role;
 }

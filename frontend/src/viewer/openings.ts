@@ -258,35 +258,35 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
           const nn = face + s * (n * Math.cos(theta) + u * Math.sin(theta) + (slide ? 0.05 : 0));
           return tf(atStart ? x0 + along : x1 - along, nn, y);
         };
-        // an open leaf leaves its wall: keep it visible when the wall folds away
-        const leafBucket = open > 0.05 ? ALWAYS : bucket;
+        // open or shut, the leaf's part above the cut height folds away with its wall (#244): swung or slid out of
+        // the wall it would otherwise stand full height over the cut walls
         const warm = markClosed ? !!st.sensed && open < 0.05 : open > 0.9;
         const leafC = warm ? shade(OPEN_WARM, 0.7) : new Color(front ? LEAF_FRONT : LEAF);
         const leafTop = warm ? shade(OPEN_WARM, 0.9) : new Color(front ? LEAF_FRONT_TOP : LEAF_TOP);
         if (style === "glass") {
           // a glass door: slim stiles and rails around a pane
-          splitBox(frames, leafTf, 0, 0.05, -thick, 0, S + 0.01, T - 0.01, leafC, leafTop, cut, leafBucket);
-          splitBox(frames, leafTf, lw - 0.05, lw, -thick, 0, S + 0.01, T - 0.01, leafC, leafTop, cut, leafBucket);
-          splitBox(frames, leafTf, 0.05, lw - 0.05, -thick, 0, S + 0.01, S + 0.12, leafC, leafTop, cut, leafBucket);
-          splitBox(frames, leafTf, 0.05, lw - 0.05, -thick, 0, T - 0.08, T - 0.01, leafC, leafTop, cut, leafBucket);
-          panel(glass, leafTf, 0.05, lw - 0.05, -thick / 2, S + 0.12, T - 0.08, GLASS, cut, leafBucket);
+          splitBox(frames, leafTf, 0, 0.05, -thick, 0, S + 0.01, T - 0.01, leafC, leafTop, cut, bucket);
+          splitBox(frames, leafTf, lw - 0.05, lw, -thick, 0, S + 0.01, T - 0.01, leafC, leafTop, cut, bucket);
+          splitBox(frames, leafTf, 0.05, lw - 0.05, -thick, 0, S + 0.01, S + 0.12, leafC, leafTop, cut, bucket);
+          splitBox(frames, leafTf, 0.05, lw - 0.05, -thick, 0, T - 0.08, T - 0.01, leafC, leafTop, cut, bucket);
+          panel(glass, leafTf, 0.05, lw - 0.05, -thick / 2, S + 0.12, T - 0.08, GLASS, cut, bucket);
         } else {
-          splitBox(frames, leafTf, 0, lw, -thick, 0, S + 0.01, T - 0.01, leafC, leafTop, cut, leafBucket);
+          splitBox(frames, leafTf, 0, lw, -thick, 0, S + 0.01, T - 0.01, leafC, leafTop, cut, bucket);
         }
         // the pane on both faces of the solid leaf: from outside the leaf hid it (#712)
         for (const n of [0.001, -thick - 0.001]) {
-          if (style === "front_glass") panel(glass, leafTf, 0.12, lw - 0.12, n, S + (T - S) * 0.55, T - 0.18, GLASS, cut, leafBucket);
-          else if (front) panel(glass, leafTf, 0.1, 0.18, n, S + 0.3, T - 0.3, GLASS, cut, leafBucket);
+          if (style === "front_glass") panel(glass, leafTf, 0.12, lw - 0.12, n, S + (T - S) * 0.55, T - 0.18, GLASS, cut, bucket);
+          else if (front) panel(glass, leafTf, 0.1, 0.18, n, S + 0.3, T - 0.3, GLASS, cut, bucket);
         }
         // handle on both sides: a knob on a room door, a bar on a front door
         const hy = S + Math.min(1.05, (T - S) * 0.5);
         const hh = front ? 0.3 : 0.012;
         const hx0 = front ? lw - 0.11 : lw - 0.16;
         const hx1 = front ? lw - 0.08 : lw - 0.05;
-        splitBox(frames, leafTf, hx0, hx1, 0.004, 0.05, hy - hh, hy + hh, new Color(HANDLE), new Color(HANDLE_TOP), cut, leafBucket);
-        splitBox(frames, leafTf, hx0, hx1, -thick - 0.05, -thick - 0.004, hy - hh, hy + hh, new Color(HANDLE), new Color(HANDLE_TOP), cut, leafBucket);
+        splitBox(frames, leafTf, hx0, hx1, 0.004, 0.05, hy - hh, hy + hh, new Color(HANDLE), new Color(HANDLE_TOP), cut, bucket);
+        splitBox(frames, leafTf, hx0, hx1, -thick - 0.05, -thick - 0.004, hy - hh, hy + hh, new Color(HANDLE), new Color(HANDLE_TOP), cut, bucket);
         // an unlocked smart lock: a soft accent strip along the leaf's free edge, on both faces (#682)
-        if (st.unlocked && atStart === info.hingeAtStart) splitBox(frames, leafTf, lw - 0.022, lw + 0.004, -thick - 0.006, 0.006, S + 0.03, T - 0.03, shade(UNLOCKED, 0.85), shade(UNLOCKED, 1), cut, leafBucket);
+        if (st.unlocked && atStart === info.hingeAtStart) splitBox(frames, leafTf, lw - 0.022, lw + 0.004, -thick - 0.006, 0.006, S + 0.03, T - 0.03, shade(UNLOCKED, 0.85), shade(UNLOCKED, 1), cut, bucket);
       }
     } else if (info.opening.type === "garage" && openingStyle(info.opening, info.exterior) === "up_and_over") {
       // up-and-over door (#24): one leaf on side arms a third of its height up; opening, the bottom swings out and up
@@ -376,21 +376,22 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
           const x = sash.atStart ? sx0 + along : sx1 - along;
           return tf(x, nn, yy);
         };
-        // a sash that has swung into the room belongs to no wall: keep it visible
-        const sashBucket = Math.abs(theta) > 0.05 ? ALWAYS : bucket;
-        splitBox(frames, sashTf, 0, sw, n0, n1, sy0, sy1, sashC, sashTop, cut, sashBucket);
-        splitBox(frames, sashTf, sashW - sw, sashW, n0, n1, sy0, sy1, sashC, sashTop, cut, sashBucket);
-        splitBox(frames, sashTf, sw, sashW - sw, n0, n1, sy0, sy0 + sw, sashC, sashTop, cut, sashBucket);
-        splitBox(frames, sashTf, sw, sashW - sw, n0, n1, sy1 - sw, sy1, sashC, sashTop, cut, sashBucket);
-        panel(glass, sashTf, sw, sashW - sw, (n0 + n1) / 2, sy0 + sw, sy1 - sw, alert ? shade(OPEN_WARM, 0.16) : GLASS, cut, sashBucket);
+        // open, tilted or shut, the sash is cut with the walls (#244); a tilted sash leans into the room, so the wall's
+        // cut height lies a little higher along the sash
+        const sashCut = sy0 + (cut - sy0) / Math.cos(phi);
+        splitBox(frames, sashTf, 0, sw, n0, n1, sy0, sy1, sashC, sashTop, sashCut, bucket);
+        splitBox(frames, sashTf, sashW - sw, sashW, n0, n1, sy0, sy1, sashC, sashTop, sashCut, bucket);
+        splitBox(frames, sashTf, sw, sashW - sw, n0, n1, sy0, sy0 + sw, sashC, sashTop, sashCut, bucket);
+        splitBox(frames, sashTf, sw, sashW - sw, n0, n1, sy1 - sw, sy1, sashC, sashTop, sashCut, bucket);
+        panel(glass, sashTf, sw, sashW - sw, (n0 + n1) / 2, sy0 + sw, sy1 - sw, alert ? shade(OPEN_WARM, 0.16) : GLASS, sashCut, bucket);
         // a terrace door with an unlocked smart lock: the main sash's free edge glows like a door leaf's (#682)
-        if (st.unlocked && sash.atStart === info.hingeAtStart) splitBox(frames, sashTf, sashW - 0.022, sashW + 0.004, n0 - 0.006, n1 + 0.006, sy0 + 0.02, sy1 - 0.02, shade(UNLOCKED, 0.85), shade(UNLOCKED, 1), cut, sashBucket);
+        if (st.unlocked && sash.atStart === info.hingeAtStart) splitBox(frames, sashTf, sashW - 0.022, sashW + 0.004, n0 - 0.006, n1 + 0.006, sy0 + 0.02, sy1 - 0.02, shade(UNLOCKED, 0.85), shade(UNLOCKED, 1), sashCut, bucket);
         if (openingStyle(info.opening, info.exterior) === "bars") {
           // glazing bars: a cross over the pane
           const ym = (sy0 + sy1) / 2;
           const nm = (n0 + n1) / 2;
-          splitBox(frames, sashTf, sw, sashW - sw, nm - 0.012, nm + 0.012, ym - 0.012, ym + 0.012, sashC, sashTop, cut, sashBucket);
-          splitBox(frames, sashTf, sashW / 2 - 0.012, sashW / 2 + 0.012, nm - 0.012, nm + 0.012, sy0 + sw, sy1 - sw, sashC, sashTop, cut, sashBucket);
+          splitBox(frames, sashTf, sw, sashW - sw, nm - 0.012, nm + 0.012, ym - 0.012, ym + 0.012, sashC, sashTop, sashCut, bucket);
+          splitBox(frames, sashTf, sashW / 2 - 0.012, sashW / 2 + 0.012, nm - 0.012, nm + 0.012, sy0 + sw, sy1 - sw, sashC, sashTop, sashCut, bucket);
         }
       }
     }

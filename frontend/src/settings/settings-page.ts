@@ -10,6 +10,7 @@ import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import "../components/entity-picker.ts";
 import { entityOptionList } from "../entity-options.ts";
 import { entityName } from "../devices.ts";
+import { freshReload } from "../fresh-reload.ts";
 import type { Building, StartView } from "../model.ts";
 import type { FurniturePack } from "../packs.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -283,7 +284,22 @@ export class SettingsPage extends LitElement {
 
   // ------------------------------------------------------------------------------------------------ render
 
+  /**
+   * The texts the page is lent lack its own (#238): an older main bundle (one the browser kept, #223) loaded this newer
+   * page, whose texts moved into the main table (#217). Its rows would show their keys (st_sec_general …), so the page
+   * says the update is there instead, in words every main bundle has.
+   */
+  private get stale(): boolean {
+    return this.tr("st_title") === "st_title";
+  }
+
   protected render() {
+    if (this.stale) {
+      return html`<div class="st-stale" role="status">
+        <span>${this.t("update_ready")}</span>
+        <button class="fp3d-btn" @click=${() => void freshReload()}>${this.t("reload_page")}</button>
+      </div>`;
+    }
     const env = this.env;
     const sections = liveSections(env);
     const query = this._query.trim();
@@ -619,6 +635,13 @@ export class SettingsPage extends LitElement {
         grid-template-columns: 248px 1fr;
         height: 100%;
         min-height: 0;
+      }
+      .st-stale {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        padding: 24px 16px;
       }
       .st-nav {
         border-right: 1px solid var(--fp3d-line);

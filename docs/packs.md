@@ -381,7 +381,7 @@ and wallbox. The editor then offers the same links as for the built-in one, and 
 | `consumer_unit`, `energy_monitor` (a CT clamp box), `meter` | the meter: where the cables meet, the grid comes in | power (the grid, + = import), export |
 | `inverter` | an inverter: the solar fields' and panels' cables end here, it feeds the meter | power (its solar output) |
 | `home_battery`, `power_station` | a battery: on the nearest inverter of its floor, else on the meter | power, charge, state of charge |
-| `ev_charger` | a wallbox: its cable has its own colour | power, status |
+| `ev_charger`, `ev_charger_<brand>` | a wallbox: its cable has its own colour | power, status |
 | `solar_panel` | a solar panel placed as an item (a garden array, a balcony panel): a cable to the nearest inverter of its floor, else to a battery there, else to the meter | power (its own output, optional) |
 
 A `meter` tagged `gas` or `water` is a gas or water meter and plays no part. Every other electric item (a smart plug,

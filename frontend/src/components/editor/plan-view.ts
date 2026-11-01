@@ -1,7 +1,7 @@
 // The plan document and view: every edit (change/setDoc), undo and redo, the view transform, fit and zoom,
 // snapping, the grid and the snap guides.
 
-import { nothing, svg } from "lit";
+import { html, nothing, svg } from "lit";
 import { alignLines, itemBox, type AlignLines, type Box, type Guide } from "../../geometry/snap-guides.ts";
 import { setCameraSensors } from "../../markers.ts";
 import { announce } from "../../announce.ts";
@@ -140,6 +140,27 @@ export class PlanViewPart {
     const next = Math.max(8, Math.min(600, scale * factor));
     const k = next / scale;
     this._view = { scale: next, ox: sx - (sx - ox) * k, oy: sy - (sy - oy) * k };
+  }
+
+  /** Zoom about the middle of the plan (the navigation buttons, #234). */
+  zoomBy(this: Fp3dEditor, factor: number): void {
+    this.zoomAt(factor, this._size.w / 2, this._size.h / 2);
+  }
+
+  /** Move the view by (dx, dy) screen pixels: the plan follows (arrow keys without a selection, #234). */
+  panBy(this: Fp3dEditor, dx: number, dy: number): void {
+    this._view = { ...this._view, ox: this._view.ox + dx, oy: this._view.oy + dy };
+  }
+
+  /**
+   * The navigation control on the plan (#234): zoom in, zoom out, whole plan. It sits on the right edge, half way
+   * down, so it is clear of the hint bar (bottom left) and of the 3D toggles (top); the buttons are touch sized.
+   */
+  renderNav(this: Fp3dEditor) {
+    const btn = (glyph: string, tip: I18nKey, act: () => void) => html`<button class="fp3d-nav-btn" title=${this.t(tip)} aria-label=${this.t(tip)} @click=${act}>${glyph}</button>`;
+    return html`<div class="fp3d-nav" role="group" aria-label=${this.t("nav_label")}>
+      ${btn("+", "nav_zoom_in", () => this.zoomBy(1.4))}${btn("−", "nav_zoom_out", () => this.zoomBy(1 / 1.4))}${btn("⤢", "fit_hint", () => this.fit(this.fittedAll))}
+    </div>`;
   }
 
   // ------------------------------------------------------------------ snapping

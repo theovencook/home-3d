@@ -491,12 +491,14 @@ export class PointerPart {
     }
     switch (drag.kind) {
       case "pan":
+        this.panCursor(true);
         this._view = { ...this._view, ox: this._view.ox + local[0] - drag.last[0], oy: this._view.oy + local[1] - drag.last[1] };
         drag.last = local;
         break;
       case "tap":
         if (drag.panning || Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) > 6) {
           drag.panning = true;
+          this.panCursor(true);
           this._view = { ...this._view, ox: this._view.ox + local[0] - drag.last[0], oy: this._view.oy + local[1] - drag.last[1] };
         }
         drag.last = local;
@@ -1024,6 +1026,7 @@ export class PointerPart {
     }
     const drag = this.drag;
     this.drag = null;
+    this.panCursor(false);
     if (drag?.kind === "opening" || drag?.kind === "furniture") this._guides = {};
     if (!drag || e.type === "pointercancel") {
       if (drag && EDIT_DRAGS.has(drag.kind) && "moved" in drag && drag.moved && "base" in drag) this.restoreLive(drag.base);
@@ -1174,6 +1177,11 @@ export class PointerPart {
     const areas = this.floor?.outdoor ?? [];
     const hits = areas.filter((a) => a.points.length >= 3 && pointInPolygon(p, a.points)).sort((a, b) => polygonArea(a.points) - polygonArea(b.points));
     return hits[0]?.id ?? null;
+  }
+
+  /** The plan shows the closed-hand cursor while it is being panned (#233); set on the svg directly, so no render. */
+  panCursor(this: Fp3dEditor, on: boolean): void {
+    this.renderRoot?.querySelector?.("svg.fp3d-plan")?.classList?.toggle("fp3d-panning", on);
   }
 
   onContextMenu(this: Fp3dEditor, e: MouseEvent): void {
