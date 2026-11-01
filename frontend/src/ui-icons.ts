@@ -4,7 +4,7 @@
 import { svg, type TemplateResult } from "lit";
 
 // the header's tabs and the editor's toolbar (#249) join the one line family of the redesign (#219)
-export type UiIcon = "split-off" | "split-on" | "panel-left" | "panel-right" | "holo" | "flow" | "undo" | "redo" | "expand" | "cube" | "pencil" | "puzzle" | "gear" | "pointer" | "wall" | "tree" | "sofa" | "bolt" | "more" | "help" | "down";
+export type UiIcon = "split-off" | "split-on" | "panel-left" | "panel-right" | "holo" | "flow" | "undo" | "redo" | "expand" | "cube" | "pencil" | "puzzle" | "gear" | "pointer" | "wall" | "tree" | "sofa" | "bolt" | "more" | "help" | "down" | "x" | "right";
 
 const PATHS: Record<UiIcon, TemplateResult> = {
   // a plan with a second pane beside it: outline, divider, the 3D pane filled when it is open
@@ -30,6 +30,9 @@ const PATHS: Record<UiIcon, TemplateResult> = {
   more: svg`<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>`,
   help: svg`<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.4V14M12 17.5v.01"/>`,
   down: svg`<path d="m6 9 6 6 6-6"/>`,
+  // the phone editor's sheet and More (#250)
+  x: svg`<path d="M6 6l12 12M18 6 6 18"/>`,
+  right: svg`<path d="m9 6 6 6-6 6"/>`,
 };
 
 /** A toolbar icon: sized by the font (1.15em), decorative (the button carries the label). */

@@ -296,8 +296,9 @@ test("Screen and controls holds the old View menu's Controls row and FPS, Appear
   const screen = SETTINGS.filter((s) => s.section === "screen");
   assert.deepEqual(
     screen.map((s) => s.id),
-    // the floor bar's wrap switch went with the room chips (#249, Rooms picker option B)
-    ["stats", "controls", "keep_view", "angle_lock"],
+    // the floor bar's wrap switch went with the room chips (#249, Rooms picker option B); the floor pictures panel's
+    // switch came (#250)
+    ["stats", "controls", "keep_view", "angle_lock", "floor_pictures"],
   );
   // Quality sits on Appearance, as drawn (#248)
   assert.equal(settingById("quality")!.section, "look");

@@ -2962,5 +2962,14 @@
  "tools": "Werkzeuge",
  "more": "Mehr",
  "help_and_shortcuts": "Hilfe und Tastenkürzel",
- "settings_home": "Einstellungen für dieses Zuhause"
+ "settings_home": "Einstellungen für dieses Zuhause",
+ "sheet_taller": "Größer",
+ "sheet_smaller": "Kleiner",
+ "sheet_opening": "Tür oder Fenster",
+ "sheet_outdoor": "Außenbereich",
+ "outside_sub": "Flächen, Wege, Pool",
+ "wall_view_sub": "Eine Wand von vorn sehen",
+ "hint_hide": "Hinweis ausblenden",
+ "st_floor_pictures": "Etagenbilder anzeigen",
+ "st_floor_pictures_hint": "Ein zweiter Weg, eine Etage zu wählen, neben der 3D-Ansicht. Standardmäßig aus: die Etagenleiste wählt die Etage."
 }

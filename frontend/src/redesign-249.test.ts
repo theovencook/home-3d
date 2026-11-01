@@ -136,8 +136,8 @@ test("the floor bar: Whole house and the floors in one row, a Rooms picker, no r
   assert.match(bar, /fp3d-rooms-btn/);
   assert.doesNotMatch(out, /fp3d-room-chip|fp3d-nav-toggle/);
   assert.equal(settingById("nav_wrap"), undefined, "the wrap switch went with the chips");
-  // the floor pictures were a second floor picker beside the 3D view: the floor bar does that job (the card keeps them)
-  assert.match(src("./panel.ts"), /\.floorThumbs=\$\{false\}/);
+  // the floor pictures are a second floor picker beside the 3D view: off unless Settings › Screen and controls says so (#250)
+  assert.match(src("./panel.ts"), /\.floorThumbs=\$\{this\._floorPics\}/);
 });
 
 test("the Rooms picker lists the floor's rooms, or every floor's grouped by floor; search matches any part of a name", () => {

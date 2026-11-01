@@ -1,8 +1,7 @@
 // Wall view side and dimensions, the Walls block, roof sections, cables, energy markers and solar fields.
 // Part of the editor's styles (fp3d-editor static styles, #202): the slices are applied in the order editor.ts lists them.
 
-import { css, unsafeCSS } from "lit";
-import { PHONE_MEDIA } from "../../../phone.ts";
+import { css } from "lit";
 
 export const wallsRoofStyles = css`
       .fp3d-wv-zoom {
@@ -285,28 +284,6 @@ export const wallsRoofStyles = css`
         opacity: 0.75;
       }
       /* the roof and energy tools say what can be moved there (everything else is locked) */
-      .fp3d-phone-hint {
-        display: none;
-      }
-      @media ${unsafeCSS(PHONE_MEDIA)} {
-        .fp3d-phone-hint {
-          position: absolute;
-          top: 8px;
-          left: 8px;
-          /* the plan may be wider than the phone: stay on the screen */
-          width: calc(min(100%, 100vw) - 16px);
-          box-sizing: border-box;
-          z-index: 3;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 6px 6px 6px 12px;
-          border-radius: 12px;
-          background: var(--fp3d-chrome-solid);
-          border: 1px solid var(--fp3d-accent);
-          font-size: 13px;
-        }
-      }
       .fp3d-tool-note {
         position: absolute;
         top: 8px;

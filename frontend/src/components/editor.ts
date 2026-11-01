@@ -11,6 +11,7 @@ import { wallViewStyles } from "./editor/styles/wall-view.ts";
 import { menuStyles } from "./editor/styles/menus.ts";
 import { wallsRoofStyles } from "./editor/styles/walls-roof.ts";
 import { formStyles } from "./editor/styles/forms.ts";
+import { phoneStyles } from "./editor/styles/phone.ts";
 import type { Snapshot } from "../api.ts";
 import { lengthUnit, type LengthUnit } from "../units.ts";
 import type { AlignLines } from "../geometry/snap-guides.ts";
@@ -76,6 +77,8 @@ import { FieldsPart } from "./editor/fields.ts";
 import { SettingsPart } from "./editor/settings.ts";
 import { preloadParts } from "./editor/lazy.ts";
 import { BackupPart } from "./editor/backup.ts";
+import { PhonePart, type SheetHeight } from "./editor/phone.ts";
+import { BackLayers } from "../back-stack.ts";
 export type { EditorTopic };
 
 
@@ -163,7 +166,6 @@ export class Fp3dEditor extends LitElement {
     _openingNote: { state: true },
     _help: { state: true },
     _rackSheet: { state: true },
-    _phoneHint: { state: true },
     _floorMenu: { state: true },
     _openingPreset: { state: true },
     _measureLen: { state: true },
@@ -196,6 +198,11 @@ export class Fp3dEditor extends LitElement {
     homeName: { attribute: false },
     history: { attribute: false },
     topic: { attribute: false },
+    _phone: { state: true },
+    _sheeted: { state: true },
+    _sheet: { state: true },
+    _typing: { state: true },
+    _hintOff: { state: true },
   };
 
   /** Home Assistant as handed in; `hass` reads it through `hassWatch` while rendering (#130). */
@@ -433,8 +440,6 @@ export class Fp3dEditor extends LitElement {
   declare _help: boolean;
   /** The rack whose "Edit rack" sheet is open (#113; its furniture id). */
   declare _rackSheet: string | null;
-  /** The one-time "draw on a PC or tablet" hint on phones (shown by CSS on narrow screens only). */
-  declare _phoneHint: boolean;
   /** A one-time invitation for admins to switch on the usage reports (while they are off and it was not closed). */
   fixedPan = false;
   /** Frame the 3D half again after the next render (the roof tool shows the whole house). */
@@ -485,6 +490,21 @@ export class Fp3dEditor extends LitElement {
   declare _images: Record<string, { url: string; aspect: number }>;
   declare _canUndo: boolean;
   declare _canRedo: boolean;
+  /** The phone editor (#250, editor/phone.ts): the screen is phone-wide; the details sheet's height; a text field has the
+   *  keyboard (the bottom bar steps aside); the one-line hint was hidden (remembered on this device). */
+  declare _phone: boolean;
+  /** The side panel is the details sheet: on a phone, a tablet held upright and a phone held sideways (#250). */
+  declare _sheeted: boolean;
+  declare _sheet: SheetHeight;
+  declare _typing: boolean;
+  declare _hintOff: boolean;
+  phoneWatch: { media: (MediaQueryList | null)[]; onMedia: () => void; onFocus: (e: Event) => void; onPointer: (e: Event) => void } | null = null;
+  /** What the sheet showed at the last render (editor/phone.ts syncSheet), and whether the floor's settings asked for it. */
+  sheetFor: string | null = null;
+  floorSheet = false;
+  sheetSwipe: number | null = null;
+  /** Android's back gesture closes the sheet, then a menu (back-stack.ts). */
+  readonly backLayers = new BackLayers();
 
   drag: Drag | null = null;
   /** Set while a change that may join the last undo step runs (arrow nudges, #66). */
@@ -580,9 +600,13 @@ export class Fp3dEditor extends LitElement {
     this._shiftZ = 0;
     this._floorMenu = false;
     this._openingPreset = "door";
-    this._phoneHint = true;
+    this._phone = false;
+    this._sheeted = false;
+    this._sheet = "closed";
+    this._typing = false;
+    this._hintOff = false;
     try {
-      this._phoneHint = localStorage.getItem("home3d.phoneHint") !== "0";
+      this._hintOff = localStorage.getItem("home3d.hintOff") === "1";
     } catch {
       // no storage: shown until closed
     }
@@ -679,12 +703,14 @@ export class Fp3dEditor extends LitElement {
     super.connectedCallback();
     window.addEventListener("keydown", this.onKey);
     window.addEventListener("keyup", this.onShift);
+    if (!this.topic) this.watchPhone(true);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     window.removeEventListener("keydown", this.onKey);
     window.removeEventListener("keyup", this.onShift);
+    this.watchPhone(false);
     this.resizeObserver?.disconnect();
     // the thumbnail renderer holds a WebGL context: freed with the editor, made anew when a picture is next drawn (#200)
     void load3d().then((mod) => mod.releasePreviewRenderer());
@@ -764,6 +790,8 @@ export class Fp3dEditor extends LitElement {
     if (changed.has("_doc") || changed.has("packs")) this.fetchPlacedRecipes();
     // a plan or library from the backend: which placed items have an update now (#48)
     if ((changed.has("building") || changed.has("packs")) && this.isEditor && !this.topic) this.refreshLibUpdates();
+    // the phone's details sheet follows the selection (#250)
+    this.syncSheet();
   }
 
   recipesAsked = new Set<string>();
@@ -823,6 +851,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   protected updated(changed: PropertyValues): void {
+    this.afterPhoneRender(changed);
     // another item (room, door, floor …) opens its panel at the top: the fields are where they always are (#71)
     if (selectionMoved(changed, this)) for (const side of this.renderRoot.querySelectorAll<HTMLElement>(".fp3d-side")) side.scrollTop = 0;
     // a part on the Settings page (#139) shows its section unfolded (its summary is hidden there)
@@ -1068,7 +1097,7 @@ export class Fp3dEditor extends LitElement {
     const walls = floor ? generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }, floor.walls ?? []) : null;
     return html`
       ${this.renderPreview()} ${this.renderWallView()} ${this.renderPartCard()} ${this.renderHelp()} ${this.renderRackSheet()}
-      <div class="fp3d-editor ${this.narrow ? "fp3d-narrow" : ""}" style=${`--fp3d-side-w:${this._sideWidth}px`}>
+      <div class="fp3d-editor ${this.narrow ? "fp3d-narrow" : ""} ${this._phone ? "fp3d-phone" : ""} ${this._sheeted ? "fp3d-sheeted" : ""} ${this._sheeted && this._typing ? "fp3d-typing" : ""}" style=${`--fp3d-side-w:${this._sideWidth}px`}>
         <!-- one toolbar row across the plan and the sidebar (#249) -->
         <div class="fp3d-toolbar">
           ${this._wallPick ? html`<div class="fp3d-pick-tip" style=${`left:${this.wallPickTip[0]}px;top:${this.wallPickTip[1]}px`} @click=${() => (this._wallPick = false)}>${this.t("hint_wall_pick")}</div>` : nothing}
@@ -1077,25 +1106,6 @@ export class Fp3dEditor extends LitElement {
         <div class="fp3d-main">
           <div class="fp3d-stage-pair ${this._split ? "fp3d-split" : ""}" style=${this._split && !this.narrow ? `--fp3d-split:${Math.round(this._splitRatio * 100)}%` : ""}>
           <div class="fp3d-canvas-wrap">
-            ${this._phoneHint
-              ? html`<div class="fp3d-phone-hint">
-                  <span>${this.t("phone_hint")}</span>
-                  <button
-                    class="fp3d-btn"
-                    aria-label=${this.t("close")}
-                    @click=${() => {
-                      this._phoneHint = false;
-                      try {
-                        localStorage.setItem("home3d.phoneHint", "0");
-                      } catch {
-                        // no storage: gone for this visit
-                      }
-                    }}
-                  >
-                    ✕
-                  </button>
-                </div>`
-              : nothing}
             ${this.houseTool ? html`<div class="fp3d-tool-note">${this.t(this._tool === "energy" ? "energy_only_note" : "roof_only_note")}</div>` : nothing}
             <svg
               class="fp3d-plan fp3d-tool-${this._tool}"
@@ -1135,7 +1145,7 @@ export class Fp3dEditor extends LitElement {
           ${this._split ? this.render3d() : nothing}
           </div>
         </div>
-        ${this.renderAside(floor)}
+        ${this._sheeted ? this.renderSheet(floor) : this.renderAside(floor)} ${this._phone ? this.renderPhoneBar(floor) : nothing}
       </div>
     `;
   }
@@ -1225,12 +1235,13 @@ export class Fp3dEditor extends LitElement {
     menuStyles,
     wallsRoofStyles,
     formStyles,
+    phoneStyles,
   ];
 }
 
 /** The area modules' methods (#202): one class per editor area under editor/, all on this element. */
-export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart {}
-mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart]);
+export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart {}
+mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart]);
 
 defineElement("fp3d-editor", Fp3dEditor);
 

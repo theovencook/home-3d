@@ -249,7 +249,7 @@ test("every control the 'Sun and lights' sheet held is still reachable in Settin
     assert.ok(!SECTIONS.find((x) => x.id === section)!.hidden, `${id} is in the menu`);
   }
   // the View menu's set-once rows (#246) are still where the drawings put them
-  for (const [id, section] of [["quality", "look"], ["controls", "screen"], ["keep_view", "screen"], ["angle_lock", "screen"], ["stats", "screen"], ["start_view", "general"]] as const) assert.equal(settingById(id)?.section, section, id);
+  for (const [id, section] of [["quality", "look"], ["controls", "screen"], ["keep_view", "screen"], ["angle_lock", "screen"], ["floor_pictures", "screen"], ["stats", "screen"], ["start_view", "general"]] as const) assert.equal(settingById(id)?.section, section, id);
   // every setting appears once
   assert.equal(new Set(SETTINGS.map((s) => s.id)).size, SETTINGS.length);
 });
