@@ -2983,6 +2983,16 @@ const en = {
   more: "More",
   help_and_shortcuts: "Help and shortcuts",
   settings_home: "Settings for this home",
+  // the phone editor: bottom bar, More, the details sheet, the hint; the floor pictures switch (#250)
+  sheet_taller: "Taller",
+  sheet_smaller: "Smaller",
+  sheet_opening: "Door or window",
+  sheet_outdoor: "Outside area",
+  outside_sub: "Areas, paths, pool",
+  wall_view_sub: "See one wall from the front",
+  hint_hide: "Hide the hint",
+  st_floor_pictures: "Show the floor pictures panel",
+  st_floor_pictures_hint: "A second way to pick a floor, beside the 3D view. Off by default: the floor bar picks the floor.",
 };
 
 type Key = keyof typeof en;

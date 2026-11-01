@@ -247,6 +247,8 @@ export class FloorsPart {
                               this.setTool("select");
                               this.selectItem("room", null);
                               this._sideOpen = true;
+                              // a phone shows them in the details sheet (#250)
+                              this.showSheet("half");
                             }}
                           >
                             ${this.t("floor_settings")}

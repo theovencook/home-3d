@@ -174,7 +174,10 @@ function copyFonts() {
 // of the main bundle ("every page" 377 -> 363 KB, "wall tablet" 1605 -> 1591 KB). A new budget, not a raised one.
 // #249: the floor bar's Rooms picker (home-3d-rooms-picker-<hash>.js) is a lazy chunk of its own, loaded when its button is
 // first pointed at or pressed. A new budget, not a raised one.
-const BUDGET = { "home-3d-rooms-picker.js": 8 * 1024, "home-3d-view-panel.js": 25 * 1024, "home-3d-room-panel.js": 30 * 1024, "home-3d-home-switcher.js": 12 * 1024, "home-3d-editor-lazy-parts.js": 85 * 1024, "home-3d-settings-pickers.js": 12 * 1024, "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-listedit.js": 12 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
+// #250: the phone editor's bottom bar and More (home-3d-editor-phone-bar-<hash>.js, 9 KB) are a lazy chunk of their
+// own, loaded only where the editor is phone-wide; they borrow Lit from the editor, so its first open stays two files.
+// A new budget, not a raised one.
+const BUDGET = { "home-3d-editor-phone-bar.js": 12 * 1024, "home-3d-rooms-picker.js": 8 * 1024, "home-3d-view-panel.js": 25 * 1024, "home-3d-room-panel.js": 30 * 1024, "home-3d-home-switcher.js": 12 * 1024, "home-3d-editor-lazy-parts.js": 85 * 1024, "home-3d-settings-pickers.js": 12 * 1024, "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-listedit.js": 12 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
 const GZIP_BUDGET = { "home-3d.js": 45 * 1024, "home-3d-view3d.js": 100 * 1024, "home-3d-3d.js": 280 * 1024 };
 
 // What is loaded before something shows, raw and as sent (gzip), with everything those files import (#179): a module

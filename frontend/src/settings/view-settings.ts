@@ -153,6 +153,8 @@ export const SCREEN: Setting[] = [
   deviceChoice("controls", "screen", "controls", "controls", ["left", "right"], "left", "controls_side", opts([["left", "st_controls_left"], ["right", "st_controls_right"]]), "st_controls_side_hint", ["left", "right", "star", "search", "eye", "buttons"]),
   deviceSwitch("keep_view", "screen", "controls", "keep_view", false, "keep_view", "keep_view_hint", ["camera", "floor"]),
   deviceSwitch("angle_lock", "screen", "controls", "angle_lock", false, "angle_lock", "angle_lock_hint", ["lock", "turn", "rotate", "angle"]),
+  // #250: the floor pictures beside the 3D view, a second floor picker; off by default, as the floor bar picks the floor
+  deviceSwitch("floor_pictures", "screen", "controls", "floor_pictures", false, "st_floor_pictures", "st_floor_pictures_hint", ["floor", "pictures", "thumbnails"]),
 ];
 
 // ---------------------------------------------------------------------------------------------------- the View panel

@@ -44,6 +44,7 @@ import { forwardHass, HASS_CHILDREN, HassWatch } from "./hass-watch.ts";
 import { loadSampleHome } from "./api.ts";
 import { tell } from "./ask.ts";
 import { announce, lookAnnouncement, viewChange, type ViewSpot } from "./announce.ts";
+import { BackLayers } from "./back-stack.ts";
 
 type Mode = "view" | "editor" | "extensions" | "settings";
 
@@ -105,6 +106,7 @@ export class Floorplan3dPanel extends LitElement {
     _roomNames: { state: true },
     _controlsRight: { state: true },
     _keepView: { state: true },
+    _floorPics: { state: true },
     _angleLock: { state: true },
     _trail: { state: true },
     _cameraWall: { state: true },
@@ -174,6 +176,8 @@ export class Floorplan3dPanel extends LitElement {
   private declare _roomNames: boolean;
   private declare _controlsRight: boolean;
   private declare _keepView: boolean;
+  /** The floor pictures beside the 3D view (#250: a switch in Settings › Screen and controls, off by default). */
+  private declare _floorPics: boolean;
   /** 3D lock on this device: the angle stays fixed. */
   private declare _angleLock: boolean;
   /** Motion trail of the last half hour in 3D. */
@@ -282,6 +286,7 @@ export class Floorplan3dPanel extends LitElement {
     this._roomNames = prefs.get("room_names") !== "0";
     this._controlsRight = prefs.get("controls") === "right";
     this._keepView = prefs.get("keep_view") === "1";
+    this._floorPics = prefs.get("floor_pictures") === "1";
     this._angleLock = prefs.get("angle_lock") === "1";
     this._trail = prefs.get("trail") === "1";
     this._clean = prefs.get("clean") === "1";
@@ -832,8 +837,12 @@ export class Floorplan3dPanel extends LitElement {
     else if (change === "floor") announce(now.floor ? this.t("announce_floor", { name: b.floors.find((f) => f.id === now.floor)?.name ?? "" }) : this.t("all_floors"));
   }
 
+  /** Android's back gesture closes the View panel before it leaves the page (#250, back-stack.ts). */
+  private readonly backLayers = new BackLayers();
+
   protected updated(changed: PropertyValues): void {
     this.announceView();
+    if (changed.has("_viewOpen")) this.backLayers.sync("view", this._viewOpen && this._mode === "view", () => this.setViewOpen(false, true));
     // the floor row scrolls sideways on a phone: the chosen floor stays in view (#249), also when the Rooms button
     // beside it grows with a room's name
     if (changed.has("_floorId") || changed.has("_roomId")) {
@@ -895,6 +904,7 @@ export class Floorplan3dPanel extends LitElement {
     this.removeEventListener("open-settings", this.onOpenSettings);
     this.removeEventListener("open-extensions", this.onOpenExtensions);
     this.listenTouches(false);
+    this.backLayers.closeAll();
     this.tt.stop();
     this.locateLab?.();
     this.locateLab = null;
@@ -1315,7 +1325,8 @@ export class Floorplan3dPanel extends LitElement {
     return html`
       ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : this.renderFloorBar(b, floor)}
       <div class="fp3d-stage-wrap ${this._roomId ? "fp3d-room-open" : ""} ${this._controlsRight ? "fp3d-side-right" : ""} ${tt ? "fp3d-tt" : ""}">
-        <!-- the floor bar picks the floor: the floor pictures beside the 3D view were a second picker (#249; the card keeps them) -->
+        <!-- the floor bar picks the floor: the floor pictures beside the 3D view are a second picker, shown when Settings
+             › Screen and controls says so (#249, #250; the card keeps its own switch) -->
         <fp3d-view3d
           class="fp3d-body"
           .canEdit=${this.data.canEdit && !this._tablet}
@@ -1326,7 +1337,7 @@ export class Floorplan3dPanel extends LitElement {
           .building=${b}
           .packs=${this.data.packs}
           .plan2d=${this._plan2d}
-          .floorThumbs=${false}
+          .floorThumbs=${this._floorPics}
           .floorStack=${this._floorStack}
           .roomLabels=${this._roomNames}
           .controlsRight=${this._controlsRight}

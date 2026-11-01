@@ -402,13 +402,18 @@ export class ToolbarPart {
   renderHint(this: Fp3dEditor) {
     const start = this.renderStart();
     if (start) return start;
+    // a phone (#250): one line, only while nothing is chosen and the sheet is down (a tool's hint is in the sheet's
+    // title row); ✕ hides it for good, Help in More brings it back
+    if (this._phone && !this.showsPhoneHint()) return nothing;
     const key = this.hintKeyNow();
     const first = key === "hint_empty" || key === "hint_first_room";
     const warn = this._fixedHint || (this._tool === "opening" && !!this._openingNote);
     // the tooltip names the key that turns snapping off while dragging (#143)
     return html`<div class="fp3d-hint ${warn ? "fp3d-hint-fixed" : ""} ${first ? "fp3d-hint-first" : ""}" role="status" aria-live="polite" title=${touchOnly() ? nothing : this.t("snap_off_tip")}>
       <span class="fp3d-hint-text" .textContent=${live(this.hintText())}></span>
-      <button class="fp3d-hint-help" title=${this.t("help_open")} @click=${() => (this._help = true)}>? ${this.t("hint_help")}</button>
+      ${this._phone
+        ? html`<button class="fp3d-hint-help fp3d-hint-hide" aria-label=${this.t("hint_hide")} title=${this.t("hint_hide")} @click=${() => this.setHintOff(true)}>${uiIcon("x")}</button>`
+        : html`<button class="fp3d-hint-help" title=${this.t("help_open")} @click=${() => (this._help = true)}>? ${this.t("hint_help")}</button>`}
     </div>`;
   }
 

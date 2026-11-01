@@ -1,8 +1,7 @@
-// Item, device and pool forms, context menu, previews, floor menu, selection frame, openings, device rows; phone rules last.
+// Item, device and pool forms, context menu, previews, floor menu, selection frame, openings, device rows; touch sizes last.
 // Part of the editor's styles (fp3d-editor static styles, #202): the slices are applied in the order editor.ts lists them.
 
-import { css, unsafeCSS } from "lit";
-import { PHONE_MEDIA } from "../../../phone.ts";
+import { css } from "lit";
 
 export const formStyles = css`
       .fp3d-dev-area {
@@ -802,44 +801,7 @@ export const formStyles = css`
         font-size: 12.5px;
         color: var(--fp3d-warm);
       }
-      /* phones (#94): drawing is for a PC or tablet (the banner says so), but the plan keeps a usable height
-         whatever the toolbar wraps to, and the toolbar packs tighter */
-      @media ${unsafeCSS(PHONE_MEDIA)} {
-        .fp3d-editor.fp3d-narrow {
-          grid-template-rows: auto auto auto;
-        }
-        .fp3d-narrow .fp3d-canvas-wrap {
-          min-height: max(320px, 52vh);
-        }
-        .fp3d-toolbar {
-          flex-wrap: wrap;
-          gap: 4px 6px;
-          padding: 6px 8px;
-        }
-        .fp3d-toolbar .fp3d-tb-grow {
-          display: none;
-        }
-        .fp3d-toolbar .fp3d-seg > button,
-        .fp3d-toolbar .fp3d-menu-wrap > button {
-          padding: 6px 10px;
-          font-size: 13.5px;
-        }
-        /* the floor menu and More share the first row; the tools, undo and Fit follow (the phone editor is #250) */
-        .fp3d-toolbar > * {
-          order: 2;
-        }
-        .fp3d-toolbar > .fp3d-seg-floor {
-          order: 0;
-        }
-        .fp3d-toolbar > .fp3d-seg-more {
-          order: 1;
-        }
-        /* More sits near the left there: its menu opens rightwards, on the screen */
-        .fp3d-seg-more .fp3d-menu-right {
-          left: 0;
-          right: auto;
-        }
-      }
+      /* phones: the phone editor (#250) has its own layout, styles/phone.ts */
 
       /* touch screens (#181): the editor's small buttons and selects reach 44 px */
       @media (pointer: coarse) {

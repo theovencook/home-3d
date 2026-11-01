@@ -4,7 +4,10 @@
 // to fetch, and on a slow link each extra file is another wait. The editor draws a tag at once and starts loading the
 // chunk; once the editor has drawn and the page is idle it loads anyway, so a panel that needs a part rarely waits.
 
+import { css, html, LitElement, nothing } from "lit";
 import { once } from "../../lazy-part.ts";
+import { defineElement } from "../../define.ts";
+import { uiIcon } from "../../ui-icons.ts";
 
 export { need } from "../../lazy-part.ts";
 const loadParts = once(() => import("./lazy-parts.ts"));
@@ -14,6 +17,8 @@ export const loadMultiSelect = loadParts;
 export const loadTimeField = loadParts;
 /** The Extensions page (fp3d-extensions), drawn by the panel once the editor bundle and this chunk are there. */
 export const loadExtensions = loadParts;
+/** The phone editor's bottom bar and More (#250): a chunk of its own, as only phone-wide screens draw it. */
+export const loadPhoneBar = once(() => import("./phone-bar.ts").then((m) => m.definePhoneBar({ LitElement, html, css, nothing, uiIcon, defineElement })));
 
 let preloaded = false;
 
