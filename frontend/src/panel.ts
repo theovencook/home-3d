@@ -1407,8 +1407,8 @@ export class Floorplan3dPanel extends LitElement {
               @edit-floor=${(e: CustomEvent<{ floorId: string | null }>) => this.openInEditor(e.detail.floorId, null)}
             ></fp3d-room-panel>`)
           : nothing}
-        ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session}></fp3d-time-bar>` : nothing}
-        ${showsDemo(hass) ? html`<div class="fp3d-demo-chip" title=${this.t("demo_hint")}>${this.t("demo_chip")}</div>` : nothing}
+        ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session} ?demo=${showsDemo(hass)}></fp3d-time-bar>` : nothing}
+        ${showsDemo(hass) && !this.tt.session ? html`<div class="fp3d-demo-chip" title=${this.t("demo_hint")}>${this.t("demo_chip")}</div>` : nothing}
         ${this._clean ? nothing : html`<div class="fp3d-overlay">
           ${this._tablet ? nothing : planView}
           <button
@@ -1933,15 +1933,15 @@ export class Floorplan3dPanel extends LitElement {
         .fp3d-room-open fp3d-view3d {
           --fp3d-bottom-inset: calc(55% + 8px);
         }
-        /* phones: the time bar takes two rows; the switches make way for it */
+        /* phones: the time bar takes two rows (its height here, the safe area included); the switches, the time
+           travel chip among them, stay on the screen above it (#257) */
         .fp3d-tt > * {
-          --fp3d-tt-h: 100px;
+          --fp3d-tt-h: calc(120px + env(safe-area-inset-bottom, 0px));
         }
-        .fp3d-tt .fp3d-overlay {
-          display: none;
-        }
-        .fp3d-tt fp3d-view3d {
-          --fp3d-bottom-inset: var(--fp3d-tt-h);
+        @media (pointer: coarse) {
+          .fp3d-tt > * {
+            --fp3d-tt-h: calc(138px + env(safe-area-inset-bottom, 0px));
+          }
         }
       }
       /* search and eye on the right (#285): the bar leaves room there instead */

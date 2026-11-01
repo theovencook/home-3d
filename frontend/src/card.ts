@@ -743,9 +743,14 @@ clearTimeout(this.cleanTimer);
           height: 55%;
           justify-content: flex-end;
         }
-        /* the time bar takes two rows here */
+        /* the time bar takes two rows here (#257) */
         .fp3d-tt > * {
-          --fp3d-tt-h: 100px;
+          --fp3d-tt-h: calc(120px + env(safe-area-inset-bottom, 0px));
+        }
+        @media (pointer: coarse) {
+          .fp3d-tt > * {
+            --fp3d-tt-h: calc(138px + env(safe-area-inset-bottom, 0px));
+          }
         }
       }
     `,
