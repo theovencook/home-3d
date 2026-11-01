@@ -175,6 +175,12 @@ export class Fp3dRoomPanel extends LitElement {
     </p>`;
   }
 
+  /** Focus moves to the room's name when the room was chosen from the Rooms picker (#259, V19). */
+  async focusHeading(): Promise<void> {
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>(".fp3d-rp-head h2")?.focus();
+  }
+
   protected render() {
     const room = this.room;
     if (!room || !this.hass) return nothing;
@@ -214,7 +220,7 @@ export class Fp3dRoomPanel extends LitElement {
     return html`<section class="fp3d-rp ${this.readOnly ? "fp3d-rp-ro" : ""}" aria-label=${room.name}>
       <header class="fp3d-rp-head">
         <div>
-          <h2>${room.name}</h2>
+          <h2 tabindex="-1">${room.name}</h2>
           ${facts.length ? html`<p class="fp3d-rp-facts">${facts.join(" · ")}</p>` : nothing}
           ${this.renderHere(room)}
           ${this.readOnly ? html`<p class="fp3d-rp-facts fp3d-rp-ro-note">⏪ ${this.t("tt_readonly")}</p>` : nothing}
@@ -701,6 +707,9 @@ export class Fp3dRoomPanel extends LitElement {
       }
       .fp3d-rp-sheet:hover {
         border-color: var(--fp3d-accent, #37e0ff);
+      }
+      h2:focus:not(:focus-visible) {
+        outline: none;
       }
       h2 {
         margin: 0;

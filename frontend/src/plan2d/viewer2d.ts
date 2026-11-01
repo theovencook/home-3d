@@ -15,7 +15,7 @@ import { lowEndDevice } from "../viewer/pace.ts";
 import type { DeviceMarker, FlowPiece, ScreenState, Theme, ViewerOptions } from "../viewer/viewer3d.ts";
 import type { ViewerSurface } from "../viewer-surface.ts";
 import { Gestures } from "./gestures.ts";
-import { anchorSpots, rackDraw, rackOfPick, fitInside, floorPictures, flowLines, planBounds, planItems, planMarkers, planOpenings, shownFloor, zoomView, type PlanOpening, type PlanView } from "./scene.ts";
+import { anchorSpots, rackDraw, rackOfPick, fitInside, roomFocusView, floorPictures, flowLines, planBounds, planItems, planMarkers, planOpenings, shownFloor, zoomView, type PlanOpening, type PlanView } from "./scene.ts";
 
 type View = ReturnType<ViewerSurface["getView"]>;
 type Anchors = Parameters<ViewerSurface["setAnchors"]>[0];
@@ -136,11 +136,23 @@ export class Plan2dViewer implements ViewerSurface {
     this.draw();
   }
 
-  /** The room is marked; the plan keeps its place (the room's panel covers part of the view, a zoom would hide more). */
+  /**
+   * The room is marked. Beside a room panel the plan keeps its place; under a phone's room sheet it zooms to the room
+   * above the sheet (#259), and goes back to the whole floor when the room closes.
+   */
   selectRoom(roomId: string | null): void {
     if (roomId === this.roomId) return;
     this.roomId = roomId;
+    if (this.roomZoomed || this.roomView()) this.fit();
     this.draw();
+  }
+
+  /** The plan is zoomed to the chosen room (#259). */
+  private roomZoomed = false;
+
+  private roomView(): PlanView | null {
+    const floor = this.floor();
+    return floor && this.size.w ? roomFocusView(floor, this.roomId, this.size, this.bottom) : null;
   }
 
   resetView(): void {
@@ -349,6 +361,9 @@ export class Plan2dViewer implements ViewerSurface {
   private fit(): void {
     const floor = this.floor();
     if (!floor || !this.size.w) return;
+    const room = this.roomView();
+    this.roomZoomed = !!room;
+    if (room) return this.applyView(room);
     const box = planBounds(floor);
     if (!box) return;
     // room for the floor pictures on the left and the energy chips at the top; on a phone the plan takes the width

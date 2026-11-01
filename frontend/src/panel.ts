@@ -55,6 +55,11 @@ function settingsAddress(hash: string): { section: string | null; id: string | n
 }
 
 /** What counts as someone using a wall tablet: its idle return waits again (#92). */
+/** Whether a sideways-scrolling row has more past its start and its end (1 px of rounding allowed) (#259). */
+export const navEdges = (left: number, scrollWidth: number, clientWidth: number): { start: boolean; end: boolean } => ({
+  start: left > 1,
+  end: left + clientWidth < scrollWidth - 1,
+});
 /** How long (ms) a notice's buttons wait after it appears before a tap acts (#258). */
 export const NOTICE_ARM_MS = 800;
 /** Whether a tap at `now` came too soon after the notices appeared at `shownAt` to have been aimed at them (#258). */
@@ -855,6 +860,7 @@ export class Floorplan3dPanel extends LitElement {
       const row = on?.parentElement;
       if (on && row && row.scrollWidth > row.clientWidth) on.scrollIntoView?.({ block: "nearest", inline: "nearest" });
     }
+    this.markNavEdges();
     // the page's language is the one its texts are in (#196): English while a language has no texts here
     const lang = uiLanguage(this.hass);
     if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);
@@ -1217,6 +1223,25 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   /** A single-row bar scrolls sideways with the mouse wheel (a desktop has no swipe). */
+  /** Focus goes on to the room panel once the room is chosen, not back to the page (#259, V19). */
+  private async focusRoomPanel(): Promise<void> {
+    await this.updateComplete;
+    await customElements.whenDefined("fp3d-room-panel");
+    await (this.renderRoot.querySelector("fp3d-room-panel") as (HTMLElement & { focusHeading?: () => Promise<void> }) | null)?.focusHeading?.();
+  }
+
+  /**
+   * A floors row wider than its room fades out at the end(s) with more chips (#259, V12/ND-11): a chip half under the
+   * Rooms button reads as "scroll for more", not as a floor called "G". Written straight onto the row, no re-render.
+   */
+  private readonly markNavEdges = () => {
+    const row = this.renderRoot?.querySelector<HTMLElement>(".fp3d-floors");
+    if (!row) return;
+    const more = navEdges(row.scrollLeft, row.scrollWidth, row.clientWidth);
+    row.toggleAttribute("data-more-start", more.start);
+    row.toggleAttribute("data-more-end", more.end);
+  };
+
   private readonly onNavWheel = (e: WheelEvent) => {
     if (!e.deltaY || e.deltaX) return;
     const nav = e.currentTarget as HTMLElement;
@@ -1240,7 +1265,7 @@ export class Floorplan3dPanel extends LitElement {
     const room = this._roomId ? b.floors.flatMap((f) => zonesOf(f)).find((r) => r.id === this._roomId) : undefined;
     return html`<nav class="fp3d-nav" aria-label=${this.t("floors")}>
       ${many
-        ? html`<div class="fp3d-seg fp3d-floors" role="group" aria-label=${this.t("floors")} @wheel=${this.onNavWheel}>
+        ? html`<div class="fp3d-seg fp3d-floors" role="group" aria-label=${this.t("floors")} @wheel=${this.onNavWheel} @scroll=${this.markNavEdges}>
             <button aria-pressed=${this._floorId === null} @click=${() => pickFloor(null)}>${this.t("all_floors")}</button>
             ${[...b.floors].reverse().map((f) => html`<button aria-pressed=${f.id === this._floorId} @click=${() => pickFloor(f.id)}>${f.name}</button>`)}
           </div>`
@@ -1271,6 +1296,7 @@ export class Floorplan3dPanel extends LitElement {
                       if (many) this._floorId = e.detail.floorId;
                       this._roomId = e.detail.roomId;
                       this._roomsOpen = false;
+                      void this.focusRoomPanel();
                     }}
                     @edit-floor=${(e: CustomEvent<{ floorId: string }>) => this.openInEditor(e.detail.floorId, null)}
                     @picker-close=${(e: CustomEvent<{ focus?: boolean } | null>) => this.closeRooms(!!e.detail?.focus)}
@@ -1861,6 +1887,19 @@ export class Floorplan3dPanel extends LitElement {
       }
       .fp3d-floors:hover {
         scrollbar-width: thin;
+      }
+      /* more chips past an edge: that edge fades out; the chosen chip scrolls clear of the fade (#259) */
+      .fp3d-floors {
+        scroll-padding-inline: 28px;
+      }
+      .fp3d-floors[data-more-end] {
+        mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+      }
+      .fp3d-floors[data-more-start] {
+        mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+      }
+      .fp3d-floors[data-more-start][data-more-end] {
+        mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
       }
       .fp3d-floors > button {
         flex: none;

@@ -179,3 +179,100 @@ test("#258 V03: a tap that lands on a notice just after it appeared does nothing
   p.renderNotices([{ key: "save", body: "x" }]);
   assert.ok(p.noticeShownAt > at);
 });
+
+// ---- #259: the phone 3D view ----
+
+const { navEdges } = await import("./panel.ts");
+const { Fp3dView3d } = await import("./components/view3d.ts");
+const { Fp3dViewPanel, moreBelow } = await import("./components/view-panel.ts");
+const { roomFocusView } = await import("./plan2d/scene.ts");
+const view3dCss = text((Fp3dView3d as unknown as Styled).styles);
+
+test("#259 V12/ND-11: the floors row fades out at an end with more chips, and the chosen chip scrolls clear of the fade", () => {
+  assert.deepEqual(navEdges(0, 343, 247), { start: false, end: true });
+  assert.deepEqual(navEdges(96, 343, 247), { start: true, end: false });
+  assert.deepEqual(navEdges(40, 343, 247), { start: true, end: true });
+  assert.deepEqual(navEdges(0, 247, 247), { start: false, end: false });
+  assert.match(panelCss, /\.fp3d-floors\[data-more-end\] \{\s*mask-image: linear-gradient\(to right/);
+  assert.match(panelCss, /\.fp3d-floors\[data-more-start\] \{\s*mask-image: linear-gradient\(to left/);
+  assert.match(panelCss, /\.fp3d-floors \{\s*scroll-padding-inline: 28px/);
+  // marked when the row scrolls and after every render (a new floor, a room name on the Rooms button)
+  const panel = src("./panel.ts");
+  assert.match(panel, /@wheel=\$\{this\.onNavWheel\} @scroll=\$\{this\.markNavEdges\}/);
+  assert.match(panel, /this\.markNavEdges\(\);/);
+});
+
+test("#259 V04/V08: search opens with its field focused, named, and with one cross", async () => {
+  const v = new Fp3dView3d() as unknown as Record<string, any>;
+  let focused = false;
+  v.renderRoot = { querySelector: (sel: string) => (sel === ".fp3d-find input" ? { focus: () => (focused = true) } : null) };
+  Object.defineProperty(v, "updateComplete", { value: Promise.resolve(true) });
+  v.openFind();
+  assert.equal(v._find, "");
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.ok(focused, "the field has the focus");
+  const view3d = src("./components/view3d.ts");
+  assert.match(view3d, /class="fp3d-find-btn"[^>]*@click=\$\{\(\) => this\.openFind\(\)\}/);
+  assert.match(view3d, /type="search"\s*aria-label=\$\{translate\(this\.hass, "find"\)\}/);
+  assert.match(view3dCss, /\.fp3d-find input::-webkit-search-cancel-button \{[^}]*display: none/);
+});
+
+test("#259 V13: a room chosen in 2D under the phone's room sheet is zoomed to above the sheet; beside a panel the plan stays", () => {
+  const floor = {
+    id: "f",
+    rooms: [
+      { id: "a", name: "A", points: [[0, 0], [4, 0], [4, 3], [0, 3]] },
+      { id: "b", name: "B", points: [[4, 0], [12, 0], [12, 9], [4, 9]] },
+    ],
+    outdoor: [],
+    furniture: [],
+    placements: [],
+  } as never;
+  const size = { w: 390, h: 733 };
+  assert.equal(roomFocusView(floor, "a", size, 0), null, "nothing covers the plan");
+  assert.equal(roomFocusView(floor, null, size, 411), null);
+  assert.equal(roomFocusView(floor, "nope", size, 411), null);
+  const v = roomFocusView(floor, "a", size, 411)!;
+  // the room's corners on screen: inside the width, between the energy chips (60 px) and the top of the sheet
+  const top = 0 * v.k + v.ty;
+  const bottom = 3 * v.k + v.ty;
+  const left = 0 * v.k + v.tx;
+  const right = 4 * v.k + v.tx;
+  assert.ok(left >= 0 && right <= size.w, `${left} ${right}`);
+  assert.ok(top >= 60 && bottom <= size.h - 411 - 8 + 0.5, `${top} ${bottom}`);
+  // zoomed in: far larger than the whole floor fitted in the same space
+  const whole = 12;
+  assert.ok(v.k > (size.w - 72) / whole, `${v.k}`);
+  const viewer = src("./plan2d/viewer2d.ts");
+  assert.match(viewer, /if \(this\.roomZoomed \|\| this\.roomView\(\)\) this\.fit\(\);/);
+  assert.match(viewer, /const room = this\.roomView\(\);\s*this\.roomZoomed = !!room;\s*if \(room\) return this\.applyView\(room\);/);
+});
+
+test("#259 V14: on a narrow stage the energy row stops before the Walk button", () => {
+  const narrow3d = block(view3dCss, "@container fp3d (max-width: 900px)");
+  assert.match(narrow3d, /\.fp3d-stage:has\(> \.fp3d-walk-btn\) \.fp3d-energy \{\s*max-width: calc\(100% - 20px - var\(--fp3d-walk-right, 12px\) - var\(--fp3d-walk-w, 96px\)\)/);
+  assert.match(view3dCss, /\.fp3d-stage \{\s*--fp3d-walk-w: 44px;\s*\}\s*\.fp3d-walk-btn \{\s*z-index: 5;\s*width: 44px;/);
+});
+
+test("#259 V17: a View panel taller than the screen shows it scrolls: a scroll bar and a fading foot while there is more", () => {
+  assert.equal(moreBelow(0, 500, 800), true);
+  assert.equal(moreBelow(300, 500, 800), false);
+  assert.equal(moreBelow(0, 800, 800), false);
+  const css = text((Fp3dViewPanel as unknown as Styled).styles);
+  assert.match(block(css, ".vp-body {"), /scrollbar-width: thin/);
+  assert.match(block(css, ".vp-body[data-more]::after"), /position: sticky/);
+  assert.match(src("./components/view-panel.ts"), /<div class="vp-body" @scroll=\$\{this\.markMore\}>/);
+});
+
+test("#259 V19: a room chosen from the Rooms picker takes the focus to the room panel's name", async () => {
+  const { Fp3dRoomPanel } = await import("./components/room-panel.ts");
+  const rp = new Fp3dRoomPanel() as unknown as Record<string, any>;
+  let focused = false;
+  rp.renderRoot = { querySelector: (sel: string) => (sel === ".fp3d-rp-head h2" ? { focus: () => (focused = true) } : null) };
+  Object.defineProperty(rp, "updateComplete", { value: Promise.resolve(true) });
+  await rp.focusHeading();
+  assert.ok(focused);
+  assert.match(src("./components/room-panel.ts"), /<h2 tabindex="-1">\$\{room\.name\}<\/h2>/);
+  assert.match(src("./panel.ts"), /this\._roomsOpen = false;\s*void this\.focusRoomPanel\(\);/);
+});
