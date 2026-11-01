@@ -1,6 +1,7 @@
 // Pipes on walls (Pool Pro) in the wall view: tech mode, laying, editing and erasing runs, joints, feeds,
 // fittings, and their drawing.
 
+import { uiIcon } from "../../ui-icons.ts";
 import { html, nothing, svg } from "lit";
 import { sharedEdge } from "../../geometry/snap.ts";
 import { cornerPoint, nearestOnPath, onWall, pipePath, type P3 } from "../../geometry/runs.ts";
@@ -575,7 +576,7 @@ export class PipesPart {
       <button class="fp3d-btn fp3d-tech-undo" ?disabled=${!this._canUndo} title="Ctrl+Z" @click=${() => {
         this._runDraft = null;
         this.undo();
-      }}>↶ ${this.t("undo")}</button>
+      }}>${uiIcon("undo")} ${this.t("undo")}</button>
       <h4>${this.t("tech_feeds")}</h4>
       ${kinds.map((k) => {
         const done = rules.feedDone(area, k);

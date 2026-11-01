@@ -33,6 +33,7 @@ import type { ClockPos } from "./card-config.ts";
 import { TimeTravel } from "./load-timetravel.ts";
 import { IdleClock, tabletIdleSeconds, tabletMode } from "./kiosk.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
+import { uiIcon } from "./ui-icons.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 import { UndoHistory } from "./undo-history.ts";
 import { showsDemo, withDemo } from "./demo.ts";
@@ -1069,7 +1070,7 @@ export class Floorplan3dPanel extends LitElement {
                         prefs.set("controls", right ? "right" : "left");
                       }}
                     >
-                      ${right ? "◨" : "◧"}
+                      ${uiIcon(right ? "panel-right" : "panel-left")}
                     </button>`,
                 )}
                 ${this.canEdit
@@ -1333,7 +1334,8 @@ export class Floorplan3dPanel extends LitElement {
       </div>`;
     }
     const floor = b.floors.find((f) => f.id === this._floorId);
-    const roomFloors = floor ? [floor] : b.floors;
+    // "All floors" shows the floor chips only; the rooms come once one floor is picked (#222)
+    const roomFloors = floor ? [floor] : b.floors.length > 1 ? [] : b.floors;
     const tt = this.tt.active;
     // a sample / demo home: devices this Home Assistant lacks show fixed demo states (#100)
     const hass = this.viewHass(this.rawHass!, b);
@@ -1344,7 +1346,8 @@ export class Floorplan3dPanel extends LitElement {
       <button aria-pressed=${this._plan2d} @click=${() => this.setPlan2d(true)}>${this.t("view_2d")}</button>
     </div>`;
     return html`
-      ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : html`<nav class="fp3d-nav ${this._navWrap ? "fp3d-nav-wrap" : ""}" @wheel=${this.onNavWheel}>
+      ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : html`<nav class="fp3d-nav">
+        <div class="fp3d-nav-chips ${this._navWrap ? "fp3d-nav-wrap" : ""}" @wheel=${this.onNavWheel}>
         ${b.floors.length > 1
           ? html`<button class="fp3d-chip" aria-pressed=${this._floorId === null} @click=${() => {
                 this._floorId = null;
@@ -1364,12 +1367,10 @@ export class Floorplan3dPanel extends LitElement {
                   ${f.name}
                 </button>`,
               )}
-              <span class="fp3d-sep"></span>`
+              ${roomFloors.length && !this._tablet ? html`<span class="fp3d-sep"></span>` : nothing}`
           : nothing}
         ${(this._tablet ? [] : roomFloors).flatMap((f) => [
-          // in the house view the rooms of every floor follow a small floor label; a room without a name has
-          // no button (an empty chip would only take space, #370)
-          roomFloors.length > 1 && zonesOf(f).some((r) => r.name.trim()) ? html`<span class="fp3d-nav-floor">${f.name}</span>` : nothing,
+          // a room without a name has no button (an empty chip would only take space, #370)
           // the rooms, then the outdoor areas acting as rooms (garden, terrace – #100)
           // several areas of one garden (front and back lawn with the same area and name) share one chip
           ...zonesOf(f)
@@ -1387,6 +1388,7 @@ export class Floorplan3dPanel extends LitElement {
             </button>`,
           ),
         ])}
+        </div>
         ${this._tablet ? nothing : html`<button
           class="fp3d-chip fp3d-nav-toggle"
           title=${this.t(this._navWrap ? "nav_row" : "nav_wrap")}
@@ -1927,15 +1929,23 @@ export class Floorplan3dPanel extends LitElement {
       }
       .fp3d-nav {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 6px;
         padding: 10px 14px;
-        overflow-x: auto;
-        scrollbar-width: none;
         flex: none;
       }
+      /* the chips scroll in their own box; the scroll / expand button beside it has its own room (#224) */
+      .fp3d-nav-chips {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
       /* a desktop shows a thin scrollbar while the pointer rests on the bar */
-      .fp3d-nav:hover {
+      .fp3d-nav-chips:hover {
         scrollbar-width: thin;
       }
       /* wrapped: several lines, at most about three before the bar itself scrolls */
@@ -1945,20 +1955,8 @@ export class Floorplan3dPanel extends LitElement {
         overflow-y: auto;
         max-height: 132px;
       }
-      .fp3d-nav-floor {
-        flex: none;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--fp3d-muted);
-        margin-left: 6px;
-      }
       .fp3d-nav-toggle {
         flex: none;
-        margin-left: auto;
-        position: sticky;
-        right: 0;
         min-width: 34px;
         padding-left: 8px;
         padding-right: 8px;

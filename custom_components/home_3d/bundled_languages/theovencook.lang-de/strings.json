@@ -2866,5 +2866,12 @@
  "mic_would_none": "Kein Raum, keine Etage im Satz gefunden",
  "mic_house": "das ganze Haus",
  "mic_close": "Schließen",
- "mic_silent": "Das Mikrofon liefert nur Stille. Meist hält eine andere App es fest – in Fully Kiosk die Bewegungserkennung per Geräusch (Motion Detection → Acoustic Detection) ausschalten und neu laden."
+ "mic_silent": "Das Mikrofon liefert nur Stille. Meist hält eine andere App es fest – in Fully Kiosk die Bewegungserkennung per Geräusch (Motion Detection → Acoustic Detection) ausschalten und neu laden.",
+ "hint_place_touch": "Auf den Plan tippen, um {name} dort hinzustellen",
+ "hint_polygon_touch": "Zum Setzen der Ecken tippen · auf den ersten Punkt tippen schließt",
+ "hint_outdoor_free_touch": "Ecken der Außenfläche setzen · auf den ersten Punkt tippen schließt",
+ "hint_wall_pick_touch": "Wandansicht: in den Raum tippen (oder nah an eine Wand)",
+ "hint_kerb_pick_touch": "Abholplatz: dorthin tippen, wo die Tonne am Abholtag steht",
+ "fixed_drag_hint_touch": "🔒 Fixiert – erst lösen, dann verschieben (Schloss im Formular)",
+ "multi_hint_touch": "„Mehrere wählen“ einschalten, dann Objekte antippen oder über leerem Boden einen Rahmen ziehen. Gemeinsam verschieben, drehen oder kopieren, oder zu einem Block verbinden."
 }

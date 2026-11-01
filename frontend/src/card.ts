@@ -4,6 +4,7 @@ import { defineElement } from "./define.ts";
 import { zonesOf, type Building } from "./model.ts";
 import { confirmEntities } from "./devices.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
+import { uiIcon } from "./ui-icons.ts";
 import { BuildingController, type PlanChange } from "./building-controller.ts";
 import "./components/room-panel.ts";
 import { loadView, readyView } from "./load-view.ts";
@@ -595,7 +596,7 @@ clearTimeout(this.cleanTimer);
         ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session}></fp3d-time-bar>` : nothing}
         ${c?.fullscreen_button && !this._clean && !(this._roomId && c.room_panel !== false)
           ? html`<button class="fp3d-card-full" title=${t(this._fullscreen ? "fullscreen_exit" : "fullscreen")} aria-label=${t(this._fullscreen ? "fullscreen_exit" : "fullscreen")} @click=${() => this.toggleFullscreen()}>
-              ${this._fullscreen ? "✕" : "⛶"}
+              ${this._fullscreen ? "✕" : uiIcon("expand")}
             </button>`
           : nothing}
         ${c?.dashboard && !this._clean && !(this._roomId && c.room_panel !== false)

@@ -43,6 +43,7 @@ import { effectSettings, itemShade, motionRooms, tempShade } from "../room-effec
 import { alertEntities, alertKey, alertSources, alertText, alertTint, clearedSnoozes, dismissAlert, findAlerts, HOUSE_ALERTS, isOutage, mayIgnoreAlert, restoreAlert, shownAlerts, snoozeKey, type Alert, type AlertSources } from "../alerts.ts";
 import { ignoredAlerts } from "./ignored-alerts.ts";
 import { iconPath, iconSvg, mdiIcon } from "../icons.ts";
+import { uiIcon } from "../ui-icons.ts";
 import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binPlace, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
 import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, type EnergyPrefs, fieldLevels, fieldPowers, findConsumers, flowDots, isLoad, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type SolarDay, type FlowKind, type StatRow } from "../energy.ts";
 import { fieldFace, fieldSize, roofFaces, roofWindowRoom } from "../solar.ts";
@@ -6040,7 +6041,7 @@ export class Fp3dView3d extends LitElement {
           aria-label=${translate(this.hass, "through_blend")}
           @input=${(e: Event) => (this._blend = Number((e.target as HTMLInputElement).value) / 100)}
         />
-        <button class="fp3d-chip" title=${translate(this.hass, "through_full_hint")} @click=${() => this.throughFull(t.entity)}>⛶ ${translate(this.hass, "through_full")}</button>
+        <button class="fp3d-chip" title=${translate(this.hass, "through_full_hint")} @click=${() => this.throughFull(t.entity)}>${uiIcon("expand")} ${translate(this.hass, "through_full")}</button>
         <button class="fp3d-chip" @click=${() => this.endThrough()}>${translate(this.hass, "through_back")}</button>
       </div>
     </div>`;
@@ -6393,12 +6394,12 @@ export class Fp3dView3d extends LitElement {
       ${this.flows !== null
         ? nothing
         : html`<button class="fp3d-energy-item fp3d-flow-toggle" aria-pressed=${this._flows} title=${`${t("flows_hint")} (${t(this._flows ? "flow_on" : "flow_off")})`} aria-label=${t("flows")} @click=${() => this.toggleFlows()}>
-        <span>${t("flows")}</span><b>⚡</b>
+        <span>${t("flows")}</span><b>${uiIcon("flow")}</b>
       </button>`}
       ${this.holograms !== null || !this._holos.length
         ? nothing
         : html`<button class="fp3d-energy-item fp3d-flow-toggle" aria-pressed=${this._holoShow} title=${t("holos_hint")} aria-label=${t("holos")} @click=${() => this.toggleHolos()}>
-        <span>${t("holos")}</span><b>◫</b>
+        <span>${t("holos")}</span><b>${uiIcon("holo")}</b>
       </button>`}
     </div>`;
   }
@@ -9177,6 +9178,13 @@ export class Fp3dView3d extends LitElement {
         color: var(--fp3d-muted);
         font-variant-numeric: tabular-nums;
         pointer-events: none;
+        /* the buttons (search, hide, star) fill the corner on the controls' side: the line keeps clear of them and wraps (#241) */
+        max-width: calc(100% - 126px);
+        text-align: right;
+        text-wrap: balance;
+      }
+      .fp3d-side-right .fp3d-stats {
+        right: 116px;
       }
       .fp3d-error {
         position: absolute;

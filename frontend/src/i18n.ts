@@ -2885,6 +2885,14 @@ const en = {
   mic_house: "the whole house",
   mic_close: "Close",
   mic_silent: "The microphone gives only silence. Usually another app holds it – in Fully Kiosk switch off the acoustic motion detection (Motion Detection → Acoustic Detection) and reload.",
+  // touch wording of the editor's hints (#228): shown instead of the keyboard and mouse sentences on a touch-only device
+  hint_place_touch: "Tap the plan to place {name} there",
+  hint_polygon_touch: "Tap to place corners · tap the first corner to close",
+  hint_outdoor_free_touch: "Place the corners of the outdoor area · tap the first corner to close",
+  hint_wall_pick_touch: "Wall view: tap into the room (or near a wall)",
+  hint_kerb_pick_touch: "Kerb spot: tap where the bin stands on collection day",
+  fixed_drag_hint_touch: "🔒 Fixed – release it first to move it (lock in the form)",
+  multi_hint_touch: "Turn on “Select several” to tap items or draw a frame over empty ground. Move, turn or copy them together, or join them into a block.",
 };
 
 type Key = keyof typeof en;
