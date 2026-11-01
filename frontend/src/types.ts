@@ -70,5 +70,6 @@ export interface HomeAssistant {
   themes?: { darkMode?: boolean; theme?: string };
   connection: HassConnection;
   callWS<T>(msg: Record<string, unknown>): Promise<T>;
-  callService(domain: string, service: string, data?: Record<string, unknown>): Promise<unknown>;
+  /** `notifyOnError` false: Home Assistant shows no toast of its own when the call fails (we show one, #243). */
+  callService(domain: string, service: string, data?: Record<string, unknown>, target?: Record<string, unknown>, notifyOnError?: boolean): Promise<unknown>;
 }

@@ -106,6 +106,44 @@ export function coverTiltButtons(st: HassEntity | undefined): boolean {
   return typeof st.attributes.current_tilt_position === "number" || !NO_SLATS.has(String(st.attributes.device_class ?? ""));
 }
 
+/** The controls a cover's panel row offers, from its supported_features (#243): never a button it cannot do. */
+export interface CoverControls {
+  open: boolean;
+  close: boolean;
+  stop: boolean;
+  /** A position slider (SET_POSITION, and it reports a position). */
+  position: boolean;
+  tiltOpen: boolean;
+  tiltClose: boolean;
+  tiltStop: boolean;
+  /** A slats slider (SET_TILT_POSITION, and it reports a tilt position). */
+  tiltPosition: boolean;
+}
+
+/**
+ * What a cover can do, by Home Assistant's CoverEntityFeature bits: OPEN 1, CLOSE 2, SET_POSITION 4, STOP 8,
+ * OPEN_TILT 16, CLOSE_TILT 32, STOP_TILT 64, SET_TILT_POSITION 128. Tilt buttons only for covers with slats
+ * (coverTiltButtons); a cover with a slats slider and open/close keeps just the slider for its slats, as before, while a
+ * tilt-only blind gets its tilt buttons next to the slider (they are its only buttons).
+ */
+export function coverControls(st: HassEntity | undefined): CoverControls {
+  const f = (((st?.attributes.supported_features as number) ?? 0) | 0) as number;
+  const position = !!(f & 4) && typeof st?.attributes.current_position === "number";
+  const tiltPosition = !!(f & 128) && typeof st?.attributes.current_tilt_position === "number";
+  const tiltOnly = !(f & 3);
+  const tiltButtons = coverTiltButtons(st) && (tiltOnly || !tiltPosition);
+  return {
+    open: !!(f & 1),
+    close: !!(f & 2),
+    stop: !!(f & 8),
+    position,
+    tiltOpen: tiltButtons && !!(f & 16),
+    tiltClose: tiltButtons && !!(f & 32),
+    tiltStop: tiltButtons && !!(f & 64),
+    tiltPosition,
+  };
+}
+
 export function entityAreaId(hass: HomeAssistant, entityId: string): string | null {
   const entry = hass.entities?.[entityId];
   if (!entry) return null;

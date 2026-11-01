@@ -3,7 +3,7 @@
 
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
-import { areaEntities, coverTiltButtons, entityName, groupByDevice, isUnavailable, kindOf, roomClimateSensors, roomClimateValue, roomPanelEntities, fromCelsius, tempUnit, type DeviceKind } from "../devices.ts";
+import { areaEntities, coverControls, entityName, groupByDevice, isUnavailable, kindOf, roomClimateSensors, roomClimateValue, roomPanelEntities, fromCelsius, tempUnit, type DeviceKind } from "../devices.ts";
 import { askConfirm } from "../ask.ts";
 import { callServiceSafe } from "../failure.ts";
 import { confirmGroup } from "../confirm-group.ts";
@@ -19,9 +19,7 @@ import { arrangePanel, groupOrder, type ArrangedPanel, type PanelGroup } from ".
 import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
 
-const COVER_SET_POSITION = 4;
 const CAMERA_REFRESH_MS = 3000;
-const COVER_STOP = 8;
 
 /** Colour presets offered for colour lights (warm white first). */
 const SWATCHES: [number, number, number][] = [
@@ -334,10 +332,10 @@ export class Fp3dRoomPanel extends LitElement {
       return this.section(
         "panel_covers",
         states.map((st) => this.coverRow(st)),
-        covers.length > 1
-          ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("cover", "open_cover", covers.filter((c) => !isUnavailable(c)).map((c) => c.entity_id))}>
+        covers.filter((c) => coverControls(c).open || coverControls(c).close).length > 1
+          ? html`<button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("cover", "open_cover", covers.filter((c) => !isUnavailable(c) && coverControls(c).open).map((c) => c.entity_id))}>
                 ${this.t("panel_all_open")}</button
-              ><button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("cover", "close_cover", covers.filter((c) => !isUnavailable(c)).map((c) => c.entity_id))}>
+              ><button class="fp3d-btn fp3d-rp-small" @click=${() => this.callAll("cover", "close_cover", covers.filter((c) => !isUnavailable(c) && coverControls(c).close).map((c) => c.entity_id))}>
                 ${this.t("panel_all_close")}
               </button>`
           : nothing,
@@ -435,51 +433,39 @@ export class Fp3dRoomPanel extends LitElement {
     </div>`;
   }
 
+  /** A cover's row: only the buttons and sliders its supported_features allow (#243, coverControls). */
   private coverRow(st: HassEntity) {
     const a = st.attributes;
-    const features = (a.supported_features as number | undefined) ?? 0;
+    const c = coverControls(st);
     const id = st.entity_id;
     const na = isUnavailable(st);
+    const button = (label: I18nKey, service: string, ask = false) =>
+      html`<button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${async () => (!ask || (await this.askFor(id))) && this.call("cover", service, { entity_id: id })}>${this.t(label)}</button>`;
+    const slider = (label: I18nKey, value: number, service: string, key: string) =>
+      html`<label class="fp3d-rp-slider"
+        ><span>${this.t(label)}</span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          ?disabled=${na}
+          .value=${String(value)}
+          @change=${(e: Event) => this.call("cover", service, { entity_id: id, [key]: Number((e.target as HTMLInputElement).value) })}
+      /></label>`;
     return html`<div class="fp3d-rp-row">
       <span class="fp3d-rp-icon">${icon("cover")}</span>
       ${this.nameButton(id)}
       <span class="fp3d-rp-state">${this.stateOf(st)}</span>
       <div class="fp3d-rp-buttons">
-        <button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${async () => (await this.askFor(id)) && this.call("cover", "open_cover", { entity_id: id })}>${this.t("cover_open")}</button>
-        ${features & COVER_STOP
-          ? html`<button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.call("cover", "stop_cover", { entity_id: id })}>${this.t("cover_stop")}</button>`
-          : nothing}
-        <button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${async () => (await this.askFor(id)) && this.call("cover", "close_cover", { entity_id: id })}>${this.t("cover_close")}</button>
+        ${c.open ? button("cover_open", "open_cover", true) : nothing}${c.stop ? button("cover_stop", "stop_cover") : nothing}${c.close ? button("cover_close", "close_cover", true) : nothing}
       </div>
-      ${features & COVER_SET_POSITION && typeof a.current_position === "number"
-        ? html`<label class="fp3d-rp-slider"
-            ><span>${this.t("position")}</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              ?disabled=${na}
-              .value=${String(a.current_position)}
-              @change=${(e: Event) => this.call("cover", "set_cover_position", { entity_id: id, position: Number((e.target as HTMLInputElement).value) })}
-          /></label>`
+      ${c.position ? slider("position", a.current_position as number, "set_cover_position", "position") : nothing}
+      ${c.tiltOpen || c.tiltStop || c.tiltClose
+        ? html`<div class="fp3d-rp-buttons fp3d-rp-wide">
+            ${c.tiltOpen ? button("cover_tilt_open", "open_cover_tilt") : nothing}${c.tiltStop ? button("cover_stop", "stop_cover_tilt") : nothing}${c.tiltClose ? button("cover_tilt_close", "close_cover_tilt") : nothing}
+          </div>`
         : nothing}
-      ${features & 128 && typeof a.current_tilt_position === "number"
-        ? html`<label class="fp3d-rp-slider"
-            ><span>${this.t("cover_tilt")}</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              ?disabled=${na}
-              .value=${String(a.current_tilt_position)}
-              @change=${(e: Event) => this.call("cover", "set_cover_tilt_position", { entity_id: id, tilt_position: Number((e.target as HTMLInputElement).value) })}
-          /></label>`
-        : coverTiltButtons(this.hass?.states[id])
-          ? html`<div class="fp3d-rp-buttons">
-              ${features & 16 ? html`<button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.call("cover", "open_cover_tilt", { entity_id: id })}>${this.t("cover_tilt_open")}</button>` : nothing}
-              ${features & 32 ? html`<button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.call("cover", "close_cover_tilt", { entity_id: id })}>${this.t("cover_tilt_close")}</button>` : nothing}
-            </div>`
-          : nothing}
+      ${c.tiltPosition ? slider("cover_tilt", a.current_tilt_position as number, "set_cover_tilt_position", "tilt_position") : nothing}
     </div>`;
   }
 

@@ -143,3 +143,61 @@ test("'Edit list' stores each step as a plan change on the room (#229)", async (
   el.move("lights", 1, 2);
   assert.equal(changes.length, 0, "no move past either end");
 });
+
+// ---------------------------------------------------------------- cover controls follow supported_features (#243)
+
+/** The cover row of a cover with these features (and position/tilt reported), as text. */
+function coverHtml(features: number, attrs: Record<string, unknown> = { current_position: 40, current_tilt_position: 30 }): string {
+  const el = panel(false);
+  el.hass.states["cover.sample_blind"] = { entity_id: "cover.sample_blind", state: "open", attributes: { friendly_name: "Blind", supported_features: features, device_class: "blind", ...attrs } };
+  return flat(el.coverRow(el.hass.states["cover.sample_blind"]));
+}
+
+const has = (html: string) => ({
+  open: /\u0001Open\u0002/.test(html),
+  close: /\u0001Close\u0002/.test(html),
+  stop: /\u0001Stop\u0002/.test(html),
+  position: /\u0001Position\u0002/.test(html),
+  tiltOpen: /Slats open/.test(html),
+  tiltClose: /Slats closed/.test(html),
+  tiltSlider: /\u0001Slats\u0002/.test(html),
+});
+
+test("each cover feature combination shows only what it supports (#243)", async () => {
+  const { coverControls } = await import("../devices.ts");
+  // every bitmask of the eight features: a control appears exactly when its feature is there
+  for (let f = 0; f < 256; f++) {
+    const c = coverControls({ entity_id: "cover.sample_blind", state: "open", attributes: { supported_features: f, device_class: "blind", current_position: 40, current_tilt_position: 30 } } as never);
+    assert.equal(c.open, !!(f & 1), `open ${f}`);
+    assert.equal(c.close, !!(f & 2), `close ${f}`);
+    assert.equal(c.position, !!(f & 4), `position ${f}`);
+    assert.equal(c.stop, !!(f & 8), `stop ${f}`);
+    assert.equal(c.tiltPosition, !!(f & 128), `tilt position ${f}`);
+    if (c.tiltOpen) assert.ok(f & 16, `tilt open ${f}`);
+    if (c.tiltClose) assert.ok(f & 32, `tilt close ${f}`);
+    if (c.tiltStop) assert.ok(f & 64, `tilt stop ${f}`);
+    // a tilt-only blind with slats buttons gets every tilt button it supports (stop tilt only next to them)
+    if (!(f & 3) && f & 48) assert.deepEqual([c.tiltOpen, c.tiltClose, c.tiltStop], [!!(f & 16), !!(f & 32), !!(f & 64)], `tilt-only ${f}`);
+  }
+});
+
+test("a tilt-only blind gets slats buttons and the slats slider, no Open/Close (#243)", () => {
+  const h = has(coverHtml(16 | 32 | 64 | 128));
+  assert.deepEqual(h, { open: false, close: false, stop: true, position: false, tiltOpen: true, tiltClose: true, tiltSlider: true });
+});
+
+test("open/close only: two buttons, no stop, no sliders (#243)", () => {
+  assert.deepEqual(has(coverHtml(1 | 2)), { open: true, close: true, stop: false, position: false, tiltOpen: false, tiltClose: false, tiltSlider: false });
+});
+
+test("a full roller shutter: open, stop, close and position; a venetian blind keeps just the slats slider (#243)", () => {
+  assert.deepEqual(has(coverHtml(1 | 2 | 4 | 8, { current_position: 40 })), { open: true, close: true, stop: true, position: true, tiltOpen: false, tiltClose: false, tiltSlider: false });
+  assert.deepEqual(has(coverHtml(255)), { open: true, close: true, stop: true, position: true, tiltOpen: false, tiltClose: false, tiltSlider: true });
+  assert.deepEqual(has(coverHtml(1 | 2 | 16 | 32)), { open: true, close: true, stop: false, position: false, tiltOpen: true, tiltClose: true, tiltSlider: false });
+});
+
+test("a roller shutter announcing tilt (KNX) gets no slats buttons, and no position slider without a position (#243, #704)", () => {
+  const el = panel(false);
+  el.hass.states["cover.sample_shutter"] = { entity_id: "cover.sample_shutter", state: "open", attributes: { supported_features: 1 | 2 | 4 | 16 | 32, device_class: "shutter" } };
+  assert.deepEqual(has(flat(el.coverRow(el.hass.states["cover.sample_shutter"]))), { open: true, close: true, stop: false, position: false, tiltOpen: false, tiltClose: false, tiltSlider: false });
+});
