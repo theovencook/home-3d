@@ -65,3 +65,13 @@ export function shownAccent(look: Look, own: string | null | undefined, hass: Ho
   if (own && /^#[0-9a-f]{6}$/i.test(own)) return own;
   return look === "theme" ? themeAccent(hass, readVar) : null;
 }
+
+/**
+ * The inline variables for an accent of the device's own or its HA theme's (#246): it takes the accent (text, icons,
+ * outlines) and the primary fill, each with its readable text, so chosen controls follow the chosen colour.
+ */
+export function accentVars(accent: string | null | undefined): string {
+  if (!accent) return "";
+  const on = textOn(accent);
+  return `--fp3d-accent:${accent};--fp3d-accent-text:${on};--fp3d-primary:${accent};--fp3d-primary-text:${on}`;
+}

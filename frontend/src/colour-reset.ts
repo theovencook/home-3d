@@ -6,7 +6,7 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 
 /** The accent colour a picker starts from: the neon look's cyan (an accent of your own replaces it). */
-export const ACCENT_DEFAULT = "#37e0ff";
+export const ACCENT_DEFAULT = "#48cdeb";
 
 /** Two colours are the same when their hex text is (case and spaces ignored); nothing is the same as nothing. */
 export function sameColour(a: string | null | undefined, b: string | null | undefined): boolean {

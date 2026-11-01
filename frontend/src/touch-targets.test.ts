@@ -32,7 +32,8 @@ function coarseSize(css: string, selector: string): { prop: string; px: number }
   for (const { body } of coarse(css)) {
     for (const rule of body.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
       if (!rule[1].split(",").some((s) => s.trim() === selector)) continue;
-      for (const d of rule[2].matchAll(/(min-width|min-height|width|height):\s*(\d+)px/g)) found = { prop: d[1], px: Number(d[2]) };
+      // a size given by the touch token (#246) is its fallback in px
+      for (const d of rule[2].matchAll(/(min-width|min-height|width|height):\s*(?:var\(--fp3d-touch,\s*)?(\d+)px/g)) found = { prop: d[1], px: Number(d[2]) };
     }
   }
   return found;

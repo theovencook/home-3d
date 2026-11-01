@@ -781,8 +781,8 @@ export class ItemEditor extends LitElement {
         cursor: pointer;
       }
       .ie-chip.on {
-        background: var(--fp3d-accent);
-        color: var(--fp3d-accent-text);
+        background: var(--fp3d-primary);
+        color: var(--fp3d-primary-text);
         border-color: transparent;
       }
       .ie-part {

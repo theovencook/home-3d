@@ -19,7 +19,7 @@ import type { MarkerMode } from "./components/view3d.ts";
 import type { HeatMode } from "./heatmap.ts";
 import { lookOf, THEMES, type Look, type Theme } from "./themes.ts";
 import { contrastChrome, lightChrome } from "./scheme.ts";
-import { followLook, shownAccent, shownLook, textOn } from "./ha-theme.ts";
+import { accentVars, followLook, shownAccent, shownLook } from "./ha-theme.ts";
 import { keepInRoom, snapToWall } from "./geometry/snap.ts";
 import { furnitureName } from "./furniture-names.ts";
 import { confirmEntities, defaultHeight, entityName, kindOf } from "./devices.ts";
@@ -34,7 +34,6 @@ import { clockLookOf, type ClockLook } from "./clock.ts";
 import { TimeTravel } from "./load-timetravel.ts";
 import { IdleClock, tabletIdleSeconds, tabletMode } from "./kiosk.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
-import { uiIcon } from "./ui-icons.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 import { UndoHistory } from "./undo-history.ts";
 import { showsDemo, withDemo } from "./demo.ts";
@@ -113,7 +112,6 @@ export class Floorplan3dPanel extends LitElement {
     _clean: { state: true },
     _navWrap: { state: true },
     _optsOpen: { state: true },
-    _pinHover: { state: true },
     _accent: { state: true },
     _weather: { state: true },
     _director: { state: true },
@@ -186,10 +184,8 @@ export class Floorplan3dPanel extends LitElement {
   private declare _clean: boolean;
   /** The floor and room bar wraps onto several lines instead of scrolling sideways (remembered on this device). */
   private declare _navWrap: boolean;
-  /** Phones: the view options (quality, look, markers, FPS) folded behind ⚙ (#131). */
+  /** Phones: the view options (appearance, clock, device icons, size) folded behind ⚙ (#131). */
   private declare _optsOpen: boolean;
-  /** The pointer is on 📌: the 3D view marks the point it turns about, the middle of a saved start view (#733). */
-  private declare _pinHover: boolean;
   /** Accent colour of the user's choice ("#rrggbb"), null for the stock cyan; remembered on this device. */
   private declare _accent: string | null;
   /** Weather outside the house in 3D. */
@@ -244,7 +240,6 @@ export class Floorplan3dPanel extends LitElement {
     this._selDevice = null;
     this._cameraWall = false;
     this._optsOpen = false;
-    this._pinHover = false;
     this._micProbe = false;
     this._tablet = false;
     this._settingsReady = !!customElements.get("fp3d-settings-page");
@@ -596,12 +591,6 @@ export class Floorplan3dPanel extends LitElement {
     prefs.set("explode", explode ? "1" : "0");
   }
 
-  private setQuality(quality: Quality): void {
-    this._quality = quality;
-    prefs.set("quality", quality);
-    this.picked();
-  }
-
   /** A look picked in the View menu (and announced). */
   private setLook(t: Theme): void {
     announce(lookAnnouncement(this._theme, t, (k, v) => this.t(k as I18nKey, v)));
@@ -812,15 +801,6 @@ export class Floorplan3dPanel extends LitElement {
     this._selFurniture = null;
   }
 
-  /** The view as it stands now becomes the start view of the house (null: back to the default); saved in the plan. */
-  private rememberStartView(reset = false): void {
-    const b = this.data.building;
-    if (!b) return;
-    const view = reset ? null : this.view3d()?.currentView();
-    if (!reset && !view) return;
-    this.editPlan({ ...b, settings: { ...b.settings, start_view: view ?? null } });
-  }
-
   /**
    * "Sun and lights …" (#87, #231): the 3D view's ⚙ sheet. When the view is not there to open it (its code has not
    * arrived, or it is not drawn), the button must still do something you can see: the Settings page at its sun card.
@@ -1005,14 +985,6 @@ export class Floorplan3dPanel extends LitElement {
                 </button>
                 ${this._optsOpen ? html`<div class="fp3d-opts-veil" @click=${() => (this._optsOpen = false)}></div>` : nothing}
                 <div class="fp3d-view-opts ${this._optsOpen ? "fp3d-opts-open" : ""}">
-                <section class="fp3d-opt-group">
-                <h3>${this.t("quality")}</h3>
-                <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("quality")}>
-                ${(["auto", "low", "high"] as Quality[]).map(
-                  (q) => html`<button aria-pressed=${this._quality === q} @click=${() => this.setQuality(q)}>${this.t(`quality_${q}`)}</button>`,
-                )}
-              </div>
-              </section>
               <section class="fp3d-opt-group">
               <h3>${this.t("theme")}</h3>
               <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("theme")}>
@@ -1075,23 +1047,17 @@ export class Floorplan3dPanel extends LitElement {
               </section>
               <section class="fp3d-opt-group">
               <h3>${this.t("markers")}</h3>
-              <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("markers")}>
-                ${(["none", "room", "important", "all"] as MarkerMode[]).map(
-                  (m) =>
-                    html`<button
-                      aria-pressed=${this._markers === m}
-                      title=${this.t("markers")}
-                      aria-label=${`${this.t("markers")}: ${this.t(`markers_${m}`)}`}
-                      @click=${() => {
-                        this._markers = m;
-                        prefs.set("markers", m);
-                        this.picked();
-                      }}
-                    >
-                      ${this.t(`markers_${m}`)}
-                    </button>`,
-                )}
-              </div>
+              <select
+                class="fp3d-opt-select"
+                aria-label=${this.t("markers")}
+                @change=${(e: Event) => {
+                  this._markers = (e.target as HTMLSelectElement).value as MarkerMode;
+                  prefs.set("markers", this._markers);
+                  this.picked();
+                }}
+              >
+                ${(["none", "room", "important", "all"] as MarkerMode[]).map((m) => html`<option value=${m} ?selected=${this._markers === m}>${this.t(`markers_${m}`)}</option>`)}
+              </select>
               </section>
               <section class="fp3d-opt-group">
               <h3>${this.t("view_group_size")}</h3>
@@ -1111,73 +1077,7 @@ export class Floorplan3dPanel extends LitElement {
                 )}
               </div>
               </section>
-              <section class="fp3d-opt-group">
-              <h3>${this.t("view_group_controls")}</h3>
-              <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("controls_side")} title=${this.t("controls_side")}>
-                ${([false, true] as const).map(
-                  (right) =>
-                    html`<button
-                      aria-pressed=${this._controlsRight === right}
-                      title=${this.t(right ? "controls_right" : "controls_left")}
-                      aria-label=${this.t(right ? "controls_right" : "controls_left")}
-                      @click=${() => {
-                        this._controlsRight = right;
-                        prefs.set("controls", right ? "right" : "left");
-                      }}
-                    >
-                      ${uiIcon(right ? "panel-right" : "panel-left")}
-                    </button>`,
-                )}
-                ${this.canEdit
-                  ? html`<button
-                        title=${`${this.t("start_view")}: ${this.t("start_view_set")}`}
-                        aria-label=${this.t("start_view_set")}
-                        @click=${() => this.rememberStartView()}
-                        @mouseenter=${() => (this._pinHover = true)}
-                        @mouseleave=${() => (this._pinHover = false)}
-                        @focus=${() => (this._pinHover = true)}
-                        @blur=${() => (this._pinHover = false)}
-                      >
-                        📌
-                      </button>
-                      ${this.data.building?.settings.start_view
-                        ? html`<button title=${`${this.t("start_view")}: ${this.t("start_view_reset")}`} aria-label=${this.t("start_view_reset")} @click=${() => this.rememberStartView(true)}>📌✕</button>`
-                        : nothing}`
-                  : nothing}
-                <button
-                  aria-pressed=${this._keepView}
-                  title=${`${this.t("keep_view")}: ${this.t("keep_view_hint")}`}
-                  aria-label=${this.t("keep_view")}
-                  @click=${() => {
-                    this._keepView = !this._keepView;
-                    prefs.set("keep_view", this._keepView ? "1" : "0");
-                  }}
-                >
-                  ⌖
-                </button>
-                <button
-                  aria-pressed=${this._angleLock}
-                  title=${`${this.t("angle_lock")}: ${this.t("angle_lock_hint")}`}
-                  aria-label=${this.t("angle_lock")}
-                  @click=${() => {
-                    this._angleLock = !this._angleLock;
-                    prefs.set("angle_lock", this._angleLock ? "1" : "0");
-                  }}
-                >
-                  🔒
-                </button>
-                <button
-                  aria-pressed=${this._stats}
-                  title=${this.t("fps_title")}
-                  @click=${() => {
-                    this._stats = !this._stats;
-                    prefs.set("stats", this._stats ? "1" : "0");
-                  }}
-                >
-                  ${this.t("fps")}
-                </button>
-              </div>
-              </section>
+              ${this.renderQualityLine()}
               ${this.renderAllSettings("look")}
               </div>`
             : nothing}
@@ -1214,8 +1114,7 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   private accentStyle(): string {
-    const accent = this.shownAccent();
-    return accent ? `--fp3d-accent:${accent};--fp3d-accent-text:${textOn(accent)}` : "";
+    return accentVars(this.shownAccent());
   }
 
   private renderNotices() {
@@ -1308,6 +1207,17 @@ export class Floorplan3dPanel extends LitElement {
       @building-edit=${(e: CustomEvent<Building>) => this.editPlan(e.detail)}
       @packs-changed=${() => void this.data.reloadPacks()}
     ></fp3d-extensions>`;
+  }
+
+  /**
+   * Quality, the Controls row and FPS live in Settings › Screen and controls (#246): the View menu keeps a read-only
+   * line saying which quality draws, with a link there.
+   */
+  private renderQualityLine() {
+    return html`<p class="fp3d-opt-line">
+      <span>${this.t("view_quality_line", { quality: this.t(`quality_${this._quality}`) })}</span>
+      <button class="fp3d-link" @click=${() => this.openSettings("screen", "quality")}>${this.t("st_open")} ›</button>
+    </p>`;
   }
 
   /** "All settings" at the foot of a quick menu (#139): opens the Settings page at that section. */
@@ -1471,7 +1381,6 @@ export class Floorplan3dPanel extends LitElement {
           .canEdit=${this.data.canEdit && !this._tablet}
           .noSettings=${this._tablet}
           .home=${this.data.homeId}
-          .pivotMark=${this._pinHover}
           .hass=${hass}
           .replay=${this.tt.session?.replay ?? null}
           .building=${b}
@@ -1549,7 +1458,7 @@ export class Floorplan3dPanel extends LitElement {
         ${this._clean ? nothing : html`<div class="fp3d-overlay">
           ${this._tablet ? nothing : planView}
           <div class="fp3d-show-wrap">
-            <button class="fp3d-chip" aria-haspopup="true" aria-expanded=${this._showOpen} @click=${() => (this._showOpen = !this._showOpen)}>${this.t(this._tablet ? "view" : "show_menu")} <span class="fp3d-caret">▾</span></button>
+            <button class="fp3d-chip" aria-haspopup="true" aria-expanded=${this._showOpen} @click=${() => (this._showOpen = !this._showOpen)}>${this.t(this._tablet ? "view_btn" : "show_menu")} <span class="fp3d-caret">▾</span></button>
             ${this._showOpen
               ? html`<div class="fp3d-show-veil" @click=${() => (this._showOpen = false)}></div>
                   <div class="fp3d-show-panel">
@@ -1783,8 +1692,8 @@ export class Floorplan3dPanel extends LitElement {
         word-break: break-word;
       }
       .fp3d-chip-on {
-        background: var(--fp3d-accent);
-        color: var(--fp3d-accent-text);
+        background: var(--fp3d-primary);
+        color: var(--fp3d-primary-text);
       }
       .fp3d-furnish-bar {
         position: absolute;
@@ -1893,6 +1802,51 @@ export class Floorplan3dPanel extends LitElement {
         color: var(--fp3d-muted);
         white-space: nowrap;
       }
+      /* Device icons as a drop-down (#246): its four choices have full names now */
+      .fp3d-opt-select {
+        font: inherit;
+        font-size: var(--fp3d-type-body);
+        color: var(--fp3d-text);
+        background: var(--fp3d-chrome-solid);
+        border: 1px solid var(--fp3d-line);
+        border-radius: var(--fp3d-radius-control);
+        padding: 6px 8px;
+        min-height: 36px;
+      }
+      @media (pointer: coarse) {
+        .fp3d-opt-select {
+          min-height: var(--fp3d-touch);
+        }
+      }
+      /* the read-only quality line (#246): quality is set in Settings › Screen and controls */
+      .fp3d-opt-line {
+        display: flex;
+        align-items: center;
+        gap: var(--fp3d-space-2);
+        margin: 0;
+        padding-left: 4px;
+        font-size: var(--fp3d-type-hint);
+        color: var(--fp3d-muted);
+      }
+      .fp3d-link {
+        font: inherit;
+        border: 0;
+        background: none;
+        padding: 0 var(--fp3d-space-1);
+        min-height: 32px;
+        color: var(--fp3d-accent);
+        cursor: pointer;
+      }
+      @media (pointer: coarse) {
+        .fp3d-link {
+          min-height: var(--fp3d-touch);
+        }
+      }
+      @media ${unsafeCSS(PHONE_MEDIA)} {
+        .fp3d-opt-line {
+          width: 100%;
+        }
+      }
       .fp3d-follow {
         display: inline-flex;
         align-items: center;
@@ -1913,9 +1867,9 @@ export class Floorplan3dPanel extends LitElement {
         line-height: 1;
       }
       .fp3d-follow[aria-checked="true"] .fp3d-follow-box {
-        background: var(--fp3d-accent);
-        border-color: var(--fp3d-accent);
-        color: var(--fp3d-accent-text);
+        background: var(--fp3d-primary);
+        border-color: var(--fp3d-primary);
+        color: var(--fp3d-primary-text);
       }
       /* phones: version and grow move with it; the Settings tab keeps only its gear */
       @media (max-width: 700px) {

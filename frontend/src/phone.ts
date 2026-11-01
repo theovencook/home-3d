@@ -31,3 +31,28 @@ export const PHONE_NARROW_MEDIA = `(max-width: ${PHONE_NARROW_MAX_PX}px)`;
 export function closesViewMenuAfterPick(width: number): boolean {
   return isPhoneWidth(width);
 }
+
+/**
+ * Size classes (#246, the menus redesign #219): every layout rule picks one of these instead of its own width.
+ * phone up to 600 px, compact 601 to 1024 px (a tablet in landscape, a small laptop), wide above that; short is any
+ * screen up to 500 px high (a phone held sideways) and goes with any of the three. A wall tablet in kiosk mode is a
+ * mode (kiosk.ts), not a size.
+ */
+export type SizeClass = "phone" | "compact" | "wide";
+
+/** Widest screen (CSS px) in the compact class. */
+export const COMPACT_MAX_PX = 1024;
+/** Highest screen (CSS px) that counts as short. */
+export const SHORT_MAX_PX = 500;
+
+export const COMPACT_MEDIA = `(min-width: ${PHONE_MAX_PX + 1}px) and (max-width: ${COMPACT_MAX_PX}px)`;
+export const WIDE_MEDIA = `(min-width: ${COMPACT_MAX_PX + 1}px)`;
+export const SHORT_MEDIA = `(max-height: ${SHORT_MAX_PX}px)`;
+
+export function sizeClass(width: number): SizeClass {
+  return isPhoneWidth(width) ? "phone" : width <= COMPACT_MAX_PX ? "compact" : "wide";
+}
+
+export function isShortHeight(height: number): boolean {
+  return height <= SHORT_MAX_PX;
+}

@@ -1,5 +1,6 @@
 import { css, unsafeCSS } from "lit";
 import { colourResetCss } from "./colour-reset.ts";
+import { layoutVars } from "./design-tokens.ts";
 import { DARK, HIGH, LIGHT, schemeVars, type Scheme } from "./scheme.ts";
 
 /**
@@ -12,10 +13,13 @@ const TOKENS = (Object.keys(DARK) as (keyof Scheme)[])
   .filter((k) => k !== "colorScheme")
   .map((k) => `--fp3d-${key(k)}: var(--fp3d-s-${key(k)}, ${DARK[k]});`)
   .join("\n");
+/** Spacing, radius, type and touch tokens (#246, design-tokens.ts): the same in every scheme. */
+const LAYOUT = layoutVars();
 
 export const tokens = css`
   :host {
     ${unsafeCSS(TOKENS)}
+    ${unsafeCSS(LAYOUT)}
     --fp3d-font: "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --fp3d-title-font: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
     color-scheme: var(--fp3d-s-color-scheme, dark);
@@ -53,10 +57,11 @@ export const controls = css`
     white-space: nowrap;
     min-height: 34px;
   }
+  /* a chosen choice is a fill: the primary blue with its own text (#246); cyan stays for text, icons and outlines */
   .fp3d-seg button[aria-pressed="true"],
   .fp3d-chip[aria-pressed="true"] {
-    background: var(--fp3d-accent);
-    color: var(--fp3d-accent-text);
+    background: var(--fp3d-primary);
+    color: var(--fp3d-primary-text);
   }
   .fp3d-seg button:disabled {
     opacity: 0.4;
@@ -113,8 +118,8 @@ export const controls = css`
     color: var(--fp3d-danger);
   }
   .fp3d-btn.fp3d-primary {
-    background: var(--fp3d-accent);
-    color: var(--fp3d-accent-text);
+    background: var(--fp3d-primary);
+    color: var(--fp3d-primary-text);
     border-color: transparent;
   }
   .fp3d-field {
@@ -136,7 +141,11 @@ export const controls = css`
   }
   .fp3d-field input[type="range"] {
     padding: 0;
-    accent-color: var(--fp3d-accent);
+    accent-color: var(--fp3d-primary);
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--fp3d-primary);
   }
   /* a colour picker shows its colour as a full swatch, not a line inside the text field's padding */
   .fp3d-field input[type="color"] {
@@ -248,22 +257,22 @@ export const controls = css`
     border-radius: 8px;
     padding: 7px 9px;
   }
-  /* fingers need 44 px (#181): buttons, chips, fields and swatches */
+  /* fingers need 44 px (#181, the --fp3d-touch token #246): buttons, chips, fields and swatches */
   @media (pointer: coarse) {
     .fp3d-seg button,
     .fp3d-chip,
     .fp3d-btn,
     .fp3d-field select,
     .fp3d-field input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
-      min-height: 44px;
+      min-height: var(--fp3d-touch, 44px);
     }
     .fp3d-seg button,
     .fp3d-btn {
-      min-width: 44px;
+      min-width: var(--fp3d-touch, 44px);
     }
     .fp3d-swatch {
-      width: 44px;
-      height: 44px;
+      width: var(--fp3d-touch, 44px);
+      height: var(--fp3d-touch, 44px);
     }
   }
   ${colourResetCss}

@@ -386,7 +386,8 @@ export class SettingsPage extends LitElement {
 
   private renderRow(s: Setting, hit: boolean) {
     const may = mayChange(s, this.viewer);
-    const wide = s.control.kind === "embed" || s.control.kind === "list" || s.control.kind === "checks" || s.control.kind === "entity";
+    // the start view's two buttons and its state line go under the label, so the label keeps its width (#246)
+    const wide = s.control.kind === "embed" || s.control.kind === "list" || s.control.kind === "checks" || s.control.kind === "entity" || (s.control.kind === "action" && s.control.action === "start_view");
     return html`<div class="st-row st-k-${s.control.kind} ${s.hint ? "" : "st-nohint"} ${wide ? "st-row-wide" : ""} ${hit || this._flash === s.id ? "st-hit" : ""}" data-id=${s.id}>
       <div class="st-lbl">
         <span class="st-name">${s.control.kind === "number" && s.control.length ? lengthLabel(this.env, this.tr(s.label)) : this.tr(s.label)}</span>
@@ -581,8 +582,8 @@ export class SettingsPage extends LitElement {
     if (c.action === "start_view") {
       const set = s.read(this.env);
       return html`<div class="st-actions">
-        <button class="fp3d-btn" ?disabled=${disabled || !this.lastView} title=${this.lastView ? "" : this.tr("st_start_view_none")} @click=${() => this.act(s, "start_view")}>📌 ${this.tr(c.button)}</button>
-        ${set ? html`<button class="fp3d-btn" ?disabled=${disabled} @click=${() => this.write(s, null)}>${this.t("start_view_reset")}</button>` : nothing}
+        <button class="fp3d-btn" ?disabled=${disabled || !this.lastView} title=${this.lastView ? "" : this.tr("st_start_view_none")} @click=${() => this.act(s, "start_view")}>${this.tr(c.button)}</button>
+        ${set ? html`<button class="fp3d-btn" ?disabled=${disabled} @click=${() => this.write(s, null)}>${this.tr("st_start_view_reset")}</button>` : nothing}
         <span class="st-sub">${this.tr(set ? "st_start_view_set" : "st_start_view_default")}</span>
       </div>`;
     }
@@ -894,11 +895,11 @@ export class SettingsPage extends LitElement {
         transition: transform 0.15s, background 0.15s;
       }
       .st-sw[aria-checked="true"] {
-        background: color-mix(in srgb, var(--fp3d-accent) 40%, transparent);
+        background: var(--fp3d-primary);
       }
       .st-sw[aria-checked="true"]::after {
         transform: translateX(18px);
-        background: var(--fp3d-accent);
+        background: var(--fp3d-primary-text);
       }
       .st-sw:disabled,
       .st-seg button:disabled,
