@@ -3018,6 +3018,21 @@ const en = {
   st_reset_device_moved: "Resetting this device's preferences affects this device only, so it moved to This device, Screen.",
   st_go_screen: "Open Screen",
   st_card_device_reset: "Reset",
+  st_sec_homes: "Homes",
+  st_sec_homes_hint: "Switch between homes, add one, rename, duplicate or delete it",
+  st_card_homes: "Your homes",
+  st_homes_list: "Homes",
+  st_homes_hint: "Opening a home only changes what this screen shows. Show on displays makes a home the one every wall tablet and dashboard shows.",
+  st_homes_none: "The homes could not be listed. Only editors can switch homes.",
+  st_homes_new: "New home",
+  st_homes_shown: "Open here",
+  st_homes_counts: "{floors} floors, {rooms} rooms, {furniture} items",
+  st_homes_open: "Open",
+  st_homes_show: "Show on displays",
+  st_homes_rename: "Rename",
+  st_homes_duplicate: "Duplicate",
+  st_homes_delete: "Delete",
+  st_homes_open_page: "Opens Settings, Homes",
 };
 
 type Key = keyof typeof en;

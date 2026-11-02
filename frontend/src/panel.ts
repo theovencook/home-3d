@@ -982,8 +982,7 @@ export class Floorplan3dPanel extends LitElement {
         ? html`<fp3d-home-switcher
             .hass=${this.rawHass}
             .home=${this.data.homeId}
-            @home-reload=${() => void this.data.reopen()}
-            @home-open=${(e: CustomEvent<{ home: string | null }>) => this.openHome(e.detail.home ?? undefined)}
+            @home-settings=${() => this.openSettings("homes", "homes")}
           ></fp3d-home-switcher>`
         : nothing}
       <nav class="fp3d-tabs" aria-label=${this.t("modes")}>
@@ -1172,6 +1171,7 @@ export class Floorplan3dPanel extends LitElement {
       .focusId=${this._settingsAt.id}
       .saveState=${this.data.saveState}
       .homeName=${this.data.homeName ?? ""}
+      .homeId=${this.data.homeId}
       .lastView=${this.lastView}
       .loadEditor=${loadEditor}
       .backTo=${this.settingsFrom === "settings" ? "view" : this.settingsFrom}
@@ -1180,6 +1180,8 @@ export class Floorplan3dPanel extends LitElement {
       @settings-edit=${(e: CustomEvent<{ building: Building; key: string | null }>) => this.editPlan(e.detail.building, e.detail.key)}
       @device-change=${() => (this.readPrefs(), this.requestUpdate())}
       @settings-action=${this.settingsAction}
+      @home-reload=${() => void this.data.reopen()}
+      @home-open=${(e: CustomEvent<{ home: string | null }>) => this.openHome(e.detail.home ?? undefined)}
       @settings-nav=${(e: CustomEvent<{ section: string; id: string | null }>) => this.setAddress(this.settingsLink(e.detail.section, e.detail.id))}
     ></fp3d-settings-page>`;
   }

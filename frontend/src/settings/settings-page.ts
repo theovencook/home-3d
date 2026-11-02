@@ -51,6 +51,8 @@ import {
 // line icon (#248)
 const loadTimeField = once(() => import("./pickers.ts"));
 const loadEntityPicker = loadTimeField;
+// the Homes page is a chunk of its own too (#296), loaded when it is first drawn
+const loadHomes = once(() => import("./homes.ts"));
 
 /** A line icon of the menu (#248, settings-icons.ts); `small` draws it at 16 px. Its code comes with the pickers. */
 function icon(name: string, small = false) {
@@ -94,6 +96,7 @@ export class SettingsPage extends LitElement {
     focusId: { attribute: false },
     saveState: { attribute: false },
     homeName: { attribute: false },
+    homeId: { attribute: false },
     lastView: { attribute: false },
     loadEditor: { attribute: false },
     loaders: { attribute: false },
@@ -123,6 +126,8 @@ export class SettingsPage extends LitElement {
   declare focusId: string | null;
   declare saveState: "idle" | "saving" | "saved" | "error";
   declare homeName: string;
+  /** The home this view shows (the Homes page marks it, #296). */
+  declare homeId: string | null;
   declare lastView: StartView | null;
   /** Loads the editor bundle (it draws the embedded parts: favourites, backup …). */
   declare loadEditor: (() => Promise<unknown>) | undefined;
@@ -161,6 +166,7 @@ export class SettingsPage extends LitElement {
     this.focusId = null;
     this.saveState = "idle";
     this.homeName = "";
+    this.homeId = null;
     this.lastView = null;
     this.t = (key) => key;
     this._section = "general";
@@ -547,7 +553,7 @@ export class SettingsPage extends LitElement {
     // the start view's two buttons and its state line go under the label, so the label keeps its width (#246)
     // a segment of three or more choices and a select with long choices go under their label too, so the hint keeps its width (#256)
     const c = s.control;
-    const wide = (c.kind === "select" && c.options(this.env).some((o) => this.label(o).length > 24)) || (c.kind === "segment" && this.options(c).length > 2) || s.control.kind === "embed" || s.control.kind === "list" || s.control.kind === "checks" || s.control.kind === "entity" || (s.control.kind === "action" && s.control.action === "start_view");
+    const wide = (c.kind === "select" && c.options(this.env).some((o) => this.label(o).length > 24)) || (c.kind === "segment" && this.options(c).length > 2) || s.control.kind === "embed" || s.control.kind === "homes" || s.control.kind === "list" || s.control.kind === "checks" || s.control.kind === "entity" || (s.control.kind === "action" && s.control.action === "start_view");
     const rule = showRule ? this.rule(s, hit, page) : null;
     return html`<div
       class="st-row st-k-${s.control.kind} ${s.hint || rule ? "" : "st-nohint"} ${wide ? "st-row-wide" : ""} ${(hit && index === cursor) || this._flash === s.id ? "st-hit" : ""} ${hit && index === cursor ? "st-active" : ""}"
@@ -699,6 +705,10 @@ export class SettingsPage extends LitElement {
         return this.renderIgnored(s, disabled);
       case "embed":
         return this.renderEmbed(s, c.topic);
+      case "homes":
+        if (disabled) return html`<p class="st-sub">${icon("lock", true)}</p>`;
+        need(loadHomes);
+        return html`<fp3d-homes-page .hass=${this.hass} .home=${this.homeId} .t=${this.t}></fp3d-homes-page>`;
       case "note":
         return nothing;
       case "info":

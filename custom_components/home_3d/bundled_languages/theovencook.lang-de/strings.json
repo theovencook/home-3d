@@ -2996,5 +2996,20 @@
  "st_director_here_moved": "Das Einschalten des Live-Regisseurs für diesen Bildschirm gilt nur für dieses Gerät und steht jetzt unter Dieses Gerät, Bildschirm.",
  "st_reset_device_moved": "Das Zurücksetzen der Einstellungen dieses Geräts betrifft nur dieses Gerät und steht jetzt unter Dieses Gerät, Bildschirm.",
  "st_go_screen": "Bildschirm öffnen",
- "st_card_device_reset": "Zurücksetzen"
+ "st_card_device_reset": "Zurücksetzen",
+ "st_sec_homes": "Wohnungen und Häuser",
+ "st_sec_homes_hint": "Zwischen Zuhause-Plänen wechseln, einen hinzufügen, umbenennen, duplizieren oder löschen",
+ "st_card_homes": "Deine Zuhause-Pläne",
+ "st_homes_list": "Zuhause-Pläne",
+ "st_homes_hint": "Das Öffnen eines Plans ändert nur, was dieser Bildschirm zeigt. „Auf Displays zeigen“ macht einen Plan zu dem, den alle Wandtablets und Dashboards zeigen.",
+ "st_homes_none": "Die Pläne konnten nicht aufgelistet werden. Nur Editoren können wechseln.",
+ "st_homes_new": "Neuer Plan",
+ "st_homes_shown": "Hier geöffnet",
+ "st_homes_counts": "{floors} Etagen, {rooms} Räume, {furniture} Objekte",
+ "st_homes_open": "Öffnen",
+ "st_homes_show": "Auf Displays zeigen",
+ "st_homes_rename": "Umbenennen",
+ "st_homes_duplicate": "Duplizieren",
+ "st_homes_delete": "Löschen",
+ "st_homes_open_page": "Öffnet Einstellungen, Pläne"
 }

@@ -45,6 +45,7 @@ export type SectionId =
   | "look"
   | "screen"
   | "voice"
+  | "homes"
   | "access"
   | "packs"
   | "backup"
@@ -139,6 +140,8 @@ export type Control =
   | { kind: "action"; button: TextKey; action: string }
   /** A list the page draws itself (the warnings dismissed for good). */
   | { kind: "list"; list: "alert_ignored" }
+  /** The list of homes with its buttons (#296); a lazy chunk draws it. */
+  | { kind: "homes" }
   /** A block the editor bundle draws (lists with their own logic: favourites, own buttons, backup …). */
   | { kind: "embed"; topic: EmbedTopic }
   /** Only words: where something is set instead (the card options, the modules' settings). */
@@ -302,6 +305,8 @@ export const SECTIONS: Section[] = [
   },
   /* the Locating assistant, how located people show and presence (were under Advanced, #248) */
   { id: "people", group: "live", icon: "users", title: "st_sec_people", hint: "st_sec_people_hint", cards: [{ id: "people", title: "st_card_people" }] },
+  /* the homes: open, add, rename, duplicate, delete (moved here from the top bar, #296) */
+  { id: "homes", group: "system", icon: "home", title: "st_sec_homes", hint: "st_sec_homes_hint", cards: [{ id: "homes", title: "st_card_homes" }] },
   /* "Tablets & access" split in two (#248) */
   { id: "access", group: "system", icon: "key", title: "st_sec_editors", hint: "st_sec_access_hint", cards: [{ id: "editors", title: "st_card_editors" }] },
   { id: "tablets", group: "system", icon: "tablet", title: "st_sec_tablets", hint: "st_sec_tablets_hint", cards: [{ id: "tablets", title: "st_card_tablets" }] },
@@ -1188,6 +1193,23 @@ const ENERGY: Setting[] = [
   },
 ];
 
+/** The homes (#296): kept by Home Assistant for every home, editors only (the backend checks again). */
+const HOMES: Setting[] = [
+  {
+    id: "homes",
+    section: "homes",
+    card: "homes",
+    scope: "install",
+    permission: "editor",
+    label: "st_homes_list",
+    hint: "st_homes_hint",
+    keywords: ["home", "homes", "switch", "change", "new", "sample", "rename", "duplicate", "copy", "delete", "displays", "active", "tablet"],
+    control: { kind: "homes" },
+    default: null,
+    read: () => null,
+  },
+];
+
 const BACKUP: Setting[] = [embedded("backup", "backup", "backup", "backup", "backup", undefined, ["restore", "export", "import", "file", "history"])];
 
 const ADVANCED: Setting[] = [
@@ -1289,7 +1311,7 @@ const CARDS: Setting[] = [
 ];
 
 /** Every setting, in the order the page shows them. */
-export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...ENERGY, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...LANGUAGE, ...CARDS, ...SCREEN, ...VOICE, ...ACCESS, ...PACKS, ...BACKUP, ...ADVANCED] as Setting[];
+export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...ENERGY, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...LANGUAGE, ...CARDS, ...SCREEN, ...VOICE, ...HOMES, ...ACCESS, ...PACKS, ...BACKUP, ...ADVANCED] as Setting[];
 
 // ---------------------------------------------------------------------------------------------------- lengths
 
