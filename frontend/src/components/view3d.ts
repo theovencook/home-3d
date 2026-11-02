@@ -180,6 +180,7 @@ import type { BinCue, DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Qual
 import { dockFromPoint, parseDock, WALL_DOCK_KEY, WALL_DOCKS, wallLayout, type WallDock } from "../camera-wall.ts";
 import { watchedEntities } from "../watched.ts";
 import { isPrinter, printerFaces, printerState } from "../printer.ts";
+import { hiddenItemIds, typeOfEntity, type ObjectType } from "../object-types.ts";
 import { hasTimedRules, hiddenItems, shownBuilding } from "../show-when.ts";
 import { backdropCss } from "../backdrop.ts";
 import { loadVoice, micProbeAsked, micProbeDone, voicePipeline } from "../load-voice.ts";
@@ -200,6 +201,8 @@ import { isPhoneWidth, NO_FIT_MARGIN, PHONE_FIT_MARGIN, PHONE_MEDIA, thumbsCompa
 
 /** Walking through the house (and the pets' floor map) is a chunk of its own (#179): it needs no three.js. */
 const loadWalk = () => import("../viewer/walk.ts");
+
+const NO_TYPES: ReadonlySet<ObjectType> = new Set();
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 /** "room": no symbols in the house and floor views, in a room only that room's (D477, D595). */
@@ -357,6 +360,8 @@ export class Fp3dView3d extends LitElement {
     clean: { attribute: false },
     cleanButton: { attribute: false },
     roomLabels: { attribute: false },
+    hiddenTypes: { attribute: false },
+    furnitureOn: { attribute: false },
     floorStack: { attribute: false },
     panelOpen: { attribute: false },
     controlsRight: { attribute: false },
@@ -587,6 +592,10 @@ export class Fp3dView3d extends LitElement {
   declare cleanButton: boolean;
   /** Room names in 3D (cards can switch them off). */
   declare roomLabels: boolean;
+  /** Kinds of objects the View hides (#268) and the Furniture switch (#269); hiding is a flag in the viewer, not a rebuild. */
+  declare hiddenTypes: ReadonlySet<ObjectType>;
+  declare furnitureOn: boolean;
+  private hiddenIds: { sig: string; ids: ReadonlySet<string> } = { sig: "", ids: new Set() };
   /** Floors below an opened floor: dimmed, stacked (the house up to it) or hidden. */
   declare floorStack: FloorStack;
   private declare _thumbs: { floorId: string; url: string }[];
@@ -873,6 +882,8 @@ export class Fp3dView3d extends LitElement {
     this.cleanButton = false;
     this.noSettings = false;
     this.roomLabels = true;
+    this.hiddenTypes = NO_TYPES;
+    this.furnitureOn = true;
     this.floorStack = "dim";
     this._low = false;
     this.panelOpen = false;
@@ -1253,7 +1264,7 @@ export class Fp3dView3d extends LitElement {
       }
       if (changed.has("building") || changed.has("theme") || changed.has("floorThumbs") || changed.has("packs")) this.scheduleThumbs();
       // with symbols only in rooms, opening or closing a room changes which ones show
-      const forced = ["building", "markerMode", "heatMode", "flows", "alerts", "dimmed"].some((k) => changed.has(k)) || (this.markerMode === "room" && changed.has("roomId"));
+      const forced = ["building", "hiddenTypes", "furnitureOn", "markerMode", "heatMode", "flows", "alerts", "dimmed"].some((k) => changed.has(k)) || (this.markerMode === "room" && changed.has("roomId"));
       // time travel: a tick moves the clock even when no replayed state changed – the trail and a camera's
       // detections follow it (one sync per tick at most, and only when they are shown)
       const ticked = this.replayTicked && !!this.replay;
@@ -1315,6 +1326,25 @@ export class Fp3dView3d extends LitElement {
     }
     if (changed.has("showStats")) v.setStats(this.showStats);
     if (changed.has("building")) this.findIndex = null;
+  }
+
+  /** The ids of the items the View hides now; the very same set while nothing changed (the viewer compares it by identity). */
+  private hiddenItemSet(b: Building): ReadonlySet<string> {
+    const links = this.furnitureLinks;
+    const ids = hiddenItemIds(b, this.hiddenTypes, this.furnitureOn, (f) => {
+      const e = links?.get(f.id)?.entity ?? f.entity ?? null;
+      return e === "none" ? null : e;
+    });
+    const sig = [...ids].sort().join("|");
+    if (sig !== this.hiddenIds.sig) this.hiddenIds = { sig, ids };
+    return this.hiddenIds.ids;
+  }
+
+  /** A pin or lamp of a hidden kind, or of a hidden item. */
+  private markerHidden(m: { id: string; furnitureId?: string }, items: ReadonlySet<string>): boolean {
+    if (m.furnitureId && items.has(m.furnitureId)) return true;
+    const kind = typeOfEntity(m.id);
+    return kind !== null && this.hiddenTypes.has(kind);
   }
 
   /**
@@ -1422,8 +1452,11 @@ export class Fp3dView3d extends LitElement {
     const carSpots = new Set(
       b.floors.flatMap((fl) => fl.furniture.filter((f) => f.type === "parking" && f.car && parkedVehicle(hass, f)).map((f) => f.id)),
     );
+    // the kinds the View hides (#268, #269): the items collapse in place, their pins and lamps are left out
+    const hiddenItems = this.hiddenItemSet(b);
+    v.setHiddenItems(hiddenItems);
     v.setDevices([
-      ...[...deviceMarkers, ...furniture.markers, ...this.lockMarkers(hass, b)].map((m) => {
+      ...[...deviceMarkers, ...furniture.markers, ...this.lockMarkers(hass, b)].filter((m) => !this.markerHidden(m, hiddenItems)).map((m) => {
         // "without watts" drops the power badge (a plug shows only on / off)
         // below an item's own "running from" watts the standby draw is no badge either (#645)
         const power = m.show === "no_power" || ("energyDevice" in m && m.energyDevice) || ("standby" in m && m.standby) ? null : (byDevice.get(m.id) ?? null);

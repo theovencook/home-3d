@@ -96,8 +96,11 @@ export interface FloorGeometry {
   openRooms: [string, string][];
   /** Fold bucket of each wall in walls2d. */
   wallBuckets: number[];
-  /** Triangle ranges of furniture in `walls`, for tapping furniture in 3D. */
-  furnitureTris: { id: string; start: number; end: number }[];
+  /**
+   * Triangle ranges of furniture in `walls`, for tapping furniture in 3D. `line` and `shadow` are the vertex ranges of
+   * its edges in `lines` and its contact shadow in `shadow` (#268: hiding an item collapses all three in place).
+   */
+  furnitureTris: { id: string; start: number; end: number; line?: [number, number]; shadow?: [number, number] }[];
   /**
    * Racks with gear (#121): their gear is not in `walls`; the viewer draws it on its own (buildRackGear), in detail
    * near the camera and as slabs further away.
@@ -490,6 +493,8 @@ export function buildFloorGeometry(
   for (const item of floor.furniture) {
     if (isLamp(item.type)) continue;
     const start = wallBuf.count;
+    const lineStart = lines.count;
+    const shadowStart = shadow.count * 3;
     // indices into the arrays count from the last copied item (GeoBuffer.append)
     const t0 = wallBuf.p.length / 9;
     const l0 = lines.p.length / 6;
@@ -529,7 +534,7 @@ export function buildFloorGeometry(
     const other = own ? had?.get(`${otherLook}${drawn}`) : undefined;
     if (other) pieces.set(`${otherLook}${drawn}`, other);
     if (gear) racks.push({ f, base });
-    furnitureTris.push({ id: f.id, start, end: wallBuf.count });
+    furnitureTris.push({ id: f.id, start, end: wallBuf.count, line: [lineStart, lines.count], shadow: [shadowStart, shadow.count * 3] });
   }
 
   return {

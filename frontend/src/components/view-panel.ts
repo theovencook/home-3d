@@ -12,12 +12,16 @@ import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues, type TemplateResult } from "lit";
 import { translate, type I18nKey } from "../i18n.ts";
 import { colourReset } from "../colour-reset.ts";
+import { need, once } from "../lazy-part.ts";
 import { PHONE_MEDIA } from "../phone.ts";
 import { FloatDrag } from "../float-panel.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
 import type { DevicePrefs, Option, Setting, SettingsEnv } from "../settings/registry.ts";
 import { optionGroups, optionText, viewSections, viewSetting, type ViewContext, type ViewRow, type ViewSection } from "../settings/view-settings.ts";
+
+/** The searchable multi-select (a chunk of its own: nothing else on the View panel needs it). */
+const loadMultiSelect = once(() => import("./multi-select.ts"));
 
 /** This device's preferences, as the panel and the Settings page keep them ("home3d.<key>"). */
 const prefs: DevicePrefs = {
@@ -208,12 +212,32 @@ export class Fp3dViewPanel extends LitElement {
     </span>`;
   }
 
+  /** "Display what" (#268): a searchable multi-select (#227) that reads "6 object types selected"; its code is a chunk of its own. */
+  private renderDisplay(s: Setting, options: Option[], label: string, hint?: string) {
+    need(loadMultiSelect);
+    const shown = (s.read(this.env) as string[] | null) ?? [];
+    return html`<div class="vp-row vp-display" title=${hint ?? nothing}>
+      <span class="vp-label">${label}</span>
+      <fp3d-multi-select
+        .options=${options.map((o) => ({ id: o.value, label: this.t(o.label) }))}
+        .value=${shown}
+        .label=${label}
+        .summary=${shown.length === 1 ? this.t("display_count_one") : this.t("display_count", { n: shown.length })}
+        .searchLabel=${this.t("multi_search")}
+        .emptyText=${this.t("multi_none")}
+        @change=${(e: CustomEvent<{ value: string[] }>) => this.write(s, e.detail.value)}
+      ></fp3d-multi-select>
+    </div>`;
+  }
+
   private renderRow(row: ViewRow): TemplateResult | typeof nothing {
     const s = viewSetting(row.id);
     if (!s) return nothing;
     const label = this.t(s.label);
     const hint = s.hint ? this.t(s.hint) : undefined;
     switch (s.control.kind) {
+      case "checks":
+        return this.renderDisplay(s, s.control.options, label, hint);
       case "switch":
         return this.renderSwitch(label, !!s.read(this.env), () => this.write(s, !s.read(this.env)), hint);
       case "segment":
@@ -465,6 +489,10 @@ export class Fp3dViewPanel extends LitElement {
         min-width: 150px;
       }
       /* a choice that does not fit beside its label goes under it as a whole, never broken over two lines */
+      .vp-display fp3d-multi-select {
+        flex: 1 1 170px;
+        min-width: 0;
+      }
       .vp-seg-row {
         flex-wrap: wrap;
         row-gap: var(--fp3d-space-1);

@@ -40,6 +40,7 @@ export type ViewerSurface = Pick<
   | "setFridgeDoors"
   | "setFurnishMode"
   | "setFurnishTypes"
+  | "setHiddenItems"
   | "setHideRoof"
   | "setKeepRoof"
   | "setKeepView"

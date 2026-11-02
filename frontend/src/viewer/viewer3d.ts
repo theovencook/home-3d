@@ -613,6 +613,9 @@ interface FloorView {
   label: HTMLButtonElement;
 }
 
+/** A position attribute, as far as hiding items touches it. */
+type PosAttr = { array: unknown; needsUpdate: boolean };
+
 /** The floor of a room motion lights (#10). */
 const MOTION_LIGHT = new Color(1, 0.84, 0.5);
 /** A camera that sees motion. */
@@ -1245,6 +1248,54 @@ export class FloorplanViewer {
     // ceiling lamps would float above cut walls
     for (const fv of this.floors) this.buildLamps(fv);
     this.invalidate();
+  }
+
+  /** Items the View hides (#268, #269) and, per floor, the ones already collapsed in its meshes. */
+  private hiddenItems: ReadonlySet<string> = new Set();
+  private readonly hiddenDone = new WeakMap<FloorView, Set<string>>();
+  private readonly hiddenOrig = new WeakMap<BufferGeometry, Float32Array>();
+
+  /**
+   * Hide items by id without a rebuild: their triangles, edges and contact shadows lie in the floors' merged meshes,
+   * so a hidden item's vertices collapse to a point (and come back from a copy kept on the first hide). Only the
+   * items whose state changed are touched. Lamps are not here: they leave with their device pins.
+   */
+  setHiddenItems(ids: ReadonlySet<string>): void {
+    if (ids === this.hiddenItems) return;
+    this.hiddenItems = ids;
+    for (const fv of this.floors) this.applyHidden(fv);
+    this.invalidate();
+  }
+
+  private applyHidden(fv: FloorView): void {
+    const done = this.hiddenDone.get(fv) ?? new Set<string>();
+    if (!this.hiddenItems.size && !done.size) return;
+    const touched = new Set<BufferGeometry>();
+    const set = (geo: BufferGeometry, from: number, to: number, hide: boolean) => {
+      const pos = geo.getAttribute("position") as PosAttr | undefined;
+      if (!pos || to <= from) return;
+      const arr = pos.array as Float32Array;
+      let orig = this.hiddenOrig.get(geo);
+      if (!orig) {
+        if (!hide) return;
+        orig = arr.slice();
+        this.hiddenOrig.set(geo, orig);
+      }
+      if (hide) arr.fill(0, from * 3, to * 3);
+      else arr.set(orig.subarray(from * 3, to * 3), from * 3);
+      touched.add(geo);
+    };
+    for (const r of fv.geo.furnitureTris) {
+      const hide = this.hiddenItems.has(r.id);
+      if (hide === done.has(r.id)) continue;
+      set(fv.geo.walls, r.start * 3, r.end * 3, hide);
+      if (r.line) set(fv.geo.lines, r.line[0], r.line[1], hide);
+      if (r.shadow) set(fv.geo.shadow, r.shadow[0], r.shadow[1], hide);
+      if (hide) done.add(r.id);
+      else done.delete(r.id);
+    }
+    this.hiddenDone.set(fv, done);
+    for (const g of touched) (g.getAttribute("position") as PosAttr).needsUpdate = true;
   }
 
   /** Replace the device markers; pins are reused per entity, light cones rebuilt per floor. */
@@ -3289,6 +3340,7 @@ export class FloorplanViewer {
     // a kept floor still has its lamps, lights, doors and cables (the device updates keep them current)
     const built = this.floors.filter((fv) => keep.get(fv.floor.id) !== fv);
     for (const fv of built) {
+      this.applyHidden(fv);
       this.buildFridges(fv);
       this.buildRackLeds(fv);
       this.buildPipes(fv);

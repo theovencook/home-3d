@@ -95,7 +95,7 @@ test("its rows are the Settings page's own entries, under the same stored keys (
         assert.equal(entry, LOOK.find((x) => x.id === r.id), `${r.id}: the very same object`);
         keys.push(...(entry!.prefKeys ?? []));
       }
-  for (const k of ["theme", "accent", "walls", "explode", "floor_stack", "heat", "room_names", "roof", "trail", "weather", "markers", "pinSize", "clock"]) assert.ok(keys.includes(k), k);
+  for (const k of ["theme", "accent", "walls", "explode", "floor_stack", "heat", "display_hidden", "show_furniture", "roof", "trail", "weather", "markers", "pinSize", "clock"]) assert.ok(keys.includes(k), k);
 });
 
 test("with one floor open, Floors apart and Keep the roof are there but disabled, with the hint (#214)", () => {
@@ -119,7 +119,7 @@ test("each row once (#215); the 2D plan drops the 3D-only rows; one floor and no
   const flatPlan = rows(ctx({ plan2d: true }), "show").map((r) => r.id);
   for (const id of ["walls", "explode", "roof", "floor_stack"]) assert.ok(!flatPlan.includes(id), id);
   const single = rows(ctx({ floors: 1, roof: false }), "show").map((r) => r.id);
-  assert.deepEqual(single, ["walls", "heat", "room_names", "trail", "weather"]);
+  assert.deepEqual(single, ["walls", "heat", "display", "furniture", "trail", "weather"]);
 });
 
 test("a wall tablet's View panel offers only what the 3D shows (and 3D or 2D, slotted in) (#92)", () => {

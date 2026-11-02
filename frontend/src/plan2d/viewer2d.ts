@@ -165,6 +165,15 @@ export class Plan2dViewer implements ViewerSurface {
     this.draw();
   }
 
+  /** Items the View hides (#268, #269). */
+  private hiddenItems: ReadonlySet<string> = new Set();
+
+  setHiddenItems(ids: ReadonlySet<string>): void {
+    if (ids === this.hiddenItems) return;
+    this.hiddenItems = ids;
+    this.draw();
+  }
+
   setDevices(devices: DeviceMarker[]): void {
     this.devices = devices;
     this.draw();
@@ -430,7 +439,7 @@ export class Plan2dViewer implements ViewerSurface {
       return;
     }
     const walls = this.wallsOf(b, floor);
-    const items = planItems(floor, this.furnitureTargets, this.devices, this.shades);
+    const items = planItems(floor, this.furnitureTargets, this.devices, this.shades).filter((it) => !this.hiddenItems.has(it.f.id));
     const openings = planOpenings(floor, { exterior: b.settings.wall_exterior, interior: b.settings.wall_interior }, this.openingTargets, this.openingStates, walls);
     const flows = flowLines(this.flows, floor.id);
     const markers = planMarkers(this.devices, floor.id);

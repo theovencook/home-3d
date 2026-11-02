@@ -45,6 +45,7 @@ import { loadSampleHome } from "./api.ts";
 import { tell } from "./ask.ts";
 import { announce, lookAnnouncement, viewChange, type ViewSpot } from "./announce.ts";
 import { BackLayers } from "./back-stack.ts";
+import { DISPLAY_HIDDEN_KEY, hiddenText, parseHidden, SHOW_FURNITURE_KEY, type ObjectType } from "./display-pref.ts";
 
 type Mode = "view" | "editor" | "extensions" | "settings";
 
@@ -114,6 +115,8 @@ export class Floorplan3dPanel extends LitElement {
     _selDevice: { state: true },
     _floorStack: { state: true },
     _roomNames: { state: true },
+    _hidden: { state: true },
+    _furnitureOn: { state: true },
     _controlsRight: { state: true },
     _keepView: { state: true },
     _floorPics: { state: true },
@@ -184,6 +187,9 @@ export class Floorplan3dPanel extends LitElement {
   /** Floors below an opened floor, and whether room names show (both kept per device). */
   private declare _floorStack: FloorStack;
   private declare _roomNames: boolean;
+  /** The kinds of objects this device hides (#268) and its Furniture switch (#269). */
+  private declare _hidden: ReadonlySet<ObjectType>;
+  private declare _furnitureOn: boolean;
   private declare _controlsRight: boolean;
   private declare _keepView: boolean;
   /** The floor pictures beside the 3D view (#250: a switch in Settings › Screen and controls, off by default). */
@@ -293,7 +299,11 @@ export class Floorplan3dPanel extends LitElement {
     this._accent = accent && /^#[0-9a-f]{6}$/i.test(accent) ? accent : null;
     const stack = prefs.get("floor_stack");
     this._floorStack = stack === "stacked" || stack === "single" ? stack : "dim";
-    this._roomNames = prefs.get("room_names") !== "0";
+    const hidden = parseHidden(prefs.get(DISPLAY_HIDDEN_KEY), prefs.get("room_names"));
+    // the very same set while nothing changed, so the 3D view does not look again
+    if (!this._hidden || hiddenText(hidden) !== hiddenText(this._hidden)) this._hidden = hidden;
+    this._roomNames = !this._hidden.has("room_names");
+    this._furnitureOn = prefs.get(SHOW_FURNITURE_KEY) !== "0";
     this._controlsRight = prefs.get("controls") === "right";
     this._keepView = prefs.get("keep_view") === "1";
     this._floorPics = prefs.get("floor_pictures") === "1";
@@ -1402,6 +1412,8 @@ export class Floorplan3dPanel extends LitElement {
           .floorThumbs=${this._floorPics}
           .floorStack=${this._floorStack}
           .roomLabels=${this._roomNames}
+          .hiddenTypes=${this._hidden}
+          .furnitureOn=${this._furnitureOn}
           .controlsRight=${this._controlsRight}
           .keepView=${this._keepView}
           .angleLock=${this._angleLock}

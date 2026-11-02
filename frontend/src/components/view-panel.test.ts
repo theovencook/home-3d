@@ -71,7 +71,7 @@ test("wide screens: Appearance, What the 3D shows, Device icons and Clock, then 
   assert.ok(out.includes(`<optgroup label=Automatic>`) && out.includes(`<optgroup label=Fixed>`));
   assert.ok(out.includes("Follow Home Assistant (now Neon)"));
   assert.ok(out.includes("Important: devices with no 3D model"));
-  for (const label of ["Colour rooms by", "Keep the roof on when zooming in", "Motion trail (last 30 minutes)", "Weather outside", "Room names"]) assert.ok(out.includes(label), label);
+  for (const label of ["Colour rooms by", "Keep the roof on when zooming in", "Motion trail (last 30 minutes)", "Weather outside", "Furniture", "Display what", "12 object types selected"]) assert.ok(out.includes(label), label);
 });
 
 test("a change is written under the setting's own key and the panel is told; the panel stays open", () => {
@@ -167,7 +167,7 @@ test("phones: a bottom sheet whose Appearance and Device icons start open, the r
   assert.match(out, /<details class="vp-sec vp-show" \?open=false>/);
   assert.match(out, /<details class="vp-sec vp-clock" \?open=false>/);
   // What the 3D shows sums up its rows: the walls, and the switches that are on
-  assert.ok(out.includes("Tall walls · Room names · Weather outside"));
+  assert.ok(out.includes("Tall walls · Furniture · Weather outside"));
 });
 
 test("the sheet respects reduced motion, keeps the safe area, and every control is 44 px on touch", () => {
