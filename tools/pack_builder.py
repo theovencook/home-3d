@@ -149,3 +149,28 @@ def write_pack(pack_id: str, name: str, description: str, items: list[Item]) -> 
         sub.mkdir(exist_ok=True)
         (sub / f"{it.id}.json").write_bytes(dump_item(it.data()).encode("utf-8"))
     print(f"{pack_id}: {len(items)} items")
+
+
+def add_items(pack_id: str, items: list[Item], release: int, note: str) -> None:
+    """Add (or rewrite) items in an existing bundled pack and set its release and `release_note`.
+
+    Unlike `write_pack` the folder is not cleared: the pack's other items stay as they are.
+    """
+    folder = BUNDLED / pack_id
+    if not (folder / "pack.json").exists():
+        raise SystemExit(f"{pack_id} does not exist")
+    seen: set[str] = set()
+    for it in items:
+        if it.id in seen:
+            raise SystemExit(f"duplicate item id {it.id}")
+        seen.add(it.id)
+        if len(it.parts) > 60:
+            raise SystemExit(f"{it.id}: {len(it.parts)} parts")
+        sub = folder / it.group
+        sub.mkdir(exist_ok=True)
+        (sub / f"{it.id}.json").write_bytes(dump_item(it.data()).encode("utf-8"))
+    meta = json.loads((folder / "pack.json").read_text(encoding="utf-8"))
+    meta["release"] = release
+    meta["release_note"] = note
+    (folder / "pack.json").write_bytes((json.dumps(meta, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+    print(f"{pack_id}: {len(items)} items added or rewritten, release {release}")
