@@ -329,7 +329,6 @@ export class Fp3dView3d extends LitElement {
     _holoOpen: { state: true },
     _wallboxW: { state: true },
     _plants: { state: true },
-    _holoOn: { state: true },
     _holoBig: { state: true },
     _solarMore: { state: true },
     _flows: { state: true },
@@ -525,8 +524,6 @@ export class Fp3dView3d extends LitElement {
   private declare _wallboxW: number | null;
   /** The inverters with their own sensors (name and W), for the hologram when there are several plants. */
   private declare _plants: { name: string; w: number }[];
-  /** The hologram is on screen (then the energy bar keeps only its switch). */
-  private declare _holoOn: boolean;
   private holoTimer: ReturnType<typeof setInterval> | undefined;
   /** The solar card has grown (#144): hovered, or tapped on a touch screen. */
   private declare _holoBig: boolean;
@@ -851,7 +848,6 @@ export class Fp3dView3d extends LitElement {
     this._holoOpen = true;
     this._wallboxW = null;
     this._plants = [];
-    this._holoOn = false;
     this._holoBig = false;
     this._solarMore = null;
     this._swipe = null;
@@ -2366,11 +2362,7 @@ export class Fp3dView3d extends LitElement {
     const el = this.renderRoot.querySelector<HTMLElement>(`.fp3d-holo[data-holo="${index}"]`);
     const link = this.renderRoot.querySelector<SVGSVGElement>(`.fp3d-holo-link[data-holo="${index}"]`);
     const main = this._holos[index]?.kind === "main";
-    if (!el) {
-      if (main && this._holoOn) this._holoOn = false;
-      return;
-    }
-    if (main && on !== this._holoOn) this._holoOn = on;
+    if (!el) return;
     // a device card can stay away while its device is (nearly) off (#244)
     const card = this._holos[index];
     const minW = (this.building?.settings.roof.hologram ?? DEFAULT_HOLOGRAM).device_min_w ?? 0;
@@ -6598,14 +6590,12 @@ export class Fp3dView3d extends LitElement {
     if (e.tariff) items.push({ cls: "tariff", label: t("energy_tariff"), value: `${formatNumber(this.hass, e.tariff.value, 3)} ${e.tariff.unit}`.trim() });
     return html`<div class="fp3d-energy" aria-live="off">
       ${this._cheap ? html`<div class="fp3d-energy-item fp3d-energy-cheap" role="status"><span>${t("cheap_rate")}</span><b>${t("cheap_rate_now")}</b></div>` : nothing}
-      ${this._holoOn
-        ? nothing
-        : items.map(
-            (i) =>
-              html`<button type="button" class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}${this._bigTile === i.cls ? " fp3d-energy-big" : ""}" aria-pressed=${this._bigTile === i.cls ? "true" : "false"} @click=${() => this.toggleEnergyTile(i.cls)}>
-                <span>${i.label}</span><b>${i.value}</b>
-              </button>`,
-          )}
+      ${items.map(
+        (i) =>
+          html`<button type="button" class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}${this._bigTile === i.cls ? " fp3d-energy-big" : ""}" aria-pressed=${this._bigTile === i.cls ? "true" : "false"} @click=${() => this.toggleEnergyTile(i.cls)}>
+            <span>${i.label}</span><b>${i.value}</b>
+          </button>`,
+      )}
       ${this.flows !== null
         ? nothing
         : html`<button class="fp3d-energy-item fp3d-flow-toggle" aria-pressed=${this._flows} title=${`${t("flows_hint")} (${t(this._flows ? "flow_on" : "flow_off")})`} aria-label=${t("flows")} @click=${() => this.toggleFlows()}>

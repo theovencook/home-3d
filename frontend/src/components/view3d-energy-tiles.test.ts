@@ -68,3 +68,14 @@ test("a hovered or focused tile grows smoothly with a mouse; reduced motion make
   assert.match(css, /\.fp3d-energy-tile\s*\{[^}]*transition: transform/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.fp3d-energy-tile\s*\{\s*transition: none/);
 });
+
+test("the energy tiles stay while the glass cards are shown (#309)", () => {
+  const el = viewer();
+  el.holograms = null;
+  el._holoShow = true;
+  el._holos = [{ kind: "main", name: "", w: null, dayIds: [], battery: null }];
+  el._holoOn = true; // the main card is on screen (it used to hide the tiles)
+  const out = flat(el.renderEnergy());
+  assert.match(out, /fp3d-energy-tile fp3d-energy-solar/);
+  assert.match(out, /fp3d-energy-tile fp3d-energy-total/);
+});
