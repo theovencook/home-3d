@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { SEASON_IDS, beforeEaster, easterSunday, fathersDay, mothersDay, nthSunday, pancakeDay, remembranceSunday, seasonAt } from "./seasons.ts";
+import { SEASON_IDS, beforeEaster, calendarChineseNewYear, chineseNewYear, defaultRange, easterSunday, fathersDay, mothersDay, nthSunday, pancakeDay, parseMonthDay, remembranceSunday, seasonAt, seasonRange } from "./seasons.ts";
 
 const at = (y: number, m: number, d: number, h = 12, min = 0) => new Date(y, m - 1, d, h, min);
 const id = (y: number, m: number, d: number, off?: Record<string, boolean>, h = 12) => seasonAt(at(y, m, d, h), off)?.id ?? null;
@@ -55,7 +55,9 @@ test("nthSunday handles a month that starts on a Sunday (#239)", () => {
 });
 
 test("each moving holiday shows on its day and not the day before or after (#239)", () => {
-  assert.equal(id(2026, 2, 17), "pancake_day");
+  // 2026: Chinese New Year is on Pancake Day, and wins (#287); switched off, Pancake Day shows
+  assert.equal(id(2026, 2, 17), "chinese_new_year");
+  assert.equal(id(2026, 2, 17, { chinese_new_year: false }), "pancake_day");
   assert.equal(id(2026, 2, 16), null);
   assert.equal(id(2026, 2, 18), null);
   assert.equal(id(2026, 3, 15), "mothers_day");
@@ -91,7 +93,7 @@ test("the fixed holidays are on their dates (#239)", () => {
   assert.equal(id(2026, 12, 30), "twixmas");
   assert.equal(id(2026, 12, 31), "nye");
   assert.equal(id(2026, 7, 15), null);
-  assert.equal(id(2026, 10, 31), null, "Halloween is its own pack, not part of the calendar");
+  assert.equal(id(2026, 10, 31), "halloween", "Halloween is one of the holidays since #287");
 });
 
 test("Advent counts the sleeps to Christmas from 1 December (#239)", () => {
@@ -130,9 +132,66 @@ test("a holiday switched off is skipped; the other holiday of the day shows inst
 
 test("every holiday has a day it shows on in a normal year (#239)", () => {
   const seen = new Set<string>();
-  for (let t = new Date(2026, 0, 1); t.getFullYear() === 2026; t.setDate(t.getDate() + 1)) {
+  for (let t = new Date(2027, 0, 1); t.getFullYear() === 2027; t.setDate(t.getDate() + 1)) {
     const s = seasonAt(new Date(t.getFullYear(), t.getMonth(), t.getDate(), 12));
     if (s) seen.add(s.id);
   }
   assert.deepEqual([...seen].sort(), [...SEASON_IDS].sort());
+});
+
+// ---- Halloween, Chinese New Year and editable dates (#287)
+
+test("Halloween is a holiday on 31 October, with its own greeting and effect (#287)", () => {
+  assert.equal(id(2026, 10, 31), "halloween");
+  assert.equal(id(2026, 10, 30), null);
+  assert.equal(id(2026, 10, 31, { halloween: false }), null);
+  const s = seasonAt(at(2026, 10, 31))!;
+  assert.equal(s.effect, "halloween");
+  assert.equal(s.key, "season_halloween");
+});
+
+test("Chinese New Year is worked out from the Chinese calendar and agrees with the known dates (#287)", () => {
+  const known: Record<number, [number, number]> = { 2025: [1, 29], 2026: [2, 17], 2027: [2, 6], 2028: [1, 26], 2029: [2, 13], 2030: [2, 3], 2031: [1, 23], 2032: [2, 11], 2033: [1, 31], 2034: [2, 19], 2035: [2, 8], 2040: [2, 12], 2050: [1, 23] };
+  for (const [y, md] of Object.entries(known)) assert.deepEqual(chineseNewYear(Number(y)), md, y);
+  // the browser's calendar agrees to within a day (it can be a day out when the new moon is minutes from midnight in China)
+  for (let y = 2025; y <= 2050; y++) {
+    const cal = calendarChineseNewYear(y);
+    if (!cal) continue;
+    const gap = Math.abs(Date.UTC(y, cal[0] - 1, cal[1]) - Date.UTC(y, chineseNewYear(y)[0] - 1, chineseNewYear(y)[1])) / 864e5;
+    assert.ok(gap <= 1, `${y}: ${cal} against ${chineseNewYear(y)}`);
+  }
+  assert.equal(id(2026, 2, 17), "chinese_new_year");
+  assert.equal(seasonAt(at(2026, 2, 17))!.effect, "lanterns");
+  assert.equal(id(2026, 2, 16), null);
+});
+
+test("a holiday's dates can be changed; the change repeats every year and can run over New Year (#287)", () => {
+  const dates = { halloween: { from: "10-29", to: "11-01" } };
+  assert.equal(seasonAt(at(2026, 10, 29), undefined, dates)?.id, "halloween");
+  assert.equal(seasonAt(at(2026, 11, 1), undefined, dates)?.id, "halloween");
+  assert.equal(seasonAt(at(2026, 11, 2), undefined, dates), null);
+  assert.equal(seasonAt(at(2027, 10, 30), undefined, dates)?.id, "halloween");
+  // the usual day no longer counts once the house moved it
+  assert.equal(seasonAt(at(2026, 10, 31), undefined, { halloween: { from: "10-25" } }), null);
+  assert.equal(seasonAt(at(2026, 10, 25), undefined, { halloween: { from: "10-25" } })?.id, "halloween");
+  const wrap = { chinese_new_year: { from: "12-30", to: "01-02" } };
+  assert.equal(seasonAt(at(2026, 1, 1), { new_year: false }, wrap)?.id, "chinese_new_year");
+  assert.equal(seasonAt(at(2026, 12, 30), undefined, wrap)?.id, "chinese_new_year");
+});
+
+test("dates that are not a day of the calendar are ignored: the usual dates stay (#287)", () => {
+  assert.equal(parseMonthDay("02-30"), null);
+  assert.deepEqual(parseMonthDay("02-29"), [2, 29]);
+  assert.equal(parseMonthDay("2-3"), null);
+  assert.equal(seasonAt(at(2026, 10, 31), undefined, { halloween: { from: "13-40" } })?.id, "halloween");
+  assert.deepEqual(seasonRange("halloween", 2026, { halloween: { from: "13-40" } }).custom, false);
+});
+
+test("the usual dates of every holiday are in the year and form a range (#287)", () => {
+  for (const sid of SEASON_IDS) {
+    const r = defaultRange(sid, 2026);
+    assert.ok(r.from[0] >= 1 && r.from[0] <= 12 && r.to[0] >= 1 && r.to[0] <= 12, sid);
+  }
+  assert.deepEqual(defaultRange("easter", 2026), { from: [4, 3], to: [4, 6] });
+  assert.deepEqual(defaultRange("advent", 2026), { from: [12, 1], to: [12, 23] });
 });

@@ -4,9 +4,9 @@
  * repository stay hidden unless the lab switch is on, and the fun extras are named so the extensions page can list them.
  */
 
-/** Fun extras (pets, Halloween, the holidays): shown in their own section of the extensions page and switched on and off there. */
+/** Fun extras (pets, the holidays; Halloween is one of the holidays since #287): shown in their own section of the extensions page and switched on and off there. */
 export type FunFeature = "fun_pets" | "fun_halloween" | "fun_seasons";
-export const FUN: readonly FunFeature[] = ["fun_pets", "fun_halloween", "fun_seasons"];
+export const FUN: readonly FunFeature[] = ["fun_pets", "fun_seasons"];
 /** Free features that are always on (they can still be listed in UNRELEASED to hide them). */
 export type FreeFeature = "diagnostics" | "locate";
 /** Add-ons whose logic is not in this repository ("pool"). */

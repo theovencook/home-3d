@@ -1207,7 +1207,7 @@ const en = {
   halloween_ghost: "Let the ghost float",
   halloween_deco_hint: "The decorations are in the editor's furniture library under \"Fun pack: Halloween\". Pumpkin, cauldron and candles glow with a linked light.",
   fun_name_seasons: "Holidays",
-  fun_feature_seasons: "On the main UK holidays the view gets a soft glow, a greeting and a light effect: snow at Christmas, hearts on Valentine's Day, fireworks on Bonfire Night and more. Switch each holiday on or off here.",
+  fun_feature_seasons: "On the main UK holidays, Halloween and Chinese New Year the view gets a soft glow, a greeting and a light effect: snow at Christmas, hearts on Valentine's Day, fireworks on Bonfire Night and more. Switch each holiday on or off here, and change its dates if you need to.",
   season_new_year: "Happy New Year {year}",
   season_christmas_eve: "Santa's on his way",
   season_christmas: "Merry Christmas",
@@ -3033,6 +3033,17 @@ const en = {
   st_homes_duplicate: "Duplicate",
   st_homes_delete: "Delete",
   st_homes_open_page: "Opens Settings, Homes",
+  season_halloween: "Happy Halloween",
+  season_chinese_new_year: "Happy Chinese New Year 新年快乐",
+  season_name_halloween: "Halloween",
+  season_name_chinese_new_year: "Chinese New Year",
+  season_dates: "Dates",
+  season_dates_from: "From",
+  season_dates_to: "To",
+  season_dates_month: "month",
+  season_dates_day: "day",
+  season_dates_changed: "your dates",
+  season_dates_reset: "Back to the usual dates",
 };
 
 type Key = keyof typeof en;

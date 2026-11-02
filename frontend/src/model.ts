@@ -870,6 +870,8 @@ export interface BuildingSettings {
   halloween?: { ghost?: boolean } | null;
   /** Seasonal themes (#239): a holiday switched off is false here (missing = on); see seasons.ts for the ids. */
   seasons?: Record<string, boolean> | null;
+  /** Dates a holiday is on, when the house changed them (#287): "MM-DD" from and to, repeating every year; missing = the usual dates. */
+  season_dates?: Record<string, { from: string; to?: string }> | null;
   /** Easter eggs (#139): one house-wide switch for every surprise (the Halloween ghost and later ones), on unless false. */
   easter_eggs?: boolean;
   /** Plan lock: rooms, walls, doors, windows and outdoor areas cannot be moved by accident. */

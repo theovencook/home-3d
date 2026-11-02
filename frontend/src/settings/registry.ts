@@ -756,7 +756,7 @@ const FUN: Setting[] = [
   {
     id: "halloween.ghost",
     section: "fun",
-    card: "eggs",
+    card: "seasons",
     scope: "house",
     permission: "editor",
     label: "halloween_ghost",

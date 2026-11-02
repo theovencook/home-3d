@@ -106,6 +106,18 @@ def test_seasons_switch_off_single_holidays() -> None:
         SETTINGS_SCHEMA({**base, "seasons": {"christmas": "maybe"}})
 
 
+def test_season_dates_change_a_holidays_days() -> None:
+    """Holiday dates (#287): "MM-DD" from and an optional to under the holiday's id; none by default."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    assert "season_dates" not in SETTINGS_SCHEMA(base)
+    dates = {"halloween": {"from": "10-29", "to": "11-01"}, "christmas": {"from": "12-20"}}
+    assert SETTINGS_SCHEMA({**base, "season_dates": dates})["season_dates"] == dates
+    assert SETTINGS_SCHEMA({**base, "season_dates": None})["season_dates"] is None
+    for bad in ({"from": "13-01"}, {"from": "1-1"}, {"to": "10-31"}, {"from": "10-31", "to": "soon"}):
+        with pytest.raises(vol.Invalid):
+            SETTINGS_SCHEMA({**base, "season_dates": {"halloween": bad}})
+
+
 def test_furniture_block() -> None:
     """Furniture blocks: items with the same group id move together; none by default."""
     item = {"id": "f1", "type": "kitchen", "x": 0, "z": 0, "rotation": 0, "w": 0.6, "d": 0.6, "h": 0.9, "variant": None}
