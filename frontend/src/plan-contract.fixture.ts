@@ -301,6 +301,7 @@ export const PLAN_CONTRACT = {
             }
           ],
           "screen_bg": "black",
+          "active_color": "#ff3b30",
           "vehicle": "text",
           "valve_position": "filter",
           "valve_open": true,
