@@ -10,6 +10,7 @@ or 3D files.
 | --- | --- | --- | --- | --- |
 | `unifi_g4_doorbell_pro` | UniFi G4 Doorbell Pro | 51.7 x 28.7 x 160.6 | maker | https://techspecs.ui.com/unifi/cameras-nvrs/uvc-g4-doorbell-pro  |
 | `unifi_g4_doorbell_pro_poe` | UniFi G4 Doorbell Pro PoE | 51.7 x 35.1 x 160.6 | maker | https://techspecs.ui.com/unifi/cameras-nvrs/uvc-g4-doorbell-pro-poe-kit Doorbell only (the kit's camera, 35.1 deep); the kit's chime is `unifi_chime_poe`. |
+| `unifi_g5_doorbell_pro` | UniFi G5 Doorbell Pro | 51.7 x 28.7 x 160.6 | approximate | Ubiquiti publishes no size; shape and size taken from the G4 Doorbell Pro (#303) |
 | `unifi_doorbell_lite` | UniFi Doorbell Lite | 40 x 26.4 x 137 | maker | https://techspecs.ui.com/unifi/cameras-nvrs/uvc-doorbell-lite  |
 | `unifi_chime_wifi` | UniFi WiFi Smart Chime | 62 x 50.6 x 62 | maker | https://techspecs.ui.com/unifi/cameras-nvrs/up-chime-us Plug-in unit, 62 diameter x 50.6 deep without the prong. |
 | `unifi_chime_poe` | UniFi PoE Smart Chime | 62 x 54 x 62 | maker | https://techspecs.ui.com/unifi/cameras-nvrs/uacc-chime-poe 62 diameter x 54 deep (on-wall mount 20.2 deep). |
