@@ -147,5 +147,5 @@ def write_pack(pack_id: str, name: str, description: str, items: list[Item]) -> 
             raise SystemExit(f"{it.id}: {len(it.parts)} parts")
         sub = folder / it.group
         sub.mkdir(exist_ok=True)
-        (sub / f"{it.id}.json").write_text(dump_item(it.data()), encoding="utf-8")
+        (sub / f"{it.id}.json").write_bytes(dump_item(it.data()).encode("utf-8"))
     print(f"{pack_id}: {len(items)} items")

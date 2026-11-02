@@ -70,6 +70,7 @@ def test_the_core_pack_is_retired_and_every_bundled_pack_is_under_the_item_limit
         "theovencook.decor",
         "theovencook.outdoor",
         "theovencook.outdoor-plants",
+        "theovencook.outdoor-hardscape",
         "theovencook.household",
         "theovencook.devices",
         "theovencook.makers",
