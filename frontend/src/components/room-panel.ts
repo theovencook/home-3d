@@ -17,6 +17,7 @@ import type { Building, Floor, Room } from "../model.ts";
 import { roofWindowsOver } from "../solar.ts";
 import { arrangePanel, groupOrder, type ArrangedPanel, type PanelGroup } from "../panel-layout.ts";
 import { controls, tokens } from "../styles.ts";
+import { FloatResize, type Edge } from "../float-panel.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
 
 const CAMERA_REFRESH_MS = 3000;
@@ -101,8 +102,14 @@ export class Fp3dRoomPanel extends LitElement {
     this._tick = 0;
   }
 
+  /** The panel's own size, set by dragging its edges (#267), kept per device. */
+  private readonly resizer = new FloatResize(this, "room_size");
+  private readonly onWindow = () => this.resizer.apply();
+
   connectedCallback(): void {
     super.connectedCallback();
+    this.resizer.load();
+    window.addEventListener("resize", this.onWindow);
     // snapshots every few seconds are much lighter for a wall tablet than a permanent stream
     this.cameraTimer = setInterval(() => {
       if (this.hasCameras && !document.hidden) this._tick++;
@@ -111,6 +118,7 @@ export class Fp3dRoomPanel extends LitElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    window.removeEventListener("resize", this.onWindow);
     clearInterval(this.cameraTimer);
   }
 
@@ -276,7 +284,25 @@ export class Fp3dRoomPanel extends LitElement {
             </button>`
           : nothing}
       </div>
+      ${(["w", "s", "sw"] as Edge[]).map((edge) => this.renderEdge(edge))}
     </section>`;
+  }
+
+  /** An edge or the corner to drag (arrow keys too); a double click puts the size back (#267). */
+  private renderEdge(edge: Edge) {
+    return html`<div
+      class="fp3d-rz fp3d-rz-${edge}"
+      role="separator"
+      tabindex="0"
+      aria-label=${this.t("room_resize_hint")}
+      title=${this.t("room_resize_hint")}
+      @pointerdown=${(e: PointerEvent) => this.resizer.begin(e, edge)}
+      @pointermove=${(e: PointerEvent) => this.resizer.move(e)}
+      @pointerup=${() => this.resizer.end()}
+      @pointercancel=${() => this.resizer.end()}
+      @keydown=${(e: KeyboardEvent) => this.resizer.key(e, edge)}
+      @dblclick=${() => this.resizer.reset()}
+    ></div>`;
   }
 
   /** Opens "Edit list" (its chunk loads the first time) or closes it (#229). */
@@ -638,7 +664,49 @@ export class Fp3dRoomPanel extends LitElement {
       :host {
         display: block;
       }
+      /* a size set by dragging an edge (#267): the card fills the host's height */
+      :host([sized]) .fp3d-rp {
+        height: 100%;
+      }
+      .fp3d-rz {
+        position: absolute;
+        z-index: 2;
+        touch-action: none;
+      }
+      .fp3d-rz-w {
+        left: 0;
+        top: 18px;
+        bottom: 18px;
+        width: 8px;
+        cursor: ew-resize;
+      }
+      .fp3d-rz-s {
+        left: 18px;
+        right: 18px;
+        bottom: 0;
+        height: 8px;
+        cursor: ns-resize;
+      }
+      .fp3d-rz-sw {
+        left: 0;
+        bottom: 0;
+        width: 18px;
+        height: 18px;
+        cursor: nesw-resize;
+      }
+      .fp3d-rz:hover,
+      .fp3d-rz:focus-visible {
+        background: var(--fp3d-accent);
+        opacity: 0.45;
+      }
+      /* a sheet (phones, portrait tablets) keeps its own size: no edges to drag */
+      @container fp3d ((max-width: 700px) or ((orientation: portrait) and (max-width: 1000px))) {
+        .fp3d-rz {
+          display: none;
+        }
+      }
       .fp3d-rp {
+        position: relative;
         /* the host may be pointer-events: none so the 3D view stays usable around the panel */
         pointer-events: auto;
         display: flex;
