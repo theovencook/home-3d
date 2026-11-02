@@ -3587,8 +3587,9 @@ export class Fp3dView3d extends LitElement {
           if (color) screens.set(f.id, { color, level: st.state === "playing" ? 1 : 0.6, picture, ring: packAmbilight(f.type) || (ringed && st.state === "playing") });
         }
         // its own "active" colour (#289): over the usual glow while its entity is playing, on or triggered
-        if (st && f.active_color && (isActive(st) || alarmTriggered(st) || (kindOf(st.entity_id) === "media" && st.state === "on"))) {
-          const c = activeGlow(f.active_color);
+        const alarmed = !!st && alarmTriggered(st);
+        if (st && (f.active_color || alarmed) && (isActive(st) || alarmed || (kindOf(st.entity_id) === "media" && st.state === "on"))) {
+          const c = activeGlow(f.active_color || (alarmed ? "#ff3b30" : ""));
           if (c) {
             const was = screens.get(f.id);
             screens.set(f.id, { ...(was ?? { level: 0.8 }), color: c, ...(was?.faces ? { faces: was.faces.map((x) => ({ ...x, color: c })) } : {}) });
