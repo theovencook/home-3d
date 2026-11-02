@@ -2693,7 +2693,16 @@ export class FloorplanViewer {
     pin.addEventListener("pointerleave", cancel);
     pin.addEventListener("pointercancel", cancel);
     pin.addEventListener("pointerup", cancel);
-    pin.addEventListener("contextmenu", (e) => e.preventDefault());
+    pin.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      // a right click is a long press (#272)
+      if (this.furnish) return;
+      clearTimeout(timer);
+      held = true;
+      const r = pin.getBoundingClientRect();
+      const h = this.host.getBoundingClientRect();
+      this.options.onDeviceHold?.(entityId, r.left + r.width / 2 - h.left, r.top + r.height / 2 - h.top);
+    });
     pin.addEventListener("click", (e) => {
       e.stopPropagation();
       if (this.furnish) {

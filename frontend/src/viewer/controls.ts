@@ -335,6 +335,7 @@ export class OrbitControls {
       this.events.drop?.();
       return;
     }
+    const released = this.pointers.get(e.pointerId);
     this.pointers.delete(e.pointerId);
     if (this.swiping) {
       this.swiping = null;
@@ -352,7 +353,11 @@ export class OrbitControls {
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       const now = performance.now();
-      if (now - this.lastTap < 320) {
+      if (released?.button === 2 && released.type === "mouse") {
+        // a right click that did not drag acts like a long press (#272): a light's card, a device's details
+        this.lastTap = 0;
+        this.events.hold(x, y);
+      } else if (now - this.lastTap < 320) {
         this.lastTap = 0;
         this.events.doubleTap(x, y);
       } else {

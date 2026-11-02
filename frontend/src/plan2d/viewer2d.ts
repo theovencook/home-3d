@@ -99,7 +99,12 @@ export class Plan2dViewer implements ViewerSurface {
     r.addEventListener("pointerup", this.onUp);
     r.addEventListener("pointercancel", this.onCancel);
     r.addEventListener("wheel", this.onWheel, { passive: false });
-    r.addEventListener("contextmenu", (e) => e.preventDefault());
+    r.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      // a right click on a device is a long press (#272)
+      const id = (e.target as Element | null)?.closest?.("[data-pick]")?.getAttribute("data-pick");
+      if (id && !rackOfPick(id)) this.options.onDeviceHold?.(id, ...this.local(e));
+    });
     r.addEventListener("keydown", this.onKey);
     // reachable for the keyboard (#195): the arrows move the plan, plus and minus zoom
     r.tabIndex = 0;

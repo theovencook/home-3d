@@ -44,6 +44,7 @@ const { Fp3dView3d } = await import("./components/view3d.ts");
 const { Fp3dRoomPanel } = await import("./components/room-panel.ts");
 const { Fp3dViewPanel } = await import("./components/view-panel.ts");
 const { Fp3dQuickMenu } = await import("./components/quick-menu.ts");
+const { Fp3dDevicePopup } = await import("./components/device-popup.ts");
 const { Fp3dTimeBar } = await import("./components/time-bar.ts");
 const { formStyles } = await import("./components/editor/styles/forms.ts");
 const { controls } = await import("./styles.ts");
@@ -62,6 +63,7 @@ want("View panel", text((Fp3dViewPanel as unknown as Styled).styles), [".vp-sele
 want("viewer", text((Fp3dView3d as unknown as Styled).styles), [".fp3d-alert-x", ".fp3d-eye", ".fp3d-find-close", ".fp3d-sheet-x", ".fp3d-walk-btn", ".fp3d-sheet-chip", ".fp3d-holo-media-controls button", ".fp3d-thumbs-fold"]);
 want("room panel", text((Fp3dRoomPanel as unknown as Styled).styles), [".fp3d-rp-close", ".fp3d-rp-icon", ".fp3d-rp-swatch", ".fp3d-rp-small", ".fp3d-rp-sheet", ".fp3d-rp-chips .fp3d-chip", ".fp3d-rp-stepper .fp3d-btn"]);
 want("quick menu", text((Fp3dQuickMenu as unknown as Styled).styles), [".qm-swatch"]);
+want("device popup", text((Fp3dDevicePopup as unknown as Styled).styles), [".dp-swatch", ".dp-x", ".dp-btn", ".dp-chip", ".dp-power"]);
 want("time bar", text((Fp3dTimeBar as unknown as Styled).styles), [".btn", ".x", ".chip", ".track"]);
 want("editor", text(formStyles), [".fp3d-fix", ".fp3d-more-btn", ".fp3d-strip-btn", ".fp3d-3d-fold", ".fp3d-point .fp3d-btn", ".fp3d-wv-zoom .fp3d-btn", ".fp3d-presets .fp3d-chip"]);
 
