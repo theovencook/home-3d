@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- The motion trail no longer counts a Home Assistant restart as motion: a sensor back from unavailable or unknown is not a new event, even when it comes back on (#299).
 - The clock sits behind the room panel, menus and pop-ups (#313).
 - **Walking on the stairs** keeps both floors drawn, in place and at full strength, until one steps off at the top or the bottom (#312).
 - **Walking with the touch stick** follows the finger the whole time; a redraw mid-drag (walking into another room) left it stuck in its last direction until let go (#311).

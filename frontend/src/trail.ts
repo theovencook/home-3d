@@ -79,17 +79,22 @@ export function trailSources(hass: HomeAssistant, building: Building): TrailSour
 export function trailEvents(rows: Record<string, HistoryRow[]>, live: LiveState[], now: number, windowMs = TRAIL_WINDOW_MS): TrailEvent[] {
   const from = now - windowMs;
   const events: TrailEvent[] = [];
+  // a sensor back from unavailable or unknown (a restart) is no motion, even when it comes back on (#299)
+  const restarted = new Set<string>();
   for (const [entity, list] of Object.entries(rows)) {
     let prev = "";
     for (const r of list) {
       const t = (r.lc ?? r.lu) * 1000;
-      if (r.s === "on" && prev !== "on" && t >= from && t <= now) events.push({ entity, time: t });
+      const back = prev === "unavailable" || prev === "unknown";
+      if (r.s === "on" && prev !== "on" && !back && t >= from && t <= now) events.push({ entity, time: t });
+      if (r.s !== prev && back) restarted.add(entity);
+      else if (r.s !== prev) restarted.delete(entity);
       prev = r.s;
     }
   }
   for (const l of live) {
     const t = l.lastChanged ?? NaN;
-    if (l.state !== "on" || !(t >= from && t <= now)) continue;
+    if (l.state !== "on" || !(t >= from && t <= now) || restarted.has(l.entity)) continue;
     if (!events.some((e) => e.entity === l.entity && Math.abs(e.time - t) < 2000)) events.push({ entity: l.entity, time: t });
   }
   return events.sort((a, b) => a.time - b.time);

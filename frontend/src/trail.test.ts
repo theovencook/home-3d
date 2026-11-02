@@ -107,3 +107,38 @@ test("trail points: placed in the plan, repeats within a minute merged, age from
     ],
   );
 });
+
+test("a restart is no motion: a sensor back from unavailable or unknown does not count, even when it comes back on (#299)", () => {
+  const s = (t: number) => (NOW - t) / 1000;
+  const rows = {
+    "binary_sensor.restart_off": [
+      { s: "off", lu: s(25 * MIN) },
+      { s: "unavailable", lu: s(6 * MIN) },
+      { s: "off", lu: s(5 * MIN) },
+    ],
+    "binary_sensor.restart_on": [
+      { s: "on", lu: s(25 * MIN), lc: s(40 * MIN) },
+      { s: "unavailable", lu: s(6 * MIN) },
+      { s: "on", lu: s(5 * MIN) },
+    ],
+    "binary_sensor.unknown_on": [
+      { s: "unknown", lu: s(6 * MIN) },
+      { s: "on", lu: s(5 * MIN) },
+    ],
+    "binary_sensor.real": [
+      { s: "off", lu: s(25 * MIN) },
+      { s: "unavailable", lu: s(6 * MIN) },
+      { s: "off", lu: s(5 * MIN) },
+      { s: "on", lu: s(2 * MIN) },
+    ],
+  };
+  const live = [
+    { entity: "binary_sensor.restart_on", state: "on", lastChanged: NOW - 5 * MIN },
+    { entity: "binary_sensor.unknown_on", state: "on", lastChanged: NOW - 5 * MIN },
+  ];
+  const events = trailEvents(rows, live, NOW);
+  assert.deepEqual(
+    events.map((e) => [e.entity, (NOW - e.time) / MIN]),
+    [["binary_sensor.real", 2]],
+  );
+});
