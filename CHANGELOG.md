@@ -7,6 +7,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 - A Home Assistant restart is no longer shown as motion: the camera detection pins only linger for a detection this page saw, and the motion trail skips sensors coming back from unavailable or unknown (#299).
 - The clock sits behind the room panel, menus and pop-ups (#313).
+- The camera wall is a free window: drag its header to move it, drag an edge or corner to resize it, double click the header to reset; the place is remembered on this device, and the Cameras button stays readable while the wall is open (#314).
 - **Walking on the stairs** keeps both floors drawn, in place and at full strength, until one steps off at the top or the bottom (#312).
 - **Walking with the touch stick** follows the finger the whole time; a redraw mid-drag (walking into another room) left it stuck in its last direction until let go (#311).
 - The view's navigation pad gets turn left and right buttons (15 degrees a press), and is now a View option ("Navigation buttons"), off by default and not loaded until switched on (#307).

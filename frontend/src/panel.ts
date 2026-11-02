@@ -2168,9 +2168,10 @@ export class Floorplan3dPanel extends LitElement {
         pointer-events: auto;
       }
       /* the View button opens the View panel (#247, components/view-panel.ts) above the bar; an open View panel marks it */
+      /* open: the shared pressed fill with its dark text (#314); the accent colour on that fill hid the label */
       .fp3d-cam-btn[aria-pressed="true"] {
-        color: var(--fp3d-accent);
-        box-shadow: inset 0 0 0 1px var(--fp3d-accent), var(--fp3d-shadow);
+        background: var(--fp3d-primary);
+        color: var(--fp3d-primary-text);
       }
       .fp3d-view-btn[aria-expanded="true"] {
         color: var(--fp3d-accent);

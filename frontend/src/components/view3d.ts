@@ -176,7 +176,8 @@ import { activateKey } from "../activate-key.ts";
 import { callServiceSafe } from "../failure.ts";
 import { forwardHass, HASS_CHILDREN, HassWatch } from "../hass-watch.ts";
 import type { BinCue, DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SoundSource, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
-import { dockFromPoint, parseDock, WALL_DOCK_KEY, WALL_DOCKS, wallLayout, type WallDock } from "../camera-wall.ts";
+import { wallLayout } from "../camera-wall.ts";
+import type { Grip, WallWindow } from "../float-window.ts";
 import { watchedEntities } from "../watched.ts";
 import { isPrinter, printerFaces, printerState } from "../printer.ts";
 import type { NavAction } from "./view-nav.ts";
@@ -338,7 +339,6 @@ export class Fp3dView3d extends LitElement {
     _through: { state: true },
     _blend: { state: true },
     _wallBig: { state: true },
-    _wallDock: { state: true },
     _find: { state: true },
     findInBar: { type: Boolean },
     _walk: { state: true },
@@ -576,7 +576,9 @@ export class Fp3dView3d extends LitElement {
   /** Camera wall: the camera shown big (null: all tiles). */
   private declare _wallBig: string | null;
   /** The edge of the view the camera wall is docked to (#266), kept per device. */
-  private declare _wallDock: WallDock;
+  /** The camera wall as a free window (#314): its own chunk, loaded when the wall first opens. */
+  private wallWin: WallWindow | null = null;
+  private wallWinLoading = false;
   /** The look-through was started from the camera wall: going back reopens the wall. */
   private throughWall = false;
   /** Camera wall, big picture: Home Assistant's own stream player (a picture-entity card in live view), one at a time. */
@@ -857,7 +859,6 @@ export class Fp3dView3d extends LitElement {
     this._popup = null;
     this._through = null;
     this._wallBig = null;
-    this._wallDock = "bottom";
     this._blend = 0.6;
     this._find = null;
     this._central = false;
@@ -925,7 +926,6 @@ export class Fp3dView3d extends LitElement {
       this._flows = localStorage.getItem("home3d.flows") === "1";
       this._legendMin = localStorage.getItem("home3d.legendMin") === "1";
       this._holoShow = localStorage.getItem("home3d.holos") !== "0";
-      this._wallDock = parseDock(localStorage.getItem(WALL_DOCK_KEY));
     } catch {
       this._flows = false;
       this._legendMin = false;
@@ -985,6 +985,7 @@ export class Fp3dView3d extends LitElement {
     this.wireKey = "";
     this.meterKey = "";
     document.removeEventListener("visibilitychange", this.onVisible);
+    this.wallWin?.dispose();
     this.taps.cancel();
     this.stopWalk();
     this.pets?.dispose();
@@ -1224,6 +1225,8 @@ export class Fp3dView3d extends LitElement {
   }
 
   protected updated(changed: PropertyValues): void {
+    // the camera wall as a free window (#314): its place and size are put on the element after each render
+    this.wallWin?.attach(this.renderRoot.querySelector<HTMLElement>(".fp3d-wall"));
     // the chrome goes light with the Day look (#85): the shared tokens read the attribute, nested parts inherit it
     if (changed.has("hass") || changed.has("theme")) {
       this.toggleAttribute("light", lightChrome(this.effectiveTheme()));
@@ -5947,36 +5950,33 @@ export class Fp3dView3d extends LitElement {
     }
   }
 
-  private setWallDock(dock: WallDock): void {
-    this._wallDock = dock;
-    try {
-      localStorage.setItem(WALL_DOCK_KEY, dock);
-    } catch {
-      // not remembered
-    }
+  /** Loads the wall's window logic once; it attaches to the wall element after the next render. */
+  private loadWallWin(): void {
+    if (this.wallWin || this.wallWinLoading) return;
+    this.wallWinLoading = true;
+    void import("../float-window.ts").then((m) => {
+      this.wallWin = new m.WallWindow(() => !!matchMedia?.(PHONE_MEDIA).matches);
+      this.requestUpdate();
+    });
   }
 
-  /** The camera wall's header: dragging it (not its buttons) to an edge of the view docks the wall there (#266). */
-  private wallDragDock = (e: PointerEvent) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
-    const head = e.currentTarget as HTMLElement;
-    head.setPointerCapture?.(e.pointerId);
-    const up = (u: PointerEvent) => {
-      head.removeEventListener("pointerup", up);
-      head.removeEventListener("pointercancel", up);
-      const r = this.getBoundingClientRect();
-      if (u.type === "pointerup" && Math.hypot(u.clientX - e.clientX, u.clientY - e.clientY) > 12) this.setWallDock(dockFromPoint(u.clientX - r.left, u.clientY - r.top, r.width, r.height));
+  /** The wall's header: drag to move, double click to put it back (#314). */
+  private wallHeadEvents() {
+    return {
+      down: (e: PointerEvent) => this.wallWin?.begin(e, "move"),
+      move: (e: PointerEvent) => this.wallWin?.move(e),
+      up: () => this.wallWin?.end(),
+      reset: (e: MouseEvent) => {
+        if (!(e.target as HTMLElement).closest("button")) this.wallWin?.reset();
+      },
     };
-    head.addEventListener("pointerup", up);
-    head.addEventListener("pointercancel", up);
-  };
+  }
 
-  /** Four small buttons, one per edge: the wall's dock menu. */
-  private renderWallDock() {
-    const glyph = { top: "▀", bottom: "▄", left: "▌", right: "▐" } as const;
-    return html`<span class="fp3d-wall-dock" role="group" aria-label=${translate(this.hass, "camera_dock")}>
-      ${WALL_DOCKS.map((d) => html`<button class="fp3d-chip" aria-pressed=${this._wallDock === d} title=${translate(this.hass, `camera_dock_${d}` as I18nKey)} aria-label=${translate(this.hass, `camera_dock_${d}` as I18nKey)} @click=${() => this.setWallDock(d)}>${glyph[d]}</button>`)}
-    </span>`;
+  /** Edges and corners of the wall to resize by (hidden on a phone, where the wall is a sheet). */
+  private renderWallGrips() {
+    return (["n", "s", "e", "w", "ne", "nw", "se", "sw"] as Grip[]).map(
+      (g) => html`<div class="fp3d-wall-rz fp3d-wall-rz-${g}" @pointerdown=${(e: PointerEvent) => this.wallWin?.begin(e, g)} @pointermove=${(e: PointerEvent) => this.wallWin?.move(e)} @pointerup=${() => this.wallWin?.end()} @pointercancel=${() => this.wallWin?.end()}></div>`,
+    );
   }
 
   /** Kamera-Cockpit: the camera wall – every placed camera's picture, refreshed every few seconds; a tap looks through it. */
@@ -5990,6 +5990,8 @@ export class Fp3dView3d extends LitElement {
     };
     const cameras = [...new Set(this.building.floors.flatMap((f) => f.placements.map((p) => p.entity_id)).filter((id) => kindOf(id) === "camera"))];
     this.watchCameras(true);
+    this.loadWallWin();
+    const hd = this.wallHeadEvents();
     const srcOf = (id: string) => {
       const st = hass.states[id];
       const picture = st?.attributes.entity_picture as string | undefined;
@@ -6010,8 +6012,8 @@ export class Fp3dView3d extends LitElement {
         close();
         this.lookThrough(big);
       };
-      return html`<div class="fp3d-wall fp3d-wall-${this._wallDock}">
-        <div class="fp3d-wall-head" title=${translate(hass, "camera_dock")} @pointerdown=${this.wallDragDock}>
+      return html`<div class="fp3d-wall">
+        <div class="fp3d-wall-head" title=${translate(hass, "camera_wall_move")} @pointerdown=${hd.down} @pointermove=${hd.move} @pointerup=${hd.up} @pointercancel=${hd.up} @dblclick=${hd.reset}>
           <button
             class="fp3d-chip"
             @click=${() => {
@@ -6022,19 +6024,20 @@ export class Fp3dView3d extends LitElement {
             ‹ ${translate(hass, "camera_wall_all")}
           </button>
           <span class="fp3d-wall-title">${name(big)}</span>
-          <span class="fp3d-wall-tools">${this.renderWallDock()}<button class="fp3d-chip" @click=${look}>${translate(hass, "through_camera")}</button><button class="fp3d-chip" aria-label="✕" @click=${close}>✕</button></span>
+          <span class="fp3d-wall-tools"><button class="fp3d-chip" @click=${look}>${translate(hass, "through_camera")}</button><button class="fp3d-chip" aria-label="✕" @click=${close}>✕</button></span>
         </div>
         <div class="fp3d-wall-big">${stream ?? (src ? html`<img src=${src} alt="" />` : html`<div class="fp3d-wall-none">${translate(hass, "state_unavailable")}</div>`)}</div>
+        ${this.renderWallGrips()}
       </div>`;
     }
     // the grid's own size from the last render; on the first one an estimate, measured right after
     const grid = this.renderRoot.querySelector<HTMLElement>(".fp3d-wall-grid");
     if (!grid) requestAnimationFrame(() => this.requestUpdate());
     const { cols, tile } = wallLayout(cameras.length, grid?.clientWidth ?? this.clientWidth - 48, grid?.clientHeight ?? this.clientHeight - 160);
-    return html`<div class="fp3d-wall fp3d-wall-${this._wallDock}">
-      <div class="fp3d-wall-head" title=${translate(hass, "camera_dock")} @pointerdown=${this.wallDragDock}>
+    return html`<div class="fp3d-wall">
+      <div class="fp3d-wall-head" title=${translate(hass, "camera_wall_move")} @pointerdown=${hd.down} @pointermove=${hd.move} @pointerup=${hd.up} @pointercancel=${hd.up} @dblclick=${hd.reset}>
         <span>${translate(hass, "camera_wall_title")} · ${cameras.length} <span class="fp3d-still">${translate(hass, "camera_still", { s: this._low ? 10 : 5 })}</span></span>
-        <span class="fp3d-wall-tools">${this.renderWallDock()}<button class="fp3d-chip" aria-label="✕" @click=${close}>✕</button></span>
+        <span class="fp3d-wall-tools"><button class="fp3d-chip" aria-label="✕" @click=${close}>✕</button></span>
       </div>
       <div class="fp3d-wall-grid" style="grid-template-columns: repeat(${cols}, ${tile}px); grid-auto-rows: ${Math.round((tile * 9) / 16)}px">
         ${cameras.map((id) => {
@@ -6046,6 +6049,7 @@ export class Fp3dView3d extends LitElement {
           </button>`;
         })}
       </div>
+      ${this.renderWallGrips()}
     </div>`;
   }
 
@@ -7953,7 +7957,11 @@ export class Fp3dView3d extends LitElement {
       /* the camera wall: a glass sheet over the scene with every camera's picture */
       .fp3d-wall {
         position: absolute;
-        inset: 56px 12px calc(var(--fp3d-bottom-inset, 0px) + 12px);
+        /* by default docked to the bottom of the view, so the 3D view stays in sight above it (#266); a window moved or resized by the user (#314) is placed inline */
+        inset: auto 12px calc(var(--fp3d-bottom-inset, 0px) + 12px) 12px;
+        height: min(40%, 380px);
+        min-width: 260px;
+        min-height: 200px;
         z-index: 5;
         display: flex;
         flex-direction: column;
@@ -7965,22 +7973,77 @@ export class Fp3dView3d extends LitElement {
         box-shadow: 0 0 28px rgba(55, 224, 255, 0.25);
         overflow: auto;
       }
-      /* docked to one edge of the view (#266), so the 3D view stays in sight beside it */
-      .fp3d-wall-top {
-        inset: 56px 12px auto 12px;
-        height: min(40%, 380px);
+      /* edges and corners to resize by (#314); not on a phone, where the wall is a full width bottom sheet */
+      .fp3d-wall-rz {
+        position: absolute;
+        z-index: 1;
+        touch-action: none;
       }
-      .fp3d-wall-bottom {
-        inset: auto 12px calc(var(--fp3d-bottom-inset, 0px) + 12px) 12px;
-        height: min(40%, 380px);
+      .fp3d-wall-rz-n,
+      .fp3d-wall-rz-s {
+        left: 16px;
+        right: 16px;
+        height: 8px;
+        cursor: ns-resize;
       }
-      .fp3d-wall-left {
-        inset: 56px auto calc(var(--fp3d-bottom-inset, 0px) + 12px) 12px;
-        width: min(42%, 520px);
+      .fp3d-wall-rz-e,
+      .fp3d-wall-rz-w {
+        top: 16px;
+        bottom: 16px;
+        width: 8px;
+        cursor: ew-resize;
       }
-      .fp3d-wall-right {
-        inset: 56px 12px calc(var(--fp3d-bottom-inset, 0px) + 12px) auto;
-        width: min(42%, 520px);
+      .fp3d-wall-rz-ne,
+      .fp3d-wall-rz-nw,
+      .fp3d-wall-rz-se,
+      .fp3d-wall-rz-sw {
+        width: 16px;
+        height: 16px;
+      }
+      .fp3d-wall-rz-n,
+      .fp3d-wall-rz-ne,
+      .fp3d-wall-rz-nw {
+        top: 0;
+      }
+      .fp3d-wall-rz-s,
+      .fp3d-wall-rz-se,
+      .fp3d-wall-rz-sw {
+        bottom: 0;
+      }
+      .fp3d-wall-rz-e,
+      .fp3d-wall-rz-ne,
+      .fp3d-wall-rz-se {
+        right: 0;
+      }
+      .fp3d-wall-rz-w,
+      .fp3d-wall-rz-nw,
+      .fp3d-wall-rz-sw {
+        left: 0;
+      }
+      .fp3d-wall-rz-ne,
+      .fp3d-wall-rz-sw {
+        cursor: nesw-resize;
+      }
+      .fp3d-wall-rz-nw,
+      .fp3d-wall-rz-se {
+        cursor: nwse-resize;
+      }
+      .fp3d-wall-rz:hover {
+        background: var(--fp3d-accent);
+        opacity: 0.45;
+      }
+      @media ${unsafeCSS(PHONE_MEDIA)} {
+        .fp3d-wall {
+          inset: auto 0 calc(var(--fp3d-bottom-inset, 0px) + 0px) 0;
+          height: min(60%, 420px);
+          border-radius: 16px 16px 0 0;
+        }
+        .fp3d-wall-rz {
+          display: none;
+        }
+        .fp3d-wall-head {
+          cursor: default;
+        }
       }
       .fp3d-wall-head {
         cursor: grab;
@@ -8005,14 +8068,9 @@ export class Fp3dView3d extends LitElement {
         color: #ff6b6b;
         font-weight: 600;
       }
-      .fp3d-wall-tools,
-      .fp3d-wall-dock {
+      .fp3d-wall-tools {
         display: flex;
         gap: 6px;
-      }
-      .fp3d-wall-dock .fp3d-chip[aria-pressed="true"] {
-        color: var(--fp3d-accent);
-        box-shadow: inset 0 0 0 1px var(--fp3d-accent);
       }
       .fp3d-wall-big {
         flex: 1;
