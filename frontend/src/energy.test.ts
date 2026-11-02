@@ -408,3 +408,28 @@ test("source mix: a heat pump on part sun, part grid is a blend of both", () => 
     { color: FLOW_COLORS.grid, share: 0.25 },
   ]);
 });
+
+test("further inverter setups add up in the totals and keep their own readings (#285)", () => {
+  const b = house();
+  b.energy = {
+    ...b.energy,
+    battery: "sensor.bat1",
+    battery_soc: "sensor.soc1",
+    systems: [{ id: "s2", name: "Second", inverter: null, grid: null, grid_invert: false, solar: "sensor.solar2", battery: "sensor.bat2", battery_invert: true, battery_soc: "sensor.soc2" }],
+  };
+  const hass = hassWith([power("sensor.grid", "100"), power("sensor.solar", "1000"), power("sensor.solar2", "500"), power("sensor.bat1", "200"), power("sensor.bat2", "300"), st("sensor.soc1", "80"), st("sensor.soc2", "40")]);
+  const s = energySummary(hass, b, []);
+  assert.equal(s.solar, 1500);
+  assert.equal(s.battery, 200 - 300); // the second setup's sign is inverted
+  assert.equal(s.soc, 60);
+  assert.equal(s.systems?.[0].soc, 40);
+  assert.equal(s.systems?.[0].solar, 500);
+});
+
+test("a plan with one setup reads as before (#285)", () => {
+  const b = house();
+  const hass = hassWith([power("sensor.grid", "100"), power("sensor.solar", "1000")]);
+  const s = energySummary(hass, b, []);
+  assert.equal(s.solar, 1000);
+  assert.equal(s.systems, undefined);
+});

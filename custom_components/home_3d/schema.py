@@ -1175,7 +1175,28 @@ ENERGY_DEFAULTS = {
     "cheap_rate": None,
     "cheap_from": None,
     "cheap_to": None,
+    "systems": [],
 }
+
+# Further inverter / battery setups (#285). The top-level sensors of the energy settings are setup 1 and stay as they
+# were (so a plan with one inverter needs no migration); each entry here is one more setup with its own sensors. Totals
+# add up across all setups. `inverter` names the placed inverter the setup belongs to (its batteries share the setup's
+# charge when they have none of their own, #282).
+ENERGY_SYSTEM_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): _ID,
+        vol.Optional("name", default=""): vol.All(str, vol.Length(max=80)),
+        vol.Optional("inverter", default=None): vol.Any(None, _ID),
+        vol.Optional("grid", default=None): _ENTITY,
+        vol.Optional("grid_invert", default=False): bool,
+        vol.Optional("solar", default=None): _ENTITY,
+        vol.Optional("battery", default=None): _ENTITY,
+        vol.Optional("battery_invert", default=False): bool,
+        vol.Optional("battery_soc", default=None): _ENTITY,
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+MAX_ENERGY_SYSTEMS = 8
 
 # Power sensors in watts: grid positive = import, battery positive = discharging (both can be inverted)
 ENERGY_SCHEMA = vol.Schema(
@@ -1197,6 +1218,7 @@ ENERGY_SCHEMA = vol.Schema(
         vol.Optional("cheap_rate", default=None): _ENTITY,
         vol.Optional("cheap_from", default=None): _TIME,
         vol.Optional("cheap_to", default=None): _TIME,
+        vol.Optional("systems", default=list): vol.All([ENERGY_SYSTEM_SCHEMA], vol.Length(max=MAX_ENERGY_SYSTEMS)),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -1213,7 +1235,7 @@ BUILDING_FIELDS = vol.Schema(
         vol.Required("version"): PLAN_VERSION,
         vol.Required("floors"): vol.All([FLOOR_SCHEMA], vol.Length(max=MAX_FLOORS)),
         vol.Required("settings"): SETTINGS_SCHEMA,
-        vol.Optional("energy", default=lambda: dict(ENERGY_DEFAULTS)): ENERGY_SCHEMA,
+        vol.Optional("energy", default=lambda: {**ENERGY_DEFAULTS, "systems": []}): ENERGY_SCHEMA,
         vol.Optional("presence", default=list): vol.All([PRESENCE_SCHEMA], vol.Length(max=50)),
         # a copy of the recipe of every pack item type the plan uses (#2, see recipes.py)
         vol.Optional("recipes", default=dict): recipes_validator,
@@ -1242,7 +1264,7 @@ def empty_building() -> dict:
         "version": PLAN_VERSION,
         "floors": [],
         "settings": {"wall_exterior": 0.24, "wall_interior": 0.12, "grid": 0.05},
-        "energy": dict(ENERGY_DEFAULTS),
+        "energy": {**ENERGY_DEFAULTS, "systems": []},
         "presence": [],
     }
 

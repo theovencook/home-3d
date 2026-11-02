@@ -56,6 +56,6 @@ export function watchedEntities(hass: HomeAssistant, b: Building, w: WatchLinks)
   const live = b.floors.flatMap((f) => [...f.rooms.flatMap((r) => roomLiveSensors(hass, f, r, "motion")), ...f.furniture.map((m) => itemTempSource(hass, m))]);
   // rack gear's status entities and links (#119): its LEDs and details
   const racks = b.floors.flatMap((f) => f.furniture.flatMap((m) => (m.rack?.slots ?? []).flatMap(slotEntities)));
-  const all = [...placed, ...racks, ...printers, ...cameraSensors, ...links, ...power, ...furniture, ...states, ...doors, ...robotRooms, ...roofWindowIds, ...solarIds, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.consumption, e.tariff, ...presence, ...lights, ...heat, ...w.warnings, ...parking, ...motion, ...live, ...household, weather, "sun.sun"];
+  const all = [...placed, ...racks, ...printers, ...cameraSensors, ...links, ...power, ...furniture, ...states, ...doors, ...robotRooms, ...roofWindowIds, ...solarIds, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.consumption, e.tariff, ...(e.systems ?? []).flatMap((x) => [x.grid, x.solar, x.battery, x.battery_soc]), ...presence, ...lights, ...heat, ...w.warnings, ...parking, ...motion, ...live, ...household, weather, "sun.sun"];
   return [...new Set(all.filter((id): id is string => !!id))];
 }

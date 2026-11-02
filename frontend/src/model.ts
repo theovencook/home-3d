@@ -1251,6 +1251,26 @@ export function poolShapePoints(shape: "rect" | "round" | "oval", x0: number, z0
   return pts;
 }
 
+/**
+ * One more inverter / battery setup (#285). The top-level sensors of EnergySettings are setup 1 and stay as they were;
+ * each of these adds a setup with its own sensors, and the totals add up across all of them.
+ */
+export interface EnergySystem {
+  id: string;
+  name: string;
+  /** The placed inverter this setup belongs to (its batteries without a charge sensor of their own show this setup's charge, #282). */
+  inverter?: string | null;
+  grid: string | null;
+  grid_invert: boolean;
+  solar: string | null;
+  battery: string | null;
+  battery_invert: boolean;
+  battery_soc: string | null;
+}
+
+/** How many further inverter / battery setups a plan can hold (#285; the backend allows the same). */
+export const MAX_ENERGY_SYSTEMS = 8;
+
 /** Energy flow: meter position and power sensors (W). Grid positive = import, battery positive = discharging. */
 export interface EnergySettings {
   meter: { floor_id: string; x: number; z: number } | null;
@@ -1271,6 +1291,8 @@ export interface EnergySettings {
   /** The cheap rate as a daily window, "HH:MM" from the start up to the end (a start after the end runs over midnight). */
   cheap_from?: string | null;
   cheap_to?: string | null;
+  /** Further inverter / battery setups next to the one in the fields above (#285). */
+  systems?: EnergySystem[];
 }
 
 /** A person and the sensor whose state names the room they are in (ESPresense, Bermuda, …). */
