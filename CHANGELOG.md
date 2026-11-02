@@ -3,7 +3,23 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
-## Unreleased
+## Home 3D 0.2.0 (2 November 2026)
+
+### Panels, views and controls (#265–#298)
+
+- **The View panel** closes on a click outside it or its close button, and can be dragged by its header (#265). **Display what** picks which labels show, in place of the room names switch (#268), and a switch hides the furniture so only smart devices are left (#269).
+- **The room panel** can be resized by its edges (#267). The room selector can hide rooms (#298). The 3D view has zoom and pan buttons (#297).
+- **Walking** climbs stairs to the other floors (#270).
+- **Device cards:** a right click (a long press on touch) on a light opens brightness, colour temperature and colour (#272). A robot vacuum opens its last run and controls (#271). A camera opens already playing, and hovering it, its pin or its model, floats its live picture (#284). TV cards always show, grow under the mouse and can be hidden (#281).
+- **Markers:** common UniFi Protect cameras are drawn as their own models (#273). Batteries show four charge bars (#282). Clickable items pulse their outline every few seconds (#283). Alarms, speakers, TVs and PCs take a second colour while active (#289). The light spilling out of windows has a setting, off by default (#274).
+- **Settings:** clearer wording (#277), related words for every setting in the search (#286), options for this device only moved out of This home (#295), the home switcher moved into Settings (#296), and the language setting easier to find (#292). Holidays take in Halloween and Chinese New Year, and every holiday's dates can be changed (#287).
+- **Editor:** a searchable item picker with pack and type filters and previews (#293). Drawing by measure takes a typed length along the drag and then clears it (#294). The room types were reviewed and extended (#291). In the item editor preview the wheel no longer scrolls the page and the zoom no longer jumps while turning (#290).
+- **Packs:** outdoor plants (#275), garden fences, walls, kerbs, roads and street lights (#276), Ninja-style kitchen appliances and worktop gear (#278), a corner base cabinet with a sink (#279) and trophies (#280). A pack update can carry a one-line note on what changed (#288). Energy setups with more than one inverter and battery (#285).
+
+### Fixed
+
+- Walking up a stair no longer stops short of the top where a wall of the floor below stands under the landing.
+- The camera hover preview opens for cameras drawn as models, which have no pin.
 
 ### Seasonal themes (#239)
 
