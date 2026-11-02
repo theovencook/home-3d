@@ -129,6 +129,8 @@ export interface FurniturePack {
   description?: string;
   /** Release number; a newer release of the same id replaces the installed one. */
   release?: number;
+  /** One line on what this release changed (#288). */
+  release_note?: string;
   /** Feature names the pack lists (compatibility only; see features.ts). */
   features?: string[];
   /** "sha256:…" of the pack's items (#44): fetched recipes are kept while it stays. */

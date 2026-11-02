@@ -898,3 +898,69 @@ async def test_a_language_pack_previews_its_texts_and_installs_at_the_previewed_
     assert moved["error"]["code"] == "changed_since_preview"
     got = await _call(client, type="home_3d/languages/get", language="uk")
     assert got["strings"] == {"view": "Vue 3D", "editor": "Éditeur"}
+
+
+def _installed_pack(release: int = 1, note: str | None = None) -> dict:
+    files = _files(release)
+    if note is not None:
+        files["pack.json"] = json.dumps({**PACK_JSON, "release": release, "release_note": note})
+    return verify_folder(files)
+
+
+def _plan_with_copy_of(pack: dict, *, strip_defaults: bool = False) -> dict:
+    """A plan whose chair copy was kept at `pack`'s release; `strip_defaults` makes it as an older Home 3D kept it:
+    without the item fields that have a default today, and the hash of that smaller recipe."""
+    from custom_components.home_3d.packs import recipe_hash
+    from custom_components.home_3d.recipes import recipe_copy
+
+    chair = next(i for i in pack["items"] if i["id"] == "cube_chair")
+    copy = recipe_copy(pack, chair)
+    if strip_defaults:
+        recipe = {k: v for k, v in copy["recipe"].items() if k in {"id", "name", "size", "parts"}}
+        assert recipe != copy["recipe"], "the item schema fills in defaults"
+        copy = {**copy, "recipe": recipe, "hash": recipe_hash(recipe)}
+    return {"recipes": {CHAIR_TYPE: copy}, "floors": [{"furniture": [_furniture("a", CHAIR_TYPE)]}]}
+
+
+def test_a_copy_kept_before_a_field_with_a_default_existed_is_not_an_update() -> None:
+    """#288: 'Release 1 -> 1' was offered for a copy that only lacked fields the item schema fills in today."""
+    pack = _installed_pack()
+    plan = _plan_with_copy_of(pack, strip_defaults=True)
+    assert pack_updates.pending_items(plan, [pack]) == []
+
+
+def test_changed_content_in_the_same_release_is_still_listed() -> None:
+    pack = _installed_pack()
+    plan = _plan_with_copy_of(pack)
+    bigger = [{**i, "size": [1.0, 1.0, 1.0]} if i["id"] == "cube_chair" else i for i in pack["items"]]
+    changed = {**pack, "items": bigger}
+    items = pack_updates.pending_items(plan, [changed])
+    assert [(i["type"], i["release"], i["new_release"]) for i in items] == [(CHAIR_TYPE, 1, 1)]
+    assert "note" not in items[0]
+
+
+def test_a_release_note_travels_with_the_update() -> None:
+    """#288: a pack may give each release one line on what changed; the placed item's update carries it."""
+    old = _installed_pack(1)
+    plan = _plan_with_copy_of(old)
+    new = verify_folder(
+        {
+            **_files(2, chair_size=[1.2, 0.9, 0.8]),
+            "pack.json": json.dumps({**PACK_JSON, "release": 2, "release_note": "Wider chair"}),
+        }
+    )
+    items = pack_updates.pending_items(plan, [new])
+    assert [(i["release"], i["new_release"], i["note"]) for i in items] == [(1, 2, "Wider chair")]
+
+
+def test_a_release_note_is_one_short_line() -> None:
+    import pytest
+    import voluptuous as vol
+
+    from custom_components.home_3d.packs import PackError
+
+    assert _installed_pack(2, "Fixes the chair")["release_note"] == "Fixes the chair"
+    assert "release_note" not in _installed_pack(2)
+    for bad in ("two\nlines", "x" * 201):
+        with pytest.raises((PackError, vol.Invalid)):
+            _installed_pack(2, bad)

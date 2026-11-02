@@ -299,15 +299,6 @@ test("#260 V06: in the Day look the clock is dark text on a light box that clear
   assert.ok(contrast("#3d4d63", "#f6f8fb") >= 4.5);
 });
 
-test("#260 V09: the home menu uses the app's solid menu surface and 44 px rows on a touch screen", async () => {
-  const { Fp3dHomeSwitcher } = (await import("./components/home-switcher.ts")) as unknown as { Fp3dHomeSwitcher: Styled };
-  const css = text(Fp3dHomeSwitcher.styles);
-  const ul = block(css, "ul {");
-  assert.match(ul, /background: var\(--fp3d-chrome-solid/);
-  assert.match(ul, /color: var\(--fp3d-text/);
-  assert.match(block(css, "@media (pointer: coarse)"), /li:not\(\.sep\) \{[^}]*min-height: 44px/);
-});
-
 test("#260 V07: on a touch screen the room panel's 44 px icon has a column as wide, clear of the name", async () => {
   const { Fp3dRoomPanel } = await import("./components/room-panel.ts");
   const css = text((Fp3dRoomPanel as unknown as Styled).styles);

@@ -21,6 +21,7 @@ import { EFFECT_DEFAULTS } from "../room-effects.ts";
 import { formatImperial, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 // this device's look and screen rows live with the View panel's list (#247), which the panel loads without this file
 import { deviceSwitch, LOOK, SCREEN } from "./view-settings.ts";
+import { LANGUAGE } from "./language.ts";
 
 export { deviceChoice, deviceSwitch } from "./view-settings.ts";
 
@@ -44,6 +45,7 @@ export type SectionId =
   | "look"
   | "screen"
   | "voice"
+  | "homes"
   | "access"
   | "packs"
   | "backup"
@@ -138,6 +140,8 @@ export type Control =
   | { kind: "action"; button: TextKey; action: string }
   /** A list the page draws itself (the warnings dismissed for good). */
   | { kind: "list"; list: "alert_ignored" }
+  /** The list of homes with its buttons (#296); a lazy chunk draws it. */
+  | { kind: "homes" }
   /** A block the editor bundle draws (lists with their own logic: favourites, own buttons, backup …). */
   | { kind: "embed"; topic: EmbedTopic }
   /** Only words: where something is set instead (the card options, the modules' settings). */
@@ -301,6 +305,8 @@ export const SECTIONS: Section[] = [
   },
   /* the Locating assistant, how located people show and presence (were under Advanced, #248) */
   { id: "people", group: "live", icon: "users", title: "st_sec_people", hint: "st_sec_people_hint", cards: [{ id: "people", title: "st_card_people" }] },
+  /* the homes: open, add, rename, duplicate, delete (moved here from the top bar, #296) */
+  { id: "homes", group: "system", icon: "home", title: "st_sec_homes", hint: "st_sec_homes_hint", cards: [{ id: "homes", title: "st_card_homes" }] },
   /* "Tablets & access" split in two (#248) */
   { id: "access", group: "system", icon: "key", title: "st_sec_editors", hint: "st_sec_access_hint", cards: [{ id: "editors", title: "st_card_editors" }] },
   { id: "tablets", group: "system", icon: "tablet", title: "st_sec_tablets", hint: "st_sec_tablets_hint", cards: [{ id: "tablets", title: "st_card_tablets" }] },
@@ -351,6 +357,7 @@ export const SECTIONS: Section[] = [
     cards: [
       { id: "screen", title: "st_card_screen" },
       { id: "controls", title: "st_card_controls" },
+      { id: "device_reset", title: "st_card_device_reset" },
     ],
   },
   { id: "voice", group: "device_use", icon: "mic", title: "st_sec_voice", hint: "st_sec_voice_hint", cards: [{ id: "voice", title: "st_card_voice" }] },
@@ -595,6 +602,14 @@ const EFFECTS: Setting[] = [
   effect("tank_hot", "effects", "motion", "effects_tank_hot", true, ["cylinder", "hot water", "tank"]),
 ];
 
+/**
+ * A row that only points to where a setting moved to (#295): its button opens `target` ("<section>:<setting id>").
+ * It is a device row (it opens a device page) that anyone may use, so it works for viewers too.
+ */
+function linkRow(id: string, section: SectionId, card: string, target: string, label: TextKey, button: TextKey, keywords?: string[]): Setting<null> {
+  return { id, section, card, scope: "device", permission: "everyone", label, keywords, control: { kind: "action", button, action: `goto:${target}` }, default: null, read: () => null };
+}
+
 /** The live director's events (house) and its switch on this device; Camera Cockpit. */
 const directorPart = (env: SettingsEnv) => env.building?.settings.director ?? {};
 const directorSwitch = (id: "doorbell" | "appliances" | "alerts" | "live", label: TextKey, hint?: TextKey, keywords?: string[]): Setting<boolean> => ({
@@ -616,7 +631,9 @@ const placedCameras = (env: SettingsEnv) => new Set((env.building?.floors ?? [])
 const CAMERAS: Setting[] = [
   effect("camera_seconds", "cameras", "cameras", "effects_camera_seconds", false, ["camera", "red", "motion", "hold"]),
   // the live director on this device: the same key the panel reads (director.ts directorOnHere, "home3d.director")
-  deviceSwitch("director_here", "cameras", "director", "director", false, "director_here", "st_director_here_hint", ["director", "tablet", "move by itself"]),
+  // kept per device, so it sits on This device > Screen now (#295); a link stays here
+  deviceSwitch("director_here", "screen", "screen", "director", false, "director_here", "st_director_here_hint", ["director", "tablet", "move by itself"]),
+  linkRow("director_here_link", "cameras", "director", "screen:director_here", "st_director_here_moved", "st_go_screen", ["director", "tablet", "this device"]),
   directorSwitch("doorbell", "director_doorbell", undefined, ["doorbell", "ring", "door"]),
   {
     id: "director.doorbell_entity",
@@ -739,7 +756,7 @@ const FUN: Setting[] = [
   {
     id: "halloween.ghost",
     section: "fun",
-    card: "eggs",
+    card: "seasons",
     scope: "house",
     permission: "editor",
     label: "halloween_ghost",
@@ -1176,13 +1193,31 @@ const ENERGY: Setting[] = [
   },
 ];
 
+/** The homes (#296): kept by Home Assistant for every home, editors only (the backend checks again). */
+const HOMES: Setting[] = [
+  {
+    id: "homes",
+    section: "homes",
+    card: "homes",
+    scope: "install",
+    permission: "editor",
+    label: "st_homes_list",
+    hint: "st_homes_hint",
+    keywords: ["home", "homes", "switch", "change", "new", "sample", "rename", "duplicate", "copy", "delete", "displays", "active", "tablet"],
+    control: { kind: "homes" },
+    default: null,
+    read: () => null,
+  },
+];
+
 const BACKUP: Setting[] = [embedded("backup", "backup", "backup", "backup", "backup", undefined, ["restore", "export", "import", "file", "history"])];
 
 const ADVANCED: Setting[] = [
+  linkRow("reset_device_link", "advanced", "advanced", "screen:reset_device", "st_reset_device_moved", "st_go_screen", ["reset", "defaults", "preferences", "browser", "this device"]),
   {
     id: "reset_device",
-    section: "advanced",
-    card: "advanced",
+    section: "screen",
+    card: "device_reset",
     scope: "device",
     permission: "everyone",
     label: "st_reset_device",
@@ -1276,7 +1311,7 @@ const CARDS: Setting[] = [
 ];
 
 /** Every setting, in the order the page shows them. */
-export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...ENERGY, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...CARDS, ...SCREEN, ...VOICE, ...ACCESS, ...PACKS, ...BACKUP, ...ADVANCED] as Setting[];
+export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...ENERGY, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...LANGUAGE, ...CARDS, ...SCREEN, ...VOICE, ...HOMES, ...ACCESS, ...PACKS, ...BACKUP, ...ADVANCED] as Setting[];
 
 // ---------------------------------------------------------------------------------------------------- lengths
 

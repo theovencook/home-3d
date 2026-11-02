@@ -19,6 +19,8 @@ interface Shared {
   extra: Map<string, Table>;
   pending: Map<string, Promise<void>>;
   en?: Table;
+  /** This device's chosen language (#292); undefined: not read yet, null: follow Home Assistant. */
+  chosen?: string | null;
 }
 const shared: Shared = ((globalThis as { __fp3dLanguages?: Shared }).__fp3dLanguages ??= { extra: new Map(), pending: new Map() });
 const { extra, pending } = shared;
@@ -37,9 +39,29 @@ export function english(): Table {
   return shared.en ?? {};
 }
 
-/** The language a Home Assistant language reads (its base code, "de" of "de-AT"); null: English, built in. */
+/** The pref this device keeps its language choice in ("home3d.language"; absent or "auto": follow Home Assistant, #292). */
+export const LANGUAGE_PREF = "home3d.language";
+
+/** Use `code` instead of Home Assistant's language on this page (null or "auto": follow Home Assistant again). */
+export function setChosenLanguage(code: string | null | undefined): void {
+  shared.chosen = code && code !== "auto" && /^[a-z]{2,3}$/i.test(code) ? code.toLowerCase() : null;
+}
+
+/** The language this device chose, read from its pref once; null: it follows Home Assistant. */
+export function chosenLanguage(): string | null {
+  if (shared.chosen === undefined) {
+    try {
+      setChosenLanguage(localStorage.getItem(LANGUAGE_PREF));
+    } catch {
+      shared.chosen = null;
+    }
+  }
+  return shared.chosen ?? null;
+}
+
+/** The language a Home Assistant language reads (its base code, "de" of "de-AT"); null: English, built in. This device's own choice (#292) comes first. */
 export function languageCode(lang: string | undefined): string | null {
-  const raw = (lang ?? navigator.language ?? "en").toLowerCase();
+  const raw = (chosenLanguage() ?? lang ?? navigator.language ?? "en").toLowerCase();
   // plain "no" (Norwegian) reads as Bokmål
   const code = raw.startsWith("no") ? "nb" : raw.split(/[-_]/)[0]!;
   return code === "en" || !/^[a-z]{2,3}$/.test(code) ? null : code;
@@ -125,7 +147,7 @@ export function loadLanguage(lang: string | undefined, hass?: Caller, again = fa
  * Assistant's language when texts for it are at hand, else English (the texts fall back to it).
  */
 export function uiLanguage(hass: HomeAssistant | undefined): string {
-  const lang = hass?.language ?? navigator.language ?? "en";
+  const lang = chosenLanguage() ?? hass?.language ?? navigator.language ?? "en";
   const code = languageCode(lang);
   if (!code) return /^en(?:-|$)/i.test(lang) ? lang : "en";
   const table = extra.get(code);

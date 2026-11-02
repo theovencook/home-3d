@@ -7,6 +7,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync,
 import { gzipSync } from "node:zlib";
 import { shrinkThreeShaders } from "./src/glsl-shrink.ts";
 import { borrowEnglish } from "./src/borrow-english.ts";
+import { shrinkCssTemplates } from "./src/css-shrink.ts";
 
 const out = "../custom_components/home_3d/frontend";
 const watch = process.argv.includes("--watch");
@@ -76,7 +77,14 @@ const locateConfig = { ...common, entryPoints: ["src/locate/entry.ts"], outfile:
 // the Settings page (#139) only loads when someone opens its tab; its labels come from the main bundle (`t`)
 // #245: split like the editor: its time and entity pickers are one chunk of their own (home-3d-settings-pickers-<hash>.js)
 const SETTINGS = `${out}/home-3d-settings.js`;
-const settingsConfig = { ...common, entryPoints: { "home-3d-settings": "src/settings/entry.ts" }, outdir: out, splitting: true, chunkNames: "home-3d-settings-[name]-[hash]" };
+// #296: the page's CSS templates lose their indentation and comments as they are bundled (src/css-shrink.ts); the bundle was at its budget
+const shrinkSettingsCss = {
+  name: "shrink-settings-css",
+  setup(b) {
+    b.onLoad({ filter: /src.settings.[a-z0-9-]+[.]ts$/ }, (args) => ({ contents: shrinkCssTemplates(readFileSync(args.path, "utf8")), loader: "ts" }));
+  },
+};
+const settingsConfig = { ...common, plugins: [...common.plugins, shrinkSettingsCss], entryPoints: { "home-3d-settings": "src/settings/entry.ts" }, outdir: out, splitting: true, chunkNames: "home-3d-settings-[name]-[hash]" };
 // The main bundle loads the 3D bundle with a hash of its content in the URL, so a new 3D bundle is
 // never taken from the browser cache (the integration version only changes after a restart).
 // the frontend knows its own version, to notice a backend that still runs an older one
@@ -179,8 +187,9 @@ function copyFonts() {
 // A new budget, not a raised one.
 // Run 5 merge (#265-#267 + #272): drag/close/dock and resize handles pushed the View panel (25.4 KB) and room panel (30.0 KB)
 // chunks to their limits once combined; both are lazy and small, so their budgets go to 28 and 33 KB.
+// #296/#287: Settings > Homes and the holiday Dates editor are lazy chunks with budgets of their own.
 // #293: the item picker (home-3d-editor-item-picker-<hash>.js) is a lazy chunk of its own, drawn only by an open Item field. A new budget.
-const BUDGET = { "home-3d-device-popup.js": 16 * 1024, "home-3d-editor-item-picker.js": 14 * 1024, "home-3d-editor-phone-bar.js": 12 * 1024, "home-3d-rooms-picker.js": 8 * 1024, "home-3d-view-panel.js": 28 * 1024, "home-3d-room-panel.js": 33 * 1024, "home-3d-home-switcher.js": 12 * 1024, "home-3d-editor-lazy-parts.js": 85 * 1024, "home-3d-settings-pickers.js": 12 * 1024, "home-3d-settings-reset.js": 4 * 1024, "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-listedit.js": 12 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
+const BUDGET = { "home-3d-editor-season-dates.js": 9 * 1024, "home-3d-settings-homes.js": 14 * 1024, "home-3d-device-popup.js": 16 * 1024, "home-3d-editor-item-picker.js": 14 * 1024, "home-3d-editor-phone-bar.js": 12 * 1024, "home-3d-rooms-picker.js": 8 * 1024, "home-3d-view-panel.js": 28 * 1024, "home-3d-room-panel.js": 33 * 1024, "home-3d-home-switcher.js": 12 * 1024, "home-3d-editor-lazy-parts.js": 85 * 1024, "home-3d-settings-pickers.js": 12 * 1024, "home-3d-settings-reset.js": 4 * 1024, "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-listedit.js": 12 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
 const GZIP_BUDGET = { "home-3d.js": 45 * 1024, "home-3d-view3d.js": 100 * 1024, "home-3d-3d.js": 280 * 1024 };
 
 // What is loaded before something shows, raw and as sent (gzip), with everything those files import (#179): a module

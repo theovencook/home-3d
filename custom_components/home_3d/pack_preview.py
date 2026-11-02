@@ -48,6 +48,7 @@ def pack_preview(
             "publisher": payload["publisher"],
             "licence": payload["licence"],
             "release": payload["release"],
+            **({"note": payload["release_note"]} if payload.get("release_note") else {}),
             "items": len(payload["items"]),
             # a language pack (#196): its language and how many texts it has
             **(

@@ -18,7 +18,6 @@ g.history = { state: null, replaceState: () => undefined };
 const { Floorplan3dPanel } = await import("./panel.ts");
 const { Fp3dRoomPanel } = await import("./components/room-panel.ts");
 const { filterRooms } = await import("./components/rooms-picker.ts");
-const { menuRows } = await import("./components/home-switcher.ts");
 const { Fp3dEditor } = (await import("./components/editor.ts")) as unknown as { Fp3dEditor: new () => Record<string, any> };
 const { editorSource } = await import("./components/editor-source.ts");
 const { settingById } = await import("./settings/registry.ts");
@@ -77,7 +76,7 @@ test("one header row: HA's menu, the title, one home control, the tabs as naviga
   const header = out.slice(out.indexOf('<header class="fp3d-header">'), out.indexOf("</header>"));
   assert.match(header, /<ha-menu-button/);
   assert.match(header, /<h1>Home 3D<\/h1>/);
-  assert.equal(header.split("<fp3d-home-switcher").length, 2, "one home control (chip and menu merged)");
+  assert.equal(header.split("<fp3d-home-switcher").length, 2, "one home indicator (the chip for a home that is not on the displays, #296)");
   assert.match(header, /<nav class="fp3d-tabs" aria-label=Mode>/);
   for (const tab of ["fp3d-tab-view", "fp3d-tab-editor", "fp3d-tab-ext", "fp3d-tab-settings"]) assert.match(header, new RegExp(`class="fp3d-tab ${tab}"`), tab);
   assert.match(header, /class="fp3d-save[^"]*" role="status" aria-live="polite"/);
@@ -88,13 +87,15 @@ test("one header row: HA's menu, the title, one home control, the tabs as naviga
   assert.match(out, /fp3d-view-btn/);
 });
 
-test("the home control's menu keeps every action: switch, show on displays, new, sample, rename, duplicate, delete", () => {
+test("the home actions moved from the header to Settings > Homes, every action kept (#296)", async () => {
+  const { rowActions } = await import("./settings/homes.ts");
   const homes = [
     { id: "a", name: "A" },
     { id: "b", name: "B" },
-  ] as never;
-  const values = menuRows(homes, "a", "b", (k) => en[k] ?? k).map((r) => r.value);
-  for (const v of ["a", "b", "show", "new", "sample", "rename", "duplicate", "delete"]) assert.ok(values.includes(v), v);
+  ] as never[];
+  const actions = rowActions(homes[1]!, homes, "a", "a");
+  for (const v of ["open", "show", "rename", "duplicate", "delete"]) assert.ok(actions.includes(v as never), v);
+  for (const k of ["st_homes_new", "home_sample", "st_homes_open", "st_homes_show", "st_homes_rename", "st_homes_duplicate", "st_homes_delete"]) assert.ok(en[k], k);
 });
 
 test("the save line says who it saved for on every tab but Settings (which has its own)", () => {

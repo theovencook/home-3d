@@ -64,6 +64,8 @@ const LOOKS: Partial<Record<SeasonEffect, Look>> = {
   flowers: { glyphs: ["🌸", "🌷", "🌼"], n: 22, move: "fall", size: [16, 26], speed: [20, 40] },
   easter: { glyphs: ["🥚", "🐣", "🐰", "🌷"], n: 18, move: "fall", size: [18, 28], speed: [22, 44] },
   stars: { glyphs: ["⭐", "✨"], n: 22, move: "twinkle", size: [14, 26], speed: [0, 0] },
+  halloween: { glyphs: ["🎃", "🦇", "🕸️"], n: 18, move: "fall", size: [18, 30], speed: [20, 40] },
+  lanterns: { glyphs: ["🏮", "🧧", "🎆"], n: 18, move: "rise", size: [18, 28], speed: [18, 40] },
 };
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);

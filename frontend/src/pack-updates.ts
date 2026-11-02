@@ -17,6 +17,8 @@ export interface PackUpdateSettings {
 export interface PackUpdateState {
   id: string;
   release: number;
+  /** The installed release's one line on what it changed (#288), when the pack gave one. */
+  note?: string;
   bundled: boolean;
   /** Pinned to its release: no check updates it, auto-update leaves its items alone. */
   pinned: boolean;
@@ -28,7 +30,7 @@ export interface PackUpdateState {
   checked_at?: number;
   latest_release?: number;
   /** A newer release a check found but did not install (#189): auto-update is off, an editor reviews and installs it. */
-  available?: { release: number; commit: string };
+  available?: { release: number; commit: string; note?: string };
   error?: string;
 }
 
@@ -42,6 +44,8 @@ export interface PlacedUpdate {
   /** The release of the plan's copy and of the installed item. */
   release: number;
   new_release: number;
+  /** The new release's one line on what it changed (#288), when the pack gave one. */
+  note?: string;
   /** How often it is placed. */
   placed: number;
   pinned: boolean;
@@ -116,7 +120,7 @@ export interface PreviewItem {
 /** What installing a pack release from GitHub would change (#189; backend pack_preview.py). Nothing is installed yet. */
 export interface PackPreview {
   /** `kind`, `language`, `texts`: a language pack (#196), whose `changes` are its text keys. */
-  pack: { id: string; name: string; publisher: string; licence: string; release: number; items: number; kind?: "language"; language?: string; texts?: number };
+  pack: { id: string; name: string; publisher: string; licence: string; release: number; note?: string; items: number; kind?: "language"; language?: string; texts?: number };
   /** Where it comes from; `commit` is the pin: the install insists on exactly this commit. */
   origin: { url: string; owner: string; repo: string; ref: string; folder: string; commit: string; default_branch: boolean };
   /** The pack the library offers now under this id, null when it is new. */

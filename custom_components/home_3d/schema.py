@@ -280,6 +280,7 @@ WASTE_KINDS = ["rest", "bio", "paper", "plastic", "glass", "garden", "recycling"
 # both included, over the new year when from > to) and/or times of day ("HH:MM", over midnight when start > end, the
 # night then belonging to the day it started); each pair is given whole or not at all (#46)
 _DAY = vol.Any(None, vol.Match(r"^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"))
+_MONTH_DAY = vol.Match(r"^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
 _TIME = vol.Any(None, vol.Match(TIME_PATTERN))
 
 
@@ -1087,6 +1088,20 @@ SETTINGS_SCHEMA = vol.Schema(
         ),
         # seasonal themes (#239): a holiday switched off is False here (missing = on); the ids are in seasons.ts
         vol.Optional("seasons"): vol.Any(None, vol.Schema({vol.Optional(str): bool}, extra=vol.ALLOW_EXTRA)),
+        # dates a holiday is on when the house changed them (#287): "MM-DD" from and to (to may come before from, over
+        # the turn of the year); missing = the usual dates
+        vol.Optional("season_dates"): vol.Any(
+            None,
+            vol.Schema(
+                {
+                    vol.Optional(str): vol.Schema(
+                        {vol.Required("from"): _MONTH_DAY, vol.Optional("to"): _MONTH_DAY},
+                        extra=vol.ALLOW_EXTRA,
+                    )
+                },
+                extra=vol.ALLOW_EXTRA,
+            ),
+        ),
         # the ground around the house: its height and the earth around cellars
         vol.Optional("terrain", default=None): vol.Any(
             None,

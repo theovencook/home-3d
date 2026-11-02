@@ -22,7 +22,6 @@ import { customItems } from "../custom-items.ts";
 import { KINDS, ROOMS } from "../library-index.ts";
 import { loadItems } from "../load-items.ts";
 import { FUN, released } from "../features.ts";
-import { SEASON_IDS, type SeasonId } from "../season-ids.ts";
 import { DOG_BREEDS, PET_EYES, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
 import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
 import { languageCode, loadLanguage, translate, type I18nKey } from "../i18n.ts";
@@ -46,24 +45,6 @@ import { getPacks, packName, packOrigin, type FurniturePack } from "../packs.ts"
 import { modulesWithSettings } from "../modules.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
-
-/** The little picture of each holiday in the Fun list. */
-const SEASON_ICONS: Record<SeasonId, string> = {
-  nye: "🎆",
-  new_year: "🎉",
-  christmas_eve: "🎅",
-  christmas: "🎄",
-  boxing_day: "🎁",
-  twixmas: "❄️",
-  advent: "🕯️",
-  bonfire: "🔥",
-  remembrance: "🌺",
-  valentines: "❤️",
-  pancake_day: "🥞",
-  mothers_day: "🌸",
-  easter: "🐣",
-  fathers_day: "⭐",
-};
 
 export class Extensions extends LitElement {
   static properties = {
@@ -102,6 +83,8 @@ export class Extensions extends LitElement {
   private declare _updatesMsg: { ok: boolean; text: string } | null;
   /** Long lists opened by the viewer (the installed packs); closed, a bar sums them up. */
   private declare _open: Set<string>;
+  /** The holidays' dates part (season-dates.ts, #287): a chunk of its own, loaded when the holidays are first drawn. */
+  private seasonDatesPart: typeof import("./season-dates.ts") | undefined;
 
   constructor() {
     super();
@@ -247,7 +230,8 @@ export class Extensions extends LitElement {
                 (i) => html`<div class="fp3d-pack">
                   <div>
                     <b>${i.name[lang.split("-")[0]] ?? i.name.en ?? Object.values(i.name)[0] ?? i.item}</b>
-                    <span class="fp3d-sub">${this.t("upd_item", { from: i.release, to: i.new_release, n: i.placed })}${i.pinned ? ` · ${this.t("upd_pinned")}` : ""}</span>
+                    <span class="fp3d-sub">${i.release === i.new_release ? this.t("upd_item_same", { to: i.new_release, n: i.placed }) : this.t("upd_item", { from: i.release, to: i.new_release, n: i.placed })}${i.pinned ? ` · ${this.t("upd_pinned")}` : ""}</span>
+                    ${i.note ? html`<span class="fp3d-sub fp3d-upd-note">${i.note}</span>` : nothing}
                   </div>
                   ${editor ? html`<button class="fp3d-btn" @click=${() => this.updateItems([i.type])}>${this.t("upd_update")}</button>` : nothing}
                 </div>`,
@@ -282,6 +266,7 @@ export class Extensions extends LitElement {
         ? html`<span class="fp3d-sub fp3d-pack-error">${this.t("pack_check_error", { detail: state.error })}</span>`
         : state.available
           ? html`<span class="fp3d-sub fp3d-pack-available">${this.t("pack_available", { release: state.available.release, commit: shortCommit(state.available.commit) })}</span>
+              ${state.available.note ? html`<span class="fp3d-sub fp3d-upd-note">${state.available.note}</span>` : nothing}
               ${this.isEditor && pack.source?.origin
                 ? html`<button class="fp3d-btn" ?disabled=${this._installing} @click=${() => void this.review(pack.source!.origin!.url)}>${this.t("pack_review_update")}</button>`
                 : nothing}`
@@ -372,11 +357,9 @@ export class Extensions extends LitElement {
         ? this.funSwitch(this.building.settings.easter_eggs !== false, this.t("st_easter_eggs"), (on) => this.editBuilding((b) => (b.settings.easter_eggs = on)))
         : nothing}
       ${shown.map((f) =>
-        f === "fun_halloween"
-          ? this.renderHalloween()
-          : f === "fun_seasons"
-            ? this.renderSeasons()
-            : html`<div class="fp3d-ext-feature fp3d-ext-on">
+        f === "fun_seasons"
+          ? this.renderSeasons()
+          : html`<div class="fp3d-ext-feature fp3d-ext-on">
               <b>${this.t("fun_name_pets")}</b>
               <span class="fp3d-sub">${this.t("fun_feature_pets")}</span>
               ${this.isEditor && this.building
@@ -458,44 +441,23 @@ export class Extensions extends LitElement {
     return html`<div class="fp3d-ext-season"><span>${label}</span><button type="button" class="fp3d-ext-sw" role="switch" aria-checked=${on} aria-label=${label} ?disabled=${disabled} @click=${() => set(!on)}></button></div>`;
   }
 
-  /** Fun pack "Halloween": decorations in the furniture library, and the ghost (switched in Settings). */
-  private renderHalloween() {
-    const ghost = this.building?.settings.halloween?.ghost !== false;
-    return html`<div class="fp3d-ext-feature fp3d-ext-on">
-      <b>🎃 ${this.t("fun_name_halloween")}</b>
-      <span class="fp3d-sub">${this.t("fun_feature_halloween")}</span>
-      ${this.isEditor && this.building
-        ? this.funSwitch(ghost, this.t("halloween_ghost"), (v) => this.editBuilding((b) => (b.settings.halloween = { ...(b.settings.halloween ?? {}), ghost: v })))
-        : nothing}
-      <span class="fp3d-sub">${this.t("halloween_deco_hint")}</span>
-    </div>`;
-  }
-
-  /** Fun pack "Holidays" (#239): each UK holiday has its own switch (editors); it shows on its day. */
+  /**
+   * Fun pack "Holidays" (#239): each holiday has its own switch and its days (editors); Halloween is one of them since
+   * #287. The card is a chunk of its own (season-dates.ts), loaded when it is first drawn.
+   */
   private renderSeasons() {
-    const off = this.building?.settings.seasons ?? {};
-    const eggs = this.building?.settings.easter_eggs !== false;
-    return html`<div class="fp3d-ext-feature fp3d-ext-on">
-      <b>🎄 ${this.t("fun_name_seasons")}</b>
-      <span class="fp3d-sub">${this.t("fun_feature_seasons")}</span>
-      ${this.isEditor && this.building
-        ? SEASON_IDS.map(
-            (id) =>
-              this.funSwitch(
-                off[id] !== false && eggs,
-                `${SEASON_ICONS[id]} ${this.t(`season_name_${id}` as I18nKey)}`,
-                (on) =>
-                  this.editBuilding((b) => {
-                    const seasons = { ...(b.settings.seasons ?? {}) };
-                    if (on) delete seasons[id];
-                    else seasons[id] = false;
-                    b.settings.seasons = seasons;
-                  }),
-                !eggs,
-              ),
-          )
-        : nothing}
-    </div>`;
+    const part = this.seasonDatesPart;
+    if (!part) void import("./season-dates.ts").then((m) => ((this.seasonDatesPart = m), this.requestUpdate()));
+    return part?.seasonsCard({
+      building: this.building,
+      editor: this.isEditor && !!this.building,
+      lang: this.hass?.language,
+      open: this._open,
+      t: (key) => this.t(key as I18nKey),
+      toggle: (key) => this.toggleOpen(key),
+      funSwitch: (on, label, set, disabled) => this.funSwitch(on, label, set, disabled),
+      edit: (fn) => this.editBuilding(fn),
+    });
   }
 
   /**
@@ -727,6 +689,7 @@ export class Extensions extends LitElement {
         : nothing;
     return html`<div class="fp3d-preview" role="group" aria-label=${this.t("pp_title")}>
       <b>${update ? this.t("pp_update", { name: p.pack.name, from: p.installed!.release, to: p.pack.release }) : this.t("pp_install", { name: p.pack.name, release: p.pack.release })}</b>
+      ${p.pack.note ? html`<span class="fp3d-sub fp3d-upd-note">${p.pack.note}</span>` : nothing}
       <span class="fp3d-sub">${texts ? this.t("lang_pack_texts", { language: p.pack.language ?? "?", n: p.pack.texts ?? 0, publisher: p.pack.publisher }) : this.t("pack_by", { publisher: p.pack.publisher, n: p.pack.items })} · ${this.t("pack_licence", { licence: p.pack.licence })}</span>
       <span class="fp3d-sub">
         ${this.t("pp_from")}
@@ -951,6 +914,33 @@ export class Extensions extends LitElement {
       .fp3d-ext-fields {
         display: block;
         height: auto;
+      }
+      .fp3d-ext-dates {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 12px;
+        margin: -6px 0 6px;
+      }
+      .fp3d-ext-dates-edit {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 16px;
+        flex-basis: 100%;
+      }
+      .fp3d-ext-dates-field {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .fp3d-ext-dates-field input {
+        width: 4.5em;
+      }
+      .fp3d-ext-sub {
+        margin: 0 0 8px 12px;
+        padding-left: 10px;
+        border-left: 2px solid var(--fp3d-line);
       }
       .fp3d-ext-season {
         display: flex;

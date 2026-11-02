@@ -73,7 +73,7 @@ const key = (k: string) => ({ key: k, preventDefault: () => undefined, stopPropa
 test("the menu shows who a change affects first, then topics: This home and This device (option B)", () => {
   const menu = (a: "home" | "device") => SECTIONS.filter((s) => !s.hidden && audienceOf(s) === a).map((s) => s.id);
   assert.deepEqual(menu("device"), ["look", "view3d", "screen", "voice"]);
-  assert.deepEqual(menu("home"), ["general", "scene", "energy", "favourites", "warnings", "effects", "cameras", "household", "people", "access", "tablets", "packs", "backup", "advanced"]);
+  assert.deepEqual(menu("home"), ["general", "scene", "energy", "favourites", "warnings", "effects", "cameras", "household", "people", "homes", "access", "tablets", "packs", "backup", "advanced"]);
   for (const g of GROUPS) assert.ok(en[g.title], g.id);
   assert.deepEqual(
     GROUPS.filter((g) => g.audience === "device").map((g) => en[g.title]),
@@ -163,10 +163,10 @@ test("each page says once who it affects; a row with another rule says so; no ba
   for (const sec of liveSections(env())) {
     const text = show(p, sec.id);
     assert.doesNotMatch(text, /st-scope/, sec.id);
-    const sentence = audienceOf(sec) === "device" ? "st_page_device" : sec.id === "packs" ? "st_page_install" : sec.id === "access" || sec.id === "tablets" ? null : "st_page_home";
+    const sentence = audienceOf(sec) === "device" ? "st_page_device" : sec.id === "packs" || sec.id === "homes" ? "st_page_install" : sec.id === "access" || sec.id === "tablets" ? null : "st_page_home";
     if (sentence) assert.ok(text.includes(t(sentence)), `${sec.id}: ${sentence}`);
   }
-  // the live director on this device sits with the cameras (a home page) and says it is this device's
+  // the live director's link sits with the cameras (a home page) and says the setting is this device's (#295)
   assert.ok(show(p, "cameras").includes(t("st_row_device")));
   // the Assist sentences are Home Assistant's, on the Voice page of this device
   assert.ok(show(p, "voice").includes(t("st_row_install")));

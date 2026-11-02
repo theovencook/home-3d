@@ -65,6 +65,7 @@ in the importer and every folder with a `pack.json` in it is imported as its own
 | `licence` | yes | The licence of the pack's content as an [SPDX id](https://spdx.org/licenses/) such as `MIT` or `CC-BY-4.0`. A pack without a licence is refused. `"license"` is read as `"licence"`. |
 | `release` | no | Release number of the pack (1 to 100000, default 1). A newer release of the same pack id replaces the installed one. |
 | `description` | no | Up to 400 characters. |
+| `release_note` | no | One line (up to 200 characters) on what this release changed. It is shown next to the update on the Extensions page, for the pack and for placed items that can take it. |
 | `kind` | no | `"furniture"` (the default) or `"language"` for a [language pack](languages.md). |
 | `language` | language packs only | The language a language pack is for, e.g. `"fr"`. |
 

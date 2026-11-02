@@ -4754,7 +4754,7 @@ export class Fp3dView3d extends LitElement {
   private async syncSeason(): Promise<void> {
     clearTimeout(this.seasonTimer);
     const b = this.building;
-    const on = !!b && !!this.viewer && b.settings.easter_eggs !== false && this.ghostOn !== false && !!seasonNow(b.settings.seasons);
+    const on = !!b && !!this.viewer && b.settings.easter_eggs !== false && this.ghostOn !== false && !!seasonNow(b.settings.seasons, undefined, b.settings.season_dates);
     if (!on) {
       this.season?.dispose();
       this.season = null;
@@ -4777,7 +4777,7 @@ export class Fp3dView3d extends LitElement {
       if (!this.viewer || this.season || !stage) return;
       this.season = fun.startSeason({
         host: stage,
-        now: () => (this.building?.settings.easter_eggs === false || this.ghostOn === false ? null : seasonNow(this.building?.settings.seasons)),
+        now: () => (this.building?.settings.easter_eggs === false || this.ghostOn === false ? null : seasonNow(this.building?.settings.seasons, undefined, this.building?.settings.season_dates)),
         text: (key, vars) => translate(this.hass, key as I18nKey, vars),
         low: () => this._low,
       });

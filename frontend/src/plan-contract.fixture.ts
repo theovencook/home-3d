@@ -820,6 +820,12 @@ export const PLAN_CONTRACT = {
     "seasons": {
       "twixmas": false
     },
+    "season_dates": {
+      "halloween": {
+        "from": "10-29",
+        "to": "11-01"
+      }
+    },
     "terrain": {
       "level": -10.0,
       "earth": true
