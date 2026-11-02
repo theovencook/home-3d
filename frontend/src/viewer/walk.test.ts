@@ -102,6 +102,7 @@ function stairWalk(lowerRooms: Room[]) {
   lower.furniture.push({ id: "s", type: "stairs", x: 4, z: 2.5, rotation: 0, w: 1, d: 3, h: 2.7, variant: null, entity: null, power: null });
   const b = { ...emptyBuilding(), floors: [lower, upper] };
   const shown: string[] = [];
+  const stairs: boolean[] = [];
   const v = {
     camera: { position: { set() {}, x: 0, y: 0, z: 0 }, lookAt() {}, fov: 50, near: 0.1, updateProjectionMatrix() {}, aspect: 1 },
     controls: { update: () => false, view: { target: { x: 0, y: 0, z: 0, set() {} }, radius: 1, theta: 0, phi: 0 } },
@@ -113,7 +114,7 @@ function stairWalk(lowerRooms: Room[]) {
     updateWalls() {},
     onControls: null as (() => void) | null,
   };
-  const walk = new WalkCamera(v as never, new FloorMap(b, lower), new EventTarget() as unknown as HTMLElement, { onRoom() {}, start: { x: 4, z: 5.2, yaw: -Math.PI / 2, pitch: 0 }, onFloor: (f) => shown.push(f.id) });
+  const walk = new WalkCamera(v as never, new FloorMap(b, lower), new EventTarget() as unknown as HTMLElement, { onRoom() {}, start: { x: 4, z: 5.2, yaw: -Math.PI / 2, pitch: 0 }, onFloor: (f, st) => (shown.push(f.id), stairs.push(st)) });
   const w = walk as unknown as { move(dx: number, dz: number): void; stairs(): void; lift: number; map: FloorMap };
   const step = (dz: number, n: number) => {
     for (let i = 0; i < n; i++) {
@@ -121,7 +122,7 @@ function stairWalk(lowerRooms: Room[]) {
       w.stairs();
     }
   };
-  return { walk, w, shown, step };
+  return { walk, w, shown, stairs, step };
 }
 
 test("walking onto a stair climbs it and switches to the upper floor at the top, and back down (#270)", () => {
@@ -143,6 +144,16 @@ test("walking onto a stair climbs it and switches to the upper floor at the top,
   step(0.05, 80);
   assert.equal(w.lift, 0);
   assert.equal(shown.at(-1), "eg");
+  walk.dispose();
+});
+
+test("on the steps both floors show; stepping off at the top ends that (#312)", () => {
+  const { walk, w, stairs, step } = stairWalk([rect("a", 0, -4, 8, 6)]);
+  step(-0.05, 30);
+  assert.deepEqual(stairs, [true], "on the steps");
+  step(-0.05, 60);
+  assert.equal(w.map.floor.id, "og");
+  assert.deepEqual(stairs, [true, false], "off the top");
   walk.dispose();
 });
 

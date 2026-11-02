@@ -368,7 +368,8 @@ export class WalkCamera {
   private origNear: number;
   private onRoom: (room: Room | null) => void;
   private roomId: string | null = null;
-  private onFloor: ((floor: Floor) => void) | null;
+  /** The floor to show; `stairs`: on the steps, where the floors below must show whole too (#312). */
+  private onFloor: ((floor: Floor, stairs: boolean) => void) | null;
   private links: Link[];
   /** On a stair (#270): its way, whether bound upwards, and the arc length reached. */
   private climb: { link: Link; up: boolean; s: number; len: number; armed: boolean } | null = null;
@@ -384,7 +385,7 @@ export class WalkCamera {
   map: FloorMap;
   private readonly surface: HTMLElement;
 
-  constructor(v: ViewerInternals, map: FloorMap, surface: HTMLElement, opts: { onRoom: (room: Room | null) => void; start?: WalkState; onFloor?: (floor: Floor) => void }) {
+  constructor(v: ViewerInternals, map: FloorMap, surface: HTMLElement, opts: { onRoom: (room: Room | null) => void; start?: WalkState; onFloor?: (floor: Floor, stairs: boolean) => void }) {
     this.v = v;
     this.map = map;
     this.surface = surface;
@@ -605,7 +606,7 @@ export class WalkCamera {
           this.lift = top[1];
         }
         this.climb = { link, up, s: up ? 0 : stairLength(pts), len: stairLength(pts), armed: false };
-        this.onFloor?.(upper);
+        this.onFloor?.(upper, true);
         this.path = [];
         return;
       }
@@ -627,7 +628,7 @@ export class WalkCamera {
       this.lift = 0;
       this.climb = null;
       this.skipLink = c.link;
-      this.onFloor?.(upper);
+      this.onFloor?.(upper, false);
       this.path = [];
       this.roomId = null;
     } else if (at.s <= 0.05 && (!c.up || c.armed)) {
@@ -636,7 +637,7 @@ export class WalkCamera {
       this.lift = 0;
       this.climb = null;
       this.skipLink = c.link;
-      if (lower) this.onFloor?.(lower);
+      if (lower) this.onFloor?.(lower, false);
       this.path = [];
     }
   }
