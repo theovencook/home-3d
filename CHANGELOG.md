@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- The clock sits behind the room panel, menus and pop-ups (#313).
 - **Walking on the stairs** keeps both floors drawn, in place and at full strength, until one steps off at the top or the bottom (#312).
 - **Walking with the touch stick** follows the finger the whole time; a redraw mid-drag (walking into another room) left it stuck in its last direction until let go (#311).
 - The heat legend (temperature, humidity, CO₂) folds to a slim bar with a tap and back, remembered on this device, and sits a little further from the energy tiles (#310).

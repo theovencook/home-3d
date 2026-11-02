@@ -2018,6 +2018,8 @@ export class Floorplan3dPanel extends LitElement {
         flex-direction: column;
         justify-content: flex-start;
         pointer-events: none;
+        /* over the view's passive overlays, the clock among them (#313) */
+        z-index: 2;
       }
       /* the switches sit at the bottom (as in the card), where they never meet the energy values or warnings */
       fp3d-view3d {

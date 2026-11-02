@@ -731,6 +731,8 @@ clearTimeout(this.cleanTimer);
         display: flex;
         flex-direction: column;
         pointer-events: none;
+        /* over the view's passive overlays, the clock among them (#313) */
+        z-index: 2;
       }
       /* phones and portrait tablets: the room panel becomes a sheet at the bottom */
       @container fp3d ((max-width: 700px) or ((orientation: portrait) and (max-width: 1000px))) {

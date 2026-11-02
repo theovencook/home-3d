@@ -7754,7 +7754,8 @@ export class Fp3dView3d extends LitElement {
       /* the clock in a corner of the view (view settings / card option clock) */
       .fp3d-clock {
         position: absolute;
-        z-index: 4;
+        /* the lowest layer over the scene: panels, menus and pop-ups cover it (#313) */
+        z-index: 1;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
