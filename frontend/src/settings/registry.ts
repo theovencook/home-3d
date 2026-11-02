@@ -1389,9 +1389,10 @@ export function fold(text: string): string {
 
 /**
  * Search over labels, hints, keywords and the section's name, across every section: every word typed must be found
- * somewhere in the setting's texts. `text` turns a text key into its words in the viewer's language.
+ * somewhere in the setting's texts. `text` turns a text key into its words in the viewer's language. `more` holds the
+ * search words of each setting (#286, search-words.ts), which the page loads with its search box.
  */
-export function searchSettings(query: string, env: SettingsEnv, text: (key: TextKey) => string): Setting[] {
+export function searchSettings(query: string, env: SettingsEnv, text: (key: TextKey) => string, more: Readonly<Record<string, readonly string[]>> = {}): Setting[] {
   const words = fold(query).split(/\s+/).filter(Boolean);
   if (!words.length) return [];
   return SETTINGS.filter((s) => {
@@ -1401,7 +1402,7 @@ export function searchSettings(query: string, env: SettingsEnv, text: (key: Text
     // a typed word must start a word of the name, keywords, section or card; in the hint it must be a whole word, so
     // "clock" finds "clock" rows but not a hint that says "clockwise" (#254)
     const split = (t: string): string[] => fold(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-    const names = split([text(s.label), ...(s.keywords ?? []), sec ? text(sec.title) : "", card ? text(card.title) : "", s.id].join(" "));
+    const names = split([text(s.label), ...(s.keywords ?? []), ...(more[s.id] ?? []), sec ? text(sec.title) : "", card ? text(card.title) : "", s.id].join(" "));
     const hint = new Set(s.hint ? split(text(s.hint)) : []);
     return words.every((w) => names.some((h) => h.startsWith(w)) || hint.has(w));
   });

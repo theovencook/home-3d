@@ -2,6 +2,7 @@
 // floor walks there (around walls, through doors), dragging looks around, keys and a stick move.
 // The geometry part (walls, doors, paths) is plain maths; WalkCamera drives Home 3D's 3D view.
 import { generateWalls, locateOpening, openingHost, type Wall } from "../geometry/walls.ts";
+import { stairLinks, type Link } from "../geometry/stair-links.ts";
 import { centroid, pointInPolygon, type Building, type Floor, type Room, type Vec2 } from "../model.ts";
 
 export const EYE = 1.62;
@@ -296,6 +297,41 @@ function area(r: Room): number {
   return Math.abs(a / 2);
 }
 
+// ------------------------------------------------------------------ stairs (#270)
+
+/** How far from the line of the steps one may stand on them, and how close to a foot or top one steps on. */
+const STAIR_HALF = 0.5;
+const STAIR_ENTRY = 0.45;
+
+export interface StairSpot {
+  /** Arc length along the steps (m), the distance from the line of the steps, and the height there (m above the lower floor). */
+  s: number;
+  dist: number;
+  h: number;
+}
+
+/** Where a point lies on the way up a stair (nearest point of its line; `near` limits the search to arc lengths around it). */
+export function stairSpot(pts: readonly [number, number, number][], p: Vec2, near?: number): StairSpot {
+  let best: StairSpot = { s: 0, dist: Infinity, h: 0 };
+  let acc = 0;
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const [ax, ah, az] = pts[i];
+    const [bx, bh, bz] = pts[i + 1];
+    const dx = bx - ax;
+    const dz = bz - az;
+    const len = Math.hypot(dx, dz) || 1e-6;
+    if (near === undefined || (acc + len >= near - 1.2 && acc <= near + 1.2)) {
+      const t = Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - az) * dz) / (len * len)));
+      const dist = Math.hypot(p[0] - (ax + dx * t), p[1] - (az + dz * t));
+      if (dist < best.dist) best = { s: acc + len * t, dist, h: ah + (bh - ah) * t };
+    }
+    acc += len;
+  }
+  return best;
+}
+
+const stairLength = (pts: readonly [number, number, number][]) => pts.reduce((a, q, i) => (i ? a + Math.hypot(q[0] - pts[i - 1][0], q[2] - pts[i - 1][2]) : 0), 0);
+
 // ------------------------------------------------------------------ the camera
 
 /** The parts of Home 3D's viewer the walk takes over (private there, reached at run time). */
@@ -332,6 +368,14 @@ export class WalkCamera {
   private origNear: number;
   private onRoom: (room: Room | null) => void;
   private roomId: string | null = null;
+  private onFloor: ((floor: Floor) => void) | null;
+  private links: Link[];
+  /** On a stair (#270): its way, whether bound upwards, and the arc length reached. */
+  private climb: { link: Link; up: boolean; s: number; len: number; armed: boolean } | null = null;
+  /** The eye's height above the floor of the map, above the usual eye height (on the steps). */
+  private lift = 0;
+  /** A stair just left at its far end: not taken again until one has stepped away. */
+  private skipLink: Link | null = null;
   private listeners: [EventTarget, string, EventListener, boolean][] = [];
   /** Turning toward the walking direction while a path is followed. */
   private turnTo: number | null = null;
@@ -340,11 +384,13 @@ export class WalkCamera {
   map: FloorMap;
   private readonly surface: HTMLElement;
 
-  constructor(v: ViewerInternals, map: FloorMap, surface: HTMLElement, opts: { onRoom: (room: Room | null) => void; start?: WalkState }) {
+  constructor(v: ViewerInternals, map: FloorMap, surface: HTMLElement, opts: { onRoom: (room: Room | null) => void; start?: WalkState; onFloor?: (floor: Floor) => void }) {
     this.v = v;
     this.map = map;
     this.surface = surface;
     this.onRoom = opts.onRoom;
+    this.onFloor = opts.onFloor ?? null;
+    this.links = stairLinks(map.building);
     const s = opts.start ?? (() => {
       const st = map.start();
       return { x: st.p[0], z: st.p[1], yaw: st.yaw, pitch: -0.05 };
@@ -390,6 +436,8 @@ export class WalkCamera {
   setMap(map: FloorMap, start?: WalkState): void {
     this.map = map;
     this.path = [];
+    this.climb = null;
+    this.lift = 0;
     const s = start ?? (() => {
       const st = map.start();
       return { x: st.p[0], z: st.p[1], yaw: st.yaw, pitch: -0.05 };
@@ -401,7 +449,7 @@ export class WalkCamera {
 
   private floorY(): number {
     const fv = this.v.floorMap.get(this.map.floor.id);
-    return (fv ? fv.floor.elevation + fv.y : this.map.floor.elevation) + EYE;
+    return (fv ? fv.floor.elevation + fv.y : this.map.floor.elevation) + EYE + this.lift;
   }
 
   /** Sets the camera (called by the viewer's frame); true while it still moves. */
@@ -418,6 +466,7 @@ export class WalkCamera {
 
   /** Walk to a point on the floor (through doors when needed). */
   goTo(p: Vec2): boolean {
+    if (this.climb) return false;
     const path = this.map.path([this.state.x, this.state.z], this.map.freeNear(p));
     if (!path) return false;
     this.path = path;
@@ -497,6 +546,7 @@ export class WalkCamera {
       }
       if (!this.path.length && Math.abs(d) < 0.05) this.turnTo = null;
     }
+    if (moving) this.stairs();
     this.reportRoom();
     this.v.invalidate();
     if (moving || this.keys.size || this.stick) this.raf = requestAnimationFrame((t) => this.tick(t));
@@ -505,14 +555,87 @@ export class WalkCamera {
   private move(dx: number, dz: number): void {
     const s = this.state;
     const p: Vec2 = [s.x + dx, s.z + dz];
-    if (!this.map.blocked(p)) {
+    if (this.free(p)) {
       s.x = p[0];
       s.z = p[1];
       return;
     }
     // slide along the wall
-    if (!this.map.blocked([s.x + dx, s.z])) s.x += dx;
-    else if (!this.map.blocked([s.x, s.z + dz])) s.z += dz;
+    if (this.free([s.x + dx, s.z])) s.x += dx;
+    else if (this.free([s.x, s.z + dz])) s.z += dz;
+  }
+
+  /** Whether one may stand at p: clear of walls, and on the steps only on the steps (their ends excepted). */
+  private free(p: Vec2): boolean {
+    if (this.map.blocked(p)) return false;
+    const c = this.climb;
+    if (!c) return true;
+    const at = stairSpot(c.link.pts, p, c.s);
+    return at.dist <= STAIR_HALF || at.s < 0.15 || at.s > c.len - 0.15;
+  }
+
+  /** Walking onto a stair takes you up or down it; reaching its top or bottom switches the floor (#270). */
+  private stairs(): void {
+    const s = this.state;
+    const p: Vec2 = [s.x, s.z];
+    const c = this.climb;
+    if (!c) {
+      if (this.skipLink) {
+        const e = this.skipLink.pts;
+        const far = Math.min(Math.hypot(p[0] - e[0][0], p[1] - e[0][2]), Math.hypot(p[0] - e[e.length - 1][0], p[1] - e[e.length - 1][2]));
+        if (far > 0.9) this.skipLink = null;
+      }
+      for (const link of this.links) {
+        if (link === this.skipLink) continue;
+        const pts = link.pts;
+        const foot = pts[0];
+        const top = pts[pts.length - 1];
+        const up = link.lower === this.map.floor.id && Math.hypot(p[0] - foot[0], p[1] - foot[2]) < STAIR_ENTRY;
+        const down = link.upper === this.map.floor.id && Math.hypot(p[0] - top[0], p[1] - top[2]) < STAIR_ENTRY;
+        if (!up && !down) continue;
+        const lower = this.map.building.floors.find((f) => f.id === link.lower);
+        const upper = this.map.building.floors.find((f) => f.id === link.upper);
+        if (!lower || !upper) continue;
+        // the steps belong to the lower floor: its walls apply on them, and both floors show
+        if (down) {
+          this.map = new FloorMap(this.map.building, lower);
+          this.lift = top[1];
+        }
+        this.climb = { link, up, s: up ? 0 : stairLength(pts), len: stairLength(pts), armed: false };
+        this.onFloor?.(upper);
+        this.path = [];
+        return;
+      }
+      return;
+    }
+    const at = stairSpot(c.link.pts, p, c.s);
+    c.s = at.s;
+    this.lift = at.h;
+    // the ends count only once one has gone some way along (stepping on is not stepping off)
+    if (at.s > 0.4 && at.s < c.len - 0.4) c.armed = true;
+    if (at.s >= c.len - 0.05 && (c.up || c.armed) && at.dist < STAIR_HALF + 0.2) {
+      // off the top: onto the upper floor, at the same spot (the nearest free floor when a wall stands there)
+      const upper = this.map.building.floors.find((f) => f.id === c.link.upper);
+      if (!upper) return;
+      this.map = new FloorMap(this.map.building, upper);
+      const f = this.map.freeNear(p);
+      s.x = f[0];
+      s.z = f[1];
+      this.lift = 0;
+      this.climb = null;
+      this.skipLink = c.link;
+      this.onFloor?.(upper);
+      this.path = [];
+      this.roomId = null;
+    } else if (at.s <= 0.05 && (!c.up || c.armed)) {
+      // back at the bottom: on the lower floor again
+      const lower = this.map.building.floors.find((f) => f.id === c.link.lower);
+      this.lift = 0;
+      this.climb = null;
+      this.skipLink = c.link;
+      if (lower) this.onFloor?.(lower);
+      this.path = [];
+    }
   }
 
   private reportRoom(): void {

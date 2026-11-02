@@ -497,6 +497,8 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("rise"): vol.All(vol.Coerce(float), vol.Range(min=-80, max=80)),
         vol.Optional("pictures", default=[]): vol.All([_SCREEN_PICTURE_SCHEMA], vol.Length(max=20)),
         # screens: the screen around a rule picture is dark (default) or white
+        # the glow colour while its entity is active (#289); none = the usual one
+        vol.Optional("active_color", default=None): vol.Any(None, vol.Match(r"^#[0-9a-fA-F]{6}$")),
         vol.Optional("screen_bg", default="black"): vol.In(["black", "white"]),
         vol.Optional("vehicle", default=None): vol.Any(None, vol.All(str, vol.Length(max=96))),
         # Pool Pro: the sand filter's six-way valve and whether a ball valve is open

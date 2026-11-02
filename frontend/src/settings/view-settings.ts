@@ -118,6 +118,7 @@ export const LOOK: Setting[] = [
   deviceSwitch("clock_date", "look", "clock", "clock_date", true, "st_clock_date", undefined, ["time", "clock", "date", "day"]),
   ].map((s): Setting => ({ ...s, visible: (env) => ["tl", "tr", "bl", "br"].includes(env.prefs.get("clock") ?? "") })), // the clock's details only while it shows (#256)
   deviceChoice("markers", "view3d", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), "markers_important_hint", ["pins", "icons", "symbols", "devices", "markers"], "select"),
+  deviceSwitch("pulse", "view3d", "markers", "pulse", true, "st_pulse", "st_pulse_hint", ["pins", "outline", "pulse", "animation", "motion"]),
   deviceChoice("pinSize", "view3d", "markers", "pinSize", ["small", "normal", "large"], "normal", "pin_size", opts([["small", "pin_size_small"], ["normal", "pin_size_normal"], ["large", "pin_size_large"]]), undefined, ["pins", "icons", "symbols", "size"]),
   {
     id: "plan_pin_zoom",
@@ -235,7 +236,7 @@ export function viewSections(ctx: ViewContext): ViewSection[] {
   return [
     { id: "look", title: "theme", rows: [{ id: "theme" }, { id: "accent" }], openOnPhone: true },
     shows,
-    { id: "markers", title: "markers", rows: [{ id: "markers" }, { id: "pinSize" }], hint: "markers_important_hint", openOnPhone: true },
+    { id: "markers", title: "markers", rows: [{ id: "markers" }, { id: "pinSize" }, { id: "pulse" }], hint: "markers_important_hint", openOnPhone: true },
     { id: "clock", title: "st_clock", rows: [{ id: "clock" }], openOnPhone: false },
   ];
 }

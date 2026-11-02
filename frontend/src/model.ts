@@ -373,6 +373,8 @@ export interface Furniture {
   pictures?: ScreenPicture[];
   /** Screens: what shows around a rule picture – a dark screen (default) or a white one (for dark logos). */
   screen_bg?: "black" | "white";
+  /** Its glow colour ("#rrggbb") while its entity is active – playing, on, triggered (#289); none = the usual glow. */
+  active_color?: string | null;
   /** Parking spots: the vehicle shown (a pack item type) while `entity` reports a car. */
   vehicle?: string | null;
   /** Auto Pro: the car's entities (each null = found on the device of `device`, or of the presence entity). */

@@ -411,6 +411,14 @@ export function heatSensorOn(hass: HomeAssistant, ref: EntityRef | undefined): b
   return Number.isFinite(v) ? v > 0 : null;
 }
 
+/** An alarm that has gone off: a smoke or CO sensor on, or an alarm panel triggered (#289). */
+export function alarmTriggered(st: HassEntity | undefined): boolean {
+  if (!st) return false;
+  if (st.entity_id.startsWith("alarm_control_panel.")) return st.state === "triggered";
+  const cls = st.attributes.device_class;
+  return st.entity_id.startsWith("binary_sensor.") && (cls === "smoke" || cls === "carbon_monoxide" || cls === "gas") && st.state === "on";
+}
+
 export function isUnavailable(st: HassEntity | undefined): boolean {
   return !st || st.state === "unavailable" || st.state === "unknown";
 }

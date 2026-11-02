@@ -84,6 +84,13 @@ const shrinkSettingsCss = {
     b.onLoad({ filter: /src.settings.[a-z0-9-]+[.]ts$/ }, (args) => ({ contents: shrinkCssTemplates(readFileSync(args.path, "utf8")), loader: "ts" }));
   },
 };
+// run 5: the same for the main bundle and its chunks (the 3D view's stylesheet is 80 KB of source): the "wall tablet" path was over its gzip budget
+const shrinkViewCss = {
+  name: "shrink-view-css",
+  setup(b) {
+    b.onLoad({ filter: /src.(?:components.)?[a-z0-9-]+[.]ts$/ }, (args) => ({ contents: shrinkCssTemplates(readFileSync(args.path, "utf8")), loader: "ts" }));
+  },
+};
 const settingsConfig = { ...common, plugins: [...common.plugins, shrinkSettingsCss], entryPoints: { "home-3d-settings": "src/settings/entry.ts" }, outdir: out, splitting: true, chunkNames: "home-3d-settings-[name]-[hash]" };
 // The main bundle loads the 3D bundle with a hash of its content in the URL, so a new 3D bundle is
 // never taken from the browser cache (the integration version only changes after a restart).
@@ -108,7 +115,7 @@ const CHUNK = /^home-3d-[\w-]+-[A-Z0-9]{8}\.js$/;
 const mainConfig = (hashes) => ({
   ...common,
   // the one bundle with the English table (its chunks share it)
-  plugins: [shrinkShaders],
+  plugins: [shrinkShaders, shrinkViewCss],
   entryPoints: { "home-3d": "src/main.ts" },
   outdir: out,
   splitting: true,
@@ -189,7 +196,8 @@ function copyFonts() {
 // chunks to their limits once combined; both are lazy and small, so their budgets go to 28 and 33 KB.
 // #296/#287: Settings > Homes and the holiday Dates editor are lazy chunks with budgets of their own.
 // #293: the item picker (home-3d-editor-item-picker-<hash>.js) is a lazy chunk of its own, drawn only by an open Item field. A new budget.
-const BUDGET = { "home-3d-editor-season-dates.js": 9 * 1024, "home-3d-settings-homes.js": 14 * 1024, "home-3d-device-popup.js": 16 * 1024, "home-3d-editor-item-picker.js": 14 * 1024, "home-3d-editor-phone-bar.js": 12 * 1024, "home-3d-rooms-picker.js": 8 * 1024, "home-3d-view-panel.js": 28 * 1024, "home-3d-room-panel.js": 33 * 1024, "home-3d-home-switcher.js": 12 * 1024, "home-3d-editor-lazy-parts.js": 85 * 1024, "home-3d-settings-pickers.js": 12 * 1024, "home-3d-settings-reset.js": 4 * 1024, "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-listedit.js": 12 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
+// #286: the Settings search words (home-3d-settings-search-words-<hash>.js, 8.8 KB) load with the search box, not on first open. A new budget.
+const BUDGET = { "home-3d-quick-menu.js": 20 * 1024, "home-3d-settings-search-words.js": 10 * 1024, "home-3d-editor-season-dates.js": 9 * 1024, "home-3d-settings-homes.js": 14 * 1024, "home-3d-device-popup.js": 16 * 1024, "home-3d-editor-item-picker.js": 14 * 1024, "home-3d-editor-phone-bar.js": 12 * 1024, "home-3d-rooms-picker.js": 8 * 1024, "home-3d-view-panel.js": 28 * 1024, "home-3d-room-panel.js": 33 * 1024, "home-3d-home-switcher.js": 12 * 1024, "home-3d-editor-lazy-parts.js": 85 * 1024, "home-3d-settings-pickers.js": 12 * 1024, "home-3d-settings-reset.js": 4 * 1024, "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-listedit.js": 12 * 1024, "home-3d-fun.js": 40 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 68 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 72 * 1024, "home-3d-settings.js": 95 * 1024 };
 const GZIP_BUDGET = { "home-3d.js": 45 * 1024, "home-3d-view3d.js": 100 * 1024, "home-3d-3d.js": 280 * 1024 };
 
 // What is loaded before something shows, raw and as sent (gzip), with everything those files import (#179): a module

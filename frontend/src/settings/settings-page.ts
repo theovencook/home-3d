@@ -107,6 +107,7 @@ export class SettingsPage extends LitElement {
     _cursor: { state: true },
     _saved: { state: true },
     _query: { state: true },
+    _words: { state: true },
     _drill: { state: true },
     _flash: { state: true },
     _remote: { state: true },
@@ -148,6 +149,8 @@ export class SettingsPage extends LitElement {
   /** The starting side was chosen for this viewer (once, when the viewer is first known, #255). */
   private startPicked = false;
   private declare _query: string;
+  /** The search words of each setting, once their chunk has loaded (#286); null until then. */
+  private declare _words: Readonly<Record<string, readonly string[]>> | null;
   /** Phones: a section is open (else the list of sections). */
   private declare _drill: boolean;
   /** The row a deep link points at, highlighted for a moment. */
@@ -175,6 +178,7 @@ export class SettingsPage extends LitElement {
     this._saved = null;
     this.backTo = null;
     this._query = "";
+    this._words = null;
     this._drill = false;
     this._flash = null;
     this._remote = {};
@@ -256,7 +260,7 @@ export class SettingsPage extends LitElement {
   private askRemote(): void {
     const hass = this.hass;
     if (!hass) return;
-    const wanted = new Set((this._query ? searchSettings(this._query, this.env, (k) => this.tr(k)) : settingsIn(this._section, this.env)).map((s) => s.loader).filter((l): l is string => !!l));
+    const wanted = new Set((this._query ? searchSettings(this._query, this.env, (k) => this.tr(k), this._words ?? undefined) : settingsIn(this._section, this.env)).map((s) => s.loader).filter((l): l is string => !!l));
     for (const id of wanted) {
       if (this.remoteAsked.has(id) || !this.loadersNow[id]) continue;
       this.remoteAsked.add(id);
@@ -397,9 +401,11 @@ export class SettingsPage extends LitElement {
             .value=${this._query}
             placeholder=${this.tr("st_search_all")}
             aria-label=${this.tr("st_search_all")}
+            @focus=${this.loadWords}
             @input=${(e: Event) => {
               this._query = (e.target as HTMLInputElement).value;
               this._cursor = 0;
+              this.loadWords();
             }}
             @keydown=${this.searchKey}
           />
@@ -424,9 +430,17 @@ export class SettingsPage extends LitElement {
   /** The search's hits in the order they show (by section): the arrow keys walk this list. */
   private hits(query: string): Setting[] {
     const bySection = new Map<SectionId, Setting[]>();
-    for (const s of searchSettings(query, this.env, (k) => this.tr(k))) bySection.set(s.section, [...(bySection.get(s.section) ?? []), s]);
+    for (const s of searchSettings(query, this.env, (k) => this.tr(k), this._words ?? undefined)) bySection.set(s.section, [...(bySection.get(s.section) ?? []), s]);
     return [...bySection.values()].flat();
   }
+
+  /** The search words (#286, search-words.ts) are a chunk of their own: loaded at the search box's first use; the page draws again when they arrive. */
+  private readonly loadWords = (): void => {
+    if (this._words) return;
+    need(async () => {
+      this._words ??= (await import("./search-words.ts")).SEARCH_WORDS;
+    });
+  };
 
   /** The search box's keys (#248): arrows move through the hits, Enter opens the one marked, Escape clears. */
   private readonly searchKey = (e: KeyboardEvent): void => {
