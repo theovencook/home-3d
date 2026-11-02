@@ -22,3 +22,28 @@ export function wallLayout(n: number, width: number, height: number, gap = 12, m
   }
   return { cols: best.cols, tile: Math.floor(best.tile) };
 }
+
+/** The four edges of the 3D view the camera wall docks to (#266). */
+export const WALL_DOCKS = ["top", "bottom", "left", "right"] as const;
+export type WallDock = (typeof WALL_DOCKS)[number];
+export const DEFAULT_WALL_DOCK: WallDock = "bottom";
+export const WALL_DOCK_KEY = "home3d.camera_wall_dock";
+
+/** A stored dock, or the default when it is missing or not one of the four. */
+export const parseDock = (v: string | null | undefined): WallDock => (WALL_DOCKS as readonly string[]).includes(v ?? "") ? (v as WallDock) : DEFAULT_WALL_DOCK;
+
+/**
+ * The edge nearest to a point inside a box of the given size (where a dragged wall was let go): the distance to each
+ * edge, as a share of the box so a wide view does not favour the sides.
+ */
+export function dockFromPoint(x: number, y: number, width: number, height: number): WallDock {
+  const w = Math.max(1, width);
+  const h = Math.max(1, height);
+  const d: [WallDock, number][] = [
+    ["top", y / h],
+    ["bottom", (h - y) / h],
+    ["left", x / w],
+    ["right", (w - x) / w],
+  ];
+  return d.reduce((a, b) => (b[1] < a[1] ? b : a))[0];
+}

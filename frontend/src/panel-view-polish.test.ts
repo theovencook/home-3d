@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { emptyBuilding } from "./model.ts";
 import { englishTable } from "./i18n.ts";
 import { settingById, SETTINGS } from "./settings/registry.ts";
-import { appearanceOptions, CAMERA_WALL, LOOK, optionGroups, optionText, viewSections, type ViewContext } from "./settings/view-settings.ts";
+import { appearanceOptions, LOOK, optionGroups, optionText, viewSections, type ViewContext } from "./settings/view-settings.ts";
 
 const g = globalThis as Record<string, unknown>;
 for (const k of ["VIEWER", "EDITOR", "LOCATE", "ITEMS", "LANG", "PLAN2D", "FUN", "VOICE", "TIMETRAVEL", "CARD_EDITOR", "SETTINGS"]) g[`__FP3D_${k}_HASH__`] = "test";
@@ -89,7 +89,6 @@ test("its rows are the Settings page's own entries, under the same stored keys (
   for (const kiosk of [false, true])
     for (const s of viewSections(ctx({ kiosk, floorOpen: true })))
       for (const r of s.rows) {
-        if (r.id === CAMERA_WALL) continue;
         const entry = settingById(r.id);
         assert.ok(entry, r.id);
         assert.ok(SETTINGS.includes(entry!), `${r.id} is in the registry's list`);
@@ -120,7 +119,7 @@ test("each row once (#215); the 2D plan drops the 3D-only rows; one floor and no
   const flatPlan = rows(ctx({ plan2d: true }), "show").map((r) => r.id);
   for (const id of ["walls", "explode", "roof", "floor_stack"]) assert.ok(!flatPlan.includes(id), id);
   const single = rows(ctx({ floors: 1, roof: false }), "show").map((r) => r.id);
-  assert.deepEqual(single, ["walls", "heat", "room_names", "trail", "weather", CAMERA_WALL]);
+  assert.deepEqual(single, ["walls", "heat", "room_names", "trail", "weather"]);
 });
 
 test("a wall tablet's View panel offers only what the 3D shows (and 3D or 2D, slotted in) (#92)", () => {

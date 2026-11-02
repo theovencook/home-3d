@@ -173,7 +173,7 @@ import { activateKey } from "../activate-key.ts";
 import { callServiceSafe } from "../failure.ts";
 import { forwardHass, HASS_CHILDREN, HassWatch } from "../hass-watch.ts";
 import type { BinCue, DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SoundSource, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
-import { wallLayout } from "../camera-wall.ts";
+import { dockFromPoint, parseDock, WALL_DOCK_KEY, WALL_DOCKS, wallLayout, type WallDock } from "../camera-wall.ts";
 import { watchedEntities } from "../watched.ts";
 import { isPrinter, printerFaces, printerState } from "../printer.ts";
 import { hasTimedRules, hiddenItems, shownBuilding } from "../show-when.ts";
@@ -313,6 +313,7 @@ export class Fp3dView3d extends LitElement {
     _through: { state: true },
     _blend: { state: true },
     _wallBig: { state: true },
+    _wallDock: { state: true },
     _find: { state: true },
     _walk: { state: true },
     walkable: { attribute: false },
@@ -540,6 +541,8 @@ export class Fp3dView3d extends LitElement {
   private declare _through: { entity: string; back: ReturnType<FloorplanViewer["getView"]> } | null;
   /** Camera wall: the camera shown big (null: all tiles). */
   private declare _wallBig: string | null;
+  /** The edge of the view the camera wall is docked to (#266), kept per device. */
+  private declare _wallDock: WallDock;
   /** The look-through was started from the camera wall: going back reopens the wall. */
   private throughWall = false;
   /** Camera wall, big picture: Home Assistant's own stream player (a picture-entity card in live view), one at a time. */
@@ -811,6 +814,7 @@ export class Fp3dView3d extends LitElement {
     this._menu = null;
     this._through = null;
     this._wallBig = null;
+    this._wallDock = "bottom";
     this._blend = 0.6;
     this._find = null;
     this._central = false;
@@ -874,6 +878,7 @@ export class Fp3dView3d extends LitElement {
     try {
       this._flows = localStorage.getItem("home3d.flows") === "1";
       this._holoShow = localStorage.getItem("home3d.holos") !== "0";
+      this._wallDock = parseDock(localStorage.getItem(WALL_DOCK_KEY));
     } catch {
       this._flows = false;
       this._holoShow = true;
@@ -5885,6 +5890,38 @@ export class Fp3dView3d extends LitElement {
     }
   }
 
+  private setWallDock(dock: WallDock): void {
+    this._wallDock = dock;
+    try {
+      localStorage.setItem(WALL_DOCK_KEY, dock);
+    } catch {
+      // not remembered
+    }
+  }
+
+  /** The camera wall's header: dragging it (not its buttons) to an edge of the view docks the wall there (#266). */
+  private wallDragDock = (e: PointerEvent) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
+    const head = e.currentTarget as HTMLElement;
+    head.setPointerCapture?.(e.pointerId);
+    const up = (u: PointerEvent) => {
+      head.removeEventListener("pointerup", up);
+      head.removeEventListener("pointercancel", up);
+      const r = this.getBoundingClientRect();
+      if (u.type === "pointerup" && Math.hypot(u.clientX - e.clientX, u.clientY - e.clientY) > 12) this.setWallDock(dockFromPoint(u.clientX - r.left, u.clientY - r.top, r.width, r.height));
+    };
+    head.addEventListener("pointerup", up);
+    head.addEventListener("pointercancel", up);
+  };
+
+  /** Four small buttons, one per edge: the wall's dock menu. */
+  private renderWallDock() {
+    const glyph = { top: "▀", bottom: "▄", left: "▌", right: "▐" } as const;
+    return html`<span class="fp3d-wall-dock" role="group" aria-label=${translate(this.hass, "camera_dock")}>
+      ${WALL_DOCKS.map((d) => html`<button class="fp3d-chip" aria-pressed=${this._wallDock === d} title=${translate(this.hass, `camera_dock_${d}` as I18nKey)} aria-label=${translate(this.hass, `camera_dock_${d}` as I18nKey)} @click=${() => this.setWallDock(d)}>${glyph[d]}</button>`)}
+    </span>`;
+  }
+
   /** Kamera-Cockpit: the camera wall – every placed camera's picture, refreshed every few seconds; a tap looks through it. */
   private renderCameraWall() {
     if (!this.cameraWall || !this.hass || !this.building || this.ro) return nothing;
@@ -5916,8 +5953,8 @@ export class Fp3dView3d extends LitElement {
         close();
         this.lookThrough(big);
       };
-      return html`<div class="fp3d-wall">
-        <div class="fp3d-wall-head">
+      return html`<div class="fp3d-wall fp3d-wall-${this._wallDock}">
+        <div class="fp3d-wall-head" title=${translate(hass, "camera_dock")} @pointerdown=${this.wallDragDock}>
           <button
             class="fp3d-chip"
             @click=${() => {
@@ -5928,7 +5965,7 @@ export class Fp3dView3d extends LitElement {
             ‹ ${translate(hass, "camera_wall_all")}
           </button>
           <span class="fp3d-wall-title">${name(big)}</span>
-          <span class="fp3d-wall-tools"><button class="fp3d-chip" @click=${look}>${translate(hass, "through_camera")}</button><button class="fp3d-chip" aria-label="✕" @click=${close}>✕</button></span>
+          <span class="fp3d-wall-tools">${this.renderWallDock()}<button class="fp3d-chip" @click=${look}>${translate(hass, "through_camera")}</button><button class="fp3d-chip" aria-label="✕" @click=${close}>✕</button></span>
         </div>
         <div class="fp3d-wall-big">${stream ?? (src ? html`<img src=${src} alt="" />` : html`<div class="fp3d-wall-none">${translate(hass, "state_unavailable")}</div>`)}</div>
       </div>`;
@@ -5937,10 +5974,10 @@ export class Fp3dView3d extends LitElement {
     const grid = this.renderRoot.querySelector<HTMLElement>(".fp3d-wall-grid");
     if (!grid) requestAnimationFrame(() => this.requestUpdate());
     const { cols, tile } = wallLayout(cameras.length, grid?.clientWidth ?? this.clientWidth - 48, grid?.clientHeight ?? this.clientHeight - 160);
-    return html`<div class="fp3d-wall">
-      <div class="fp3d-wall-head">
+    return html`<div class="fp3d-wall fp3d-wall-${this._wallDock}">
+      <div class="fp3d-wall-head" title=${translate(hass, "camera_dock")} @pointerdown=${this.wallDragDock}>
         <span>${translate(hass, "camera_wall_title")} · ${cameras.length} <span class="fp3d-still">${translate(hass, "camera_still", { s: this._low ? 10 : 5 })}</span></span>
-        <button class="fp3d-chip" aria-label="✕" @click=${close}>✕</button>
+        <span class="fp3d-wall-tools">${this.renderWallDock()}<button class="fp3d-chip" aria-label="✕" @click=${close}>✕</button></span>
       </div>
       <div class="fp3d-wall-grid" style="grid-template-columns: repeat(${cols}, ${tile}px); grid-auto-rows: ${Math.round((tile * 9) / 16)}px">
         ${cameras.map((id) => {
@@ -7972,7 +8009,28 @@ export class Fp3dView3d extends LitElement {
         box-shadow: 0 0 28px rgba(55, 224, 255, 0.25);
         overflow: auto;
       }
+      /* docked to one edge of the view (#266), so the 3D view stays in sight beside it */
+      .fp3d-wall-top {
+        inset: 56px 12px auto 12px;
+        height: min(40%, 380px);
+      }
+      .fp3d-wall-bottom {
+        inset: auto 12px calc(var(--fp3d-bottom-inset, 0px) + 12px) 12px;
+        height: min(40%, 380px);
+      }
+      .fp3d-wall-left {
+        inset: 56px auto calc(var(--fp3d-bottom-inset, 0px) + 12px) 12px;
+        width: min(42%, 520px);
+      }
+      .fp3d-wall-right {
+        inset: 56px 12px calc(var(--fp3d-bottom-inset, 0px) + 12px) auto;
+        width: min(42%, 520px);
+      }
       .fp3d-wall-head {
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+        gap: 8px;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -7991,9 +8049,14 @@ export class Fp3dView3d extends LitElement {
         color: #ff6b6b;
         font-weight: 600;
       }
-      .fp3d-wall-tools {
+      .fp3d-wall-tools,
+      .fp3d-wall-dock {
         display: flex;
         gap: 6px;
+      }
+      .fp3d-wall-dock .fp3d-chip[aria-pressed="true"] {
+        color: var(--fp3d-accent);
+        box-shadow: inset 0 0 0 1px var(--fp3d-accent);
       }
       .fp3d-wall-big {
         flex: 1;

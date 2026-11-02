@@ -175,7 +175,7 @@ export interface ViewContext {
   kiosk: boolean;
 }
 
-/** A row of the View panel: a setting of LOOK by its id, or the camera wall (a switch of the view, not a stored choice). */
+/** A row of the View panel: a setting of LOOK or SCREEN by its id. */
 export interface ViewRow {
   id: string;
   /** Shown but not usable here (a whole-house row while one floor is open). */
@@ -194,9 +194,6 @@ export interface ViewSection {
   openOnPhone: boolean;
 }
 
-/** The camera wall row: a switch of the 3D view itself (it opens the camera wall), not a stored setting. */
-export const CAMERA_WALL = "camera_wall";
-
 /** The View panel's sections and rows for where the 3D view is (#247). */
 export function viewSections(ctx: ViewContext): ViewSection[] {
   const several = ctx.floors > 1;
@@ -206,7 +203,7 @@ export function viewSections(ctx: ViewContext): ViewSection[] {
   if (several && ctx.floorOpen && !ctx.plan2d) show.push({ id: "floor_stack" });
   show.push({ id: "heat" }, { id: "room_names" });
   if (ctx.roof && !ctx.plan2d) show.push({ id: "roof", disabled: ctx.floorOpen });
-  show.push({ id: "trail" }, { id: "weather" }, { id: CAMERA_WALL });
+  show.push({ id: "trail" }, { id: "weather" });
   const shows: ViewSection = { id: "show", title: "st_card_show", rows: show, hint: show.some((r) => r.disabled) ? "pick_all_floors" : undefined, openOnPhone: false };
   if (ctx.kiosk) return [{ ...shows, openOnPhone: true }];
   return [

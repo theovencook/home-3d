@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { wallLayout } from "./camera-wall.ts";
+import { dockFromPoint, parseDock, wallLayout } from "./camera-wall.ts";
 
 test("the camera wall fits every tile without overlap (#217)", () => {
   for (const n of [1, 2, 4, 9, 13, 22]) {
@@ -19,4 +19,14 @@ test("too many cameras for a small wall: the smallest tile, the wall scrolls", (
   const { cols, tile } = wallLayout(40, 600, 300);
   assert.equal(tile, 180);
   assert.equal(cols, 3);
+});
+
+test("the wall docks to the edge nearest where it is let go, and keeps a stored edge only when valid (#266)", () => {
+  assert.equal(dockFromPoint(500, 20, 1000, 600), "top");
+  assert.equal(dockFromPoint(500, 590, 1000, 600), "bottom");
+  assert.equal(dockFromPoint(30, 300, 1000, 600), "left");
+  assert.equal(dockFromPoint(980, 300, 1000, 600), "right");
+  assert.equal(parseDock("left"), "left");
+  assert.equal(parseDock("middle"), "bottom");
+  assert.equal(parseDock(null), "bottom");
 });
