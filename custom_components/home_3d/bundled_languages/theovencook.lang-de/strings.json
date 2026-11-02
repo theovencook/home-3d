@@ -2989,5 +2989,8 @@
  "wall_view_sub": "Eine Wand von vorn sehen",
  "hint_hide": "Hinweis ausblenden",
  "st_floor_pictures": "Etagenbilder anzeigen",
- "st_floor_pictures_hint": "Ein zweiter Weg, eine Etage zu wählen, neben der 3D-Ansicht. Standardmäßig aus: die Etagenleiste wählt die Etage."
+ "st_floor_pictures_hint": "Ein zweiter Weg, eine Etage zu wählen, neben der 3D-Ansicht. Standardmäßig aus: die Etagenleiste wählt die Etage.",
+ "st_language": "Sprache",
+ "st_language_auto": "Automatisch (wie Home Assistant)",
+ "st_language_hint": "Die Sprache, in der Home 3D auf diesem Gerät erscheint. Automatisch folgt der Sprache von Home Assistant. Noch nicht übersetzte Texte erscheinen auf Englisch."
 }

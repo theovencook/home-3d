@@ -12,7 +12,7 @@ import { loadLocate } from "./load-locate.ts";
 import { loadView, readyView } from "./load-view.ts";
 import { loadHomeSwitcher, loadRoomPanel, loadRoomsPicker, loadViewPanel } from "./load-parts.ts";
 import { need } from "./lazy-part.ts";
-import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
+import { languageReady, loadLanguage, setChosenLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
 import type { Building, Floor, StartView } from "./model.ts";
 import type { RoomGroup } from "./components/rooms-picker.ts";
 import { controls, tokens } from "./styles.ts";
@@ -304,6 +304,9 @@ export class Floorplan3dPanel extends LitElement {
     this._director = directorOnHere();
     this._voiceHere = voiceOnHere();
     this._screen = screenName();
+    // this device's own language (#292): its texts load now when it just changed
+    setChosenLanguage(prefs.get("language"));
+    if (this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language, this.hass).then(() => this.requestUpdate());
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -1175,7 +1178,7 @@ export class Floorplan3dPanel extends LitElement {
       .version=${this.versions()}
       @settings-back=${() => this.setMode(this.settingsFrom === "settings" ? "view" : this.settingsFrom)}
       @settings-edit=${(e: CustomEvent<{ building: Building; key: string | null }>) => this.editPlan(e.detail.building, e.detail.key)}
-      @device-change=${() => this.readPrefs()}
+      @device-change=${() => (this.readPrefs(), this.requestUpdate())}
       @settings-action=${this.settingsAction}
       @settings-nav=${(e: CustomEvent<{ section: string; id: string | null }>) => this.setAddress(this.settingsLink(e.detail.section, e.detail.id))}
     ></fp3d-settings-page>`;

@@ -21,6 +21,7 @@ import { EFFECT_DEFAULTS } from "../room-effects.ts";
 import { formatImperial, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 // this device's look and screen rows live with the View panel's list (#247), which the panel loads without this file
 import { deviceSwitch, LOOK, SCREEN } from "./view-settings.ts";
+import { LANGUAGE } from "./language.ts";
 
 export { deviceChoice, deviceSwitch } from "./view-settings.ts";
 
@@ -1276,7 +1277,7 @@ const CARDS: Setting[] = [
 ];
 
 /** Every setting, in the order the page shows them. */
-export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...ENERGY, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...CARDS, ...SCREEN, ...VOICE, ...ACCESS, ...PACKS, ...BACKUP, ...ADVANCED] as Setting[];
+export const SETTINGS: Setting[] = [...GENERAL, ...SCENE, ...ENERGY, ...FUN, ...WARNINGS, ...EFFECTS, ...CAMERAS, ...HOUSEHOLD, ...FAVOURITES, ...LOOK, ...LANGUAGE, ...CARDS, ...SCREEN, ...VOICE, ...ACCESS, ...PACKS, ...BACKUP, ...ADVANCED] as Setting[];
 
 // ---------------------------------------------------------------------------------------------------- lengths
 

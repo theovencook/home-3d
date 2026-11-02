@@ -3011,6 +3011,9 @@ const en = {
   hint_hide: "Hide the hint",
   st_floor_pictures: "Show the floor pictures panel",
   st_floor_pictures_hint: "A second way to pick a floor, beside the 3D view. Off by default: the floor bar picks the floor.",
+  st_language: "Language",
+  st_language_auto: "Automatic (follows Home Assistant)",
+  st_language_hint: "The language Home 3D is shown in on this device. Automatic follows Home Assistant's language. Texts not translated yet show in English.",
 };
 
 type Key = keyof typeof en;
