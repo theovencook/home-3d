@@ -121,3 +121,27 @@ test("phone layout: the field covers the row; the results sit under the field", 
   assert.match(css, /:host\(\[variant="bar"\]\) \.list \{\s*position: absolute;\s*top: calc\(100% \+ 6px\)/);
   assert.match(src("./load-parts.ts"), /loadFind = once\(\(\) => import\("\.\/components\/find\.ts"\)\)/);
 });
+
+// ---- #308: the star's panel holds only the favourites
+
+test("the star's panel has no house-wide rows: favourites and own buttons only; an empty one links to the Favourites settings (#308)", () => {
+  const v = new Fp3dView3d() as unknown as Record<string, any>;
+  v.hass = { language: "en", states: { "scene.party": { entity_id: "scene.party", state: "unknown", attributes: {} }, "light.sample_lounge": { entity_id: "light.sample_lounge", state: "on", attributes: {} } } };
+  v.building = emptyBuilding();
+  v.building.floors = [newFloor("f1", "Ground", 0)];
+  v.central = true;
+  v.canEdit = true;
+  v._central = true;
+  v.building.settings.favorites = [];
+  const empty = flat(v.renderCentral());
+  assert.doesNotMatch(empty, /fp3d-central-row|central_house|Whole house|Blinds|Lights/);
+  assert.match(empty, /No favourites yet/);
+  assert.match(empty, /fp3d-central-link/, "a way to the Favourites page");
+  v.building.settings.favorites = ["scene.party"];
+  const full = flat(v.renderCentral());
+  assert.match(full, /fp3d-central-favs/);
+  assert.doesNotMatch(full, /fp3d-central-row|fp3d-central-top|Settings ›/);
+  v.canEdit = false;
+  v.building.settings.favorites = [];
+  assert.doesNotMatch(flat(v.renderCentral()), /fp3d-central-link/, "a viewer cannot set favourites");
+});

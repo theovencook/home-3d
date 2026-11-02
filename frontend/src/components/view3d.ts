@@ -27,7 +27,6 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
   roomNamed,
   carEntities,
   isStatusSensor,
-  floorControls,
   favoriteCall,
   runButton,
   climateModeGlow,
@@ -194,7 +193,6 @@ import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
 import { sunPath, type SunPath } from "../sun-path.ts";
 import { cheapRate } from "../cheap-rate.ts";
 import { askConfirm } from "../ask.ts";
-import { confirmGroup } from "../confirm-group.ts";
 import "./ask-dialog.ts";
 import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
 import { forecastCurvePath, forecastSplit, solarMoreRows, solarPrefsInfo, type SolarForecast, type SolarPrefsInfo } from "../solar-more.ts";
@@ -353,8 +351,6 @@ export class Fp3dView3d extends LitElement {
     _rackView: { state: true },
     _note: { state: true },
     _thumbsCompact: { state: true },
-    _armed: { state: true },
-    _armLeft: { state: true },
     central: { attribute: false },
     buttons: { attribute: false },
     _thumbs: { state: true },
@@ -715,11 +711,6 @@ export class Fp3dView3d extends LitElement {
   private noteTimer: ReturnType<typeof setTimeout> | undefined;
   /** The people shown in the last sync (for the rooms someone is in). */
   private lastPersons: { floorId: string; roomId: string }[] = [];
-  /** A house-wide action waiting for its second tap ("sure?"), with the time it was armed. */
-  private declare _armed: string | null;
-  private armTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Whole seconds left to confirm the armed house-wide action (shown as a countdown, #209). */
-  private declare _armLeft: number;
   /** Show the star with the central menu (card option central; default on). */
   declare central: boolean;
   /** Offer the walk through the house at eye height (card option walk; default on). */
@@ -876,8 +867,6 @@ export class Fp3dView3d extends LitElement {
     }
     this._thumbsCompact = thumbsCompact(this.thumbsSaved, false);
     this._phoneStage = false;
-    this._armed = null;
-    this._armLeft = 0;
     this.central = true;
     this.walkable = true;
     this.pivotMark = false;
@@ -986,7 +975,6 @@ export class Fp3dView3d extends LitElement {
     clearInterval(this.wireTimer);
     clearInterval(this.meterTimer);
     this.meterTimer = undefined;
-    clearTimeout(this.armTimer);
     this.wireKey = "";
     this.meterKey = "";
     document.removeEventListener("visibilitychange", this.onVisible);
@@ -5001,55 +4989,16 @@ export class Fp3dView3d extends LitElement {
       aria-expanded=${this._central}
       @click=${() => {
         this._central = !this._central;
-        this.disarm();
       }}
     >
       <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" /></svg>
     </button>`;
     if (!this._central) return star;
-    const floor = this.floorId ? b.floors.find((f) => f.id === this.floorId) : undefined;
-    const floors = floor ? [floor] : b.floors;
-    const lights = floors.flatMap((f) => floorControls(hass, f).lights);
-    const covers = floors.flatMap((f) => floorControls(hass, f).covers);
-    const lightsOn = lights.filter((id) => hass.states[id]?.state === "on").length;
-    const house = !floor;
-    // house-wide: the first tap arms the button ("sure?"), the second runs it
-    const act = (key: string, domain: string, service: string, ids: string[]) => {
-      if (!ids.length) return;
-      if (house && this._armed !== key) {
-        this.arm(key);
-        return;
-      }
-      this.disarm();
-      // devices that ask before switching are asked about first, once for the whole row (#162)
-      void this.confirmForAll(ids).then((ok) => ok && safeCall(hass, domain, service, { entity_id: ids }));
-    };
-    const button = (key: string, label: I18nKey, domain: string, service: string, ids: string[]) =>
-      html`<button class="fp3d-btn ${this._armed === key ? "fp3d-central-armed" : ""}" ?disabled=${!ids.length} aria-pressed=${this._armed === key ? "true" : nothing} @click=${() => act(key, domain, service, ids)}>
-        ${this._armed === key ? t("central_confirm") : t(label)}
-      </button>`;
-    // the armed action says what the next tap does, with the seconds left (#209); a screen reader hears it at once
-    const armedAsk = (keys: readonly string[]) => {
-      const key = this._armed;
-      if (!key || !keys.includes(key)) return nothing;
-      return html`<div class="fp3d-central-ask"><span>${t(`central_again_${key}` as I18nKey)}</span><b aria-hidden="true">${this._armLeft}</b><i aria-hidden="true"></i></div>`;
-    };
-    const armedRow = (keys: readonly string[]) => (this._armed && keys.includes(this._armed) ? "fp3d-central-row-armed" : "");
     const favorites = (b.settings.favorites ?? []).filter((id) => hass.states[id]);
     const own = this.buttons ?? b.settings.buttons ?? [];
     const sheets = anyModule() ? moduleMenuSheets(this.sceneHost(hass, b)) : [];
     return html`${star}
       <div class="fp3d-central" role="dialog" aria-label=${t("central")}>
-        <div class="fp3d-central-top">
-          <b>${floor ? floor.name : t("central_house")}</b>
-          ${this.noSettings
-            ? nothing
-            : html`<button class="fp3d-btn fp3d-central-gear" @click=${() => {
-                // the "Sun and lights" sheet is gone (#248): its settings are on the Settings page
-                this._central = false;
-                this.openTab("open-settings", "/home_3d#settings");
-              }}>${t("settings")} ›</button>`}
-        </div>
         ${sheets.length
           ? html`<div class="fp3d-central-favs">
               ${sheets.map(
@@ -5058,21 +5007,6 @@ export class Fp3dView3d extends LitElement {
                   this._sheet = { id: sh.id, floorId: null, roomId: null };
                 }}><span aria-hidden="true">${sh.icon}</span> ${sh.title}</button>`,
               )}
-            </div>`
-          : nothing}
-        <div class="fp3d-sr-only" role="status" aria-live="assertive">${this._armed ? t(`central_again_${this._armed}` as I18nKey) : ""}</div>
-        <div class="fp3d-central-row ${armedRow(["lights_on", "lights_off"])}">
-          <span>${t("central_lights")}${lights.length ? html` <small>${lightsOn}/${lights.length}</small>` : nothing}</span>
-          ${button("lights_on", "central_on", "light", "turn_on", lights.filter((id) => hass.states[id]?.state === "off"))}
-          ${button("lights_off", "central_off", "light", "turn_off", lights.filter((id) => hass.states[id]?.state === "on"))}
-          ${armedAsk(["lights_on", "lights_off"])}
-        </div>
-        ${covers.length
-          ? html`<div class="fp3d-central-row ${armedRow(["covers_open", "covers_close"])}">
-              <span>${t("central_covers")} <small>${covers.length}</small></span>
-              ${button("covers_open", "central_open", "cover", "open_cover", covers)}
-              ${button("covers_close", "central_close", "cover", "close_cover", covers)}
-              ${armedAsk(["covers_open", "covers_close"])}
             </div>`
           : nothing}
         <b>${t("central_favorites")}</b>
@@ -5098,7 +5032,13 @@ export class Fp3dView3d extends LitElement {
             </div>`
           : own.length
             ? nothing
-            : html`<p class="fp3d-central-hint">${t(this.mayEdit ? "central_no_favorites" : "central_no_favorites_viewer")}</p>`}
+            : html`<p class="fp3d-central-hint">${t(this.mayEdit ? "central_no_favorites" : "central_no_favorites_viewer")}</p>
+                ${this.mayEdit && !this.noSettings
+                  ? html`<button class="fp3d-btn fp3d-central-link" @click=${() => {
+                      this._central = false;
+                      this.openTab("open-settings", "/home_3d#settings", "favourites");
+                    }}>${t("central_open_favorites")} ›</button>`
+                  : nothing}`}
         ${own.length
           ? html`<div class="fp3d-central-favs">
               ${own.map(
@@ -5831,8 +5771,8 @@ export class Fp3dView3d extends LitElement {
    * Another tab of the panel (#248: Settings for the central menu's link, Extensions for a module sheet's): the panel
    * opens it; a dashboard card has no panel around it, so it goes to the panel's page.
    */
-  private openTab(event: "open-settings" | "open-extensions", url: string): void {
-    const asked = new CustomEvent(event, { detail: { section: null, id: null }, bubbles: true, composed: true, cancelable: true });
+  private openTab(event: "open-settings" | "open-extensions", url: string, section: string | null = null): void {
+    const asked = new CustomEvent(event, { detail: { section, id: null }, bubbles: true, composed: true, cancelable: true });
     if (this.dispatchEvent(asked)) {
       history.pushState(null, "", url);
       window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
@@ -6373,31 +6313,6 @@ export class Fp3dView3d extends LitElement {
   /** Asks first for devices marked so ("ask before switching"). */
   private async confirmFor(id: string): Promise<boolean> {
     return !this.confirmSet.has(id) || (await this.ask(translate(this.hass, "confirm_switch", { name: entityName(this.hass, id) })));
-  }
-
-  /** House-wide action `key` waits for its second tap: 3.5 s, with whole seconds counted down on screen (#209). */
-  private arm(key: string): void {
-    clearTimeout(this.armTimer);
-    const end = Date.now() + 3500;
-    this._armed = key;
-    const tick = () => {
-      const left = end - Date.now();
-      if (left <= 0) return this.disarm();
-      this._armLeft = Math.ceil(left / 1000);
-      this.armTimer = setTimeout(tick, left - (this._armLeft - 1) * 1000 + 5);
-    };
-    tick();
-  }
-
-  private disarm(): void {
-    clearTimeout(this.armTimer);
-    this._armed = null;
-    this._armLeft = 0;
-  }
-
-  /** Asks once for a whole group when any of its devices asks first (#162). */
-  private confirmForAll(ids: readonly string[]): Promise<boolean> {
-    return confirmGroup(ids, this.confirmSet, (id) => entityName(this.hass, id), (names) => this.ask(translate(this.hass, "confirm_switch", { name: names })));
   }
 
   /** What a tap does by the device's kind (no own action). */
@@ -7598,75 +7513,6 @@ export class Fp3dView3d extends LitElement {
         text-transform: uppercase;
         opacity: 0.7;
       }
-      .fp3d-central-row {
-        display: grid;
-        grid-template-columns: 1fr auto auto;
-        gap: 6px;
-        align-items: center;
-      }
-      .fp3d-central-row small {
-        opacity: 0.6;
-      }
-      .fp3d-central .fp3d-btn {
-        min-width: 64px;
-      }
-      .fp3d-central-armed {
-        background: #ff8a3d !important;
-        color: #1a0d00 !important;
-        font-weight: 700;
-      }
-      /* the armed row (#209): it cannot be missed, and it says what the next tap does, with a bar that runs out */
-      .fp3d-central-row-armed {
-        padding: 6px;
-        margin: -6px;
-        border-radius: 12px;
-        background: color-mix(in srgb, #ff8a3d 22%, transparent);
-        outline: 2px solid #ff8a3d;
-      }
-      .fp3d-central-ask {
-        grid-column: 1 / -1;
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        padding-bottom: 6px;
-        font-weight: 700;
-        font-size: 13px;
-      }
-      .fp3d-central-ask b {
-        min-width: 1.6em;
-        padding: 1px 6px;
-        border-radius: 999px;
-        background: #ff8a3d;
-        color: #1a0d00;
-        text-align: center;
-        font-variant-numeric: tabular-nums;
-      }
-      .fp3d-central-ask i {
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: 3px;
-        border-radius: 2px;
-        background: #ff8a3d;
-        transform-origin: left;
-        animation: fp3d-ask-run 3.5s linear forwards;
-      }
-      @keyframes fp3d-ask-run {
-        from {
-          transform: scaleX(1);
-        }
-        to {
-          transform: scaleX(0);
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .fp3d-central-ask i {
-          animation: none;
-        }
-      }
       .fp3d-sr-only {
         position: absolute;
         width: 1px;
@@ -7907,22 +7753,6 @@ export class Fp3dView3d extends LitElement {
         position: absolute;
         inset: 0;
         z-index: 5;
-      }
-      .fp3d-central-top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-      }
-      .fp3d-central-top > b {
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--fp3d-muted);
-      }
-      .fp3d-central-gear {
-        padding: 4px 10px;
-        font-size: 12px;
       }
       /* a module's sheet and the ⚙ settings: a glass box in the middle, over a dim backdrop */
       .fp3d-sheet-backdrop {
