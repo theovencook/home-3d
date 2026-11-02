@@ -166,6 +166,8 @@ export const LOOK: Setting[] = [
   deviceSwitch("furniture", "view3d", "show", SHOW_FURNITURE_KEY, true, "st_furniture", "st_furniture_hint", ["furniture", "decor", "items", "hide", "devices only"]),
   deviceSwitch("trail", "view3d", "show", "trail", false, "st_trail", "trail_hint", ["motion", "trail", "history"]),
   deviceSwitch("weather", "view3d", "show", "weather", true, "st_weather", "st_weather_hint", ["rain", "snow", "weather"]),
+  // #274: kept per device and off by default (the light pooling outside looked poor); the old home setting of the same name no longer counts
+  deviceSwitch("window_glow", "view3d", "show", "window_spill", false, "window_glow", "window_glow_hint", ["night", "glow", "light", "windows", "spill"]),
 ];
 
 /**

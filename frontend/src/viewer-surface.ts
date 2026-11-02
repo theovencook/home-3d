@@ -75,4 +75,5 @@ export type ViewerSurface = Pick<
   | "setTrail"
   | "setWallMode"
   | "setWeather"
+  | "setWindowSpill"
 >;

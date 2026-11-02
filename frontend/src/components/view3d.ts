@@ -367,6 +367,7 @@ export class Fp3dView3d extends LitElement {
     controlsRight: { attribute: false },
     keepView: { attribute: false },
     angleLock: { attribute: false },
+    windowSpill: { attribute: false },
     alerts: { attribute: false },
     alertJump: { attribute: false },
     director: { attribute: false },
@@ -609,6 +610,8 @@ export class Fp3dView3d extends LitElement {
   declare keepView: boolean;
   /** 3D lock: the angle stays fixed (a wall tablet nobody should turn the house on). */
   declare angleLock: boolean;
+  /** The light out of lit windows at night (#274); off unless the device's setting is on. */
+  declare windowSpill: boolean;
   /** The stage is narrower than 700 px (smaller floor pictures, phone layout). */
   private declare _narrowStage: boolean;
   /** The stage is phone-wide (#93): floor pictures folded, the house fitted clear of the bars. */
@@ -890,6 +893,7 @@ export class Fp3dView3d extends LitElement {
     this.controlsRight = false;
     this.keepView = false;
     this.angleLock = false;
+    this.windowSpill = false;
     this._narrowStage = false;
     this.alerts = true;
     this.alertJump = false;
@@ -1114,6 +1118,7 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setWallMode(this.wallMode);
       this.viewer.setKeepView(this.keepView);
       this.viewer.setAngleLock(this.angleLock);
+      this.viewer.setWindowSpill(this.windowSpill);
       this.viewer.setTheme(this.effectiveTheme());
       this.viewer.setDescription((this.sceneLabel = translate(this.hass, flat ? "sr_plan" : "sr_scene")));
       this.viewer.setAccent(this.accent ?? null);
@@ -1285,6 +1290,7 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("wallMode")) v.setWallMode(this.wallMode);
     if (changed.has("keepView")) v.setKeepView(this.keepView);
     if (changed.has("angleLock")) v.setAngleLock(this.angleLock);
+    if (changed.has("windowSpill")) v.setWindowSpill(this.windowSpill);
     if (changed.has("explode")) v.setExplode(this.explode);
     if (changed.has("keepRoof")) v.setKeepRoof(this.keepRoof);
     if (changed.has("hideRoof")) v.setHideRoof(this.hideRoof);

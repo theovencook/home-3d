@@ -240,7 +240,7 @@ test("old links still open: every old section id, and rows that moved open their
 test("every control the 'Sun and lights' sheet held is still reachable in Settings (the drawings' inventory)", () => {
   const sheet: [string, string][] = [
     ["sun_shadow", "scene"],
-    ["window_glow", "scene"],
+    ["window_glow", "view3d"],
     ["sun_patches", "scene"],
     ["rain_warning", "warnings"],
     ["alert_unavailable", "warnings"],

@@ -1802,6 +1802,16 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
+  /** The light out of lit windows onto the ground (#274): a setting of this device, off by default. */
+  private windowSpill = false;
+
+  setWindowSpill(on: boolean): void {
+    if (on === this.windowSpill) return;
+    this.windowSpill = on;
+    for (const fv of this.floors) this.buildSpill(fv, this.lightSources(fv));
+    this.invalidate();
+  }
+
   /** Position of the sun; sunlight falls through windows facing it. */
   setSun(sun: SunState | null): void {
     this.sun = sun;
@@ -2025,7 +2035,7 @@ export class FloorplanViewer {
    */
   private buildSpill(fv: FloorView, sources: LightSource[]): void {
     const b = this.building;
-    const night = b?.settings.window_glow === false ? 0 : this.nightFactor();
+    const night = this.windowSpill ? this.nightFactor() : 0;
     const gf = b && night > 0 ? groundFloor(b) : null;
     const ground = !!gf && Math.abs(fv.floor.elevation - gf.elevation) < 0.5;
     // the light per light zone: colour weighted by brightness

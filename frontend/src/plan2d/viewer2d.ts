@@ -325,6 +325,7 @@ export class Plan2dViewer implements ViewerSurface {
   setFurnishTypes(): void {}
   setHideRoof(): void {}
   setKeepRoof(): void {}
+  setWindowSpill(): void {}
   setKeepView(): void {}
   setParked(): void {}
 
