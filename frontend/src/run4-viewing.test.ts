@@ -202,20 +202,16 @@ test("#259 V12/ND-11: the floors row fades out at an end with more chips, and th
   assert.match(panel, /this\.markNavEdges\(\);/);
 });
 
-test("#259 V04/V08: search opens with its field focused, named, and with one cross", async () => {
+test("#259 V04/V08: the search field (a card's floating one) opens named, focused and with one cross", () => {
   const v = new Fp3dView3d() as unknown as Record<string, any>;
-  let focused = false;
-  v.renderRoot = { querySelector: (sel: string) => (sel === ".fp3d-find input" ? { focus: () => (focused = true) } : null) };
-  Object.defineProperty(v, "updateComplete", { value: Promise.resolve(true) });
   v.openFind();
   assert.equal(v._find, "");
-  await Promise.resolve();
-  await Promise.resolve();
-  assert.ok(focused, "the field has the focus");
   const view3d = src("./components/view3d.ts");
   assert.match(view3d, /class="fp3d-find-btn"[^>]*@click=\$\{\(\) => this\.openFind\(\)\}/);
-  assert.match(view3d, /type="search"\s*aria-label=\$\{translate\(this\.hass, "find"\)\}/);
-  assert.match(view3dCss, /\.fp3d-find input::-webkit-search-cancel-button \{[^}]*display: none/);
+  const find = src("./components/find.ts");
+  assert.match(find, /type="search"\s*aria-label=\$\{translate\(hass, "find"\)\}/);
+  assert.match(find, /input::-webkit-search-cancel-button \{[^}]*display: none/);
+  assert.match(find, /firstUpdated\(\): void \{\s*this\.renderRoot\.querySelector<HTMLInputElement>\("input"\)\?\.focus\(\)/);
 });
 
 test("#259 V13: a room chosen in 2D under the phone's room sheet is zoomed to above the sheet; beside a panel the plan stays", () => {

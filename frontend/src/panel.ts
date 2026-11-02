@@ -11,10 +11,11 @@ import { loadSettings } from "./load-settings.ts";
 import { extensionAnchor } from "./settings/extension-anchor.ts";
 import { loadLocate } from "./load-locate.ts";
 import { loadView, readyView } from "./load-view.ts";
-import { loadHomeSwitcher, loadRoomPanel, loadRoomsPicker, loadViewPanel } from "./load-parts.ts";
+import { loadFind, loadHomeSwitcher, loadRoomPanel, loadRoomsPicker, loadViewPanel } from "./load-parts.ts";
 import { need } from "./lazy-part.ts";
 import { languageReady, loadLanguage, setChosenLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
 import type { Building, Floor, StartView } from "./model.ts";
+import type { SearchItem } from "./search.ts";
 import type { RoomGroup } from "./components/rooms-picker.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -129,6 +130,7 @@ export class Floorplan3dPanel extends LitElement {
     _cameraWall: { state: true },
     _clean: { state: true },
     _roomsOpen: { state: true },
+    _findOpen: { state: true },
     _noticesHidden: { state: true },
     _accent: { state: true },
     _weather: { state: true },
@@ -211,6 +213,8 @@ export class Floorplan3dPanel extends LitElement {
   private declare _clean: boolean;
   /** The Rooms picker on the floor bar is open (#249, option B of #219: one searchable list instead of a chip per room). */
   private declare _roomsOpen: boolean;
+  /** The search beside the floor bar is open (#305). */
+  private declare _findOpen: boolean;
   /** The notices (update, save failed …) the person put away (#249): their badge on the save line brings them back. */
   private declare _noticesHidden: string;
   /** Accent colour of the user's choice ("#rrggbb"), null for the stock cyan; remembered on this device. */
@@ -272,6 +276,7 @@ export class Floorplan3dPanel extends LitElement {
     this._micProbe = false;
     this._tablet = false;
     this._roomsOpen = false;
+    this._findOpen = false;
     this._noticesHidden = "";
     this._settingsReady = !!customElements.get("fp3d-settings-page");
     this._settingsError = null;
@@ -1340,7 +1345,43 @@ export class Floorplan3dPanel extends LitElement {
                   ></fp3d-rooms-picker>`)
                 : nothing}
             </div>`}
+      ${this.renderFindBar(b)}
     </nav>`;
+  }
+
+  /**
+   * The search at the bar's right end (#305): a magnifier that opens the field, the results dropping under it (a phone: the field
+   * covers the row). The field is a chunk of its own; a pick flies the 3D view to the result like the old floating search did.
+   */
+  private renderFindBar(b: Building) {
+    const open = this._findOpen;
+    const close = () => {
+      this._findOpen = false;
+      void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>(".fp3d-find-toggle")?.focus());
+    };
+    return html`<button
+        class="fp3d-chip fp3d-find-toggle ${open ? "fp3d-rooms-on" : ""}"
+        title=${this.t("find")}
+        aria-label=${this.t("find")}
+        aria-expanded=${open}
+        @pointerenter=${() => need(loadFind)}
+        @click=${() => (open ? close() : (this._findOpen = true))}
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></svg>
+      </button>
+      ${open
+        ? (need(loadFind),
+          html`<fp3d-find
+            variant="bar"
+            .hass=${this.shownHass}
+            .building=${b}
+            @find-close=${close}
+            @find-pick=${(e: CustomEvent<SearchItem>) => {
+              this._findOpen = false;
+              this.renderRoot.querySelector<HTMLElement & { goTo(item: SearchItem): void }>("fp3d-view3d")?.goTo(e.detail);
+            }}
+          ></fp3d-find>`)
+        : nothing}`;
   }
 
   /** An editor hides a room from the selector, or brings it back (#298); the room stays drawn. Saved like any plan change. */
@@ -1425,6 +1466,7 @@ export class Floorplan3dPanel extends LitElement {
              › Screen and controls says so (#249, #250; the card keeps its own switch) -->
         <fp3d-view3d
           class="fp3d-body"
+          .findInBar=${!(this._clean || (this._tablet && b.floors.length < 2))}
           .canEdit=${this.data.canEdit && !this._tablet}
           .noSettings=${this._tablet}
           .home=${this.data.homeId}
@@ -1916,6 +1958,7 @@ export class Floorplan3dPanel extends LitElement {
       }
       /* the floor bar (#249): the floors in one row that scrolls sideways, then the Rooms picker; it never wraps */
       .fp3d-nav {
+        position: relative;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -1972,6 +2015,16 @@ export class Floorplan3dPanel extends LitElement {
       .fp3d-rooms-on,
       .fp3d-rooms-btn[aria-expanded="true"] {
         color: var(--fp3d-accent);
+        border-color: var(--fp3d-accent) !important;
+      }
+      .fp3d-find-toggle {
+        flex: none;
+        margin-left: auto;
+        display: inline-grid;
+        place-items: center;
+        min-width: 36px;
+      }
+      .fp3d-find-toggle[aria-expanded="true"] {
         border-color: var(--fp3d-accent) !important;
       }
       .fp3d-sep {
@@ -2179,6 +2232,7 @@ export class Floorplan3dPanel extends LitElement {
       @media (pointer: coarse), ${unsafeCSS(PHONE_MEDIA)} {
         .fp3d-view-btn,
         .fp3d-rooms-btn,
+        .fp3d-find-toggle,
         .fp3d-note-badge {
           min-width: 44px;
         }
