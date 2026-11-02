@@ -521,6 +521,10 @@ export class RoomsPart {
           >${this.t("aliases")}
           <input type="text" maxlength="240" .value=${(room.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.t("aliases_placeholder")} @change=${(e: Event) => this.updateRoom({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
         /></label>
+        <label class="fp3d-check fp3d-wide" title=${this.t("room_hide_hint")}
+          ><input type="checkbox" .checked=${room.hide_in_picker === true} ?disabled=${!admin} @change=${(e: Event) => this.updateRoom({ hide_in_picker: (e.target as HTMLInputElement).checked ? true : undefined })} />
+          ${this.t("room_hide_in_picker")}</label
+        >
         <label class="fp3d-field fp3d-wide"
           >${this.t("material")}
           <select ?disabled=${!admin} @change=${(e: Event) => this.updateRoom({ floor_material: (e.target as HTMLSelectElement).value })}>

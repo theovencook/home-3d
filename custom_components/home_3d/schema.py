@@ -109,6 +109,8 @@ ROOM_SCHEMA = vol.Schema(
         vol.Required("area_id"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Required("points"): vol.All([_POINT], vol.Length(min=3, max=MAX_POINTS)),
         vol.Required("floor_material"): vol.All(str, vol.Length(max=32)),
+        # left out of the room selector unless "Show hidden" is on (#298); the room is still drawn
+        vol.Optional("hide_in_picker"): bool,
         # the camera this room opens with when it is tapped (None = framed from above)
         vol.Optional("start_view", default=None): vol.Any(None, START_VIEW_SCHEMA),
         # entities shown in the room's panel although they are not in the plan

@@ -3147,6 +3147,13 @@ const en = {
   nav_pan_up: "Move forward",
   nav_pan_down: "Move back",
   nav_reset: "Show the whole house again",
+  room_hide: "Hide",
+  room_unhide: "Unhide",
+  room_hide_named: "Hide {room} from this list",
+  room_unhide_named: "Show {room} in this list again",
+  rooms_show_hidden: "Show hidden",
+  room_hide_in_picker: "Hide from the room list",
+  room_hide_hint: "A room you rarely need (a chimney, an eaves space) leaves the room list. It is still drawn; \"Show hidden\" in the list brings it back.",
 };
 
 type Key = keyof typeof en;

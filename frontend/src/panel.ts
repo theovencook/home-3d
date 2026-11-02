@@ -1315,6 +1315,8 @@ export class Floorplan3dPanel extends LitElement {
                     .selected=${this._roomId}
                     .t=${this.translator}
                     .editFloor=${floor && this.canEdit ? floor.id : null}
+                    .canHide=${this.canEdit}
+                    @room-hide=${(e: CustomEvent<{ roomId: string; hide: boolean }>) => this.hideRoom(e.detail.roomId, e.detail.hide)}
                     @room-pick=${(e: CustomEvent<{ floorId: string; roomId: string }>) => {
                       if (many) this._floorId = e.detail.floorId;
                       this._roomId = e.detail.roomId;
@@ -1327,6 +1329,13 @@ export class Floorplan3dPanel extends LitElement {
                 : nothing}
             </div>`}
     </nav>`;
+  }
+
+  /** An editor hides a room from the selector, or brings it back (#298); the room stays drawn. Saved like any plan change. */
+  private hideRoom(roomId: string, hide: boolean): void {
+    this.data.update((b) => {
+      for (const f of b.floors) for (const r of f.rooms) if (r.id === roomId) hide ? (r.hide_in_picker = true) : delete r.hide_in_picker;
+    });
   }
 
   private roomGroupsMemo: { b: Building; floor: Floor | undefined; groups: RoomGroup[] } | null = null;
@@ -1346,7 +1355,7 @@ export class Floorplan3dPanel extends LitElement {
         name: f.name,
         rooms: zonesOf(f)
           .filter((r, i, all) => r.name.trim() && !(r.outdoor && all.findIndex((x) => x.outdoor && x.area_id === r.area_id && x.name === r.name) < i))
-          .map((r) => ({ id: r.id, name: r.name })),
+          .map((r) => ({ id: r.id, name: r.name, hidden: r.hide_in_picker === true })),
       }))
       .filter((g) => g.rooms.length);
     this.roomGroupsMemo = { b, floor, groups };

@@ -94,6 +94,7 @@ export const PLAN_CONTRACT = {
             ]
           ],
           "ceiling_height": 8.25,
+          "hide_in_picker": true,
           "wall_thickness": [
             0.39
           ],

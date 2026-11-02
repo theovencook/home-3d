@@ -3124,5 +3124,12 @@
  "nav_pan_right": "Nach rechts",
  "nav_pan_up": "Nach vorn",
  "nav_pan_down": "Nach hinten",
- "nav_reset": "Ganzes Haus wieder zeigen"
+ "nav_reset": "Ganzes Haus wieder zeigen",
+ "room_hide": "Ausblenden",
+ "room_unhide": "Einblenden",
+ "room_hide_named": "{room} aus dieser Liste ausblenden",
+ "room_unhide_named": "{room} wieder in dieser Liste zeigen",
+ "rooms_show_hidden": "Ausgeblendete zeigen",
+ "room_hide_in_picker": "In der Raumliste ausblenden",
+ "room_hide_hint": "Ein Raum, den du kaum brauchst (Schornstein, Spitzboden), verschwindet aus der Raumliste. Er wird weiter gezeichnet; \"Ausgeblendete zeigen\" in der Liste holt ihn zurück."
 }

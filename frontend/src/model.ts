@@ -52,6 +52,8 @@ export interface Room {
   /** Further names the voice answers to ("Stube", "Lounge"). */
   aliases?: string[];
   area_id: string | null;
+  /** Left out of the room selector unless "Show hidden" is on (#298): a chimney or eaves space; the room is still drawn. */
+  hide_in_picker?: boolean;
   /** The camera the room opens with when it is tapped in 3D (null: framed from above). */
   start_view?: StartView | null;
   points: Vec2[];
