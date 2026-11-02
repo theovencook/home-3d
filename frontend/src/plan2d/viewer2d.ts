@@ -165,6 +165,21 @@ export class Plan2dViewer implements ViewerSurface {
     this.draw();
   }
 
+  /** The on-screen zoom and pan buttons (#297): the keyboard's moves; "reset" fits the plan. */
+  navigate(act: "in" | "out" | "left" | "right" | "up" | "down" | "reset"): void {
+    if (act === "reset") return this.resetView();
+    const step = 60;
+    const w = this.size.w / 2;
+    const h = this.size.h / 2;
+    this.moveView(
+      act === "left" ? { ...this.view, tx: this.view.tx + step }
+      : act === "right" ? { ...this.view, tx: this.view.tx - step }
+      : act === "up" ? { ...this.view, ty: this.view.ty + step }
+      : act === "down" ? { ...this.view, ty: this.view.ty - step }
+      : zoomView(this.view, act === "in" ? 1.2 : 1 / 1.2, w, h),
+    );
+  }
+
   /** Items the View hides (#268, #269). */
   private hiddenItems: ReadonlySet<string> = new Set();
 

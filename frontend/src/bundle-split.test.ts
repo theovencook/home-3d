@@ -120,3 +120,13 @@ test("the Settings page's first open carries neither the time nor the entity pic
     assert.ok(all.has(file), `${file}: its chunk is built`);
   }
 });
+
+test("the 3D view's zoom and pan buttons and the View panel's multi-select are lazy chunks, not part of the view's first paint (#268, #297)", async () => {
+  const m = await meta("src/components/view3d.ts", true);
+  const loaded = staticInputs(m);
+  const all = new Set(Object.values(m.outputs).flatMap((o) => Object.keys(o.inputs)));
+  assert.ok(!loaded.has("src/components/view-nav.ts"), "view-nav.ts is loaded with the 3D view");
+  assert.ok(all.has("src/components/view-nav.ts"), "view-nav.ts: its chunk is built");
+  const p = await meta("src/components/view-panel.ts", true);
+  assert.ok(!staticInputs(p).has("src/components/multi-select.ts"), "multi-select.ts is loaded with the View panel");
+});

@@ -2418,6 +2418,12 @@ export class FloorplanViewer {
     this.fit(700);
   }
 
+  /** The on-screen zoom and pan buttons (#297); "reset" brings the whole house back. */
+  navigate(act: "in" | "out" | "left" | "right" | "up" | "down" | "reset"): void {
+    if (act === "reset") this.resetView();
+    else this.controls.nudge(act);
+  }
+
   /** The camera the house view opens with (null: fitted from the front left). */
   setStartView(view: StartView | null): void {
     this.startView = view;

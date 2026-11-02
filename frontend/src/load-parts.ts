@@ -11,5 +11,7 @@ export const loadHomeSwitcher = once(() => import("./components/home-switcher.ts
 export const loadViewPanel = once(() => import("./components/view-panel.ts"));
 /** The device popup (<fp3d-device-popup>, #272 #271 #284): a light's, a robot vacuum's or a camera's card; loaded the first time one opens. */
 export const loadDevicePopup = once(() => import("./components/device-popup.ts"));
+/** The 3D view's zoom and pan buttons (<fp3d-view-nav>, #297): loaded when the stage first draws them. */
+export const loadViewNav = once(() => import("./components/view-nav.ts"));
 /** The Rooms picker (<fp3d-rooms-picker>, #249) on the floor bar: loaded when the Rooms button is first pointed at or pressed. */
 export const loadRoomsPicker = once(() => import("./components/rooms-picker.ts"));

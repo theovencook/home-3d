@@ -133,7 +133,7 @@ import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { holdTarget } from "../hold.ts";
 import { popupKind, popupPosition } from "../device-popup-model.ts";
-import { loadDevicePopup } from "../load-parts.ts";
+import { loadDevicePopup, loadViewNav } from "../load-parts.ts";
 import { need } from "../lazy-part.ts";
 import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
@@ -180,6 +180,7 @@ import type { BinCue, DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Qual
 import { dockFromPoint, parseDock, WALL_DOCK_KEY, WALL_DOCKS, wallLayout, type WallDock } from "../camera-wall.ts";
 import { watchedEntities } from "../watched.ts";
 import { isPrinter, printerFaces, printerState } from "../printer.ts";
+import type { NavAction } from "./view-nav.ts";
 import { hiddenItemIds, typeOfEntity, type ObjectType } from "../object-types.ts";
 import { hasTimedRules, hiddenItems, shownBuilding } from "../show-when.ts";
 import { backdropCss } from "../backdrop.ts";
@@ -5157,6 +5158,13 @@ export class Fp3dView3d extends LitElement {
   private pausedDue = 0;
 
   /** The eye: one tap hides every bar and overlay so only the stage remains, the next brings them back. */
+  /** Zoom and pan buttons (#297), for the 3D view and the 2D plan; not in the clean view, in a walk or beside the room panel. */
+  private renderViewNav() {
+    if (this.clean || this._walk || this.panelOpen || !this.hass) return nothing;
+    need(loadViewNav);
+    return html`<fp3d-view-nav class="fp3d-vnav" .t=${(k: string) => translate(this.hass, k as I18nKey)} @nav=${(e: CustomEvent<NavAction>) => this.viewer?.navigate(e.detail)}></fp3d-view-nav>`;
+  }
+
   private renderEye() {
     // while the search is open its field takes the eye's place (#220)
     if (!this.cleanButton || !this.hass || (this._find !== null && !this.clean)) return nothing;
@@ -6659,7 +6667,7 @@ export class Fp3dView3d extends LitElement {
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderWires()} ${this.clean ? nothing : this.renderLegend()}
       ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderRackView()} ${this.renderNote()}
-      ${this.renderMenu()} ${this.renderPopup()} ${this.renderEye()} ${this.renderRoomList()}
+      ${this.renderMenu()} ${this.renderPopup()} ${this.renderViewNav()} ${this.renderEye()} ${this.renderRoomList()}
       ${this.renderMic()}
       ${this.pivotMark && !this._walk ? html`<span class="fp3d-pivot" aria-hidden="true"></span>` : nothing}
       ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.rawHass} .building=${this.building} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
@@ -9386,6 +9394,18 @@ export class Fp3dView3d extends LitElement {
       .fp3d-stats b {
         color: var(--fp3d-accent);
         font-weight: 700;
+      }
+      /* zoom and pan buttons (#297), centred on the right edge like the editor plan's; left of the stage when the controls are on the right */
+      .fp3d-vnav {
+        position: absolute;
+        z-index: 2;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+      .fp3d-side-right .fp3d-vnav {
+        right: auto;
+        left: 10px;
       }
       .fp3d-stats {
         padding: 4px 9px;
