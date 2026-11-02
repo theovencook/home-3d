@@ -3156,8 +3156,6 @@ const en = {
   ot_decor: "Decor",
   ot_outdoor: "Outdoor",
   ot_energy: "Energy",
-  st_furniture: "Furniture",
-  st_furniture_hint: "Off: only items linked to a device are drawn. Walls, floors, doors and windows stay.",
   nav_view_label: "Zoom and move the view",
   nav_pan_left: "Move left",
   nav_pan_right: "Move right",

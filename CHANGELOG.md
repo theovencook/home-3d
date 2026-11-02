@@ -12,6 +12,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - **Drawing by measure** takes over the side panel: the length box (focused once the start is set), the arrows, Close room and the wall list are all in view (#301).
 - The Settings search also finds what is on the Extensions tab (holidays and their dates, pets, packs, updates, languages, your own items, extension settings); a hit opens the tab and scrolls to and lights up its card (#302)
 - **Camera models** for the UniFi Protect G5 Instant and G5 Doorbell Pro, approximated from the G6 Instant and G4 Doorbell Pro (their sizes are not published, so they are marked approximate) (#303).
+- **View > Display what** has no search box, so opening it no longer brings up the phone keyboard; the separate Furniture switch is gone, and its Furniture and Decor kinds in Display what carry an old "off" over (#306).
 
 ## Home 3D 0.2.0 (2 November 2026)
 

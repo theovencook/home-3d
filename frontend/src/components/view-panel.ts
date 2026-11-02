@@ -224,6 +224,7 @@ export class Fp3dViewPanel extends LitElement {
         .label=${label}
         .summary=${shown.length === 1 ? this.t("display_count_one") : this.t("display_count", { n: shown.length })}
         .searchLabel=${this.t("multi_search")}
+        .noSearch=${true}
         .emptyText=${this.t("multi_none")}
         @change=${(e: CustomEvent<{ value: string[] }>) => this.write(s, e.detail.value)}
       ></fp3d-multi-select>

@@ -29,6 +29,7 @@ export class MultiSelect extends LitElement {
     secondaryLabel: { attribute: false },
     removeLabel: { attribute: false },
     summary: { attribute: false },
+    noSearch: { type: Boolean },
     _query: { state: true },
     _open: { state: true },
     _cursor: { state: true },
@@ -52,6 +53,8 @@ export class MultiSelect extends LitElement {
   declare searchLabel: string;
   /** Text in place of the chips ("6 object types selected", #268): a long list stays one line. */
   declare summary: string;
+  /** No search field (#306): the box takes the keyboard itself, so nothing opens an on-screen keyboard. */
+  declare noSearch: boolean;
   private declare _query: string;
   private declare _open: boolean;
   private declare _cursor: number;
@@ -70,6 +73,7 @@ export class MultiSelect extends LitElement {
     this.secondaryLabel = "";
     this.removeLabel = "Remove {name}";
     this.summary = "";
+    this.noSearch = false;
     this._query = "";
     this._open = false;
     this._cursor = 0;
@@ -153,7 +157,7 @@ export class MultiSelect extends LitElement {
     const rows = this._open ? this.rows : [];
     const hidden = this.hiddenCount;
     return html`<div class="wrap" @focusout=${this.onFocusOut}>
-      <div class="box" @click=${() => (this.renderRoot.querySelector("input") as HTMLInputElement | null)?.focus()}>
+      <div class="box" @click=${() => (this.renderRoot.querySelector("input, .pick") as HTMLElement | null)?.focus()}>
         ${this.summary ? html`<span class="sum">${this.summary}</span>` : nothing}
         ${(this.summary ? [] : this.value).map((id) => {
           const name = this.nameOf(id);
@@ -162,26 +166,28 @@ export class MultiSelect extends LitElement {
             ? nothing
             : html`<button type="button" aria-label=${this.removeLabel.replace("{name}", name)} @click=${(e: Event) => (e.stopPropagation(), this.dropPick(id))}>×</button>`}</span>`;
         })}
-        <input
-          type="text"
-          role="combobox"
-          autocomplete="off"
-          aria-label=${this.label}
-          aria-expanded=${this._open}
-          aria-haspopup="listbox"
-          aria-controls="list"
-          placeholder=${this.value.length ? this.searchLabel : this.placeholder || this.searchLabel}
-          .value=${this._query}
-          ?disabled=${this.disabled}
-          @focus=${() => this.openList()}
-          @click=${() => this.openList()}
-          @input=${(e: Event) => {
-            this._query = (e.target as HTMLInputElement).value;
-            this._cursor = 0;
-            this.openList();
-          }}
-          @keydown=${this.onKey}
-        />
+        ${this.noSearch
+          ? html`<span class="pick" tabindex="0" role="combobox" aria-label=${this.label} aria-expanded=${this._open} aria-haspopup="listbox" aria-controls="list" @focus=${() => this.openList()} @click=${() => this.openList()} @keydown=${this.onKey}></span>`
+          : html`<input
+              type="text"
+              role="combobox"
+              autocomplete="off"
+              aria-label=${this.label}
+              aria-expanded=${this._open}
+              aria-haspopup="listbox"
+              aria-controls="list"
+              placeholder=${this.value.length ? this.searchLabel : this.placeholder || this.searchLabel}
+              .value=${this._query}
+              ?disabled=${this.disabled}
+              @focus=${() => this.openList()}
+              @click=${() => this.openList()}
+              @input=${(e: Event) => {
+                this._query = (e.target as HTMLInputElement).value;
+                this._cursor = 0;
+                this.openList();
+              }}
+              @keydown=${this.onKey}
+            />`}
       </div>
       ${this._open
         ? html`<div class="pop">
@@ -235,6 +241,11 @@ export class MultiSelect extends LitElement {
       }
       .sum {
         font-size: 13px;
+      }
+      .pick {
+        flex: 1 1 4em;
+        min-height: 32px;
+        outline: none;
       }
       .chip {
         display: inline-flex;
