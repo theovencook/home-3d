@@ -595,7 +595,7 @@ export class Fp3dView3d extends LitElement {
   declare cleanButton: boolean;
   /** Room names in 3D (cards can switch them off). */
   declare roomLabels: boolean;
-  /** Kinds of objects the View hides (#268) and the Furniture switch (#269); hiding is a flag in the viewer, not a rebuild. */
+  /** Kinds of objects the View hides (#268; the old Furniture switch, #269, is its furniture and decor kinds, #306); hiding is a flag in the viewer, not a rebuild. */
   declare hiddenTypes: ReadonlySet<ObjectType>;
   declare furnitureOn: boolean;
   private hiddenIds: { sig: string; ids: ReadonlySet<string> } = { sig: "", ids: new Set() };

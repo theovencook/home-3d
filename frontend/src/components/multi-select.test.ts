@@ -119,3 +119,18 @@ test("users: real people first (admins, then by name), users with no person atta
 test("users: without any person entity nobody is a service user", () => {
   assert.ok(userChoices(users, new Set()).every((r) => !r.secondary));
 });
+
+test("with noSearch (#306) there is no search field: the box takes the focus and the keys, the list still opens and moves", () => {
+  const shown = flat(select().render());
+  assert.match(shown, /<input\s+type="text"/, "the search field shows by default");
+  const m = select();
+  m.noSearch = true;
+  const out = flat(m.render());
+  assert.doesNotMatch(out, /<input\s+type="text"/, "no text field, so no keyboard");
+  assert.match(out, /<span class="pick" tabindex="0" role="combobox"/);
+  m.onKey(key("ArrowDown"));
+  assert.equal(m.open, true, "arrows open the list");
+  m.onKey(key("ArrowDown"));
+  m.onKey(key("Enter"));
+  assert.deepEqual(m.value, ["b"], "the arrows move the cursor and Enter ticks the option");
+});

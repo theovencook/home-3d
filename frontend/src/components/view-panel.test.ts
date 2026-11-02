@@ -11,7 +11,7 @@ const store = new Map<string, string>();
 g.localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
 
 const { Fp3dViewPanel } = await import("./view-panel.ts");
-const { viewSetting } = await import("../settings/view-settings.ts");
+const { viewSetting, viewSections } = await import("../settings/view-settings.ts");
 
 /** A template as text, with each function value as <fn>. */
 function flat(v: unknown): string {
@@ -71,7 +71,7 @@ test("wide screens: Appearance, What the 3D shows, Device icons and Clock, then 
   assert.ok(out.includes(`<optgroup label=Automatic>`) && out.includes(`<optgroup label=Fixed>`));
   assert.ok(out.includes("Follow Home Assistant (now Neon)"));
   assert.ok(out.includes("Important: devices with no 3D model"));
-  for (const label of ["Colour rooms by", "Keep the roof on when zooming in", "Motion trail (last 30 minutes)", "Weather outside", "Furniture", "Display what", "12 object types selected"]) assert.ok(out.includes(label), label);
+  for (const label of ["Colour rooms by", "Keep the roof on when zooming in", "Motion trail (last 30 minutes)", "Weather outside", "Display what", "12 object types selected"]) assert.ok(out.includes(label), label);
 });
 
 test("a change is written under the setting's own key and the panel is told; the panel stays open", () => {
@@ -167,11 +167,40 @@ test("phones: a bottom sheet whose Appearance and Device icons start open, the r
   assert.match(out, /<details class="vp-sec vp-show" \?open=false>/);
   assert.match(out, /<details class="vp-sec vp-clock" \?open=false>/);
   // What the 3D shows sums up its rows: the walls, and the switches that are on
-  assert.ok(out.includes("Tall walls · Furniture · Weather outside"));
+  assert.ok(out.includes("Tall walls · Weather outside"));
 });
 
 test("the sheet respects reduced motion, keeps the safe area, and every control is 44 px on touch", () => {
   const css = (Fp3dViewPanel as unknown as { styles: { cssText: string }[] }).styles.map((s) => s.cssText).join("\n");
   assert.match(css, /prefers-reduced-motion: reduce\)\s*\{\s*\.vp\s*\{\s*animation: none;/);
   assert.match(css, /env\(safe-area-inset-bottom, 0px\), 16px/);
+});
+
+test("Display what has no search field (#306), and the Furniture switch is gone: its Furniture option does the hiding (#269, #306)", async () => {
+  store.clear();
+  const { itemHidden, parseHidden } = await import("../object-types.ts");
+  const el = viewPanel();
+  const shownBy = viewSetting("display")!;
+  const out = flat(el.renderDisplay(shownBy, (shownBy.control as { options: { value: string; label: string }[] }).options, "Display what"));
+  assert.match(out, /\.noSearch=true/);
+  const rowIds = viewSections({ floors: 2, floorOpen: false, roof: true, plan2d: false, kiosk: false }).flatMap((s) => s.rows.map((r) => r.id));
+  assert.ok(!rowIds.includes("furniture"), "no Furniture switch in the View panel");
+  // the Display what Furniture option hides plain furniture; the lamp stays
+  const sofa = { id: "s", type: "sofa", x: 0, z: 0, w: 2, d: 1, h: 1, rotation: 0, variant: null, entity: null } as any;
+  const lamp = { id: "l", type: "lamp_ceiling", x: 0, z: 0, w: 1, d: 1, h: 1, rotation: 0, variant: null, entity: null } as any;
+  const env = { prefs: { get: (k: string) => store.get(`home3d.${k}`) ?? null, set: (k: string, v: string | null) => (v === null ? store.delete(`home3d.${k}`) : store.set(`home3d.${k}`, v)) } } as any;
+  const display = viewSetting("display")!;
+  display.write!(env, ["room_names", "lights", "media", "cameras", "sensors", "climate", "covers", "plugs", "decor", "outdoor", "energy"]);
+  assert.equal(store.get("home3d.display_hidden"), "furniture");
+  const hidden = parseHidden(store.get("home3d.display_hidden") ?? null);
+  assert.equal(itemHidden(sofa, hidden, true), true, "furniture unticked: hidden");
+  assert.equal(itemHidden(lamp, hidden, true), false, "a lamp is not furniture");
+  // an old Furniture switch set to off still applies until the list is written (no setting is lost)
+  store.clear();
+  store.set("home3d.show_furniture", "0");
+  const legacy = display.read!(env) as string[];
+  assert.ok(!legacy.includes("furniture") && !legacy.includes("decor"), "read as the Display what values");
+  assert.equal(itemHidden(sofa, parseHidden(null, null, "0"), true), true);
+  // the switch is never written again
+  assert.equal(store.get("home3d.show_furniture"), "0");
 });

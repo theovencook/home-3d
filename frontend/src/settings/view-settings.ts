@@ -155,7 +155,7 @@ export const LOOK: Setting[] = [
     default: [...OBJECT_TYPES],
     prefKeys: [DISPLAY_HIDDEN_KEY, "room_names"],
     read: (env) => {
-      const hidden = parseHidden(env.prefs.get(DISPLAY_HIDDEN_KEY), env.prefs.get("room_names"));
+      const hidden = parseHidden(env.prefs.get(DISPLAY_HIDDEN_KEY), env.prefs.get("room_names"), env.prefs.get(SHOW_FURNITURE_KEY));
       return OBJECT_TYPES.filter((t) => !hidden.has(t));
     },
     write: (env, shown) => {
@@ -163,8 +163,6 @@ export const LOOK: Setting[] = [
       env.prefs.set("room_names", null);
     },
   } as Setting<string[]>,
-  // #269: off draws only the items linked to a device (walls, floors, doors and windows stay); the View panel's "Display what" (#268) is its own row
-  deviceSwitch("furniture", "view3d", "show", SHOW_FURNITURE_KEY, true, "st_furniture", "st_furniture_hint", ["furniture", "decor", "items", "hide", "devices only"]),
   deviceSwitch("trail", "view3d", "show", "trail", false, "st_trail", "trail_hint", ["motion", "trail", "history"]),
   deviceSwitch("weather", "view3d", "show", "weather", true, "st_weather", "st_weather_hint", ["rain", "snow", "weather"]),
   // #274: kept per device and off by default (the light pooling outside looked poor); the old home setting of the same name no longer counts
@@ -228,7 +226,7 @@ export function viewSections(ctx: ViewContext): ViewSection[] {
   if (!ctx.plan2d) show.push({ id: "walls" });
   if (several && !ctx.plan2d) show.push({ id: "explode", disabled: ctx.floorOpen });
   if (several && ctx.floorOpen && !ctx.plan2d) show.push({ id: "floor_stack" });
-  show.push({ id: "heat" }, { id: "display" }, { id: "furniture" });
+  show.push({ id: "heat" }, { id: "display" });
   if (ctx.roof && !ctx.plan2d) show.push({ id: "roof", disabled: ctx.floorOpen });
   show.push({ id: "trail" }, { id: "weather" });
   const shows: ViewSection = { id: "show", title: "st_card_show", rows: show, hint: show.some((r) => r.disabled) ? "pick_all_floors" : undefined, openOnPhone: false };

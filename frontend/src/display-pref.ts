@@ -6,12 +6,20 @@ export type ObjectType = (typeof OBJECT_TYPES)[number];
 
 /** The preference "home3d.display_hidden": the hidden kinds, comma separated. */
 export const DISPLAY_HIDDEN_KEY = "display_hidden";
-/** The preference of the Furniture switch (#269): on (the default) draws every item. */
+/** The old Furniture switch (#269) preference: "0" hid the furniture and decor that no device is linked to. Read once, never written (#306). */
 export const SHOW_FURNITURE_KEY = "show_furniture";
 
-/** The hidden kinds from the stored preference; the old "Room names" switch (off) still counts until the list is written. */
-export function parseHidden(raw: string | null, legacyRoomNames: string | null = null): Set<ObjectType> {
-  if (raw === null) return new Set(legacyRoomNames === "0" ? ["room_names"] : []);
+/**
+ * The hidden kinds from the stored preference. Until the list is written, the old "Room names" switch (off) and the old
+ * Furniture switch (off, #306: now the furniture and decor kinds) still count.
+ */
+export function parseHidden(raw: string | null, legacyRoomNames: string | null = null, legacyFurniture: string | null = null): Set<ObjectType> {
+  if (raw === null) {
+    const old = new Set<ObjectType>();
+    if (legacyRoomNames === "0") old.add("room_names");
+    if (legacyFurniture === "0") old.add("furniture").add("decor");
+    return old;
+  }
   return new Set(raw.split(",").filter((s): s is ObjectType => (OBJECT_TYPES as readonly string[]).includes(s)));
 }
 

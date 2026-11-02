@@ -111,7 +111,6 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   roof: ["lid", "lift", "fade", "attic", "cover", "top"],
   heat: ["heat", "thermal", "climate", "overlay", "comfort", "warm"],
   display: ["layers", "filter", "visible", "declutter", "categories", "objects"],
-  furniture: ["sofa", "chairs", "tables", "declutter", "clutter"],
   trail: ["path", "track", "movements", "breadcrumbs", "route", "journey"],
   weather: ["forecast", "clouds", "fog", "sunshine", "outdoor", "sky"],
   dashboard_cards: ["widgets", "tiles", "panels", "editor", "layout", "appearance"],

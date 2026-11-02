@@ -308,11 +308,12 @@ export class Floorplan3dPanel extends LitElement {
     this._accent = accent && /^#[0-9a-f]{6}$/i.test(accent) ? accent : null;
     const stack = prefs.get("floor_stack");
     this._floorStack = stack === "stacked" || stack === "single" ? stack : "dim";
-    const hidden = parseHidden(prefs.get(DISPLAY_HIDDEN_KEY), prefs.get("room_names"));
+    const hidden = parseHidden(prefs.get(DISPLAY_HIDDEN_KEY), prefs.get("room_names"), prefs.get(SHOW_FURNITURE_KEY));
     // the very same set while nothing changed, so the 3D view does not look again
     if (!this._hidden || hiddenText(hidden) !== hiddenText(this._hidden)) this._hidden = hidden;
     this._roomNames = !this._hidden.has("room_names");
-    this._furnitureOn = prefs.get(SHOW_FURNITURE_KEY) !== "0";
+    // the Furniture switch is gone (#306): its old "off" is in the hidden kinds above, so every item is drawn here
+    this._furnitureOn = true;
     this._pulse = prefs.get("pulse") !== "0";
     this._controlsRight = prefs.get("controls") === "right";
     this._keepView = prefs.get("keep_view") === "1";
