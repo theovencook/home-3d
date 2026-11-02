@@ -102,7 +102,8 @@ const version = JSON.parse(readFileSync("../custom_components/home_3d/manifest.j
 const inputs = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? inputs(`${dir}/${e.name}`) : [`${dir}/${e.name}`])).sort();
 const buildId = (() => {
   const h = createHash("sha256").update(version);
-  for (const file of [...inputs("src"), "package-lock.json", "build.mjs"]) if (existsSync(file)) h.update(file).update(readFileSync(file));
+  // line endings do not count: a Windows checkout with CRLF files builds the same id as CI
+  for (const file of [...inputs("src"), "package-lock.json", "build.mjs"]) if (existsSync(file)) h.update(file).update(readFileSync(file, "utf8").replace(/\r\n/g, "\n"));
   return h.digest("hex").slice(0, 12);
 })();
 // `hashes`: the content hash of each bundle it loads, by name (viewer, editor, cardEditor, timeTravel, fun, voice, locate, plan2d, settings)

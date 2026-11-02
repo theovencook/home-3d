@@ -8,7 +8,7 @@ import contextlib
 import copy
 from typing import Any
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from custom_components.home_3d.const import DOMAIN, SIGNAL_BUILDING_UPDATED
@@ -152,7 +152,7 @@ async def test_overlapping_saves_get_their_own_revisions_and_events(hass: HomeAs
     home: Home = hass.data[DOMAIN].active
     written = _slow_writes(home)
     events: list[int] = []
-    unsub = async_dispatcher_connect(hass, SIGNAL_BUILDING_UPDATED, lambda _home, revision: events.append(revision))
+    unsub = async_dispatcher_connect(hass, SIGNAL_BUILDING_UPDATED, callback(lambda _h, rev: events.append(rev)))
     first, second = await asyncio.gather(home.async_save_building(_named("A")), home.async_save_building(_named("B")))
     unsub()
     assert sorted([first, second]) == [1, 2]

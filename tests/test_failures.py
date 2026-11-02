@@ -8,7 +8,7 @@ import copy
 import json
 from typing import Any
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -119,7 +119,7 @@ async def test_a_failed_write_keeps_the_plan_and_the_revision_it_has_on_disk(has
     await home.async_save_building(_named("Saved"))
     tried = _failing_writes(home)
     events: list[int] = []
-    unsub = async_dispatcher_connect(hass, SIGNAL_BUILDING_UPDATED, lambda _home, revision: events.append(revision))
+    unsub = async_dispatcher_connect(hass, SIGNAL_BUILDING_UPDATED, callback(lambda _h, rev: events.append(rev)))
     with pytest.raises(OSError, match="disk full"):
         await home.async_save_building(_named("Lost"), base_revision=1)
     assert (home.revision, _room(home.building)) == (1, "Saved")
