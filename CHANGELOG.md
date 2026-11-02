@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- **Furniture library**: the search and a Filters button stay in view above the results; room and pack are menus in a drawer that starts closed, and an empty search says how many items the filters hide (#300).
+
 ## Home 3D 0.2.0 (2 November 2026)
 
 ### Panels, views and controls (#265–#298)

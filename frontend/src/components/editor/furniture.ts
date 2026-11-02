@@ -505,7 +505,7 @@ export class FurniturePart {
     need(loadLibrary);
     return html`<section>
       <h3>${this.t("furniture_add")}</h3>
-      <p class="fp3d-sub">${room ? this.t("furniture_into", { room: room.name }) : this.t("furniture_pick_room")}</p>
+      ${this._placing ? nothing : html`<p class="fp3d-sub">${room ? this.t("furniture_into", { room: room.name }) : this.t("furniture_pick_room")}</p>`}
       ${this._placing
         ? html`<div class="fp3d-placing" role="status">
             <span>${this.t("place_armed", { name: furnitureName(this.hass, this._placing.type) })}</span>
