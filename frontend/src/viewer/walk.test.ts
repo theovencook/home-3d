@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Room, type Vec2 } from "../model.ts";
-import { FloorMap, WalkCamera, type Obstacle } from "./walk.ts";
+import { FloorMap, stairSpot, WalkCamera, type Obstacle } from "./walk.ts";
 
 function rect(id: string, x0: number, z0: number, x1: number, z1: number): Room {
   return { id, name: id, area_id: null, points: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], floor_material: "wood" };
@@ -86,4 +86,61 @@ test("the walk takes the camera again when the viewer swaps its controls, and gi
   walk.dispose();
   assert.equal(v.controls.update, protoUpdate, "the orbit camera is back");
   assert.equal(v.onControls, null);
+});
+
+test("walking onto a stair climbs it and switches to the upper floor at the top, and back down (#270)", () => {
+  const g = globalThis as unknown as Record<string, unknown>;
+  g.requestAnimationFrame ??= () => 1;
+  g.cancelAnimationFrame ??= () => undefined;
+  g.window ??= new EventTarget();
+  g.document ??= new EventTarget();
+  const lower = { ...newFloor("eg", "EG", 0), rooms: [rect("a", 0, -4, 8, 6)] };
+  const upper = { ...newFloor("og", "OG", 2.7), rooms: [rect("b", 0, -4, 8, 6)] };
+  // a straight stair, its foot at the front (+z), its top at the back
+  lower.furniture.push({ id: "s", type: "stairs", x: 4, z: 2.5, rotation: 0, w: 1, d: 3, h: 2.7, variant: null, entity: null, power: null });
+  const b = { ...emptyBuilding(), floors: [lower, upper] };
+  const shown: string[] = [];
+  const v = {
+    camera: { position: { set() {}, x: 0, y: 0, z: 0 }, lookAt() {}, fov: 50, near: 0.1, updateProjectionMatrix() {}, aspect: 1 },
+    controls: { update: () => false, view: { target: { x: 0, y: 0, z: 0, set() {} }, radius: 1, theta: 0, phi: 0 } },
+    floorMap: new Map(),
+    floors: [],
+    labels: { style: { visibility: "" } },
+    renderer: { domElement: {} },
+    invalidate() {},
+    updateWalls() {},
+    onControls: null as (() => void) | null,
+  };
+  const walk = new WalkCamera(v as never, new FloorMap(b, lower), new EventTarget() as unknown as HTMLElement, { onRoom() {}, start: { x: 4, z: 5.2, yaw: -Math.PI / 2, pitch: 0 }, onFloor: (f) => shown.push(f.id) });
+  const w = walk as unknown as { move(dx: number, dz: number): void; stairs(): void; lift: number; map: FloorMap };
+  const step = (dz: number, n: number) => {
+    for (let i = 0; i < n; i++) {
+      w.move(0, dz);
+      w.stairs();
+    }
+  };
+  step(-0.05, 30);
+  assert.equal(w.map.floor.id, "eg", "still on the steps of the lower floor");
+  assert.ok(w.lift > 0.1 && w.lift < 2.7, `lifted part of the way (${w.lift})`);
+  assert.deepEqual(shown, ["og"], "the stairs show while on them");
+  step(-0.05, 60);
+  assert.equal(w.map.floor.id, "og", "up on the first floor");
+  assert.equal(w.lift, 0);
+  assert.equal(shown.at(-1), "og");
+  // away from the top and back onto it: down the stair
+  step(-0.05, 30);
+  assert.equal(w.map.floor.id, "og", "no stair taken on the way away");
+  step(0.05, 50);
+  assert.equal(w.map.floor.id, "eg", "on the steps down (lower floor)");
+  assert.ok(w.lift > 0 && w.lift < 2.7, `part of the way down (${w.lift})`);
+  step(0.05, 80);
+  assert.equal(w.lift, 0);
+  assert.equal(shown.at(-1), "eg");
+  walk.dispose();
+});
+
+test("stairSpot finds the nearest point on the way and its height", () => {
+  const way: [number, number, number][] = [[0, 0, 4], [0, 2.7, 1]];
+  const mid = stairSpot(way, [0.2, 2.5]);
+  assert.ok(Math.abs(mid.s - 1.5) < 1e-9 && Math.abs(mid.dist - 0.2) < 1e-9 && Math.abs(mid.h - 1.35) < 1e-9);
 });

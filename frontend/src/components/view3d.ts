@@ -4818,6 +4818,8 @@ export class Fp3dView3d extends LitElement {
     }
     this.walker = new walk.WalkCamera(v as never, map, surface, {
       start,
+      // up or down a stair (#270): the floor shown follows (the stairs show while on them)
+      onFloor: (f) => v.setFloor(f.id, false),
       onRoom: (r) => {
         this.walkRoomPts = r?.points ?? null;
         if (this._walk) this._walk = { ...this._walk, room: r?.name ?? null };
