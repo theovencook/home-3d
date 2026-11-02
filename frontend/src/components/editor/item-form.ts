@@ -24,6 +24,7 @@ import { isThermostatItem, linkField, linkFilter } from "../../furniture-links.t
 import { setIntervalPart } from "../../show-when.ts";
 import { MAX_MOUNT_Y, round, NO_STATE_TYPES, isEnergyDevice, volumeMeter, numberish, binaryish } from "./helpers.ts";
 import { colourReset } from "../../colour-reset.ts";
+import { loadItemPicker, need } from "./lazy.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** The colour an item shown "only in this colour" starts with. */
@@ -188,25 +189,27 @@ export class ItemFormPart {
           <input type="text" maxlength="240" .value=${(f.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.t("aliases_placeholder")} @change=${(e: Event) => this.updateFurniture({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
         /></label>`;
       case "type":
-        return html`<label class="fp3d-field fp3d-wide"
-          >${this.t("furniture_type")}
-          <select ?disabled=${!admin} @change=${(e: Event) => this.retypeFurniture((e.target as HTMLSelectElement).value)}>
-            ${this.typeChoices(f.type).map((t) => html`<option value=${t} ?selected=${t === f.type}>${this.t(`furn_${t}` as I18nKey)}</option>`)}
-            ${(this.packs ?? [])
-              .filter((pack) => pack.items.length)
-              .map(
-                (pack) => html`<optgroup label=${packName(pack, this.hass?.language ?? "de")}>
-                  ${this.typeLabels(pack).map((label, i) => {
-                    const t = packType(pack.id, pack.items[i].id);
-                    return html`<option value=${t} ?selected=${t === f.type}>${label}</option>`;
-                  })}
-                </optgroup>`,
-              )}
-            ${f.type.startsWith("pack:") && !(this.packs ?? []).some((p) => f.type.startsWith(`pack:${p.id}:`))
-              ? html`<option value=${f.type} selected>${furnitureName(this.hass, f.type)}</option>`
-              : nothing}
-          </select></label
-        >`;
+        // the item picker (#293): search, pack and type filters, previews; its code loads with the library's chunk
+        need(loadItemPicker);
+        return html`<div class="fp3d-field fp3d-wide">
+          ${this.t("furniture_type")}
+          <button class="fp3d-btn fp3d-item-pick" ?disabled=${!admin} aria-haspopup="dialog" title=${this.t("item_picker_open")} @click=${() => (this._itemPicker = true)}>${furnitureName(this.hass, f.type)} ▾</button>
+          ${this._itemPicker
+            ? html`<fp3d-item-picker
+                .entries=${this.libraryEntries(this.hass?.language ?? "en")}
+                .current=${f.type}
+                .language=${this.hass?.language ?? "en"}
+                .t=${(k: string, v?: Record<string, string | number>) => this.t(k as I18nKey, v)}
+                .thumb=${this.libraryThumb}
+                .picture=${this.libraryPicture}
+                @pick=${(e: CustomEvent<{ type: string }>) => {
+                  this._itemPicker = false;
+                  this.retypeFurniture(e.detail.type);
+                }}
+                @close=${() => (this._itemPicker = false)}
+              ></fp3d-item-picker>`
+            : nothing}
+        </div>`;
       case "floor":
         return this.renderItemFloor();
     }
