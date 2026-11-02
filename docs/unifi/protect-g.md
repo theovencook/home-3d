@@ -30,4 +30,5 @@ Not duplicated, already in the library (kept where they are): `unifi_g3_flex`, `
 | `unifi_g6_pro_360` | UniFi G6 Pro 360 | 147 x 147 x 65.5 | maker | techspecs.ui.com/unifi/cameras-nvrs/uvc-g6-pro-360; max 13.5 W |
 | `unifi_g6_180` | UniFi G6 180 | 136 x 64 x 92 | maker (axes assumed) | techspecs.ui.com/unifi/cameras-nvrs/uvc-g6-180: 136 x 64 x 92, read as W x D x H; max 15 W |
 | `unifi_g6_instant` | UniFi G6 Instant | 81.7 x 57.2 x 50.1 | maker (axes assumed) | techspecs.ui.com/unifi/cameras-nvrs/uvc-g6-ins: 81.7 x 50.1 x 57.2; which of the last two is the depth is our reading; max 7 W |
+| `unifi_g5_instant` | UniFi G5 Instant | 81.7 x 57.2 x 50.1 | approximate | Ubiquiti publishes no size; shape and size taken from the G6 Instant (#303) |
 | `unifi_g5_flex` | UniFi G5 Flex | 48 x 48 x 107.5 | maker (depth assumed) | techspecs.ui.com/unifi/cameras-nvrs/uvc-g5-flex: diameter 48, height 107.5; max 4 W |

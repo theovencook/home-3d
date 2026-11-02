@@ -167,3 +167,17 @@ test("the devices pack ships G4 Doorbell and G4 Bullet, found by their device mo
   assert.equal(matchCameraModel("UVC G4 Bullet", [pack]), "pack:d:unifi_g4_bullet");
   assert.deepEqual(items[0].size, [0.0468, 0.0258, 0.1183]);
 });
+
+test("the UniFi pack ships G5 Instant and G5 Doorbell Pro with approximate sizes taken from the G6 Instant and G4 Doorbell Pro (#303)", () => {
+  const dir = fileURLToPath(new URL("../../custom_components/home_3d/bundled_packs/theovencook.unifi/tech/", import.meta.url));
+  const read = (id: string) => JSON.parse(readFileSync(join(dir, `${id}.json`), "utf8"));
+  const items = ["unifi_g5_instant", "unifi_g5_doorbell_pro", "unifi_g6_instant", "unifi_g4_doorbell_pro"].map(read);
+  const pack: FurniturePack = { id: "u", name: "u", publisher: "t", items };
+  assert.equal(matchCameraModel("G5 Instant", [pack]), "pack:u:unifi_g5_instant");
+  assert.equal(matchCameraModel("UVC G5 Doorbell Pro", [pack]), "pack:u:unifi_g5_doorbell_pro");
+  assert.equal(matchCameraModel("G5 Doorbell Pro PoE", [pack]), "pack:u:unifi_g5_doorbell_pro");
+  assert.equal(matchCameraModel("G6 Instant", [pack]), "pack:u:unifi_g6_instant");
+  assert.deepEqual(items[0].size, items[2].size);
+  assert.deepEqual(items[1].size, [0.0517, 0.0287, 0.1606]);
+  for (const it of items.slice(0, 2)) assert.match(it.name.en, /approximate size/);
+});

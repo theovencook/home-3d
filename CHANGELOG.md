@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- **Camera models** for the UniFi Protect G5 Instant and G5 Doorbell Pro, approximated from the G6 Instant and G4 Doorbell Pro (their sizes are not published, so they are marked approximate) (#303).
+
 ## Home 3D 0.2.0 (2 November 2026)
 
 ### Panels, views and controls (#265–#298)
