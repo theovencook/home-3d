@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 import re
+from typing import Any
 
 import voluptuous as vol
 
@@ -1160,7 +1161,7 @@ METER_SCHEMA = vol.Schema(
     {vol.Required("floor_id"): _ID, vol.Required("x"): _COORD, vol.Required("z"): _COORD}, extra=vol.ALLOW_EXTRA
 )
 
-ENERGY_DEFAULTS = {
+ENERGY_DEFAULTS: dict[str, Any] = {
     "meter": None,
     "grid": None,
     "grid_invert": False,

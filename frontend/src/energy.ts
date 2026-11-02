@@ -77,6 +77,30 @@ export function systemSummaries(hass: HomeAssistant, e: EnergySettings): SystemS
   });
 }
 
+/**
+ * The charge a battery model shows (#282): its own charge sensor when it has one, else the average of the setup of the
+ * inverter it hangs on (the nearest inverter of its floor), else the whole house's average. `own` is false for both
+ * fallbacks, so the pin can label the number as a system average.
+ */
+export function batteryCharge(hass: HomeAssistant, building: Building, floorId: string, bat: Furniture, summary: EnergySummary): { soc: number; own: boolean } | null {
+  const ownId = ref(bat.soc);
+  const v = ownId ? Number(hass.states[ownId]?.state) : NaN;
+  if (Number.isFinite(v)) return { soc: v, own: true };
+  const floor = building.floors.find((x) => x.id === floorId);
+  let inv: Furniture | null = null;
+  for (const m of floor?.furniture ?? []) {
+    if (energyRole(m.type) !== "inverter") continue;
+    if (!inv || Math.hypot(m.x - bat.x, m.z - bat.z) < Math.hypot(inv.x - bat.x, inv.z - bat.z)) inv = m;
+  }
+  const sys = inv ? summary.systems?.find((x) => x.inverter === inv!.id) : undefined;
+  if (sys && sys.soc !== null) return { soc: sys.soc, own: false };
+  // setup 1 (the sensors at the top of the energy settings) has no inverter link: with several setups its own charge
+  const first = ref(building.energy.battery_soc);
+  const firstV = building.energy.systems?.length && first ? Number(hass.states[first]?.state) : NaN;
+  if (Number.isFinite(firstV)) return { soc: firstV, own: false };
+  return summary.soc !== null ? { soc: summary.soc, own: false } : null;
+}
+
 export interface Consumer {
   /** Placed entity (device) id. */
   id: string;

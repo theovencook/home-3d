@@ -690,9 +690,16 @@ def test_the_opening_links_mark_is_an_optional_flag_apart_from_the_version() -> 
 
 def test_energy_systems_default_and_old_plan_untouched() -> None:
     """A plan with one inverter keeps its sensors and gains an empty list of further setups (#285)."""
-    old = ENERGY_SCHEMA({"solar": "sensor.pv", "battery": "sensor.bat", "battery_soc": "sensor.soc", "grid": "sensor.grid"})
+    old = ENERGY_SCHEMA(
+        {"solar": "sensor.pv", "battery": "sensor.bat", "battery_soc": "sensor.soc", "grid": "sensor.grid"}
+    )
     assert old["systems"] == []
-    assert (old["solar"], old["battery"], old["battery_soc"], old["grid"]) == ("sensor.pv", "sensor.bat", "sensor.soc", "sensor.grid")
+    assert (old["solar"], old["battery"], old["battery_soc"], old["grid"]) == (
+        "sensor.pv",
+        "sensor.bat",
+        "sensor.soc",
+        "sensor.grid",
+    )
     more = ENERGY_SCHEMA({"systems": [{"id": "sys2", "name": "Garage", "solar": "sensor.pv2", "inverter": "inv1"}]})
     assert more["systems"][0]["battery"] is None
     assert more["systems"][0]["inverter"] == "inv1"

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deviceSensors, energySummary, fieldPowers, findConsumers, flowColor, FLOW_COLORS, flowDots, flowSegments, sourceMix, type EnergySummary, gridPoint, meterPosition, powerSensorFor, proposeEnergySensors, readPower, solarCurvePath, solarDayFromStats, wattsPerUnit } from "./energy.ts";
+import { batteryCharge, deviceSensors, energySummary, fieldPowers, findConsumers, flowColor, FLOW_COLORS, flowDots, flowSegments, sourceMix, type EnergySummary, gridPoint, meterPosition, powerSensorFor, proposeEnergySensors, readPower, solarCurvePath, solarDayFromStats, wattsPerUnit } from "./energy.ts";
 import { proposeField, roofFaces } from "./solar.ts";
 import type { Building, Room } from "./model.ts";
 import { emptyBuilding, newFloor } from "./model.ts";
@@ -432,4 +432,19 @@ test("a plan with one setup reads as before (#285)", () => {
   const s = energySummary(hass, b, []);
   assert.equal(s.solar, 1000);
   assert.equal(s.systems, undefined);
+});
+
+test("a battery shows its own charge, else its inverter's setup, else the house average (#282)", () => {
+  const b = emptyBuilding();
+  const fl = newFloor("g", "G", 0);
+  const item = (id: string, type: string, x: number, extra: Record<string, unknown> = {}) => ({ id, type, x, z: 0, w: 1, d: 1, h: 1, rotation: 0, ...extra }) as unknown as Building["floors"][number]["furniture"][number];
+  fl.furniture = [item("inv1", "inverter", 0), item("inv2", "inverter", 10), item("b1", "home_battery", 1, { soc: "sensor.own" }), item("b2", "home_battery", 9), item("b3", "home_battery", 1)];
+  b.floors = [fl];
+  b.energy = { ...b.energy, battery_soc: "sensor.soc1", systems: [{ id: "s2", name: "", inverter: "inv2", grid: null, grid_invert: false, solar: null, battery: null, battery_invert: false, battery_soc: "sensor.soc2" }] };
+  const hass = hassWith([st("sensor.own", "77"), st("sensor.soc1", "80"), st("sensor.soc2", "30")]);
+  const sum = energySummary(hass, b, []);
+  const get = (id: string) => batteryCharge(hass, b, "g", fl.furniture.find((x) => x.id === id)!, sum);
+  assert.deepEqual(get("b1"), { soc: 77, own: true });
+  assert.deepEqual(get("b2"), { soc: 30, own: false });
+  assert.deepEqual(get("b3"), { soc: 80, own: false });
 });

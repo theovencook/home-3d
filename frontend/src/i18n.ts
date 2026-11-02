@@ -2535,6 +2535,7 @@ const en = {
   energy_import_prefs: "Take over from the energy dashboard",
   energy_import_done: "{n} sensors taken over – please check the signs.",
   energy_import_none: "No matching power sensors (W) were found in the energy dashboard – please choose them by hand.",
+  battery_system_avg: "(system average)",
   energy_systems_title: "More inverters and batteries",
   energy_systems_hint: "The sensors above are setup 1. Each setup added here has its own inverter, battery and grid sensors; totals and the energy flow add them all up.",
   energy_system_add: "Add a setup",
