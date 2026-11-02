@@ -34,3 +34,9 @@ test("a single full-height flight is as before", () => {
   assert.deepEqual(p.map((q) => q[1]), [0, 2.75]);
   assert.deepEqual([p[0][0], p[0][2], p[1][0], p[1][2]], [7, 12.5, 7, 9.5]);
 });
+
+test("a lone stair a bit short of the floor-to-floor height still links, ending at the floor above", () => {
+  const links = stairLinks(twoFloors(flight("s", 7, 11, 0, 1, 3, 2.5)));
+  assert.equal(links.length, 1);
+  assert.deepEqual(links[0].pts.map((q) => q[1]), [0, 2.75]);
+});

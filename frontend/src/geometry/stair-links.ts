@@ -83,7 +83,7 @@ const flightPts = (f: Flight): [number, number, number][] =>
 /**
  * Every way up between floors (built-in stairs and the stairs pack's). A flight starts at its mount height and rises its
  * own height; flights whose top meets the foot of another (a quarter-turn stair drawn as two) join into one way, and only a
- * way from the floor to the floor above is a link. A flight that reaches nowhere (a few steps to a raised area) is left out.
+ * way from the floor that reaches at least half way up is a link, taken to the floor above. A flight that reaches nowhere (a few steps to a raised area) is left out.
  */
 export function stairLinks(b: Building): Link[] {
   const floors = b.floors.filter((f) => f.rooms.some((r) => r.points.length >= 3)).sort((x, y) => x.elevation - y.elevation);
@@ -129,8 +129,8 @@ export function stairLinks(b: Building): Link[] {
       const chain = [first];
       for (let n = next.get(first); n && !chain.includes(n); n = next.get(n)) chain.push(n);
       const last = chain[chain.length - 1];
-      if (Math.abs(last.h1 - rise) > JOIN_HEIGHT) continue;
-      // from the floor to the floor above exactly, with the joins at one height
+      if (last.h1 < rise / 2) continue;
+      // a way that tops out at least half way up is taken to the floor above (ends snapped), with the joins at one height
       first.h0 = 0;
       last.h1 = rise;
       for (let k = 1; k < chain.length; k++) chain[k].h0 = chain[k - 1].h1;
