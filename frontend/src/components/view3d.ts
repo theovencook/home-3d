@@ -2089,6 +2089,9 @@ export class Fp3dView3d extends LitElement {
    * Kamera-Cockpit: a pin in front of every camera for each detection its sensors report right now
    * (a person, a vehicle, an animal, motion – Frigate, UniFi Protect, Reolink and the like), with the time.
    */
+  /** Detection sensors this page has seen on (only those linger after dropping back, #299). */
+  private readonly detectSeenOn = new Set<string>();
+
   private detectionPins(hass: HomeAssistant, markers: DeviceMarker[]) {
     const out: (DeviceMarker & { pin: boolean })[] = [];
     // cameras whose detection pins are switched off: only the camera turns red (#267)
@@ -2096,13 +2099,17 @@ export class Fp3dView3d extends LitElement {
     for (const cam of markers) {
       if (!cam.model?.startsWith("camera") || quiet.has(cam.id)) continue;
       // a detection stays as a pin for two minutes after the sensor dropped back (Reolink and the like hold it
-      // only for seconds), with the time it was seen
+      // only for seconds), with the time it was seen – only one this page saw on: after a restart every sensor
+      // comes back off with a fresh change time, which is no detection (#299)
       const now = this.now();
       const active = cameraMotionSensors(hass, cam.id).filter((id) => {
         const st = hass.states[id];
         if (!st) return false;
-        if (st.state === "on") return true;
-        return st.state === "off" && !!st.last_changed && now - Date.parse(st.last_changed) < DETECT_LINGER_MS;
+        if (st.state === "on") {
+          this.detectSeenOn.add(id);
+          return true;
+        }
+        return st.state === "off" && this.detectSeenOn.has(id) && !!st.last_changed && now - Date.parse(st.last_changed) < DETECT_LINGER_MS;
       });
       // one pin per kind (a person and a car at the same time), the plain motion only when nothing else is seen
       const kinds = new Map<string, string>();
