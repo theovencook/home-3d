@@ -3022,5 +3022,6 @@
  "season_dates_month": "Monat",
  "season_dates_day": "Tag",
  "season_dates_changed": "eigene Daten",
- "season_dates_reset": "Zurück zu den üblichen Daten"
+ "season_dates_reset": "Zurück zu den üblichen Daten",
+ "upd_item_same": "Seit dem Platzieren geändert (Release {to}) · {n}× platziert"
 }

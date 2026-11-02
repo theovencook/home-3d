@@ -3044,6 +3044,7 @@ const en = {
   season_dates_day: "day",
   season_dates_changed: "your dates",
   season_dates_reset: "Back to the usual dates",
+  upd_item_same: "Changed since you placed it (release {to}) · placed {n}×",
 };
 
 type Key = keyof typeof en;

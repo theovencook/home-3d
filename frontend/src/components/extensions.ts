@@ -250,7 +250,8 @@ export class Extensions extends LitElement {
                 (i) => html`<div class="fp3d-pack">
                   <div>
                     <b>${i.name[lang.split("-")[0]] ?? i.name.en ?? Object.values(i.name)[0] ?? i.item}</b>
-                    <span class="fp3d-sub">${this.t("upd_item", { from: i.release, to: i.new_release, n: i.placed })}${i.pinned ? ` · ${this.t("upd_pinned")}` : ""}</span>
+                    <span class="fp3d-sub">${i.release === i.new_release ? this.t("upd_item_same", { to: i.new_release, n: i.placed }) : this.t("upd_item", { from: i.release, to: i.new_release, n: i.placed })}${i.pinned ? ` · ${this.t("upd_pinned")}` : ""}</span>
+                    ${i.note ? html`<span class="fp3d-sub fp3d-upd-note">${i.note}</span>` : nothing}
                   </div>
                   ${editor ? html`<button class="fp3d-btn" @click=${() => this.updateItems([i.type])}>${this.t("upd_update")}</button>` : nothing}
                 </div>`,
@@ -285,6 +286,7 @@ export class Extensions extends LitElement {
         ? html`<span class="fp3d-sub fp3d-pack-error">${this.t("pack_check_error", { detail: state.error })}</span>`
         : state.available
           ? html`<span class="fp3d-sub fp3d-pack-available">${this.t("pack_available", { release: state.available.release, commit: shortCommit(state.available.commit) })}</span>
+              ${state.available.note ? html`<span class="fp3d-sub fp3d-upd-note">${state.available.note}</span>` : nothing}
               ${this.isEditor && pack.source?.origin
                 ? html`<button class="fp3d-btn" ?disabled=${this._installing} @click=${() => void this.review(pack.source!.origin!.url)}>${this.t("pack_review_update")}</button>`
                 : nothing}`
@@ -748,6 +750,7 @@ export class Extensions extends LitElement {
         : nothing;
     return html`<div class="fp3d-preview" role="group" aria-label=${this.t("pp_title")}>
       <b>${update ? this.t("pp_update", { name: p.pack.name, from: p.installed!.release, to: p.pack.release }) : this.t("pp_install", { name: p.pack.name, release: p.pack.release })}</b>
+      ${p.pack.note ? html`<span class="fp3d-sub fp3d-upd-note">${p.pack.note}</span>` : nothing}
       <span class="fp3d-sub">${texts ? this.t("lang_pack_texts", { language: p.pack.language ?? "?", n: p.pack.texts ?? 0, publisher: p.pack.publisher }) : this.t("pack_by", { publisher: p.pack.publisher, n: p.pack.items })} · ${this.t("pack_licence", { licence: p.pack.licence })}</span>
       <span class="fp3d-sub">
         ${this.t("pp_from")}

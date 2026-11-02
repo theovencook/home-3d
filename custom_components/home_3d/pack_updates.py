@@ -48,7 +48,7 @@ from .moves import migrate_pins, moved_copy, moved_out_of, retired_packs
 from .off_loop import OFF_LOOP
 from .pack_github import checked_origin, fetch_pack, latest_release
 from .pack_preview import pack_preview
-from .packs import CUSTOM_PACK_ID, PackError, checked_folder, with_bundled
+from .packs import CUSTOM_PACK_ID, ITEM_SCHEMA, PackError, checked_folder, recipe_hash, with_bundled
 from .recipes import installed_copies, placed_types, recipe_copy
 
 if TYPE_CHECKING:
@@ -81,6 +81,16 @@ def placed_counts(building: dict[str, Any]) -> dict[str, int]:
     return dict(Counter(placed_types(building)))
 
 
+def _current_hash(copy_: dict[str, Any]) -> str | None:
+    """The hash of a plan's copy read with today's item rules (#288). A copy kept before an item field with a default
+    was added has no such field, so its stored hash differs from the installed item's although nothing changed: that
+    showed as an update from a release to the same release."""
+    try:
+        return recipe_hash(ITEM_SCHEMA(copy_["recipe"]))
+    except (vol.Invalid, KeyError, TypeError):
+        return None
+
+
 def pending_items(building: dict[str, Any], packs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The placed pack items with an update, sorted by type: the installed item differs from the plan's copy and is
     not an older release. The household's own items follow their edits by themselves and are never listed."""
@@ -92,7 +102,7 @@ def pending_items(building: dict[str, Any], packs: list[dict[str, Any]]) -> list
             continue
         pack, item = installed[type_]
         new = recipe_copy(pack, item)
-        if new["hash"] == copy_.get("hash") or new["release"] < copy_.get("release", 1):
+        if new["hash"] in (copy_.get("hash"), _current_hash(copy_)) or new["release"] < copy_.get("release", 1):
             continue
         found.append(
             {
@@ -102,6 +112,8 @@ def pending_items(building: dict[str, Any], packs: list[dict[str, Any]]) -> list
                 "name": item["name"],
                 "release": copy_.get("release", 1),
                 "new_release": new["release"],
+                # the pack's one line on what this release changed (#288), when it gave one
+                **({"note": pack["release_note"]} if pack.get("release_note") else {}),
                 "placed": counts.get(type_, 0),
             }
         )
@@ -228,6 +240,7 @@ class PackUpdates:
                 {
                     "id": pack["id"],
                     "release": pack.get("release", 1),
+                    **({"note": pack["release_note"]} if pack.get("release_note") else {}),
                     "bundled": bool(pack.get("bundled")),
                     "pinned": pack["id"] in self.pinned,
                     # whether a check looks for new releases (installed from GitHub)
@@ -466,7 +479,8 @@ class PackUpdates:
         if not self.settings["auto_update"]:
             # updates are opt-in (#189): the check only records that one is waiting; an editor looks at what it
             # changes and installs it (nothing is downloaded here, only the pack.json was read)
-            result["available"] = {"release": latest, "commit": commit}
+            note = pack_json.get("release_note") if pack_json is not None else None
+            result["available"] = {"release": latest, "commit": commit, **({"note": note} if note else {})}
             return False
         files, new_origin = await fetch_pack(self.hass, origin["url"])
         # a large pack takes a while to check: not in the event loop (#176)

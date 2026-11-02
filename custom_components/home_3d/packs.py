@@ -443,6 +443,8 @@ PACK_SCHEMA_V2 = vol.Schema(
         # release number of the pack (a newer release of the same id replaces an installed one)
         vol.Optional("release", default=1): vol.All(int, vol.Range(min=1, max=100000)),
         vol.Optional("description", default=""): vol.All(str, vol.Length(max=400)),
+        # one line on what this release changed (#288), shown next to the update; optional
+        vol.Optional("release_note"): vol.All(str, vol.Length(max=200), vol.Match(r"^[^\r\n]*$")),
         # what the pack holds (#196): furniture items (the default, left out) or the texts of one language
         vol.Optional("kind"): vol.In(PACK_KINDS),
         # the language a language pack is for: a base language code ("de", "fr", "pt"), lower case
