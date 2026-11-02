@@ -730,6 +730,8 @@ export class Fp3dView3d extends LitElement {
   /** The walk: the room one stands in (null between rooms), or false when not walking. */
   private declare _walk: { room: string | null; hint: boolean } | false;
   private walker: { dispose(): void; setStick(v: { x: number; y: number } | null): void } | null = null;
+  /** The finger on the walk stick: kept on the element, so a redraw mid-drag (a room change) does not drop it (#311). */
+  private walkStick: { id: number; cx: number; cy: number } | null = null;
   /** Fun pack "pets": the animals living in the house (their own bundle), and what they were last given. */
   private pets: { update(b: Building, pets: readonly Pet[]): void; dispose(): void } | null = null;
   private petsFor: Building | null = null;
@@ -4891,6 +4893,7 @@ export class Fp3dView3d extends LitElement {
     if (!this.walker && !this._walk) return;
     this.walker?.dispose();
     this.walker = null;
+    this.walkStick = null;
     if (this.walkKeys) window.removeEventListener("keydown", this.walkKeys);
     this.walkKeys = null;
     this._walk = false;
@@ -4913,9 +4916,9 @@ export class Fp3dView3d extends LitElement {
       </button>`;
     const w = this._walk;
     // the stick (tablets): forward and back, turning left and right
-    let stick: { id: number; cx: number; cy: number } | null = null;
     const knob = (e: PointerEvent, el: HTMLElement) => {
-      if (!stick) return;
+      const stick = this.walkStick;
+      if (!stick || e.pointerId !== stick.id) return;
       const r = 44;
       let dx = e.clientX - stick.cx;
       let dy = e.clientY - stick.cy;
@@ -4935,18 +4938,18 @@ export class Fp3dView3d extends LitElement {
         @pointerdown=${(e: PointerEvent) => {
           const el = e.currentTarget as HTMLElement;
           const r = el.getBoundingClientRect();
-          stick = { id: e.pointerId, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+          this.walkStick = { id: e.pointerId, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
           el.setPointerCapture(e.pointerId);
           knob(e, el);
         }}
         @pointermove=${(e: PointerEvent) => knob(e, e.currentTarget as HTMLElement)}
         @pointerup=${(e: PointerEvent) => {
-          stick = null;
+          this.walkStick = null;
           ((e.currentTarget as HTMLElement).firstElementChild as HTMLElement).style.transform = "";
           this.walker?.setStick(null);
         }}
         @pointercancel=${(e: PointerEvent) => {
-          stick = null;
+          this.walkStick = null;
           ((e.currentTarget as HTMLElement).firstElementChild as HTMLElement).style.transform = "";
           this.walker?.setStick(null);
         }}
