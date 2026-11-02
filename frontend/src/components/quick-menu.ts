@@ -23,13 +23,12 @@ const COLORS: [number, number, number][] = [
   [120, 255, 150],
 ];
 const KELVINS = [2200, 2700, 3200, 4000, 5000, 6500];
-const COVER_SET_POSITION = 4;
 const COVER_OPEN_TILT = 16;
 const COVER_CLOSE_TILT = 32;
 const COVER_SET_TILT = 128;
 
-import { lightAbilities } from "../light-abilities.ts";
-export { lightAbilities };
+import { coverPositionable, lightAbilities } from "../light-abilities.ts";
+export { coverPositionable, lightAbilities };
 
 /**
  * What the big cover button does (#251), from coverControls: open or close for covers that can, else the slats of a
@@ -52,11 +51,6 @@ export function coverToggle(st: HassEntity): { service: string; data?: Record<st
   }
   if (c.tiltPosition) return tilt! < 50 ? { service: "set_cover_tilt_position", data: { tilt_position: 100 }, open: true } : { service: "set_cover_tilt_position", data: { tilt_position: 0 }, open: false };
   return null;
-}
-
-/** Whether a cover can be moved to a position. */
-export function coverPositionable(st: HassEntity): boolean {
-  return (((st.attributes.supported_features as number) ?? 0) & COVER_SET_POSITION) !== 0 && typeof st.attributes.current_position === "number";
 }
 
 export class Fp3dQuickMenu extends LitElement {

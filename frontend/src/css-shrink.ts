@@ -16,7 +16,13 @@ export function shrinkCss(css: string): string {
   };
   for (let i = 0; i < css.length; i++) {
     const c = css[i]!;
-    if (QUOTES.has(c)) {
+    if (c === "/" && css[i + 1] === "*") {
+      // a comment goes first: an apostrophe in one is not the start of a string
+      const end = css.indexOf("*/", i + 2);
+      if (end < 0) return css;
+      cur += " ";
+      i = end + 1;
+    } else if (QUOTES.has(c)) {
       const end = css.indexOf(c, i + 1);
       if (end < 0) return css;
       flush(true, css.slice(i, end + 1));

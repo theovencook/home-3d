@@ -114,6 +114,7 @@ export class Floorplan3dPanel extends LitElement {
     _selDevice: { state: true },
     _floorStack: { state: true },
     _roomNames: { state: true },
+    _pulse: { state: true },
     _controlsRight: { state: true },
     _keepView: { state: true },
     _floorPics: { state: true },
@@ -184,6 +185,7 @@ export class Floorplan3dPanel extends LitElement {
   /** Floors below an opened floor, and whether room names show (both kept per device). */
   private declare _floorStack: FloorStack;
   private declare _roomNames: boolean;
+  private declare _pulse: boolean;
   private declare _controlsRight: boolean;
   private declare _keepView: boolean;
   /** The floor pictures beside the 3D view (#250: a switch in Settings › Screen and controls, off by default). */
@@ -294,6 +296,7 @@ export class Floorplan3dPanel extends LitElement {
     const stack = prefs.get("floor_stack");
     this._floorStack = stack === "stacked" || stack === "single" ? stack : "dim";
     this._roomNames = prefs.get("room_names") !== "0";
+    this._pulse = prefs.get("pulse") !== "0";
     this._controlsRight = prefs.get("controls") === "right";
     this._keepView = prefs.get("keep_view") === "1";
     this._floorPics = prefs.get("floor_pictures") === "1";
@@ -1402,6 +1405,7 @@ export class Floorplan3dPanel extends LitElement {
           .floorThumbs=${this._floorPics}
           .floorStack=${this._floorStack}
           .roomLabels=${this._roomNames}
+          .pulse=${this._pulse}
           .controlsRight=${this._controlsRight}
           .keepView=${this._keepView}
           .angleLock=${this._angleLock}

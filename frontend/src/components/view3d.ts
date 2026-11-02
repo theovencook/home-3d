@@ -9,6 +9,7 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
   areaEntities,
   entityName,
   furnitureEntities,
+  alarmTriggered,
   isActive,
   isUnavailable,
   kindOf,
@@ -133,7 +134,7 @@ import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { holdTarget } from "../hold.ts";
 import { popupKind, popupPosition } from "../device-popup-model.ts";
-import { loadDevicePopup } from "../load-parts.ts";
+import { loadDevicePopup, loadQuickMenu } from "../load-parts.ts";
 import { need } from "../lazy-part.ts";
 import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
@@ -149,8 +150,7 @@ import { anyModule, moduleAlerts, moduleCards, moduleMenuSheets, modulePools, mo
 import { lineFlows, majorOnly, markerEmoji, markerPath, sparkPoints } from "../module-scene.ts";
 import { generateWalls, openingHost, placeWallPlate, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { signedArea } from "../model.ts";
-import { coverPositionable, lightAbilities } from "./quick-menu.ts";
-import "./quick-menu.ts";
+import { coverPositionable, lightAbilities } from "../light-abilities.ts";
 import { load3d } from "../load3d.ts";
 import { load2d } from "../load2d.ts";
 import { pinIn2d } from "../plan2d/pins.ts";
@@ -357,6 +357,7 @@ export class Fp3dView3d extends LitElement {
     clean: { attribute: false },
     cleanButton: { attribute: false },
     roomLabels: { attribute: false },
+    pulse: { attribute: false },
     floorStack: { attribute: false },
     panelOpen: { attribute: false },
     controlsRight: { attribute: false },
@@ -587,6 +588,8 @@ export class Fp3dView3d extends LitElement {
   declare cleanButton: boolean;
   /** Room names in 3D (cards can switch them off). */
   declare roomLabels: boolean;
+  /** Pins that can be tapped draw a faint outline now and then, staggered (#283); off in low quality and with reduced motion. */
+  declare pulse: boolean;
   /** Floors below an opened floor: dimmed, stacked (the house up to it) or hidden. */
   declare floorStack: FloorStack;
   private declare _thumbs: { floorId: string; url: string }[];
@@ -873,6 +876,7 @@ export class Fp3dView3d extends LitElement {
     this.cleanButton = false;
     this.noSettings = false;
     this.roomLabels = true;
+    this.pulse = true;
     this.floorStack = "dim";
     this._low = false;
     this.panelOpen = false;
@@ -3581,6 +3585,15 @@ export class Fp3dView3d extends LitElement {
           // a TV's Ambilight (glowing strips round its back) shines whenever its screen is lit
           if (color) screens.set(f.id, { color, level: st.state === "playing" ? 1 : 0.6, picture, ring: packAmbilight(f.type) || (ringed && st.state === "playing") });
         }
+        // its own "active" colour (#289): over the usual glow while its entity is playing, on or triggered
+        const alarmed = !!st && alarmTriggered(st);
+        if (st && (f.active_color || alarmed) && (isActive(st) || alarmed || (kindOf(st.entity_id) === "media" && st.state === "on"))) {
+          const c = activeGlow(f.active_color || (alarmed ? "#ff3b30" : ""));
+          if (c) {
+            const was = screens.get(f.id);
+            screens.set(f.id, { ...(was ?? { level: 0.8 }), color: c, ...(was?.faces ? { faces: was.faces.map((x) => ({ ...x, color: c })) } : {}) });
+          }
+        }
         // a 3D printer (#11): its progress ring and chamber light; a tap shows its camera, its pin the per cents
         const printer = isPrinter(f.type) ? printerState(hass, link.entity) : null;
         if (printer) {
@@ -4818,6 +4831,8 @@ export class Fp3dView3d extends LitElement {
     }
     this.walker = new walk.WalkCamera(v as never, map, surface, {
       start,
+      // up or down a stair (#270): the floor shown follows (the stairs show while on them)
+      onFloor: (f) => v.setFloor(f.id, false),
       onRoom: (r) => {
         this.walkRoomPts = r?.points ?? null;
         if (this._walk) this._walk = { ...this._walk, room: r?.name ?? null };
@@ -6192,6 +6207,7 @@ export class Fp3dView3d extends LitElement {
     const h = stage?.clientHeight ?? 600;
     const left = Math.max(8, Math.min(w - 240, m.x - 116));
     const top = Math.max(8, Math.min(h - 360, m.y - 170));
+    need(loadQuickMenu);
     return html`<div class="fp3d-menu-backdrop" @click=${() => (this._menu = null)}></div>
       <fp3d-quick-menu
         style="left:${left}px;top:${top}px"
@@ -6615,7 +6631,7 @@ export class Fp3dView3d extends LitElement {
       @touchend=${this.keepTouch}
       @pointerover=${this.onPinOver}
       @pointerout=${this.onPinOut}
-      class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this.controlsRight ? "fp3d-side-right" : ""} ${this._alerts.length ? "fp3d-has-alerts" : ""} ${this._through ? "fp3d-through-on" : ""} ${this._flash ? "fp3d-flash" : ""} ${this.replay ? "fp3d-replay" : ""}"
+      class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this.pulse && !this._low ? "fp3d-pulse" : ""} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this.controlsRight ? "fp3d-side-right" : ""} ${this._alerts.length ? "fp3d-has-alerts" : ""} ${this._through ? "fp3d-through-on" : ""} ${this._flash ? "fp3d-flash" : ""} ${this.replay ? "fp3d-replay" : ""}"
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderWires()} ${this.clean ? nothing : this.renderLegend()}
@@ -9312,6 +9328,27 @@ export class Fp3dView3d extends LitElement {
         background: color-mix(in srgb, var(--fp3d-chrome-solid) 92%, transparent);
         pointer-events: none;
       }
+      /* a faint outline on tappable pins every few seconds (#283): opacity and transform only (compositor, no script); three offsets stagger them */
+      .fp3d-pulse .fp3d-dev[data-entity]::after {
+        content: "";
+        position: absolute;
+        inset: -3px;
+        border-radius: inherit;
+        border: 1px solid var(--fp3d-accent);
+        opacity: 0;
+        pointer-events: none;
+        animation: fp3d-pin-pulse 6s ease-out infinite;
+      }
+      .fp3d-pulse .fp3d-dev:nth-child(3n + 2)::after { animation-delay: 2s; }
+      .fp3d-pulse .fp3d-dev:nth-child(3n)::after { animation-delay: 4s; }
+      @keyframes fp3d-pin-pulse {
+        0%, 20%, 100% { opacity: 0; transform: scale(1); }
+        5% { opacity: 0.45; }
+        15% { opacity: 0; transform: scale(1.12); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .fp3d-pulse .fp3d-dev[data-entity]::after { animation: none; }
+      }
       .fp3d-dev-sel {
         outline: 2px solid var(--fp3d-accent);
         outline-offset: 2px;
@@ -9450,6 +9487,12 @@ function formatPower(hass: HomeAssistant | undefined, w: number): string {
 }
 
 /** Marker height above furniture: in front of a screen, above wall units, else just above the top. */
+/** "#rrggbb" as a glow colour (0..1 per channel), or null when it is none (#289). */
+function activeGlow(hex: string): [number, number, number] | null {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  return m ? [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255] : null;
+}
+
 /** A running washer or dryer: a ring of light round its round door (#516); a dishwasher: its front. */
 function runGlow(type: string): ScreenState {
   const color: [number, number, number] = [0.3, 0.85, 1];

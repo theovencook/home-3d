@@ -360,8 +360,18 @@ export class ItemFormPart {
    */
   renderColourRoles(this: Fp3dEditor, f: Furniture) {
     const roles = itemColourRoles(f.type);
-    if (!roles.length) return nothing;
     const admin = this.isEditor;
+    // its glow colour while its entity is active (#289): playing, on, triggered; "From the appearance" = the usual glow
+    const activeOwn = roleColour({ accent: f.active_color ?? undefined }, "accent");
+    const activeRow = html`<div class="fp3d-field fp3d-colour-role">
+      <span>${this.t("colour_active")}</span>
+      <span class="fp3d-colour-pick"><span class="fp3d-colour-swatch">
+        <input type="color" class=${activeOwn ? "" : "fp3d-colour-unset"} aria-label=${this.t("colour_active")} .value=${activeOwn ?? "#ff3b30"} ?disabled=${!admin}
+          @change=${(e: Event) => this.updateFurniture({ active_color: (e.target as HTMLInputElement).value })} />
+        ${colourReset({ value: activeOwn, fallback: null, label: this.t("colour_theme"), disabled: !admin, onReset: () => this.updateFurniture({ active_color: null }) })}
+      </span></span>
+    </div>`;
+    if (!roles.length) return html`<div class="fp3d-form"><h4 class="fp3d-lib-head fp3d-wide">${this.t("colours")}</h4>${activeRow}<p class="fp3d-sub fp3d-wide">${this.t("colour_active_hint")}</p></div>`;
     const set = (role: ColourRole, hex: string | null) => this.updateFurniture({ colors: setRoleColour(f.colors, role, hex) });
     const setMaterial = (role: ColourRole, m: string) => this.updateFurniture({ materials: setRoleMaterial(f.materials, role, (m || null) as Material | null) });
     const materialName = (m: Material) => this.t(`material_${m}` as I18nKey);
@@ -393,7 +403,8 @@ export class ItemFormPart {
           </span>
         </div>`;
       })}
-      <p class="fp3d-sub fp3d-wide">${this.t("colours_hint")}</p>
+      ${activeRow}
+      <p class="fp3d-sub fp3d-wide">${this.t("colours_hint")} ${this.t("colour_active_hint")}</p>
     </div>`;
   }
 
