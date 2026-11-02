@@ -358,6 +358,7 @@ export class Fp3dView3d extends LitElement {
     clean: { attribute: false },
     cleanButton: { attribute: false },
     roomLabels: { attribute: false },
+    pulse: { attribute: false },
     floorStack: { attribute: false },
     panelOpen: { attribute: false },
     controlsRight: { attribute: false },
@@ -588,6 +589,8 @@ export class Fp3dView3d extends LitElement {
   declare cleanButton: boolean;
   /** Room names in 3D (cards can switch them off). */
   declare roomLabels: boolean;
+  /** Pins that can be tapped draw a faint outline now and then, staggered (#283); off in low quality and with reduced motion. */
+  declare pulse: boolean;
   /** Floors below an opened floor: dimmed, stacked (the house up to it) or hidden. */
   declare floorStack: FloorStack;
   private declare _thumbs: { floorId: string; url: string }[];
@@ -874,6 +877,7 @@ export class Fp3dView3d extends LitElement {
     this.cleanButton = false;
     this.noSettings = false;
     this.roomLabels = true;
+    this.pulse = true;
     this.floorStack = "dim";
     this._low = false;
     this.panelOpen = false;
@@ -6624,7 +6628,7 @@ export class Fp3dView3d extends LitElement {
       @touchend=${this.keepTouch}
       @pointerover=${this.onPinOver}
       @pointerout=${this.onPinOut}
-      class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this.controlsRight ? "fp3d-side-right" : ""} ${this._alerts.length ? "fp3d-has-alerts" : ""} ${this._through ? "fp3d-through-on" : ""} ${this._flash ? "fp3d-flash" : ""} ${this.replay ? "fp3d-replay" : ""}"
+      class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this.pulse && !this._low ? "fp3d-pulse" : ""} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this.controlsRight ? "fp3d-side-right" : ""} ${this._alerts.length ? "fp3d-has-alerts" : ""} ${this._through ? "fp3d-through-on" : ""} ${this._flash ? "fp3d-flash" : ""} ${this.replay ? "fp3d-replay" : ""}"
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderWires()} ${this.clean ? nothing : this.renderLegend()}
@@ -9320,6 +9324,34 @@ export class Fp3dView3d extends LitElement {
            the light and high contrast chrome too (#216) */
         background: color-mix(in srgb, var(--fp3d-chrome-solid) 92%, transparent);
         pointer-events: none;
+      }
+      /* a faint outline drawn every few seconds on tappable pins (#283): opacity and transform only, so it runs on the
+         compositor and costs no script time; seven offsets stagger the pins. Off in low quality (no class) and for reduced motion. */
+      .fp3d-pulse .fp3d-dev[data-entity]::after {
+        content: "";
+        position: absolute;
+        inset: -3px;
+        border-radius: inherit;
+        border: 1px solid var(--fp3d-accent);
+        opacity: 0;
+        pointer-events: none;
+        animation: fp3d-pin-pulse 7s ease-out infinite;
+      }
+      .fp3d-pulse .fp3d-dev:nth-child(7n + 2)::after { animation-delay: 1s; }
+      .fp3d-pulse .fp3d-dev:nth-child(7n + 3)::after { animation-delay: 2s; }
+      .fp3d-pulse .fp3d-dev:nth-child(7n + 4)::after { animation-delay: 3s; }
+      .fp3d-pulse .fp3d-dev:nth-child(7n + 5)::after { animation-delay: 4s; }
+      .fp3d-pulse .fp3d-dev:nth-child(7n + 6)::after { animation-delay: 5s; }
+      .fp3d-pulse .fp3d-dev:nth-child(7n)::after { animation-delay: 6s; }
+      @keyframes fp3d-pin-pulse {
+        0%, 14%, 100% { opacity: 0; transform: scale(1); }
+        4% { opacity: 0.45; }
+        10% { opacity: 0.2; transform: scale(1.12); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .fp3d-pulse .fp3d-dev[data-entity]::after {
+          animation: none;
+        }
       }
       .fp3d-dev-sel {
         outline: 2px solid var(--fp3d-accent);

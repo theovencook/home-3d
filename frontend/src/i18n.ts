@@ -2808,6 +2808,8 @@ const en = {
   st_trail: "Motion trail (last 30 minutes)",
   st_weather: "Weather outside",
   st_room_names: "Room names",
+  st_pulse: "Pulse tappable pins",
+  st_pulse_hint: "Every few seconds each pin you can tap briefly draws a faint outline, one after another. Off in low quality and when the device asks for less motion.",
   st_keep_roof: "Keep the roof on when zooming in",
   st_clock: "Clock",
   st_clock_off: "Off",
