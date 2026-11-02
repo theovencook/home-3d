@@ -101,6 +101,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   quality: ["lag", "lightweight", "detail", "resolution", "sharpness", "stutter"],
   // view 3D
   markers: ["dots", "badges", "bubbles", "labels", "tags", "points"],
+  pulse: ["blink", "flash", "glow", "animate", "outline", "hint", "tappable"],
   pinSize: ["bigger", "smaller", "scale", "large", "tiny", "zoom"],
   plan_pin_zoom: ["threshold", "distance", "close", "far", "magnify", "density"],
   plan2d: ["map", "drawing", "overhead", "top", "blueprint", "layout"],
