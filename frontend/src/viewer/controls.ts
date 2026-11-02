@@ -59,6 +59,8 @@ const MAX_PHI = 1.35;
 const KEY_TURN = Math.PI / 16;
 const KEY_ZOOM = 0.85;
 const KEY_MOVE = 0.1;
+/** One press of the on-screen turn buttons (#307): 15 degrees. */
+export const NAV_TURN = Math.PI / 12;
 
 /**
  * Where a key takes the view from `from`: arrows turn it (Shift: move it across the ground), plus and minus zoom;
@@ -141,7 +143,12 @@ export class OrbitControls {
   }
 
   /** A zoom or pan button (#297): the same moves as the keys, plain arrows moving the view across the ground. */
-  nudge(act: "in" | "out" | "left" | "right" | "up" | "down"): void {
+  nudge(act: "in" | "out" | "left" | "right" | "up" | "down" | "turnLeft" | "turnRight"): void {
+    if (act === "turnLeft" || act === "turnRight") {
+      // round the point the view looks at, from where the last flight is headed so presses add up (#307)
+      this.flyTo({ theta: this.goal.theta + (act === "turnLeft" ? NAV_TURN : -NAV_TURN) }, 220);
+      return;
+    }
     const key = act === "in" ? "+" : act === "out" ? "-" : act === "left" ? "ArrowLeft" : act === "right" ? "ArrowRight" : act === "up" ? "ArrowUp" : "ArrowDown";
     const to = keyView(key, act !== "in" && act !== "out", this.goal, this.minRadius, this.maxRadius);
     if (to) this.flyTo(to, 160);

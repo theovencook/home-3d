@@ -126,3 +126,22 @@ test("the canvas takes arrow keys when focused and the host allows it, and leave
   assert.equal(c.view.theta, before);
   delete (globalThis as { matchMedia?: unknown }).matchMedia;
 });
+
+test("the turn buttons orbit the view 15 degrees a press, round the same target (#307)", async () => {
+  const { OrbitControls } = await import("./controls.ts");
+  (globalThis as Record<string, unknown>).matchMedia = () => ({ matches: false });
+  const el = { addEventListener: () => {}, removeEventListener: () => {}, clientHeight: 100 };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const c = new OrbitControls(el as any, {} as any, { change: () => {} } as any);
+  c.view = FROM();
+  c.nudge("turnLeft");
+  assert.ok(Math.abs(c.goal.theta - Math.PI / 12) < 1e-9);
+  c.nudge("turnLeft"); // presses add up from where the flight is headed
+  assert.ok(Math.abs(c.goal.theta - Math.PI / 6) < 1e-9);
+  c.nudge("turnRight");
+  c.nudge("turnRight");
+  c.nudge("turnRight");
+  assert.ok(Math.abs(c.goal.theta + Math.PI / 12) < 1e-9);
+  assert.deepEqual([c.goal.target.x, c.goal.target.y, c.goal.target.z], [5, 1, 5]);
+  assert.equal(c.goal.radius, 16);
+});

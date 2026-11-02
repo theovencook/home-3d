@@ -7,17 +7,20 @@ import { defineElement } from "../define.ts";
 import { css, html, LitElement } from "lit";
 import { tokens } from "../styles.ts";
 
-export type NavAction = "in" | "out" | "left" | "right" | "up" | "down" | "reset";
+export type NavAction = "in" | "out" | "left" | "right" | "up" | "down" | "reset" | "turnLeft" | "turnRight";
 
 type T = (key: string) => string;
 
 export class Fp3dViewNav extends LitElement {
-  static properties = { t: { attribute: false } };
+  static properties = { t: { attribute: false }, turn: { type: Boolean } };
   declare t: T;
+  /** Show the turn buttons (the flat 2D plan does not turn). */
+  declare turn: boolean;
 
   constructor() {
     super();
     this.t = (k) => k;
+    this.turn = true;
   }
 
   private btn(act: NavAction, glyph: string, tip: string) {
@@ -29,7 +32,7 @@ export class Fp3dViewNav extends LitElement {
     return html`<div class="pad" role="group" aria-label=${t("nav_view_label")}>
       ${this.btn("in", "+", t("nav_zoom_in"))}${this.btn("up", "▲", t("nav_pan_up"))}${this.btn("out", "−", t("nav_zoom_out"))}
       ${this.btn("left", "◀", t("nav_pan_left"))}${this.btn("reset", "⤢", t("nav_reset"))}${this.btn("right", "▶", t("nav_pan_right"))}
-      <span class="gap"></span>${this.btn("down", "▼", t("nav_pan_down"))}<span class="gap"></span>
+      ${this.turn ? this.btn("turnLeft", "↺", t("nav_turn_left")) : html`<span class="gap"></span>`}${this.btn("down", "▼", t("nav_pan_down"))}${this.turn ? this.btn("turnRight", "↻", t("nav_turn_right")) : html`<span class="gap"></span>`}
     </div>`;
   }
 
@@ -62,7 +65,9 @@ export class Fp3dViewNav extends LitElement {
         touch-action: manipulation;
       }
       .b.in,
-      .b.out {
+      .b.out,
+      .b.turnLeft,
+      .b.turnRight {
         font-size: 20px;
       }
       .b:hover,

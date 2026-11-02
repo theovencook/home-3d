@@ -8,6 +8,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - The clock sits behind the room panel, menus and pop-ups (#313).
 - **Walking on the stairs** keeps both floors drawn, in place and at full strength, until one steps off at the top or the bottom (#312).
 - **Walking with the touch stick** follows the finger the whole time; a redraw mid-drag (walking into another room) left it stuck in its last direction until let go (#311).
+- The view's navigation pad gets turn left and right buttons (15 degrees a press), and is now a View option ("Navigation buttons"), off by default and not loaded until switched on (#307).
 - The heat legend (temperature, humidity, CO₂) folds to a slim bar with a tap and back, remembered on this device, and sits a little further from the energy tiles (#310).
 - The energy tiles (consumption, grid, solar, battery) stay in view while the glass cards are on (#309).
 - **Favourites panel** (the star) shows only the favourites and own buttons you set: the pre-filled Whole house / floor rows (lights, blinds, Settings) are gone, and an empty panel links to Favourites in Settings (#308).

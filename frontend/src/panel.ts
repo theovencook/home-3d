@@ -126,6 +126,7 @@ export class Floorplan3dPanel extends LitElement {
     _floorPics: { state: true },
     _angleLock: { state: true },
     _windowSpill: { state: true },
+    _navButtons: { state: true },
     _trail: { state: true },
     _cameraWall: { state: true },
     _clean: { state: true },
@@ -206,6 +207,7 @@ export class Floorplan3dPanel extends LitElement {
   /** 3D lock on this device: the angle stays fixed. */
   private declare _angleLock: boolean;
   private declare _windowSpill: boolean;
+  private declare _navButtons: boolean;
   /** Motion trail of the last half hour in 3D. */
   private declare _trail: boolean;
   private declare _cameraWall: boolean;
@@ -325,6 +327,7 @@ export class Floorplan3dPanel extends LitElement {
     this._floorPics = prefs.get("floor_pictures") === "1";
     this._angleLock = prefs.get("angle_lock") === "1";
     this._windowSpill = prefs.get("window_spill") === "1";
+    this._navButtons = prefs.get("nav") === "1";
     this._trail = prefs.get("trail") === "1";
     this._clean = prefs.get("clean") === "1";
     this._weather = prefs.get("weather") !== "0";
@@ -1486,6 +1489,7 @@ export class Floorplan3dPanel extends LitElement {
           .keepView=${this._keepView}
           .angleLock=${this._angleLock}
           .windowSpill=${this._windowSpill}
+          .navButtons=${this._navButtons}
           ?trail=${this._trail}
           .cameraWall=${this._cameraWall && !tt}
           @camera-wall-close=${() => (this._cameraWall = false)}

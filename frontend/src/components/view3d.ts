@@ -367,6 +367,7 @@ export class Fp3dView3d extends LitElement {
     keepView: { attribute: false },
     angleLock: { attribute: false },
     windowSpill: { attribute: false },
+    navButtons: { attribute: false },
     alerts: { attribute: false },
     alertJump: { attribute: false },
     director: { attribute: false },
@@ -613,6 +614,8 @@ export class Fp3dView3d extends LitElement {
   declare angleLock: boolean;
   /** The light out of lit windows at night (#274); off unless the device's setting is on. */
   declare windowSpill: boolean;
+  /** The zoom, move and turn pad (#297, #307); a device choice, off unless the host turns it on. */
+  declare navButtons: boolean;
   /** The stage is narrower than 700 px (smaller floor pictures, phone layout). */
   private declare _narrowStage: boolean;
   /** The stage is phone-wide (#93): floor pictures folded, the house fitted clear of the bars. */
@@ -892,6 +895,7 @@ export class Fp3dView3d extends LitElement {
     this.keepView = false;
     this.angleLock = false;
     this.windowSpill = false;
+    this.navButtons = false;
     this._narrowStage = false;
     this.alerts = true;
     this.alertJump = false;
@@ -5099,9 +5103,9 @@ export class Fp3dView3d extends LitElement {
   /** The eye: one tap hides every bar and overlay so only the stage remains, the next brings them back. */
   /** Zoom and pan buttons (#297), for the 3D view and the 2D plan; not in the clean view, in a walk or beside the room panel. */
   private renderViewNav() {
-    if (this.clean || this._walk || this.panelOpen || !this.hass) return nothing;
+    if (!this.navButtons || this.clean || this._walk || this.panelOpen || !this.hass) return nothing;
     need(loadViewNav);
-    return html`<fp3d-view-nav class="fp3d-vnav" .t=${(k: string) => translate(this.hass, k as I18nKey)} @nav=${(e: CustomEvent<NavAction>) => this.viewer?.navigate(e.detail)}></fp3d-view-nav>`;
+    return html`<fp3d-view-nav class="fp3d-vnav" ?turn=${!this.plan2d} .t=${(k: string) => translate(this.hass, k as I18nKey)} @nav=${(e: CustomEvent<NavAction>) => this.viewer?.navigate(e.detail)}></fp3d-view-nav>`;
   }
 
   private renderEye() {

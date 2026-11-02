@@ -119,7 +119,7 @@ test("each row once (#215); the 2D plan drops the 3D-only rows; one floor and no
   const flatPlan = rows(ctx({ plan2d: true }), "show").map((r) => r.id);
   for (const id of ["walls", "explode", "roof", "floor_stack"]) assert.ok(!flatPlan.includes(id), id);
   const single = rows(ctx({ floors: 1, roof: false }), "show").map((r) => r.id);
-  assert.deepEqual(single, ["walls", "heat", "display", "trail", "weather"]);
+  assert.deepEqual(single, ["walls", "heat", "display", "trail", "weather", "nav"]);
 });
 
 test("a wall tablet's View panel offers only what the 3D shows (and 3D or 2D, slotted in) (#92)", () => {

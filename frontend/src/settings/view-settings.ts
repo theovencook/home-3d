@@ -167,6 +167,8 @@ export const LOOK: Setting[] = [
   deviceSwitch("weather", "view3d", "show", "weather", true, "st_weather", "st_weather_hint", ["rain", "snow", "weather"]),
   // #274: kept per device and off by default (the light pooling outside looked poor); the old home setting of the same name no longer counts
   deviceSwitch("window_glow", "view3d", "show", "window_spill", false, "window_glow", "window_glow_hint", ["night", "glow", "light", "windows", "spill"]),
+  // #307: the zoom, move and turn pad on the view; off by default
+  deviceSwitch("nav", "view3d", "show", "nav", false, "st_nav"),
 ];
 
 /**
@@ -228,7 +230,7 @@ export function viewSections(ctx: ViewContext): ViewSection[] {
   if (several && ctx.floorOpen && !ctx.plan2d) show.push({ id: "floor_stack" });
   show.push({ id: "heat" }, { id: "display" });
   if (ctx.roof && !ctx.plan2d) show.push({ id: "roof", disabled: ctx.floorOpen });
-  show.push({ id: "trail" }, { id: "weather" });
+  show.push({ id: "trail" }, { id: "weather" }, { id: "nav" });
   const shows: ViewSection = { id: "show", title: "st_card_show", rows: show, hint: show.some((r) => r.disabled) ? "pick_all_floors" : undefined, openOnPhone: false };
   if (ctx.kiosk) return [{ ...shows, openOnPhone: true }];
   return [

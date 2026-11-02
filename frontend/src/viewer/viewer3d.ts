@@ -2422,8 +2422,8 @@ export class FloorplanViewer {
     this.fit(700);
   }
 
-  /** The on-screen zoom and pan buttons (#297); "reset" brings the whole house back. */
-  navigate(act: "in" | "out" | "left" | "right" | "up" | "down" | "reset"): void {
+  /** The on-screen zoom, pan and turn buttons (#297, #307); "reset" brings the whole house back. */
+  navigate(act: "in" | "out" | "left" | "right" | "up" | "down" | "reset" | "turnLeft" | "turnRight"): void {
     if (act === "reset") this.resetView();
     else this.controls.nudge(act);
   }

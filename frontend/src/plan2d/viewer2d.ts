@@ -166,8 +166,9 @@ export class Plan2dViewer implements ViewerSurface {
   }
 
   /** The on-screen zoom and pan buttons (#297): the keyboard's moves; "reset" fits the plan. */
-  navigate(act: "in" | "out" | "left" | "right" | "up" | "down" | "reset"): void {
+  navigate(act: "in" | "out" | "left" | "right" | "up" | "down" | "reset" | "turnLeft" | "turnRight"): void {
     if (act === "reset") return this.resetView();
+    if (act === "turnLeft" || act === "turnRight") return; // the flat plan does not turn
     const step = 60;
     const w = this.size.w / 2;
     const h = this.size.h / 2;
