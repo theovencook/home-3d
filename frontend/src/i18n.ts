@@ -2390,6 +2390,8 @@ const en = {
   colour_theme: "From the appearance",
   colour_reset: "Back to the default colour",
   colour_own: "Own colour",
+  colour_active: "Colour while active",
+  colour_active_hint: "The glow colour while its entity is active: a speaker playing, a TV or PC on, a smoke or CO alarm triggered.",
   material_of: "Material: {role}",
   material_usual: "Usual ({material})",
   material_matt: "Matt",

@@ -9,6 +9,7 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
   areaEntities,
   entityName,
   furnitureEntities,
+  alarmTriggered,
   isActive,
   isUnavailable,
   kindOf,
@@ -3580,6 +3581,14 @@ export class Fp3dView3d extends LitElement {
           const picture = kindOf(st.entity_id) === "media" ? ((st.attributes.entity_picture as string | undefined) ?? null) : null;
           // a TV's Ambilight (glowing strips round its back) shines whenever its screen is lit
           if (color) screens.set(f.id, { color, level: st.state === "playing" ? 1 : 0.6, picture, ring: packAmbilight(f.type) || (ringed && st.state === "playing") });
+        }
+        // its own "active" colour (#289): over the usual glow while its entity is playing, on or triggered
+        if (st && f.active_color && (isActive(st) || alarmTriggered(st) || (kindOf(st.entity_id) === "media" && st.state === "on"))) {
+          const c = activeGlow(f.active_color);
+          if (c) {
+            const was = screens.get(f.id);
+            screens.set(f.id, { ...(was ?? { level: 0.8 }), color: c, ...(was?.faces ? { faces: was.faces.map((x) => ({ ...x, color: c })) } : {}) });
+          }
         }
         // a 3D printer (#11): its progress ring and chamber light; a tap shows its camera, its pin the per cents
         const printer = isPrinter(f.type) ? printerState(hass, link.entity) : null;
@@ -9450,6 +9459,12 @@ function formatPower(hass: HomeAssistant | undefined, w: number): string {
 }
 
 /** Marker height above furniture: in front of a screen, above wall units, else just above the top. */
+/** "#rrggbb" as a glow colour (0..1 per channel), or null when it is none (#289). */
+function activeGlow(hex: string): [number, number, number] | null {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  return m ? [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255] : null;
+}
+
 /** A running washer or dryer: a ring of light round its round door (#516); a dishwasher: its front. */
 function runGlow(type: string): ScreenState {
   const color: [number, number, number] = [0.3, 0.85, 1];
