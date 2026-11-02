@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Room, type Vec2 } from "../model.ts";
+import { flightA, flightB, twoFloors } from "../geometry/stair-fixture.ts";
 import { FloorMap, stairSpot, WalkCamera, type Obstacle } from "./walk.ts";
 
 function rect(id: string, x0: number, z0: number, x1: number, z1: number): Room {
@@ -157,4 +158,52 @@ test("stairSpot finds the nearest point on the way and its height", () => {
   const way: [number, number, number][] = [[0, 0, 4], [0, 2.7, 1]];
   const mid = stairSpot(way, [0.2, 2.5]);
   assert.ok(Math.abs(mid.s - 1.5) < 1e-9 && Math.abs(mid.dist - 0.2) < 1e-9 && Math.abs(mid.h - 1.35) < 1e-9);
+});
+
+test("a stair drawn as two flights is climbed round the corner and switches floors only at the top (#304)", () => {
+  const g = globalThis as unknown as Record<string, unknown>;
+  g.requestAnimationFrame ??= () => 1;
+  g.cancelAnimationFrame ??= () => undefined;
+  g.window ??= new EventTarget();
+  g.document ??= new EventTarget();
+  const run = (flights: ReturnType<typeof flightA>[]) => {
+    const b = twoFloors(...flights);
+    const v = {
+      camera: { position: { set() {}, x: 0, y: 0, z: 0 }, lookAt() {}, fov: 50, near: 0.1, updateProjectionMatrix() {}, aspect: 1 },
+      controls: { update: () => false, view: { target: { x: 0, y: 0, z: 0, set() {} }, radius: 1, theta: 0, phi: 0 } },
+      floorMap: new Map(), floors: [], labels: { style: { visibility: "" } }, renderer: { domElement: {} }, invalidate() {}, updateWalls() {}, onControls: null as (() => void) | null,
+    };
+    const walk = new WalkCamera(v as never, new FloorMap(b, b.floors[0]), new EventTarget() as unknown as HTMLElement, { onRoom() {}, start: { x: 6.4, z: 11.688, yaw: 0, pitch: 0 }, onFloor() {} });
+    const w = walk as unknown as { move(dx: number, dz: number): void; stairs(): void; lift: number; map: FloorMap; state: { x: number; z: number } };
+    const to = (x: number, z: number) => {
+      for (let i = 0; i < 400; i++) {
+        const dx = x - w.state.x;
+        const dz = z - w.state.z;
+        const d = Math.hypot(dx, dz);
+        if (d < 0.03) return;
+        w.move((dx / d) * Math.min(0.05, d), (dz / d) * Math.min(0.05, d));
+        w.stairs();
+      }
+    };
+    return { walk, w, to };
+  };
+  // both flights: along the first, round the corner, up the second
+  const full = run([flightA(), flightB()]);
+  full.to(7.2, 11.688);
+  assert.ok(full.w.lift > 0 && full.w.lift < 0.55, `on the first flight (${full.w.lift})`);
+  full.to(8.2, 11.688);
+  assert.ok(Math.abs(full.w.lift - 0.55) < 0.15, `at the turn (${full.w.lift})`);
+  assert.equal(full.w.map.floor.id, "eg");
+  full.to(7.7, 11.188);
+  full.to(7.7, 10.3);
+  assert.ok(full.w.lift > 1 && full.w.lift < 2.75, `well up the second flight (${full.w.lift})`);
+  full.to(7.7, 8.5);
+  assert.equal(full.w.map.floor.id, "og", "up on the next floor");
+  full.walk.dispose();
+  // the short flight alone: no floor change, no lift
+  const alone = run([flightA()]);
+  alone.to(8.6, 11.688);
+  assert.equal(alone.w.map.floor.id, "eg");
+  assert.equal(alone.w.lift, 0);
+  alone.walk.dispose();
 });
