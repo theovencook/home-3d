@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- **Walking** follows each flight of a stair drawn in several pieces: a flight starts at its mount height and rises its own height, flights that meet join into one way round the corner, and only the way that reaches the floor above changes floors (#304).
+
 ## Home 3D 0.2.0 (2 November 2026)
 
 ### Panels, views and controls (#265–#298)

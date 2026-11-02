@@ -61,7 +61,30 @@ function stairWay(item: string, w: number, d: number): [number, number, number][
   return null;
 }
 
-/** Every staircase that joins a floor to the one above it (built-in stairs and the stairs pack's). */
+/** How close a flight's top must be to the foot of the next (m across, plus half the widths) and in height (m) to join it. */
+const JOIN_NEAR = 0.3;
+const JOIN_HEIGHT = 0.15;
+
+/** One drawn flight: its way (stepping-off points at both ends) from `h0` to `h1` above the lower floor. */
+interface Flight {
+  way: [number, number, number][];
+  w: number;
+  W: (x: number, z: number) => Vec2;
+  h0: number;
+  h1: number;
+}
+
+const flightPts = (f: Flight): [number, number, number][] =>
+  f.way.map(([x, z, t]): [number, number, number] => {
+    const [wx, wz] = f.W(x, z);
+    return [wx, f.h0 + t * (f.h1 - f.h0), wz];
+  });
+
+/**
+ * Every way up between floors (built-in stairs and the stairs pack's). A flight starts at its mount height and rises its
+ * own height; flights whose top meets the foot of another (a quarter-turn stair drawn as two) join into one way, and only a
+ * way from the floor that reaches at least half way up is a link, taken to the floor above. A flight that reaches nowhere (a few steps to a raised area) is left out.
+ */
 export function stairLinks(b: Building): Link[] {
   const floors = b.floors.filter((f) => f.rooms.some((r) => r.points.length >= 3)).sort((x, y) => x.elevation - y.elevation);
   const out: Link[] = [];
@@ -69,27 +92,64 @@ export function stairLinks(b: Building): Link[] {
     const lower = floors[i];
     const upper = floors[i + 1];
     const rise = upper.elevation - lower.elevation;
+    const flights: Flight[] = [];
     for (const f of lower.furniture) {
       const way = stairWay(itemOf(f.type), f.w, f.d);
       if (!way) continue;
       const a = (f.rotation * Math.PI) / 180;
       const m = f.mirror ? -1 : 1;
       const W = (x: number, z: number): Vec2 => [f.x + x * m * Math.cos(a) - z * Math.sin(a), f.z + x * m * Math.sin(a) + z * Math.cos(a)];
-      const pts = way.map(([x, z, t]): [number, number, number] => {
-        const [wx, wz] = W(x, z);
-        return [wx, t * rise, wz];
-      });
-      // the way's first and last points step off the stair; beside them, the first and last step from the side
-      const z0 = way[1][1];
-      const z1 = way[way.length - 2][1];
-      const side = f.w / 2 + 0.35;
+      const h0 = f.mount_y ?? 0;
+      flights.push({ way, w: f.w, W, h0, h1: h0 + f.h });
+    }
+    // which flight carries on from which: the top of one at the foot of another, at the same height
+    const next = new Map<Flight, Flight>();
+    const taken = new Set<Flight>();
+    for (const x of flights) {
+      const t = flightPts(x);
+      const top = t[t.length - 2];
+      let best: Flight | null = null;
+      let bestD = Infinity;
+      for (const y of flights) {
+        if (y === x || taken.has(y)) continue;
+        const foot = flightPts(y)[1];
+        const d = Math.hypot(top[0] - foot[0], top[2] - foot[2]);
+        if (d <= JOIN_NEAR + (x.w + y.w) / 4 && Math.abs(x.h1 - y.h0) <= JOIN_HEIGHT && d < bestD) {
+          best = y;
+          bestD = d;
+        }
+      }
+      if (best) {
+        next.set(x, best);
+        taken.add(best);
+      }
+    }
+    for (const first of flights) {
+      if (taken.has(first) || first.h0 > JOIN_HEIGHT) continue;
+      const chain = [first];
+      for (let n = next.get(first); n && !chain.includes(n); n = next.get(n)) chain.push(n);
+      const last = chain[chain.length - 1];
+      if (last.h1 < rise / 2) continue;
+      // a way that tops out at least half way up is taken to the floor above (ends snapped), with the joins at one height
+      first.h0 = 0;
+      last.h1 = rise;
+      for (let k = 1; k < chain.length; k++) chain[k].h0 = chain[k - 1].h1;
+      const parts = chain.map(flightPts);
+      // each flight's first and last points step off it; beside them, the first and last step from the side
+      const side0 = first.w / 2 + 0.35;
+      const side1 = last.w / 2 + 0.35;
+      const z0 = first.way[1][1];
+      const z1 = last.way[last.way.length - 2][1];
+      const head = parts[0][0];
+      const endPart = parts[parts.length - 1];
+      const tail = endPart[endPart.length - 1];
       out.push({
         lower: lower.id,
         upper: upper.id,
-        pts: pts.slice(1, -1),
+        pts: parts.flatMap((p) => p.slice(1, -1)),
         // (beside: at the first steps, a little up the stair, where a wall in front leaves room)
-        foot: [[pts[0][0], pts[0][2]], ...[0, -0.35, -0.7].flatMap((k) => [W(-side, z0 + k), W(side, z0 + k)])],
-        top: [[pts[pts.length - 1][0], pts[pts.length - 1][2]], ...[0, 0.35, 0.7].flatMap((k) => [W(-side, z1 + k), W(side, z1 + k)])],
+        foot: [[head[0], head[2]], ...[0, -0.35, -0.7].flatMap((k) => [first.W(-side0, z0 + k), first.W(side0, z0 + k)])],
+        top: [[tail[0], tail[2]], ...[0, 0.35, 0.7].flatMap((k) => [last.W(-side1, z1 + k), last.W(side1, z1 + k)])],
       });
     }
   }
