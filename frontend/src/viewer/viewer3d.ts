@@ -227,6 +227,8 @@ export interface DeviceMarker {
   model?: "camera_wall" | "camera_ceiling";
   /** A camera shown by a furniture item of its own (#779): its built-in model is not drawn (the look-through stays). */
   ownLook?: boolean;
+  /** A UniFi Protect camera of a known model: the pack item drawn instead of the built-in camera (#273). */
+  camPack?: string;
   /** Camera: saw motion within the hold time (⚙ effects), drawn red. */
   motion?: boolean;
   /** Camera: opening angle (degrees) and reach (m) of its field of view, for its projected picture; default 90° / 4.5 m (dome: 360° / 3 m). */
@@ -3692,7 +3694,7 @@ export class FloorplanViewer {
     const shapeSig =
       this.wallMode +
       (this.lowQuality ? "L" : this.highQuality ? "H" : "M") +
-      lamps.map((d) => `${d.id},${d.lamp ?? d.model},${d.variant},${d.x},${d.z},${d.y},${d.rotation ?? 0},${d.roll ?? 0},${d.upright ? 1 : 0},${d.rise ?? 0},${d.size?.join("/")},${d.base ?? 0},${d.pack ?? ""},${d.mirror ? 1 : 0},${d.motion ? 1 : 0}${d.colors ? JSON.stringify(d.colors) + this.theme : ""}${d.materials ? JSON.stringify(d.materials) : ""}`).join(";");
+      lamps.map((d) => `${d.id},${d.lamp ?? d.model},${d.variant},${d.x},${d.z},${d.y},${d.rotation ?? 0},${d.roll ?? 0},${d.upright ? 1 : 0},${d.rise ?? 0},${d.size?.join("/")},${d.base ?? 0},${d.pack ?? ""}${d.camPack ?? ""},${d.mirror ? 1 : 0},${d.motion ? 1 : 0}${d.colors ? JSON.stringify(d.colors) + this.theme : ""}${d.materials ? JSON.stringify(d.materials) : ""}`).join(";");
     const glows = lamps.map((d) => this.glowOf(d));
     const colorSig = `${this.theme};` + lamps.map((d, i) => `${flash(d.id)},${glows[i] ? `${glows[i]!.level.toFixed(3)},${glows[i]!.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`).join(";");
     if (shapeSig !== fv.lampShapeSig || !fv.lampMesh.geometry.getAttribute("position")) {
@@ -3712,7 +3714,11 @@ export class FloorplanViewer {
         const [pw, pd, ph] = d.size ?? [0.3, 0.3, 0.3];
         // shades get the sentinel colour and are recoloured below
         if (d.model) {
-          if (!d.ownLook) pushCameraModel(buf, d.model, d.x, d.model === "camera_ceiling" ? H : d.y, d.z, d.rotation ?? 0, !!d.motion);
+          const cam = d.camPack ? packItem(d.camPack) : undefined;
+          if (cam && !d.ownLook) {
+            const [w, dd, h] = cam.size;
+            pushPackLamp(buf, cam, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w, d: dd, h }, d.model === "camera_ceiling" ? H - h : d.y - h / 2, SHADE_SENTINEL);
+          } else if (!d.ownLook) pushCameraModel(buf, d.model, d.x, d.model === "camera_ceiling" ? H : d.y, d.z, d.rotation ?? 0, !!d.motion);
         }
         else if (packed) pushPackLamp(buf, packed, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w: pw, d: pd, h: ph, mirror: d.mirror, colors: d.colors, materials: d.materials }, d.base ?? 0, SHADE_SENTINEL);
         // a ceiling fan's blades turn in a group of their own (syncFans)

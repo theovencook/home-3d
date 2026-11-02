@@ -158,3 +158,12 @@ test("UniFi's AI cameras match without a number in their model name (#145)", () 
   // a bare "ai" is no model name
   assert.equal(matchCameraModel("AI", [PACK]), null);
 });
+
+test("the devices pack ships G4 Doorbell and G4 Bullet, found by their device models (#273)", () => {
+  const dir = fileURLToPath(new URL("../../custom_components/home_3d/bundled_packs/theovencook.devices/tech/", import.meta.url));
+  const items = ["unifi_g4_doorbell", "unifi_g4_bullet"].map((id) => JSON.parse(readFileSync(join(dir, `${id}.json`), "utf8")));
+  const pack: FurniturePack = { id: "d", name: "d", publisher: "t", items };
+  assert.equal(matchCameraModel("G4 Doorbell", [pack]), "pack:d:unifi_g4_doorbell");
+  assert.equal(matchCameraModel("UVC G4 Bullet", [pack]), "pack:d:unifi_g4_bullet");
+  assert.deepEqual(items[0].size, [0.0468, 0.0258, 0.1183]);
+});
