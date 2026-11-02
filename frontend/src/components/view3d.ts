@@ -17,7 +17,7 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
   openingState,
   TOGGLE_KINDS,
   type FurnitureLinks,
-  type OpeningEntities, awningStates, confirmEntities, fridgeDoors, hasScreen, pictureRuleMatches,
+  type OpeningEntities, awningStates, confirmEntities, fridgeDoors, hasScreen, isMediaFurniture, pictureRuleMatches,
   fromCelsius,
   tempUnit,
   robotRoom,
@@ -85,7 +85,7 @@ interface HoloCard {
   /** Auto Pro: the car in its parking spot (charge, range, charging, lock, climate). */
   car?: { spot: string; soc: number | null; range: number | null; rangeUnit: string; chargingW: number | null; charging: boolean; locked: boolean | null; climateOn: boolean | null; lock: string | null; climate: string | null; charge: string | null };
   /** Klang & Kino: what the player plays right now. */
-  media?: { id: string; title: string; artist: string; picture: string | null; volume: number; playing: boolean };
+  media?: { id: string; title: string; artist: string; picture: string | null; volume: number; playing: boolean; /** A TV's card (#281): always shown, can be hidden. */ tv?: boolean; /** The TV is off: the card shows a power button only. */ off?: boolean };
   /** The plant's power now (W); null on the main card (it shows the house). */
   w: number | null;
   /** Sensors whose statistics give today's curve. */
@@ -131,6 +131,9 @@ type RackView = RackElevation & { name: string };
 import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { holdTarget } from "../hold.ts";
+import { popupKind, popupPosition } from "../device-popup-model.ts";
+import { loadDevicePopup } from "../load-parts.ts";
+import { need } from "../lazy-part.ts";
 import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
@@ -234,6 +237,24 @@ function writeFlag(key: string, on: boolean): void {
   }
 }
 
+/** The TV cards this browser hid (#281), by player entity; storage may be blocked: none. */
+function readTvHidden(): Set<string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem("home3d.tv_hidden") ?? "[]") as unknown;
+    return new Set(Array.isArray(raw) ? raw.filter((v): v is string => typeof v === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeTvHidden(ids: ReadonlySet<string>): void {
+  try {
+    localStorage.setItem("home3d.tv_hidden", JSON.stringify([...ids]));
+  } catch {
+    /* hidden only until the page reloads */
+  }
+}
+
 /** A roof window's sash and blind as the 3D view shows them: its contact and tilt sensors, or its window motor. */
 function roofWindowState(hass: HomeAssistant, w: RoofWindow): { open: number; tilt: number; cover: number } {
   const ref = (e: string | null | undefined) => (e && e !== "none" ? e : null);
@@ -310,6 +331,7 @@ export class Fp3dView3d extends LitElement {
     _holoShow: { state: true },
     _swipe: { state: true },
     _menu: { state: true },
+    _popup: { state: true },
     _through: { state: true },
     _blend: { state: true },
     _wallBig: { state: true },
@@ -511,6 +533,8 @@ export class Fp3dView3d extends LitElement {
   private holoFolded = new Set<number>();
   /** Media cards folded by the user, by player (positions shift as players start and stop). */
   private mediaFolded = new Set<string>();
+  /** TV cards hidden on this device (#281); a click on the TV brings its card back. */
+  private tvHidden = readTvHidden();
   /** A module card just opened from its marker (it lights up for a moment). */
   private cardPing: string | null = null;
   private cardPingTimer: ReturnType<typeof setTimeout> | undefined;
@@ -537,6 +561,9 @@ export class Fp3dView3d extends LitElement {
   private declare _swipe: { entity: string; kind: "light" | "cover"; start: number; value: number; x: number; y: number } | null;
   /** Quick menu at a device (long press). */
   private declare _menu: { entity: string; x: number; y: number; car?: CarState; doorLock?: boolean } | null;
+  /** The device popup (#272 #271 #284): a light's, a robot vacuum's or a camera's card; `hover`: a camera's floating live preview. */
+  private declare _popup: { entity: string; x: number; y: number; hover?: boolean } | null;
+  private popupTimer: ReturnType<typeof setTimeout> | undefined;
   /** Looking through a camera: its live picture lies over the 3D view; `back` is the view to return to. */
   private declare _through: { entity: string; back: ReturnType<FloorplanViewer["getView"]> } | null;
   /** Camera wall: the camera shown big (null: all tiles). */
@@ -812,6 +839,7 @@ export class Fp3dView3d extends LitElement {
     this._solarMore = null;
     this._swipe = null;
     this._menu = null;
+    this._popup = null;
     this._through = null;
     this._wallBig = null;
     this._wallDock = "bottom";
@@ -1120,6 +1148,7 @@ export class Fp3dView3d extends LitElement {
     this.ghost = null;
     this._through = null;
     this._menu = null;
+    this._popup = null;
     this.viewer?.dispose();
     this.viewer = null;
     this.shownPacks = -1;
@@ -1626,7 +1655,7 @@ export class Fp3dView3d extends LitElement {
     {
       const seenMedia = new Set<string>();
       const holoSize = (b.settings.roof.hologram ?? DEFAULT_HOLOGRAM).size;
-      const add = (floor: Building["floors"][number], id: string, x: number, z: number, top: number, name: string) => {
+      const add = (floor: Building["floors"][number], id: string, x: number, z: number, top: number, name: string, tvItem = false) => {
         const st = hass.states[id];
         if (!st || kindOf(id) !== "media") return;
         if (seenMedia.has(id)) {
@@ -1643,7 +1672,17 @@ export class Fp3dView3d extends LitElement {
         const graced = this.ro ? undefined : this.mediaGrace.get(id);
         // what it plays: the title, else the app or the source (a receiver on "TV", a speaker on Bluetooth)
         const label = [st.attributes.media_title, st.attributes.app_name, st.attributes.source].find((v): v is string => typeof v === "string" && !!v.trim()) ?? "";
+        // a TV (#281) keeps its card all the time, off or on; the owner can hide it on this device
+        const tv = tvItem || st.attributes.device_class === "tv";
+        const hide = tv && this.tvHidden.has(id);
         const showing = !isUnavailable(st) && (st.state === "playing" || (st.state === "paused" && !!label && this.pausedRecently(st)) || (st.state === "on" && !!st.attributes.source));
+        if (!showing && tv && !isUnavailable(st)) {
+          sound.push({ id, floorId: floor.id, x, z, level: 0, playing: false, members: [] });
+          if (hide) return;
+          anchors.push({ p: [x, floor.elevation + top + 0.12, z] as [number, number, number], n: [0, 1, 0] as [number, number, number], floorId: floor.id, size: holoSize * 0.7, roof: false, views: "all" as const });
+          cards.push({ kind: "media", name, w: null, dayIds: [], battery: null, media: { id, title: translate(hass, "state_off"), artist: "", picture: null, volume: 0, playing: false, tv: true, off: st.state === "off" || st.state === "standby" } });
+          return;
+        }
         if (!showing) {
           if (graced && graced.until > Date.now()) {
             sound.push({ ...graced.source, playing: false, level: 0 });
@@ -1670,8 +1709,9 @@ export class Fp3dView3d extends LitElement {
           w: null,
           dayIds: [],
           battery: null,
-          media: { id, title, artist: typeof a.media_artist === "string" ? a.media_artist : typeof a.media_album_name === "string" ? a.media_album_name : "", picture: typeof a.entity_picture === "string" ? a.entity_picture : null, volume: Math.round(vol * 100), playing },
+          media: { id, title, artist: typeof a.media_artist === "string" ? a.media_artist : typeof a.media_album_name === "string" ? a.media_album_name : "", picture: typeof a.entity_picture === "string" ? a.entity_picture : null, volume: Math.round(vol * 100), playing, ...(tv ? { tv: true } : {}) },
         };
+        if (hide) return;
         anchors.push(anchor);
         cards.push(card);
         // (a card of the past does not stand in for a live one afterwards)
@@ -1683,7 +1723,7 @@ export class Fp3dView3d extends LitElement {
         for (const f of floor.furniture) {
           if ((f.entity != null && f.entity !== "none") !== byHand) continue;
           const e = this.furnitureLinks?.get(f.id)?.entity;
-          if (e) add(floor, e, f.x, f.z, mountBase(floor, f) + f.h, f.name || furnitureName(hass, f.type));
+          if (e) add(floor, e, f.x, f.z, mountBase(floor, f) + f.h, f.name || furnitureName(hass, f.type), isMediaFurniture(f.type));
         }
       };
       for (const floor of b.floors) furn(floor, true);
@@ -1961,6 +2001,7 @@ export class Fp3dView3d extends LitElement {
   /** Time travel: a tap shows the device's state at the replayed moment ("on · 60 % · since 07:42"). */
   private showInfo(entity: string, x: number, y: number): void {
     this._menu = null;
+    this._popup = null;
     this._info = { entity, x, y };
     clearTimeout(this.infoTimer);
     this.infoTimer = setTimeout(() => (this._info = null), 4000);
@@ -2596,12 +2637,15 @@ export class Fp3dView3d extends LitElement {
       <div class="fp3d-holo-sheen"></div>
       <div class="fp3d-holo-scan"></div>
       <div class="fp3d-holo-body">
-        <div class="fp3d-holo-head" role="button" tabindex="0" aria-expanded=${open ? "true" : "false"} @click=${toggle} @keydown=${activateKey(toggle)}><span>♪ ${card.name}</span><span class="fp3d-holo-live">${playing ? `● ${t("holo_media_playing")}` : t("holo_media_paused")}</span></div>
+        <div class="fp3d-holo-head" role="button" tabindex="0" aria-expanded=${open ? "true" : "false"} @click=${toggle} @keydown=${activateKey(toggle)}><span>${m.tv ? "▭" : "♪"} ${card.name}</span><span class="fp3d-holo-live">${m.off ? t("state_off") : playing ? `● ${t("holo_media_playing")}` : m.tv ? "" : t("holo_media_paused")}</span>${m.tv && !this.ro ? html`<button class="fp3d-holo-hide" title=${t("tv_hide")} aria-label=${t("tv_hide")} @click=${(e: Event) => { e.stopPropagation(); this.hideTvCard(m.id); }} @keydown=${(e: Event) => e.stopPropagation()}>✕</button>` : nothing}</div>
         <div class="fp3d-holo-track">
           ${m.picture ? html`<img class="fp3d-holo-cover" src=${m.picture} alt="" />` : html`<span class="fp3d-holo-cover fp3d-holo-cover-none">♪</span>`}
           <div class="fp3d-holo-titles"><b>${m.title}</b>${m.artist ? html`<span>${m.artist}</span>` : nothing}</div>
         </div>
-        ${open && !this.ro
+        ${open && !this.ro && m.off
+          ? html`<div class="fp3d-holo-media-controls"><button aria-label=${t("tv_on")} title=${t("tv_on")} @click=${() => call("turn_on")}>⏻</button></div>`
+          : nothing}
+        ${open && !this.ro && !m.off
           ? html`<div class="fp3d-holo-media-controls">
                 <button aria-label=${t("previous")} ?disabled=${!can(16)} @pointerdown=${press.down} @pointerup=${press.up(() => call("media_previous_track"))} @click=${press.key(() => call("media_previous_track"))}>⏮</button>
                 <button aria-label=${t("play_pause")} ?disabled=${playing ? !can(1) : !canPlay} @pointerdown=${press.down} @pointerup=${press.up(playPause)} @click=${press.key(playPause)}>${playing ? "⏸" : "▶"}</button>
@@ -4386,8 +4430,10 @@ export class Fp3dView3d extends LitElement {
           }
         }
     }
-    // every device opens its more-info (a light, a switch, a lock and a camera too: their quick menu stays on the
-    // tap where a tap opens it, a cover's and a camera's); pins without one entity behind them do what a tap does
+    // a light opens its card (#272: brightness, colour temperature, colour; "More" leads to the details); every other
+    // device opens its more-info (a switch, a lock too: their quick menu stays on the tap where a tap opens it, a
+    // cover's); pins without one entity behind them do what a tap does
+    if (popupKind(entityId) === "light" && this.hass?.states[entityId]) return this.openPopup(entityId, x, y);
     const target = holdTarget(entityId);
     if (target) openMoreInfo(this, target);
     else this.onDeviceTap(entityId, x, y);
@@ -6057,6 +6103,73 @@ export class Fp3dView3d extends LitElement {
     else openMoreInfo(this, entity);
   }
 
+  /** Hides a TV's card on this device, or brings it back (#281). */
+  private hideTvCard(id: string): void {
+    this.tvHidden.add(id);
+    writeTvHidden(this.tvHidden);
+    this.syncDevices(true);
+  }
+
+  private showTvCard(id: string): void {
+    this.tvHidden.delete(id);
+    writeTvHidden(this.tvHidden);
+    this.syncDevices(true);
+  }
+
+  /** Opens the device popup beside the pin (the quick menu and the details give way). */
+  private openPopup(entity: string, x: number, y: number, hover = false): void {
+    clearTimeout(this.popupTimer);
+    if (!hover) this._menu = null;
+    need(loadDevicePopup);
+    this._popup = { entity, x, y, hover };
+  }
+
+  /** A mouse over a camera's pin (#284): after a short moment its live picture floats beside it; leaving closes it (and the stream). */
+  private onPinOver = (e: PointerEvent): void => {
+    if (e.pointerType !== "mouse" || this.ro) return;
+    const pin = (e.target as Element | null)?.closest?.(".fp3d-dev[data-entity]") as HTMLElement | null;
+    const id = pin?.dataset.entity;
+    if (!pin || !id || popupKind(id) !== "camera" || (this._popup && !this._popup.hover)) return;
+    clearTimeout(this.popupTimer);
+    this.popupTimer = setTimeout(() => {
+      const stage = this.renderRoot.querySelector(".fp3d-stage") as HTMLElement | null;
+      if (!stage || !this.hass?.states[id] || (this._popup && !this._popup.hover)) return;
+      const r = pin.getBoundingClientRect();
+      const h = stage.getBoundingClientRect();
+      this.openPopup(id, r.left + r.width / 2 - h.left, r.top - h.top, true);
+    }, 250);
+  };
+
+  private onPinOut = (e: PointerEvent): void => {
+    if (e.pointerType !== "mouse") return;
+    const pin = (e.target as Element | null)?.closest?.(".fp3d-dev[data-entity]");
+    if (!pin || pin.contains(e.relatedTarget as Node | null)) return;
+    clearTimeout(this.popupTimer);
+    if (this._popup?.hover) this._popup = null;
+  };
+
+  private renderPopup() {
+    const p = this._popup;
+    if (!p || !this.hass || this.ro) return nothing;
+    const stage = this.renderRoot.querySelector(".fp3d-stage") as HTMLElement | null;
+    const camera = popupKind(p.entity) === "camera";
+    const pos = popupPosition(p.x, p.y, camera ? 320 : 252, camera ? (p.hover ? 230 : 270) : 330, stage?.clientWidth ?? 800, stage?.clientHeight ?? 600);
+    return html`${p.hover ? nothing : html`<div class="fp3d-menu-backdrop" @click=${() => (this._popup = null)}></div>`}
+      <fp3d-device-popup
+        style="left:${pos.left}px;top:${pos.top}px"
+        mode=${p.hover ? "hover" : "card"}
+        ?low=${this._low}
+        ?noLook=${this.plan2d}
+        .hass=${this.rawHass}
+        .entity=${p.entity}
+        @close=${() => (this._popup = null)}
+        @camera-look=${(e: CustomEvent<{ entity: string }>) => {
+          this._popup = null;
+          this.lookThrough(e.detail.entity);
+        }}
+      ></fp3d-device-popup>`;
+  }
+
   private renderMenu() {
     const m = this._menu;
     if (!m || !this.hass || this.ro) return nothing;
@@ -6142,6 +6255,8 @@ export class Fp3dView3d extends LitElement {
 
   /** A tap on a device or item: its own tap / double-tap action (#6), else what it does by its kind. */
   private onDeviceTap(entityId: string, x = 0, y = 0): void {
+    // a click on a TV whose card is hidden brings the card back (#281)
+    if (this.tvHidden.has(entityId)) return this.showTvCard(entityId);
     const owner = this.ro ? undefined : this.actionOwners.get(entityId);
     if (!owner) return this.defaultTap(entityId, x, y);
     const double = gestureAction(owner, "double_tap");
@@ -6273,8 +6388,10 @@ export class Fp3dView3d extends LitElement {
       this._menu = { entity: printerCam, x, y };
       return;
     }
+    // a robot vacuum (#271) and a camera (#284, it plays at once) open their card
+    if ((popupKind(entityId) === "vacuum" || popupKind(entityId) === "camera") && this.hass?.states[entityId]) return this.openPopup(entityId, x, y);
     const kind = kindOf(entityId);
-    // blinds have no single on/off: a tap opens their quick menu (up, positions, stop, down); a camera shows its picture
+    // blinds have no single on/off: a tap opens their quick menu (up, positions, stop, down)
     if (kind === "cover" || kind === "camera") {
       this._menu = { entity: entityId, x, y };
       return;
@@ -6482,12 +6599,14 @@ export class Fp3dView3d extends LitElement {
       @touchstart=${this.keepTouch}
       @touchmove=${this.keepTouch}
       @touchend=${this.keepTouch}
+      @pointerover=${this.onPinOver}
+      @pointerout=${this.onPinOut}
       class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this.controlsRight ? "fp3d-side-right" : ""} ${this._alerts.length ? "fp3d-has-alerts" : ""} ${this._through ? "fp3d-through-on" : ""} ${this._flash ? "fp3d-flash" : ""} ${this.replay ? "fp3d-replay" : ""}"
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderWires()} ${this.clean ? nothing : this.renderLegend()}
       ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderRackView()} ${this.renderNote()}
-      ${this.renderMenu()} ${this.renderEye()} ${this.renderRoomList()}
+      ${this.renderMenu()} ${this.renderPopup()} ${this.renderEye()} ${this.renderRoomList()}
       ${this.renderMic()}
       ${this.pivotMark && !this._walk ? html`<span class="fp3d-pivot" aria-hidden="true"></span>` : nothing}
       ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.rawHass} .building=${this.building} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
@@ -8315,6 +8434,39 @@ export class Fp3dView3d extends LitElement {
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 170px;
+      }
+      /* the TV card (#281): a mouse makes it larger while it hovers, like the solar card; it can be hidden */
+      @media (hover: hover) and (pointer: fine) {
+        .fp3d-holo-media:hover {
+          z-index: 6;
+        }
+        .fp3d-holo-media:hover .fp3d-holo-body {
+          scale: 1.22;
+          transform-origin: 0 100%;
+        }
+      }
+      .fp3d-holo-hide {
+        margin-left: 6px;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: rgba(8, 16, 34, 0.5);
+        color: inherit;
+        font-size: 11px;
+        cursor: pointer;
+        flex: none;
+      }
+      .fp3d-holo-hide:hover {
+        background: rgba(8, 16, 34, 0.85);
+      }
+      @media (pointer: coarse) {
+        .fp3d-holo-hide {
+          width: 44px;
+          height: 44px;
+          margin: -11px -9px -11px 0;
+        }
       }
       .fp3d-holo-media-controls {
         display: flex;

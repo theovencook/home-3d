@@ -23,18 +23,13 @@ const COLORS: [number, number, number][] = [
   [120, 255, 150],
 ];
 const KELVINS = [2200, 2700, 3200, 4000, 5000, 6500];
-const COLOR_MODES = ["hs", "rgb", "rgbw", "rgbww", "xy"];
 const COVER_SET_POSITION = 4;
 const COVER_OPEN_TILT = 16;
 const COVER_CLOSE_TILT = 32;
 const COVER_SET_TILT = 128;
 
-/** What a light can do, from its supported colour modes. */
-export function lightAbilities(st: HassEntity): { dim: boolean; color: boolean; temp: boolean } {
-  const modes = (st.attributes.supported_color_modes as string[] | undefined) ?? [];
-  const color = modes.some((m) => COLOR_MODES.includes(m));
-  return { dim: modes.some((m) => m !== "onoff"), color, temp: modes.includes("color_temp") };
-}
+import { lightAbilities } from "../light-abilities.ts";
+export { lightAbilities };
 
 /**
  * What the big cover button does (#251), from coverControls: open or close for covers that can, else the slats of a

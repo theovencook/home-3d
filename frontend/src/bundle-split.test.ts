@@ -28,7 +28,8 @@ async function meta(entry: string, splitting: boolean, plugins: Plugin[] = []): 
 
 /** The inputs of the entry output and of every file it imports statically. */
 function staticInputs(m: Metafile): Set<string> {
-  const entry = Object.keys(m.outputs).find((o) => m.outputs[o]!.entryPoint)!;
+  // the entry file itself (not the first lazy chunk esbuild lists with an entry point)
+  const entry = Object.keys(m.outputs).find((o) => o.endsWith("/out.js") && m.outputs[o]!.entryPoint)!;
   const seen = new Set<string>();
   const inputs = new Set<string>();
   const visit = (o: string) => {
