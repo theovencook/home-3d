@@ -25,3 +25,8 @@ test("strings and interpolations stay as they are", () => {
   assert.equal(shrinkCssTemplates(withValue), "css`a{color:${c}}`");
   assert.equal(shrinkCssTemplates("x = css`\n  a { b: c; }\n`;"), "x = css`a{b:c}`;");
 });
+
+test("an apostrophe in a comment does not start a string", () => {
+  assert.equal(shrinkCss("/* a bin's colour */ a { color: red; }"), "a{color:red}");
+  assert.equal(shrinkCss('a::after { content: "/* kept */"; }'), 'a::after{content:"/* kept */"}');
+});
