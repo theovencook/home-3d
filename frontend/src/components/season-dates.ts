@@ -3,6 +3,8 @@
 // what it changed (settings.season_dates). Pure functions and a template: the page keeps the open row.
 
 import { html, nothing, type TemplateResult } from "lit";
+import type { Building } from "../model.ts";
+import { SEASON_IDS } from "../season-ids.ts";
 import { monthDayText, parseMonthDay, seasonRange, type MonthDay, type SeasonDates, type SeasonDatesMap, type SeasonId } from "../seasons.ts";
 
 const DAYS_IN = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -80,4 +82,92 @@ export function withSeasonDates(dates: SeasonDatesMap, id: SeasonId, next: Seaso
   for (const [k, v] of Object.entries(dates ?? {})) if (v && k !== id && parseMonthDay(v.from)) out[k] = v;
   if (next) out[id] = next;
   return Object.keys(out).length ? out : undefined;
+}
+
+/** The little picture of each holiday in the Fun list. */
+const SEASON_ICONS: Record<SeasonId, string> = {
+  nye: "🎆",
+  new_year: "🎉",
+  christmas_eve: "🎅",
+  christmas: "🎄",
+  boxing_day: "🎁",
+  twixmas: "❄️",
+  advent: "🕯️",
+  bonfire: "🔥",
+  remembrance: "🌺",
+  valentines: "❤️",
+  pancake_day: "🥞",
+  mothers_day: "🌸",
+  easter: "🐣",
+  fathers_day: "⭐",
+  halloween: "🎃",
+  chinese_new_year: "🧧",
+};
+
+/** What the holidays card needs from the Extensions page. */
+export interface SeasonsCardHost {
+  building: Building | null | undefined;
+  editor: boolean;
+  lang: string | undefined;
+  /** The open rows of the page (a row is "dates:<holiday>"). */
+  open: ReadonlySet<string>;
+  t: (key: string) => string;
+  toggle: (key: string) => void;
+  funSwitch: (on: boolean, label: string, set: (on: boolean) => void, disabled?: boolean) => TemplateResult;
+  edit: (fn: (b: Building) => void) => void;
+}
+
+/**
+ * Fun pack "Holidays" (#239): each holiday has its own switch and its days (editors); it shows on its day. Halloween is
+ * one of them since #287, with the floating ghost and the decorations inside it.
+ */
+export function seasonsCard(h: SeasonsCardHost): TemplateResult {
+  const settings = h.building?.settings;
+  const off = settings?.seasons ?? {};
+  const eggs = settings?.easter_eggs !== false;
+  const year = new Date().getFullYear();
+  const ghost = settings?.halloween?.ghost !== false;
+  return html`<div class="fp3d-ext-feature fp3d-ext-on">
+    <b>🎄 ${h.t("fun_name_seasons")}</b>
+    <span class="fp3d-sub">${h.t("fun_feature_seasons")}</span>
+    ${h.editor
+      ? SEASON_IDS.map(
+          (id) => html`${h.funSwitch(
+              off[id] !== false && eggs,
+              `${SEASON_ICONS[id]} ${h.t(`season_name_${id}`)}`,
+              (on) =>
+                h.edit((b) => {
+                  const seasons = { ...(b.settings.seasons ?? {}) };
+                  if (on) delete seasons[id];
+                  else seasons[id] = false;
+                  b.settings.seasons = seasons;
+                }),
+              !eggs,
+            )}
+            ${seasonDates({
+              id,
+              year,
+              lang: h.lang,
+              dates: settings?.season_dates,
+              open: h.open.has(`dates:${id}`),
+              editable: true,
+              t: h.t,
+              toggle: () => h.toggle(`dates:${id}`),
+              set: (next) =>
+                h.edit((b) => {
+                  const all = withSeasonDates(b.settings.season_dates, id, next);
+                  if (all) b.settings.season_dates = all;
+                  else delete b.settings.season_dates;
+                }),
+            })}
+            ${id === "halloween"
+              ? html`<div class="fp3d-ext-sub">
+                  <span class="fp3d-sub">${h.t("fun_feature_halloween")}</span>
+                  ${h.funSwitch(ghost, h.t("halloween_ghost"), (v) => h.edit((b) => (b.settings.halloween = { ...(b.settings.halloween ?? {}), ghost: v })))}
+                  <span class="fp3d-sub">${h.t("halloween_deco_hint")}</span>
+                </div>`
+              : nothing}`,
+        )
+      : nothing}
+  </div>`;
 }

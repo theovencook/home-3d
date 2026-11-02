@@ -22,8 +22,6 @@ import { customItems } from "../custom-items.ts";
 import { KINDS, ROOMS } from "../library-index.ts";
 import { loadItems } from "../load-items.ts";
 import { FUN, released } from "../features.ts";
-import { SEASON_IDS, type SeasonId } from "../season-ids.ts";
-import { seasonDates, withSeasonDates } from "./season-dates.ts";
 import { DOG_BREEDS, PET_EYES, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
 import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
 import { languageCode, loadLanguage, translate, type I18nKey } from "../i18n.ts";
@@ -47,26 +45,6 @@ import { getPacks, packName, packOrigin, type FurniturePack } from "../packs.ts"
 import { modulesWithSettings } from "../modules.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
-
-/** The little picture of each holiday in the Fun list. */
-const SEASON_ICONS: Record<SeasonId, string> = {
-  nye: "🎆",
-  new_year: "🎉",
-  christmas_eve: "🎅",
-  christmas: "🎄",
-  boxing_day: "🎁",
-  twixmas: "❄️",
-  advent: "🕯️",
-  bonfire: "🔥",
-  remembrance: "🌺",
-  valentines: "❤️",
-  pancake_day: "🥞",
-  mothers_day: "🌸",
-  easter: "🐣",
-  fathers_day: "⭐",
-  halloween: "🎃",
-  chinese_new_year: "🧧",
-};
 
 export class Extensions extends LitElement {
   static properties = {
@@ -105,6 +83,8 @@ export class Extensions extends LitElement {
   private declare _updatesMsg: { ok: boolean; text: string } | null;
   /** Long lists opened by the viewer (the installed packs); closed, a bar sums them up. */
   private declare _open: Set<string>;
+  /** The holidays' dates part (season-dates.ts, #287): a chunk of its own, loaded when the holidays are first drawn. */
+  private seasonDatesPart: typeof import("./season-dates.ts") | undefined;
 
   constructor() {
     super();
@@ -462,63 +442,22 @@ export class Extensions extends LitElement {
   }
 
   /**
-   * Fun pack "Holidays" (#239): each holiday has its own switch and its days (editors); it shows on its day. Halloween
-   * is one of them since #287, with the floating ghost and the decorations inside it.
+   * Fun pack "Holidays" (#239): each holiday has its own switch and its days (editors); Halloween is one of them since
+   * #287. The card is a chunk of its own (season-dates.ts), loaded when it is first drawn.
    */
   private renderSeasons() {
-    const off = this.building?.settings.seasons ?? {};
-    const dates = this.building?.settings.season_dates;
-    const eggs = this.building?.settings.easter_eggs !== false;
-    const editor = this.isEditor && !!this.building;
-    const year = new Date().getFullYear();
-    const lang = this.hass?.language;
-    return html`<div class="fp3d-ext-feature fp3d-ext-on">
-      <b>🎄 ${this.t("fun_name_seasons")}</b>
-      <span class="fp3d-sub">${this.t("fun_feature_seasons")}</span>
-      ${editor
-        ? SEASON_IDS.map(
-            (id) => html`${this.funSwitch(
-                off[id] !== false && eggs,
-                `${SEASON_ICONS[id]} ${this.t(`season_name_${id}` as I18nKey)}`,
-                (on) =>
-                  this.editBuilding((b) => {
-                    const seasons = { ...(b.settings.seasons ?? {}) };
-                    if (on) delete seasons[id];
-                    else seasons[id] = false;
-                    b.settings.seasons = seasons;
-                  }),
-                !eggs,
-              )}
-              ${seasonDates({
-                id,
-                year,
-                lang,
-                dates,
-                open: this._open.has(`dates:${id}`),
-                editable: true,
-                t: (key) => this.t(key as I18nKey),
-                toggle: () => this.toggleOpen(`dates:${id}`),
-                set: (next) =>
-                  this.editBuilding((b) => {
-                    const all = withSeasonDates(b.settings.season_dates, id, next);
-                    if (all) b.settings.season_dates = all;
-                    else delete b.settings.season_dates;
-                  }),
-              })}
-              ${id === "halloween" ? this.renderHalloween() : nothing}`,
-          )
-        : nothing}
-    </div>`;
-  }
-
-  /** Halloween's own options, inside its holiday (#287): the floating ghost and where the decorations are. */
-  private renderHalloween() {
-    const ghost = this.building?.settings.halloween?.ghost !== false;
-    return html`<div class="fp3d-ext-sub">
-      <span class="fp3d-sub">${this.t("fun_feature_halloween")}</span>
-      ${this.funSwitch(ghost, this.t("halloween_ghost"), (v) => this.editBuilding((b) => (b.settings.halloween = { ...(b.settings.halloween ?? {}), ghost: v })))}
-      <span class="fp3d-sub">${this.t("halloween_deco_hint")}</span>
-    </div>`;
+    const part = this.seasonDatesPart;
+    if (!part) void import("./season-dates.ts").then((m) => ((this.seasonDatesPart = m), this.requestUpdate()));
+    return part?.seasonsCard({
+      building: this.building,
+      editor: this.isEditor && !!this.building,
+      lang: this.hass?.language,
+      open: this._open,
+      t: (key) => this.t(key as I18nKey),
+      toggle: (key) => this.toggleOpen(key),
+      funSwitch: (on, label, set, disabled) => this.funSwitch(on, label, set, disabled),
+      edit: (fn) => this.editBuilding(fn),
+    });
   }
 
   /**
