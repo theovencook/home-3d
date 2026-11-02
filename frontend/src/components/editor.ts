@@ -658,7 +658,7 @@ export class Fp3dEditor extends LitElement {
     this._sideMin = min;
     this._preview = null;
     this._libUpdates = new Set();
-    this._measureLen = 3;
+    this._measureLen = 0;
     this._packages = false;
     this._rectSize = [4, 3];
     this._rectName = "";

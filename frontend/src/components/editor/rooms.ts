@@ -51,6 +51,15 @@ export class RoomsPart {
     this._guides = {};
   }
 
+  /** By measure, a typed length wins over where the pointer is: the next point lies that far along the pull (#294). */
+  pulledPoint(this: Fp3dEditor, p: Vec2 | null): Vec2 | null {
+    const last = this._draft[this._draft.length - 1];
+    if (!p || this._tool !== "measure" || !last || !(this._measureLen > 0)) return p;
+    const d = Math.hypot(p[0] - last[0], p[1] - last[1]);
+    if (d < 1e-6) return p;
+    return [round(last[0] + ((p[0] - last[0]) / d) * this._measureLen), round(last[1] + ((p[1] - last[1]) / d) * this._measureLen)];
+  }
+
   /** Adds a wall of the typed length in a direction (drawing by measure). */
   measureStep(this: Fp3dEditor, dir: Direction): void {
     const last = this._draft[this._draft.length - 1];
@@ -121,8 +130,9 @@ export class RoomsPart {
                   inputmode="decimal"
                   step="0.01"
                   min="0.05"
-                  .value=${this.lenValue(this._measureLen)}
-                  @change=${(e: Event) => (this._measureLen = this.readLen((e.target as HTMLInputElement).value) ?? 0)}
+                  placeholder=${this.t("measure_pull")}
+                  .value=${this._measureLen > 0 ? this.lenValue(this._measureLen) : ""}
+                  @input=${(e: Event) => (this._measureLen = this.readLen((e.target as HTMLInputElement).value) ?? 0)}
                   @keydown=${(e: KeyboardEvent) => {
                     const dir = { ArrowRight: "right", ArrowLeft: "left", ArrowUp: "up", ArrowDown: "down" }[e.key] as Direction | undefined;
                     if (dir) {
@@ -438,7 +448,8 @@ export class RoomsPart {
       </g>`;
     }
     if (this._tool !== "polygon" && this._tool !== "measure" && !this.drawingPoints) return nothing;
-    const world = [...this._draft, ...(this._cursor && this._draft.length ? [this._cursor] : [])];
+    const tip = this.pulledPoint(this._cursor);
+    const world = [...this._draft, ...(tip && this._draft.length ? [tip] : [])];
     const pts = world.map((p) => this.toScreen(p));
     return svg`<g pointer-events="none">
       ${pts.length > 1 ? svg`<polyline class="fp3d-draft" points=${pts.map((p) => p.join(",")).join(" ")} />` : nothing}
@@ -452,7 +463,7 @@ export class RoomsPart {
         const [x, y] = this.toScreen(p);
         return svg`<circle class=${i === 0 && this._draft.length >= 3 ? "fp3d-draft-pt fp3d-draft-first" : "fp3d-draft-pt"} cx=${x} cy=${y} r=${i === 0 && this._draft.length >= 3 ? 9 : 5} />`;
       })}
-      ${this._cursor ? svg`<circle class="fp3d-cursor" cx=${this.toScreen(this._cursor)[0]} cy=${this.toScreen(this._cursor)[1]} r="4" />` : nothing}
+      ${tip ? svg`<circle class="fp3d-cursor" cx=${this.toScreen(tip)[0]} cy=${this.toScreen(tip)[1]} r="4" />` : nothing}
     </g>`;
   }
 
