@@ -614,6 +614,11 @@ export class Floorplan3dPanel extends LitElement {
     if (!open && refocus) void this.updateComplete.then(() => this.renderRoot?.querySelector<HTMLElement>(".fp3d-view-btn")?.focus());
   }
 
+  /** Some device of the home is a camera: the Cameras button (the camera wall, #266) is there. */
+  private hasCameras(b: Building): boolean {
+    return b.floors.some((f) => f.placements.some((p) => kindOf(p.entity_id) === "camera"));
+  }
+
   /** Where the 3D view is, for what the View panel offers (as the Show menu did). */
   private viewContext(b: Building): ViewContext {
     return { floors: b.floors.length, floorOpen: !!this._floorId, roof: b.settings.roof.type !== "none", plan2d: this._plan2d, kiosk: this._tablet };
@@ -1474,6 +1479,9 @@ export class Floorplan3dPanel extends LitElement {
           >
             ${this.t("view_btn")} <span class="fp3d-caret" aria-hidden="true">${this._viewOpen ? "▴" : "▾"}</span>
           </button>
+          ${!tt && this.hasCameras(b)
+            ? html`<button class="fp3d-chip fp3d-cam-btn" aria-pressed=${this._cameraWall} title=${this.t("camera_wall_hint")} @click=${() => (this._cameraWall = !this._cameraWall)}>${this.t("cameras_short")}</button>`
+            : nothing}
           ${this._tablet ? nothing : html`<button class="fp3d-chip fp3d-tt-chip" aria-pressed=${tt} title=${this.t("tt_hint")} aria-label=${this.t("tt_chip")} @click=${() => this.toggleTimeTravel()}>
             ⏪ <span class="fp3d-tt-label">${this.t("tt_chip")}</span>
           </button>`}
@@ -1486,10 +1494,8 @@ export class Floorplan3dPanel extends LitElement {
               id="fp3d-view-panel"
               .hass=${this.rawHass}
               .context=${this.viewContext(b)}
-              ?cameraWall=${this._cameraWall}
               @view-change=${this.onViewChange}
-              @camera-wall-toggle=${() => (this._cameraWall = !this._cameraWall)}
-              @view-close=${() => this.setViewOpen(false, true)}
+              @view-close=${(e: CustomEvent<{ outside?: boolean } | null>) => this.setViewOpen(false, !e.detail?.outside)}
               >${this._tablet ? planView : nothing}</fp3d-view-panel
             >`)
           : nothing}
@@ -2059,6 +2065,10 @@ export class Floorplan3dPanel extends LitElement {
         pointer-events: auto;
       }
       /* the View button opens the View panel (#247, components/view-panel.ts) above the bar; an open View panel marks it */
+      .fp3d-cam-btn[aria-pressed="true"] {
+        color: var(--fp3d-accent);
+        box-shadow: inset 0 0 0 1px var(--fp3d-accent), var(--fp3d-shadow);
+      }
       .fp3d-view-btn[aria-expanded="true"] {
         color: var(--fp3d-accent);
         box-shadow: inset 0 0 0 1px var(--fp3d-accent), var(--fp3d-shadow);

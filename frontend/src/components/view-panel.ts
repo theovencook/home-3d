@@ -13,10 +13,11 @@ import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues, type Te
 import { translate, type I18nKey } from "../i18n.ts";
 import { colourReset } from "../colour-reset.ts";
 import { PHONE_MEDIA } from "../phone.ts";
+import { FloatDrag } from "../float-panel.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
 import type { DevicePrefs, Option, Setting, SettingsEnv } from "../settings/registry.ts";
-import { CAMERA_WALL, optionGroups, optionText, viewSections, viewSetting, type ViewContext, type ViewRow, type ViewSection } from "../settings/view-settings.ts";
+import { optionGroups, optionText, viewSections, viewSetting, type ViewContext, type ViewRow, type ViewSection } from "../settings/view-settings.ts";
 
 /** This device's preferences, as the panel and the Settings page keep them ("home3d.<key>"). */
 const prefs: DevicePrefs = {
@@ -47,14 +48,11 @@ export class Fp3dViewPanel extends LitElement {
   static properties = {
     hass: { attribute: false },
     context: { attribute: false },
-    cameraWall: { type: Boolean },
     _phone: { state: true },
   };
 
   declare hass: HomeAssistant | undefined;
   declare context: ViewContext;
-  /** The camera wall is open (a switch of the view, not a stored choice). */
-  declare cameraWall: boolean;
   private declare _phone: boolean;
   private phoneQuery: MediaQueryList | null = null;
   private readonly onPhone = () => (this._phone = !!this.phoneQuery?.matches);
@@ -62,7 +60,6 @@ export class Fp3dViewPanel extends LitElement {
   constructor() {
     super();
     this.context = { floors: 1, floorOpen: false, roof: false, plan2d: false, kiosk: false };
-    this.cameraWall = false;
     this._phone = false;
   }
 
@@ -71,10 +68,27 @@ export class Fp3dViewPanel extends LitElement {
     this.phoneQuery = typeof matchMedia === "function" ? matchMedia(PHONE_MEDIA) : null;
     this.phoneQuery?.addEventListener?.("change", this.onPhone);
     this.onPhone();
+    // a press anywhere outside the panel closes it (#265)
+    window.addEventListener("pointerdown", this.onOutside, true);
+    window.addEventListener("resize", this.onResize);
   }
+
+  /** Where the panel was dragged to (#265), kept per device; null while it sits at its dock. */
+  private readonly drag = new FloatDrag(this, "view", () => this.requestUpdate());
+  private readonly onResize = () => this.drag.settle();
+
+  /** A press outside the panel (and not on the View button, which toggles it) closes it; the focus stays where it was pressed. */
+  private readonly onOutside = (e: Event) => {
+    const path = e.composedPath();
+    if (path.includes(this)) return;
+    if (path.some((n) => (n as HTMLElement).classList?.contains("fp3d-view-btn"))) return;
+    this.emit("view-close", { outside: true });
+  };
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    window.removeEventListener("pointerdown", this.onOutside, true);
+    window.removeEventListener("resize", this.onResize);
     this.phoneQuery?.removeEventListener?.("change", this.onPhone);
     this.sizer?.disconnect();
     this.sizer = null;
@@ -83,6 +97,7 @@ export class Fp3dViewPanel extends LitElement {
   /** A non-modal dialog takes the focus when it opens, so the keyboard and a screen reader are in it at once. */
   protected firstUpdated(changed: PropertyValues): void {
     super.firstUpdated(changed);
+    this.drag.load();
     this.renderRoot.querySelector<HTMLElement>(".vp")?.focus({ preventScroll: true });
     const body = this.renderRoot.querySelector<HTMLElement>(".vp-body");
     if (body && typeof ResizeObserver === "function") {
@@ -194,7 +209,6 @@ export class Fp3dViewPanel extends LitElement {
   }
 
   private renderRow(row: ViewRow): TemplateResult | typeof nothing {
-    if (row.id === CAMERA_WALL) return this.renderSwitch(this.t("camera_wall"), this.cameraWall, () => this.emit("camera-wall-toggle"), this.t("camera_wall_hint"));
     const s = viewSetting(row.id);
     if (!s) return nothing;
     const label = this.t(s.label);
@@ -219,10 +233,6 @@ export class Fp3dViewPanel extends LitElement {
   private summary(section: ViewSection): string {
     const parts: string[] = [];
     for (const row of section.rows) {
-      if (row.id === CAMERA_WALL) {
-        if (this.cameraWall) parts.push(this.t("camera_wall"));
-        continue;
-      }
       const s = viewSetting(row.id);
       if (!s) continue;
       const v = s.read(this.env);
@@ -294,11 +304,20 @@ export class Fp3dViewPanel extends LitElement {
   protected render() {
     const sections = viewSections(this.context);
     return html`<div class="vp" role="dialog" aria-modal="false" aria-labelledby="vp-title" tabindex="-1">
-      <header class="vp-head">
+      <header
+        class="vp-head"
+        title=${this._phone ? nothing : this.t("float_drag_hint")}
+        @pointerdown=${(e: PointerEvent) => !this._phone && this.drag.begin(e)}
+        @pointermove=${(e: PointerEvent) => this.drag.move(e)}
+        @pointerup=${() => this.drag.end()}
+        @pointercancel=${() => this.drag.end()}
+        @dblclick=${() => this.drag.reset()}
+      >
         <span class="vp-grab" aria-hidden="true"></span>
         <h2 id="vp-title">${this.t("view_btn")}</h2>
         <span class="vp-scope">${this.t("view_scope")}</span>
-        <button type="button" class="vp-close" @click=${() => this.emit("view-close")}>${this.t("close")}</button>
+        ${this.drag.offset && !this._phone ? html`<button type="button" class="vp-snap" title=${this.t("float_snap_back")} aria-label=${this.t("float_snap_back")} @click=${() => this.drag.reset()}>⤒</button>` : nothing}
+        <button type="button" class="vp-close" title=${this.t("close")} aria-label=${this.t("close")} @click=${() => this.emit("view-close")}>✕</button>
       </header>
       <div class="vp-body" @scroll=${this.markMore}>
         <slot></slot>
@@ -354,9 +373,24 @@ export class Fp3dViewPanel extends LitElement {
         font-size: var(--fp3d-type-hint);
         color: var(--fp3d-muted);
       }
-      .vp-grab,
-      .vp-close {
+      .vp-grab {
         display: none;
+      }
+      /* the header moves the panel (#265): a grab cursor, no text selection while dragging */
+      .vp-head {
+        cursor: grab;
+        user-select: none;
+        touch-action: none;
+      }
+      .vp-head:active {
+        cursor: grabbing;
+      }
+      .vp-close,
+      .vp-snap {
+        color: var(--fp3d-text);
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
       }
       .vp-body {
         overflow-x: hidden;
@@ -536,7 +570,8 @@ export class Fp3dViewPanel extends LitElement {
       }
       .vp-link,
       .vp-quiet,
-      .vp-close {
+      .vp-close,
+      .vp-snap {
         flex: none;
         font: inherit;
         border: 0;
@@ -572,7 +607,8 @@ export class Fp3dViewPanel extends LitElement {
         .vp-line,
         .vp-link,
         .vp-quiet,
-        .vp-close {
+        .vp-close,
+        .vp-snap {
           min-height: var(--fp3d-touch, 44px);
         }
         .vp-seg button {
@@ -620,14 +656,14 @@ export class Fp3dViewPanel extends LitElement {
           flex: 1;
           font-size: 16px;
         }
+        .vp-head {
+          cursor: default;
+          touch-action: auto;
+        }
         .vp-close {
-          display: inline-flex;
-          align-items: center;
-          min-height: var(--fp3d-touch);
-          padding: 0 var(--fp3d-space-3);
           border: 1px solid var(--fp3d-line);
           border-radius: var(--fp3d-radius-control);
-          color: var(--fp3d-text);
+          min-width: var(--fp3d-touch);
         }
         .vp-sec summary {
           display: flex;

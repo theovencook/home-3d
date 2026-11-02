@@ -71,7 +71,7 @@ test("wide screens: Appearance, What the 3D shows, Device icons and Clock, then 
   assert.ok(out.includes(`<optgroup label=Automatic>`) && out.includes(`<optgroup label=Fixed>`));
   assert.ok(out.includes("Follow Home Assistant (now Neon)"));
   assert.ok(out.includes("Important: devices with no 3D model"));
-  for (const label of ["Colour rooms by", "Keep the roof on when zooming in", "Motion trail (last 30 minutes)", "Weather outside", "Camera wall", "Room names"]) assert.ok(out.includes(label), label);
+  for (const label of ["Colour rooms by", "Keep the roof on when zooming in", "Motion trail (last 30 minutes)", "Weather outside", "Room names"]) assert.ok(out.includes(label), label);
 });
 
 test("a change is written under the setting's own key and the panel is told; the panel stays open", () => {
@@ -126,17 +126,28 @@ test("the footer: Quality is read-only and opens Appearance; the links open Sett
   );
 });
 
-test("Close and the camera wall row tell the panel (it owns both)", () => {
+test("the X in the header tells the panel to close (it owns the open state) (#265)", () => {
   store.clear();
   const el = viewPanel();
   const tpl = el.render();
-  for (const h of handlers(tpl, /class="vp-close" @click=$/)) h();
-  el.renderRow({ id: "camera_wall" });
-  for (const h of handlers(el.renderRow({ id: "camera_wall" }), /@click=$/)) h();
+  assert.match(flat(tpl), /class="vp-close" title=Close aria-label=Close @click=<fn>>✕</);
+  handlers(tpl, /@click=$/)[0]!();
   assert.deepEqual(
     el.events.map((e: { type: string }) => e.type),
-    ["view-close", "camera-wall-toggle"],
+    ["view-close"],
   );
+});
+
+test("a press outside the panel closes it, a press inside or on the View button does not (#265)", () => {
+  store.clear();
+  const el = viewPanel();
+  const press = (path: unknown[]) => el.onOutside({ composedPath: () => path });
+  press([el]);
+  assert.equal(el.events.length, 0, "inside");
+  press([{ classList: { contains: (c: string) => c === "fp3d-view-btn" } }]);
+  assert.equal(el.events.length, 0, "on the View button");
+  press([{ classList: { contains: () => false } }, {}]);
+  assert.deepEqual(el.events.map((e: { type: string; detail: unknown }) => [e.type, e.detail]), [["view-close", { outside: true }]]);
 });
 
 test("a wall tablet gets What the 3D shows only, no footer (#92)", () => {
