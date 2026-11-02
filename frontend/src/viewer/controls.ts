@@ -127,7 +127,7 @@ export class OrbitControls {
     };
     on("pointerdown", (e) => this.onDown(e));
     on("pointermove", (e) => {
-      if (e.pointerType === "mouse" && !e.buttons && !this.pointers.size) this.events.hover?.(...this.local(e));
+      if (e.pointerType === "mouse" && !e.buttons && !this.pointers.size && this.events.hover) this.events.hover(...this.local(e));
       this.onMove(e);
     });
     on("pointerleave", (e) => {
