@@ -27,7 +27,6 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
   roomNamed,
   carEntities,
   isStatusSensor,
-  floorControls,
   favoriteCall,
   runButton,
   climateModeGlow,
@@ -40,7 +39,7 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
 } from "../devices.ts";
 import { effectSettings, itemShade, motionRooms, tempShade } from "../room-effects.ts";
 import { alertEntities, alertKey, alertSources, alertText, alertTint, clearedSnoozes, dismissAlert, findAlerts, HOUSE_ALERTS, isOutage, mayIgnoreAlert, shownAlerts, snoozeKey, type Alert, type AlertSources } from "../alerts.ts";
-import { iconPath, iconSvg, mdiIcon } from "../icons.ts";
+import { iconSvg, mdiIcon } from "../icons.ts";
 import { uiIcon } from "../ui-icons.ts";
 import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binPlace, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
 import { BAR_RGB, CHARGE_BAR_COUNT, chargeBars, DARK_BAR_RGB } from "../charge-bars.ts";
@@ -134,7 +133,7 @@ import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { holdTarget } from "../hold.ts";
 import { popupKind, popupPosition } from "../device-popup-model.ts";
-import { loadDevicePopup, loadQuickMenu, loadViewNav } from "../load-parts.ts";
+import { loadDevicePopup, loadFind, loadQuickMenu, loadViewNav } from "../load-parts.ts";
 import { need } from "../lazy-part.ts";
 import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
@@ -143,7 +142,7 @@ import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
 import { realisticSky, type RealisticSky } from "../realistic.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
 import { projectionOn, released } from "../features.ts";
-import { searchIndex, searchItems, type SearchItem } from "../search.ts";
+import { searchIndex, type SearchItem } from "../search.ts";
 import type { Shown } from "../voice/targets.ts";
 import type { SpokenRack } from "../voice/racks.ts";
 import { anyModule, moduleAlerts, moduleCards, moduleMenuSheets, modulePools, moduleRoomSheets, moduleScene, modulesWithSettings, moduleVoice, moduleWatched, syncModules, type ModuleCard, type ModuleHost, type ModuleSheet, type ScenePiece, type SpokenAlert, type SpokenCar, type SpokenDevice, type SpokenOpening, type VoiceAnswer } from "../modules.ts";
@@ -194,7 +193,6 @@ import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
 import { sunPath, type SunPath } from "../sun-path.ts";
 import { cheapRate } from "../cheap-rate.ts";
 import { askConfirm } from "../ask.ts";
-import { confirmGroup } from "../confirm-group.ts";
 import "./ask-dialog.ts";
 import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
 import { forecastCurvePath, forecastSplit, solarMoreRows, solarPrefsInfo, type SolarForecast, type SolarPrefsInfo } from "../solar-more.ts";
@@ -342,6 +340,7 @@ export class Fp3dView3d extends LitElement {
     _wallBig: { state: true },
     _wallDock: { state: true },
     _find: { state: true },
+    findInBar: { type: Boolean },
     _walk: { state: true },
     walkable: { attribute: false },
     pivotMark: { attribute: false },
@@ -352,8 +351,6 @@ export class Fp3dView3d extends LitElement {
     _rackView: { state: true },
     _note: { state: true },
     _thumbsCompact: { state: true },
-    _armed: { state: true },
-    _armLeft: { state: true },
     central: { attribute: false },
     buttons: { attribute: false },
     _thumbs: { state: true },
@@ -679,6 +676,8 @@ export class Fp3dView3d extends LitElement {
   declare startView: StartView | null;
   /** Search index (rooms and devices), built when the search opens and reused while it is open. */
   private findIndex: SearchItem[] | null = null;
+  /** The panel's floor bar has the search (#305): no floating button. */
+  declare findInBar: boolean;
   /** The consumers of the last sync (the modules ask what draws power right now). */
   private lastConsumers: Consumer[] = [];
   /** A tour of the house (a module's answer): its stops run one after the other until a tap ends them. */
@@ -712,11 +711,6 @@ export class Fp3dView3d extends LitElement {
   private noteTimer: ReturnType<typeof setTimeout> | undefined;
   /** The people shown in the last sync (for the rooms someone is in). */
   private lastPersons: { floorId: string; roomId: string }[] = [];
-  /** A house-wide action waiting for its second tap ("sure?"), with the time it was armed. */
-  private declare _armed: string | null;
-  private armTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Whole seconds left to confirm the armed house-wide action (shown as a countdown, #209). */
-  private declare _armLeft: number;
   /** Show the star with the central menu (card option central; default on). */
   declare central: boolean;
   /** Offer the walk through the house at eye height (card option walk; default on). */
@@ -874,8 +868,6 @@ export class Fp3dView3d extends LitElement {
     }
     this._thumbsCompact = thumbsCompact(this.thumbsSaved, false);
     this._phoneStage = false;
-    this._armed = null;
-    this._armLeft = 0;
     this.central = true;
     this.walkable = true;
     this.pivotMark = false;
@@ -986,7 +978,6 @@ export class Fp3dView3d extends LitElement {
     clearInterval(this.wireTimer);
     clearInterval(this.meterTimer);
     this.meterTimer = undefined;
-    clearTimeout(this.armTimer);
     this.wireKey = "";
     this.meterKey = "";
     document.removeEventListener("visibilitychange", this.onVisible);
@@ -4556,7 +4547,7 @@ export class Fp3dView3d extends LitElement {
   }
 
   /** Fly to a search result: rooms are selected, devices shown on their floor and flashing. */
-  private goTo(item: SearchItem): void {
+  goTo(item: SearchItem): void {
     this._find = null;
     if (item.kind === "room") {
       this.fire("room-tap", { floorId: item.floorId, roomId: item.roomId });
@@ -4966,7 +4957,6 @@ export class Fp3dView3d extends LitElement {
   /** Search opens with the field focused, ready for typing (#259, V04). */
   private openFind(): void {
     this._find = "";
-    void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLInputElement>(".fp3d-find input")?.focus());
   }
 
   /** Search closes back to its button (#259). */
@@ -4977,39 +4967,15 @@ export class Fp3dView3d extends LitElement {
 
   private renderFind() {
     const b = this.building;
-    if (!b || !this.hass) return nothing;
+    // the panel's floor bar carries the search when it is shown (#305); a card without that bar keeps this button
+    if (!b || !this.hass || this.findInBar) return nothing;
     if (this._find === null) {
       return html`<button class="fp3d-find-btn" title=${translate(this.hass, "find")} aria-label=${translate(this.hass, "find")} @click=${() => this.openFind()}>
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></svg>
       </button>`;
     }
-    const results = searchItems((this.findIndex ??= searchIndex(this.hass, b)), this._find);
-    return html`<div class="fp3d-find">
-      <input
-        type="search"
-        aria-label=${translate(this.hass, "find")}
-        placeholder=${translate(this.hass, "find_placeholder")}
-        .value=${this._find}
-        @input=${(e: Event) => (this._find = (e.target as HTMLInputElement).value)}
-        @keydown=${(e: KeyboardEvent) => {
-          if (e.key === "Escape") this.closeFind();
-          if (e.key === "Enter" && results[0]) this.goTo(results[0]);
-        }}
-      />
-      <button class="fp3d-find-close" aria-label=${translate(this.hass, "close")} @click=${() => this.closeFind()}>✕</button>
-      ${this._find.trim()
-        ? html`<div class="fp3d-find-list">
-            ${results.length
-              ? results.map(
-                  (it) => html`<button @click=${() => this.goTo(it)}>
-                    <span class="fp3d-find-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d=${it.icon ? iconPath(it.icon) : "M4 10l8-6 8 6v10H4z"} /></svg></span>
-                    <span><b>${it.name}</b>${it.where ? html`<small>${it.where}</small>` : nothing}</span>
-                  </button>`,
-                )
-              : html`<p>${translate(this.hass, "find_none")}</p>`}
-          </div>`
-        : nothing}
-    </div>`;
+    need(loadFind);
+    return html`<fp3d-find variant="float" .hass=${this.hass} .building=${b} @find-close=${() => this.closeFind()} @find-pick=${(e: CustomEvent<SearchItem>) => this.goTo(e.detail)}></fp3d-find>`;
   }
 
   /**
@@ -5028,55 +4994,16 @@ export class Fp3dView3d extends LitElement {
       aria-expanded=${this._central}
       @click=${() => {
         this._central = !this._central;
-        this.disarm();
       }}
     >
       <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" /></svg>
     </button>`;
     if (!this._central) return star;
-    const floor = this.floorId ? b.floors.find((f) => f.id === this.floorId) : undefined;
-    const floors = floor ? [floor] : b.floors;
-    const lights = floors.flatMap((f) => floorControls(hass, f).lights);
-    const covers = floors.flatMap((f) => floorControls(hass, f).covers);
-    const lightsOn = lights.filter((id) => hass.states[id]?.state === "on").length;
-    const house = !floor;
-    // house-wide: the first tap arms the button ("sure?"), the second runs it
-    const act = (key: string, domain: string, service: string, ids: string[]) => {
-      if (!ids.length) return;
-      if (house && this._armed !== key) {
-        this.arm(key);
-        return;
-      }
-      this.disarm();
-      // devices that ask before switching are asked about first, once for the whole row (#162)
-      void this.confirmForAll(ids).then((ok) => ok && safeCall(hass, domain, service, { entity_id: ids }));
-    };
-    const button = (key: string, label: I18nKey, domain: string, service: string, ids: string[]) =>
-      html`<button class="fp3d-btn ${this._armed === key ? "fp3d-central-armed" : ""}" ?disabled=${!ids.length} aria-pressed=${this._armed === key ? "true" : nothing} @click=${() => act(key, domain, service, ids)}>
-        ${this._armed === key ? t("central_confirm") : t(label)}
-      </button>`;
-    // the armed action says what the next tap does, with the seconds left (#209); a screen reader hears it at once
-    const armedAsk = (keys: readonly string[]) => {
-      const key = this._armed;
-      if (!key || !keys.includes(key)) return nothing;
-      return html`<div class="fp3d-central-ask"><span>${t(`central_again_${key}` as I18nKey)}</span><b aria-hidden="true">${this._armLeft}</b><i aria-hidden="true"></i></div>`;
-    };
-    const armedRow = (keys: readonly string[]) => (this._armed && keys.includes(this._armed) ? "fp3d-central-row-armed" : "");
     const favorites = (b.settings.favorites ?? []).filter((id) => hass.states[id]);
     const own = this.buttons ?? b.settings.buttons ?? [];
     const sheets = anyModule() ? moduleMenuSheets(this.sceneHost(hass, b)) : [];
     return html`${star}
       <div class="fp3d-central" role="dialog" aria-label=${t("central")}>
-        <div class="fp3d-central-top">
-          <b>${floor ? floor.name : t("central_house")}</b>
-          ${this.noSettings
-            ? nothing
-            : html`<button class="fp3d-btn fp3d-central-gear" @click=${() => {
-                // the "Sun and lights" sheet is gone (#248): its settings are on the Settings page
-                this._central = false;
-                this.openTab("open-settings", "/home_3d#settings");
-              }}>${t("settings")} ›</button>`}
-        </div>
         ${sheets.length
           ? html`<div class="fp3d-central-favs">
               ${sheets.map(
@@ -5085,21 +5012,6 @@ export class Fp3dView3d extends LitElement {
                   this._sheet = { id: sh.id, floorId: null, roomId: null };
                 }}><span aria-hidden="true">${sh.icon}</span> ${sh.title}</button>`,
               )}
-            </div>`
-          : nothing}
-        <div class="fp3d-sr-only" role="status" aria-live="assertive">${this._armed ? t(`central_again_${this._armed}` as I18nKey) : ""}</div>
-        <div class="fp3d-central-row ${armedRow(["lights_on", "lights_off"])}">
-          <span>${t("central_lights")}${lights.length ? html` <small>${lightsOn}/${lights.length}</small>` : nothing}</span>
-          ${button("lights_on", "central_on", "light", "turn_on", lights.filter((id) => hass.states[id]?.state === "off"))}
-          ${button("lights_off", "central_off", "light", "turn_off", lights.filter((id) => hass.states[id]?.state === "on"))}
-          ${armedAsk(["lights_on", "lights_off"])}
-        </div>
-        ${covers.length
-          ? html`<div class="fp3d-central-row ${armedRow(["covers_open", "covers_close"])}">
-              <span>${t("central_covers")} <small>${covers.length}</small></span>
-              ${button("covers_open", "central_open", "cover", "open_cover", covers)}
-              ${button("covers_close", "central_close", "cover", "close_cover", covers)}
-              ${armedAsk(["covers_open", "covers_close"])}
             </div>`
           : nothing}
         <b>${t("central_favorites")}</b>
@@ -5125,7 +5037,13 @@ export class Fp3dView3d extends LitElement {
             </div>`
           : own.length
             ? nothing
-            : html`<p class="fp3d-central-hint">${t(this.mayEdit ? "central_no_favorites" : "central_no_favorites_viewer")}</p>`}
+            : html`<p class="fp3d-central-hint">${t(this.mayEdit ? "central_no_favorites" : "central_no_favorites_viewer")}</p>
+                ${this.mayEdit && !this.noSettings
+                  ? html`<button class="fp3d-btn fp3d-central-link" @click=${() => {
+                      this._central = false;
+                      this.openTab("open-settings", "/home_3d#settings", "favourites");
+                    }}>${t("central_open_favorites")} ›</button>`
+                  : nothing}`}
         ${own.length
           ? html`<div class="fp3d-central-favs">
               ${own.map(
@@ -5858,8 +5776,8 @@ export class Fp3dView3d extends LitElement {
    * Another tab of the panel (#248: Settings for the central menu's link, Extensions for a module sheet's): the panel
    * opens it; a dashboard card has no panel around it, so it goes to the panel's page.
    */
-  private openTab(event: "open-settings" | "open-extensions", url: string): void {
-    const asked = new CustomEvent(event, { detail: { section: null, id: null }, bubbles: true, composed: true, cancelable: true });
+  private openTab(event: "open-settings" | "open-extensions", url: string, section: string | null = null): void {
+    const asked = new CustomEvent(event, { detail: { section, id: null }, bubbles: true, composed: true, cancelable: true });
     if (this.dispatchEvent(asked)) {
       history.pushState(null, "", url);
       window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
@@ -6400,31 +6318,6 @@ export class Fp3dView3d extends LitElement {
   /** Asks first for devices marked so ("ask before switching"). */
   private async confirmFor(id: string): Promise<boolean> {
     return !this.confirmSet.has(id) || (await this.ask(translate(this.hass, "confirm_switch", { name: entityName(this.hass, id) })));
-  }
-
-  /** House-wide action `key` waits for its second tap: 3.5 s, with whole seconds counted down on screen (#209). */
-  private arm(key: string): void {
-    clearTimeout(this.armTimer);
-    const end = Date.now() + 3500;
-    this._armed = key;
-    const tick = () => {
-      const left = end - Date.now();
-      if (left <= 0) return this.disarm();
-      this._armLeft = Math.ceil(left / 1000);
-      this.armTimer = setTimeout(tick, left - (this._armLeft - 1) * 1000 + 5);
-    };
-    tick();
-  }
-
-  private disarm(): void {
-    clearTimeout(this.armTimer);
-    this._armed = null;
-    this._armLeft = 0;
-  }
-
-  /** Asks once for a whole group when any of its devices asks first (#162). */
-  private confirmForAll(ids: readonly string[]): Promise<boolean> {
-    return confirmGroup(ids, this.confirmSet, (id) => entityName(this.hass, id), (names) => this.ask(translate(this.hass, "confirm_switch", { name: names })));
   }
 
   /** What a tap does by the device's kind (no own action). */
@@ -7376,8 +7269,6 @@ export class Fp3dView3d extends LitElement {
       .fp3d-low .fp3d-dev,
       .fp3d-low .fp3d-dev-on,
       .fp3d-low .fp3d-energy-item,
-      .fp3d-low .fp3d-find input,
-      .fp3d-low .fp3d-find-list,
       .fp3d-low .fp3d-find-btn,
       .fp3d-low .fp3d-swipe,
       .fp3d-low .fp3d-thumb {
@@ -7636,75 +7527,6 @@ export class Fp3dView3d extends LitElement {
         text-transform: uppercase;
         opacity: 0.7;
       }
-      .fp3d-central-row {
-        display: grid;
-        grid-template-columns: 1fr auto auto;
-        gap: 6px;
-        align-items: center;
-      }
-      .fp3d-central-row small {
-        opacity: 0.6;
-      }
-      .fp3d-central .fp3d-btn {
-        min-width: 64px;
-      }
-      .fp3d-central-armed {
-        background: #ff8a3d !important;
-        color: #1a0d00 !important;
-        font-weight: 700;
-      }
-      /* the armed row (#209): it cannot be missed, and it says what the next tap does, with a bar that runs out */
-      .fp3d-central-row-armed {
-        padding: 6px;
-        margin: -6px;
-        border-radius: 12px;
-        background: color-mix(in srgb, #ff8a3d 22%, transparent);
-        outline: 2px solid #ff8a3d;
-      }
-      .fp3d-central-ask {
-        grid-column: 1 / -1;
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        padding-bottom: 6px;
-        font-weight: 700;
-        font-size: 13px;
-      }
-      .fp3d-central-ask b {
-        min-width: 1.6em;
-        padding: 1px 6px;
-        border-radius: 999px;
-        background: #ff8a3d;
-        color: #1a0d00;
-        text-align: center;
-        font-variant-numeric: tabular-nums;
-      }
-      .fp3d-central-ask i {
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: 3px;
-        border-radius: 2px;
-        background: #ff8a3d;
-        transform-origin: left;
-        animation: fp3d-ask-run 3.5s linear forwards;
-      }
-      @keyframes fp3d-ask-run {
-        from {
-          transform: scaleX(1);
-        }
-        to {
-          transform: scaleX(0);
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .fp3d-central-ask i {
-          animation: none;
-        }
-      }
       .fp3d-sr-only {
         position: absolute;
         width: 1px;
@@ -7857,99 +7679,6 @@ export class Fp3dView3d extends LitElement {
       .fp3d-eye-clean:hover {
         opacity: 1;
       }
-      .fp3d-find {
-        position: absolute;
-        left: 12px;
-        bottom: calc(10px + var(--fp3d-bottom-inset, 0px));
-        width: min(340px, calc(100% - 24px));
-        display: flex;
-        flex-direction: column-reverse;
-        gap: 6px;
-        z-index: 3;
-      }
-      .fp3d-find input {
-        box-sizing: border-box;
-        width: 100%;
-        height: 42px;
-        padding: 0 42px 0 14px;
-        border: 1px solid var(--fp3d-line);
-        border-radius: 14px;
-        background: var(--fp3d-chrome);
-        color: var(--fp3d-text);
-        font: inherit;
-        font-size: 15px;
-        box-shadow: var(--fp3d-shadow);
-        backdrop-filter: blur(8px);
-      }
-      /* one cross: the field's own clear button goes, the close button stays (#259, V08) */
-      .fp3d-find input::-webkit-search-cancel-button {
-        -webkit-appearance: none;
-        appearance: none;
-        display: none;
-      }
-      .fp3d-find-close {
-        position: absolute;
-        right: 6px;
-        bottom: 6px;
-        width: 30px;
-        height: 30px;
-        border: 0;
-        border-radius: 10px;
-        background: none;
-        color: var(--fp3d-muted);
-        cursor: pointer;
-      }
-      .fp3d-find-list {
-        display: grid;
-        padding: 6px;
-        border-radius: 14px;
-        background: var(--fp3d-chrome);
-        box-shadow: var(--fp3d-shadow);
-        backdrop-filter: blur(8px);
-      }
-      .fp3d-find-list button {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 8px 10px;
-        border: 0;
-        border-radius: 10px;
-        background: none;
-        color: var(--fp3d-text);
-        text-align: left;
-        font: inherit;
-        cursor: pointer;
-      }
-      .fp3d-find-list button:hover,
-      .fp3d-find-list button:focus-visible {
-        background: rgba(127, 127, 127, 0.14);
-      }
-      .fp3d-find-list b {
-        display: block;
-        font-weight: 600;
-      }
-      .fp3d-find-list small,
-      .fp3d-find-list p {
-        color: var(--fp3d-muted);
-        font-size: 12px;
-        margin: 0;
-      }
-      .fp3d-find-list p {
-        padding: 8px 10px;
-      }
-      .fp3d-find-icon {
-        display: grid;
-        place-items: center;
-        width: 30px;
-        height: 30px;
-        border-radius: 10px;
-        background: rgba(127, 127, 127, 0.15);
-        flex: none;
-      }
-      .fp3d-find-icon svg {
-        width: 16px;
-        height: 16px;
-      }
       .fp3d-swipe {
         position: absolute;
         transform: translate(-50%, calc(-100% - 28px));
@@ -8039,22 +7768,6 @@ export class Fp3dView3d extends LitElement {
         position: absolute;
         inset: 0;
         z-index: 5;
-      }
-      .fp3d-central-top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-      }
-      .fp3d-central-top > b {
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--fp3d-muted);
-      }
-      .fp3d-central-gear {
-        padding: 4px 10px;
-        font-size: 12px;
       }
       /* a module's sheet and the ⚙ settings: a glass box in the middle, over a dim backdrop */
       .fp3d-sheet-backdrop {
@@ -9369,7 +9082,7 @@ export class Fp3dView3d extends LitElement {
         }
       }
       /* the view's own controls on the right (#285); the room panel opens there, so they make way for it */
-      .fp3d-side-right :is(.fp3d-thumbs, .fp3d-find-btn, .fp3d-central-btn, .fp3d-central, .fp3d-eye-clean, .fp3d-find, .fp3d-legend) {
+      .fp3d-side-right :is(.fp3d-thumbs, .fp3d-find-btn, .fp3d-central-btn, .fp3d-central, .fp3d-eye-clean, fp3d-find, .fp3d-legend) {
         left: auto;
         right: 12px;
       }
@@ -9377,22 +9090,16 @@ export class Fp3dView3d extends LitElement {
         left: auto;
         right: 56px;
       }
-      .fp3d-side-right.fp3d-panel-open :is(.fp3d-thumbs, .fp3d-find-btn, .fp3d-central-btn, .fp3d-central, .fp3d-eye-clean, .fp3d-find, .fp3d-legend) {
+      .fp3d-side-right.fp3d-panel-open :is(.fp3d-thumbs, .fp3d-find-btn, .fp3d-central-btn, .fp3d-central, .fp3d-eye-clean, fp3d-find, .fp3d-legend) {
         display: none;
       }
       /* a room sheet covers the lower half: the view's own controls step aside */
       @container fp3d ((max-width: 700px) or ((orientation: portrait) and (max-width: 1000px))) {
-        .fp3d-panel-open :is(.fp3d-find-btn, .fp3d-find, .fp3d-thumbs, .fp3d-legend, .fp3d-stats, .fp3d-scenes) {
+        .fp3d-panel-open :is(.fp3d-find-btn, fp3d-find, .fp3d-thumbs, .fp3d-legend, .fp3d-stats, .fp3d-scenes) {
           display: none;
         }
       }
       @media (pointer: coarse) {
-        .fp3d-find-close {
-          width: 40px;
-          height: 40px;
-          right: 1px;
-          bottom: 1px;
-        }
         .fp3d-dev {
           padding: 6px;
         }
@@ -9556,8 +9263,6 @@ export class Fp3dView3d extends LitElement {
       @media (pointer: coarse) {
         .fp3d-alert-x,
         .fp3d-eye,
-        .fp3d-find-close,
-        .fp3d-find-icon,
         .fp3d-sheet-x,
         .fp3d-person,
         .fp3d-thumbs-fold,
@@ -9572,9 +9277,6 @@ export class Fp3dView3d extends LitElement {
         .fp3d-sheet-input,
         .fp3d-alert-menu button {
           min-height: 44px;
-        }
-        .fp3d-find input {
-          height: 44px;
         }
       }
     `,

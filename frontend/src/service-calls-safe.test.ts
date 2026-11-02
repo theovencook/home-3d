@@ -38,9 +38,9 @@ test("no direct hass.callService( in the views: they use callServiceSafe (#208)"
   assert.deepEqual(bad, [], "route these through callServiceSafe (failure.ts)");
 });
 
-test("the star menu, pins, openings, own buttons and device cards use the safe call (#208)", () => {
+test("pins, openings, own buttons and device cards use the safe call (#208)", () => {
   const view = readFileSync(join(root, "components/view3d.ts"), "utf8");
-  for (const needle of ["safeCall(hass, domain, service, { entity_id: ids })", 'safeCall(this.hass, domain, domain === "switch" ? "turn_on" : "press"', 'safeCall(hass, "media_player"']) {
+  for (const needle of ['safeCall(this.hass, domain, domain === "switch" ? "turn_on" : "press"', 'safeCall(hass, "media_player"']) {
     assert.ok(view.includes(needle), `view3d.ts has ${needle}`);
   }
   assert.ok(/toggleEntity\(hass: HomeAssistant, entityId: string\): void/.test(readFileSync(join(root, "markers.ts"), "utf8")), "a pin tap's toggle never returns a promise to drop");

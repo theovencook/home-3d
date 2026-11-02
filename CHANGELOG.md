@@ -10,6 +10,8 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - **Walking with the touch stick** follows the finger the whole time; a redraw mid-drag (walking into another room) left it stuck in its last direction until let go (#311).
 - The heat legend (temperature, humidity, CO₂) folds to a slim bar with a tap and back, remembered on this device, and sits a little further from the energy tiles (#310).
 - The energy tiles (consumption, grid, solar, battery) stay in view while the glass cards are on (#309).
+- **Favourites panel** (the star) shows only the favourites and own buttons you set: the pre-filled Whole house / floor rows (lights, blinds, Settings) are gone, and an empty panel links to Favourites in Settings (#308).
+- **Search** moved from the floating button into the floor bar: a magnifier at the right end that opens the field with the results dropping under it (a phone: the field covers the row); Esc closes and the focus returns to the button. Cards without the floor bar keep the floating button (#305).
 - **Walking** follows each flight of a stair drawn in several pieces: a flight starts at its mount height and rises its own height, flights that meet join into one way round the corner, and only the way that reaches the floor above changes floors (#304).
 - **Furniture library**: the search and a Filters button stay in view above the results; room and pack are menus in a drawer that starts closed, and an empty search says how many items the filters hide (#300).
 - **Drawing by measure** takes over the side panel: the length box (focused once the start is set), the arrows, Close room and the wall list are all in view (#301).
