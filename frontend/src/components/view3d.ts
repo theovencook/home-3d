@@ -9325,8 +9325,7 @@ export class Fp3dView3d extends LitElement {
         background: color-mix(in srgb, var(--fp3d-chrome-solid) 92%, transparent);
         pointer-events: none;
       }
-      /* a faint outline drawn every few seconds on tappable pins (#283): opacity and transform only, so it runs on the
-         compositor and costs no script time; seven offsets stagger the pins. Off in low quality (no class) and for reduced motion. */
+      /* a faint outline on tappable pins every few seconds (#283): opacity and transform only (compositor, no script); three offsets stagger them */
       .fp3d-pulse .fp3d-dev[data-entity]::after {
         content: "";
         position: absolute;
@@ -9335,23 +9334,17 @@ export class Fp3dView3d extends LitElement {
         border: 1px solid var(--fp3d-accent);
         opacity: 0;
         pointer-events: none;
-        animation: fp3d-pin-pulse 7s ease-out infinite;
+        animation: fp3d-pin-pulse 6s ease-out infinite;
       }
-      .fp3d-pulse .fp3d-dev:nth-child(7n + 2)::after { animation-delay: 1s; }
-      .fp3d-pulse .fp3d-dev:nth-child(7n + 3)::after { animation-delay: 2s; }
-      .fp3d-pulse .fp3d-dev:nth-child(7n + 4)::after { animation-delay: 3s; }
-      .fp3d-pulse .fp3d-dev:nth-child(7n + 5)::after { animation-delay: 4s; }
-      .fp3d-pulse .fp3d-dev:nth-child(7n + 6)::after { animation-delay: 5s; }
-      .fp3d-pulse .fp3d-dev:nth-child(7n)::after { animation-delay: 6s; }
+      .fp3d-pulse .fp3d-dev:nth-child(3n + 2)::after { animation-delay: 2s; }
+      .fp3d-pulse .fp3d-dev:nth-child(3n)::after { animation-delay: 4s; }
       @keyframes fp3d-pin-pulse {
-        0%, 14%, 100% { opacity: 0; transform: scale(1); }
-        4% { opacity: 0.45; }
-        10% { opacity: 0.2; transform: scale(1.12); }
+        0%, 20%, 100% { opacity: 0; transform: scale(1); }
+        5% { opacity: 0.45; }
+        15% { opacity: 0; transform: scale(1.12); }
       }
       @media (prefers-reduced-motion: reduce) {
-        .fp3d-pulse .fp3d-dev[data-entity]::after {
-          animation: none;
-        }
+        .fp3d-pulse .fp3d-dev[data-entity]::after { animation: none; }
       }
       .fp3d-dev-sel {
         outline: 2px solid var(--fp3d-accent);
