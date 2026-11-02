@@ -17,6 +17,8 @@ export const loadMultiSelect = loadParts;
 export const loadTimeField = loadParts;
 /** The Extensions page (fp3d-extensions), drawn by the panel once the editor bundle and this chunk are there. */
 export const loadExtensions = loadParts;
+/** The item picker (#293): a chunk of its own, as only an open Item field draws it. */
+export const loadItemPicker = once(() => import("../item-picker.ts"));
 /** The phone editor's bottom bar and More (#250): a chunk of its own, as only phone-wide screens draw it. */
 export const loadPhoneBar = once(() => import("./phone-bar.ts").then((m) => m.definePhoneBar({ LitElement, html, css, nothing, uiIcon, defineElement })));
 

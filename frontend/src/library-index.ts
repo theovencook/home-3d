@@ -252,6 +252,30 @@ export function classify(packId: string, item: PackItemInfo): { kind: Kind; room
 export function roomKindOf(name: string): Room | null {
   const n = name.toLowerCase();
   const table: [RegExp, Room][] = [
+    [/en[- ]?suite|ensuite|masterbad|elternbad/, "ensuite"],
+    [/cloak ?room|garderobe|guardaroba|vestiaire/, "cloakroom"],
+    [/boot ?room|mud ?room/, "bootroom"],
+    [/pantry|larder|speisekammer|vorrat|dispensa|despensa|garde-manger/, "pantry"],
+    [/walk-?in (wardrobe|closet)|ankleide|cabina armadio|vestidor/, "wardrobe"],
+    [/dressing ?room|umkleide/, "dressing"],
+    [/study|studeerkamer|estudio/, "study"],
+    [/play ?room|spielzimmer|speelkamer|sala giochi|salle de jeux/, "playroom"],
+    [/nursery|baby ?room|babyzimmer/, "nursery"],
+    [/gym|fitness ?room|fitnessraum|palestra|gimnasio/, "gym"],
+    [/cinema|home theat(er|re)|media room|heimkino|kinosaal/, "cinema"],
+    [/games? ?room|spielraum|billiard|snooker/, "games"],
+    [/laundry|waschk[üu]che|waschraum|lavander|buanderie|wasruimte|pralni|prádeln|vaskerom/, "laundry"],
+    [/plant ?room|boiler room|heizungsraum|technikraum|sala de m[áa]quinas/, "plantroom"],
+    [/workshop|werkstatt|werkplaats|taller/, "workshop"],
+    [/summer ?house|gartenlaube|gazebo|pavilion|laube/, "summerhouse"],
+    [/green ?house|gew[äa]chshaus|invernadero|broeikas|szklarnia/, "greenhouse"],
+    [/shed|gartenhaus|ger[äa]tehaus|schuppen|cobertizo|capanno/, "shed"],
+    [/cellar|basement|keller|s[óo]tano|cantina|kælder|kjeller|kellari/, "cellar"],
+    [/landing|treppenabsatz/, "landing"],
+    [/porch|windfang|vestibule|vestibül/, "porch"],
+    [/balcon|balkon/, "balcony"],
+    [/terrace|terrasse|patio|terraza|terrazza/, "terrace"],
+    [/car ?port|unterstand/, "carport"],
     [/kinder|kids|child|niñ|bambin|enfant|dziec|děts|barn|lapsi|gyerek|copi|otro|儿童|kinderkamer/, "kids"],
     [/schlaf|bedroom|dormit|camera da letto|chambre|slaapkamer|sypial|ložnic|sover|makuu|háló|dormitor|spaln|卧室|soveværelse/, "bedroom"],
     [/wohn|living|lounge|salon|soggiorno|sala de estar|woonkamer|obývací|stue|olohuone|nappali|sufrag|dnevn|客厅/, "living"],
@@ -332,7 +356,7 @@ export interface IndexSource {
   size: (type: string) => [number, number, number];
 }
 
-const OUTDOOR_ROOMS = new Set<Room>(["garden"]);
+const OUTDOOR_ROOMS = new Set<Room>(["garden", "balcony", "terrace", "carport"]);
 
 export function buildIndex(src: IndexSource): LibraryEntry[] {
   const out: LibraryEntry[] = [];
@@ -438,9 +462,17 @@ function wordMatcher(w: string): (hay: string) => boolean {
   return (hay) => re.test(hay);
 }
 
+/** The newer room types also fit the items of the rooms they resemble (#291): a cellar gets the utility items. */
+const RELATED: Partial<Record<Room, Room[]>> = {
+  ensuite: ["bath"], cloakroom: ["bath", "hall"], bootroom: ["hall", "utility"], pantry: ["kitchen", "utility"], study: ["office"], playroom: ["kids"],
+  nursery: ["kids", "bedroom"], gym: ["hobby"], cinema: ["living", "hobby"], games: ["hobby", "living"], laundry: ["utility"], workshop: ["garage", "hobby"],
+  shed: ["garden", "garage"], summerhouse: ["garden", "conservatory"], greenhouse: ["garden", "conservatory"], cellar: ["utility", "hobby"], landing: ["hall"], porch: ["hall"],
+  wardrobe: ["bedroom"], dressing: ["bedroom"], plantroom: ["utility"], balcony: ["garden"], terrace: ["garden"], carport: ["garage", "garden"],
+};
+
 /** Does an entry fit the open room? Items for any room fit every room. */
 function fitsRoom(e: LibraryEntry, room: Room | null): boolean {
-  return !room || !e.rooms.length || e.rooms.includes(room);
+  return !room || !e.rooms.length || e.rooms.includes(room) || !!RELATED[room]?.some((r) => e.rooms.includes(r));
 }
 
 /** The toggle chips (Electric, Lights up, Outdoor) and the pack chip: hard filters, with or without a query. */

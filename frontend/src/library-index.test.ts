@@ -44,8 +44,12 @@ test("a room's name tells which room kind it is, in several languages", () => {
   assert.equal(roomKindOf("Flur"), "hall");
   assert.equal(roomKindOf("HWR"), "utility");
   assert.equal(roomKindOf("Garage"), "garage");
-  assert.equal(roomKindOf("Terrasse"), "garden");
-  assert.equal(roomKindOf("Fitnessraum"), "hobby");
+  assert.equal(roomKindOf("Terrasse"), "terrace");
+  assert.equal(roomKindOf("Fitnessraum"), "gym");
+  assert.equal(roomKindOf("Master en-suite"), "ensuite");
+  assert.equal(roomKindOf("Walk-in wardrobe"), "wardrobe");
+  assert.equal(roomKindOf("Keller"), "cellar");
+  assert.equal(roomKindOf("Boot room"), "bootroom");
   assert.equal(roomKindOf("Raum 3"), null);
 });
 

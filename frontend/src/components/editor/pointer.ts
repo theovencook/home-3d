@@ -1060,9 +1060,14 @@ export class PointerPart {
       }
       case "tap":
         if (drag.panning) break;
-        // by measure, a tap only sets (or moves) the starting point; the walls are typed in
-        if (this._tool === "measure") this._draft = [this.snap(this.toWorld(...local), undefined, e.altKey)];
-        else this.addDraftPoint(this.snap(this.toWorld(...local), undefined, e.altKey), local);
+        // by measure, the first tap sets the start; the next ones add a point, a typed length setting how far along the pull (#294)
+        if (this._tool === "measure" && !this._draft.length) this._draft = [this.snap(this.toWorld(...local), undefined, e.altKey)];
+        else if (this._tool === "measure") {
+          const to = this.pulledPoint(this.snap(this.toWorld(...local), undefined, e.altKey)) as Vec2;
+          const typed = this._measureLen > 0;
+          this.addDraftPoint(to, local);
+          if (typed) this._measureLen = 0; // the next wall starts empty
+        } else this.addDraftPoint(this.snap(this.toWorld(...local), undefined, e.altKey), local);
         break;
       case "marquee": {
         // everything whose centre lies in the frame joins the selection

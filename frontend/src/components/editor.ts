@@ -98,6 +98,7 @@ export class Fp3dEditor extends LitElement {
     packs: { attribute: false },
     _preview: { state: true },
     _libUpdates: { state: true },
+    _itemPicker: { state: true },
     _doc: { state: true },
     _doc3d: { state: true },
     _split: { state: true },
@@ -242,6 +243,7 @@ export class Fp3dEditor extends LitElement {
   declare _preview: { type: string; url: string | null; left: number; top: number } | null;
   /** The furniture types of placed items with an update (#48), shown on the library's cards. */
   declare _libUpdates: ReadonlySet<string>;
+  declare _itemPicker: boolean;
   declare _doc: Building;
   /** The draft as the 3D pane shows it (follows _doc with a short delay, so drags stay smooth). */
   declare _doc3d: Building;
@@ -658,7 +660,8 @@ export class Fp3dEditor extends LitElement {
     this._sideMin = min;
     this._preview = null;
     this._libUpdates = new Set();
-    this._measureLen = 3;
+    this._itemPicker = false;
+    this._measureLen = 0;
     this._packages = false;
     this._rectSize = [4, 3];
     this._rectName = "";
@@ -1219,6 +1222,14 @@ export class Fp3dEditor extends LitElement {
     if (isPackType(entry.type) && !packItem(entry.type)) return null;
     const [w, d, h] = entry.size;
     return mod.furniturePreview({ type: entry.type, w, d, h, variant: null, lamp: LAMP_MODEL[entry.type] ?? null }, 96, this.packs ?? []);
+  };
+
+  /** The item picker's big picture (#293): the same drawing as a card's, larger. */
+  libraryPicture = async (entry: LibraryEntry, size: number): Promise<string | null> => {
+    const [mod] = await Promise.all([load3d(), this.hass ? ensureRecipes(this.hass, [entry.type]) : undefined]);
+    if (isPackType(entry.type) && !packItem(entry.type)) return null;
+    const [w, d, h] = entry.size;
+    return mod.furniturePreview({ type: entry.type, w, d, h, variant: null, lamp: LAMP_MODEL[entry.type] ?? null }, size, this.packs ?? []);
   };
 
   libUpdatesAsked = false;
