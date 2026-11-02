@@ -283,7 +283,7 @@ export function energyAt(timeline: Timeline, live: Record<string, HassEntity>, b
 /** The sensors the energy balance reads. */
 export function energyIds(building: Building, devices: DeviceSensors): string[] {
   const e = building.energy;
-  return [...new Set([e.grid, e.solar, e.battery, e.battery_soc, e.consumption, devices.grid, devices.gridExport, ...devices.solar, ...devices.battery, ...devices.charge, ...devices.soc].filter((x): x is string => !!x))];
+  return [...new Set([e.grid, e.solar, e.battery, e.battery_soc, e.consumption, ...(e.systems ?? []).flatMap((x) => [x.grid, x.solar, x.battery, x.battery_soc]), devices.grid, devices.gridExport, ...devices.solar, ...devices.battery, ...devices.charge, ...devices.soc].filter((x): x is string => !!x))];
 }
 
 /** kWh of a day from the balance every five minutes; null when the replay knows no energy at all. */

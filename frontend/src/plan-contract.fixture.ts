@@ -869,7 +869,20 @@ export const PLAN_CONTRACT = {
     "water": "text",
     "cheap_rate": "text",
     "cheap_from": "07:30",
-    "cheap_to": "07:30"
+    "cheap_to": "07:30",
+    "systems": [
+      {
+        "id": "text",
+        "name": "text",
+        "inverter": "text",
+        "grid": "text",
+        "grid_invert": true,
+        "solar": "text",
+        "battery": "text",
+        "battery_invert": true,
+        "battery_soc": "text"
+      }
+    ]
   },
   "presence": [
     {

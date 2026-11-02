@@ -42,7 +42,8 @@ import { alertEntities, alertKey, alertSources, alertText, alertTint, clearedSno
 import { iconPath, iconSvg, mdiIcon } from "../icons.ts";
 import { uiIcon } from "../ui-icons.ts";
 import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binPlace, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
-import { deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, type EnergyPrefs, fieldLevels, fieldPowers, findConsumers, flowDots, isLoad, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type SolarDay, type FlowKind, type StatRow } from "../energy.ts";
+import { BAR_RGB, CHARGE_BAR_COUNT, chargeBars, DARK_BAR_RGB } from "../charge-bars.ts";
+import { batteryCharge, deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, type EnergyPrefs, fieldLevels, fieldPowers, findConsumers, flowDots, isLoad, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type SolarDay, type FlowKind, type StatRow } from "../energy.ts";
 import { fieldFace, fieldSize, roofFaces, roofWindowRoom } from "../solar.ts";
 import { type CustomButton, type EntityRef, DEFAULT_HOLOGRAM, lockAlong, type PoolPipe, type RoofWindow, type SolarField, uid } from "../model.ts";
 
@@ -3341,6 +3342,7 @@ export class Fp3dView3d extends LitElement {
     const markers: (DeviceMarker & { fromFurniture: boolean; energyDevice?: boolean; standby?: boolean })[] = [];
     const consumers: Consumer[] = [];
     const screens = new Map<string, ScreenState>();
+    let batSummary: EnergySummary | undefined;
     const targets = new Map<string, string>();
     // devices placed on their own keep their pin; two pieces of furniture on one entity (a copy) each get theirs, like lamps (#688)
     const placed = new Set(taken);
@@ -3442,6 +3444,16 @@ export class Fp3dView3d extends LitElement {
         const appliance = f.type === "washer" || f.type === "dryer" || f.type === "dishwasher";
         const extraRef = energyRole(f.type) === "home_battery" ? f.soc : energyRole(f.type) === "wallbox" ? f.status : f.type === "parking" && car ? (f.car?.device ?? car.entities.soc) : appliance ? (f.remaining ?? null) : null;
         const extra = extraRef && extraRef !== "none" ? extraRef : null;
+        // a battery model shows its charge as four bars (#282): its own sensor, else its inverter's setup, else the house average
+        const batCharge = energyRole(f.type) === "home_battery" ? batteryCharge(hass, b, floor.id, f, (batSummary ??= energySummary(hass, b, [], deviceSensors(b)))) : null;
+        if (batCharge) {
+          const lit = chargeBars(batCharge.soc);
+          screens.set(f.id, {
+            color: BAR_RGB.green,
+            level: 0.9,
+            faces: lit.map((c, i) => ({ part: "charge" as const, index: i, of: CHARGE_BAR_COUNT, color: c ? BAR_RGB[c] : DARK_BAR_RGB, level: c ? 0.9 : 0.15 })),
+          });
+        }
         // a sensor whose value stands at the symbol (a boiler's water temperature, D619): a pin even without a link
         const extraSensor = f.extra && f.extra !== "none" && hass.states[f.extra] ? f.extra : null;
         // a radiator or hot-water cylinder with a temperature shades from cold blue to warm red with it, its pin
@@ -3598,7 +3610,7 @@ export class Fp3dView3d extends LitElement {
             (car
               ? this.carText(hass, car, !!st && !PRESENT_STATES.has(st.state.toLowerCase()))
               : energyRole(f.type) === "home_battery"
-              ? this.batteryText(hass, extra, power)
+              ? this.batteryText(hass, extra, power, batCharge && !batCharge.own ? batCharge.soc : null)
               : energyRole(f.type) === "wallbox"
                 ? this.wallboxText(hass, extra, power)
                 : energyRole(f.type) === "meter"
@@ -4126,10 +4138,12 @@ export class Fp3dView3d extends LitElement {
   }
 
   /** Home battery: "64 % · ▲ 1,5 kW" (▲ charging, ▼ discharging; its power sensor counts discharging positive). */
-  private batteryText(hass: HomeAssistant, soc: string | null, power: number | null): string {
+  private batteryText(hass: HomeAssistant, soc: string | null, power: number | null, systemSoc: number | null = null): string {
     const v = soc ? Number(hass.states[soc]?.state) : Number.NaN;
     const parts: string[] = [];
     if (Number.isFinite(v)) parts.push(`${formatNumber(hass, v, 0)} %`);
+    // no sensor of its own: the inverter's system average, labelled as such (#282)
+    else if (systemSoc !== null) parts.push(`${formatNumber(hass, systemSoc, 0)} % ${translate(hass, "battery_system_avg")}`);
     if (power !== null && Math.abs(power) >= 10) parts.push(`${power < 0 ? "▲" : "▼"} ${formatPower(hass, Math.abs(power))}`);
     return parts.join(" · ");
   }

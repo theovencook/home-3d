@@ -332,8 +332,9 @@ export interface ScreenState {
   /** Furniture with a state: glowing faces on top of the item instead of a screen – the whole top, or a half of it. */
   // (see also SoundSource below)
   // "gang": one rocker or socket of a wall switch or socket (`index` of `of`)
+  // "charge": one of a battery's four charge bars (`index` of `of`, bottom up, #282)
   // "progress": a ring on the top filled to `fill` (a 3D printer's print, #11); "chamber": the pack's glow parts
-  faces?: { part: "all" | "left" | "right" | "top" | "bottom" | "band" | "cabin" | "lights" | "burners" | "lid" | "beacon" | "gang" | "drum" | "apring" | "strata" | "progress" | "chamber"; color: [number, number, number]; level: number; index?: number; of?: number; accent?: boolean; top?: [number, number, number]; fill?: number }[];
+  faces?: { part: "all" | "left" | "right" | "top" | "bottom" | "band" | "cabin" | "lights" | "burners" | "lid" | "beacon" | "gang" | "drum" | "apring" | "strata" | "progress" | "chamber" | "charge"; color: [number, number, number]; level: number; index?: number; of?: number; accent?: boolean; top?: [number, number, number]; fill?: number }[];
 }
 
 /** Position of the sun (from sun.sun): degrees above the horizon and clockwise from north. */
@@ -4195,6 +4196,23 @@ export class FloorplanViewer {
               buf.tri(at(a0, r), at(a0, r * 1.18), at(a1, r * 1.18), col, dark, dark);
               buf.tri(at(a0, r), at(a1, r * 1.18), at(a1, r), col, dark, col);
             }
+            continue;
+          }
+          if (face.part === "charge") {
+            // a battery model's charge bar: a short bar on its front, stacked bottom up
+            const n = Math.max(1, face.of ?? 1);
+            const aw = Math.abs(w);
+            const wall = f.variant === "wall";
+            const top = (wall ? 0.5 : 0) + h * 0.82;
+            const bottom = (wall ? 0.5 : 0) + h * 0.18;
+            const pitch = (top - bottom) / n;
+            const y0 = base + bottom + pitch * (face.index ?? 0) + pitch * 0.12;
+            const y1 = y0 + pitch * 0.76;
+            const zf = d / 2 + 0.006;
+            const hx = aw * 0.3 * Math.sign(w);
+            const col = new Color(...face.color.map((v) => Math.min(1, v * (0.35 + 0.65 * face.level))) as [number, number, number]);
+            buf.tri(P(-hx, y0, zf), P(hx, y0, zf), P(hx, y1, zf), col);
+            buf.tri(P(-hx, y0, zf), P(hx, y1, zf), P(-hx, y1, zf), col);
             continue;
           }
           if (face.part === "gang") {

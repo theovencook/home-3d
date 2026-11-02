@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deviceSensors, energySummary, fieldPowers, findConsumers, flowColor, FLOW_COLORS, flowDots, flowSegments, sourceMix, type EnergySummary, gridPoint, meterPosition, powerSensorFor, proposeEnergySensors, readPower, solarCurvePath, solarDayFromStats, wattsPerUnit } from "./energy.ts";
+import { batteryCharge, deviceSensors, energySummary, fieldPowers, findConsumers, flowColor, FLOW_COLORS, flowDots, flowSegments, sourceMix, type EnergySummary, gridPoint, meterPosition, powerSensorFor, proposeEnergySensors, readPower, solarCurvePath, solarDayFromStats, wattsPerUnit } from "./energy.ts";
 import { proposeField, roofFaces } from "./solar.ts";
 import type { Building, Room } from "./model.ts";
 import { emptyBuilding, newFloor } from "./model.ts";
@@ -407,4 +407,44 @@ test("source mix: a heat pump on part sun, part grid is a blend of both", () => 
     { color: FLOW_COLORS.solar, share: 0.75 },
     { color: FLOW_COLORS.grid, share: 0.25 },
   ]);
+});
+
+test("further inverter setups add up in the totals and keep their own readings (#285)", () => {
+  const b = house();
+  b.energy = {
+    ...b.energy,
+    battery: "sensor.bat1",
+    battery_soc: "sensor.soc1",
+    systems: [{ id: "s2", name: "Second", inverter: null, grid: null, grid_invert: false, solar: "sensor.solar2", battery: "sensor.bat2", battery_invert: true, battery_soc: "sensor.soc2" }],
+  };
+  const hass = hassWith([power("sensor.grid", "100"), power("sensor.solar", "1000"), power("sensor.solar2", "500"), power("sensor.bat1", "200"), power("sensor.bat2", "300"), st("sensor.soc1", "80"), st("sensor.soc2", "40")]);
+  const s = energySummary(hass, b, []);
+  assert.equal(s.solar, 1500);
+  assert.equal(s.battery, 200 - 300); // the second setup's sign is inverted
+  assert.equal(s.soc, 60);
+  assert.equal(s.systems?.[0].soc, 40);
+  assert.equal(s.systems?.[0].solar, 500);
+});
+
+test("a plan with one setup reads as before (#285)", () => {
+  const b = house();
+  const hass = hassWith([power("sensor.grid", "100"), power("sensor.solar", "1000")]);
+  const s = energySummary(hass, b, []);
+  assert.equal(s.solar, 1000);
+  assert.equal(s.systems, undefined);
+});
+
+test("a battery shows its own charge, else its inverter's setup, else the house average (#282)", () => {
+  const b = emptyBuilding();
+  const fl = newFloor("g", "G", 0);
+  const item = (id: string, type: string, x: number, extra: Record<string, unknown> = {}) => ({ id, type, x, z: 0, w: 1, d: 1, h: 1, rotation: 0, ...extra }) as unknown as Building["floors"][number]["furniture"][number];
+  fl.furniture = [item("inv1", "inverter", 0), item("inv2", "inverter", 10), item("b1", "home_battery", 1, { soc: "sensor.own" }), item("b2", "home_battery", 9), item("b3", "home_battery", 1)];
+  b.floors = [fl];
+  b.energy = { ...b.energy, battery_soc: "sensor.soc1", systems: [{ id: "s2", name: "", inverter: "inv2", grid: null, grid_invert: false, solar: null, battery: null, battery_invert: false, battery_soc: "sensor.soc2" }] };
+  const hass = hassWith([st("sensor.own", "77"), st("sensor.soc1", "80"), st("sensor.soc2", "30")]);
+  const sum = energySummary(hass, b, []);
+  const get = (id: string) => batteryCharge(hass, b, "g", fl.furniture.find((x) => x.id === id)!, sum);
+  assert.deepEqual(get("b1"), { soc: 77, own: true });
+  assert.deepEqual(get("b2"), { soc: 30, own: false });
+  assert.deepEqual(get("b3"), { soc: 80, own: false });
 });

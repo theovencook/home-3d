@@ -7,7 +7,7 @@ import { snapToWall } from "../../geometry/snap.ts";
 import { deviceSensors, energySummary, flowSegments, gridPoint, proposeEnergySensors, type EnergyPrefs, type FlowSegment, proposeMeters } from "../../energy.ts";
 import { energySensorFor } from "../../wire-ends.ts";
 import { type I18nKey } from "../../i18n.ts";
-import { centroid, ENERGY_DEVICES, DEFAULT_HOLOGRAM, type HologramSettings, signedArea, pointInPolygon, uid, type Building, type Floor, type Furniture, type SolarField, type Room, type Vec2 } from "../../model.ts";
+import { centroid, ENERGY_DEVICES, DEFAULT_HOLOGRAM, type HologramSettings, signedArea, pointInPolygon, uid, type Building, type EnergySystem, MAX_ENERGY_SYSTEMS, type Floor, type Furniture, type SolarField, type Room, type Vec2 } from "../../model.ts";
 import { energyRole, furnitureSize, packInfo, packItemName } from "../../packs.ts";
 import { round, isEnergyDevice, numberish } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
@@ -522,6 +522,54 @@ export class EnergyPart {
     this._energyNote = n ? this.t("energy_import_done", { n }) : this.t("energy_import_none");
   }
 
+  /** Further inverter / battery setups (#285): each with its own sensors, added to the totals. */
+  renderEnergySystems(this: Fp3dEditor, power: Parameters<Fp3dEditor["entitySelect"]>[3], soc: Parameters<Fp3dEditor["entitySelect"]>[3]) {
+    const systems = this._doc.energy.systems ?? [];
+    const admin = this.isEditor;
+    const set = (id: string, patch: Partial<EnergySystem>) => this.setEnergy({ systems: systems.map((x) => (x.id === id ? { ...x, ...patch } : x)) });
+    const inverters = this._doc.floors.flatMap((fl) => fl.furniture.filter((m) => energyRole(m.type) === "inverter"));
+    const pick = (id: string, key: "grid" | "solar" | "battery" | "battery_soc") => (v: string | null) => set(id, { [key]: v === "none" ? null : v });
+    return html`<div class="fp3d-wide">
+      <h4>${this.t("energy_systems_title")}</h4>
+      <p class="fp3d-sub">${this.t("energy_systems_hint")}</p>
+      ${systems.map(
+        (x, i) => html`<div class="fp3d-form">
+          <label class="fp3d-field fp3d-wide"
+            ><span>${this.t("energy_system_name")}</span>
+            <input type="text" .value=${x.name} placeholder=${this.t("energy_system_n", { n: i + 2 })} ?disabled=${!admin} @change=${(ev: Event) => set(x.id, { name: (ev.target as HTMLInputElement).value })}
+          /></label>
+          <label class="fp3d-field fp3d-wide"
+            ><span>${this.t("energy_system_inverter")}</span>
+            <select ?disabled=${!admin} @change=${(ev: Event) => set(x.id, { inverter: (ev.target as HTMLSelectElement).value || null })}>
+              <option value="" ?selected=${!x.inverter}>${this.t("energy_system_inverter_none")}</option>
+              ${inverters.map((m, n) => html`<option value=${m.id} ?selected=${m.id === x.inverter}>${m.name?.trim() || `${this.t("furn_inverter")} ${n + 1}`}</option>`)}
+            </select></label
+          >
+          ${this.entitySelect(this.t("energy_grid"), x.grid, undefined, power, pick(x.id, "grid"))}
+          <label class="fp3d-check fp3d-wide"
+            ><input type="checkbox" .checked=${x.grid_invert} ?disabled=${!admin} @change=${(ev: Event) => set(x.id, { grid_invert: (ev.target as HTMLInputElement).checked })} />
+            ${this.t("energy_invert")}</label
+          >
+          ${this.entitySelect(this.t("energy_solar_sensor"), x.solar, undefined, power, pick(x.id, "solar"))}
+          ${this.entitySelect(this.t("energy_battery_sensor"), x.battery, undefined, power, pick(x.id, "battery"))}
+          <label class="fp3d-check fp3d-wide"
+            ><input type="checkbox" .checked=${x.battery_invert} ?disabled=${!admin} @change=${(ev: Event) => set(x.id, { battery_invert: (ev.target as HTMLInputElement).checked })} />
+            ${this.t("energy_invert")}</label
+          >
+          ${this.entitySelect(this.t("energy_battery_soc"), x.battery_soc, undefined, soc, pick(x.id, "battery_soc"))}
+          <button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.setEnergy({ systems: systems.filter((y) => y.id !== x.id) })}>${this.t("energy_system_remove")}</button>
+        </div>`,
+      )}
+      <button
+        class="fp3d-btn"
+        ?disabled=${!admin || systems.length >= MAX_ENERGY_SYSTEMS}
+        @click=${() => this.setEnergy({ systems: [...systems, { id: uid("sys"), name: "", inverter: null, grid: null, grid_invert: false, solar: null, battery: null, battery_invert: false, battery_soc: null }] })}
+      >
+        ${this.t("energy_system_add")}
+      </button>
+    </div>`;
+  }
+
   /** Grid, solar, battery and house sensors: from the devices in the plan unless chosen here. */
   renderEnergyBalance(this: Fp3dEditor) {
     const e = this._doc.energy;
@@ -567,6 +615,7 @@ export class EnergyPart {
           ${this.t("energy_invert")}</label
         >
         ${this.entitySelect(this.t("energy_battery_soc"), e.battery_soc, devices.soc[0] ?? null, soc, pick("battery_soc"))}
+        ${this.renderEnergySystems(power, soc)}
         ${this.entitySelect(this.t("energy_consumption_sensor"), e.consumption, null, power, pick("consumption"))}
         ${this.entitySelect(this.t("energy_tariff_sensor"), e.tariff, undefined, tariff, pick("tariff"))}
         ${this.entitySelect(this.t("energy_gas_meter"), e.gas ?? null, undefined, meter("gas"), (v) => this.setEnergy({ gas: v === "none" ? null : v }))}

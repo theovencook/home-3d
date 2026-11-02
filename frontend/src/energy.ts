@@ -40,6 +40,65 @@ export interface EnergySummary {
   tariff: { value: number; unit: string } | null;
   /** House consumption (W) from the balance, or the sum of the consumers. */
   consumption: number | null;
+  /** Each further setup (#285) with its own readings; the numbers above already include them. */
+  systems?: SystemSummary[];
+}
+
+/** What one inverter / battery setup reads right now (#285). */
+export interface SystemSummary {
+  id: string;
+  name: string;
+  inverter: string | null;
+  grid: number | null;
+  solar: number | null;
+  battery: number | null;
+  soc: number | null;
+}
+
+/** Adds readings where at least one is known (null: none known). */
+function addKnown(a: number | null, b: number | null): number | null {
+  return a === null ? b : b === null ? a : a + b;
+}
+
+/** The readings of the further setups (#285). */
+export function systemSummaries(hass: HomeAssistant, e: EnergySettings): SystemSummary[] {
+  return (e.systems ?? []).map((sys) => {
+    const soc = sys.battery_soc ? Number(hass.states[sys.battery_soc]?.state) : NaN;
+    const solar = sys.solar ? readPower(hass.states[sys.solar]) : null;
+    return {
+      id: sys.id,
+      name: sys.name,
+      inverter: sys.inverter ?? null,
+      grid: sys.grid ? readPower(hass.states[sys.grid], sys.grid_invert) : null,
+      solar: solar === null ? null : Math.max(0, solar),
+      battery: sys.battery ? readPower(hass.states[sys.battery], sys.battery_invert) : null,
+      soc: Number.isFinite(soc) ? soc : null,
+    };
+  });
+}
+
+/**
+ * The charge a battery model shows (#282): its own charge sensor when it has one, else the average of the setup of the
+ * inverter it hangs on (the nearest inverter of its floor), else the whole house's average. `own` is false for both
+ * fallbacks, so the pin can label the number as a system average.
+ */
+export function batteryCharge(hass: HomeAssistant, building: Building, floorId: string, bat: Furniture, summary: EnergySummary): { soc: number; own: boolean } | null {
+  const ownId = ref(bat.soc);
+  const v = ownId ? Number(hass.states[ownId]?.state) : NaN;
+  if (Number.isFinite(v)) return { soc: v, own: true };
+  const floor = building.floors.find((x) => x.id === floorId);
+  let inv: Furniture | null = null;
+  for (const m of floor?.furniture ?? []) {
+    if (energyRole(m.type) !== "inverter") continue;
+    if (!inv || Math.hypot(m.x - bat.x, m.z - bat.z) < Math.hypot(inv.x - bat.x, inv.z - bat.z)) inv = m;
+  }
+  const sys = inv ? summary.systems?.find((x) => x.inverter === inv!.id) : undefined;
+  if (sys && sys.soc !== null) return { soc: sys.soc, own: false };
+  // setup 1 (the sensors at the top of the energy settings) has no inverter link: with several setups its own charge
+  const first = ref(building.energy.battery_soc);
+  const firstV = building.energy.systems?.length && first ? Number(hass.states[first]?.state) : NaN;
+  if (Number.isFinite(firstV)) return { soc: firstV, own: false };
+  return summary.soc !== null ? { soc: summary.soc, own: false } : null;
 }
 
 export interface Consumer {
@@ -267,7 +326,7 @@ export function powerSensorFor(hass: HomeAssistant, entityId: string): string | 
  */
 export function findConsumers(hass: HomeAssistant, building: Building, devices: DeviceSensors = deviceSensors(building)): Consumer[] {
   const e = building.energy;
-  const sources = new Set([e.grid, e.solar, e.battery, devices.grid, devices.gridExport, ...devices.solar, ...devices.battery, ...devices.charge].filter(Boolean));
+  const sources = new Set([e.grid, e.solar, e.battery, ...(e.systems ?? []).flatMap((x) => [x.grid, x.solar, x.battery]), devices.grid, devices.gridExport, ...devices.solar, ...devices.battery, ...devices.charge].filter(Boolean));
   const out: Consumer[] = [];
   const seen = new Set<string>();
   for (const floor of building.floors) {
@@ -316,6 +375,14 @@ export function energySummary(hass: HomeAssistant, building: Building, consumers
   // several batteries: their charge is averaged
   const socIds = e.battery_soc ? [e.battery_soc] : devices.soc;
   const socs = socIds.map((id) => Number(hass.states[id]?.state)).filter((v) => Number.isFinite(v));
+  // the further setups (#285) add to the totals; their charge joins the average
+  const more = systemSummaries(hass, e);
+  for (const m of more) {
+    grid = addKnown(grid, m.grid);
+    solar = addKnown(solar, m.solar);
+    battery = addKnown(battery, m.battery);
+    if (m.soc !== null) socs.push(m.soc);
+  }
   const socState = socs.length ? socs.reduce((a, b) => a + b, 0) / socs.length : NaN;
   const tariffState = e.tariff ? hass.states[e.tariff] : undefined;
   const tariffValue = Number(tariffState?.state);
@@ -330,6 +397,7 @@ export function energySummary(hass: HomeAssistant, building: Building, consumers
     soc: Number.isFinite(socState) ? socState : null,
     tariff: tariffState && Number.isFinite(tariffValue) ? { value: tariffValue, unit: String(tariffState.attributes.unit_of_measurement ?? "") } : null,
     consumption,
+    ...(more.length ? { systems: more } : {}),
   };
 }
 
@@ -671,7 +739,13 @@ export function flowSegments({ building, consumers, summary, battery, fieldPower
   const closest = <T extends { x: number; z: number }>(list: T[], p: { x: number; z: number }): T | null =>
     list.reduce((best: T | null, x) => (!best || Math.hypot(x.x - p.x, x.z - p.z) < Math.hypot(best.x - p.x, best.z - p.z) ? x : best), null);
   // every battery hangs on the nearest inverter of its floor (a hybrid inverter), else on the meter
-  const batteryPower = (bat: DevicePos) => own(bat.id) ?? (batteries.length === 1 ? (summary.battery ?? 0) : 0);
+  // a further setup (#285) tied to a placed inverter brings its own readings for that inverter and its batteries
+  const systemOf = (invId: string) => summary.systems?.find((x) => x.inverter === invId);
+  const batteryPower = (bat: DevicePos) => {
+    const sys = onInverter.get(bat.id) ? systemOf(onInverter.get(bat.id)!.id) : undefined;
+    if (sys && sys.battery !== null && own(bat.id) === undefined) return sys.battery / Math.max(1, batteries.filter((x) => onInverter.get(x.id) === onInverter.get(bat.id)).length);
+    return own(bat.id) ?? (batteries.length === 1 ? (summary.battery ?? 0) : 0);
+  };
   const onInverter = new Map<string, DevicePos>();
   for (const bat of batteries) {
     const inv = nearest(bat);
@@ -800,7 +874,7 @@ export function flowSegments({ building, consumers, summary, battery, fieldPower
     const mine = batteries.filter((bat) => onInverter.get(bat.id) === inv);
     let feed = own(inv.id);
     if (feed === undefined) {
-      feed = fieldsOf.get(inv.id) ?? (inverters.length === 1 ? (summary.solar ?? 0) : 0);
+      feed = fieldsOf.get(inv.id) ?? systemOf(inv.id)?.solar ?? (inverters.length === 1 ? (summary.solar ?? 0) : 0);
       for (const bat of mine) feed += batteryPower(bat);
     }
     const invFloor = building.floors.find((x) => x.id === inv.floorId);
