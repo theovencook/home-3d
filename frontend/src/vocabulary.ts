@@ -40,7 +40,7 @@ export const KINDS = [
 export type Kind = (typeof KINDS)[number];
 
 /** Rooms an item is made for; "any" fits everywhere. */
-export const ROOMS = ["living", "dining", "kitchen", "bedroom", "kids", "bath", "office", "hall", "utility", "garage", "garden", "hobby", "conservatory", "loft"] as const;
+export const ROOMS = ["living", "dining", "kitchen", "bedroom", "kids", "bath", "office", "hall", "utility", "garage", "garden", "hobby", "conservatory", "loft", "ensuite", "cloakroom", "bootroom", "pantry", "study", "playroom", "nursery", "gym", "cinema", "games", "laundry", "workshop", "shed", "summerhouse", "greenhouse", "cellar", "landing", "porch", "wardrobe", "dressing", "plantroom", "balcony", "terrace", "carport"] as const;
 export type Room = (typeof ROOMS)[number];
 
 /** The words every kind of decoration answers to. */

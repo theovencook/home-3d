@@ -307,7 +307,9 @@ shapes needs a Home 3D version that knows them.
     `household`, `deco`, `tray`, `frame`, `vase`, `cushion`, `throw`, `candle`, `plant`, `outdoor`, `kids`,
     `sport`, `pets`, `vehicle`, `stairs` or `architecture`.
   - `room`: up to 12 rooms the item is meant for: `living`, `dining`, `kitchen`, `bedroom`, `kids`, `bath`,
-    `office`, `hall`, `utility`, `garage`, `garden`, `hobby`, `conservatory`, `loft`. Empty means any room.
+    `office`, `hall`, `utility`, `garage`, `garden`, `hobby`, `conservatory`, `loft`, `ensuite`, `cloakroom`, `bootroom`, `pantry`, `study`, `playroom`,
+    `nursery`, `gym`, `cinema`, `games`, `laundry`, `workshop`, `shed`, `summerhouse`, `greenhouse`, `cellar`, `landing`,
+    `porch`, `wardrobe`, `dressing`, `plantroom`, `balcony`, `terrace`, `carport`. Empty means any room.
   - `tags`: up to 12 more search words (1 to 30 characters each).
   - `family`: groups variants of one thing (a table in three lengths) into one library card; `variant` (text by
     language, like `name`) labels the variant's chip.
