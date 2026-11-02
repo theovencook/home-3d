@@ -62,7 +62,7 @@ export function seasonDates(v: SeasonDatesView): TemplateResult {
       aria-label=${`${v.t(end === "from" ? "season_dates_from" : "season_dates_to")}: ${v.t("season_dates_day")}`}
       @change=${(e: Event) => v.set(changedDates(v.id, v.year, v.dates, end, at[0], Number((e.target as HTMLInputElement).value) || at[1]))}
     /></span>`;
-  return html`<div class="fp3d-ext-dates">
+  return html`<div class="fp3d-ext-dates" data-ext=${`season:${v.id}`}>
     <span class="fp3d-sub">${rangeText(v.id, v.year, v.dates, v.lang)}${range.custom ? ` · ${v.t("season_dates_changed")}` : ""}</span>
     ${v.editable
       ? html`<button type="button" class="fp3d-link" aria-expanded=${v.open} @click=${v.toggle}>${v.t("season_dates")} ${v.open ? "▴" : "▾"}</button>`
@@ -127,7 +127,7 @@ export function seasonsCard(h: SeasonsCardHost): TemplateResult {
   const eggs = settings?.easter_eggs !== false;
   const year = new Date().getFullYear();
   const ghost = settings?.halloween?.ghost !== false;
-  return html`<div class="fp3d-ext-feature fp3d-ext-on">
+  return html`<div class="fp3d-ext-feature fp3d-ext-on" data-ext="holidays">
     <b>🎄 ${h.t("fun_name_seasons")}</b>
     <span class="fp3d-sub">${h.t("fun_feature_seasons")}</span>
     ${h.editor

@@ -8,6 +8,7 @@ import { COMPACT_MAX_PX, PHONE_MEDIA } from "./phone.ts";
 import { BuildingController, type PlanChange } from "./building-controller.ts";
 import { loadEditor, loadExtensionsPage } from "./load-editor.ts";
 import { loadSettings } from "./load-settings.ts";
+import { extensionAnchor } from "./settings/extension-anchor.ts";
 import { loadLocate } from "./load-locate.ts";
 import { loadView, readyView } from "./load-view.ts";
 import { loadHomeSwitcher, loadRoomPanel, loadRoomsPicker, loadViewPanel } from "./load-parts.ts";
@@ -94,6 +95,7 @@ export class Floorplan3dPanel extends LitElement {
     panel: { attribute: false },
     _mode: { state: true },
     _viewOpen: { state: true },
+    _extFocus: { state: true },
     _editorReady: { state: true },
     _editorError: { state: true },
     _floorId: { state: true },
@@ -162,6 +164,8 @@ export class Floorplan3dPanel extends LitElement {
   private declare _mode: Mode;
   /** The View panel on the 3D view is open (#247): one panel for the look and what the 3D shows. */
   private declare _viewOpen: boolean;
+  /** The card of the Extensions tab to scroll to and light up (a Settings search hit, #302); null: none. */
+  private declare _extFocus: string | null;
   /** The editor bundle is loaded (it is fetched the first time the editor opens). */
   private declare _editorReady: boolean;
   /** Why the editor bundle failed to load (shown on its tabs instead of "Loading …"; opening a tab again retries). */
@@ -255,6 +259,7 @@ export class Floorplan3dPanel extends LitElement {
     this.narrow = false;
     this._mode = "view";
     this._viewOpen = false;
+    this._extFocus = null;
     this._editorReady = !!customElements.get("fp3d-editor");
     this._editorError = null;
     this._floorId = null;
@@ -511,6 +516,7 @@ export class Floorplan3dPanel extends LitElement {
     if (this._mode === "settings" && mode !== "settings") this.setAddress("");
     if (mode === "settings") this.setAddress(this.settingsLink(this._settingsAt.section, this._settingsAt.id));
     if (mode === "settings") this.settingsFrom = this._mode;
+    if (mode !== "extensions") this._extFocus = null;
     this._mode = mode;
   }
 
@@ -559,10 +565,12 @@ export class Floorplan3dPanel extends LitElement {
   };
 
   /** A button on the Settings page that leaves it or opens something of the panel's. */
-  private settingsAction(e: CustomEvent<{ action: string }>): void {
+  private settingsAction(e: CustomEvent<{ action: string; id?: string | null; focus?: string | null }>): void {
     const { action } = e.detail;
-    if (action === "extensions") this.setMode("extensions");
-    else if (action === "editor") this.setMode("editor");
+    if (action === "extensions") {
+      this._extFocus = e.detail.focus ?? extensionAnchor(e.detail.id);
+      this.setMode("extensions");
+    } else if (action === "editor") this.setMode("editor");
     else if (action === "kerb") this.openBinKerb();
     else if (action === "mic_probe") void loadVoice().then(() => (this._micProbe = true)).catch(() => undefined);
     else if (action === "locate" && this.hass && this.data.building) {
@@ -1166,6 +1174,7 @@ export class Floorplan3dPanel extends LitElement {
       .canEdit=${this.data.canEdit}
       .packs=${this.data.packs}
       .building=${this.data.building}
+      .card=${this._extFocus}
       @building-edit=${(e: CustomEvent<Building>) => this.editPlan(e.detail)}
       @packs-changed=${() => void this.data.reloadPacks()}
     ></fp3d-extensions>`;

@@ -18,6 +18,7 @@ import type { FurniturePack } from "../packs.ts";
 import type { HomeAssistant } from "../types.ts";
 import { colourReset } from "../colour-reset.ts";
 import { optionGroups, optionText } from "./view-settings.ts";
+import type { ExtensionEntry } from "./extensions-index.ts";
 import { controls, tokens } from "../styles.ts";
 import {
   GROUPS,
@@ -151,6 +152,8 @@ export class SettingsPage extends LitElement {
   private declare _query: string;
   /** The search words of each setting, once their chunk has loaded (#286); null until then. */
   private declare _words: Readonly<Record<string, readonly string[]>> | null;
+  /** What the Extensions tab holds, searched with the settings (#302); loaded with the search words. */
+  private _extIndex: typeof import("./extensions-index.ts") | null = null;
   /** Phones: a section is open (else the list of sections). */
   private declare _drill: boolean;
   /** The row a deep link points at, highlighted for a moment. */
@@ -337,13 +340,13 @@ export class SettingsPage extends LitElement {
     this.dispatchEvent(new CustomEvent("settings-action", { detail: { action, id: s.id }, bubbles: true, composed: true }));
   }
 
-  /** The old "fun" page: its switches live on the Extensions tab alone (#256). */
-  private toExtensions(): void {
-    this.dispatchEvent(new CustomEvent("settings-action", { detail: { action: "extensions", id: null }, bubbles: true, composed: true }));
+  /** The old "fun" page: its switches live on the Extensions tab alone (#256). `focus`: the card there to scroll to; `id`: the setting whose card it is (#302). */
+  private toExtensions(focus?: string | null, id?: string | null): void {
+    this.dispatchEvent(new CustomEvent("settings-action", { detail: { action: "extensions", id, focus }, bubbles: true, composed: true }));
   }
 
   private open(section: SectionId, focus: string | null = null): void {
-    if (sectionOf(section)?.hidden) return this.toExtensions();
+    if (sectionOf(section)?.hidden) return this.toExtensions(null, focus);
     this._section = section;
     this._audience = audienceOf(sectionOf(section)!);
     if (focus) this.flash(focus);
@@ -378,7 +381,9 @@ export class SettingsPage extends LitElement {
     const hits = query ? this.hits(query) : null;
     const side = this._audience;
     const other: Audience = side === "home" ? "device" : "home";
-    const cursor = hits?.length ? Math.min(this._cursor, hits.length - 1) : -1;
+    const ext = this.extHits(query);
+    const n = (hits?.length ?? 0) + ext.length;
+    const cursor = n ? Math.min(this._cursor, n - 1) : -1;
     return html`<div class="st ${this._drill || query ? "st-drill" : ""} ${query ? "st-query" : ""}">
       <nav class="st-nav" aria-label=${this.tr("st_title")}>
         ${this.renderBackTo()}
@@ -423,7 +428,7 @@ export class SettingsPage extends LitElement {
         })}
         <button class="st-other" @click=${() => this.showSide(other)}><span>${this.tr(other === "home" ? "st_other_home" : "st_other_device")}</span>${icon("next", true)}</button>
       </nav>
-      <main class="st-main">${hits ? this.renderResults(query, hits, cursor) : this.renderSection(sectionOf(this._section)!)}</main>
+      <main class="st-main">${hits ? this.renderResults(query, hits, ext, cursor) : this.renderSection(sectionOf(this._section)!)}</main>
     </div>`;
   }
 
@@ -434,11 +439,18 @@ export class SettingsPage extends LitElement {
     return [...bySection.values()].flat();
   }
 
-  /** The search words (#286, search-words.ts) are a chunk of their own: loaded at the search box's first use; the page draws again when they arrive. */
+  /** What the search finds on the Extensions tab (#302): editors only, as the tab is; nothing until the index has loaded. */
+  private extHits(query: string): ExtensionEntry[] {
+    return this._extIndex && this.viewer.editor ? this._extIndex.searchExtensions(query, (k) => this.tr(k)) : [];
+  }
+
+  /** The search words (#286, search-words.ts) and the Extensions index (#302) are a chunk of their own: loaded at the search box's first use; the page draws again when they arrive. */
   private readonly loadWords = (): void => {
     if (this._words) return;
     need(async () => {
-      this._words ??= (await import("./search-words.ts")).SEARCH_WORDS;
+      const [words, ext] = await Promise.all([import("./search-words.ts"), import("./extensions-index.ts")]);
+      this._words ??= words.SEARCH_WORDS;
+      this._extIndex ??= ext;
     });
   };
 
@@ -452,19 +464,23 @@ export class SettingsPage extends LitElement {
       this._cursor = 0;
       return;
     }
-    const hits = this._query.trim() ? this.hits(this._query.trim()) : [];
-    if (!hits.length) return;
+    const q = this._query.trim();
+    const hits = q ? this.hits(q) : [];
+    const ext = this.extHits(q);
+    const total = hits.length + ext.length;
+    if (!total) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      const at = Math.min(this._cursor, hits.length - 1);
-      this._cursor = (at + (e.key === "ArrowDown" ? 1 : hits.length - 1)) % hits.length;
+      const at = Math.min(this._cursor, total - 1);
+      this._cursor = (at + (e.key === "ArrowDown" ? 1 : total - 1)) % total;
       this.cursorMoved = true;
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const s = hits[Math.min(this._cursor, hits.length - 1)];
+      const at = Math.min(this._cursor, total - 1);
       this._query = "";
       this._cursor = 0;
-      this.open(s.section, s.id);
+      if (at >= hits.length) this.toExtensions(ext[at - hits.length].anchor);
+      else this.open(hits[at].section, hits[at].id);
     }
   };
 
@@ -509,13 +525,14 @@ export class SettingsPage extends LitElement {
     return null;
   }
 
-  private renderResults(query: string, hits: Setting[], cursor: number) {
+  private renderResults(query: string, hits: Setting[], ext: ExtensionEntry[], cursor: number) {
     // the hits come by section (hits()): a card per run of one section
     const runs: Setting[][] = [];
     for (const s of hits) (runs.at(-1)?.[0].section === s.section ? runs.at(-1)! : (runs[runs.length] = [])).push(s);
     let i = 0;
+    const n = hits.length + ext.length;
     return html`<button class="st-back" @click=${() => (this._query = "")}>${icon("back", true)} ${this.tr("st_back")}</button>
-      <div class="st-title" role="status"><h2>${hits.length ? this.tr("st_results", { n: hits.length, q: query }) : this.tr("st_search_none", { q: query })}</h2></div>
+      <div class="st-title" role="status"><h2>${n ? this.tr("st_results", { n, q: query }) : this.tr("st_search_none", { q: query })}</h2></div>
       <div id="st-hits">
         ${runs.map((list) => {
           const sec = sectionOf(list[0].section)!;
@@ -528,6 +545,7 @@ export class SettingsPage extends LitElement {
             })}
           </section>`;
         })}
+        ${ext.length ? this._extIndex!.extensionHits(ext, { html, first: hits.length, cursor, tr: (k) => this.tr(k), icon: icon("package", true), open: (a) => this.toExtensions(a) }) : nothing}
       </div>`;
   }
 
