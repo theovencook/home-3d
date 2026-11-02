@@ -33,6 +33,9 @@ export interface ControlEvents {
   swipeEnd?(): void;
   /** May the arrow and plus/minus keys steer the view now? (not while furnishing: there the arrows nudge the selection, #195) */
   keys?(): boolean;
+  /** A mouse moving over the view with no button pressed, and the mouse leaving it. */
+  hover?(x: number, y: number): void;
+  leave?(): void;
 }
 
 const HOLD_MS = 500;
@@ -123,7 +126,13 @@ export class OrbitControls {
       this.listeners.push([type, fn as EventListener]);
     };
     on("pointerdown", (e) => this.onDown(e));
-    on("pointermove", (e) => this.onMove(e));
+    on("pointermove", (e) => {
+      if (e.pointerType === "mouse" && !e.buttons && !this.pointers.size) this.events.hover?.(...this.local(e));
+      this.onMove(e);
+    });
+    on("pointerleave", (e) => {
+      if (e.pointerType === "mouse") this.events.leave?.();
+    });
     on("pointerup", (e) => this.onUp(e));
     on("pointercancel", (e) => this.onUp(e));
     on("wheel", (e) => this.onWheel(e), { passive: false });

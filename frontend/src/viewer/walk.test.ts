@@ -88,13 +88,14 @@ test("the walk takes the camera again when the viewer swaps its controls, and gi
   assert.equal(v.onControls, null);
 });
 
-test("walking onto a stair climbs it and switches to the upper floor at the top, and back down (#270)", () => {
+/** A walk on a lower floor with the given rooms and a straight stair (foot at z 4, top at z 1) up to a first floor. */
+function stairWalk(lowerRooms: Room[]) {
   const g = globalThis as unknown as Record<string, unknown>;
   g.requestAnimationFrame ??= () => 1;
   g.cancelAnimationFrame ??= () => undefined;
   g.window ??= new EventTarget();
   g.document ??= new EventTarget();
-  const lower = { ...newFloor("eg", "EG", 0), rooms: [rect("a", 0, -4, 8, 6)] };
+  const lower = { ...newFloor("eg", "EG", 0), rooms: lowerRooms };
   const upper = { ...newFloor("og", "OG", 2.7), rooms: [rect("b", 0, -4, 8, 6)] };
   // a straight stair, its foot at the front (+z), its top at the back
   lower.furniture.push({ id: "s", type: "stairs", x: 4, z: 2.5, rotation: 0, w: 1, d: 3, h: 2.7, variant: null, entity: null, power: null });
@@ -119,6 +120,11 @@ test("walking onto a stair climbs it and switches to the upper floor at the top,
       w.stairs();
     }
   };
+  return { walk, w, shown, step };
+}
+
+test("walking onto a stair climbs it and switches to the upper floor at the top, and back down (#270)", () => {
+  const { walk, w, shown, step } = stairWalk([rect("a", 0, -4, 8, 6)]);
   step(-0.05, 30);
   assert.equal(w.map.floor.id, "eg", "still on the steps of the lower floor");
   assert.ok(w.lift > 0.1 && w.lift < 2.7, `lifted part of the way (${w.lift})`);
@@ -136,6 +142,14 @@ test("walking onto a stair climbs it and switches to the upper floor at the top,
   step(0.05, 80);
   assert.equal(w.lift, 0);
   assert.equal(shown.at(-1), "eg");
+  walk.dispose();
+});
+
+test("a wall of the lower floor under the top step does not stop the climb", () => {
+  // the hall ends where the stair arrives upstairs; behind that wall, a cupboard under the landing
+  const { walk, w, step } = stairWalk([rect("hall", 0, 1, 8, 6), rect("cupboard", 0, -4, 8, 1)]);
+  step(-0.05, 90);
+  assert.equal(w.map.floor.id, "og", `up on the first floor (stopped at lift ${w.lift})`);
   walk.dispose();
 });
 

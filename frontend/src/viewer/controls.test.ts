@@ -45,6 +45,28 @@ test("a second finger neither moves nor drops a furniture drag (#174)", async ()
   assert.deepEqual(log, ["drag20", "drop"]);
 });
 
+test("a resting mouse reports where it hovers; a pressed button, a finger or leaving does not hover (#284)", async () => {
+  const { OrbitControls } = await import("./controls.ts");
+  const handlers: Record<string, (e: unknown) => void> = {};
+  const el = {
+    addEventListener: (t: string, fn: (e: unknown) => void) => (handlers[t] = fn),
+    removeEventListener: () => {},
+    setPointerCapture: () => {},
+    getBoundingClientRect: () => ({ left: 10, top: 20, width: 100, height: 100 }),
+    clientHeight: 100,
+  };
+  const log: string[] = [];
+  const events = { tap() {}, doubleTap() {}, hold() {}, change() {}, hover: (x: number, y: number) => log.push(`hover${x},${y}`), leave: () => log.push("leave") };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  new OrbitControls(el as any, {} as any, events as any);
+  const ev = (pointerType: string, buttons: number) => ({ pointerId: 1, button: 0, buttons, clientX: 40, clientY: 50, pointerType, timeStamp: performance.now(), altKey: false, shiftKey: false });
+  handlers.pointermove(ev("mouse", 0));
+  handlers.pointermove(ev("mouse", 1));
+  handlers.pointermove(ev("touch", 0));
+  handlers.pointerleave(ev("mouse", 0));
+  assert.deepEqual(log, ["hover30,30", "leave"]);
+});
+
 const FROM = () => ({ target: new Vector3(5, 1, 5), radius: 16, theta: 0, phi: 0.85 });
 
 test("arrow keys turn the view, Shift+arrows move it, plus and minus zoom (#195)", () => {

@@ -567,10 +567,13 @@ export class WalkCamera {
 
   /** Whether one may stand at p: clear of walls, and on the steps only on the steps (their ends excepted). */
   private free(p: Vec2): boolean {
-    if (this.map.blocked(p)) return false;
     const c = this.climb;
-    if (!c) return true;
+    if (!c) return !this.map.blocked(p);
     const at = stairSpot(c.link.pts, p, c.s);
+    // close to the line of the steps the steps decide: a lower-floor wall under the top step (the end of the hall
+    // below the landing) would stop one short of the top
+    if (at.dist <= STAIR_HALF * 0.6) return true;
+    if (this.map.blocked(p)) return false;
     return at.dist <= STAIR_HALF || at.s < 0.15 || at.s > c.len - 0.15;
   }
 

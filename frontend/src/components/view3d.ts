@@ -1108,6 +1108,7 @@ export class Fp3dView3d extends LitElement {
         onDeviceTap: (id, x, y) => this.onDeviceTap(id, x, y),
         onRackTap: (id, draw, slot) => this.showRackView(id, draw, slot),
         onDeviceHold: (id, x, y) => this.onDeviceHold(id, x, y),
+        onDeviceHover: (id, x, y) => this.onModelHover(id, x, y),
         onDeviceDoubleTap: (id) => !this.ro && this.taps.doubleTap(id),
         onRoomDoubleTap: (floorId, roomId) => this.onRoomDoubleTap(floorId, roomId),
         onDeviceSwipe: (id, phase, dy, x, y) => this.onDeviceSwipe(id, phase, dy, x, y),
@@ -6215,6 +6216,26 @@ export class Fp3dView3d extends LitElement {
       this.openPopup(id, r.left + r.width / 2 - h.left, r.top - h.top, true);
     }, 250);
   };
+
+  /** The mouse resting on a camera drawn as a model (#273 #284, it has no pin): its live picture floats beside it, as over a pin. */
+  private onModelHover(id: string | null, x: number, y: number): void {
+    if (this.ro || (this._popup && !this._popup.hover)) return;
+    const camera = !!id && popupKind(id) === "camera" && !!this.hass?.states[id];
+    // leaving a model (onto its pin too) closes only what the model opened: a pin's own preview stays
+    if (this.modelHover) {
+      clearTimeout(this.popupTimer);
+      if (this._popup?.hover && this._popup.entity === this.modelHover) this._popup = null;
+      this.modelHover = null;
+    }
+    if (!camera || !id) return;
+    this.modelHover = id;
+    this.popupTimer = setTimeout(() => {
+      if (!this._popup || this._popup.hover) this.openPopup(id, x, y - 12, true);
+    }, 250);
+  }
+
+  /** The camera model the mouse rests on (its preview is the model's, not a pin's). */
+  private modelHover: string | null = null;
 
   private onPinOut = (e: PointerEvent): void => {
     if (e.pointerType !== "mouse") return;

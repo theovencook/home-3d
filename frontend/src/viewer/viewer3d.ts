@@ -135,6 +135,8 @@ export interface ViewerOptions {
   onRackTap?: (furnitureId: string, draw: RackDraw, slot?: string | null) => void;
   /** Long press on a device marker. */
   onDeviceHold?: (entityId: string, x: number, y: number) => void;
+  /** The device under a resting mouse (a camera drawn as a model has no pin to hover, #284); null: none any more. */
+  onDeviceHover?: (entityId: string | null, x: number, y: number) => void;
   /** A double tap on a device or item: true when it had an own double-tap action (#6), else the view goes back. */
   onDeviceDoubleTap?: (entityId: string, x: number, y: number) => boolean;
   /**
@@ -2494,6 +2496,7 @@ export class FloorplanViewer {
     this.projections.dispose();
     this.realism.dispose();
     this.disposed = true;
+    clearTimeout(this.hoverTimer);
     cancelAnimationFrame(this.floorFrame);
     this.nextRenderer?.dispose();
     this.nextRenderer?.forceContextLoss();
@@ -2622,6 +2625,8 @@ export class FloorplanViewer {
       change: () => this.invalidate(),
       tap: (x, y) => this.onTap(x, y),
       hold: (x, y) => this.onHold(x, y),
+      hover: (x, y) => this.onHover(x, y),
+      leave: () => this.onHover(null, 0),
       swipeStart: (x, y, dx, dy) => this.swipeStart(x, y, dx, dy),
       swipeMove: (dy) => this.swipe && this.options.onDeviceSwipe?.(this.swipe.entity, "move", dy, this.swipe.x, this.swipe.y),
       swipeEnd: () => {
@@ -5224,6 +5229,26 @@ export class FloorplanViewer {
       else this.onTap(x, y);
     }
   }
+
+  /** The mouse over the view: every 100 ms at most (the last spot always) the device under it, told only when it changes. */
+  private onHover(x: number | null, y: number): void {
+    if (!this.options.onDeviceHover) return;
+    this.hoverSpot = x === null ? null : [x, y];
+    if (this.hoverTimer !== undefined) return;
+    this.hoverTimer = setTimeout(() => {
+      this.hoverTimer = undefined;
+      const spot = this.hoverSpot;
+      const hit = !spot || this.furnish ? null : this.pick(spot[0], spot[1]);
+      const entity = hit && "entity" in hit ? hit.entity : null;
+      if (entity === this.hoverEntity) return;
+      this.hoverEntity = entity;
+      this.options.onDeviceHover?.(entity, spot?.[0] ?? 0, spot?.[1] ?? 0);
+    }, 100);
+  }
+
+  private hoverSpot: Vec2 | null = null;
+  private hoverTimer: ReturnType<typeof setTimeout> | undefined;
+  private hoverEntity: string | null = null;
 
   /** A mostly vertical drag on a lamp or blind becomes a swipe (unless furnishing). */
   private swipeStart(x: number, y: number, dx: number, dy: number): boolean {
