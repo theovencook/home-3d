@@ -1,11 +1,13 @@
 // Turns placements and entity states into device markers for the 3D view, and formats short state
 // texts shared by markers and the room panel.
 
+import { detectCameraModel } from "./camera-models.ts";
 import { defaultHeight, entityName, isActive, isUnavailable, kindOf, lightGlow, tempUnit } from "./devices.ts";
 import { callServiceSafe } from "./failure.ts";
 import { formatNumber, translate, type I18nKey } from "./i18n.ts";
 import { iconSvg, mdiIcon } from "./icons.ts";
 import type { Building } from "./model.ts";
+import { getPacks, packsVersion } from "./packs.ts";
 import { effectSettings } from "./room-effects.ts";
 import { pointInPolygon } from "./model.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
@@ -64,6 +66,17 @@ function translateState(hass: HomeAssistant | undefined, state: string): string 
   return s === key ? state : s;
 }
 
+const protectLooks = new Map<string, string | null>();
+
+/** The pack camera model drawn for a UniFi Protect camera of a known model (#273); null: the built-in one. */
+function protectLook(hass: HomeAssistant, id: string): string | null {
+  const e = hass.entities?.[id];
+  if (e?.platform !== "unifiprotect") return null;
+  const key = `${packsVersion()}${hass.devices?.[e.device_id ?? ""]?.model}`;
+  if (!protectLooks.has(key)) protectLooks.set(key, detectCameraModel(hass, id, getPacks()));
+  return protectLooks.get(key)!;
+}
+
 /** Markers for every placed entity that still exists; `now` (epoch ms) for how long a camera stays red. */
 export function buildMarkers(hass: HomeAssistant, building: Building, now = Date.now()): DeviceMarker[] {
   const out: DeviceMarker[] = [];
@@ -86,7 +99,7 @@ export function buildMarkers(hass: HomeAssistant, building: Building, now = Date
         y: pl.y ?? defaultHeight(kind, floor.height, pl.mount ?? null),
         lamp: kind === "light" ? (pl.mount ?? "ceiling") : null,
         model: kind === "camera" ? (pl.mount === "ceiling" ? "camera_ceiling" : "camera_wall") : undefined,
-        ...(kind === "camera" && looks.has(pl.entity_id) ? { ownLook: true } : {}),
+        ...(kind === "camera" && looks.has(pl.entity_id) ? { ownLook: true } : kind === "camera" ? { camPack: protectLook(hass, pl.entity_id) ?? undefined } : {}),
         motion: kind === "camera" ? cameraRedUntil(hass, pl.entity_id, hold, now) !== null : undefined,
         fov: pl.fov ?? undefined,
         reach: pl.reach ?? undefined,
