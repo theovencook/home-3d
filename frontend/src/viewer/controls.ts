@@ -131,6 +131,13 @@ export class OrbitControls {
     on("keydown", (e) => this.onKey(e));
   }
 
+  /** A zoom or pan button (#297): the same moves as the keys, plain arrows moving the view across the ground. */
+  nudge(act: "in" | "out" | "left" | "right" | "up" | "down"): void {
+    const key = act === "in" ? "+" : act === "out" ? "-" : act === "left" ? "ArrowLeft" : act === "right" ? "ArrowRight" : act === "up" ? "ArrowUp" : "ArrowDown";
+    const to = keyView(key, act !== "in" && act !== "out", this.goal, this.minRadius, this.maxRadius);
+    if (to) this.flyTo(to, 160);
+  }
+
   /** Arrow keys turn the view, Shift+arrows move it, plus and minus zoom (#195): the canvas takes the focus for it. */
   private onKey(e: KeyboardEvent): void {
     if (e.target !== this.el || e.ctrlKey || e.metaKey || e.altKey || this.grabbing) return;

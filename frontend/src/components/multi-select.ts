@@ -28,6 +28,7 @@ export class MultiSelect extends LitElement {
     emptyText: { attribute: false },
     secondaryLabel: { attribute: false },
     removeLabel: { attribute: false },
+    summary: { attribute: false },
     _query: { state: true },
     _open: { state: true },
     _cursor: { state: true },
@@ -49,6 +50,8 @@ export class MultiSelect extends LitElement {
   /** "Remove {name}" for a chip's button. */
   declare removeLabel: string;
   declare searchLabel: string;
+  /** Text in place of the chips ("6 object types selected", #268): a long list stays one line. */
+  declare summary: string;
   private declare _query: string;
   private declare _open: boolean;
   private declare _cursor: number;
@@ -66,6 +69,7 @@ export class MultiSelect extends LitElement {
     this.emptyText = "–";
     this.secondaryLabel = "";
     this.removeLabel = "Remove {name}";
+    this.summary = "";
     this._query = "";
     this._open = false;
     this._cursor = 0;
@@ -150,7 +154,8 @@ export class MultiSelect extends LitElement {
     const hidden = this.hiddenCount;
     return html`<div class="wrap" @focusout=${this.onFocusOut}>
       <div class="box" @click=${() => (this.renderRoot.querySelector("input") as HTMLInputElement | null)?.focus()}>
-        ${this.value.map((id) => {
+        ${this.summary ? html`<span class="sum">${this.summary}</span>` : nothing}
+        ${(this.summary ? [] : this.value).map((id) => {
           const name = this.nameOf(id);
           const fixed = this.locked.includes(id);
           return html`<span class="chip">${name}${fixed || this.disabled
@@ -227,6 +232,9 @@ export class MultiSelect extends LitElement {
       .box:focus-within {
         outline: 2px solid var(--fp3d-accent);
         outline-offset: -1px;
+      }
+      .sum {
+        font-size: 13px;
       }
       .chip {
         display: inline-flex;

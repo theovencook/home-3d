@@ -134,7 +134,7 @@ import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { holdTarget } from "../hold.ts";
 import { popupKind, popupPosition } from "../device-popup-model.ts";
-import { loadDevicePopup, loadQuickMenu } from "../load-parts.ts";
+import { loadDevicePopup, loadQuickMenu, loadViewNav } from "../load-parts.ts";
 import { need } from "../lazy-part.ts";
 import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
@@ -180,6 +180,8 @@ import type { BinCue, DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Qual
 import { dockFromPoint, parseDock, WALL_DOCK_KEY, WALL_DOCKS, wallLayout, type WallDock } from "../camera-wall.ts";
 import { watchedEntities } from "../watched.ts";
 import { isPrinter, printerFaces, printerState } from "../printer.ts";
+import type { NavAction } from "./view-nav.ts";
+import { hiddenItemIds, typeOfEntity, type ObjectType } from "../object-types.ts";
 import { hasTimedRules, hiddenItems, shownBuilding } from "../show-when.ts";
 import { backdropCss } from "../backdrop.ts";
 import { loadVoice, micProbeAsked, micProbeDone, voicePipeline } from "../load-voice.ts";
@@ -200,6 +202,8 @@ import { isPhoneWidth, NO_FIT_MARGIN, PHONE_FIT_MARGIN, PHONE_MEDIA, thumbsCompa
 
 /** Walking through the house (and the pets' floor map) is a chunk of its own (#179): it needs no three.js. */
 const loadWalk = () => import("../viewer/walk.ts");
+
+const NO_TYPES: ReadonlySet<ObjectType> = new Set();
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 /** "room": no symbols in the house and floor views, in a room only that room's (D477, D595). */
@@ -357,12 +361,15 @@ export class Fp3dView3d extends LitElement {
     clean: { attribute: false },
     cleanButton: { attribute: false },
     roomLabels: { attribute: false },
+    hiddenTypes: { attribute: false },
+    furnitureOn: { attribute: false },
     pulse: { attribute: false },
     floorStack: { attribute: false },
     panelOpen: { attribute: false },
     controlsRight: { attribute: false },
     keepView: { attribute: false },
     angleLock: { attribute: false },
+    windowSpill: { attribute: false },
     alerts: { attribute: false },
     alertJump: { attribute: false },
     director: { attribute: false },
@@ -588,6 +595,10 @@ export class Fp3dView3d extends LitElement {
   declare cleanButton: boolean;
   /** Room names in 3D (cards can switch them off). */
   declare roomLabels: boolean;
+  /** Kinds of objects the View hides (#268) and the Furniture switch (#269); hiding is a flag in the viewer, not a rebuild. */
+  declare hiddenTypes: ReadonlySet<ObjectType>;
+  declare furnitureOn: boolean;
+  private hiddenIds: { sig: string; ids: ReadonlySet<string> } = { sig: "", ids: new Set() };
   /** Pins that can be tapped draw a faint outline now and then, staggered (#283); off in low quality and with reduced motion. */
   declare pulse: boolean;
   /** Floors below an opened floor: dimmed, stacked (the house up to it) or hidden. */
@@ -603,6 +614,8 @@ export class Fp3dView3d extends LitElement {
   declare keepView: boolean;
   /** 3D lock: the angle stays fixed (a wall tablet nobody should turn the house on). */
   declare angleLock: boolean;
+  /** The light out of lit windows at night (#274); off unless the device's setting is on. */
+  declare windowSpill: boolean;
   /** The stage is narrower than 700 px (smaller floor pictures, phone layout). */
   private declare _narrowStage: boolean;
   /** The stage is phone-wide (#93): floor pictures folded, the house fitted clear of the bars. */
@@ -876,6 +889,8 @@ export class Fp3dView3d extends LitElement {
     this.cleanButton = false;
     this.noSettings = false;
     this.roomLabels = true;
+    this.hiddenTypes = NO_TYPES;
+    this.furnitureOn = true;
     this.pulse = true;
     this.floorStack = "dim";
     this._low = false;
@@ -883,6 +898,7 @@ export class Fp3dView3d extends LitElement {
     this.controlsRight = false;
     this.keepView = false;
     this.angleLock = false;
+    this.windowSpill = false;
     this._narrowStage = false;
     this.alerts = true;
     this.alertJump = false;
@@ -1107,6 +1123,7 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setWallMode(this.wallMode);
       this.viewer.setKeepView(this.keepView);
       this.viewer.setAngleLock(this.angleLock);
+      this.viewer.setWindowSpill(this.windowSpill);
       this.viewer.setTheme(this.effectiveTheme());
       this.viewer.setDescription((this.sceneLabel = translate(this.hass, flat ? "sr_plan" : "sr_scene")));
       this.viewer.setAccent(this.accent ?? null);
@@ -1257,7 +1274,7 @@ export class Fp3dView3d extends LitElement {
       }
       if (changed.has("building") || changed.has("theme") || changed.has("floorThumbs") || changed.has("packs")) this.scheduleThumbs();
       // with symbols only in rooms, opening or closing a room changes which ones show
-      const forced = ["building", "markerMode", "heatMode", "flows", "alerts", "dimmed"].some((k) => changed.has(k)) || (this.markerMode === "room" && changed.has("roomId"));
+      const forced = ["building", "hiddenTypes", "furnitureOn", "markerMode", "heatMode", "flows", "alerts", "dimmed"].some((k) => changed.has(k)) || (this.markerMode === "room" && changed.has("roomId"));
       // time travel: a tick moves the clock even when no replayed state changed – the trail and a camera's
       // detections follow it (one sync per tick at most, and only when they are shown)
       const ticked = this.replayTicked && !!this.replay;
@@ -1278,6 +1295,7 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("wallMode")) v.setWallMode(this.wallMode);
     if (changed.has("keepView")) v.setKeepView(this.keepView);
     if (changed.has("angleLock")) v.setAngleLock(this.angleLock);
+    if (changed.has("windowSpill")) v.setWindowSpill(this.windowSpill);
     if (changed.has("explode")) v.setExplode(this.explode);
     if (changed.has("keepRoof")) v.setKeepRoof(this.keepRoof);
     if (changed.has("hideRoof")) v.setHideRoof(this.hideRoof);
@@ -1319,6 +1337,25 @@ export class Fp3dView3d extends LitElement {
     }
     if (changed.has("showStats")) v.setStats(this.showStats);
     if (changed.has("building")) this.findIndex = null;
+  }
+
+  /** The ids of the items the View hides now; the very same set while nothing changed (the viewer compares it by identity). */
+  private hiddenItemSet(b: Building): ReadonlySet<string> {
+    const links = this.furnitureLinks;
+    const ids = hiddenItemIds(b, this.hiddenTypes, this.furnitureOn, (f) => {
+      const e = links?.get(f.id)?.entity ?? f.entity ?? null;
+      return e === "none" ? null : e;
+    });
+    const sig = [...ids].sort().join("|");
+    if (sig !== this.hiddenIds.sig) this.hiddenIds = { sig, ids };
+    return this.hiddenIds.ids;
+  }
+
+  /** A pin or lamp of a hidden kind, or of a hidden item. */
+  private markerHidden(m: { id: string; furnitureId?: string }, items: ReadonlySet<string>): boolean {
+    if (m.furnitureId && items.has(m.furnitureId)) return true;
+    const kind = typeOfEntity(m.id);
+    return kind !== null && this.hiddenTypes.has(kind);
   }
 
   /**
@@ -1426,8 +1463,11 @@ export class Fp3dView3d extends LitElement {
     const carSpots = new Set(
       b.floors.flatMap((fl) => fl.furniture.filter((f) => f.type === "parking" && f.car && parkedVehicle(hass, f)).map((f) => f.id)),
     );
+    // the kinds the View hides (#268, #269): the items collapse in place, their pins and lamps are left out
+    const hiddenItems = this.hiddenItemSet(b);
+    v.setHiddenItems(hiddenItems);
     v.setDevices([
-      ...[...deviceMarkers, ...furniture.markers, ...this.lockMarkers(hass, b)].map((m) => {
+      ...[...deviceMarkers, ...furniture.markers, ...this.lockMarkers(hass, b)].filter((m) => !this.markerHidden(m, hiddenItems)).map((m) => {
         // "without watts" drops the power badge (a plug shows only on / off)
         // below an item's own "running from" watts the standby draw is no badge either (#645)
         const power = m.show === "no_power" || ("energyDevice" in m && m.energyDevice) || ("standby" in m && m.standby) ? null : (byDevice.get(m.id) ?? null);
@@ -5133,6 +5173,13 @@ export class Fp3dView3d extends LitElement {
   private pausedDue = 0;
 
   /** The eye: one tap hides every bar and overlay so only the stage remains, the next brings them back. */
+  /** Zoom and pan buttons (#297), for the 3D view and the 2D plan; not in the clean view, in a walk or beside the room panel. */
+  private renderViewNav() {
+    if (this.clean || this._walk || this.panelOpen || !this.hass) return nothing;
+    need(loadViewNav);
+    return html`<fp3d-view-nav class="fp3d-vnav" .t=${(k: string) => translate(this.hass, k as I18nKey)} @nav=${(e: CustomEvent<NavAction>) => this.viewer?.navigate(e.detail)}></fp3d-view-nav>`;
+  }
+
   private renderEye() {
     // while the search is open its field takes the eye's place (#220)
     if (!this.cleanButton || !this.hass || (this._find !== null && !this.clean)) return nothing;
@@ -6636,7 +6683,7 @@ export class Fp3dView3d extends LitElement {
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderWires()} ${this.clean ? nothing : this.renderLegend()}
       ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderRackView()} ${this.renderNote()}
-      ${this.renderMenu()} ${this.renderPopup()} ${this.renderEye()} ${this.renderRoomList()}
+      ${this.renderMenu()} ${this.renderPopup()} ${this.renderViewNav()} ${this.renderEye()} ${this.renderRoomList()}
       ${this.renderMic()}
       ${this.pivotMark && !this._walk ? html`<span class="fp3d-pivot" aria-hidden="true"></span>` : nothing}
       ${this._micProbe && this.hass ? html`<fp3d-mic-probe .hass=${this.rawHass} .building=${this.building} @close=${() => ((this._micProbe = false), micProbeDone())}></fp3d-mic-probe>` : nothing}
@@ -9384,6 +9431,18 @@ export class Fp3dView3d extends LitElement {
       .fp3d-stats b {
         color: var(--fp3d-accent);
         font-weight: 700;
+      }
+      /* zoom and pan buttons (#297), centred on the right edge like the editor plan's; left of the stage when the controls are on the right */
+      .fp3d-vnav {
+        position: absolute;
+        z-index: 2;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+      .fp3d-side-right .fp3d-vnav {
+        right: auto;
+        left: 10px;
       }
       .fp3d-stats {
         padding: 4px 9px;

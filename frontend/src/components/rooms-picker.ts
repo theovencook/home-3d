@@ -9,14 +9,14 @@ import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 export interface RoomGroup {
   id: string;
   name: string;
-  rooms: { id: string; name: string }[];
+  rooms: { id: string; name: string; /** Hidden from the list unless "Show hidden" is on (#298). */ hidden?: boolean }[];
 }
 
 /** The groups whose rooms match what was typed (any part of the name, any case); groups left empty go. */
-export function filterRooms(groups: readonly RoomGroup[], query: string): RoomGroup[] {
+export function filterRooms(groups: readonly RoomGroup[], query: string, showHidden = true): RoomGroup[] {
   const q = query.trim().toLocaleLowerCase();
-  if (!q) return [...groups];
-  return groups.map((g) => ({ ...g, rooms: g.rooms.filter((r) => r.name.toLocaleLowerCase().includes(q)) })).filter((g) => g.rooms.length);
+  if (!q && showHidden) return [...groups];
+  return groups.map((g) => ({ ...g, rooms: g.rooms.filter((r) => (showHidden || !r.hidden) && (!q || r.name.toLocaleLowerCase().includes(q))) })).filter((g) => g.rooms.length);
 }
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
@@ -27,6 +27,8 @@ export class Fp3dRoomsPicker extends LitElement {
     selected: { attribute: false },
     t: { attribute: false },
     editFloor: { attribute: false },
+    canHide: { attribute: false },
+    _showHidden: { state: true },
     _query: { state: true },
     _cursor: { state: true },
   };
@@ -37,6 +39,9 @@ export class Fp3dRoomsPicker extends LitElement {
   declare t: T;
   /** The floor "Edit floor" opens in the editor (editors, one floor picked); null: no such line. */
   declare editFloor: string | null;
+  /** Editors can hide a room from this list and bring it back (#298). */
+  declare canHide: boolean;
+  private declare _showHidden: boolean;
   private declare _query: string;
   /** The highlighted room (index into the listed rooms). */
   private declare _cursor: number;
@@ -47,12 +52,14 @@ export class Fp3dRoomsPicker extends LitElement {
     this.selected = null;
     this.t = (k) => k;
     this.editFloor = null;
+    this.canHide = false;
+    this._showHidden = false;
     this._query = "";
     this._cursor = 0;
   }
 
   private listed(): { group: RoomGroup; room: { id: string; name: string } }[] {
-    return filterRooms(this.groups, this._query).flatMap((group) => group.rooms.map((room) => ({ group, room })));
+    return filterRooms(this.groups, this._query, this._showHidden).flatMap((group) => group.rooms.map((room) => ({ group, room })));
   }
 
   private fire(type: string, detail: unknown = null): void {
@@ -89,7 +96,8 @@ export class Fp3dRoomsPicker extends LitElement {
   }
 
   protected render() {
-    const groups = filterRooms(this.groups, this._query);
+    const groups = filterRooms(this.groups, this._query, this._showHidden);
+    const hiddenCount = this.groups.reduce((n, g) => n + g.rooms.filter((r) => r.hidden).length, 0);
     const many = this.groups.length > 1;
     let i = -1;
     const cursorId = this.listed().length ? `room-${this._cursor}` : nothing;
@@ -119,17 +127,29 @@ export class Fp3dRoomsPicker extends LitElement {
                   id="room-${n}"
                   role="option"
                   aria-selected=${r.id === this.selected}
-                  class="mi ${n === this._cursor ? "cursor" : ""} ${r.id === this.selected ? "on" : ""}"
+                  class="mi ${n === this._cursor ? "cursor" : ""} ${r.id === this.selected ? "on" : ""} ${r.hidden ? "dim" : ""}"
                   @mouseenter=${() => (this._cursor = n)}
                   @click=${() => this.fire("room-pick", { floorId: g.id, roomId: r.id })}
                 >
-                  ${r.name}
+                  ${r.name}${this.canHide
+                    ? html`<button
+                        type="button"
+                        class="hide"
+                        aria-label=${this.t(r.hidden ? "room_unhide_named" : "room_hide_named", { room: r.name })}
+                        @click=${(e: Event) => (e.stopPropagation(), this.fire("room-hide", { roomId: r.id, hide: !r.hidden }))}
+                      >
+                        ${this.t(r.hidden ? "room_unhide" : "room_hide")}
+                      </button>`
+                    : nothing}
                 </div>`;
               })}
             </div>`,
           )}
           ${groups.length ? nothing : html`<p class="none" role="status">${this.t("rooms_none", { q: this._query.trim() })}</p>`}
         </div>
+        ${hiddenCount
+          ? html`<label class="more"><input type="checkbox" .checked=${this._showHidden} @change=${(e: Event) => ((this._showHidden = (e.target as HTMLInputElement).checked), (this._cursor = 0))} />${this.t("rooms_show_hidden")} <small>(${hiddenCount})</small></label>`
+          : nothing}
         ${this.editFloor ? html`<button class="edit" @click=${() => this.fire("edit-floor", { floorId: this.editFloor })}>${this.t("edit_floor")} ›</button>` : nothing}
       </div>`;
   }
@@ -198,6 +218,43 @@ export class Fp3dRoomsPicker extends LitElement {
     .mi.on {
       color: var(--fp3d-accent, #48cdeb);
       font-weight: 700;
+    }
+    .mi.dim {
+      color: var(--fp3d-muted, #94a3b8);
+      font-style: italic;
+    }
+    .hide {
+      margin-left: auto;
+      font: inherit;
+      font-size: 12px;
+      font-style: normal;
+      font-weight: 400;
+      color: var(--fp3d-muted, #94a3b8);
+      background: none;
+      border: none;
+      min-height: 28px;
+      padding: 0 6px;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .hide:hover,
+    .hide:focus-visible {
+      color: var(--fp3d-accent, #48cdeb);
+    }
+    .more {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 10px;
+      border-top: 1px solid var(--fp3d-line, rgba(127, 127, 127, 0.4));
+      cursor: pointer;
+    }
+    .more input {
+      min-height: 0;
+    }
+    .more small {
+      color: var(--fp3d-muted, #94a3b8);
     }
     .mi.on::after {
       content: "✓";

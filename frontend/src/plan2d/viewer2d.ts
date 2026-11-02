@@ -165,6 +165,30 @@ export class Plan2dViewer implements ViewerSurface {
     this.draw();
   }
 
+  /** The on-screen zoom and pan buttons (#297): the keyboard's moves; "reset" fits the plan. */
+  navigate(act: "in" | "out" | "left" | "right" | "up" | "down" | "reset"): void {
+    if (act === "reset") return this.resetView();
+    const step = 60;
+    const w = this.size.w / 2;
+    const h = this.size.h / 2;
+    this.moveView(
+      act === "left" ? { ...this.view, tx: this.view.tx + step }
+      : act === "right" ? { ...this.view, tx: this.view.tx - step }
+      : act === "up" ? { ...this.view, ty: this.view.ty + step }
+      : act === "down" ? { ...this.view, ty: this.view.ty - step }
+      : zoomView(this.view, act === "in" ? 1.2 : 1 / 1.2, w, h),
+    );
+  }
+
+  /** Items the View hides (#268, #269). */
+  private hiddenItems: ReadonlySet<string> = new Set();
+
+  setHiddenItems(ids: ReadonlySet<string>): void {
+    if (ids === this.hiddenItems) return;
+    this.hiddenItems = ids;
+    this.draw();
+  }
+
   setDevices(devices: DeviceMarker[]): void {
     this.devices = devices;
     this.draw();
@@ -316,6 +340,7 @@ export class Plan2dViewer implements ViewerSurface {
   setFurnishTypes(): void {}
   setHideRoof(): void {}
   setKeepRoof(): void {}
+  setWindowSpill(): void {}
   setKeepView(): void {}
   setParked(): void {}
 
@@ -430,7 +455,7 @@ export class Plan2dViewer implements ViewerSurface {
       return;
     }
     const walls = this.wallsOf(b, floor);
-    const items = planItems(floor, this.furnitureTargets, this.devices, this.shades);
+    const items = planItems(floor, this.furnitureTargets, this.devices, this.shades).filter((it) => !this.hiddenItems.has(it.f.id));
     const openings = planOpenings(floor, { exterior: b.settings.wall_exterior, interior: b.settings.wall_interior }, this.openingTargets, this.openingStates, walls);
     const flows = flowLines(this.flows, floor.id);
     const markers = planMarkers(this.devices, floor.id);

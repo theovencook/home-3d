@@ -6,6 +6,7 @@ import type { FloorplanViewer } from "./viewer/viewer3d.ts";
 export type ViewerSurface = Pick<
   FloorplanViewer,
   | "low"
+  | "navigate"
   | "batch"
   | "busy"
   | "dispose"
@@ -40,6 +41,7 @@ export type ViewerSurface = Pick<
   | "setFridgeDoors"
   | "setFurnishMode"
   | "setFurnishTypes"
+  | "setHiddenItems"
   | "setHideRoof"
   | "setKeepRoof"
   | "setKeepView"
@@ -74,4 +76,5 @@ export type ViewerSurface = Pick<
   | "setTrail"
   | "setWallMode"
   | "setWeather"
+  | "setWindowSpill"
 >;

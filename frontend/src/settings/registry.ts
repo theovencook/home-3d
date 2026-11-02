@@ -823,7 +823,6 @@ const backdropColour = (id: string, key: "color" | "color2", label: TextKey, fal
 const SCENE: Setting[] = [
   houseSwitch("sun_shadow", "scene", "sun", "sun_shadow", true, "sun_shadow", "st_sun_shadow_hint", ["sun", "arc", "shadow"]),
   houseSwitch("sun_patches", "scene", "sun", "sun_patches", true, "sun_patches", "st_sun_patches_hint", ["sun", "floor", "light"]),
-  houseSwitch("window_glow", "scene", "sun", "window_glow", true, "window_glow", "window_glow_hint", ["night", "glow", "light"]),
   houseEntity("weather_entity", "scene", "weather", "weather_entity", "weather_entity", "weather_entity_hint", (id) => id.startsWith("weather."), (env) => (env.hass ? weatherEntity(env.hass, null) : undefined), ["forecast", "rain", "snow"]),
   {
     id: "weather_effects",

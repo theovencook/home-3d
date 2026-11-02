@@ -615,6 +615,9 @@ interface FloorView {
   label: HTMLButtonElement;
 }
 
+/** A position attribute, as far as hiding items touches it. */
+type PosAttr = { array: unknown; needsUpdate: boolean };
+
 /** The floor of a room motion lights (#10). */
 const MOTION_LIGHT = new Color(1, 0.84, 0.5);
 /** A camera that sees motion. */
@@ -1249,6 +1252,54 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
+  /** Items the View hides (#268, #269) and, per floor, the ones already collapsed in its meshes. */
+  private hiddenItems: ReadonlySet<string> = new Set();
+  private readonly hiddenDone = new WeakMap<FloorView, Set<string>>();
+  private readonly hiddenOrig = new WeakMap<BufferGeometry, Float32Array>();
+
+  /**
+   * Hide items by id without a rebuild: their triangles, edges and contact shadows lie in the floors' merged meshes,
+   * so a hidden item's vertices collapse to a point (and come back from a copy kept on the first hide). Only the
+   * items whose state changed are touched. Lamps are not here: they leave with their device pins.
+   */
+  setHiddenItems(ids: ReadonlySet<string>): void {
+    if (ids === this.hiddenItems) return;
+    this.hiddenItems = ids;
+    for (const fv of this.floors) this.applyHidden(fv);
+    this.invalidate();
+  }
+
+  private applyHidden(fv: FloorView): void {
+    const done = this.hiddenDone.get(fv) ?? new Set<string>();
+    if (!this.hiddenItems.size && !done.size) return;
+    const touched = new Set<BufferGeometry>();
+    const set = (geo: BufferGeometry, from: number, to: number, hide: boolean) => {
+      const pos = geo.getAttribute("position") as PosAttr | undefined;
+      if (!pos || to <= from) return;
+      const arr = pos.array as Float32Array;
+      let orig = this.hiddenOrig.get(geo);
+      if (!orig) {
+        if (!hide) return;
+        orig = arr.slice();
+        this.hiddenOrig.set(geo, orig);
+      }
+      if (hide) arr.fill(0, from * 3, to * 3);
+      else arr.set(orig.subarray(from * 3, to * 3), from * 3);
+      touched.add(geo);
+    };
+    for (const r of fv.geo.furnitureTris) {
+      const hide = this.hiddenItems.has(r.id);
+      if (hide === done.has(r.id)) continue;
+      set(fv.geo.walls, r.start * 3, r.end * 3, hide);
+      if (r.line) set(fv.geo.lines, r.line[0], r.line[1], hide);
+      if (r.shadow) set(fv.geo.shadow, r.shadow[0], r.shadow[1], hide);
+      if (hide) done.add(r.id);
+      else done.delete(r.id);
+    }
+    this.hiddenDone.set(fv, done);
+    for (const g of touched) (g.getAttribute("position") as PosAttr).needsUpdate = true;
+  }
+
   /** Replace the device markers; pins are reused per entity, light cones rebuilt per floor. */
   setDevices(devices: DeviceMarker[]): void {
     this.devices = devices;
@@ -1753,6 +1804,16 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
+  /** The light out of lit windows onto the ground (#274): a setting of this device, off by default. */
+  private windowSpill = false;
+
+  setWindowSpill(on: boolean): void {
+    if (on === this.windowSpill) return;
+    this.windowSpill = on;
+    for (const fv of this.floors) this.buildSpill(fv, this.lightSources(fv));
+    this.invalidate();
+  }
+
   /** Position of the sun; sunlight falls through windows facing it. */
   setSun(sun: SunState | null): void {
     this.sun = sun;
@@ -1976,7 +2037,7 @@ export class FloorplanViewer {
    */
   private buildSpill(fv: FloorView, sources: LightSource[]): void {
     const b = this.building;
-    const night = b?.settings.window_glow === false ? 0 : this.nightFactor();
+    const night = this.windowSpill ? this.nightFactor() : 0;
     const gf = b && night > 0 ? groundFloor(b) : null;
     const ground = !!gf && Math.abs(fv.floor.elevation - gf.elevation) < 0.5;
     // the light per light zone: colour weighted by brightness
@@ -2357,6 +2418,12 @@ export class FloorplanViewer {
 
   resetView(): void {
     this.fit(700);
+  }
+
+  /** The on-screen zoom and pan buttons (#297); "reset" brings the whole house back. */
+  navigate(act: "in" | "out" | "left" | "right" | "up" | "down" | "reset"): void {
+    if (act === "reset") this.resetView();
+    else this.controls.nudge(act);
   }
 
   /** The camera the house view opens with (null: fitted from the front left). */
@@ -3291,6 +3358,7 @@ export class FloorplanViewer {
     // a kept floor still has its lamps, lights, doors and cables (the device updates keep them current)
     const built = this.floors.filter((fv) => keep.get(fv.floor.id) !== fv);
     for (const fv of built) {
+      this.applyHidden(fv);
       this.buildFridges(fv);
       this.buildRackLeds(fv);
       this.buildPipes(fv);

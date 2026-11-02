@@ -191,6 +191,11 @@ export class LineBuffer {
 
   private sealed: LineSlice[] = [];
 
+  /** Vertices in the buffer, the appended copies included (#268: where an item's edges lie). */
+  get count(): number {
+    return this.sealed.reduce((n, s) => n + s.f.length, 0) + this.f.length;
+  }
+
   seg(a: number[], b: number[], color: Color = EDGE_TOP, fold = ALWAYS): void {
     this.p.push(...a, ...b);
     this.c.push(color.r, color.g, color.b, color.r, color.g, color.b);

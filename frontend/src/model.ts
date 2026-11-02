@@ -52,6 +52,8 @@ export interface Room {
   /** Further names the voice answers to ("Stube", "Lounge"). */
   aliases?: string[];
   area_id: string | null;
+  /** Left out of the room selector unless "Show hidden" is on (#298): a chimney or eaves space; the room is still drawn. */
+  hide_in_picker?: boolean;
   /** The camera the room opens with when it is tapped in 3D (null: framed from above). */
   start_view?: StartView | null;
   points: Vec2[];
@@ -855,7 +857,7 @@ export interface BuildingSettings {
   sun_patches?: boolean;
   /** The sun's arc over the house and the house's shadow on the ground (default on). */
   sun_shadow?: boolean;
-  /** At night lit rooms throw their light out of the windows onto the ground in front (default on). */
+  /** Old home setting, no longer read: the light out of the windows is a setting of each device, off by default (#274). */
   window_glow?: boolean;
   /** The ground around the house: its height and the earth around cellars. */
   terrain?: Terrain | null;

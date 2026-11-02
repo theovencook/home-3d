@@ -6,6 +6,7 @@
 
 import { ACCENT_DEFAULT } from "../colour-reset.ts";
 import { shownLook } from "../ha-theme.ts";
+import { DISPLAY_HIDDEN_KEY, hiddenText, OBJECT_TYPES, parseHidden, SHOW_FURNITURE_KEY } from "../display-pref.ts";
 import { parsePinZoom, PLAN_PIN_ZOOM_DEFAULT, PLAN_PIN_ZOOM_KEY, PLAN_PIN_ZOOM_MAX } from "../plan-pins.ts";
 import type { Option, SectionId, Setting, SettingsEnv, TextKey } from "./registry.ts";
 
@@ -140,9 +141,34 @@ export const LOOK: Setting[] = [
   deviceChoice("floor_stack", "view3d", "show", "floor_stack", ["dim", "stacked", "single"], "dim", "st_floor_stack", opts([["dim", "floor_stack_short_dim"], ["stacked", "floor_stack_short_stacked"], ["single", "floor_stack_short_single"]]), undefined, ["floors", "below", "dimmed"]),
   deviceSwitch("roof", "view3d", "show", "roof", false, "st_keep_roof", "roof_keep_hint", ["roof", "zoom"]),
   deviceChoice("heat", "view3d", "show", "heat", ["none", "temperature", "humidity", "co2", "values"], "none", "st_heat", opts([["none", "heat_nothing"], ["temperature", "heat_temperature"], ["humidity", "heat_humidity"], ["co2", "heat_co2"], ["values", "heat_values"]]), undefined, ["heatmap", "temperature", "humidity", "co2", "colour"], "select"),
-  deviceSwitch("room_names", "view3d", "show", "room_names", true, "st_room_names", undefined, ["labels", "names", "rooms"]),
+  // #268: the kinds of objects the 3D view shows (what is ticked); the preference keeps the hidden ones, so a kind added later shows
+  {
+    id: "display",
+    section: "view3d",
+    card: "show",
+    scope: "device",
+    permission: "everyone",
+    label: "st_display_what",
+    hint: "st_display_what_hint",
+    keywords: ["display", "show", "hide", "objects", "lights", "furniture", "room names", "cameras", "sensors", "layers"],
+    control: { kind: "checks", options: OBJECT_TYPES.map((t): Option => ({ value: t, label: `ot_${t}` })) },
+    default: [...OBJECT_TYPES],
+    prefKeys: [DISPLAY_HIDDEN_KEY, "room_names"],
+    read: (env) => {
+      const hidden = parseHidden(env.prefs.get(DISPLAY_HIDDEN_KEY), env.prefs.get("room_names"));
+      return OBJECT_TYPES.filter((t) => !hidden.has(t));
+    },
+    write: (env, shown) => {
+      env.prefs.set(DISPLAY_HIDDEN_KEY, hiddenText(new Set(OBJECT_TYPES.filter((t) => !shown.includes(t)))));
+      env.prefs.set("room_names", null);
+    },
+  } as Setting<string[]>,
+  // #269: off draws only the items linked to a device (walls, floors, doors and windows stay); the View panel's "Display what" (#268) is its own row
+  deviceSwitch("furniture", "view3d", "show", SHOW_FURNITURE_KEY, true, "st_furniture", "st_furniture_hint", ["furniture", "decor", "items", "hide", "devices only"]),
   deviceSwitch("trail", "view3d", "show", "trail", false, "st_trail", "trail_hint", ["motion", "trail", "history"]),
   deviceSwitch("weather", "view3d", "show", "weather", true, "st_weather", "st_weather_hint", ["rain", "snow", "weather"]),
+  // #274: kept per device and off by default (the light pooling outside looked poor); the old home setting of the same name no longer counts
+  deviceSwitch("window_glow", "view3d", "show", "window_spill", false, "window_glow", "window_glow_hint", ["night", "glow", "light", "windows", "spill"]),
 ];
 
 /**
@@ -202,7 +228,7 @@ export function viewSections(ctx: ViewContext): ViewSection[] {
   if (!ctx.plan2d) show.push({ id: "walls" });
   if (several && !ctx.plan2d) show.push({ id: "explode", disabled: ctx.floorOpen });
   if (several && ctx.floorOpen && !ctx.plan2d) show.push({ id: "floor_stack" });
-  show.push({ id: "heat" }, { id: "room_names" });
+  show.push({ id: "heat" }, { id: "display" }, { id: "furniture" });
   if (ctx.roof && !ctx.plan2d) show.push({ id: "roof", disabled: ctx.floorOpen });
   show.push({ id: "trail" }, { id: "weather" });
   const shows: ViewSection = { id: "show", title: "st_card_show", rows: show, hint: show.some((r) => r.disabled) ? "pick_all_floors" : undefined, openOnPhone: false };
