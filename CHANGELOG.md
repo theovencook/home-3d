@@ -6,6 +6,8 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 ## Unreleased
 
 - **Walking** follows each flight of a stair drawn in several pieces: a flight starts at its mount height and rises its own height, flights that meet join into one way round the corner, and only the way that reaches the floor above changes floors (#304).
+- **Furniture library**: the search and a Filters button stay in view above the results; room and pack are menus in a drawer that starts closed, and an empty search says how many items the filters hide (#300).
+- **Drawing by measure** takes over the side panel: the length box (focused once the start is set), the arrows, Close room and the wall list are all in view (#301).
 
 ## Home 3D 0.2.0 (2 November 2026)
 

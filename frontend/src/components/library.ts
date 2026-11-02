@@ -21,6 +21,7 @@ const STORE_FAV = "home3d.lib.fav";
 const STORE_RECENT = "home3d.lib.recent";
 const STORE_RECENT_SHUT = "home3d.lib.recent.shut";
 const STORE_SHUT = "home3d.lib.shut";
+const STORE_FILTERS = "home3d.lib.filters";
 /** Blocks above and below the sections: open by default, each folds away on its own header (#211). */
 const SPECIAL = new Set(["fav", "other-rooms"]);
 /** The sections open until the person has opened or closed one. */
@@ -73,6 +74,8 @@ export class FurnitureLibrary extends LitElement {
     _thumbs: { state: true },
     _shown: { state: true },
     _limits: { state: true },
+    _filtersOpen: { state: true },
+    _status: { state: true },
   };
 
   /** Everything the library offers (from buildIndex). */
@@ -111,6 +114,14 @@ export class FurnitureLibrary extends LitElement {
   /** The variant whose picture a family card shows (its first key -> the variant's key), set by hovering a chip. */
   private declare _shown: Map<string, string>;
   private declare _limits: Map<string, number>;
+  /** The filter drawer (room, pack, toggles) is open; remembered per device, closed by default (#300). */
+  private declare _filtersOpen: boolean;
+  /** The "N results" line a screen reader hears, set a moment after the query or a filter changed. */
+  private declare _status: string;
+  private resultText = "";
+  private filterKey = "";
+  private announcedKey: string | null = null;
+  private statusTimer: ReturnType<typeof setTimeout> | undefined;
   private roomTouched = false;
   private observer: IntersectionObserver | null = null;
   private observed = new WeakSet<Element>();
@@ -145,6 +156,8 @@ export class FurnitureLibrary extends LitElement {
     this._thumbs = new Map();
     this._shown = new Map();
     this._limits = new Map();
+    this._filtersOpen = load<boolean>(STORE_FILTERS, false) === true;
+    this._status = "";
   }
 
   willUpdate(changed: Map<string, unknown>): void {
@@ -184,11 +197,20 @@ export class FurnitureLibrary extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     clearTimeout(this.warmTimer);
+    clearTimeout(this.statusTimer);
     this.observer?.disconnect();
     this.observer = null;
   }
 
   updated(): void {
+    // "N results" for a screen reader, a moment after the query or a filter changed (not on every re-render)
+    const key = `${this._query.trim()}|${this.filterKey}`;
+    if (this.announcedKey === null) this.announcedKey = key;
+    else if (key !== this.announcedKey) {
+      this.announcedKey = key;
+      clearTimeout(this.statusTimer);
+      this.statusTimer = setTimeout(() => (this._status = this.resultText), 500);
+    }
     if (this.lite || !this.thumb) return;
     this.observer ??= new IntersectionObserver(
       (hits) => {
@@ -326,6 +348,11 @@ export class FurnitureLibrary extends LitElement {
     this._query = value;
   }
 
+  private setFiltersOpen(open: boolean): void {
+    this._filtersOpen = open;
+    save(STORE_FILTERS, open);
+  }
+
   private setRoom(room: Room | null): void {
     this.roomTouched = true;
     this._room = room;
@@ -376,50 +403,80 @@ export class FurnitureLibrary extends LitElement {
     this.defaultOpen = new Set(usual.length ? usual : sections.length ? [sections[0].kind] : []);
     const active = activeFilters(filter);
     const chipName = (c: LibraryChip) => (c === "room" ? t(`lib_room_${this._room}`) : c === "pack" ? (this.entries.find((e) => e.pack === this._pack)?.packLabel ?? this._pack ?? "") : t(`lib_chip_${c}`));
-    return html`<input
-        class="fp3d-search"
-        type="search"
-        placeholder=${t("furniture_search")}
-        .value=${this._query}
-        @input=${(e: Event) => this.setQuery((e.target as HTMLInputElement).value)}
-        @keydown=${(e: KeyboardEvent) => {
-          if (e.key === "Escape") this.setQuery("");
-        }}
-      />
-      <div class="fp3d-lib-rooms" role="group">
-        <button class="fp3d-chip ${this._room === null ? "on" : ""}" @click=${() => this.setRoom(null)}>${t("lib_room_all")}</button>
-        ${ROOMS.map((r) => html`<button class="fp3d-chip ${this._room === r ? "on" : ""}" @click=${() => this.setRoom(r)}>${t(`lib_room_${r}`)}</button>`)}
+    const packs = this.packList();
+    const n = active.length;
+    const open = this._filtersOpen;
+    const q = this._query.trim();
+    this.resultText = hits.length === 1 ? t("lib_results_one") : t("lib_results", { n: hits.length });
+    this.filterKey = JSON.stringify(filter);
+    return html`<div class="fp3d-lib-top">
+        <div class="fp3d-lib-bar">
+          <input
+            class="fp3d-search"
+            type="search"
+            aria-label=${t("lib_search_label")}
+            placeholder=${t("furniture_search")}
+            .value=${this._query}
+            @input=${(e: Event) => this.setQuery((e.target as HTMLInputElement).value)}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key === "Escape") this.setQuery("");
+            }}
+          />
+          <button class="fp3d-lib-filterbtn ${open || n ? "on" : ""}" aria-expanded=${open} aria-controls="fp3d-lib-filters" @click=${() => this.setFiltersOpen(!open)}>
+            ${t("lib_filters_btn")}${n ? html` <span class="fp3d-lib-badge">${n}</span>` : nothing}
+          </button>
+        </div>
+        <div id="fp3d-lib-filters" class="fp3d-lib-drawer" ?hidden=${!open}>
+          <label class="fp3d-lib-sel"
+            ><span>${t("lib_room_label")}</span>
+            <select @change=${(e: Event) => this.setRoom(((e.target as HTMLSelectElement).value || null) as Room | null)}>
+              <option value="" ?selected=${this._room === null}>${t("lib_room_all")}</option>
+              ${ROOMS.map((r) => html`<option value=${r} ?selected=${this._room === r}>${t(`lib_room_${r}`)}</option>`)}
+            </select></label
+          >
+          ${packs.size < 2
+            ? nothing
+            : html`<label class="fp3d-lib-sel"
+                ><span>${t("lib_pack_label")}</span>
+                <select @change=${(e: Event) => (this._pack = (e.target as HTMLSelectElement).value || null)}>
+                  <option value="" ?selected=${this._pack === null}>${t("lib_pack_all")}</option>
+                  ${[...packs].map(([id, label]) => html`<option value=${id} ?selected=${this._pack === id}>${label}</option>`)}
+                </select></label
+              >`}
+          <div class="fp3d-lib-chips" role="group" aria-label=${t("lib_toggles_label")}>
+            <button class="fp3d-chip fp3d-chip-f ${this._electric ? "on" : ""}" aria-pressed=${this._electric} @click=${() => (this._electric = !this._electric)}><span aria-hidden="true">⚡</span> ${t("lib_chip_electric")}</button>
+            <button class="fp3d-chip fp3d-chip-f ${this._light ? "on" : ""}" aria-pressed=${this._light} @click=${() => (this._light = !this._light)}><span aria-hidden="true">💡</span> ${t("lib_chip_light")}</button>
+            <button class="fp3d-chip fp3d-chip-f ${this._outdoor ? "on" : ""}" aria-pressed=${this._outdoor} @click=${() => (this._outdoor = !this._outdoor)}><span aria-hidden="true">🌳</span> ${t("lib_chip_outdoor")}</button>
+          </div>
+        </div>
+        ${active.length
+          ? html`<div class="fp3d-lib-active">
+              <span>${t("lib_filters")} ${active.map(chipName).join(" · ")}${found.hiddenByChips ? html` <span class="fp3d-lib-hidden">(${t("lib_hidden_by_filters", { n: found.hiddenByChips })})</span>` : nothing}</span>
+              <button class="fp3d-lib-clear" @click=${() => this.clearFilters()}>${t("lib_clear_filters")}</button>
+            </div>`
+          : nothing}
       </div>
-      ${this.packChips()}
-      <div class="fp3d-lib-chips">
-        <button class="fp3d-chip fp3d-chip-f ${this._electric ? "on" : ""}" @click=${() => (this._electric = !this._electric)}>⚡ ${t("lib_chip_electric")}</button>
-        <button class="fp3d-chip fp3d-chip-f ${this._light ? "on" : ""}" @click=${() => (this._light = !this._light)}>💡 ${t("lib_chip_light")}</button>
-        <button class="fp3d-chip fp3d-chip-f ${this._outdoor ? "on" : ""}" @click=${() => (this._outdoor = !this._outdoor)}>🌳 ${t("lib_chip_outdoor")}</button>
-      </div>
-      ${active.length
-        ? html`<div class="fp3d-lib-active" role="status">
-            <span>${t("lib_filters")} ${active.map(chipName).join(" · ")}${found.hiddenByChips ? html` <span class="fp3d-lib-hidden">(${t("lib_hidden_by_filters", { n: found.hiddenByChips })})</span>` : nothing}</span>
-            <button class="fp3d-lib-clear" @click=${() => this.clearFilters()}>${t("lib_clear_filters")}</button>
+      <div class="fp3d-lib-sr" role="status" aria-live="polite">${this._status}</div>
+      ${!searching && this.roomHint && this._room === this.roomHint && !this.roomTouched ? html`<p class="fp3d-lib-hint">${t("lib_hint_room")}</p>` : nothing}
+      ${!hits.length
+        ? html`<div class="fp3d-lib-empty">
+            <p class="fp3d-lib-hint">${q ? t("lib_no_match", { q }) : t("furniture_search_none")}</p>
+            ${found.hiddenByChips ? html`<p class="fp3d-lib-hint">${t("lib_hidden_by_filters", { n: found.hiddenByChips })}</p>` : nothing}
+            ${active.length ? html`<button class="fp3d-lib-clear fp3d-lib-clear-big" @click=${() => this.clearFilters()}>${t("lib_clear_filters")}</button>` : nothing}
           </div>`
         : nothing}
-      ${!searching && this.roomHint && this._room === this.roomHint && !this.roomTouched ? html`<p class="fp3d-lib-hint">${t("lib_hint_room")}</p>` : nothing}
-      ${!hits.length ? html`<p class="fp3d-lib-hint">${t("furniture_search_none")}</p>` : nothing}
-      ${found.cut ? html`<p class="fp3d-lib-hint" role="status">${t("lib_keep_typing", { n: found.cut })}</p>` : nothing}
+      ${found.cut ? html`<p class="fp3d-lib-hint">${t("lib_keep_typing", { n: found.cut })}</p>` : nothing}
       ${recent.length && !searching ? this.section("recent", `🕘 ${t("lib_recent")}`, recent.map(single), searching) : nothing}
       ${favs.length ? this.section("fav", `★ ${t("lib_favorites")}`, favs.map(single), searching) : nothing}
       ${sections.map((s) => this.section(s.kind, t(`lib_kind_${s.kind}`), s.cards, searching))}
       ${others.length ? this.section("other-rooms", t("lib_other_rooms", { n: found.otherRooms.length }), others, searching) : nothing}`;
   }
 
-  /** One chip per pack to narrow the library to it; none while only one pack is installed (#109). */
-  private packChips() {
+  /** The packs to narrow the library to (id -> label); the pack select shows only with two or more installed (#109). */
+  private packList(): Map<string, string> {
     const packs = new Map<string, string>();
     for (const e of this.entries) if (e.pack && e.packLabel) packs.set(e.pack, e.packLabel);
-    if (packs.size < 2) return nothing;
-    return html`<div class="fp3d-lib-chips" role="group" aria-label=${this.t("lib_pack_all")}>
-      <button class="fp3d-chip ${this._pack === null ? "on" : ""}" @click=${() => (this._pack = null)}>${this.t("lib_pack_all")}</button>
-      ${[...packs].map(([id, label]) => html`<button class="fp3d-chip ${this._pack === id ? "on" : ""}" @click=${() => (this._pack = id)}>${label}</button>`)}
-    </div>`;
+    return packs;
   }
 
   private section(key: string, title: string, cards: LibraryCard[], searching: boolean) {
@@ -504,11 +561,24 @@ export class FurnitureLibrary extends LitElement {
       :host {
         display: block;
       }
-      .fp3d-search {
+      /* the search and the filter button stay in view above the results (sticky in the scrolling side panel, #300) */
+      .fp3d-lib-top {
         position: sticky;
         top: 0;
-        z-index: 2;
-        width: 100%;
+        z-index: 3;
+        margin: 0 -2px;
+        padding: 6px 2px 2px;
+        background: var(--fp3d-chrome-solid, var(--fp3d-panel, #0d1424));
+      }
+      .fp3d-lib-bar {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+      .fp3d-search {
+        flex: 1;
+        min-width: 0;
+        min-height: 36px;
         box-sizing: border-box;
         font: inherit;
         font-size: 14px;
@@ -516,15 +586,106 @@ export class FurnitureLibrary extends LitElement {
         background: var(--fp3d-panel, #0d1424);
         border: 1px solid var(--fp3d-line);
         border-radius: 8px;
-        padding: 8px 10px;
-        margin: 6px 0 8px;
+        padding: 6px 10px;
       }
-      .fp3d-lib-rooms,
+      .fp3d-lib-filterbtn {
+        flex: none;
+        min-height: 36px;
+        padding: 0 12px;
+        font: inherit;
+        font-size: 13px;
+        color: var(--fp3d-text);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--fp3d-line);
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .fp3d-lib-filterbtn.on {
+        border-color: var(--fp3d-accent);
+      }
+      .fp3d-lib-badge {
+        display: inline-block;
+        min-width: 16px;
+        padding: 0 5px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 16px;
+        text-align: center;
+        color: var(--fp3d-primary-text);
+        background: var(--fp3d-primary);
+        border-radius: 999px;
+      }
+      .fp3d-lib-drawer {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+      .fp3d-lib-drawer[hidden] {
+        display: none;
+      }
+      .fp3d-lib-drawer .fp3d-lib-chips {
+        grid-column: 1 / -1;
+        margin-bottom: 0;
+      }
+      .fp3d-lib-sel {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        font-size: 11px;
+        color: var(--fp3d-muted);
+      }
+      .fp3d-lib-sel select {
+        min-height: 36px;
+        min-width: 0;
+        box-sizing: border-box;
+        font: inherit;
+        font-size: 13px;
+        color: var(--fp3d-text);
+        background: var(--fp3d-panel, #0d1424);
+        border: 1px solid var(--fp3d-line);
+        border-radius: 8px;
+        padding: 0 6px;
+      }
+      .fp3d-lib-sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      .fp3d-lib-empty {
+        margin: 4px 0 8px;
+      }
+      .fp3d-lib-clear-big {
+        padding: 6px 12px;
+      }
       .fp3d-lib-chips {
         display: flex;
         flex-wrap: wrap;
         gap: 4px;
         margin-bottom: 6px;
+      }
+      /* fingers need 40-44 px; the shared coarse rules live in the editor's styles and do not reach this shadow root */
+      @media (pointer: coarse) {
+        .fp3d-search,
+        .fp3d-lib-filterbtn,
+        .fp3d-lib-sel select,
+        .fp3d-chip,
+        .fp3d-lib-clear,
+        .fp3d-lib-more,
+        .fp3d-lib-head {
+          min-height: var(--fp3d-touch, 44px);
+        }
+        .fp3d-lib-filterbtn,
+        .fp3d-chip {
+          min-width: 40px;
+        }
       }
       .fp3d-chip {
         font: inherit;

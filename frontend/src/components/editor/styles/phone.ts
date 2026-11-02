@@ -234,6 +234,23 @@ export const phoneStyles = css`
         font-size: 12.5px;
         color: var(--fp3d-muted);
       }
+      /* drawing by measure in the sheet (#301): the hint is in the sheet header; the length box and the arrows share a row */
+      .fp3d-phone .fp3d-measure-hint {
+        display: none;
+      }
+      .fp3d-phone .fp3d-measure-row {
+        flex-direction: row;
+        align-items: flex-end;
+      }
+      .fp3d-phone .fp3d-measure-len {
+        flex: 1;
+        min-width: 0;
+      }
+      .fp3d-phone .fp3d-arrows {
+        grid-template-columns: repeat(4, var(--fp3d-touch, 44px));
+        grid-template-areas: "left down up right";
+        gap: 4px;
+      }
       .fp3d-sheet-size,
       .fp3d-sheet-close {
         flex: none;

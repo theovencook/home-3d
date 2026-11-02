@@ -150,6 +150,8 @@ export class SidePanelPart {
     if (this._tool === "roof") return this.renderRoofPanel();
     if (this._tool === "energy") return this.renderEnergyPanel();
     if (this._tool === "pool") return this.renderPoolPanel(floor);
+    // by measure the tool owns the panel: its form is all there is, with a way back to the floor settings (#301)
+    if (this._tool === "measure" && floor) return this.renderMeasureForm();
     // furnishing: the library and the selected item come first
     if (this._tool === "furniture" && floor && admin) {
       // a way back to the library: the item panel takes its place while an item is chosen (#70)
@@ -271,9 +273,7 @@ export class SidePanelPart {
             </div>`
           : nothing}
       </section>
-      ${this._tool === "measure" && floor
-        ? this.renderMeasureForm()
-        : this.freeWall
+      ${this.freeWall
         ? this.renderFreeWallForm(this.freeWall)
         : this.outdoorArea
         ? this.renderOutdoorForm(this.outdoorArea)
