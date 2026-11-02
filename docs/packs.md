@@ -695,7 +695,7 @@ The settings, pins, previous releases and last check results are kept in `.stora
 ## Packs that ship with Home 3D
 
 Our own library comes with the integration in `custom_components/home_3d/bundled_packs/`, one folder per pack
-(`theovencook.living`, `theovencook.bedroom`, `theovencook.kitchen-bath`, `theovencook.office`, `theovencook.it`, `theovencook.decor`, `theovencook.outdoor`, `theovencook.household`, `theovencook.devices`, `theovencook.makers` and `theovencook.ikea-uk`; the former `theovencook.core` was split into the themed ones and retired, #111). Home Assistant reads these folders from its own disk when the integration starts, so
+(`theovencook.living`, `theovencook.bedroom`, `theovencook.kitchen-bath`, `theovencook.office`, `theovencook.it`, `theovencook.decor`, `theovencook.outdoor`, `theovencook.outdoor-plants`, `theovencook.household`, `theovencook.devices`, `theovencook.makers` and `theovencook.ikea-uk`; the former `theovencook.core` was split into the themed ones and retired, #111). Home Assistant reads these folders from its own disk when the integration starts, so
 they are there on a fresh install without network access and nothing has to be imported. They are checked like an
 imported pack; a bundled pack that does not check is logged and left out.
 
@@ -773,6 +773,7 @@ are laid out alike (`<pack>/<group>/<item id>.json`, MIT, loaded from disk, offl
 | `theovencook.it` | IT & network | racks, switches, routers, NAS, access points, UPS |
 | `theovencook.decor` | Decor & plants | deco, frame, candle, vase, tray, cushion, throw, plant |
 | `theovencook.outdoor` | Garden & outdoor | outdoor, sport, vehicle |
+| `theovencook.outdoor-plants` | Garden plants & ground | plant (50 plants in sizes and colours), outdoor (grass, soils and mulch, raised beds); made by `tools/gen_plants.py` |
 | `theovencook.household` | Household & building | household, architecture, pets |
 | `theovencook.makers` | Makers | 3D printers (FDM and resin), wash and cure stations, maker and workshop kit |
 | `theovencook.devices` | Smart-home devices | sensors, switches, thermostats, doorbells, boilers, meters, alarms, smart speakers, radiators and other device models |
