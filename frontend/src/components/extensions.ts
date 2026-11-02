@@ -50,6 +50,7 @@ export class Extensions extends LitElement {
   static properties = {
     hass: { attribute: false },
     canEdit: { attribute: false },
+    card: { attribute: false },
     packs: { attribute: false },
     building: { attribute: false },
     _packMsg: { state: true },
@@ -66,6 +67,8 @@ export class Extensions extends LitElement {
   declare hass: HomeAssistant | undefined;
   /** On the editors list (#7); unset: admins are (a backend before #7). */
   declare canEdit: boolean | undefined;
+  /** The card to scroll to and light up (a Settings search hit, #302): a `data-ext` value; null: none. */
+  declare card: string | null | undefined;
   declare packs: FurniturePack[] | undefined;
   /** The plan (the fun extras keep their settings in it, e.g. the pets). */
   declare building: Building | null | undefined;
@@ -140,7 +143,17 @@ export class Extensions extends LitElement {
   protected updated(changed: Map<string, unknown>): void {
     const first = changed.has("hass") && !this._updates && !this.updatesLoading && !this.updatesTried;
     if (this.hass && (first || changed.has("packs") || changed.has("building"))) void this.loadUpdates();
+    // a Settings search hit points at a card (#302): scroll to it and light it up for a moment; the holidays card loads late, so this waits for it
+    const card = this.card && this.card !== this.shownCard ? this.renderRoot.querySelector<HTMLElement>(`[data-ext="${CSS.escape(this.card)}"]`) : null;
+    if (card) {
+      this.shownCard = this.card!;
+      card.scrollIntoView?.({ block: "center" });
+      card.classList.add("fp3d-ext-flash");
+      setTimeout(() => card.classList.remove("fp3d-ext-flash"), 2500);
+    }
   }
+
+  private shownCard: string | null = null;
 
   private updatesLoading = false;
   /** Asked once already: a failed answer is not asked for again on every state change of Home Assistant (#200). */
@@ -217,7 +230,7 @@ export class Extensions extends LitElement {
     const lang = this.hass?.language ?? "en";
     const open = status.items.filter((i) => !i.pinned);
     const next = nextCheck(settings);
-    return html`<section class="fp3d-ext-card fp3d-updates">
+    return html`<section class="fp3d-ext-card fp3d-updates" data-ext="updates">
       <h3>${this.t("upd_title")}</h3>
       <p class="fp3d-sub">${this.t("upd_intro")}</p>
       ${this.summaryBar("updates", [
@@ -350,7 +363,7 @@ export class Extensions extends LitElement {
         b.settings.pets = p;
       });
     const change = (id: string, patch: Partial<Pet>) => set((p) => (p.list = p.list.map((x) => (x.id === id ? { ...x, ...patch } : x))));
-    return html`<section class="fp3d-ext-card">
+    return html`<section class="fp3d-ext-card" data-ext="fun">
       <h3>🎈 ${this.t("fun_title")}</h3>
       <p class="fp3d-sub">${this.t("fun_intro")}</p>
       ${this.isEditor && this.building
@@ -359,7 +372,7 @@ export class Extensions extends LitElement {
       ${shown.map((f) =>
         f === "fun_seasons"
           ? this.renderSeasons()
-          : html`<div class="fp3d-ext-feature fp3d-ext-on">
+          : html`<div class="fp3d-ext-feature fp3d-ext-on" data-ext="pets">
               <b>${this.t("fun_name_pets")}</b>
               <span class="fp3d-sub">${this.t("fun_feature_pets")}</span>
               ${this.isEditor && this.building
@@ -474,7 +487,7 @@ export class Extensions extends LitElement {
       const name = pack ? packName(pack, hass.language ?? "en").replace(/^(Modul|Module):\s*/i, "") : id;
       const key = `mod:${id}`;
       const open = this._open.has(key);
-      return html`<section class="fp3d-ext-card fp3d-ext-module" id=${`ext-${id}`}>
+      return html`<section class="fp3d-ext-card fp3d-ext-module" id=${`ext-${id}`} data-ext="modules">
         <h3>${name}</h3>
         <button class="fp3d-link fp3d-ext-setting" aria-expanded=${open} @click=${() => this.toggleOpen(key)}>${this.t("ext_module_settings")} ${open ? "▴" : "▾"}</button>
         ${open
@@ -500,7 +513,7 @@ export class Extensions extends LitElement {
   private renderItems() {
     if (!this.isEditor) return nothing;
     const n = customItems(this.packs).length;
-    return html`<section class="fp3d-ext-card">
+    return html`<section class="fp3d-ext-card" data-ext="items">
       <h3>${this.t("own_items_title")}</h3>
       <p class="fp3d-sub">${this.t("own_items_hint", { n })}</p>
       <button class="fp3d-btn fp3d-primary fp3d-pack-import" @click=${() => this.openItemEditor()}>${this.t("own_items_open")}</button>
@@ -532,7 +545,7 @@ export class Extensions extends LitElement {
   private renderPacks() {
     const packs = (this.packs ?? []).filter((p) => !p.custom && p.kind !== "language");
     const items = packs.reduce((s, p) => s + p.items.length, 0);
-    return html`<section class="fp3d-ext-card">
+    return html`<section class="fp3d-ext-card" data-ext="packs">
       <h3>${this.t("packs")}</h3>
       ${this.summaryBar("packs", [{ n: packs.length, label: this.t("ext_sum_packs", { items }), tone: "ok" }])}
       ${(this._open.has("packs") ? packs : []).map(
@@ -586,7 +599,7 @@ export class Extensions extends LitElement {
   private renderLanguages() {
     const langs = (this.packs ?? []).filter((p) => p.kind === "language");
     const shown = languageCode(this.hass?.language);
-    return html`<section class="fp3d-ext-card">
+    return html`<section class="fp3d-ext-card" data-ext="languages">
       <h3>${this.t("languages")}</h3>
       ${langs.length ? nothing : html`<p class="fp3d-sub">${this.t("lang_pack_none")}</p>`}
       ${langs.map(
@@ -914,6 +927,10 @@ export class Extensions extends LitElement {
       .fp3d-ext-fields {
         display: block;
         height: auto;
+      }
+      .fp3d-ext-flash {
+        outline: 2px solid var(--fp3d-accent);
+        outline-offset: 3px;
       }
       .fp3d-ext-dates {
         display: flex;

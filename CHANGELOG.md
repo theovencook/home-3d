@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- The Settings search also finds what is on the Extensions tab (holidays and their dates, pets, packs, updates, languages, your own items, extension settings); a hit opens the tab and scrolls to and lights up its card (#302)
+
 ## Home 3D 0.2.0 (2 November 2026)
 
 ### Panels, views and controls (#265–#298)
