@@ -133,7 +133,7 @@ import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { holdTarget } from "../hold.ts";
 import { popupKind, popupPosition } from "../device-popup-model.ts";
-import { loadDevicePopup } from "../load-parts.ts";
+import { loadDevicePopup, loadQuickMenu } from "../load-parts.ts";
 import { need } from "../lazy-part.ts";
 import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
@@ -149,8 +149,7 @@ import { anyModule, moduleAlerts, moduleCards, moduleMenuSheets, modulePools, mo
 import { lineFlows, majorOnly, markerEmoji, markerPath, sparkPoints } from "../module-scene.ts";
 import { generateWalls, openingHost, placeWallPlate, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { signedArea } from "../model.ts";
-import { coverPositionable, lightAbilities } from "./quick-menu.ts";
-import "./quick-menu.ts";
+import { coverPositionable, lightAbilities } from "../light-abilities.ts";
 import { load3d } from "../load3d.ts";
 import { load2d } from "../load2d.ts";
 import { pinIn2d } from "../plan2d/pins.ts";
@@ -6194,6 +6193,7 @@ export class Fp3dView3d extends LitElement {
     const h = stage?.clientHeight ?? 600;
     const left = Math.max(8, Math.min(w - 240, m.x - 116));
     const top = Math.max(8, Math.min(h - 360, m.y - 170));
+    need(loadQuickMenu);
     return html`<div class="fp3d-menu-backdrop" @click=${() => (this._menu = null)}></div>
       <fp3d-quick-menu
         style="left:${left}px;top:${top}px"

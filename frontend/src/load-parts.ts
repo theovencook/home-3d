@@ -13,3 +13,5 @@ export const loadViewPanel = once(() => import("./components/view-panel.ts"));
 export const loadDevicePopup = once(() => import("./components/device-popup.ts"));
 /** The Rooms picker (<fp3d-rooms-picker>, #249) on the floor bar: loaded when the Rooms button is first pointed at or pressed. */
 export const loadRoomsPicker = once(() => import("./components/rooms-picker.ts"));
+/** The quick menu (<fp3d-quick-menu>): a device's controls; loaded the first time one opens. */
+export const loadQuickMenu = once(() => import("./components/quick-menu.ts"));
