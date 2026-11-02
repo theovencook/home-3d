@@ -855,6 +855,7 @@ export class Fp3dEditor extends LitElement {
 
   protected updated(changed: PropertyValues): void {
     this.afterPhoneRender(changed);
+    if (this._tool === "measure" && changed.has("_draft")) this.afterMeasureDraft(changed.get("_draft") as Vec2[] | undefined);
     // another item (room, door, floor …) opens its panel at the top: the fields are where they always are (#71)
     if (selectionMoved(changed, this) || changed.has("_tool")) for (const side of this.renderRoot.querySelectorAll<HTMLElement>(".fp3d-side")) side.scrollTop = 0;
     // a part on the Settings page (#139) shows its section unfolded (its summary is hidden there)

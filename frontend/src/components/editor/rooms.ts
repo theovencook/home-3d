@@ -104,6 +104,11 @@ export class RoomsPart {
     return new Set(this._doc.floors.flatMap((f) => [...f.rooms.map((r) => r.area_id), ...(f.outdoor ?? []).map((a) => a.area_id ?? null)]));
   }
 
+  /**
+   * The measure tool owns the side panel (#301): only this form shows, in the order the work goes: what to do, the
+   * length box (focused once the start is set), the arrows, the gap, Close room, the walls so far. The rectangle is a
+   * closed fold-out below.
+   */
   renderMeasureForm(this: Fp3dEditor) {
     const draft = this._draft;
     const first = draft[0];
@@ -116,47 +121,60 @@ export class RoomsPart {
       ["down", "↓"],
     ];
     const len = (v: number) => formatNumber(this.hass, v, 2);
-    return html`<section>
-      <h3>${this.t("measure")}</h3>
-      ${!first
-        ? html`<p class="fp3d-sub">${this.t("measure_start")}</p>`
-        : html`<p class="fp3d-sub">${this.t("measure_from", { x: this.m(first[0]), z: this.m(first[1]) })}</p>
-            <div class="fp3d-form">
-              <label class="fp3d-field fp3d-wide"
-                >${unitLabel(this.t("measure_length"), this.unit)}
-                <input
-                  class="fp3d-measure-input"
-                  type=${this.unit === "imperial" ? "text" : "number"}
-                  inputmode="decimal"
-                  step="0.01"
-                  min="0.05"
-                  placeholder=${this.t("measure_pull")}
-                  .value=${this._measureLen > 0 ? this.lenValue(this._measureLen) : ""}
-                  @input=${(e: Event) => (this._measureLen = this.readLen((e.target as HTMLInputElement).value) ?? 0)}
-                  @keydown=${(e: KeyboardEvent) => {
-                    const dir = { ArrowRight: "right", ArrowLeft: "left", ArrowUp: "up", ArrowDown: "down" }[e.key] as Direction | undefined;
-                    if (dir) {
-                      e.preventDefault();
-                      this.measureStep(dir);
-                    } else if (e.key === "Enter") this.closeDraft();
-                  }}
-              /></label>
-              <div class="fp3d-arrows fp3d-wide">
-                ${arrows.map(([dir, label]) => html`<button class="fp3d-btn fp3d-arrow-${dir}" title=${this.t(`dir_${dir}`)} @click=${() => this.measureStep(dir)}>${label}</button>`)}
-              </div>
+    // what a screen reader hears after each tap or arrow: the start, the wall just added, the gap left to close
+    const status = !first
+      ? ""
+      : draft.length === 1
+        ? this.t("measure_started", { x: this.m(first[0]), z: this.m(first[1]) })
+        : [this.t("measure_added", { n: draft.length - 1, len: this.m(Math.hypot(last[0] - draft[draft.length - 2][0], last[1] - draft[draft.length - 2][1])) }), draft.length >= 3 ? this.t("measure_gap", { gap: len(gap) }) : ""].filter(Boolean).join(". ");
+    return html`<section class="fp3d-measure" aria-labelledby="fp3d-measure-h">
+      <button class="fp3d-link fp3d-measure-back" @click=${() => this.setTool("select")}>‹ ${this.t("measure_back")}</button>
+      <h3 id="fp3d-measure-h">${this.t("measure")}</h3>
+      <p class="fp3d-sub fp3d-measure-hint">${this.t("hint_measure")}</p>
+      ${first
+        ? html`<p class="fp3d-sub fp3d-measure-from">${this.t("measure_from", { x: this.m(first[0]), z: this.m(first[1]) })}</p>`
+        : html`<p class="fp3d-measure-start">${this.t("measure_start")}</p>`}
+      <div class="fp3d-measure-row">
+        <label class="fp3d-field fp3d-measure-len"
+          >${unitLabel(this.t("measure_length"), this.unit)}
+          <input
+            class="fp3d-measure-input"
+            type=${this.unit === "imperial" ? "text" : "number"}
+            inputmode="decimal"
+            step="0.01"
+            min="0.05"
+            ?disabled=${!first}
+            placeholder=${this.t("measure_pull")}
+            .value=${this._measureLen > 0 ? this.lenValue(this._measureLen) : ""}
+            @input=${(e: Event) => (this._measureLen = this.readLen((e.target as HTMLInputElement).value) ?? 0)}
+            @keydown=${(e: KeyboardEvent) => {
+              const dir = { ArrowRight: "right", ArrowLeft: "left", ArrowUp: "up", ArrowDown: "down" }[e.key] as Direction | undefined;
+              if (dir) {
+                e.preventDefault();
+                this.measureStep(dir);
+              } else if (e.key === "Enter") this.closeDraft();
+            }}
+        /></label>
+        <div class="fp3d-arrows" role="group" aria-label=${this.t("measure_arrows")}>
+          ${arrows.map(([dir, label]) => html`<button class="fp3d-btn fp3d-arrow-${dir}" ?disabled=${!first} title=${this.t(`dir_${dir}`)} aria-label=${this.t("measure_add_wall", { dir: this.t(`dir_${dir}`).toLowerCase() })} @click=${() => this.measureStep(dir)}><span aria-hidden="true">${label}</span></button>`)}
+        </div>
+      </div>
+      ${first && draft.length >= 3 ? html`<p class="fp3d-sub fp3d-measure-gap">${this.t("measure_gap", { gap: len(gap) })}</p>` : nothing}
+      ${this._notice ? html`<p class="fp3d-sub fp3d-notice">${this._notice}</p>` : nothing}
+      ${first
+        ? html`<div class="fp3d-actions">
+              <button class="fp3d-btn fp3d-primary" ?disabled=${draft.length < 3} @click=${() => this.closeDraft()}>${this.t("measure_close")}</button>
+              <button class="fp3d-btn" ?disabled=${draft.length < 2} @click=${() => (this._draft = draft.slice(0, -1))}>${this.t("measure_undo")}</button>
             </div>
             ${draft.length > 1
               ? html`<ol class="fp3d-measure-list">
                   ${draft.slice(1).map((p, i) => html`<li>${this.m(Math.hypot(p[0] - draft[i][0], p[1] - draft[i][1]))}</li>`)}
                 </ol>`
-              : nothing}
-            <div class="fp3d-actions">
-              <button class="fp3d-btn fp3d-primary" ?disabled=${draft.length < 3} @click=${() => this.closeDraft()}>${this.t("measure_close")}</button>
-              <button class="fp3d-btn" ?disabled=${draft.length < 2} @click=${() => (this._draft = draft.slice(0, -1))}>${this.t("measure_undo")}</button>
-            </div>
-            ${draft.length >= 3 ? html`<p class="fp3d-sub">${this.t("measure_gap", { gap: len(gap) })}</p>` : nothing}`}
-      <h4 class="fp3d-lib-head">${this.t("rect_by_size")}</h4>
-      ${this._notice ? html`<p class="fp3d-sub fp3d-notice">${this._notice}</p>` : nothing}
+              : nothing}`
+        : nothing}
+      <div class="fp3d-measure-sr" role="status" aria-live="polite">${status}</div>
+      <details class="fp3d-measure-rect">
+        <summary>${this.t("rect_by_size")}</summary>
       <div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
           >${this.t("room_name")}
@@ -179,8 +197,25 @@ export class RoomsPart {
         ${this.len(this.t("depth"), this._rectSize[1], (v) => (this._rectSize = [this._rectSize[0], Math.max(0.1, v)]), 0.01, 0.1)}
         <button class="fp3d-btn fp3d-wide" @click=${() => this.rectBySize()}>${this.t("rect_add")}</button>
       </div>
+      </details>
       <p class="fp3d-sub">${this.t("measure_hint")}</p>
     </section>`;
+  }
+
+  /**
+   * After the measure tool's walls changed (#301): the newest wall is in view in the capped list, and the length box
+   * takes the focus when a point was added (the start, an arrow, a tap) so the next length is typed at once. It never
+   * steals the focus from another field and is not touched on ordinary re-renders.
+   */
+  afterMeasureDraft(this: Fp3dEditor, before: Vec2[] | undefined): void {
+    const list = this.renderRoot.querySelector<HTMLElement>(".fp3d-measure-list");
+    if (list) list.scrollTop = list.scrollHeight;
+    if (this._draft.length === 0 || this._draft.length <= (before?.length ?? 0)) return;
+    const input = this.renderRoot.querySelector<HTMLInputElement>(".fp3d-measure-input");
+    if (!input || input.disabled) return;
+    const active = (this.renderRoot as ShadowRoot).activeElement;
+    if (active && active !== input && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
+    input.focus({ preventScroll: true });
   }
 
   /** A floor opening (stairwell, gallery): a hole in this floor's floor, drawn as a rectangle. */

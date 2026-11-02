@@ -173,8 +173,18 @@ export const sideStyles = css`
         justify-content: center;
       }
       .fp3d-arrows .fp3d-btn {
+        height: 40px;
         font-size: 20px;
-        padding: 6px 0;
+        padding: 0;
+      }
+      @media (pointer: coarse) {
+        .fp3d-arrows {
+          grid-template-columns: repeat(3, var(--fp3d-touch, 44px));
+        }
+        .fp3d-arrows .fp3d-btn {
+          min-width: var(--fp3d-touch, 44px);
+          height: var(--fp3d-touch, 44px);
+        }
       }
       .fp3d-arrow-up {
         grid-area: up;
@@ -191,9 +201,55 @@ export const sideStyles = css`
       .fp3d-measure-list {
         margin: 8px 0;
         padding-left: 22px;
+        max-height: 120px;
+        overflow-y: auto;
         color: var(--fp3d-muted);
         font-size: 13px;
         font-variant-numeric: tabular-nums;
+      }
+      /* the measure tool owns the side panel (#301) */
+      .fp3d-measure {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .fp3d-measure > * {
+        margin: 0;
+      }
+      .fp3d-measure-back {
+        align-self: flex-start;
+      }
+      .fp3d-measure-start {
+        padding: 8px 10px;
+        font-size: 13px;
+        color: var(--fp3d-text);
+        border: 1px solid var(--fp3d-accent);
+        border-radius: 8px;
+        background: rgba(80, 200, 255, 0.08);
+      }
+      .fp3d-measure-row {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .fp3d-measure-input {
+        min-height: 40px;
+        box-sizing: border-box;
+      }
+      .fp3d-measure-gap {
+        color: var(--fp3d-warm);
+      }
+      .fp3d-measure-sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+      .fp3d-measure-rect > summary {
+        margin-bottom: 8px;
       }
       .fp3d-library {
         display: grid;
