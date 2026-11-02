@@ -332,6 +332,7 @@ export class Fp3dView3d extends LitElement {
     _holoBig: { state: true },
     _solarMore: { state: true },
     _flows: { state: true },
+    _legendMin: { state: true },
     _holoShow: { state: true },
     _swipe: { state: true },
     _menu: { state: true },
@@ -525,6 +526,8 @@ export class Fp3dView3d extends LitElement {
   /** The inverters with their own sensors (name and W), for the hologram when there are several plants. */
   private declare _plants: { name: string; w: number }[];
   private holoTimer: ReturnType<typeof setInterval> | undefined;
+  /** The heat legend is folded to a slim bar (#310), remembered on this device. */
+  private declare _legendMin: boolean;
   /** The solar card has grown (#144): hovered, or tapped on a touch screen. */
   private declare _holoBig: boolean;
   /** What the grown solar card adds (fetched only when it grows, kept for a few minutes). */
@@ -922,10 +925,12 @@ export class Fp3dView3d extends LitElement {
     this.holograms = null;
     try {
       this._flows = localStorage.getItem("home3d.flows") === "1";
+      this._legendMin = localStorage.getItem("home3d.legendMin") === "1";
       this._holoShow = localStorage.getItem("home3d.holos") !== "0";
       this._wallDock = parseDock(localStorage.getItem(WALL_DOCK_KEY));
     } catch {
       this._flows = false;
+      this._legendMin = false;
       this._holoShow = true;
     }
   }
@@ -6623,12 +6628,23 @@ export class Fp3dView3d extends LitElement {
     const hi = temp ? fromCelsius(this.hass, scale.stops[scale.stops.length - 1][0]) : scale.stops[scale.stops.length - 1][0];
     const unit = temp ? tempUnit(this.hass) : scale.unit;
     const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
-    return html`<div class="fp3d-legend">
-      <b>${t(`heat_${this.heatMode}`)}</b>
+    // a tap folds it to a slim bar with the range, and back (#310)
+    const min = this._legendMin;
+    return html`<button type="button" class="fp3d-legend${min ? " fp3d-legend-min" : ""}" aria-expanded=${min ? "false" : "true"} @click=${() => this.toggleLegend()}>
+      <b class=${min ? "fp3d-sr-only" : ""}>${t(`heat_${this.heatMode}`)}</b>
       <span class="fp3d-legend-bar" style="background:${heatGradient(this.heatMode)}"></span>
       <span class="fp3d-legend-range"><span>${formatNumber(this.hass, lo, 0)} ${unit}</span><span>${formatNumber(this.hass, hi, 0)} ${unit}</span></span>
-      ${this.heatValues.size ? nothing : html`<span class="fp3d-legend-none">${t("heat_none_found")}</span>`}
-    </div>`;
+      ${this.heatValues.size || min ? nothing : html`<span class="fp3d-legend-none">${t("heat_none_found")}</span>`}
+    </button>`;
+  }
+
+  private toggleLegend(): void {
+    this._legendMin = !this._legendMin;
+    try {
+      localStorage.setItem("home3d.legendMin", this._legendMin ? "1" : "0");
+    } catch {
+      // private mode: the choice lasts for this page only
+    }
   }
 
   /** The sky colour behind the house right now (night: deep blue-black, day: lighter and bluer, clouds in between). */
@@ -8431,7 +8447,22 @@ export class Fp3dView3d extends LitElement {
         background: var(--fp3d-chrome);
         box-shadow: var(--fp3d-shadow);
         font-size: 12px;
-        pointer-events: none;
+        /* a button (#310): a tap folds it */
+        border: 0;
+        color: inherit;
+        font-family: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-legend-min {
+        min-width: 0;
+        width: 92px;
+        gap: 2px;
+        padding: 5px 7px;
+        font-size: 10px;
+      }
+      .fp3d-legend-min .fp3d-legend-bar {
+        height: 5px;
       }
       .fp3d-legend-bar {
         height: 8px;
@@ -9322,10 +9353,10 @@ export class Fp3dView3d extends LitElement {
         }
         .fp3d-legend {
           bottom: auto;
-          top: 62px;
+          top: 70px;
         }
         .fp3d-has-alerts .fp3d-legend {
-          top: 110px;
+          top: 118px;
         }
       }
       /* the view's own controls on the right (#285); the room panel opens there, so they make way for it */

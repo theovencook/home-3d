@@ -79,3 +79,18 @@ test("the energy tiles stay while the glass cards are shown (#309)", () => {
   assert.match(out, /fp3d-energy-tile fp3d-energy-solar/);
   assert.match(out, /fp3d-energy-tile fp3d-energy-total/);
 });
+
+test("the heat legend is a button that folds to a slim bar and back (#310)", () => {
+  const el = viewer();
+  el.heatMode = "temperature";
+  el.heatValues = new Map([["r", 20]]);
+  el._legendMin = false;
+  let out = flat(el.renderLegend());
+  assert.match(out, /<button type="button" class="fp3d-legend" aria-expanded=true/);
+  el.toggleLegend();
+  out = flat(el.renderLegend());
+  assert.match(out, /class="fp3d-legend fp3d-legend-min" aria-expanded=false/);
+  assert.match(out, /class=fp3d-sr-only>Temperature/);
+  el.toggleLegend();
+  assert.equal(el._legendMin, false);
+});
