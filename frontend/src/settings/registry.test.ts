@@ -294,7 +294,7 @@ test("every home3d.* or fp3d-tt-* key the code writes is removed by the reset un
 test("Screen and controls holds the old View menu's Controls row and FPS, Appearance its Quality, under the same stored keys (#246, #248)", () => {
   const screen = SETTINGS.filter((s) => s.section === "screen");
   assert.deepEqual(
-    screen.map((s) => s.id),
+    screen.map((s) => s.id).filter((id) => id !== "director_here" && id !== "reset_device"),
     // the floor bar's wrap switch went with the room chips (#249, Rooms picker option B); the floor pictures panel's
     // switch came (#250)
     ["stats", "controls", "keep_view", "angle_lock", "floor_pictures"],
@@ -305,8 +305,12 @@ test("Screen and controls holds the old View menu's Controls row and FPS, Appear
   assert.equal(audienceOf(SECTIONS.find((s) => s.id === "screen")!), "device");
   for (const s of screen) {
     assert.equal(s.scope, "device", s.id);
-    assert.deepEqual(s.prefKeys, [s.id], `${s.id} keeps its key`);
+    if (s.id !== "director_here" && s.id !== "reset_device") assert.deepEqual(s.prefKeys, [s.id], `${s.id} keeps its key`);
   }
+  // device-only rows that sat under This home moved here (#295), the old places keep a link
+  assert.deepEqual(settingById("director_here")!.prefKeys, ["director"]);
+  assert.equal(settingById("director_here")!.section, "screen");
+  assert.equal(settingById("reset_device")!.section, "screen");
   // full labels, no glyphs
   assert.equal(text(settingById("controls")!.label), "On-screen buttons");
   assert.equal(text(settingById("keep_view")!.label), "Keep the camera when changing floor");
@@ -334,4 +338,14 @@ test("Start view is a labelled row for the whole home: house scope, editors only
   assert.equal(text(s.label), "Start view");
   assert.match(text(s.hint!), /whole home/);
   assert.equal(searchSettings("remember start", env(), text)[0]?.id, "start_view");
+});
+
+test("no This home page holds a device setting; only link rows point to where one moved (#295)", () => {
+  for (const s of SETTINGS) {
+    if (audienceOf(SECTIONS.find((x) => x.id === s.section)!) !== "home" || s.scope !== "device") continue;
+    assert.ok(s.control.kind === "action" && s.control.action.startsWith("goto:"), `${s.id} is a device row on a This home page`);
+    const [section, id] = s.control.action.slice(5).split(":");
+    assert.equal(audienceOf(SECTIONS.find((x) => x.id === section)!), "device", `${s.id} points to a This device page`);
+    assert.equal(settingById(id!)!.section, section);
+  }
 });

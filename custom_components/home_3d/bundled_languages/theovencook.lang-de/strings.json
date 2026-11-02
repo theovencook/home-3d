@@ -2992,5 +2992,9 @@
  "st_floor_pictures_hint": "Ein zweiter Weg, eine Etage zu wählen, neben der 3D-Ansicht. Standardmäßig aus: die Etagenleiste wählt die Etage.",
  "st_language": "Sprache",
  "st_language_auto": "Automatisch (wie Home Assistant)",
- "st_language_hint": "Die Sprache, in der Home 3D auf diesem Gerät erscheint. Automatisch folgt der Sprache von Home Assistant. Noch nicht übersetzte Texte erscheinen auf Englisch."
+ "st_language_hint": "Die Sprache, in der Home 3D auf diesem Gerät erscheint. Automatisch folgt der Sprache von Home Assistant. Noch nicht übersetzte Texte erscheinen auf Englisch.",
+ "st_director_here_moved": "Das Einschalten des Live-Regisseurs für diesen Bildschirm gilt nur für dieses Gerät und steht jetzt unter Dieses Gerät, Bildschirm.",
+ "st_reset_device_moved": "Das Zurücksetzen der Einstellungen dieses Geräts betrifft nur dieses Gerät und steht jetzt unter Dieses Gerät, Bildschirm.",
+ "st_go_screen": "Bildschirm öffnen",
+ "st_card_device_reset": "Zurücksetzen"
 }

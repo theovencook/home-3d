@@ -308,6 +308,12 @@ export class SettingsPage extends LitElement {
       if (this.lastView) this.write(s, this.lastView as never);
       return;
     }
+    if (action.startsWith("goto:")) {
+      // a row that points to where a setting moved to (#295)
+      const [section, id] = action.slice(5).split(":");
+      if (sectionOf(section as SectionId)) this.open(section as SectionId, id || null);
+      return;
+    }
     if (action === "reset_device") {
       // one tap used to wipe the device's choices at once (#255): it asks first (reset.ts, loaded now)
       void import("./reset.ts").then(async (m) => {

@@ -3014,6 +3014,10 @@ const en = {
   st_language: "Language",
   st_language_auto: "Automatic (follows Home Assistant)",
   st_language_hint: "The language Home 3D is shown in on this device. Automatic follows Home Assistant's language. Texts not translated yet show in English.",
+  st_director_here_moved: "Switching the live director on for this screen is a setting of this device, so it moved to This device, Screen.",
+  st_reset_device_moved: "Resetting this device's preferences affects this device only, so it moved to This device, Screen.",
+  st_go_screen: "Open Screen",
+  st_card_device_reset: "Reset",
 };
 
 type Key = keyof typeof en;
