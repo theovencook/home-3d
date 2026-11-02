@@ -117,6 +117,7 @@ export class ItemEditor extends LitElement {
     _busy: { state: true },
     _yaw: { state: true },
     _pitch: { state: true },
+    _zoom: { state: true },
     _addShape: { state: true },
     _paste: { state: true },
     _note: { state: true },
@@ -135,6 +136,7 @@ export class ItemEditor extends LitElement {
   private declare _busy: boolean;
   private declare _yaw: number;
   private declare _pitch: number;
+  private declare _zoom: number;
   private declare _addShape: PackPart["shape"];
   /** The paste box's text (null: closed). */
   private declare _paste: string | null;
@@ -143,7 +145,7 @@ export class ItemEditor extends LitElement {
   /** The picture in the light look (white parts white) instead of the dark neon one (#84); kept per browser. */
   private declare _light: boolean;
   /** Draws the picture (the 3D bundle's itemPicture); a test hands in its own. */
-  private picture = async (item: CustomItem, size: number, yaw: number, pitch: number, light: boolean): Promise<string> => (await load3d()).itemPicture(item, size, yaw, pitch, light);
+  private picture = async (item: CustomItem, size: number, yaw: number, pitch: number, light: boolean, zoom: number): Promise<string> => (await load3d()).itemPicture(item, size, yaw, pitch, light, zoom);
   private drawn = "";
   private drawing = false;
   private drag: { x: number; y: number; yaw: number; pitch: number } | null = null;
@@ -159,6 +161,7 @@ export class ItemEditor extends LitElement {
     this._busy = false;
     this._yaw = 35;
     this._pitch = 25;
+    this._zoom = 1;
     this._addShape = "box";
     this._paste = null;
     this._note = null;
@@ -234,7 +237,7 @@ export class ItemEditor extends LitElement {
   // ------------------------------------------------------------------ the live picture
 
   protected updated(): void {
-    const key = JSON.stringify([this._draft, Math.round(this._yaw), Math.round(this._pitch), this._light]);
+    const key = JSON.stringify([this._draft, Math.round(this._yaw), Math.round(this._pitch), this._light, Math.round(this._zoom * 20)]);
     if (!this._draft || key === this.drawn || this.drawing) return;
     this.drawing = true;
     requestAnimationFrame(() => void this.draw(key));
@@ -243,7 +246,7 @@ export class ItemEditor extends LitElement {
   private async draw(key: string): Promise<void> {
     try {
       const draft = this._draft;
-      if (draft) this._picture = await this.picture(draft, 420, this._yaw, this._pitch, this._light);
+      if (draft) this._picture = await this.picture(draft, 420, this._yaw, this._pitch, this._light, this._zoom);
       this.drawn = key;
     } catch (err) {
       this._msg = { ok: false, text: String((err as Error)?.message ?? err) };
@@ -259,6 +262,14 @@ export class ItemEditor extends LitElement {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     this.drag = { x: e.clientX, y: e.clientY, yaw: this._yaw, pitch: this._pitch };
   }
+
+  /** The wheel over the picture zooms it and never scrolls the page (#290). */
+  private wheel = (e: WheelEvent): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    this._zoom = Math.max(0.4, Math.min(5, this._zoom * Math.exp(-dy * 0.0015)));
+  };
 
   private pointerMove(e: PointerEvent): void {
     if (!this.drag) return;
@@ -432,7 +443,7 @@ export class ItemEditor extends LitElement {
 
   private renderDraft(draft: CustomItem) {
     return html`<section class="ie-stage">
-        <div class="ie-picture ${this._light ? "light" : ""}" @pointerdown=${(e: PointerEvent) => this.pointerDown(e)} @pointermove=${(e: PointerEvent) => this.pointerMove(e)} @pointerup=${() => (this.drag = null)} @pointercancel=${() => (this.drag = null)}>
+        <div class="ie-picture ${this._light ? "light" : ""}" @pointerdown=${(e: PointerEvent) => this.pointerDown(e)} @pointermove=${(e: PointerEvent) => this.pointerMove(e)} @pointerup=${() => (this.drag = null)} @pointercancel=${() => (this.drag = null)} @wheel=${{ handleEvent: this.wheel, passive: false } as unknown as EventListener} @dblclick=${() => (this._zoom = 1)}>
           ${this._picture ? html`<img src=${this._picture} alt=${this.itemName(draft)} draggable="false" />` : nothing}
         </div>
         <div class="ie-views">

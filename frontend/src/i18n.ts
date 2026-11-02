@@ -2611,7 +2611,7 @@ const en = {
   ie_duplicate: "Copy",
   ie_remove_part: "Remove part",
   ie_part: "Part {n}",
-  ie_turn_hint: "Drag the picture to turn the item.",
+  ie_turn_hint: "Drag the picture to turn the item; scroll to zoom, double-click to reset.",
   ie_view_front: "Front",
   ie_view_side: "Side",
   ie_view_top: "Top",

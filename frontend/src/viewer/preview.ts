@@ -75,16 +75,16 @@ export function furniturePreview(item: PreviewItem, size = 180, packs?: Furnitur
  * seen from `yaw` degrees around it (0: from the front) and `pitch` degrees above. Not cached: it changes with
  * every edit. `light`: in the day look's colours (white parts white, dark lines) for a light background (#84).
  */
-export function itemPicture(item: PackItem, size = 320, yaw = 35, pitch = 25, light = false): string {
+export function itemPicture(item: PackItem, size = 320, yaw = 35, pitch = 25, light = false, zoom = 1): string {
   const [w, d, h] = item.size;
   const model = withPackItem(DRAFT_TYPE, item, () => buildModel({ type: DRAFT_TYPE, w, d, h }));
   const a = (yaw * Math.PI) / 180;
   const b = (Math.max(-80, Math.min(80, pitch)) * Math.PI) / 180;
-  return picture(model, size, new Vector3(Math.sin(a) * Math.cos(b), Math.sin(b), Math.cos(a) * Math.cos(b)), 1.3, light);
+  return picture(model, size, new Vector3(Math.sin(a) * Math.cos(b), Math.sin(b), Math.cos(a) * Math.cos(b)), 1.3, light, true, zoom);
 }
 
 /** Draw a model seen from `dir` (towards the camera) into a square PNG data URL, the model filling it. */
-function picture({ buf, lines }: { buf: GeoBuffer; lines: LineBuffer }, size: number, dir: Vector3, brightness: number, light = false): string {
+function picture({ buf, lines }: { buf: GeoBuffer; lines: LineBuffer }, size: number, dir: Vector3, brightness: number, light = false, steady = false, zoom = 1): string {
   renderer ??= keepRender(new WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true }));
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   renderer.setSize(size, size, false);
@@ -117,7 +117,9 @@ function picture({ buf, lines }: { buf: GeoBuffer; lines: LineBuffer }, size: nu
           const p = new Vector3(x, y, z).applyMatrix4(camera.matrixWorldInverse);
           r = Math.max(r, Math.abs(p.x), Math.abs(p.y));
         }
-  const pad = r * 1.12;
+  // steady (#290): fit the box's bounding sphere, so turning the item never changes the scale; `zoom` magnifies
+  if (steady && !box.isEmpty()) r = Math.max(0.05, box.getSize(new Vector3()).length() / 2);
+  const pad = (r * 1.12) / Math.max(0.2, zoom);
   camera.left = -pad;
   camera.right = pad;
   camera.top = pad;
