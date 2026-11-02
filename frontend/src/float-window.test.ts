@@ -161,3 +161,9 @@ test("active buttons keep dark text on the fill: the Cameras button and no accen
   const view = readFileSync(new URL("./components/view3d.ts", import.meta.url), "utf8");
   assert.doesNotMatch(view, /fp3d-wall-dock/, "the dock buttons are gone");
 });
+
+test("the wall's stored size is its whole box, so a window clamped to the view stays inside it", () => {
+  const src = readFileSync(new URL("./components/view3d.ts", import.meta.url), "utf8");
+  const rule = src.match(/.fp3d-wall {[^}]*}/)?.[0] ?? "";
+  assert.match(rule, /box-sizing: border-box/);
+});

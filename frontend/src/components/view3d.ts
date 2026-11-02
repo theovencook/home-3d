@@ -7962,6 +7962,8 @@ export class Fp3dView3d extends LitElement {
         height: min(40%, 380px);
         min-width: 260px;
         min-height: 200px;
+        /* a stored size is the whole window, padding and border included, so it fits inside the view (#314) */
+        box-sizing: border-box;
         z-index: 5;
         display: flex;
         flex-direction: column;
