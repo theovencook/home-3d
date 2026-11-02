@@ -119,6 +119,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   controls: ["side", "layout", "handed", "lefty", "menu", "hand"],
   keep_view: ["height", "stay", "view", "position", "follow", "switching"],
   angle_lock: ["rotation", "fixed", "spin", "orbit", "drag", "freeze"],
+  nav: ["arrows", "zoom", "rotate", "touch", "pad", "onscreen", "turn", "pan"],
   floor_pictures: ["picker", "thumbs", "gallery", "panel", "level", "selector"],
   // voice
   voice_here: ["voice", "mic", "talk", "dictation", "spoken", "command"],

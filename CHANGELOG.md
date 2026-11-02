@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- The view's navigation pad gets turn left and right buttons (15 degrees a press), and is now a View option ("Navigation buttons"), off by default and not loaded until switched on (#307).
 - The heat legend (temperature, humidity, CO₂) folds to a slim bar with a tap and back, remembered on this device, and sits a little further from the energy tiles (#310).
 - The energy tiles (consumption, grid, solar, battery) stay in view while the glass cards are on (#309).
 - **Walking** follows each flight of a stair drawn in several pieces: a flight starts at its mount height and rises its own height, flights that meet join into one way round the corner, and only the way that reaches the floor above changes floors (#304).

@@ -204,3 +204,15 @@ test("Display what has no search field (#306), and the Furniture switch is gone:
   // the switch is never written again
   assert.equal(store.get("home3d.show_furniture"), "0");
 });
+
+test("Navigation buttons: a View switch, off by default, kept on this device (#307)", () => {
+  store.clear();
+  const s = viewSetting("nav")!;
+  assert.equal(s.default, false);
+  assert.ok(viewSections({ floors: 1, floorOpen: false, roof: false, plan2d: false, kiosk: false }).some((sec) => sec.rows.some((r) => r.id === "nav")));
+  const out = flat(viewPanel().render());
+  assert.ok(out.includes("Navigation buttons"));
+  assert.equal(store.get("home3d.nav"), undefined);
+  s.write!({ building: null, hass: undefined, prefs: { get: (k: string) => store.get(`home3d.${k}`) ?? null, set: (k: string, v: string | null) => void (v === null ? store.delete(`home3d.${k}`) : store.set(`home3d.${k}`, v)) } } as never, true as never);
+  assert.equal(store.get("home3d.nav"), "1");
+});
