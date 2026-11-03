@@ -903,7 +903,7 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   private view3d() {
-    return readyView(this.renderRoot) as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void }) | null;
+    return readyView(this.renderRoot) as (HTMLElement & { resetView(): void; endWalk(): boolean; lookThrough(entityId: string): void; historyEntities(): HistorySpec; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void }) | null;
   }
 
   /** Time travel on or off; without the Pro add-on its hint shows. `at`: a start moment from a link. */
@@ -987,6 +987,7 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   private back(): void {
+    if (this.view3d()?.endWalk()) return;
     if (this._roomId) this._roomId = null;
     else if (this._floorId && (this.data.building?.floors.length ?? 0) > 1) this._floorId = null;
     else this.view3d()?.resetView();

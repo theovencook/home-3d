@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- Walk mode on a touch screen: the bottom bar stays pressable (the walk layer stops above it), "Exit walk" is a larger button where the Walk button was at the top right with the energy row stopping before it, the room name sits under the energy row, the clock is hidden while walking so the stick never covers it, and Back and Escape end the walk (the browser Back too) (#351).
 - Door and window contact sensors show their state on the door or window itself (leaf swung open, sash open); their pins are hidden unless View > Show > "Door sensor pins" is on (off by default). A tap on the opening still opens the sensor (#349).
 - The new controls look like the rest: the holiday dates (buttons, rule fields in a labelled grid), the icon picker without Home Assistant (styled fields, icon names when pictures are not available) and the pet panel (two-column spot and trigger rows, the shared entity picker for a trigger entity) (#343).
 - Names on the plan no longer sit on each other in the 2D editor, the 2D view or 3D (phones too): room, outdoor area and item names share one pass, where two would touch the smaller room's or the item's name gives way and comes back as you zoom in; the selected one always shows, and an item's hidden name shows while the pointer is over it (#341).

@@ -13,6 +13,8 @@ function handlers(v: unknown, out: ((e: unknown) => void)[] = []): ((e: unknown)
   return out;
 }
 
+import { nothing as nothing_ } from "lit";
+
 test("the walk stick keeps steering after the view redraws mid-drag (#311)", () => {
   const el = new Fp3dView3d();
   el.hass = { language: "en", locale: { language: "en" }, states: {}, config: { unit_system: {} } };
@@ -35,4 +37,20 @@ test("the walk stick keeps steering after the view redraws mid-drag (#311)", () 
   assert.ok(last && last.x > 0.9 && Math.abs(last.y) < 0.1, `the stick follows the finger (${JSON.stringify(last)})`);
   second[3](ev(90, 50));
   assert.equal(sticks.at(-1), null);
+});
+
+test("Back and Escape end the walk, and the clock stays away while walking (#351)", () => {
+  const el = new Fp3dView3d();
+  el.hass = { language: "en", locale: { language: "en" }, states: {}, config: { unit_system: {} } };
+  el.building = { floors: [] };
+  el.clock = "br";
+  assert.ok(el.renderClock() !== undefined && typeof el.renderClock() === "object", "the clock shows");
+  assert.equal(el.endWalk(), false, "no walk, nothing to end");
+  let disposed = 0;
+  el._walk = { room: null, hint: false };
+  assert.equal(el.renderClock(), nothing_, "no clock while walking");
+  el.walker = { dispose: () => disposed++, setStick() {} };
+  assert.equal(el.endWalk(), true);
+  assert.equal(el._walk, false);
+  assert.equal(disposed, 1);
 });

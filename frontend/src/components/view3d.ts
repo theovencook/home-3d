@@ -1275,6 +1275,8 @@ export class Fp3dView3d extends LitElement {
     row("_rackView", "rack", !!rack, () => (this._rackView = null), rack ? () => (this._rackView = rack) : undefined);
     row("_gangMenu", "gang", !!gang, () => (this._gangMenu = null), gang ? () => (this._gangMenu = gang) : undefined);
     row("_central", "central", this._central, () => (this._central = false), () => (this._central = true));
+    // Back ends a walk (#351)
+    row("_walk", "walk", !!this._walk, () => this.stopWalk());
     this.backLayers.syncAll(rows);
   }
 
@@ -4798,7 +4800,8 @@ export class Fp3dView3d extends LitElement {
 
   private renderClock() {
     const pos = this.clock;
-    if (!pos || pos === "off" || !this.hass) {
+    // not while walking: the stick takes the corner and the clock would sit under it (#351)
+    if (!pos || pos === "off" || !this.hass || this._walk) {
       if (this.clockTimer) {
         clearInterval(this.clockTimer);
         this.clockTimer = undefined;
@@ -5044,6 +5047,13 @@ export class Fp3dView3d extends LitElement {
     }, 9000);
   }
 
+  /** Ends the walk if one is on (Back and Escape, #351); false when there was none. */
+  endWalk(): boolean {
+    if (!this._walk) return false;
+    this.stopWalk();
+    return true;
+  }
+
   private stopWalk(): void {
     if (!this.walker && !this._walk) return;
     this.walker?.dispose();
@@ -5086,8 +5096,8 @@ export class Fp3dView3d extends LitElement {
     return html`<div class="fp3d-walk-surface"></div>
       <div class="fp3d-walk-top">
         <span class="fp3d-walk-room">🚶 ${w.room ?? t("walk_title")}</span>
-        <button class="fp3d-walk-exit" @click=${() => this.stopWalk()}>✕ ${t("walk_end")}</button>
       </div>
+      <button class="fp3d-walk-exit" @click=${() => this.stopWalk()}>✕ ${t("walk_end")}</button>
       ${w.hint ? html`<div class="fp3d-walk-hint">${t("walk_hint")}</div>` : nothing}
       <div
         class="fp3d-walk-stick"
@@ -7549,9 +7559,10 @@ export class Fp3dView3d extends LitElement {
         box-shadow: var(--fp3d-shadow);
         cursor: pointer;
       }
+      /* stops above the bottom bar, so that its buttons stay pressable while walking (#351) */
       .fp3d-walk-surface {
         position: absolute;
-        inset: 0;
+        inset: 0 0 calc(var(--fp3d-bottom-inset, 0px) + 8px) 0;
         z-index: 4;
         touch-action: none;
         cursor: grab;
@@ -7559,7 +7570,8 @@ export class Fp3dView3d extends LitElement {
       .fp3d-walk-top {
         position: absolute;
         z-index: 5;
-        top: 12px;
+        /* under the energy strip, so the two never overlap (#351) */
+        top: 64px;
         left: 50%;
         transform: translateX(-50%);
         display: flex;
@@ -7579,16 +7591,27 @@ export class Fp3dView3d extends LitElement {
         font: inherit;
         font-weight: 700;
       }
+      /* "Exit walk": where the Walk button was, at the top right, a 44 px target (#351) */
       .fp3d-walk-exit {
-        border: 0;
+        position: absolute;
+        z-index: 5;
+        top: 12px;
+        right: var(--fp3d-walk-right, 12px);
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 16px;
+        border: 1px solid rgba(55, 224, 255, 0.45);
+        font-size: 15px;
+        white-space: nowrap;
         cursor: pointer;
-        pointer-events: auto;
       }
       .fp3d-walk-hint {
         position: absolute;
         z-index: 5;
         left: 50%;
-        top: 62px;
+        top: 112px;
         transform: translateX(-50%);
         max-width: min(560px, calc(100% - 32px));
         font-weight: 500;
@@ -9293,6 +9316,10 @@ export class Fp3dView3d extends LitElement {
         /* the row stops before the Walk button in the corner instead of running under it (#259, V14) */
         .fp3d-stage:has(> .fp3d-walk-btn) .fp3d-energy {
           max-width: calc(100% - 20px - var(--fp3d-walk-right, 12px) - var(--fp3d-walk-w, 96px));
+        }
+        /* Exit walk is wider than the Walk button (#351) */
+        .fp3d-stage:has(> .fp3d-walk-exit) .fp3d-energy {
+          max-width: calc(100% - 20px - var(--fp3d-walk-right, 12px) - 124px);
         }
         /* the scrolling row would clip a lifted tile */
         .fp3d-energy .fp3d-energy-tile:hover {
