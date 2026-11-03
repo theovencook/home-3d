@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- Browser Back and Forward follow every page and pane of the panel: the editor, Extensions, each Settings section, the View panel, menus, sheets and questions; Back closes what is open before it leaves a page, coming back to a page opens again what was open on it, and a link to a Settings section or the editor survives a reload. A dashboard card never adds a history entry (#322).
+
 ## Home 3D 0.2.1 (2 November 2026)
 
 - A Home Assistant restart is no longer shown as motion: the camera detection pins only linger for a detection this page saw, and the motion trail skips sensors coming back from unavailable or unknown (#299).

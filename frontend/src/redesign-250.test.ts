@@ -374,7 +374,7 @@ test("the phone editor's sheet, menus and help follow Back; the View panel too (
   el.afterPhoneRender(new Map());
   assert.equal(entries.length, start);
   // the panel keeps the View panel's layer in step with it
-  assert.match(src("./panel.ts"), /this\.backLayers\.sync\("view", this\._viewOpen && this\._mode === "view", \(\) => this\.setViewOpen\(false, true\)\)/);
+  assert.match(src("./panel.ts"), /row\("_viewOpen", "view", this\._viewOpen && this\._mode === "view", \(\) => this\.setViewOpen\(false, true\), \(\) => this\.setViewOpen\(true\)\)/);
   assert.match(src("./panel.ts"), /this\.backLayers\.closeAll\(\)/);
 });
 

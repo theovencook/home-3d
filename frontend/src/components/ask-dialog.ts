@@ -67,8 +67,20 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
     this.toggleAttribute("open", !!req);
   }
 
+  /** Back answers the question with Cancel before it leaves the page (#322); its history entry's release. */
+  private backRelease: (() => void) | null = null;
+
   protected updated(): void {
     const req = this.queue.current;
+    // the panel's history (back-stack.ts) lends its hook while it is the host; a dashboard has none. Not imported, so
+    // the bundles that ask (items, Settings) stay as small as they were
+    const open = (globalThis as { __fp3dNavOpen?: (close: () => void, key: string) => () => void }).__fp3dNavOpen;
+    if (req && !this.backRelease && open) this.backRelease = open(() => ((this.backRelease = null), this.answer(false)), "ask:question");
+    else if (!req && this.backRelease) {
+      const release = this.backRelease;
+      this.backRelease = null;
+      release();
+    }
     if (req === this.shown) return;
     this.shown = req;
     if (!req) {
