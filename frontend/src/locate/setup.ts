@@ -506,14 +506,31 @@ export class LocateSetup extends LitElement {
     </select>`;
   }
 
+  /** Step-by-step phone guide with a link to the official Home Assistant page ("android" or "iphone"). */
+  private phoneGuide(kind: "android" | "iphone", open = false, only?: string) {
+    const t = this.t;
+    const android = kind === "android";
+    const steps = android
+      ? [t.guide_android_1, t.guide_android_2, t.guide_android_3, t.guide_android_4]
+      : [t.guide_iphone_1, t.guide_iphone_2, t.guide_iphone_3, t.guide_iphone_4];
+    const url = android ? "https://companion.home-assistant.io/docs/core/sensors/#bluetooth-sensors" : "https://www.home-assistant.io/integrations/private_ble_device/";
+    return html`<details class="guide" ?open=${open}>
+      <summary>${android ? t.guide_android_title : t.guide_iphone_title}</summary>
+      <ol>
+        ${steps.map((st) => html`<li class=${only && st !== only ? "dim" : ""}>${st}</li>`)}
+      </ol>
+      <a href=${url} target="_blank" rel="noopener noreferrer">${android ? t.guide_android_link : t.guide_iphone_link}</a>
+    </details>`;
+  }
+
   /** "not heard" next to a device while locating runs and no receiver hears it (an Android phone added by key, a
    * switched-off transmitter): learning with it would collect nothing. */
-  private unheardBadge(id: string) {
+  private unheardBadge(id: string, kind?: string) {
     const live = this._live;
     if (!live?.running) return nothing;
     const d = live.devices.find((x) => x.id === id);
     if (!d || d.room || (d.last_seen && Date.now() / 1000 - d.last_seen < 120)) return nothing;
-    return html`<small class="warn" title=${this.t.unheard_hint}>${this.t.unheard}</small>`;
+    return html`<small class="warn" title=${this.t.unheard_hint}>${this.t.unheard}</small>${this.phoneGuide(kind === "irk" ? "iphone" : "android")}`;
   }
 
   private addDevice(cfg: Config, device: Omit<Device, "id" | "person" | "icon">, person: string | null = null): void {
@@ -539,7 +556,7 @@ export class LocateSetup extends LitElement {
                   ><input type="checkbox" .checked=${!!d.wearable} @change=${(e: Event) => setDevice(d.id, { wearable: (e.target as HTMLInputElement).checked })} />⌚
                   ${t.worn}</label
                 >
-                ${this.unheardBadge(d.id)}
+                ${this.unheardBadge(d.id, d.kind)}
                 <button @click=${() => void this.save({ devices: cfg.devices.filter((x) => x.id !== d.id) })}>${t.remove}</button>
               </li>`,
             )}
@@ -550,13 +567,15 @@ export class LocateSetup extends LitElement {
             <ul class="list">
               ${apps.map((a) => {
                 const warnings = [
-                  a.state !== "Transmitting" ? t.app_off : null,
-                  a.power === "ultraLow" || a.power === "low" ? t.app_power : null,
-                  a.mode === "lowPower" ? t.app_mode : null,
-                ].filter((w): w is string => !!w);
+                  a.state !== "Transmitting" ? { text: t.app_off, step: t.guide_android_2 } : null,
+                  a.power === "ultraLow" || a.power === "low" ? { text: t.app_power, step: t.guide_android_3 } : null,
+                  a.mode === "lowPower" ? { text: t.app_mode, step: t.guide_android_4 } : null,
+                ].filter((w): w is { text: string; step: string } => !!w);
                 return html`<li>
                   <span
-                    ><b>${a.name}</b>${warnings.map((w) => html`<small class="warn">⚠ ${w}</small>`)}</span
+                    ><b>${a.name}</b>${warnings.map((w) => html`<small class="warn">⚠ ${w.text}</small>`)}${warnings.length
+                      ? this.phoneGuide("android", true, warnings[0].step)
+                      : nothing}</span
                   >
                   ${has(a.key)
                     ? html`<small>${t.added}</small>`
@@ -565,6 +584,8 @@ export class LocateSetup extends LitElement {
               })}
             </ul>`
         : nothing}
+      ${apps.length ? nothing : this.phoneGuide("android")}
+      ${this.phoneGuide("iphone")}
       ${this.renderKeyHelper(cfg)}
       <details
         class="pbd"
@@ -868,6 +889,24 @@ export class LocateSetup extends LitElement {
     .hint {
       opacity: 0.8;
       font-size: 13px;
+    }
+    details.guide {
+      font-size: 13px;
+      margin: 4px 0;
+    }
+    details.guide summary {
+      cursor: pointer;
+      opacity: 0.9;
+    }
+    details.guide ol {
+      margin: 4px 0;
+      padding-left: 20px;
+    }
+    details.guide li.dim {
+      opacity: 0.65;
+    }
+    details.guide a {
+      color: #37e0ff;
     }
     .warn {
       display: block;

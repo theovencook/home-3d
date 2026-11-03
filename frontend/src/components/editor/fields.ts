@@ -16,7 +16,7 @@ import { round } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 import { callServiceSafe } from "../../failure.ts";
 import { uses12Hours } from "../../time-of-day.ts";
-import { need, loadTimeField } from "./lazy.ts";
+import { need, loadTimeField, loadIconPicker } from "./lazy.ts";
 
 /** FieldsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class FieldsPart {
@@ -215,6 +215,14 @@ export class FieldsPart {
   /** An own symbol for the marker (a Material Design icon name), with a preview. */
   iconInput(this: Fp3dEditor, value: string | null | undefined, onChange: (v: string | null) => void) {
     const name = value ? (value.startsWith("mdi:") ? value : `mdi:${value}`) : "";
+    // the picker (#327) is a lazy chunk; until it is there the plain text box does the job
+    need(loadIconPicker);
+    if (customElements.get("fp3d-icon-picker"))
+      return html`<div class="fp3d-field fp3d-wide" title=${this.t("marker_icon_hint")}>
+        ${this.t("marker_icon")}
+        <fp3d-icon-picker .value=${value ?? null} .hass=${this.hass} .label=${this.t("marker_icon")} .searchText=${this.t("icon_search")} .noneText=${this.t("icon_none")} .disabled=${!this.isEditor} @icon-change=${(e: CustomEvent<{ value: string | null }>) => onChange(e.detail.value)}></fp3d-icon-picker>
+      </div>`;
+    void customElements.whenDefined("fp3d-icon-picker").then(() => this.requestUpdate());
     return html`<label class="fp3d-field fp3d-wide" title=${this.t("marker_icon_hint")}
       >${this.t("marker_icon")}
       <span class="fp3d-icon-row">
