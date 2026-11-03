@@ -20,6 +20,12 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - Settings: "Colour rooms by" is now "Show room climate as", with options named by what they do (floor colour or numbers at the room names) and a one-line description (#331).
 - Settings: "Switch on on this device" is now "Live director on this screen" and "Voice button on this screen", each with a plain description (#334).
 - Browser Back and Forward follow every page and pane of the panel: the editor, Extensions, each Settings section, the View panel, menus, sheets and questions; Back closes what is open before it leaves a page, coming back to a page opens again what was open on it, and a link to a Settings section or the editor survives a reload. A dashboard card never adds a history entry (#322).
+- The power-flow and hologram switches moved from the 3D view's energy row into the View panel (Show), under the same device keys, so a choice made before still holds (#315).
+- Energy values no longer grow or react to a click; they only lift a hair when hovered (#316).
+- Hiding the controls (the eye) hides the floor bar with them (Whole house, floors, Rooms, search); the Rooms list and the search no longer come back open (#317).
+- Sun path height (Settings, 3D view): the sun and its way are drawn over the highest roof by default; Higher and Real angle are the other choices. The real sun angle still lights and shades the house (#319).
+- The TV and player card grows as a whole box while hovered (wider, titles in full) instead of scaling its text inside a fixed box, and stays inside the view (#335).
+- Weather tile by the clock (View panel and Settings, clock rows): the outside temperature and a condition symbol from the home's weather entity; a tap opens today's forecast (hourly, else daily) from weather.get_forecasts. Both parts load only when used (#333).
 
 ## Home 3D 0.2.1 (2 November 2026)
 

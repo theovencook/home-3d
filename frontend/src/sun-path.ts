@@ -93,3 +93,18 @@ export function sunPath(t: number, lat: number, lon: number): SunPath {
   if (!rise && points.length && at(start).elevation > HORIZON) points.unshift(at(start));
   return { points, rise, set };
 }
+
+/** How high the sun's way is drawn (#319): over the highest roof ("auto"), a good deal higher, or at the real sun angle's height ("real"). */
+export type SunHeight = "auto" | "high" | "real";
+
+/**
+ * How much the arc's height is stretched (the real sun angle is never touched: it lights and shades the house as
+ * before). The dome's top stands `r` times the sine of the day's highest sun above the ground floor; "auto" lifts
+ * it just over the highest point of the plan (1 m clear), "high" half as far again. Never less than 1, never more than 10.
+ */
+export function sunArcStretch(mode: SunHeight, peakElevation: number, r: number, topAboveGround: number): number {
+  if (mode === "real") return 1;
+  const peak = Math.sin((Math.max(1, peakElevation) * Math.PI) / 180) * r;
+  const want = Math.max(0, topAboveGround) + 1;
+  return Math.min(10, Math.max(1, (mode === "high" ? want * 1.5 : want) / peak));
+}

@@ -41,6 +41,7 @@ import type { ClockPos } from "./card-config.ts";
 import { clockLookOf, type ClockLook } from "./clock.ts";
 import { TimeTravel } from "./load-timetravel.ts";
 import { IdleClock, tabletIdleSeconds, tabletMode } from "./kiosk.ts";
+import type { SunHeight } from "./sun-path.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 import { UndoHistory } from "./undo-history.ts";
@@ -141,6 +142,8 @@ export class Floorplan3dPanel extends LitElement {
     _floorPics: { state: true },
     _angleLock: { state: true },
     _windowSpill: { state: true },
+    _sunHeight: { state: true },
+    _clockWeather: { state: true },
     _navButtons: { state: true },
     _trail: { state: true },
     _cameraWall: { state: true },
@@ -150,6 +153,8 @@ export class Floorplan3dPanel extends LitElement {
     _noticesHidden: { state: true },
     _accent: { state: true },
     _weather: { state: true },
+    _flows: { state: true },
+    _holos: { state: true },
     _director: { state: true },
     _micProbe: { state: true },
     _voiceHere: { state: true },
@@ -222,6 +227,8 @@ export class Floorplan3dPanel extends LitElement {
   /** 3D lock on this device: the angle stays fixed. */
   private declare _angleLock: boolean;
   private declare _windowSpill: boolean;
+  private declare _sunHeight: SunHeight;
+  private declare _clockWeather: boolean;
   private declare _navButtons: boolean;
   /** Motion trail of the last half hour in 3D. */
   private declare _trail: boolean;
@@ -238,6 +245,9 @@ export class Floorplan3dPanel extends LitElement {
   private declare _accent: string | null;
   /** Weather outside the house in 3D. */
   private declare _weather: boolean;
+  /** Power flow lines and hologram cards (#315): View panel switches, read from this device's preferences. */
+  private declare _flows: boolean;
+  private declare _holos: boolean;
   /** Kamera-Cockpit: the live director works on this device (its own switch, default off). */
   private declare _director: boolean;
   /** The microphone probe opened from the editor (the live director's section). */
@@ -343,10 +353,15 @@ export class Floorplan3dPanel extends LitElement {
     this._floorPics = prefs.get("floor_pictures") === "1";
     this._angleLock = prefs.get("angle_lock") === "1";
     this._windowSpill = prefs.get("window_spill") === "1";
+    this._clockWeather = prefs.get("clock_weather") === "1";
+    const sunHeight = prefs.get("sun_height");
+    this._sunHeight = sunHeight === "high" || sunHeight === "real" ? sunHeight : "auto";
     this._navButtons = prefs.get("nav") === "1";
     this._trail = prefs.get("trail") === "1";
     this._clean = prefs.get("clean") === "1";
     this._weather = prefs.get("weather") !== "0";
+    this._flows = prefs.get("flows") === "1";
+    this._holos = prefs.get("holos") !== "0";
     this._director = directorOnHere();
     this._voiceHere = voiceOnHere();
     this._screen = screenName();
@@ -1539,6 +1554,7 @@ export class Floorplan3dPanel extends LitElement {
           .keepView=${this._keepView}
           .angleLock=${this._angleLock}
           .windowSpill=${this._windowSpill}
+          .sunHeight=${this._sunHeight}
           .navButtons=${this._navButtons}
           ?trail=${this._trail}
           .cameraWall=${this._cameraWall && !tt}
@@ -1549,8 +1565,12 @@ export class Floorplan3dPanel extends LitElement {
           @clean-toggle=${() => {
             this._clean = !this._clean;
             prefs.set("clean", this._clean ? "1" : "0");
+            // the Rooms list and the search close with the bar they hang from, so they do not come back open (#317)
+            if (this._clean) this._roomsOpen = this._findOpen = false;
           }}
           .weather=${this._weather}
+          .flows=${this._flows}
+          .holograms=${this._holos}
           .director=${this._director}
           .voice=${this._voiceHere}
           .screen=${this._screen || null}
@@ -1566,6 +1586,7 @@ export class Floorplan3dPanel extends LitElement {
           .theme=${this._theme}
           .clock=${this._clock}
           .clockLook=${this._clockLook}
+          .clockWeather=${this._clockWeather}
           .accent=${this.shownAccent()}
           ?furnish=${this._furnish && !tt}
           .selectedFurniture=${this._selFurniture}
@@ -2134,6 +2155,10 @@ export class Floorplan3dPanel extends LitElement {
       }
       .fp3d-clean fp3d-view3d {
         --fp3d-bottom-inset: 0px;
+      }
+      /* the floor bar goes with the other controls (#317) */
+      .fp3d-clean .fp3d-nav {
+        display: none;
       }
       .fp3d-furnish-bar {
         bottom: 68px;

@@ -116,6 +116,7 @@ export const LOOK: Setting[] = [
   deviceChoice("clock_style", "look", "clock", "clock_style", ["digital", "analogue"], "digital", "st_clock_face", opts([["digital", "clock_digital"], ["analogue", "clock_analogue"]]), undefined, ["time", "clock", "dial", "hands", "face"]),
   deviceSwitch("clock_seconds", "look", "clock", "clock_seconds", false, "st_clock_seconds", undefined, ["time", "clock", "seconds"]),
   deviceSwitch("clock_date", "look", "clock", "clock_date", true, "st_clock_date", undefined, ["time", "clock", "date", "day"]),
+  deviceSwitch("clock_weather", "look", "clock", "clock_weather", false, "st_clock_weather", "st_clock_weather_hint"),
   ].map((s): Setting => ({ ...s, visible: (env) => ["tl", "tr", "bl", "br"].includes(env.prefs.get("clock") ?? "") })), // the clock's details only while it shows (#256)
   deviceChoice("markers", "view3d", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), "markers_important_hint", ["pins", "icons", "symbols", "devices", "markers"], "select"),
   deviceSwitch("pulse", "view3d", "markers", "pulse", true, "st_pulse", "st_pulse_hint", ["pins", "outline", "pulse", "animation", "motion"]),
@@ -169,6 +170,10 @@ export const LOOK: Setting[] = [
   deviceSwitch("window_glow", "view3d", "show", "window_spill", false, "window_glow", "window_glow_hint", ["night", "glow", "light", "windows", "spill"]),
   // #307: the zoom, move and turn pad on the view; off by default
   deviceSwitch("nav", "view3d", "show", "nav", false, "st_nav"),
+  // #315: the two small switches that sat in the energy row of the 3D view (power flow lines, hologram cards) are View options now
+  // #319: how high the sun's way is drawn; the lighting and shadows keep the real sun angle
+  deviceChoice("sun_height", "view3d", "show", "sun_height", ["auto", "high", "real"], "auto", "st_sun_height", opts([["auto", "sun_height_auto"], ["high", "sun_height_high"], ["real", "sun_height_real"]]), "st_sun_height_hint"),
+  ...["flows", "holos"].map((k) => deviceSwitch(k, "view3d", "show", k, k === "holos", k as TextKey, `${k}_hint` as TextKey)),
 ];
 
 /**
@@ -230,14 +235,14 @@ export function viewSections(ctx: ViewContext): ViewSection[] {
   if (several && ctx.floorOpen && !ctx.plan2d) show.push({ id: "floor_stack" });
   show.push({ id: "heat" }, { id: "display" });
   if (ctx.roof && !ctx.plan2d) show.push({ id: "roof", disabled: ctx.floorOpen });
-  show.push({ id: "trail" }, { id: "weather" }, { id: "nav" });
+  show.push({ id: "trail" }, { id: "weather" }, { id: "nav" }, ...["flows", "holos"].map((id) => ({ id })));
   const shows: ViewSection = { id: "show", title: "st_card_show", rows: show, hint: show.some((r) => r.disabled) ? "pick_all_floors" : undefined, openOnPhone: false };
   if (ctx.kiosk) return [{ ...shows, openOnPhone: true }];
   return [
     { id: "look", title: "theme", rows: [{ id: "theme" }, { id: "accent" }], openOnPhone: true },
     shows,
     { id: "markers", title: "markers", rows: [{ id: "markers" }, { id: "pinSize" }, { id: "pulse" }], hint: "markers_important_hint", openOnPhone: true },
-    { id: "clock", title: "st_clock", rows: [{ id: "clock" }], openOnPhone: false },
+    { id: "clock", title: "st_clock", rows: [{ id: "clock" }, { id: "clock_weather" }], openOnPhone: false },
   ];
 }
 

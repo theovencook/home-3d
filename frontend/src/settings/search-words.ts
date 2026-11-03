@@ -96,6 +96,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   clock_hours: ["format", "military", "twelve", "hourly", "meridiem", "hour"],
   clock_style: ["analogue", "analog", "digital", "design", "style", "numerals"],
   clock_seconds: ["tick", "ticking", "hand", "sweep", "precise", "second"],
+  clock_weather: ["temperature", "forecast", "conditions", "outdoor", "tile", "degrees", "today"],
   clock_date: ["calendar", "dates", "weekday", "month", "today", "year"],
   time_format: ["twelve", "twentyfour", "meridiem", "military", "clock", "hourly"],
   language: ["tongue", "dialect", "languages", "region", "text", "country"],
@@ -121,6 +122,9 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   keep_view: ["height", "stay", "view", "position", "follow", "switching"],
   angle_lock: ["rotation", "fixed", "spin", "orbit", "drag", "freeze"],
   nav: ["arrows", "zoom", "rotate", "touch", "pad", "onscreen", "turn", "pan"],
+  sun_height: ["sun", "arc", "path", "ring", "roof", "above", "dome", "sky"],
+  flows: ["power", "cables", "lines", "glowing", "meter", "consumers", "grid"],
+  holos: ["hologram", "glass", "cards", "info", "plant", "devices", "solar"],
   floor_pictures: ["picker", "thumbs", "gallery", "panel", "level", "selector"],
   // voice
   voice_here: ["voice", "mic", "talk", "dictation", "spoken", "command", "button"],

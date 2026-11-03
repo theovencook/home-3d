@@ -288,11 +288,14 @@ export class Fp3dViewPanel extends LitElement {
         ${section.hint ? html`<p class="vp-help">${this.t(section.hint)}</p>` : nothing}`;
     }
     if (section.id === "clock") {
-      const [clock] = rows.map(([, s]) => s);
+      const [clock, wx] = rows.map(([, s]) => s);
+      // the weather tile sits beside the clock, so its switch shows while a clock does (#333)
+      const shows = !!clock && clock.read(this.env) !== "off";
       return html`<div class="vp-line">
-        ${clock ? this.renderSelect(clock, this.t(clock.label)) : nothing}
-        <button type="button" class="vp-link" @click=${() => this.openSettings("look", "clock_hours")}>${this.t("view_clock_style")} ›</button>
-      </div>`;
+          ${clock ? this.renderSelect(clock, this.t(clock.label)) : nothing}
+          <button type="button" class="vp-link" @click=${() => this.openSettings("look", "clock_hours")}>${this.t("view_clock_style")} ›</button>
+        </div>
+        ${wx && shows ? this.renderRow({ id: wx.id }) : nothing}`;
     }
     return html`${rows.map(([r]) => this.renderRow(r))}${section.hint ? html`<p class="vp-help">${this.t(section.hint)}</p>` : nothing}`;
   }

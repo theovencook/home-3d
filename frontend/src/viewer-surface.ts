@@ -70,6 +70,7 @@ export type ViewerSurface = Pick<
   | "setStartView"
   | "setStats"
   | "setSun"
+  | "setSunHeight"
   | "setSunPath"
   | "setSurfaceGrab"
   | "setTheme"

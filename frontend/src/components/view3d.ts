@@ -107,6 +107,8 @@ const RACK_SPARK_MS = 6 * 3600000;
 const DETECT_LINGER_MS = 120000;
 /** How long a paused player keeps its now-playing card. */
 const PAUSED_CARD_MS = 10 * 60 * 1000;
+/** The TV or player card's width while hovered (#335), as the stylesheet has it: the card is placed and kept on screen for it. */
+const MEDIA_HOVER_W = 288;
 
 /** Pins of what a camera detects (Frigate and the like): a person, a vehicle, an animal, motion. */
 const DETECT_ICONS: Record<string, string> = {
@@ -134,7 +136,7 @@ import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { timeStyleOf } from "../time-text.ts";
 import { holdTarget } from "../hold.ts";
 import { popupKind, popupPosition } from "../device-popup-model.ts";
-import { loadDevicePopup, loadFind, loadQuickMenu, loadViewNav } from "../load-parts.ts";
+import { loadDevicePopup, loadFind, loadQuickMenu, loadViewNav, loadWeatherTile } from "../load-parts.ts";
 import { need } from "../lazy-part.ts";
 import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
@@ -192,7 +194,7 @@ import type { ClockPos } from "../card-config.ts";
 import { CLOCK_LOOK, renderClock, type ClockLook } from "../clock.ts";
 import { Director, HOLD_DEFAULT, directorAny, doorbellCamera, doorbellEntities, doorbellRang, triggerFired, type DirectorSettings, type Shot } from "../director.ts";
 import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
-import { sunPath, type SunPath } from "../sun-path.ts";
+import { sunPath, type SunHeight, type SunPath } from "../sun-path.ts";
 import { cheapRate } from "../cheap-rate.ts";
 import { askConfirm } from "../ask.ts";
 import "./ask-dialog.ts";
@@ -294,6 +296,7 @@ export class Fp3dView3d extends LitElement {
     theme: { attribute: false },
     clock: { attribute: false },
     clockLook: { attribute: false },
+    clockWeather: { attribute: false },
     _clockTick: { state: true },
     accent: { attribute: false },
     packs: { attribute: false },
@@ -319,7 +322,6 @@ export class Fp3dView3d extends LitElement {
     _stats: { state: true },
     _error: { state: true },
     _energy: { state: true },
-    _bigTile: { state: true },
     _holos: { state: true },
     _rows: { state: true },
     _meters: { state: true },
@@ -369,6 +371,7 @@ export class Fp3dView3d extends LitElement {
     keepView: { attribute: false },
     angleLock: { attribute: false },
     windowSpill: { attribute: false },
+    sunHeight: { attribute: false },
     navButtons: { attribute: false },
     alerts: { attribute: false },
     alertJump: { attribute: false },
@@ -459,6 +462,8 @@ export class Fp3dView3d extends LitElement {
   declare clock: ClockPos | null;
   /** What the clock looks like (#232); the default is digits with the date. */
   declare clockLook: ClockLook | null;
+  /** A weather tile by the clock (#333; a device preference, off by default). */
+  declare clockWeather: boolean;
   private declare _clockTick: number;
   private clockTimer: ReturnType<typeof setInterval> | undefined;
   private clockEvery = 0;
@@ -515,7 +520,6 @@ export class Fp3dView3d extends LitElement {
   private declare _error: string | null;
   private declare _energy: EnergySummary | null;
   /** The energy tile shown enlarged after a tap (touch has no hover), null = none (#90). */
-  private declare _bigTile: string | null;
   /** Energie Pro: today's solar statistics for the hologram (kWh, peak and the day curve). */
   /** The hologram cards (main plant first) and today's statistics rows of their sensors. */
   private declare _holos: HoloCard[];
@@ -618,6 +622,8 @@ export class Fp3dView3d extends LitElement {
   declare angleLock: boolean;
   /** The light out of lit windows at night (#274); off unless the device's setting is on. */
   declare windowSpill: boolean;
+  /** How high the sun's way is drawn (#319; a device preference). */
+  declare sunHeight: SunHeight;
   /** The zoom, move and turn pad (#297, #307); a device choice, off unless the host turns it on. */
   declare navButtons: boolean;
   /** The stage is narrower than 700 px (smaller floor pictures, phone layout). */
@@ -829,6 +835,7 @@ export class Fp3dView3d extends LitElement {
     this.theme = "neon";
     this.clock = null;
     this.clockLook = null;
+    this.clockWeather = false;
     this._clockTick = 0;
     this.accent = null;
     this.furnish = false;
@@ -848,7 +855,6 @@ export class Fp3dView3d extends LitElement {
     this._stats = null;
     this._error = null;
     this._energy = null;
-    this._bigTile = null;
     this._holos = [];
     this._rows = null;
     this._holoOpen = true;
@@ -898,6 +904,7 @@ export class Fp3dView3d extends LitElement {
     this.keepView = false;
     this.angleLock = false;
     this.windowSpill = false;
+    this.sunHeight = "auto";
     this.navButtons = false;
     this._narrowStage = false;
     this.alerts = true;
@@ -1127,6 +1134,7 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setKeepView(this.keepView);
       this.viewer.setAngleLock(this.angleLock);
       this.viewer.setWindowSpill(this.windowSpill);
+      this.viewer.setSunHeight(this.sunHeight);
       this.viewer.setTheme(this.effectiveTheme());
       this.viewer.setDescription((this.sceneLabel = translate(this.hass, flat ? "sr_plan" : "sr_scene")));
       this.viewer.setAccent(this.accent ?? null);
@@ -1317,6 +1325,7 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("keepView")) v.setKeepView(this.keepView);
     if (changed.has("angleLock")) v.setAngleLock(this.angleLock);
     if (changed.has("windowSpill")) v.setWindowSpill(this.windowSpill);
+    if (changed.has("sunHeight")) v.setSunHeight(this.sunHeight);
     if (changed.has("explode")) v.setExplode(this.explode);
     if (changed.has("keepRoof")) v.setKeepRoof(this.keepRoof);
     if (changed.has("hideRoof")) v.setHideRoof(this.hideRoof);
@@ -2438,7 +2447,7 @@ export class Fp3dView3d extends LitElement {
     const dx = 34 * s;
     const dy = 46 * s;
     // the card's lower left corner (lower right seen from behind) sits up and to the side of the anchor
-    const cx = x + (facing ? dx : -dx);
+    let cx = x + (facing ? dx : -dx);
     let cy = y - dy;
     // cards that would cover one placed before step up above it (two devices side by side, D178);
     // the card's size is read now and then, not every frame
@@ -2449,10 +2458,24 @@ export class Fp3dView3d extends LitElement {
       size = { w: el.offsetWidth || 184, h: el.offsetHeight || 90, at: now };
       this.holoSizes.set(index, size);
     }
-    const w = size.w * s;
+    // a TV or player card grows wider under the mouse (#335): it is placed for that size and kept inside the stage
+    const media = el.classList.contains("fp3d-holo-media");
+    const w = (media ? Math.max(size.w, MEDIA_HOVER_W) : size.w) * s;
     const h = size.h * s;
-    const x0 = facing ? cx : cx - w;
-    const x1 = x0 + w;
+    let x0 = facing ? cx : cx - w;
+    let x1 = x0 + w;
+    if (media) {
+      const stage = this.renderRoot.querySelector<HTMLElement>(".fp3d-stage");
+      const sw = stage?.clientWidth ?? 0;
+      if (sw > 0) {
+        const shift = x1 > sw - 6 ? sw - 6 - x1 : x0 < 6 ? 6 - x0 : 0;
+        cx += shift;
+        x0 += shift;
+        x1 += shift;
+      }
+      const top = 6 - (cy - h);
+      if (top > 0 && stage?.clientHeight) cy += top;
+    }
     for (let pass = 0; pass < 6; pass++) {
       const hit = this.holoBoxes.find((b) => x0 < b.x1 + 4 && x1 > b.x0 - 4 && cy - h < b.y1 + 4 && cy > b.y0 - 4);
       if (!hit) break;
@@ -4694,7 +4717,12 @@ export class Fp3dView3d extends LitElement {
     if (this.clockTimer && this.clockEvery !== every) clearInterval(this.clockTimer), (this.clockTimer = undefined);
     this.clockEvery = every;
     this.clockTimer ??= setInterval(() => (this._clockTick = Date.now()), every);
-    return renderClock(pos, { now: new Date(this.now()), lang: (this.hass.language || "en").replace("_", "-"), timeZone: this.hass.config?.time_zone, locale: this.hass.locale }, look);
+    const clock = renderClock(pos, { now: new Date(this.now()), lang: (this.hass.language || "en").replace("_", "-"), timeZone: this.hass.config?.time_zone, locale: this.hass.locale }, look);
+    // the weather tile beside it (#333): its code loads when the option is on, its forecast on the first tap
+    const wx = this.clockWeather ? weatherEntity(this.hass, this.weatherEntityId ?? this.building?.settings.weather_entity) : null;
+    if (!wx) return clock;
+    need(loadWeatherTile);
+    return html`<div class="fp3d-clockrow fp3d-clock-${pos}">${clock}<fp3d-weather-tile .hass=${this.hass} .entity=${wx} .look=${look} .pos=${pos} ?light=${this.hasAttribute("light")}></fp3d-weather-tile></div>`;
   }
 
   private renderAlerts() {
@@ -6535,9 +6563,9 @@ export class Fp3dView3d extends LitElement {
       ${this._cheap ? html`<div class="fp3d-energy-item fp3d-energy-cheap" role="status"><span>${t("cheap_rate")}</span><b>${t("cheap_rate_now")}</b></div>` : nothing}
       ${items.map(
         (i) =>
-          html`<button type="button" class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}${this._bigTile === i.cls ? " fp3d-energy-big" : ""}" aria-pressed=${this._bigTile === i.cls ? "true" : "false"} @click=${() => this.toggleEnergyTile(i.cls)}>
+          html`<div class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}">
             <span>${i.label}</span><b>${i.value}</b>
-          </button>`,
+          </div>`,
       )}
       ${this.flows !== null
         ? nothing
@@ -6550,11 +6578,6 @@ export class Fp3dView3d extends LitElement {
         <span>${t("holos")}</span><b>${uiIcon("holo")}</b>
       </button>`}
     </div>`;
-  }
-
-  /** A tap enlarges an energy tile so its value reads without zooming; a second tap shrinks it (#90). */
-  private toggleEnergyTile(cls: string): void {
-    this._bigTile = this._bigTile === cls ? null : cls;
   }
 
   private renderLegend() {
@@ -7655,6 +7678,23 @@ export class Fp3dView3d extends LitElement {
         color: #3d4d63;
       }
       /* at the top it sits under the energy strip and the walk button */
+      /* the clock with the weather tile beside it (#333): the row takes the clock's corner, the clock sits in it */
+      .fp3d-clockrow {
+        position: absolute;
+        z-index: 1;
+        display: flex;
+        align-items: stretch;
+        gap: 8px;
+        pointer-events: none;
+      }
+      .fp3d-clockrow > .fp3d-clock {
+        position: static;
+      }
+      .fp3d-clock-tr.fp3d-clockrow,
+      .fp3d-clock-br.fp3d-clockrow {
+        flex-direction: row-reverse;
+      }
+      /* at the top it sits under the energy strip and the walk button */
       .fp3d-clock-tl {
         top: 64px;
         left: 12px;
@@ -8369,14 +8409,29 @@ export class Fp3dView3d extends LitElement {
         text-overflow: ellipsis;
         max-width: 170px;
       }
-      /* the TV card (#281): a mouse makes it larger while it hovers, like the solar card; it can be hidden */
+      /* the TV card (#281): a mouse makes the whole box larger while it hovers, like the solar card (wider, the titles
+         in full), so nothing is cut off (#335); MEDIA_HOVER_W in the script keeps it on the screen; it can be hidden */
+      .fp3d-holo-media {
+        transition: width 140ms ease-out;
+      }
       @media (hover: hover) and (pointer: fine) {
         .fp3d-holo-media:hover {
           z-index: 6;
+          width: 288px;
         }
-        .fp3d-holo-media:hover .fp3d-holo-body {
-          scale: 1.22;
-          transform-origin: 0 100%;
+        .fp3d-holo-media.fp3d-holo-min:hover {
+          width: 200px;
+        }
+        .fp3d-holo-media:hover .fp3d-holo-titles b,
+        .fp3d-holo-media:hover .fp3d-holo-titles span {
+          max-width: none;
+          white-space: normal;
+          overflow-wrap: anywhere;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .fp3d-holo-media {
+          transition: none;
         }
       }
       .fp3d-holo-hide {
@@ -9005,34 +9060,16 @@ export class Fp3dView3d extends LitElement {
         backdrop-filter: blur(6px);
         font-variant-numeric: tabular-nums;
       }
-      /* a value tile grows when hovered, focused or tapped, so it reads without zooming in (#90) */
+      /* a value tile only lifts a hair when hovered (#316): no growing, no click */
       .fp3d-energy-tile {
         position: relative;
         pointer-events: auto;
-        cursor: zoom-in;
-        border: 0;
-        border-left: 3px solid var(--fp3d-line);
-        color: inherit;
-        text-align: left;
-        font: inherit;
-        transform-origin: top left;
-        transition: transform 160ms ease-out;
-      }
-      .fp3d-energy-big {
-        transform: scale(1.5);
-        z-index: 2;
-        cursor: zoom-out;
-      }
-      .fp3d-energy-tile:focus-visible {
-        transform: scale(1.5);
-        z-index: 2;
-        outline: 2px solid var(--fp3d-accent);
-        outline-offset: 2px;
+        transition: transform 180ms ease-out, box-shadow 180ms ease-out, border-left-color 180ms ease-out;
       }
       @media (hover: hover) {
         .fp3d-energy-tile:hover {
-          transform: scale(1.5);
-          z-index: 2;
+          transform: translateY(-1px);
+          box-shadow: var(--fp3d-shadow), 0 2px 8px color-mix(in srgb, var(--fp3d-accent) 28%, transparent);
         }
       }
       @media (prefers-reduced-motion: reduce) {
@@ -9156,15 +9193,9 @@ export class Fp3dView3d extends LitElement {
         .fp3d-stage:has(> .fp3d-walk-btn) .fp3d-energy {
           max-width: calc(100% - 20px - var(--fp3d-walk-right, 12px) - var(--fp3d-walk-w, 96px));
         }
-        /* the scrolling row would clip a scaled tile: there the enlarged tile gets bigger text instead (#90) */
-        .fp3d-energy .fp3d-energy-tile {
+        /* the scrolling row would clip a lifted tile */
+        .fp3d-energy .fp3d-energy-tile:hover {
           transform: none;
-        }
-        .fp3d-energy-big span {
-          font-size: 13px;
-        }
-        .fp3d-energy-big b {
-          font-size: 22px;
         }
         .fp3d-legend {
           bottom: auto;
