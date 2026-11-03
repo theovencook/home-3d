@@ -3451,10 +3451,6 @@ export class FloorplanViewer {
           if (!fv.glowSig) this.buildGlow(fv);
         }
         this.invalidate();
-        // the page's layout with the floor's pins and the view's cards, in a task of its own: the first frame reads
-        // the cards' sizes and would lay it all out itself
-        if (!fresh || this.disposed) return;
-        void nextTask().then(() => !this.disposed && this.host.getBoundingClientRect());
       });
     }
     this.applyTargets(previous.size === 0 || loading);
