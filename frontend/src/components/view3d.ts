@@ -107,6 +107,8 @@ const RACK_SPARK_MS = 6 * 3600000;
 const DETECT_LINGER_MS = 120000;
 /** How long a paused player keeps its now-playing card. */
 const PAUSED_CARD_MS = 10 * 60 * 1000;
+/** The TV or player card's width while hovered (#335), as the stylesheet has it: the card is placed and kept on screen for it. */
+const MEDIA_HOVER_W = 288;
 
 /** Pins of what a camera detects (Frigate and the like): a person, a vehicle, an animal, motion. */
 const DETECT_ICONS: Record<string, string> = {
@@ -2420,7 +2422,7 @@ export class Fp3dView3d extends LitElement {
     const dx = 34 * s;
     const dy = 46 * s;
     // the card's lower left corner (lower right seen from behind) sits up and to the side of the anchor
-    const cx = x + (facing ? dx : -dx);
+    let cx = x + (facing ? dx : -dx);
     let cy = y - dy;
     // cards that would cover one placed before step up above it (two devices side by side, D178);
     // the card's size is read now and then, not every frame
@@ -2431,10 +2433,24 @@ export class Fp3dView3d extends LitElement {
       size = { w: el.offsetWidth || 184, h: el.offsetHeight || 90, at: now };
       this.holoSizes.set(index, size);
     }
-    const w = size.w * s;
+    // a TV or player card grows wider under the mouse (#335): it is placed for that size and kept inside the stage
+    const media = el.classList.contains("fp3d-holo-media");
+    const w = (media ? Math.max(size.w, MEDIA_HOVER_W) : size.w) * s;
     const h = size.h * s;
-    const x0 = facing ? cx : cx - w;
-    const x1 = x0 + w;
+    let x0 = facing ? cx : cx - w;
+    let x1 = x0 + w;
+    if (media) {
+      const stage = this.renderRoot.querySelector<HTMLElement>(".fp3d-stage");
+      const sw = stage?.clientWidth ?? 0;
+      if (sw > 0) {
+        const shift = x1 > sw - 6 ? sw - 6 - x1 : x0 < 6 ? 6 - x0 : 0;
+        cx += shift;
+        x0 += shift;
+        x1 += shift;
+      }
+      const top = 6 - (cy - h);
+      if (top > 0 && stage?.clientHeight) cy += top;
+    }
     for (let pass = 0; pass < 6; pass++) {
       const hit = this.holoBoxes.find((b) => x0 < b.x1 + 4 && x1 > b.x0 - 4 && cy - h < b.y1 + 4 && cy > b.y0 - 4);
       if (!hit) break;
@@ -8345,14 +8361,29 @@ export class Fp3dView3d extends LitElement {
         text-overflow: ellipsis;
         max-width: 170px;
       }
-      /* the TV card (#281): a mouse makes it larger while it hovers, like the solar card; it can be hidden */
+      /* the TV card (#281): a mouse makes the whole box larger while it hovers, like the solar card (wider, the titles
+         in full), so nothing is cut off (#335); MEDIA_HOVER_W in the script keeps it on the screen; it can be hidden */
+      .fp3d-holo-media {
+        transition: width 140ms ease-out;
+      }
       @media (hover: hover) and (pointer: fine) {
         .fp3d-holo-media:hover {
           z-index: 6;
+          width: 288px;
         }
-        .fp3d-holo-media:hover .fp3d-holo-body {
-          scale: 1.22;
-          transform-origin: 0 100%;
+        .fp3d-holo-media.fp3d-holo-min:hover {
+          width: 200px;
+        }
+        .fp3d-holo-media:hover .fp3d-holo-titles b,
+        .fp3d-holo-media:hover .fp3d-holo-titles span {
+          max-width: none;
+          white-space: normal;
+          overflow-wrap: anywhere;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .fp3d-holo-media {
+          transition: none;
         }
       }
       .fp3d-holo-hide {
