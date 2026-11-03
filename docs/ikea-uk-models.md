@@ -403,3 +403,10 @@ brackets of the BERGSHULT shelves, the TJUSIG rack's slat detail and the SAMVERK
 | 44 | Hanger for door, white 35 cm | ENUDDEN | `storage` | done, 1 item |
 | 45 | Tray, brass-colour 38 cm | GLATTIS | `tray` | done, 1 item |
 | 46 | Tray, birch 44 cm | SKALA | `tray` | done, 1 item |
+
+### Additions (run 6)
+
+| # | Model | IKEA name | Group | Status |
+| --- | --- | --- | --- | --- |
+| 1 | Coffee table with mesh shelf 90x46 cm | FJÄLLBO | `table` | done, 1 item |
+| 2 | Shelving unit with mesh shelf 100x136 cm | FJÄLLBO | `storage` | done, 1 item |
