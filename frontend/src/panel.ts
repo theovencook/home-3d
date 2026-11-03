@@ -38,6 +38,7 @@ import type { ClockPos } from "./card-config.ts";
 import { clockLookOf, type ClockLook } from "./clock.ts";
 import { TimeTravel } from "./load-timetravel.ts";
 import { IdleClock, tabletIdleSeconds, tabletMode } from "./kiosk.ts";
+import type { SunHeight } from "./sun-path.ts";
 import type { HistorySpec } from "./timetravel/types.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 import { UndoHistory } from "./undo-history.ts";
@@ -126,6 +127,7 @@ export class Floorplan3dPanel extends LitElement {
     _floorPics: { state: true },
     _angleLock: { state: true },
     _windowSpill: { state: true },
+    _sunHeight: { state: true },
     _navButtons: { state: true },
     _trail: { state: true },
     _cameraWall: { state: true },
@@ -209,6 +211,7 @@ export class Floorplan3dPanel extends LitElement {
   /** 3D lock on this device: the angle stays fixed. */
   private declare _angleLock: boolean;
   private declare _windowSpill: boolean;
+  private declare _sunHeight: SunHeight;
   private declare _navButtons: boolean;
   /** Motion trail of the last half hour in 3D. */
   private declare _trail: boolean;
@@ -332,6 +335,8 @@ export class Floorplan3dPanel extends LitElement {
     this._floorPics = prefs.get("floor_pictures") === "1";
     this._angleLock = prefs.get("angle_lock") === "1";
     this._windowSpill = prefs.get("window_spill") === "1";
+    const sunHeight = prefs.get("sun_height");
+    this._sunHeight = sunHeight === "high" || sunHeight === "real" ? sunHeight : "auto";
     this._navButtons = prefs.get("nav") === "1";
     this._trail = prefs.get("trail") === "1";
     this._clean = prefs.get("clean") === "1";
@@ -1496,6 +1501,7 @@ export class Floorplan3dPanel extends LitElement {
           .keepView=${this._keepView}
           .angleLock=${this._angleLock}
           .windowSpill=${this._windowSpill}
+          .sunHeight=${this._sunHeight}
           .navButtons=${this._navButtons}
           ?trail=${this._trail}
           .cameraWall=${this._cameraWall && !tt}

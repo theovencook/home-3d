@@ -191,7 +191,7 @@ import type { ClockPos } from "../card-config.ts";
 import { CLOCK_LOOK, renderClock, type ClockLook } from "../clock.ts";
 import { Director, HOLD_DEFAULT, directorAny, doorbellCamera, doorbellEntities, doorbellRang, triggerFired, type DirectorSettings, type Shot } from "../director.ts";
 import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
-import { sunPath, type SunPath } from "../sun-path.ts";
+import { sunPath, type SunHeight, type SunPath } from "../sun-path.ts";
 import { cheapRate } from "../cheap-rate.ts";
 import { askConfirm } from "../ask.ts";
 import "./ask-dialog.ts";
@@ -366,6 +366,7 @@ export class Fp3dView3d extends LitElement {
     keepView: { attribute: false },
     angleLock: { attribute: false },
     windowSpill: { attribute: false },
+    sunHeight: { attribute: false },
     navButtons: { attribute: false },
     alerts: { attribute: false },
     alertJump: { attribute: false },
@@ -614,6 +615,8 @@ export class Fp3dView3d extends LitElement {
   declare angleLock: boolean;
   /** The light out of lit windows at night (#274); off unless the device's setting is on. */
   declare windowSpill: boolean;
+  /** How high the sun's way is drawn (#319; a device preference). */
+  declare sunHeight: SunHeight;
   /** The zoom, move and turn pad (#297, #307); a device choice, off unless the host turns it on. */
   declare navButtons: boolean;
   /** The stage is narrower than 700 px (smaller floor pictures, phone layout). */
@@ -893,6 +896,7 @@ export class Fp3dView3d extends LitElement {
     this.keepView = false;
     this.angleLock = false;
     this.windowSpill = false;
+    this.sunHeight = "auto";
     this.navButtons = false;
     this._narrowStage = false;
     this.alerts = true;
@@ -1121,6 +1125,7 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setKeepView(this.keepView);
       this.viewer.setAngleLock(this.angleLock);
       this.viewer.setWindowSpill(this.windowSpill);
+      this.viewer.setSunHeight(this.sunHeight);
       this.viewer.setTheme(this.effectiveTheme());
       this.viewer.setDescription((this.sceneLabel = translate(this.hass, flat ? "sr_plan" : "sr_scene")));
       this.viewer.setAccent(this.accent ?? null);
@@ -1295,6 +1300,7 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("keepView")) v.setKeepView(this.keepView);
     if (changed.has("angleLock")) v.setAngleLock(this.angleLock);
     if (changed.has("windowSpill")) v.setWindowSpill(this.windowSpill);
+    if (changed.has("sunHeight")) v.setSunHeight(this.sunHeight);
     if (changed.has("explode")) v.setExplode(this.explode);
     if (changed.has("keepRoof")) v.setKeepRoof(this.keepRoof);
     if (changed.has("hideRoof")) v.setHideRoof(this.hideRoof);

@@ -170,6 +170,8 @@ export const LOOK: Setting[] = [
   // #307: the zoom, move and turn pad on the view; off by default
   deviceSwitch("nav", "view3d", "show", "nav", false, "st_nav"),
   // #315: the two small switches that sat in the energy row of the 3D view (power flow lines, hologram cards) are View options now
+  // #319: how high the sun's way is drawn; the lighting and shadows keep the real sun angle
+  deviceChoice("sun_height", "view3d", "show", "sun_height", ["auto", "high", "real"], "auto", "st_sun_height", opts([["auto", "sun_height_auto"], ["high", "sun_height_high"], ["real", "sun_height_real"]]), "st_sun_height_hint"),
   ...["flows", "holos"].map((k) => deviceSwitch(k, "view3d", "show", k, k === "holos", k as TextKey, `${k}_hint` as TextKey)),
 ];
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sunPath, sunPosition } from "./sun-path.ts";
+import { sunArcStretch, sunPath, sunPosition } from "./sun-path.ts";
 
 // Berlin, midsummer: the sun stands about 61° high in the south at noon and rises in the north-east before 5:00 local time
 const BERLIN: [number, number] = [52.52, 13.405];
@@ -32,4 +32,18 @@ test("no sunrise in the polar night", () => {
   const path = sunPath(Date.UTC(2026, 11, 21, 12, 0), 78.2, 15.6);
   assert.equal(path.rise, null);
   assert.equal(path.points.length, 0);
+});
+
+test("the drawn sun path clears the highest roof by default and never lowers (#319)", () => {
+  // a winter sun 15 degrees high over a 9 m house, dome radius 8 m: the dome's top is 2.1 m up as it was
+  const r = 8;
+  const k = sunArcStretch("auto", 15, r, 9);
+  assert.ok(Math.sin((15 * Math.PI) / 180) * r * k >= 10 - 1e-9, "the top of the path is 1 m over the roof");
+  assert.ok(k > 1 && k <= 10);
+  // a high summer sun over a low house needs no stretch
+  assert.equal(sunArcStretch("auto", 60, 12, 3), 1);
+  // "higher" goes half as far again; "real" keeps the old height; a polar day's tiny peak is capped
+  assert.ok(sunArcStretch("high", 15, r, 9) > k);
+  assert.equal(sunArcStretch("real", 15, r, 9), 1);
+  assert.equal(sunArcStretch("auto", 0, 8, 12), 10);
 });

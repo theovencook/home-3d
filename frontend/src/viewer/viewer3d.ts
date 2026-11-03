@@ -84,7 +84,7 @@ import { watchContext } from "./context-loss.ts";
 import { keepRender } from "./keep-render.ts";
 import { deviceTier, shadowPlan, type ShadowPlan } from "../realistic.ts";
 import { houseShadow, shadowBox } from "./sun-shadow.ts";
-import type { SunPath } from "../sun-path.ts";
+import { sunArcStretch, type SunHeight, type SunPath } from "../sun-path.ts";
 import { GROUND, groundFace, groundFloor, roofFaces, roofWindowRoom, wallFaces } from "../solar.ts";
 import { buildSolarLive, solarLiveMaterial, writeSolarLevels, type SolarLive } from "./solar-live.ts";
 import { buildPools, disposePools, type PoolPiece } from "./pool-water.ts";
@@ -667,6 +667,8 @@ export class FloorplanViewer {
   /** The sun's arc in the sky and the house's shadow on the ground (built only when the sun has moved a little). */
   private sunFx = new SunFx();
   private sunPath: SunPath | null = null;
+  /** How high the sun's way is drawn (#319): over the highest roof, higher, or as the real sun angle stands. */
+  private sunHeight: SunHeight = "auto";
   private shadowSig = "";
   /** The GL context of the current renderer is gone (#163): no frames until it is back. */
   private contextLost = false;
@@ -1839,6 +1841,14 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
+  /** How high the sun's way is drawn (#319); the sun's real angle still lights and shades the house. */
+  setSunHeight(mode: SunHeight): void {
+    if (mode === this.sunHeight) return;
+    this.sunHeight = mode;
+    this.buildSunFx();
+    this.invalidate();
+  }
+
   /** Weather outside: particles over the plot, fog, a dimmer sun; nothing on the tablet level but the dimming. */
   setWeather(weather: WeatherView | null): void {
     this.weather = weather;
@@ -1987,7 +1997,9 @@ export class FloorplanViewer {
     const path = this.sunPath;
     const arc = on && !!path && path.points.length > 1 && sun.elevation > -3;
     const frame = arc ? this.arcFrame() : null;
-    const arcSig = arc && frame ? `${this.theme},${sun.elevation.toFixed(1)},${sun.azimuth.toFixed(1)},${this.compassLetters.join("")},${path.points[0].t},${north},${frame.x.toFixed(2)},${frame.z.toFixed(2)},${frame.y.toFixed(2)},${frame.r.toFixed(2)},${cloud.toFixed(1)}` : "";
+    const top = arc && frame ? this.houseTop() : 0;
+    const k = arc && frame ? sunArcStretch(this.sunHeight, path.points.reduce((m, p) => Math.max(m, p.elevation), 0), frame.r, top - frame.y) : 1;
+    const arcSig = arc && frame ? `${k.toFixed(2)},${this.theme},${sun.elevation.toFixed(1)},${sun.azimuth.toFixed(1)},${this.compassLetters.join("")},${path.points[0].t},${north},${frame.x.toFixed(2)},${frame.z.toFixed(2)},${frame.y.toFixed(2)},${frame.r.toFixed(2)},${cloud.toFixed(1)}` : "";
     if (arcSig === this.arcSig) return;
     this.arcSig = arcSig;
     if (!arcSig || !frame || !path || !sun) return this.sunFx.hideArc();
@@ -1995,7 +2007,7 @@ export class FloorplanViewer {
     const at = (azimuth: number, elevation: number, lift = 0): [number, number, number] => {
       const e = Math.max(0, elevation) * DEG;
       const a = north + azimuth * DEG;
-      return [frame.x + Math.sin(a) * Math.cos(e) * frame.r, frame.y + Math.sin(e) * frame.r + lift, frame.z - Math.cos(a) * Math.cos(e) * frame.r];
+      return [frame.x + Math.sin(a) * Math.cos(e) * frame.r, frame.y + Math.sin(e) * frame.r * k + lift, frame.z - Math.cos(a) * Math.cos(e) * frame.r];
     };
     const fade = 1 - 0.7 * cloud;
     const now = Date.now();
@@ -2012,6 +2024,18 @@ export class FloorplanViewer {
       fade,
       light: this.theme !== "neon",
     });
+  }
+
+  /** The highest point of the plan (a roof's ridge, else the top of the highest floor), in the plan's heights (#319). */
+  private houseTop(): number {
+    const b = this.building;
+    let top = b ? Math.max(0, ...b.floors.map((f) => f.elevation + f.height)) : 0;
+    for (const g of this.roofGeos) {
+      let high = -Infinity;
+      for (let i = 1; i < g.solid.p.length; i += 3) high = Math.max(high, g.solid.p[i]);
+      if (high > -Infinity) top = Math.max(top, g.floor.elevation + g.base + high);
+    }
+    return top;
   }
 
   /** Where the sun's arc stands: around the middle of the house, a little wider than the house, on its ground. */

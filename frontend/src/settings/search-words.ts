@@ -120,6 +120,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   keep_view: ["height", "stay", "view", "position", "follow", "switching"],
   angle_lock: ["rotation", "fixed", "spin", "orbit", "drag", "freeze"],
   nav: ["arrows", "zoom", "rotate", "touch", "pad", "onscreen", "turn", "pan"],
+  sun_height: ["sun", "arc", "path", "ring", "roof", "above", "dome", "sky"],
   flows: ["power", "cables", "lines", "glowing", "meter", "consumers", "grid"],
   holos: ["hologram", "glass", "cards", "info", "plant", "devices", "solar"],
   floor_pictures: ["picker", "thumbs", "gallery", "panel", "level", "selector"],

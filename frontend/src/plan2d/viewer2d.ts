@@ -367,6 +367,7 @@ export class Plan2dViewer implements ViewerSurface {
   setSound(): void {}
   setStats(): void {}
   setSun(): void {}
+  setSunHeight(): void {}
   setSunPath(): void {}
   setSurfaceGrab(): void {}
   setTrail(): void {}

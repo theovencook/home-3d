@@ -236,3 +236,16 @@ test("Power flow and Holograms: View switches on this device, flows off and holo
   const out = flat(viewPanel().render());
   assert.ok(out.includes("Power flow") && out.includes("Holograms"));
 });
+
+test("Sun path height: a device choice, over the roof by default, on the Settings page (#319)", () => {
+  store.clear();
+  const s = viewSetting("sun_height")!;
+  assert.ok(s, "a Settings row");
+  const env = { building: null, hass: undefined, prefs: { get: (k: string) => store.get(`home3d.${k}`) ?? null, set: (k: string, v: string | null) => void (v === null ? store.delete(`home3d.${k}`) : store.set(`home3d.${k}`, v)) } } as never;
+  assert.equal(s.default, "auto");
+  assert.equal(s.read(env), "auto");
+  s.write!(env, "real" as never);
+  assert.equal(store.get("home3d.sun_height"), "real");
+  store.set("home3d.sun_height", "junk");
+  assert.equal(s.read(env), "auto", "anything else reads as the default");
+});
