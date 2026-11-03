@@ -4,6 +4,7 @@
 // element takes the properties it was given when its code arrives. The room panel (#245, load-parts.ts) follows once the
 // view is there and the page is idle, so it is not in the way of the first picture; a tapped room loads it at once.
 
+import { guardImport } from "./guard-import.ts";
 import { loadRoomPanel } from "./load-parts.ts";
 import { need } from "./lazy-part.ts";
 
@@ -18,7 +19,7 @@ let loading: Promise<void> | undefined;
 
 /** Loads the view once; a failed download is forgotten, so the next call tries again. */
 export function loadView(): Promise<void> {
-  loading ??= import("./components/view3d.ts").then(
+  loading ??= guardImport(import("./components/view3d.ts")).then(
     () => roomPanelWhenIdle(),
     (err: unknown) => {
       loading = undefined;

@@ -30,9 +30,10 @@ HISTORY_INTERVAL = 600
 
 # The frontend files are served under /api/ (#218): Home Assistant's service worker takes /api/ paths from the network
 # only, while it answers any other path, and Home Assistant's own page, from its cache first. So the main bundle keeps
-# ONE URL for every build and every restart, and a page the service worker kept from before an update names the same
-# module as the panel's module_url: the browser runs one copy of the bundle, not two. The files stay fresh because
-# they are sent with no-cache (a short 304 when unchanged), not because their URL changes.
+# ONE URL for every restart, and a page the service worker kept from before an update names the same module as the
+# panel's module_url: the browser runs one copy of the bundle, not two. Since #340 that one URL carries the build id
+# (`?v=`), the same everywhere (extra module, panel, card loader), so an update is a new URL and a cache with a time
+# of its own (a proxy) cannot keep the old entry. The URL without the id still works and is sent with no-cache.
 URL_BASE = "/api/home_3d/static"
 # the path before #218, still served: a cached page or an old dashboard resource can name it
 LEGACY_URL_BASE = "/home_3d_static"
