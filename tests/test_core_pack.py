@@ -271,7 +271,7 @@ def test_the_run6_library_items_are_valid_and_their_packs_moved_on() -> None:
 def test_the_smastad_platsa_white_birch_units_are_in_the_ikea_pack_at_ikeas_size() -> None:
     """Run 6: the 6-drawer bookcase and the 2-door wardrobe, white with birch fronts, 60 x 57 x 181 cm."""
     folder = BUNDLED / "theovencook.ikea-uk" / "kids"
-    for name in ("smastad_platsa_bookcase_6_drawers_60x57x181", "smastad_platsa_wardrobe_60x57x181"):
+    for name in ("smastad_platsa_bookcase_6dr_60x57x181", "smastad_platsa_wardrobe_60x57x181"):
         item = json.loads((folder / f"{name}.json").read_text(encoding="utf-8"))
         assert item["size"] == [0.6, 0.57, 1.81]
         assert item["ikea"] == "SMÅSTAD / PLATSA"

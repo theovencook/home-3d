@@ -155,9 +155,11 @@ test("the run 6 library items ship in their packs and are found by their everyda
   assert.deepEqual(skruvby?.size, [0.6, 0.6, 0.5]);
   assert.equal(skruvby?.ikea, "SKRUVBY");
 
+});
+
 test("the SMÅSTAD / PLATSA white/birch bookcase and wardrobe are in the IKEA UK pack at IKEA's size (run 6)", () => {
   const ikea = packs.find((p) => p.pack.id === "theovencook.ikea-uk");
-  for (const id of ["smastad_platsa_bookcase_6_drawers_60x57x181", "smastad_platsa_wardrobe_60x57x181"]) {
+  for (const id of ["smastad_platsa_bookcase_6dr_60x57x181", "smastad_platsa_wardrobe_60x57x181"]) {
     const item = ikea?.pack.items.find((i) => i.id === id);
     assert.ok(item, id);
     assert.deepEqual(item.size, [0.6, 0.57, 1.81]);
