@@ -584,8 +584,6 @@
  "view_clock_style": "Uhr-Stil",
  "view_more_settings": "Weitere Ansichtseinstellungen",
  "view_home_settings": "Sonne, Fensterlicht und Warnungen sind Einstellungen des Zuhauses",
- "view_sheet_full": "Das ganze Fenster zeigen",
- "view_sheet_half": "Das Fenster halb zeigen",
  "theme_group_auto": "Automatisch",
  "theme_group_fixed": "Fest",
  "theme_hint": "Automatisch folgt dem Design von Home Assistant oder der Sonne. Fest bleibt immer gleich.",

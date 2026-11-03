@@ -131,7 +131,7 @@ test("a wall tablet's View panel offers only what the 3D shows (and 3D or 2D, sl
   const at = out.indexOf("<fp3d-view-panel");
   assert.ok(at > 0);
   assert.ok(out.slice(at).includes("aria-label=2D or 3D"), "3D or 2D inside the panel");
-  assert.match(out, />\s*View <span class="fp3d-caret"/, "the chip is called View");
+  assert.match(out, /<span class="fp3d-bar-word">View<\/span> <span class="fp3d-caret"/, "the chip is called View");
 });
 
 test("Appearance is one drop-down: Automatic (each saying what it shows now) and Fixed (#247)", () => {

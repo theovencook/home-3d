@@ -191,8 +191,6 @@ const en = {
   view_clock_style: "Clock style",
   view_more_settings: "More view settings",
   view_home_settings: "Sun, window light and warnings are home settings",
-  view_sheet_full: "Show the whole panel",
-  view_sheet_half: "Show half the panel",
   theme_group_auto: "Automatic",
   theme_group_fixed: "Fixed",
   theme_hint: "Automatic follows Home Assistant's theme or the sun. Fixed never changes.",

@@ -260,3 +260,38 @@ test("Back leaving the panel closes what is open, and the panel's page stays as 
   assert.equal(p._mode, "view");
   p.navRelease();
 });
+
+test("a picked floor and an open room are steps of Back, as the bar's Back button takes them (#346)", () => {
+  visit("/home_3d");
+  const start = at;
+  const p = panel();
+  const floor = (id: string) => ({ id, name: id, rooms: [{ id: `${id}r`, name: "Room", points: [[0, 0], [4, 0], [4, 3], [0, 3]], area_id: null }], furniture: [], placements: [], openings: [], walls: [], height: 2.5, elevation: 0 });
+  p.data.building.floors = [floor("f1"), floor("f2")];
+  const step = () => p.syncBack(new Map([["_floorId", undefined], ["_roomId", undefined]]));
+  p._floorId = "f1";
+  step();
+  assert.equal(at, start + 1, "a floor is an entry");
+  p._floorId = "f2";
+  step();
+  assert.equal(at, start + 1, "another floor is the same step");
+  p._roomId = "f2r";
+  step();
+  assert.equal(at, start + 2, "a room on it is the next");
+  back();
+  assert.equal(p._roomId, null, "Back closes the room first");
+  assert.equal(p._floorId, "f2");
+  back();
+  assert.equal(p._floorId, null, "then the whole house");
+  forward();
+  assert.equal(p._floorId, "f2", "Forward picks the floor again");
+  // the bar's Back button: the same step, and its entry goes with it
+  p._roomId = "f2r";
+  step();
+  const there = at;
+  p.back();
+  step();
+  run();
+  assert.equal(p._roomId, null);
+  assert.equal(at, there - 1, "the room's entry goes with it");
+  p.navRelease();
+});
