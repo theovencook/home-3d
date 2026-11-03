@@ -216,3 +216,23 @@ test("Navigation buttons: a View switch, off by default, kept on this device (#3
   s.write!({ building: null, hass: undefined, prefs: { get: (k: string) => store.get(`home3d.${k}`) ?? null, set: (k: string, v: string | null) => void (v === null ? store.delete(`home3d.${k}`) : store.set(`home3d.${k}`, v)) } } as never, true as never);
   assert.equal(store.get("home3d.nav"), "1");
 });
+
+test("Power flow and Holograms: View switches on this device, flows off and holograms on by default, under the old keys (#315)", () => {
+  store.clear();
+  const ctx = { floors: 1, floorOpen: false, roof: false, plan2d: false, kiosk: false };
+  for (const kiosk of [false, true]) {
+    const ids = viewSections({ ...ctx, kiosk }).flatMap((sec) => sec.rows.map((r) => r.id));
+    assert.ok(ids.includes("flows") && ids.includes("holos"), `kiosk ${kiosk}`);
+  }
+  const env = { building: null, hass: undefined, prefs: { get: (k: string) => store.get(`home3d.${k}`) ?? null, set: (k: string, v: string | null) => void (v === null ? store.delete(`home3d.${k}`) : store.set(`home3d.${k}`, v)) } } as never;
+  const flows = viewSetting("flows")!;
+  const holos = viewSetting("holos")!;
+  assert.equal(flows.read(env), false);
+  assert.equal(holos.read(env), true);
+  flows.write!(env, true as never);
+  holos.write!(env, false as never);
+  assert.equal(store.get("home3d.flows"), "1", "the key the energy row's own button used");
+  assert.equal(store.get("home3d.holos"), "0");
+  const out = flat(viewPanel().render());
+  assert.ok(out.includes("Power flow") && out.includes("Holograms"));
+});

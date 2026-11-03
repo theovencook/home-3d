@@ -169,6 +169,8 @@ export const LOOK: Setting[] = [
   deviceSwitch("window_glow", "view3d", "show", "window_spill", false, "window_glow", "window_glow_hint", ["night", "glow", "light", "windows", "spill"]),
   // #307: the zoom, move and turn pad on the view; off by default
   deviceSwitch("nav", "view3d", "show", "nav", false, "st_nav"),
+  // #315: the two small switches that sat in the energy row of the 3D view (power flow lines, hologram cards) are View options now
+  ...["flows", "holos"].map((k) => deviceSwitch(k, "view3d", "show", k, k === "holos", k as TextKey, `${k}_hint` as TextKey)),
 ];
 
 /**
@@ -230,7 +232,7 @@ export function viewSections(ctx: ViewContext): ViewSection[] {
   if (several && ctx.floorOpen && !ctx.plan2d) show.push({ id: "floor_stack" });
   show.push({ id: "heat" }, { id: "display" });
   if (ctx.roof && !ctx.plan2d) show.push({ id: "roof", disabled: ctx.floorOpen });
-  show.push({ id: "trail" }, { id: "weather" }, { id: "nav" });
+  show.push({ id: "trail" }, { id: "weather" }, { id: "nav" }, ...["flows", "holos"].map((id) => ({ id })));
   const shows: ViewSection = { id: "show", title: "st_card_show", rows: show, hint: show.some((r) => r.disabled) ? "pick_all_floors" : undefined, openOnPhone: false };
   if (ctx.kiosk) return [{ ...shows, openOnPhone: true }];
   return [
