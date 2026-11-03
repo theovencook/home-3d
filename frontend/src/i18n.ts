@@ -1133,6 +1133,8 @@ const en = {
   room_hide_named: "Hide {room} from this list",
   room_unhide_named: "Show {room} in this list again",
   rooms_show_hidden: "Show hidden",
+  door_pins: "Door sensor pins",
+  door_pins_hint: "Door and window contact sensors show their state on the door or window itself. Switch this on to also show their pins.",
 };
 
 type Key = keyof typeof en | keyof typeof lateEnglish;
