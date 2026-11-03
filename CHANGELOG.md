@@ -6,6 +6,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 ## Unreleased
 
 - Settings, Extensions, the editor and the ask dialogs (New home, Rename, Delete …) follow the chosen look: light under the Day look or a light Home Assistant theme, high contrast under High contrast (#263).
+- On a phone the View sheet opens at half height so the house stays in sight; drag its handle up (or tap it) for all of it, down to shrink or close it (#263).
 - Wall tablets load less: the texts only the editor, Settings, time travel, the locating assistant and the microphone probe show (two thirds of the English table) are a lazy chunk, fetched when one of those opens. First-paint gzip 500.1 -> 460.8 KB (run 6 trim)
 - Holiday dates are rules instead of raw days: a fixed date, days from Easter (Good Friday, Easter Monday, Mothering Sunday, Pancake Day), the n-th or last weekday of a month, or a one-off window, each with a length and optional start and end times. Each holiday shows when it is next on, lists its next three windows, adds and removes rules (remove has Undo) and has a Show now button; when two holidays overlap the shorter one shows. Old dates load unchanged as fixed date rules (#339).
 - Any item can show or hide from an entity's state: show it when the entity is on, off or has a state you type, with a choice for an unavailable entity (keeps showing by default); it combines with the date and time intervals, hides in 3D and 2D view and stays in the editor, dimmed (#338).

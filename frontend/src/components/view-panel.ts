@@ -5,7 +5,9 @@
 // the main bundle (load-parts.ts): it loads when the View button is first pointed at or pressed.
 //
 // Wide and compact screens: a floating panel above the View button. Phones (phone.ts): a bottom sheet whose
-// Appearance and Device icons sections start open and the others folded with a one-line summary. Escape (handled by
+// Appearance and Device icons sections start open and the others folded with a one-line summary. The sheet opens at
+// half height so the house stays in sight above it (#263); dragging its handle up (or tapping it) shows all of it,
+// dragging down shrinks it again and from half height closes it. Escape (handled by
 // the panel, panel.ts) closes it and puts the focus back on the View button.
 
 import { defineElement } from "../define.ts";
@@ -48,16 +50,29 @@ const TICK = html`<svg class="vp-tick" viewBox="0 0 24 24" width="14" height="14
 /** Whether a scrolling box has more below what it shows (1 px of rounding allowed) (#259). */
 export const moreBelow = (top: number, height: number, scrollHeight: number): boolean => top + height < scrollHeight - 1;
 
+/**
+ * What a drag of the phone sheet's handle does (#263), from its height and how far it went (px, down positive): up
+ * shows all of it, down shrinks it, and down from half height closes it. A short move is a tap (the handle's click).
+ */
+export function sheetStep(full: boolean, dy: number): "full" | "half" | "close" | null {
+  if (dy < -30) return "full";
+  if (dy > 30) return full ? "half" : "close";
+  return null;
+}
+
 export class Fp3dViewPanel extends LitElement {
   static properties = {
     hass: { attribute: false },
     context: { attribute: false },
     _phone: { state: true },
+    _full: { state: true },
   };
 
   declare hass: HomeAssistant | undefined;
   declare context: ViewContext;
   private declare _phone: boolean;
+  /** The phone sheet shows at full height (#263); it opens at half height. */
+  private declare _full: boolean;
   private phoneQuery: MediaQueryList | null = null;
   private readonly onPhone = () => (this._phone = !!this.phoneQuery?.matches);
 
@@ -65,6 +80,7 @@ export class Fp3dViewPanel extends LitElement {
     super();
     this.context = { floors: 1, floorOpen: false, roof: false, plan2d: false, kiosk: false };
     this._phone = false;
+    this._full = false;
   }
 
   connectedCallback(): void {
@@ -98,6 +114,23 @@ export class Fp3dViewPanel extends LitElement {
     this.sizer = null;
   }
 
+  /** Where a drag of the phone sheet's handle started (#263); null while none is going. */
+  private sheetFrom: number | null = null;
+
+  private sheetDown(e: PointerEvent): void {
+    if (!this._phone || (e.target as HTMLElement).closest?.("button:not(.vp-grab)")) return;
+    this.sheetFrom = e.clientY;
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  }
+
+  private sheetUp(e: PointerEvent): void {
+    if (this.sheetFrom === null) return;
+    const step = sheetStep(this._full, e.clientY - this.sheetFrom);
+    this.sheetFrom = null;
+    if (step === "close") this.emit("view-close");
+    else if (step) this._full = step === "full";
+  }
+
   /** A non-modal dialog takes the focus when it opens, so the keyboard and a screen reader are in it at once. */
   protected firstUpdated(changed: PropertyValues): void {
     super.firstUpdated(changed);
@@ -112,6 +145,7 @@ export class Fp3dViewPanel extends LitElement {
 
   protected updated(changed: PropertyValues): void {
     super.updated(changed);
+    this.toggleAttribute("full", this._phone && this._full);
     this.markMore();
   }
 
@@ -335,13 +369,15 @@ export class Fp3dViewPanel extends LitElement {
       <header
         class="vp-head"
         title=${this._phone ? nothing : this.t("float_drag_hint")}
-        @pointerdown=${(e: PointerEvent) => !this._phone && this.drag.begin(e)}
+        @pointerdown=${(e: PointerEvent) => (this._phone ? this.sheetDown(e) : this.drag.begin(e))}
         @pointermove=${(e: PointerEvent) => this.drag.move(e)}
-        @pointerup=${() => this.drag.end()}
-        @pointercancel=${() => this.drag.end()}
+        @pointerup=${(e: PointerEvent) => (this.sheetUp(e), this.drag.end())}
+        @pointercancel=${() => ((this.sheetFrom = null), this.drag.end())}
         @dblclick=${() => this.drag.reset()}
       >
-        <span class="vp-grab" aria-hidden="true"></span>
+        ${this._phone
+          ? html`<button type="button" class="vp-grab" aria-expanded=${this._full ? "true" : "false"} aria-label=${this.t(this._full ? "view_sheet_half" : "view_sheet_full")} @click=${() => (this._full = !this._full)}></button>`
+          : html`<span class="vp-grab" aria-hidden="true"></span>`}
         <h2 id="vp-title">${this.t("view_btn")}</h2>
         <span class="vp-scope">${this.t("view_scope")}</span>
         ${this.drag.offset && !this._phone ? html`<button type="button" class="vp-snap" title=${this.t("float_snap_back")} aria-label=${this.t("float_snap_back")} @click=${() => this.drag.reset()}>⤒</button>` : nothing}
@@ -656,8 +692,12 @@ export class Fp3dViewPanel extends LitElement {
           bottom: 0;
           transform: none;
           width: auto;
-          max-height: 78%;
+          /* half height so the house stays in sight (#263); the handle shows all of it */
+          max-height: 50%;
           z-index: 40;
+        }
+        :host([full]) {
+          max-height: calc(100% - 12px);
         }
         .vp {
           border-radius: 14px 14px 0 0;
@@ -673,11 +713,25 @@ export class Fp3dViewPanel extends LitElement {
         .vp-grab {
           display: block;
           position: absolute;
-          top: 6px;
+          top: 0;
           left: 50%;
+          width: 88px;
+          height: 22px;
+          margin-left: -44px;
+          padding: 0;
+          border: 0;
+          background: none;
+          cursor: grab;
+          touch-action: none;
+        }
+        /* the handle's bar; the button around it is a larger target */
+        .vp-grab::before {
+          content: "";
+          position: absolute;
+          top: 6px;
+          left: 26px;
           width: 36px;
           height: 4px;
-          margin-left: -18px;
           border-radius: 2px;
           background: var(--fp3d-line);
         }
@@ -690,7 +744,7 @@ export class Fp3dViewPanel extends LitElement {
         }
         .vp-head {
           cursor: default;
-          touch-action: auto;
+          touch-action: none;
         }
         .vp-close {
           border: 1px solid var(--fp3d-line);
