@@ -323,3 +323,21 @@ async def test_a_new_home_from_an_older_plan_is_migrated(hass: HomeAssistant) ->
     newer = {**BUILDING, "version": PLAN_VERSION + 1}
     copied = await hass.data[DOMAIN].async_create_home("Newer", copy.deepcopy(newer))
     assert copied.read_only and copied.building == newer
+
+
+def test_a_plan_from_before_existing_rate_sensors_needs_no_migration() -> None:
+    """#323 adds optional energy fields only: a stored plan without them is passed on as it is (no new version) and
+    loads with its rates set up here, as before; its stored energy keys keep their values."""
+    stored = {
+        **empty_building(),
+        "energy": {"tariff": "sensor.sample_price", "cheap_from": "23:00", "cheap_to": "06:00", "gas": None},
+    }
+    kept = copy.deepcopy(stored)
+    assert migrate_plan(stored) is stored
+    loaded = BUILDING_SCHEMA(stored)
+    assert stored == kept, "the stored plan is left as it was"
+    assert loaded["version"] == PLAN_VERSION
+    assert all(loaded["energy"][key] == value for key, value in kept["energy"].items())
+    assert loaded["energy"]["rates_from"] == "here"
+    # a version-1 plan gets the same on its way up
+    assert BUILDING_SCHEMA(_plan("v1-lights.json"))["energy"]["rates_from"] == "here"

@@ -94,3 +94,12 @@ test("the heat legend is a button that folds to a slim bar and back (#310)", () 
   el.toggleLegend();
   assert.equal(el._legendMin, false);
 });
+
+test("with existing sensors today's cost shows as a tile of its own; net when earnings are taken off (#323)", () => {
+  const el = viewer();
+  assert.doesNotMatch(flat(el.renderEnergy()), /fp3d-energy-cost/, "no cost sensors: no tile");
+  el._costs = { net: false, value: "£1.20" };
+  assert.match(flat(el.renderEnergy()), /fp3d-energy-tile fp3d-energy-cost[^>]*>\s*<span>Cost today<\/span><b>£1.20<\/b>/);
+  el._costs = { net: true, value: "£0.80" };
+  assert.match(flat(el.renderEnergy()), /<span>Net cost today<\/span><b>£0.80<\/b>/);
+});

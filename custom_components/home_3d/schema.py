@@ -1196,6 +1196,12 @@ ENERGY_DEFAULTS: dict[str, Any] = {
     "cheap_from": None,
     "cheap_to": None,
     "systems": [],
+    "rates_from": "here",
+    "rate_entity": None,
+    "cheap_states": [],
+    "price_fixed": None,
+    "cost_sensors": [],
+    "earning_sensors": [],
 }
 
 # Further inverter / battery setups (#285). The top-level sensors of the energy settings are setup 1 and stay as they
@@ -1218,6 +1224,14 @@ ENERGY_SYSTEM_SCHEMA = vol.Schema(
 )
 MAX_ENERGY_SYSTEMS = 8
 
+RATES_FROM = ("here", "sensors")
+MAX_RATE_SOURCES = 20
+# cost and earning sources (#323): entity ids or statistic ids (an external statistic has a colon in place of the dot)
+_RATE_SOURCES = vol.All([vol.All(str, vol.Length(min=1, max=255))], vol.Length(max=MAX_RATE_SOURCES))
+_CHEAP_STATES = vol.All([vol.All(str, vol.Length(max=255))], vol.Length(max=MAX_RATE_SOURCES))
+# a price per kWh (may be negative: some tariffs pay for use at times)
+_PRICE = vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000)))
+
 # Power sensors in watts: grid positive = import, battery positive = discharging (both can be inverted)
 ENERGY_SCHEMA = vol.Schema(
     {
@@ -1239,6 +1253,15 @@ ENERGY_SCHEMA = vol.Schema(
         vol.Optional("cheap_from", default=None): _TIME,
         vol.Optional("cheap_to", default=None): _TIME,
         vol.Optional("systems", default=list): vol.All([ENERGY_SYSTEM_SCHEMA], vol.Length(max=MAX_ENERGY_SYSTEMS)),
+        # where rates and costs come from (#323): "here" (the cheap rate above; what a plan without the field means) or
+        # "sensors" (Home Assistant's own: a tariff entity and the states of it that are cheap, a fixed price from the
+        # energy dashboard when there is no price sensor in `tariff`, cost and export earning sensors or statistics)
+        vol.Optional("rates_from", default="here"): vol.In(RATES_FROM),
+        vol.Optional("rate_entity", default=None): _ENTITY,
+        vol.Optional("cheap_states", default=list): _CHEAP_STATES,
+        vol.Optional("price_fixed", default=None): _PRICE,
+        vol.Optional("cost_sensors", default=list): _RATE_SOURCES,
+        vol.Optional("earning_sensors", default=list): _RATE_SOURCES,
     },
     extra=vol.ALLOW_EXTRA,
 )

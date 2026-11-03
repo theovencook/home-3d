@@ -45,7 +45,7 @@ import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, bi
 import { BAR_RGB, CHARGE_BAR_COUNT, chargeBars, DARK_BAR_RGB } from "../charge-bars.ts";
 import { batteryCharge, deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, type EnergyPrefs, fieldLevels, fieldPowers, findConsumers, flowDots, isLoad, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type SolarDay, type FlowKind, type StatRow } from "../energy.ts";
 import { fieldFace, fieldSize, roofFaces, roofWindowRoom } from "../solar.ts";
-import { type CustomButton, type EntityRef, DEFAULT_HOLOGRAM, lockAlong, type PoolPipe, type RoofWindow, type SolarField, uid } from "../model.ts";
+import { type CustomButton, type EnergySettings, type EntityRef, DEFAULT_HOLOGRAM, lockAlong, type PoolPipe, type RoofWindow, type SolarField, uid } from "../model.ts";
 
 /** A service call from the 3D view; a refused one shows a short message instead of doing nothing (#171). */
 function safeCall(hass: HomeAssistant, domain: string, service: string, data: Record<string, unknown>): void {
@@ -192,7 +192,7 @@ import { CLOCK_LOOK, renderClock, type ClockLook } from "../clock.ts";
 import { Director, HOLD_DEFAULT, directorAny, doorbellCamera, doorbellEntities, doorbellRang, triggerFired, type DirectorSettings, type Shot } from "../director.ts";
 import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
 import { sunPath, type SunPath } from "../sun-path.ts";
-import { cheapRate } from "../cheap-rate.ts";
+import { cheapRate, ratesFromSensors } from "../cheap-rate.ts";
 import { askConfirm } from "../ask.ts";
 import "./ask-dialog.ts";
 import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
@@ -322,6 +322,7 @@ export class Fp3dView3d extends LitElement {
     _rows: { state: true },
     _meters: { state: true },
     _cheap: { state: true },
+    _costs: { state: true },
     _wires: { state: true },
     _wireKwh: { state: true },
     _wireOpen: { state: true },
@@ -982,8 +983,12 @@ export class Fp3dView3d extends LitElement {
     clearInterval(this.wireTimer);
     clearInterval(this.meterTimer);
     this.meterTimer = undefined;
+    clearInterval(this.costTimer);
+    this.costTimer = undefined;
+    this.costFetch = null;
     this.wireKey = "";
     this.meterKey = "";
+    this.costKey = "";
     document.removeEventListener("visibilitychange", this.onVisible);
     this.wallWin?.dispose();
     this.taps.cancel();
@@ -1937,7 +1942,10 @@ export class Fp3dView3d extends LitElement {
     // the cheap rate (#29): the configured entity or daily window; none configured, no badge
     const cheap = cheapRate(b.energy, hass.states, new Date(this.now()));
     if (cheap !== this._cheap) this._cheap = cheap;
-    const hasEnergy = summary.grid !== null || summary.solar !== null || summary.battery !== null || summary.tariff !== null || cheap !== null;
+    // existing sensors (#323): today's cost from the plan's cost sensors
+    const costIds = ratesFromSensors(b.energy) ? [...(b.energy.cost_sensors ?? []), ...(b.energy.earning_sensors ?? [])] : [];
+    this.watchCosts(costIds.length ? b.energy : null);
+    const hasEnergy = summary.grid !== null || summary.solar !== null || summary.battery !== null || summary.tariff !== null || cheap !== null || costIds.length > 0;
     const energy = hasEnergy ? summary : null;
     // a new object would make Lit render again; only changed values do
     if (JSON.stringify(energy) !== JSON.stringify(this._energy)) this._energy = energy;
@@ -2197,6 +2205,44 @@ export class Fp3dView3d extends LitElement {
     };
     void fetch();
     this.meterTimer = setInterval(() => void fetch(), 300000);
+  }
+
+  /**
+   * Existing sensors (#323): today's cost (net of export earnings), fetched every five minutes, and again (at most once
+   * a minute) when a cost sensor's state changes or one comes or goes.
+   */
+  private declare _costs: { net: boolean; value: string } | null;
+  private costKey = "";
+  private costLive = "";
+  private costAt = 0;
+  private costTimer?: ReturnType<typeof setInterval>;
+  private costFetch: (() => Promise<void>) | null = null;
+
+  private watchCosts(energy: EnergySettings | null): void {
+    const ids = energy ? [...(energy.cost_sensors ?? []), ...(energy.earning_sensors ?? [])] : [];
+    const key = this.replay || !energy ? "" : JSON.stringify([energy.cost_sensors ?? [], energy.earning_sensors ?? []]);
+    const live = ids.map((id) => this.hass?.states[id]?.state ?? "").join("|");
+    if (key === this.costKey) {
+      if (key && live !== this.costLive && (this._costs === null || Date.now() - this.costAt >= 60000)) void this.costFetch?.();
+      return;
+    }
+    this.costKey = key;
+    clearInterval(this.costTimer);
+    this.costTimer = undefined;
+    this.costFetch = null;
+    this._costs = null;
+    if (!key || !energy) return;
+    const fetch = async () => {
+      if (!this.hass || document.hidden) return;
+      this.costAt = Date.now();
+      this.costLive = ids.map((id) => this.hass?.states[id]?.state ?? "").join("|");
+      const { fetchCostsToday, costTile } = await import("../energy-rates.ts");
+      const got = this.hass ? await fetchCostsToday(this.hass, energy) : null;
+      if (this.costKey === key) this._costs = got ? costTile(this.hass, got) : null;
+    };
+    this.costFetch = fetch;
+    void fetch();
+    this.costTimer = setInterval(() => void fetch(), 300000);
   }
 
   /** Today's kWh at the wire ends (#29): fetched every five minutes while the cables show, by power sensor. */
@@ -6509,6 +6555,7 @@ export class Fp3dView3d extends LitElement {
       items.push({ cls: "battery", label: t("energy_battery"), value: parts.join(" · ") });
     }
     if (e.tariff) items.push({ cls: "tariff", label: t("energy_tariff"), value: `${formatNumber(this.hass, e.tariff.value, 3)} ${e.tariff.unit}`.trim() });
+    if (this._costs) items.push({ cls: "cost", label: t(this._costs.net ? "energy_cost_net_today" : "energy_cost_today"), value: this._costs.value });
     return html`<div class="fp3d-energy" aria-live="off">
       ${this._cheap ? html`<div class="fp3d-energy-item fp3d-energy-cheap" role="status"><span>${t("cheap_rate")}</span><b>${t("cheap_rate_now")}</b></div>` : nothing}
       ${items.map(
@@ -9063,6 +9110,9 @@ export class Fp3dView3d extends LitElement {
       }
       .fp3d-energy-tariff {
         border-left-color: #b98cff;
+      }
+      .fp3d-energy-cost {
+        border-left-color: #f0b44c;
       }
       .fp3d-energy-cheap {
         border-left-color: #3ccf8e;

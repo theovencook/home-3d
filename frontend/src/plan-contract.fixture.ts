@@ -878,6 +878,12 @@ export const PLAN_CONTRACT = {
     "cheap_rate": "text",
     "cheap_from": "07:30",
     "cheap_to": "07:30",
+    "rates_from": "sensors",
+    "rate_entity": "text",
+    "cheap_states": ["text"],
+    "price_fixed": 0.25,
+    "cost_sensors": ["text"],
+    "earning_sensors": ["text"],
     "systems": [
       {
         "id": "text",

@@ -59,7 +59,7 @@ function stripLinks(node: unknown, key = ""): void {
  */
 export function withoutEntities(b: Building): Building {
   const out = structuredClone(b);
-  out.energy = { ...out.energy, grid: null, solar: null, battery: null, battery_soc: null, tariff: null, ...(out.energy.systems ? { systems: out.energy.systems.map((x) => ({ ...x, grid: null, solar: null, battery: null, battery_soc: null, inverter: null })) } : {}) };
+  out.energy = { ...out.energy, grid: null, solar: null, battery: null, battery_soc: null, tariff: null, ...(out.energy.cost_sensors ? { cost_sensors: [] } : {}), ...(out.energy.earning_sensors ? { earning_sensors: [] } : {}), ...(out.energy.systems ? { systems: out.energy.systems.map((x) => ({ ...x, grid: null, solar: null, battery: null, battery_soc: null, inverter: null })) } : {}) };
   out.presence = [];
   for (const f of out.floors) {
     f.placements = [];

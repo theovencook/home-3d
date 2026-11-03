@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- **Rates and costs from existing sensors**: Settings > Energy chooses between setting rates up here (as before, still the default) and Home Assistant's own price, peak/off-peak tariff and cost sensors, or the Energy dashboard's grid setup in one tap; the 3D view then shows the tariff, cheap rate and today's cost from those (#323).
+
 ## Home 3D 0.2.1 (2 November 2026)
 
 - A Home Assistant restart is no longer shown as motion: the camera detection pins only linger for a detection this page saw, and the motion trail skips sensors coming back from unavailable or unknown (#299).

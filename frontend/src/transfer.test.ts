@@ -92,6 +92,7 @@ function linked(): Building {
   Object.assign(b.energy, {
     meter: { floor_id: "eg", x: 1, z: 1 }, grid: e("g"), solar: e("s"), battery: e("b"), battery_soc: e("bs"), consumption: e("co"), tariff: e("ta"),
     gas: e("gas"), water: e("water"), cheap_rate: "binary_sensor.cheap",
+    rate_entity: "select.tariff", cost_sensors: [e("cost"), "octopus:cost"], earning_sensors: [e("earn")],
   });
   b.presence = [{ person: "person.mia", sensor: e("mia") }];
   return b;
@@ -135,6 +136,8 @@ test("a shareable export keeps no entity id, area or floor link anywhere", () =>
   assert.equal(f.furniture[0].gangs?.length, 2);
   assert.equal(shared.settings.director?.doorbell, true);
   assert.equal(shared.energy.meter?.floor_id, "eg");
+  // existing rate sensors (#323): statistics of this Home Assistant go too
+  assert.deepEqual([shared.energy.cost_sensors, shared.energy.earning_sensors], [[], []]);
   // the full backup keeps everything
   assert.equal(JSON.stringify(exportFile(full, false).building), JSON.stringify(full));
 });
