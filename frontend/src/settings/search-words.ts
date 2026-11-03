@@ -125,6 +125,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   sun_height: ["sun", "arc", "path", "ring", "roof", "above", "dome", "sky"],
   flows: ["power", "cables", "lines", "glowing", "meter", "consumers", "grid"],
   holos: ["hologram", "glass", "cards", "info", "plant", "devices", "solar"],
+  door_pins: ["door", "window", "contact", "sensor", "pins", "buttons"],
   floor_pictures: ["picker", "thumbs", "gallery", "panel", "level", "selector"],
   // voice
   voice_here: ["voice", "mic", "talk", "dictation", "spoken", "command", "button"],

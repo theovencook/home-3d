@@ -156,6 +156,7 @@ export class Floorplan3dPanel extends LitElement {
     _weather: { state: true },
     _flows: { state: true },
     _holos: { state: true },
+    _doorPins: { state: true },
     _director: { state: true },
     _micProbe: { state: true },
     _voiceHere: { state: true },
@@ -249,6 +250,7 @@ export class Floorplan3dPanel extends LitElement {
   /** Power flow lines and hologram cards (#315): View panel switches, read from this device's preferences. */
   private declare _flows: boolean;
   private declare _holos: boolean;
+  private declare _doorPins: boolean;
   /** Kamera-Cockpit: the live director works on this device (its own switch, default off). */
   private declare _director: boolean;
   /** The microphone probe opened from the editor (the live director's section). */
@@ -363,6 +365,7 @@ export class Floorplan3dPanel extends LitElement {
     this._weather = prefs.get("weather") !== "0";
     this._flows = prefs.get("flows") === "1";
     this._holos = prefs.get("holos") !== "0";
+    this._doorPins = prefs.get("door_pins") === "1";
     this._director = directorOnHere();
     this._voiceHere = voiceOnHere();
     this._screen = screenName();
@@ -1589,6 +1592,7 @@ export class Floorplan3dPanel extends LitElement {
           .weather=${this._weather}
           .flows=${this._flows}
           .holograms=${this._holos}
+          .doorPins=${this._doorPins}
           .director=${this._director}
           .voice=${this._voiceHere}
           .screen=${this._screen || null}

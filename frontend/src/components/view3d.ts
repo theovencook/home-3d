@@ -37,6 +37,7 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
   isPulseDrive,
   entityAreaId,
 } from "../devices.ts";
+import { linkedContactIds } from "../opening-links.ts";
 import { effectSettings, itemShade, motionRooms, tempShade } from "../room-effects.ts";
 import { alertEntities, alertKey, alertSources, alertText, alertTint, clearedSnoozes, dismissAlert, findAlerts, HOUSE_ALERTS, isOutage, mayIgnoreAlert, shownAlerts, snoozeKey, type Alert, type AlertSources } from "../alerts.ts";
 import { iconSvg, mdiIcon } from "../icons.ts";
@@ -304,6 +305,7 @@ export class Fp3dView3d extends LitElement {
     showEnergy: { attribute: false },
     flows: { attribute: false },
     holograms: { attribute: false },
+    doorPins: { attribute: false },
     furnish: { type: Boolean },
     surfaceGrab: { attribute: false },
     furnishTypes: { attribute: false },
@@ -480,6 +482,8 @@ export class Fp3dView3d extends LitElement {
   declare flows: boolean | null;
   /** Energie Pro holograms always on or off (card option); null = the bar's own switch. */
   declare holograms: boolean | null;
+  /** View option "Door sensor pins" (#349): off, the contact sensors linked to a door or window show on the opening only. */
+  declare doorPins: boolean;
   private declare _holoShow: boolean;
   /** Furnishing: furniture and lamps are dragged in 3D (admins, panel only). */
   declare furnish: boolean;
@@ -933,6 +937,7 @@ export class Fp3dView3d extends LitElement {
     this.startView = null;
     this.cameraWall = false;
     this.holograms = null;
+    this.doorPins = false;
     try {
       this._flows = localStorage.getItem("home3d.flows") === "1";
       this._legendMin = localStorage.getItem("home3d.legendMin") === "1";
@@ -1326,7 +1331,7 @@ export class Fp3dView3d extends LitElement {
       }
       if (changed.has("building") || changed.has("theme") || changed.has("floorThumbs") || changed.has("packs")) this.scheduleThumbs();
       // with symbols only in rooms, opening or closing a room changes which ones show
-      const forced = ["building", "hiddenTypes", "furnitureOn", "markerMode", "heatMode", "flows", "alerts", "dimmed"].some((k) => changed.has(k)) || (this.markerMode === "room" && changed.has("roomId"));
+      const forced = ["building", "hiddenTypes", "furnitureOn", "markerMode", "heatMode", "flows", "alerts", "dimmed", "doorPins"].some((k) => changed.has(k)) || (this.markerMode === "room" && changed.has("roomId"));
       // time travel: a tick moves the clock even when no replayed state changed – the trail and a camera's
       // detections follow it (one sync per tick at most, and only when they are shown)
       const ticked = this.replayTicked && !!this.replay;
@@ -1407,8 +1412,10 @@ export class Fp3dView3d extends LitElement {
   }
 
   /** A pin or lamp of a hidden kind, or of a hidden item. */
-  private markerHidden(m: { id: string; furnitureId?: string }, items: ReadonlySet<string>): boolean {
+  private markerHidden(m: { id: string; furnitureId?: string }, items: ReadonlySet<string>, contacts?: ReadonlySet<string>): boolean {
     if (m.furnitureId && items.has(m.furnitureId)) return true;
+    // a contact sensor linked to a door or window shows on the opening itself, not as a pin (#349)
+    if (contacts?.has(m.id)) return true;
     const kind = typeOfEntity(m.id);
     return kind !== null && this.hiddenTypes.has(kind);
   }
@@ -1521,8 +1528,9 @@ export class Fp3dView3d extends LitElement {
     // the kinds the View hides (#268, #269): the items collapse in place, their pins and lamps are left out
     const hiddenItems = this.hiddenItemSet(b);
     v.setHiddenItems(hiddenItems);
+    const linkedContacts = this.doorPins || this.furnish ? undefined : linkedContactIds(this.openingLinks?.values() ?? []);
     v.setDevices([
-      ...[...deviceMarkers, ...furniture.markers, ...this.lockMarkers(hass, b)].filter((m) => !this.markerHidden(m, hiddenItems)).map((m) => {
+      ...[...deviceMarkers, ...furniture.markers, ...this.lockMarkers(hass, b)].filter((m) => !this.markerHidden(m, hiddenItems, linkedContacts)).map((m) => {
         // "without watts" drops the power badge (a plug shows only on / off)
         // below an item's own "running from" watts the standby draw is no badge either (#645)
         const power = m.show === "no_power" || ("energyDevice" in m && m.energyDevice) || ("standby" in m && m.standby) ? null : (byDevice.get(m.id) ?? null);

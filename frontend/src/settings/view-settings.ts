@@ -174,6 +174,8 @@ export const LOOK: Setting[] = [
   // #319: how high the sun's way is drawn; the lighting and shadows keep the real sun angle
   deviceChoice("sun_height", "view3d", "show", "sun_height", ["auto", "high", "real"], "auto", "st_sun_height", opts([["auto", "sun_height_auto"], ["high", "sun_height_high"], ["real", "sun_height_real"]]), "st_sun_height_hint"),
   ...["flows", "holos"].map((k) => deviceSwitch(k, "view3d", "show", k, k === "holos", k as TextKey, `${k}_hint` as TextKey)),
+  // #349: a door or window contact shows its state on the opening; its pin only comes back with this
+  deviceSwitch("door_pins", "view3d", "show", "door_pins", false, "door_pins", "door_pins_hint"),
 ];
 
 /**
@@ -235,7 +237,7 @@ export function viewSections(ctx: ViewContext): ViewSection[] {
   if (several && ctx.floorOpen && !ctx.plan2d) show.push({ id: "floor_stack" });
   show.push({ id: "heat" }, { id: "display" });
   if (ctx.roof && !ctx.plan2d) show.push({ id: "roof", disabled: ctx.floorOpen });
-  show.push({ id: "trail" }, { id: "weather" }, { id: "nav" }, ...["flows", "holos"].map((id) => ({ id })));
+  show.push({ id: "trail" }, { id: "weather" }, { id: "nav" }, ...["flows", "holos", "door_pins"].map((id) => ({ id })));
   const shows: ViewSection = { id: "show", title: "st_card_show", rows: show, hint: show.some((r) => r.disabled) ? "pick_all_floors" : undefined, openOnPhone: false };
   if (ctx.kiosk) return [{ ...shows, openOnPhone: true }];
   return [

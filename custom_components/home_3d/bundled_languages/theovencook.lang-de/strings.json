@@ -3308,5 +3308,7 @@
  "room_unhide_named": "{room} wieder in dieser Liste zeigen",
  "rooms_show_hidden": "Ausgeblendete zeigen",
  "room_hide_in_picker": "In der Raumliste ausblenden",
- "room_hide_hint": "Ein Raum, den du kaum brauchst (Schornstein, Spitzboden), verschwindet aus der Raumliste. Er wird weiter gezeichnet; \"Ausgeblendete zeigen\" in der Liste holt ihn zurück."
+ "room_hide_hint": "Ein Raum, den du kaum brauchst (Schornstein, Spitzboden), verschwindet aus der Raumliste. Er wird weiter gezeichnet; \"Ausgeblendete zeigen\" in der Liste holt ihn zurück.",
+ "door_pins": "Türsensor-Symbole",
+ "door_pins_hint": "Tür- und Fensterkontakte zeigen ihren Zustand an der Tür oder dem Fenster selbst. Einschalten, um zusätzlich ihre Symbole zu zeigen."
 }
