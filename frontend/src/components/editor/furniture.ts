@@ -403,11 +403,12 @@ export class FurniturePart {
     const many = set.length > 1;
     const hidden = this._hiddenItems;
     const shown = hidden.length ? floor.furniture.filter((f) => !hidden.includes(f.id)) : floor.furniture;
+    // names that would sit on another's give way; a hidden one shows while the pointer is over its item (#341)
+    const named = this.planLabels(floor);
     return svg`<g>${this.renderSelectionFrame(floor, set)}${shown.map((f) => {
       const member = set.includes(f.id);
       const sel = f.id === this._furnitureId && !many;
       const [cx, cy] = this.toScreen([f.x, f.z]);
-      const big = Math.min(f.w, f.d) * k > 44;
       // the handle sits in front of the item; dragging it turns the item
       const a = (f.rotation * Math.PI) / 180;
       const reach = f.d / 2 + Math.max(0.3, 26 / k);
@@ -421,7 +422,7 @@ export class FurniturePart {
           <g class="fp3d-furn-sym">${furnitureSymbol(f.type, f.w, f.d)}</g>
           <line class="fp3d-furn-front" x1=${-f.w / 2} y1=${f.d / 2} x2=${f.w / 2} y2=${f.d / 2} />
         </g>
-        ${big ? svg`<text x=${cx} y=${cy + 4}>${furnitureName(this.hass, f.type)}</text>` : nothing}
+        <text class=${named.has(`f:${f.id}`) ? "" : "fp3d-lbl-off"} x=${cx} y=${this.itemLabelY(f, cy)}>${furnitureName(this.hass, f.type)}</text>
       </g>
       ${sel && this.isEditor && !f.locked
         ? ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([sx, sz]) => {

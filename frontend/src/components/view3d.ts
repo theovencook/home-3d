@@ -37,6 +37,7 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
   isPulseDrive,
   entityAreaId,
 } from "../devices.ts";
+import { linkedContactIds } from "../opening-links.ts";
 import { effectSettings, itemShade, motionRooms, tempShade } from "../room-effects.ts";
 import { alertEntities, alertKey, alertSources, alertText, alertTint, clearedSnoozes, dismissAlert, findAlerts, HOUSE_ALERTS, isOutage, mayIgnoreAlert, shownAlerts, snoozeKey, type Alert, type AlertSources } from "../alerts.ts";
 import { iconSvg, mdiIcon } from "../icons.ts";
@@ -304,6 +305,7 @@ export class Fp3dView3d extends LitElement {
     showEnergy: { attribute: false },
     flows: { attribute: false },
     holograms: { attribute: false },
+    doorPins: { attribute: false },
     furnish: { type: Boolean },
     surfaceGrab: { attribute: false },
     furnishTypes: { attribute: false },
@@ -339,6 +341,7 @@ export class Fp3dView3d extends LitElement {
     _flows: { state: true },
     _legendMin: { state: true },
     _holoShow: { state: true },
+    _energyFold: { state: true },
     _swipe: { state: true },
     _menu: { state: true },
     _popup: { state: true },
@@ -465,7 +468,7 @@ export class Fp3dView3d extends LitElement {
   declare clock: ClockPos | null;
   /** What the clock looks like (#232); the default is digits with the date. */
   declare clockLook: ClockLook | null;
-  /** A weather tile by the clock (#333; a device preference, off by default). */
+  /** A weather tile by the clock (#333; a device preference, on by default since #347). */
   declare clockWeather: boolean;
   private declare _clockTick: number;
   private clockTimer: ReturnType<typeof setInterval> | undefined;
@@ -481,7 +484,11 @@ export class Fp3dView3d extends LitElement {
   declare flows: boolean | null;
   /** Energie Pro holograms always on or off (card option); null = the bar's own switch. */
   declare holograms: boolean | null;
+  /** View option "Door sensor pins" (#349): off, the contact sensors linked to a door or window show on the opening only. */
+  declare doorPins: boolean;
   private declare _holoShow: boolean;
+  /** The energy row is folded to the Consumption tile (#348; kept per device). */
+  private declare _energyFold: boolean;
   /** Furnishing: furniture and lamps are dragged in 3D (admins, panel only). */
   declare furnish: boolean;
   /** Editor: moves solar fields and roof windows with rays from the camera (null: none). */
@@ -844,7 +851,7 @@ export class Fp3dView3d extends LitElement {
     this.theme = "neon";
     this.clock = null;
     this.clockLook = null;
-    this.clockWeather = false;
+    this.clockWeather = true;
     this._clockTick = 0;
     this.accent = null;
     this.furnish = false;
@@ -941,11 +948,14 @@ export class Fp3dView3d extends LitElement {
     this.startView = null;
     this.cameraWall = false;
     this.holograms = null;
+    this.doorPins = false;
     try {
       this._flows = localStorage.getItem("home3d.flows") === "1";
       this._legendMin = localStorage.getItem("home3d.legendMin") === "1";
       this._holoShow = localStorage.getItem("home3d.holos") !== "0";
+      this._energyFold = localStorage.getItem("home3d.energy_fold") === "1";
     } catch {
+      this._energyFold = false;
       this._flows = false;
       this._legendMin = false;
       this._holoShow = true;
@@ -1283,6 +1293,8 @@ export class Fp3dView3d extends LitElement {
     row("_rackView", "rack", !!rack, () => (this._rackView = null), rack ? () => (this._rackView = rack) : undefined);
     row("_gangMenu", "gang", !!gang, () => (this._gangMenu = null), gang ? () => (this._gangMenu = gang) : undefined);
     row("_central", "central", this._central, () => (this._central = false), () => (this._central = true));
+    // Back ends a walk (#351)
+    row("_walk", "walk", !!this._walk, () => this.stopWalk());
     this.backLayers.syncAll(rows);
   }
 
@@ -1340,7 +1352,7 @@ export class Fp3dView3d extends LitElement {
       }
       if (changed.has("building") || changed.has("theme") || changed.has("floorThumbs") || changed.has("packs")) this.scheduleThumbs();
       // with symbols only in rooms, opening or closing a room changes which ones show
-      const forced = ["building", "hiddenTypes", "furnitureOn", "markerMode", "heatMode", "flows", "alerts", "dimmed"].some((k) => changed.has(k)) || (this.markerMode === "room" && changed.has("roomId"));
+      const forced = ["building", "hiddenTypes", "furnitureOn", "markerMode", "heatMode", "flows", "alerts", "dimmed", "doorPins"].some((k) => changed.has(k)) || (this.markerMode === "room" && changed.has("roomId"));
       // time travel: a tick moves the clock even when no replayed state changed – the trail and a camera's
       // detections follow it (one sync per tick at most, and only when they are shown)
       const ticked = this.replayTicked && !!this.replay;
@@ -1421,8 +1433,10 @@ export class Fp3dView3d extends LitElement {
   }
 
   /** A pin or lamp of a hidden kind, or of a hidden item. */
-  private markerHidden(m: { id: string; furnitureId?: string }, items: ReadonlySet<string>): boolean {
+  private markerHidden(m: { id: string; furnitureId?: string }, items: ReadonlySet<string>, contacts?: ReadonlySet<string>): boolean {
     if (m.furnitureId && items.has(m.furnitureId)) return true;
+    // a contact sensor linked to a door or window shows on the opening itself, not as a pin (#349)
+    if (contacts?.has(m.id)) return true;
     const kind = typeOfEntity(m.id);
     return kind !== null && this.hiddenTypes.has(kind);
   }
@@ -1535,8 +1549,9 @@ export class Fp3dView3d extends LitElement {
     // the kinds the View hides (#268, #269): the items collapse in place, their pins and lamps are left out
     const hiddenItems = this.hiddenItemSet(b);
     v.setHiddenItems(hiddenItems);
+    const linkedContacts = this.doorPins || this.furnish ? undefined : linkedContactIds(this.openingLinks?.values() ?? []);
     v.setDevices([
-      ...[...deviceMarkers, ...furniture.markers, ...this.lockMarkers(hass, b)].filter((m) => !this.markerHidden(m, hiddenItems)).map((m) => {
+      ...[...deviceMarkers, ...furniture.markers, ...this.lockMarkers(hass, b)].filter((m) => !this.markerHidden(m, hiddenItems, linkedContacts)).map((m) => {
         // "without watts" drops the power badge (a plug shows only on / off)
         // below an item's own "running from" watts the standby draw is no badge either (#645)
         const power = m.show === "no_power" || ("energyDevice" in m && m.energyDevice) || ("standby" in m && m.standby) ? null : (byDevice.get(m.id) ?? null);
@@ -4804,7 +4819,8 @@ export class Fp3dView3d extends LitElement {
 
   private renderClock() {
     const pos = this.clock;
-    if (!pos || pos === "off" || !this.hass) {
+    // not while walking: the stick takes the corner and the clock would sit under it (#351)
+    if (!pos || pos === "off" || !this.hass || this._walk) {
       if (this.clockTimer) {
         clearInterval(this.clockTimer);
         this.clockTimer = undefined;
@@ -4819,7 +4835,7 @@ export class Fp3dView3d extends LitElement {
     this.clockTimer ??= setInterval(() => (this._clockTick = Date.now()), every);
     const clock = renderClock(pos, { now: new Date(this.now()), lang: (this.hass.language || "en").replace("_", "-"), timeZone: this.hass.config?.time_zone, locale: this.hass.locale }, look);
     // the weather tile beside it (#333): its code loads when the option is on, its forecast on the first tap
-    const wx = this.clockWeather ? weatherEntity(this.hass, this.weatherEntityId ?? this.building?.settings.weather_entity) : null;
+    const wx = this.clockWeather ? weatherEntity(this.hass, this.weatherEntityId ?? this.building?.settings?.weather_entity) : null;
     if (!wx) return clock;
     need(loadWeatherTile);
     return html`<div class="fp3d-clockrow fp3d-clock-${pos}">${clock}<fp3d-weather-tile .hass=${this.hass} .entity=${wx} .look=${look} .pos=${pos} ?light=${this.hasAttribute("light")}></fp3d-weather-tile></div>`;
@@ -5083,6 +5099,13 @@ export class Fp3dView3d extends LitElement {
     }, 9000);
   }
 
+  /** Ends the walk if one is on (Back and Escape, #351); false when there was none. */
+  endWalk(): boolean {
+    if (!this._walk) return false;
+    this.stopWalk();
+    return true;
+  }
+
   private stopWalk(): void {
     if (!this.walker && !this._walk) return;
     this.walker?.dispose();
@@ -5125,8 +5148,8 @@ export class Fp3dView3d extends LitElement {
     return html`<div class="fp3d-walk-surface"></div>
       <div class="fp3d-walk-top">
         <span class="fp3d-walk-room">🚶 ${w.room ?? t("walk_title")}</span>
-        <button class="fp3d-walk-exit" @click=${() => this.stopWalk()}>✕ ${t("walk_end")}</button>
       </div>
+      <button class="fp3d-walk-exit" @click=${() => this.stopWalk()}>✕ ${t("walk_end")}</button>
       ${w.hint ? html`<div class="fp3d-walk-hint">${t("walk_hint")}</div>` : nothing}
       <div
         class="fp3d-walk-stick"
@@ -6669,6 +6692,16 @@ export class Fp3dView3d extends LitElement {
     return this.holograms ?? this._holoShow;
   }
 
+  /** Fold the energy row down to the Consumption tile, or unfold it again (#348). */
+  private toggleEnergyFold(): void {
+    this._energyFold = !this._energyFold;
+    try {
+      localStorage.setItem("home3d.energy_fold", this._energyFold ? "1" : "0");
+    } catch {
+      // private mode: the choice lasts for this page only
+    }
+  }
+
   private toggleFlows(): void {
     this._flows = !this._flows;
     try {
@@ -6696,13 +6729,20 @@ export class Fp3dView3d extends LitElement {
     }
     if (e.tariff) items.push({ cls: "tariff", label: t("energy_tariff"), value: `${formatNumber(this.hass, e.tariff.value, 3)} ${e.tariff.unit}`.trim() });
     if (this._costs) items.push({ cls: "cost", label: t(this._costs.net ? "energy_cost_net_today" : "energy_cost_today"), value: this._costs.value });
+    // a tap on any tile folds the row to Consumption (the first tile when there is none) and a tap again unfolds it (#348)
+    const foldable = items.length > 1;
+    const folded = foldable && this._energyFold;
+    const shown = folded ? items.slice(0, 1) : items;
     return html`<div class="fp3d-energy" aria-live="off">
-      ${this._cheap ? html`<div class="fp3d-energy-item fp3d-energy-cheap" role="status"><span>${t("cheap_rate")}</span><b>${t("cheap_rate_now")}</b></div>` : nothing}
-      ${items.map(
-        (i) =>
-          html`<div class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}">
-            <span>${i.label}</span><b>${i.value}</b>
-          </div>`,
+      ${this._cheap && !folded ? html`<div class="fp3d-energy-item fp3d-energy-cheap" role="status"><span>${t("cheap_rate")}</span><b>${t("cheap_rate_now")}</b></div>` : nothing}
+      ${shown.map((i) =>
+        foldable
+          ? html`<button type="button" class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls} fp3d-energy-fold" aria-expanded=${!folded} title=${t(folded ? "energy_unfold" : "energy_fold")} @click=${() => this.toggleEnergyFold()}>
+              <span>${i.label}</span><b>${i.value}</b>
+            </button>`
+          : html`<div class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}">
+              <span>${i.label}</span><b>${i.value}</b>
+            </div>`,
       )}
       ${this.flows !== null
         ? nothing
@@ -7588,9 +7628,10 @@ export class Fp3dView3d extends LitElement {
         box-shadow: var(--fp3d-shadow);
         cursor: pointer;
       }
+      /* stops above the bottom bar, so that its buttons stay pressable while walking (#351) */
       .fp3d-walk-surface {
         position: absolute;
-        inset: 0;
+        inset: 0 0 calc(var(--fp3d-bottom-inset, 0px) + 8px) 0;
         z-index: 4;
         touch-action: none;
         cursor: grab;
@@ -7598,7 +7639,8 @@ export class Fp3dView3d extends LitElement {
       .fp3d-walk-top {
         position: absolute;
         z-index: 5;
-        top: 12px;
+        /* under the energy strip, so the two never overlap (#351) */
+        top: 64px;
         left: 50%;
         transform: translateX(-50%);
         display: flex;
@@ -7618,16 +7660,27 @@ export class Fp3dView3d extends LitElement {
         font: inherit;
         font-weight: 700;
       }
+      /* "Exit walk": where the Walk button was, at the top right, a 44 px target (#351) */
       .fp3d-walk-exit {
-        border: 0;
+        position: absolute;
+        z-index: 5;
+        top: 12px;
+        right: var(--fp3d-walk-right, 12px);
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 16px;
+        border: 1px solid rgba(55, 224, 255, 0.45);
+        font-size: 15px;
+        white-space: nowrap;
         cursor: pointer;
-        pointer-events: auto;
       }
       .fp3d-walk-hint {
         position: absolute;
         z-index: 5;
         left: 50%;
-        top: 62px;
+        top: 112px;
         transform: translateX(-50%);
         max-width: min(560px, calc(100% - 32px));
         font-weight: 500;
@@ -8233,11 +8286,17 @@ export class Fp3dView3d extends LitElement {
         background: var(--fp3d-accent);
         opacity: 0.45;
       }
+      /* phones: the wall is a full screen page over the view, like Settings and the View panel (#346) */
       @media ${unsafeCSS(PHONE_MEDIA)} {
         .fp3d-wall {
-          inset: auto 0 calc(var(--fp3d-bottom-inset, 0px) + 0px) 0;
-          height: min(60%, 420px);
-          border-radius: 16px 16px 0 0;
+          inset: 0;
+          height: auto;
+          z-index: 12;
+          border: 0;
+          border-radius: 0;
+          background: rgb(8, 16, 34);
+          box-shadow: none;
+          padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
         }
         .fp3d-wall-rz {
           display: none;
@@ -9214,6 +9273,19 @@ export class Fp3dView3d extends LitElement {
           transition: none;
         }
       }
+      /* a tile that folds the row (#348): a button dressed as the plain tile */
+      .fp3d-energy-fold {
+        border: 0;
+        border-left: 3px solid var(--fp3d-line);
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-energy-fold:focus-visible {
+        outline: 2px solid var(--fp3d-accent);
+        outline-offset: 2px;
+      }
       .fp3d-energy-item span {
         font-size: 11px;
         color: var(--fp3d-muted);
@@ -9333,6 +9405,10 @@ export class Fp3dView3d extends LitElement {
         .fp3d-stage:has(> .fp3d-walk-btn) .fp3d-energy {
           max-width: calc(100% - 20px - var(--fp3d-walk-right, 12px) - var(--fp3d-walk-w, 96px));
         }
+        /* Exit walk is wider than the Walk button (#351) */
+        .fp3d-stage:has(> .fp3d-walk-exit) .fp3d-energy {
+          max-width: calc(100% - 20px - var(--fp3d-walk-right, 12px) - 124px);
+        }
         /* the scrolling row would clip a lifted tile */
         .fp3d-energy .fp3d-energy-tile:hover {
           transform: none;
@@ -9343,6 +9419,26 @@ export class Fp3dView3d extends LitElement {
         }
         .fp3d-has-alerts .fp3d-legend {
           top: 118px;
+        }
+      }
+      /* a phone: the chips are one short row of small type, nothing wraps, so the house stays the focus (#344) */
+      @container fp3d (max-width: 600px) {
+        .fp3d-energy {
+          gap: 4px;
+        }
+        .fp3d-energy-item {
+          padding: 3px 8px 4px;
+          border-radius: 9px;
+          white-space: nowrap;
+          flex: none;
+        }
+        .fp3d-energy-item span {
+          font-size: 10px;
+          line-height: 1.2;
+        }
+        .fp3d-energy-item b {
+          font-size: 13px;
+          line-height: 1.25;
         }
       }
       /* the view's own controls on the right (#285); the room panel opens there, so they make way for it */
@@ -9512,11 +9608,34 @@ export class Fp3dView3d extends LitElement {
           width: 44px;
           height: 44px;
         }
+        /* the star and the eye: the panel docks them at the start of its bottom bar (--fp3d-dock-*, #346), same size
+           and shape as its buttons; elsewhere (a card) they keep their corner */
         .fp3d-eye {
-          left: 62px;
+          left: calc(var(--fp3d-dock-left, 12px) + 50px);
+          bottom: var(--fp3d-dock-bottom, calc(10px + var(--fp3d-bottom-inset, 0px)));
+          border: 0;
+          border-radius: 14px;
+          background: var(--fp3d-chrome);
+          box-shadow: var(--fp3d-shadow);
+        }
+        .fp3d-eye-clean {
+          left: var(--fp3d-dock-left, 12px);
         }
         .fp3d-central-btn {
-          bottom: calc(62px + var(--fp3d-bottom-inset, 0px));
+          left: var(--fp3d-dock-left, 12px);
+          bottom: var(--fp3d-dock-bottom, calc(62px + var(--fp3d-bottom-inset, 0px)));
+          border-radius: 14px;
+        }
+        .fp3d-central {
+          bottom: var(--fp3d-dock-menu, calc(104px + var(--fp3d-bottom-inset, 0px)));
+        }
+        .fp3d-side-right :is(.fp3d-central-btn, .fp3d-eye-clean) {
+          left: auto;
+          right: var(--fp3d-dock-left, 12px);
+        }
+        .fp3d-side-right .fp3d-eye {
+          left: auto;
+          right: calc(var(--fp3d-dock-left, 12px) + 50px);
         }
         .fp3d-thumbs-compact .fp3d-thumb,
         .fp3d-thumb-house {

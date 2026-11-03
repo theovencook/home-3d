@@ -1,7 +1,7 @@
 // One-off migration for #203: door and window contact sensors used to be matched with openings automatically
 // (by room area and position) whenever an opening had none of its own. That matching is gone; this saves the pairs
 // a home showed as explicit links, once, so no home loses a link it relied on.
-import { legacyContactPairs } from "./devices.ts";
+import { legacyContactPairs, type OpeningEntities } from "./devices.ts";
 import type { HomeAssistant } from "./types.ts";
 import type { Building } from "./model.ts";
 
@@ -29,4 +29,11 @@ export function saveAutomaticOpeningLinks(hass: HomeAssistant, building: Buildin
   }
   building.opening_links_saved = true;
   return written;
+}
+
+/** The contact and tilt sensors (binary_sensor) linked to doors and windows: the opening shows their state, not a pin (#349). */
+export function linkedContactIds(links: Iterable<OpeningEntities>): Set<string> {
+  const out = new Set<string>();
+  for (const e of links) for (const id of [e.contact, e.contact2, e.tilt, e.tilt2]) if (id?.startsWith("binary_sensor.")) out.add(id);
+  return out;
 }

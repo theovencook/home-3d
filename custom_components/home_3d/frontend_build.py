@@ -13,6 +13,12 @@ from pathlib import Path
 BUILD_FILE = Path(__file__).parent / "frontend" / "build.json"
 
 
+def versioned_url(url: str, build: str | None) -> str:
+    """The URL with the build id as `?v=` (#340): every update is a new URL, so a cache between the browser and Home
+    Assistant (a proxy with a cache time of its own) cannot keep serving the old entry. Without a build, as it is."""
+    return f"{url}?v={build}" if build else url
+
+
 def read_build() -> str | None:
     """The build id on disk, None without a readable build file (a development checkout). Blocking: run it in the
     executor. Read on every ask, so files copied in without a restart are seen at once."""

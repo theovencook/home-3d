@@ -2,11 +2,13 @@
 // draws the element's tag at once; the element takes the properties it was given when its code arrives (as the 3D view
 // does, load-view.ts). Used by the editor (components/editor/lazy.ts), the Settings page and the panel (load-parts.ts).
 
+import { guardImport } from "./guard-import.ts";
+
 /** Loads `load` once; a failed download is forgotten, so the next call tries again. */
 export function once(load: () => Promise<unknown>): () => Promise<void> {
   let loading: Promise<void> | undefined;
   return () =>
-    (loading ??= load().then(
+    (loading ??= guardImport(load()).then(
       () => undefined,
       (err: unknown) => {
         loading = undefined;

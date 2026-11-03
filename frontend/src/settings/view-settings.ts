@@ -116,7 +116,7 @@ export const LOOK: Setting[] = [
   deviceChoice("clock_style", "look", "clock", "clock_style", ["digital", "analogue"], "digital", "st_clock_face", opts([["digital", "clock_digital"], ["analogue", "clock_analogue"]]), undefined, ["time", "clock", "dial", "hands", "face"]),
   deviceSwitch("clock_seconds", "look", "clock", "clock_seconds", false, "st_clock_seconds", undefined, ["time", "clock", "seconds"]),
   deviceSwitch("clock_date", "look", "clock", "clock_date", true, "st_clock_date", undefined, ["time", "clock", "date", "day"]),
-  deviceSwitch("clock_weather", "look", "clock", "clock_weather", false, "st_clock_weather", "st_clock_weather_hint"),
+  deviceSwitch("clock_weather", "look", "clock", "clock_weather", true, "st_clock_weather", "st_clock_weather_hint"),
   ].map((s): Setting => ({ ...s, visible: (env) => ["tl", "tr", "bl", "br"].includes(env.prefs.get("clock") ?? "") })), // the clock's details only while it shows (#256)
   deviceChoice("markers", "view3d", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), "markers_important_hint", ["pins", "icons", "symbols", "devices", "markers"], "select"),
   deviceSwitch("pulse", "view3d", "markers", "pulse", true, "st_pulse", "st_pulse_hint", ["pins", "outline", "pulse", "animation", "motion"]),
@@ -153,7 +153,7 @@ export const LOOK: Setting[] = [
     hint: "st_display_what_hint",
     keywords: ["display", "show", "hide", "objects", "lights", "furniture", "room names", "cameras", "sensors", "layers"],
     control: { kind: "checks", options: OBJECT_TYPES.map((t): Option => ({ value: t, label: `ot_${t}` })) },
-    default: [...OBJECT_TYPES],
+    default: OBJECT_TYPES.filter((t) => t !== "room_names"),
     prefKeys: [DISPLAY_HIDDEN_KEY, "room_names"],
     read: (env) => {
       const hidden = parseHidden(env.prefs.get(DISPLAY_HIDDEN_KEY), env.prefs.get("room_names"), env.prefs.get(SHOW_FURNITURE_KEY));
@@ -174,6 +174,8 @@ export const LOOK: Setting[] = [
   // #319: how high the sun's way is drawn; the lighting and shadows keep the real sun angle
   deviceChoice("sun_height", "view3d", "show", "sun_height", ["auto", "high", "real"], "auto", "st_sun_height", opts([["auto", "sun_height_auto"], ["high", "sun_height_high"], ["real", "sun_height_real"]]), "st_sun_height_hint"),
   ...["flows", "holos"].map((k) => deviceSwitch(k, "view3d", "show", k, k === "holos", k as TextKey, `${k}_hint` as TextKey)),
+  // #349: a door or window contact shows its state on the opening; its pin only comes back with this
+  deviceSwitch("door_pins", "view3d", "show", "door_pins", false, "door_pins", "door_pins_hint"),
   // #350: robot vacuum maps on the floors (offered only for a plan with maps); on by default
   { ...deviceSwitch("vacuum_maps", "view3d", "show", "vacuum_maps", true, "st_vacuum_maps", "st_vacuum_maps_hint"), visible: (env) => !!env.building?.settings.vacuum_maps?.length },
 ];
@@ -239,7 +241,7 @@ export function viewSections(ctx: ViewContext): ViewSection[] {
   if (several && ctx.floorOpen && !ctx.plan2d) show.push({ id: "floor_stack" });
   show.push({ id: "heat" }, { id: "display" });
   if (ctx.roof && !ctx.plan2d) show.push({ id: "roof", disabled: ctx.floorOpen });
-  show.push({ id: "trail" }, { id: "weather" }, { id: "nav" }, ...["flows", "holos"].map((id) => ({ id })));
+  show.push({ id: "trail" }, { id: "weather" }, { id: "nav" }, ...["flows", "holos", "door_pins"].map((id) => ({ id })));
   if (ctx.vacuums && !ctx.plan2d) show.push({ id: "vacuum_maps" });
   const shows: ViewSection = { id: "show", title: "st_card_show", rows: show, hint: show.some((r) => r.disabled) ? "pick_all_floors" : undefined, openOnPhone: false };
   if (ctx.kiosk) return [{ ...shows, openOnPhone: true }];

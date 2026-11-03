@@ -119,7 +119,7 @@ test("each row once (#215); the 2D plan drops the 3D-only rows; one floor and no
   const flatPlan = rows(ctx({ plan2d: true }), "show").map((r) => r.id);
   for (const id of ["walls", "explode", "roof", "floor_stack"]) assert.ok(!flatPlan.includes(id), id);
   const single = rows(ctx({ floors: 1, roof: false }), "show").map((r) => r.id);
-  assert.deepEqual(single, ["walls", "heat", "display", "trail", "weather", "nav", "flows", "holos"]);
+  assert.deepEqual(single, ["walls", "heat", "display", "trail", "weather", "nav", "flows", "holos", "door_pins"]);
 });
 
 test("a wall tablet's View panel offers only what the 3D shows (and 3D or 2D, slotted in) (#92)", () => {
@@ -131,7 +131,7 @@ test("a wall tablet's View panel offers only what the 3D shows (and 3D or 2D, sl
   const at = out.indexOf("<fp3d-view-panel");
   assert.ok(at > 0);
   assert.ok(out.slice(at).includes("aria-label=2D or 3D"), "3D or 2D inside the panel");
-  assert.match(out, />\s*View <span class="fp3d-caret"/, "the chip is called View");
+  assert.match(out, /<span class="fp3d-bar-word">View<\/span> <span class="fp3d-caret"/, "the chip is called View");
 });
 
 test("Appearance is one drop-down: Automatic (each saying what it shows now) and Fixed (#247)", () => {

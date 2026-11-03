@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { openingEntities } from "./devices.ts";
 import type { Building, Floor, Opening, Room } from "./model.ts";
 import { PLAN_VERSION, emptyBuilding, newFloor } from "./model.ts";
-import { saveAutomaticOpeningLinks } from "./opening-links.ts";
+import { linkedContactIds, saveAutomaticOpeningLinks } from "./opening-links.ts";
 import type { HomeAssistant } from "./types.ts";
 
 const room: Room = { id: "r", name: "R", area_id: "lounge", points: [[0, 0], [5, 0], [5, 4], [0, 4]], floor_material: "wood" };
@@ -107,4 +107,13 @@ test("the migration leaves the plan version alone: it is marked by its own flag,
   const fresh = home([open("w1", "window", 0)]);
   assert.equal(fresh.version, PLAN_VERSION);
   assert.equal(saveAutomaticOpeningLinks(hassWith(SENSORS), fresh), 1);
+});
+
+test("contact and tilt binary sensors linked to openings are the ones whose pins step aside (#349)", () => {
+  const ids = linkedContactIds([
+    { contact: "binary_sensor.a", contact2: "binary_sensor.b", tilt: "binary_sensor.c", cover: null } as never,
+    { contact: "sensor.handle", tilt: null, cover: "cover.x" } as never,
+    { contact: null } as never,
+  ]);
+  assert.deepEqual([...ids].sort(), ["binary_sensor.a", "binary_sensor.b", "binary_sensor.c"]);
 });

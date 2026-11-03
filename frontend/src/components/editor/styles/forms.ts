@@ -492,8 +492,18 @@ export const formStyles = css`
         text-anchor: middle;
         pointer-events: none;
       }
+      .fp3d-furn .fp3d-lbl-off {
+        display: none;
+      }
+      .fp3d-furn:hover .fp3d-lbl-off {
+        display: inline;
+      }
       .fp3d-furn-ghost {
         opacity: 0.35;
+      }
+      /* "When it shows" sits below the help paragraph before it, not against it (#344) */
+      details.fp3d-when-section {
+        margin-top: 16px;
       }
       .fp3d-furn-sel .fp3d-furn-body {
         fill: rgba(55, 224, 255, 0.16);

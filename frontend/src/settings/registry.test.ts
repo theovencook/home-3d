@@ -218,7 +218,7 @@ test("length rows show and take feet and inches on an imperial plan, metres stay
   // shown: the stored metres in feet and inches, labelled in feet
   const wall = settingById("wall_exterior")!;
   assert.equal(shownLength(imperial, wall.read(imperial) as number), '9.4"');
-  assert.equal(lengthLabel(imperial, "Exterior wall (m)"), "Exterior wall (ft)");
+  assert.equal(lengthLabel(imperial, "Exterior wall (m)"), "Exterior wall");
   // typed: feet and inches go in as metres
   const typed = typedLength(imperial, "1' 2\"");
   assert.ok(typed !== null && Math.abs(typed - 0.3556) < 1e-9);

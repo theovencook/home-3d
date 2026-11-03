@@ -27,20 +27,7 @@ test("the ask dialog takes the look of the part that asked, found along the focu
   assert.equal(focusScheme(el(["light"], el(["contrast"]))), "contrast");
 });
 
-// 2. The phone View sheet opens at half height
-
-test("the phone View sheet opens at half height and its handle shows all of it (#263)", async () => {
-  const { sheetStep } = await import("./components/view-panel.ts");
-  assert.equal(sheetStep(false, -60), "full");
-  assert.equal(sheetStep(true, 60), "half");
-  assert.equal(sheetStep(false, 60), "close");
-  assert.equal(sheetStep(false, 8), null, "a short move is a tap");
-  const vp = src("./components/view-panel.ts");
-  const phone = vp.slice(vp.indexOf("/* phones: a bottom sheet"));
-  assert.match(phone, /max-height: 50%;/);
-  assert.match(phone, /:host\(\[full\]\) \{\s*max-height: calc\(100% - 12px\);/);
-  assert.match(vp, /class="vp-grab" aria-expanded=/);
-});
+// 2. The phone View sheet opened at half height; #346 replaced it with a full screen page (ux-346.test.ts)
 
 // 3. Colliding room names: the smaller room's gives way
 

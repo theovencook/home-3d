@@ -156,6 +156,7 @@ export class Floorplan3dPanel extends LitElement {
     _weather: { state: true },
     _flows: { state: true },
     _holos: { state: true },
+    _doorPins: { state: true },
     _vacuumMaps: { state: true },
     _director: { state: true },
     _micProbe: { state: true },
@@ -250,6 +251,7 @@ export class Floorplan3dPanel extends LitElement {
   /** Power flow lines and hologram cards (#315): View panel switches, read from this device's preferences. */
   private declare _flows: boolean;
   private declare _holos: boolean;
+  private declare _doorPins: boolean;
   /** Robot vacuum maps on the floors (#350), this device's View switch. */
   private declare _vacuumMaps: boolean;
   /** Kamera-Cockpit: the live director works on this device (its own switch, default off). */
@@ -357,7 +359,7 @@ export class Floorplan3dPanel extends LitElement {
     this._floorPics = prefs.get("floor_pictures") === "1";
     this._angleLock = prefs.get("angle_lock") === "1";
     this._windowSpill = prefs.get("window_spill") === "1";
-    this._clockWeather = prefs.get("clock_weather") === "1";
+    this._clockWeather = prefs.get("clock_weather") !== "0";
     const sunHeight = prefs.get("sun_height");
     this._sunHeight = sunHeight === "high" || sunHeight === "real" ? sunHeight : "auto";
     this._navButtons = prefs.get("nav") === "1";
@@ -366,6 +368,7 @@ export class Floorplan3dPanel extends LitElement {
     this._weather = prefs.get("weather") !== "0";
     this._flows = prefs.get("flows") === "1";
     this._holos = prefs.get("holos") !== "0";
+    this._doorPins = prefs.get("door_pins") === "1";
     this._vacuumMaps = prefs.get("vacuum_maps") !== "0";
     this._director = directorOnHere();
     this._voiceHere = voiceOnHere();
@@ -904,7 +907,7 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   private view3d() {
-    return readyView(this.renderRoot) as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void }) | null;
+    return readyView(this.renderRoot) as (HTMLElement & { resetView(): void; endWalk(): boolean; lookThrough(entityId: string): void; historyEntities(): HistorySpec; currentView(): StartView | null; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void }) | null;
   }
 
   /** Time travel on or off; without the Pro add-on its hint shows. `at`: a start moment from a link. */
@@ -947,6 +950,12 @@ export class Floorplan3dPanel extends LitElement {
     row("_findOpen", "find", this._findOpen, () => (this._findOpen = false), () => (this._findOpen = true));
     row("_cameraWall", "cameras", this._cameraWall && this._mode === "view", () => (this._cameraWall = false), () => (this._cameraWall = true));
     row("_micProbe", "mic", this._micProbe, () => ((this._micProbe = false), micProbeDone()));
+    // a picked floor and an open room are steps of their own (#346): Back (Android's gesture, the browser's) takes the
+    // same steps as the Back button on the bar, the room first, then the floor, before it leaves the page
+    const floor = this._floorId;
+    const room = this._roomId;
+    row("_floorId", "floor", !!floor && (this.data.building?.floors.length ?? 0) > 1, () => ((this._roomId = null), (this._floorId = null)), floor ? () => (this._floorId = floor) : undefined);
+    row("_roomId", "room", !!room, () => (this._roomId = null), room ? () => (this._roomId = room) : undefined);
     this.backLayers.syncAll(rows);
   }
 
@@ -988,6 +997,7 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   private back(): void {
+    if (this.view3d()?.endWalk()) return;
     if (this._roomId) this._roomId = null;
     else if (this._floorId && (this.data.building?.floors.length ?? 0) > 1) this._floorId = null;
     else this.view3d()?.resetView();
@@ -1399,7 +1409,14 @@ export class Floorplan3dPanel extends LitElement {
         ? html`<div class="fp3d-seg fp3d-floors" role="group" aria-label=${this.t("floors")} @wheel=${this.onNavWheel} @scroll=${this.markNavEdges}>
             <button aria-pressed=${this._floorId === null} @click=${() => pickFloor(null)}>${this.t("all_floors")}</button>
             ${[...b.floors].reverse().map((f) => html`<button aria-pressed=${f.id === this._floorId} @click=${() => pickFloor(f.id)}>${f.name}</button>`)}
-          </div>`
+          </div>
+          <label class="fp3d-floor-pick ${this._floorId ? "fp3d-floor-on" : ""}">
+            <select aria-label=${this.t("floors")} @change=${(e: Event) => pickFloor((e.target as HTMLSelectElement).value || null)}>
+              <option value="" ?selected=${this._floorId === null}>${this.t("all_floors")}</option>
+              ${[...b.floors].reverse().map((f) => html`<option value=${f.id} ?selected=${f.id === this._floorId}>${f.name}</option>`)}
+            </select>
+            ${uiIcon("down")}
+          </label>`
         : nothing}
       ${this._tablet
         ? nothing
@@ -1552,7 +1569,7 @@ export class Floorplan3dPanel extends LitElement {
     </div>`;
     return html`
       ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : this.renderFloorBar(b, floor)}
-      <div class="fp3d-stage-wrap ${this._roomId ? "fp3d-room-open" : ""} ${this._controlsRight ? "fp3d-side-right" : ""} ${tt ? "fp3d-tt" : ""}">
+      <div class="fp3d-stage-wrap ${this._roomId ? "fp3d-room-open" : ""} ${this._controlsRight ? "fp3d-side-right" : ""} ${tt ? "fp3d-tt" : ""} ${this._cameraWall && !tt ? "fp3d-cams-open" : ""}">
         <!-- the floor bar picks the floor: the floor pictures beside the 3D view are a second picker, shown when Settings
              › Screen and controls says so (#249, #250; the card keeps its own switch) -->
         <fp3d-view3d
@@ -1593,6 +1610,7 @@ export class Floorplan3dPanel extends LitElement {
           .weather=${this._weather}
           .flows=${this._flows}
           .holograms=${this._holos}
+          .doorPins=${this._doorPins}
           .vacuumMaps=${this._vacuumMaps}
           .director=${this._director}
           .voice=${this._voiceHere}
@@ -1652,25 +1670,33 @@ export class Floorplan3dPanel extends LitElement {
         ${showsDemo(hass) && !this.tt.session ? html`<div class="fp3d-demo-chip" title=${this.t("demo_hint")}>${this.t("demo_chip")}</div>` : nothing}
         ${this._clean ? nothing : html`<div class="fp3d-overlay">
           ${this._tablet ? nothing : planView}
+          ${this._tablet
+            ? nothing
+            : html`<button class="fp3d-chip fp3d-plan-toggle" title=${this.t("plan_view")} aria-label=${`${this.t("plan_view")}: ${this.t(this._plan2d ? "view_3d" : "view_2d")}`} @click=${() => this.setPlan2d(!this._plan2d)}>
+                ${this.t(this._plan2d ? "view_3d" : "view_2d")}
+              </button>`}
           <button
             class="fp3d-chip fp3d-view-btn"
             aria-haspopup="dialog"
             aria-expanded=${this._viewOpen}
             aria-controls="fp3d-view-panel"
+            aria-label=${this.t("view_btn")}
             @pointerenter=${() => need(loadViewPanel)}
             @focus=${() => need(loadViewPanel)}
             @click=${() => this.setViewOpen(!this._viewOpen)}
           >
-            ${this.t("view_btn")} <span class="fp3d-caret" aria-hidden="true">${this._viewOpen ? "▴" : "▾"}</span>
+            <span class="fp3d-bar-icon">${uiIcon("sliders")}</span><span class="fp3d-bar-word">${this.t("view_btn")}</span> <span class="fp3d-caret" aria-hidden="true">${this._viewOpen ? "▴" : "▾"}</span>
           </button>
           ${!tt && this.hasCameras(b)
-            ? html`<button class="fp3d-chip fp3d-cam-btn" aria-pressed=${this._cameraWall} title=${this.t("camera_wall_hint")} @click=${() => (this._cameraWall = !this._cameraWall)}>${this.t("cameras_short")}</button>`
+            ? html`<button class="fp3d-chip fp3d-cam-btn" aria-pressed=${this._cameraWall} aria-label=${this.t("cameras_short")} title=${this.t("camera_wall_hint")} @click=${() => (this._cameraWall = !this._cameraWall)}>
+                <span class="fp3d-bar-icon">${uiIcon("camera")}</span><span class="fp3d-bar-word">${this.t("cameras_short")}</span>
+              </button>`
             : nothing}
           ${this._tablet ? nothing : html`<button class="fp3d-chip fp3d-tt-chip" aria-pressed=${tt} title=${this.t("tt_hint")} aria-label=${this.t("tt_chip")} @click=${() => this.toggleTimeTravel()}>
             ⏪ <span class="fp3d-tt-label">${this.t("tt_chip")}</span>
           </button>`}
           ${this._roomId || (this._floorId && b.floors.length > 1)
-            ? html`<button class="fp3d-chip" @click=${() => this.back()}>${this.t("back")}</button>`
+            ? html`<button class="fp3d-chip fp3d-back-btn" aria-label=${this.t("back")} @click=${() => this.back()}><span class="fp3d-bar-icon">${uiIcon("back")}</span><span class="fp3d-bar-word">${this.t("back")}</span></button>`
             : nothing}
         </div>`}
         ${this._viewOpen && !this._clean
@@ -2095,6 +2121,44 @@ export class Floorplan3dPanel extends LitElement {
       .fp3d-floors > button {
         flex: none;
       }
+      /* phones (#346): the floor as a dropdown instead of a row of chips cut off at the edge */
+      .fp3d-floor-pick {
+        display: none;
+        position: relative;
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+      .fp3d-floor-pick select {
+        appearance: none;
+        width: 100%;
+        max-width: 14em;
+        min-height: 44px;
+        padding: 0 34px 0 14px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 999px;
+        background: var(--fp3d-chrome);
+        color: var(--fp3d-text);
+        font: inherit;
+        font-weight: 500;
+        text-overflow: ellipsis;
+        cursor: pointer;
+      }
+      .fp3d-floor-pick option {
+        background: var(--fp3d-chrome-solid);
+        color: var(--fp3d-text);
+      }
+      .fp3d-floor-on select {
+        color: var(--fp3d-accent);
+        border-color: var(--fp3d-accent);
+      }
+      .fp3d-floor-pick svg {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        color: var(--fp3d-muted);
+      }
       .fp3d-rooms {
         position: relative;
         flex: none;
@@ -2283,6 +2347,11 @@ export class Floorplan3dPanel extends LitElement {
         font-size: 0.8em;
         opacity: 0.7;
       }
+      /* the phone bar's symbols and its one 3D/2D button (#346); wider screens show the words and the segment */
+      .fp3d-bar-icon,
+      .fp3d-plan-toggle {
+        display: none;
+      }
       .fp3d-message,
       .fp3d-empty {
         padding: 32px 20px;
@@ -2315,6 +2384,12 @@ export class Floorplan3dPanel extends LitElement {
           position: relative;
           padding: 4px 8px;
         }
+        .fp3d-nav .fp3d-floors {
+          display: none;
+        }
+        .fp3d-floor-pick {
+          display: block;
+        }
         /* the Rooms picker opens from the bar's left edge, so it stays on the screen */
         .fp3d-rooms {
           position: static;
@@ -2332,6 +2407,81 @@ export class Floorplan3dPanel extends LitElement {
         .fp3d-overlay .fp3d-tt-chip {
           min-width: 44px;
           justify-content: center;
+        }
+        /* the View panel is a full screen page on a phone (#346), the time bar under it too */
+        .fp3d-tt fp3d-view-panel {
+          bottom: 0;
+        }
+        /* so is the camera wall (view3d.ts): the bar's buttons go while it is open, its Close and Back shut it */
+        .fp3d-cams-open .fp3d-overlay {
+          display: none;
+        }
+        /* one bar along the foot (#346): the star and the eye (view3d.ts) at its start, then 3D/2D, View, Cameras, time
+           travel and Back, each a 44 px square at the same pitch; it never wraps (seven fit a 360 px phone) */
+        .fp3d-overlay {
+          left: 108px;
+          right: 8px;
+          bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+          flex-wrap: nowrap;
+          justify-content: flex-start;
+          gap: 6px;
+        }
+        .fp3d-side-right .fp3d-overlay {
+          left: 8px;
+          right: 108px;
+          justify-content: flex-end;
+        }
+        .fp3d-overlay > .fp3d-seg {
+          display: none;
+        }
+        .fp3d-overlay .fp3d-chip {
+          flex: none;
+          display: inline-grid;
+          place-items: center;
+          width: 44px;
+          min-width: 44px;
+          height: 44px;
+          padding: 0;
+          border-radius: 14px;
+        }
+        .fp3d-overlay .fp3d-bar-icon {
+          display: contents;
+        }
+        .fp3d-overlay :is(.fp3d-bar-word, .fp3d-caret) {
+          display: none;
+        }
+        .fp3d-overlay .fp3d-bar-icon svg {
+          width: 22px;
+          height: 22px;
+        }
+        /* the 3D view's star and eye join the bar (view3d.ts reads these; without them, as in a card, they keep their corner) */
+        fp3d-view3d {
+          --fp3d-dock-left: 8px;
+          --fp3d-dock-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+          --fp3d-dock-menu: calc(60px + env(safe-area-inset-bottom, 0px));
+        }
+        /* time travel has no star (nothing is switched): the eye takes its place and the bar moves up to it */
+        .fp3d-tt fp3d-view3d {
+          --fp3d-dock-left: -42px;
+          --fp3d-dock-bottom: calc(var(--fp3d-tt-h) + 4px);
+          --fp3d-dock-menu: calc(var(--fp3d-tt-h) + 56px);
+        }
+        .fp3d-tt .fp3d-overlay {
+          left: 58px;
+        }
+        .fp3d-side-right.fp3d-tt .fp3d-overlay {
+          left: 8px;
+          right: 58px;
+        }
+        /* a room sheet: the pair waits in one row above it */
+        .fp3d-room-open fp3d-view3d {
+          --fp3d-dock-bottom: calc(55% + 18px);
+          --fp3d-dock-menu: calc(55% + 70px);
+        }
+        .fp3d-clean fp3d-view3d {
+          --fp3d-dock-left: initial;
+          --fp3d-dock-bottom: initial;
+          --fp3d-dock-menu: initial;
         }
       }
       /* touch screens, a tablet as much as a phone (#181): 44 px, and room for three rows of floor chips */
