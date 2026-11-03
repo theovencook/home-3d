@@ -51,12 +51,13 @@ test("'Fit with garden' (was Fit everything) frames the whole plot and the items
   for (const p of [[-10, -8], [20, 16], [23, 18], [0, 0], [8, 6]] as [number, number][]) assert.ok(onScreen(el, p), `${p} is off the plan`);
 });
 
-test("one Fit in the row; 'Fit with garden' is in More, only when something stands outside; Wall view sits apart (#91, #249)", () => {
+test("no Fit in the top bar (the plan's zoom buttons have it, #321); 'Fit with garden' is in More, only when something stands outside; Wall view sits apart (#91, #249)", () => {
   const el = editor();
   const bar = flat(el.renderToolBar());
   const groups = bar.split(/<div class="fp3d-seg/);
-  const views = groups.find((g) => g.includes("fp3d-fit-btn"))!;
-  assert.match(views, / Fit<\/button>/);
+  const views = groups.find((g) => g.includes("3D beside"))!;
+  assert.doesNotMatch(views, /fp3d-fit-btn| Fit<\/button>/);
+  assert.match(flat(el.renderNav()), /fp3d-nav-btn[^>]*>⤢/, "the plan's own Fit is beside + and −");
   assert.match(views, /3D beside/);
   assert.doesNotMatch(views, /Wall view/);
   assert.match(bar, /Wall view/);

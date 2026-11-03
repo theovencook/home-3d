@@ -6,6 +6,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 ## Unreleased
 
 - **Display what** in Settings (and the weather effects list) uses the same searchable multi-select as the View panel instead of a grid of checkboxes (#332).
+- The top bar no longer has a second Fit button in 2D; the one beside the zoom buttons stays (#321).
 
 ## Home 3D 0.2.1 (2 November 2026)
 
