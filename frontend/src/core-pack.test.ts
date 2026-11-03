@@ -122,6 +122,40 @@ test("the RISHOLMEN wing chair is in the IKEA UK pack at IKEA's size, found by b
   assert.ok((ikea?.pack.release ?? 0) >= 4);
 });
 
+const RUN6_ITEMS: [string, string, string][] = [
+  ["theovencook.ikea-uk", "skruvby_coffee_table_60x60", "skruvby"],
+  ["theovencook.outdoor", "rattan_tub_chair_black_legs", "rattan tub chair"],
+  ["theovencook.outdoor", "rattan_bench_2_black_legs", "rattan bench"],
+  ["theovencook.outdoor", "rattan_glass_coffee_table_small", "rattan coffee table"],
+  ["theovencook.outdoor", "bike_helmet", "bike helmet"],
+  ["theovencook.outdoor", "pizza_peel_wall", "pizza peel"],
+  ["theovencook.household", "cat_tunnel_crinkle_90", "cat tunnel"],
+  ["theovencook.household", "boot_tray_75", "boot tray"],
+  ["theovencook.kitchen-bath", "pedal_bin_5l", "pedal bin"],
+  ["theovencook.kitchen-bath", "pedal_bin_30l", "pedal bin"],
+  ["theovencook.kitchen-bath", "toilet_roll_holder_freestanding", "toilet roll"],
+  ["theovencook.kitchen-bath", "toilet_roll_holder_wall", "toilet roll"],
+  ["theovencook.kitchen-bath", "shower_curtain_rail_170", "shower curtain"],
+  ["theovencook.outdoor-plants", "silver_birch_young", "silver birch"],
+  ["theovencook.outdoor-plants", "silver_birch_mature", "silver birch"],
+  ["theovencook.living", "uplighter_slim_floor", "uplighter"],
+  ["theovencook.living", "uplighter_slim_desk", "uplighter"],
+  ["theovencook.decor", "cardboard_cutout_person", "cardboard cutout"],
+];
+
+test("the run 6 library items ship in their packs and are found by their everyday words (run 6)", () => {
+  for (const [packId, id, words] of RUN6_ITEMS) {
+    const bundled = packs.find((p) => p.pack.id === packId);
+    assert.ok(bundled, packId);
+    const entries = buildIndex({ packs: [bundled.pack], basics: [], language: "en", basicName: (t) => t, basicNameEn: (t) => t, kindName: (k) => k, size: () => [1, 1, 1] });
+    const found = filterEntries(entries, { query: words, room: null, electric: false, light: false, outdoor: false }).map((e) => e.type);
+    assert.ok(found.includes(`pack:${packId}:${id}`), `"${words}" finds ${id}`);
+  }
+  const skruvby = packs.find((p) => p.pack.id === "theovencook.ikea-uk")?.pack.items.find((i) => i.id === "skruvby_coffee_table_60x60");
+  assert.deepEqual(skruvby?.size, [0.6, 0.6, 0.5]);
+  assert.equal(skruvby?.ikea, "SKRUVBY");
+});
+
 test("theovencook.makers and theovencook.devices ship with Home 3D beside the others (#109)", () => {
   for (const [id, name] of [["theovencook.makers", "Makers"], ["theovencook.devices", "Smart-home devices"]] as const) {
     const bundled = packs.find((p) => p.pack.id === id);

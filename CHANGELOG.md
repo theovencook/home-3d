@@ -5,6 +5,8 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- IKEA UK pack release 5: SKRUVBY coffee table 60x60x50 cm in black-blue, with its low shelf (run 6).
+- New library items (run 6): a rattan garden set with black metal legs and black seat pads (tub chair, 2-seat bench, small glass-top coffee table), a bike helmet and a wall-hung pizza peel (Garden & outdoor 5); a crinkle cat tunnel and a boot tray (Household 3); pedal bins 5 L and 30 L, freestanding and wall toilet roll holders, a shower curtain on a straight 170 cm rail (Kitchen & bath 3); silver birch, young and mature (Garden plants 2); slim uplighters, floor and desk (Living 3); a life-size cardboard cutout of a person (Decor 3).
 - Cars no longer look sunk into the ground: every car with a curved body (the Leaf too) has wheel arches over its tyres with dark wheel wells behind, so the tyres show down to the ground; Garden & outdoor pack release 5 (run 6).
 - Robot vacuum maps on the plan: a map camera (dreame_vacuum's map camera, or the Xiaomi Cloud Map Extractor for Roborock and other Xiaomi robots) lies on its floor in the 3D view, aligned to the plan by up to three point pairs picked once in the editor, with the robot and its dock as live markers; opacity per map, and a View switch "Vacuum maps" (#350).
 - Walk mode on a touch screen: the bottom bar stays pressable (the walk layer stops above it), "Exit walk" is a larger button where the Walk button was at the top right with the energy row stopping before it, the room name sits under the energy row, the clock is hidden while walking so the stick never covers it, and Back and Escape end the walk (the browser Back too) (#351).

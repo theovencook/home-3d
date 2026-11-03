@@ -205,7 +205,11 @@ def test_every_curved_car_has_wheel_arches_so_its_tyres_show() -> None:
     for path in sorted((folder / "vehicle").glob("*.json")):
         item = json.loads(path.read_text(encoding="utf-8"))
         shells = [p for p in item["parts"] if p["shape"] == "shell" and p.get("color") not in ("glass", "dark")]
-        tyres = [p for p in item["parts"] if p["shape"] == "cyl" and p.get("axis") == "x" and p["color"] == "dark" and p["y"] == 0]
+        tyres = [
+            p
+            for p in item["parts"]
+            if p["shape"] == "cyl" and p.get("axis") == "x" and p["color"] == "dark" and p["y"] == 0
+        ]
         if not shells or len(tyres) < 4:
             continue
         body = min(shells, key=lambda p: p["y"])  # the lower body
@@ -221,3 +225,45 @@ def test_every_curved_car_has_wheel_arches_so_its_tyres_show() -> None:
         checked += 1
     assert checked > 190
     assert json.loads((folder / "pack.json").read_text(encoding="utf-8"))["release"] >= 5
+
+
+RUN6_ITEMS = {
+    "theovencook.ikea-uk/table/skruvby_coffee_table_60x60": [0.6, 0.6, 0.5],
+    "theovencook.outdoor/outdoor/rattan_tub_chair_black_legs": [0.66, 0.64, 0.72],
+    "theovencook.outdoor/outdoor/rattan_bench_2_black_legs": [1.18, 0.64, 0.72],
+    "theovencook.outdoor/outdoor/rattan_glass_coffee_table_small": [0.6, 0.4, 0.4],
+    "theovencook.outdoor/sport/bike_helmet": [0.2, 0.27, 0.17],
+    "theovencook.outdoor/outdoor/pizza_peel_wall": [0.35, 0.03, 0.8],
+    "theovencook.household/pets/cat_tunnel_crinkle_90": [0.9, 0.27, 0.27],
+    "theovencook.household/household/boot_tray_75": [0.75, 0.38, 0.03],
+    "theovencook.kitchen-bath/bath/pedal_bin_5l": [0.21, 0.24, 0.28],
+    "theovencook.kitchen-bath/kitchen/pedal_bin_30l": [0.3, 0.36, 0.65],
+    "theovencook.kitchen-bath/bath/toilet_roll_holder_freestanding": [0.18, 0.18, 0.62],
+    "theovencook.kitchen-bath/bath/toilet_roll_holder_wall": [0.16, 0.12, 0.12],
+    "theovencook.kitchen-bath/bath/shower_curtain_rail_170": [1.7, 0.06, 1.45],
+    "theovencook.outdoor-plants/plant/silver_birch_young": [1.6, 1.6, 4.0],
+    "theovencook.outdoor-plants/plant/silver_birch_mature": [5.0, 5.0, 10.0],
+    "theovencook.living/lamp/uplighter_slim_floor": [0.25, 0.25, 1.8],
+    "theovencook.living/lamp/uplighter_slim_desk": [0.12, 0.12, 0.45],
+    "theovencook.decor/deco/cardboard_cutout_person": [0.5, 0.3, 1.75],
+}
+
+
+def test_the_run6_library_items_are_valid_and_their_packs_moved_on() -> None:
+    """Run 6: new items modelled from our own shapes at typical product sizes, each pack's release bumped."""
+    releases = {
+        "theovencook.ikea-uk": 5,
+        "theovencook.outdoor": 5,
+        "theovencook.household": 3,
+        "theovencook.kitchen-bath": 3,
+        "theovencook.outdoor-plants": 2,
+        "theovencook.living": 3,
+        "theovencook.decor": 3,
+    }
+    for path, size in RUN6_ITEMS.items():
+        item = json.loads((BUNDLED / f"{path}.json").read_text(encoding="utf-8"))
+        packs.ITEM_SCHEMA(item)
+        assert item["size"] == size, path
+        assert item["group"] == path.split("/")[1], path
+    for pack_id, release in releases.items():
+        assert json.loads((BUNDLED / pack_id / "pack.json").read_text(encoding="utf-8"))["release"] >= release, pack_id

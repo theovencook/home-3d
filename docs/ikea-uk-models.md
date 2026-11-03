@@ -411,3 +411,4 @@ brackets of the BERGSHULT shelves, the TJUSIG rack's slat detail and the SAMVERK
 | 1 | Coffee table with mesh shelf 90x46 cm | FJÄLLBO | `table` | done, 1 item |
 | 2 | Shelving unit with mesh shelf 100x136 cm | FJÄLLBO | `storage` | done, 1 item |
 | 3 | Rattan wing chair, in/outdoor 68x67x80 cm | RISHOLMEN | `seating` | done, 1 item |
+| 4 | Coffee table 60x60 cm, black-blue | SKRUVBY | `table` | done, 1 item |
