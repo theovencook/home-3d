@@ -1395,7 +1395,14 @@ export class Floorplan3dPanel extends LitElement {
         ? html`<div class="fp3d-seg fp3d-floors" role="group" aria-label=${this.t("floors")} @wheel=${this.onNavWheel} @scroll=${this.markNavEdges}>
             <button aria-pressed=${this._floorId === null} @click=${() => pickFloor(null)}>${this.t("all_floors")}</button>
             ${[...b.floors].reverse().map((f) => html`<button aria-pressed=${f.id === this._floorId} @click=${() => pickFloor(f.id)}>${f.name}</button>`)}
-          </div>`
+          </div>
+          <label class="fp3d-floor-pick ${this._floorId ? "fp3d-floor-on" : ""}">
+            <select aria-label=${this.t("floors")} @change=${(e: Event) => pickFloor((e.target as HTMLSelectElement).value || null)}>
+              <option value="" ?selected=${this._floorId === null}>${this.t("all_floors")}</option>
+              ${[...b.floors].reverse().map((f) => html`<option value=${f.id} ?selected=${f.id === this._floorId}>${f.name}</option>`)}
+            </select>
+            ${uiIcon("down")}
+          </label>`
         : nothing}
       ${this._tablet
         ? nothing
@@ -2090,6 +2097,44 @@ export class Floorplan3dPanel extends LitElement {
       .fp3d-floors > button {
         flex: none;
       }
+      /* phones (#346): the floor as a dropdown instead of a row of chips cut off at the edge */
+      .fp3d-floor-pick {
+        display: none;
+        position: relative;
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+      .fp3d-floor-pick select {
+        appearance: none;
+        width: 100%;
+        max-width: 14em;
+        min-height: 44px;
+        padding: 0 34px 0 14px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 999px;
+        background: var(--fp3d-chrome);
+        color: var(--fp3d-text);
+        font: inherit;
+        font-weight: 500;
+        text-overflow: ellipsis;
+        cursor: pointer;
+      }
+      .fp3d-floor-pick option {
+        background: var(--fp3d-chrome-solid);
+        color: var(--fp3d-text);
+      }
+      .fp3d-floor-on select {
+        color: var(--fp3d-accent);
+        border-color: var(--fp3d-accent);
+      }
+      .fp3d-floor-pick svg {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        color: var(--fp3d-muted);
+      }
       .fp3d-rooms {
         position: relative;
         flex: none;
@@ -2309,6 +2354,12 @@ export class Floorplan3dPanel extends LitElement {
         .fp3d-nav {
           position: relative;
           padding: 4px 8px;
+        }
+        .fp3d-nav .fp3d-floors {
+          display: none;
+        }
+        .fp3d-floor-pick {
+          display: block;
         }
         /* the Rooms picker opens from the bar's left edge, so it stays on the screen */
         .fp3d-rooms {
