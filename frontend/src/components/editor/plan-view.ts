@@ -7,12 +7,62 @@ import { setCameraSensors } from "../../markers.ts";
 import { announce } from "../../announce.ts";
 import { syncCameraLooks } from "../../model.ts";
 import type { I18nKey } from "../../i18n.ts";
-import { bounds, type Building, type Floor, type Vec2 } from "../../model.ts";
+import { furnitureName } from "../../furniture-names.ts";
+import { bounds, centroid, polygonArea, type Building, type Floor, type Vec2 } from "../../model.ts";
+import { BODY_FONT, clearLabels, itemRank, roomRank, textWidth, TITLE_FONT, type LabelBox } from "../../viewer/label-clear.ts";
 import { type Guides, SNAP_PX, round } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
+/** The names the plan last showed, and what they were worked out for (#341). */
+const labelMemo = new WeakMap<Fp3dEditor, { key: unknown[]; shown: ReadonlySet<string> }>();
+
 /** PlanViewPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class PlanViewPart {
+  /**
+   * The names the plan shows (#341): room, outdoor area and item names in one pass ("r:", "o:", "f:" + id). Where two
+   * would touch, a room's beats an outdoor area's, that beats an item's, a larger one a smaller one; the selected one
+   * always shows. Zooming in makes room until all show. Worked out once per view, floor and selection, from the text
+   * widths at the plan's fonts (no layout read).
+   */
+  planLabels(this: Fp3dEditor, floor: Floor): ReadonlySet<string> {
+    const k = this._view.scale;
+    const key = [floor, this._view, this._roomId, this._furnitureId, this._outdoorId, this._hiddenItems, this.hass?.language, this.unit];
+    const memo = labelMemo.get(this);
+    if (memo && memo.key.every((v, i) => v === key[i])) return memo.shown;
+    const ids: string[] = [];
+    const boxes: LabelBox[] = [];
+    const add = (id: string, [x, y]: [number, number], w: number, h: number, rank: number, keep: boolean) => {
+      ids.push(id);
+      boxes.push({ x, y, w, h, rank, keep });
+    };
+    for (const r of floor.rooms) {
+      // the name (13 px) and the area under it (11.5 px)
+      const [x, y] = this.toScreen(centroid(r.points));
+      add(`r:${r.id}`, [x, y + 2], Math.max(textWidth(r.name, `600 13px ${TITLE_FONT}`), textWidth(this.area(polygonArea(r.points)), `500 11.5px ${BODY_FONT}`)), 30, roomRank(r), r.id === this._roomId);
+    }
+    for (const a of floor.outdoor) {
+      const b = bounds(a.points);
+      // a fence is a line round the plot: its middle is somewhere in the house, so it is named only when selected
+      if (a.id !== this._outdoorId && (a.type === "fence" || Math.min(b.x1 - b.x0, b.z1 - b.z0) * k <= 40)) continue;
+      add(`o:${a.id}`, this.toScreen(centroid(a.points)), textWidth(this.t(`out_${a.type}` as I18nKey), `11px ${BODY_FONT}`), 14, Math.abs(polygonArea(a.points)) + 1e6, a.id === this._outdoorId);
+    }
+    for (const f of floor.furniture) {
+      if (this._hiddenItems.includes(f.id) || (f.id !== this._furnitureId && Math.min(f.w, f.d) * k <= 44)) continue;
+      const [x, y] = this.toScreen([f.x, f.z]);
+      add(`f:${f.id}`, [x, this.itemLabelY(f, y) - 4], textWidth(furnitureName(this.hass, f.type), `11px ${BODY_FONT}`), 14, itemRank(f.w, f.d), f.id === this._furnitureId);
+    }
+    const keep = clearLabels(boxes);
+    const shown = new Set(ids.filter((_, i) => keep[i]));
+    labelMemo.set(this, { key, shown });
+    return shown;
+  }
+
+  /** Where an item's name sits (its baseline, px): in its middle, or below it when it is too small to hold it. */
+  itemLabelY(this: Fp3dEditor, f: { w: number; d: number }, cy: number): number {
+    const k = this._view.scale;
+    return Math.min(f.w, f.d) * k > 44 ? cy + 4 : cy + (Math.max(f.w, f.d) * k) / 2 + 14;
+  }
+
   /** Replace the document; `base` (the state before the change) goes into the undo history. */
   setDoc(this: Fp3dEditor, next: Building, base: Building | null = this._doc): void {
     if (base) this.history.push(base, this.mergeKey, this.mergeWithin);

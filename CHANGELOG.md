@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- Names on the plan no longer sit on each other in the 2D editor, the 2D view or 3D (phones too): room, outdoor area and item names share one pass, where two would touch the smaller room's or the item's name gives way and comes back as you zoom in; the selected one always shows, and an item's hidden name shows while the pointer is over it (#341).
 - Settings, Extensions, the editor and the ask dialogs (New home, Rename, Delete …) follow the chosen look: light under the Day look or a light Home Assistant theme, high contrast under High contrast (#263).
 - On a phone the View sheet opens at half height so the house stays in sight; drag its handle up (or tap it) for all of it, down to shrink or close it (#263).
 - Room names on a floor view no longer pile up: where two would overlap the smaller room's name gives way, and every name comes back as you zoom in (#263).

@@ -93,14 +93,14 @@ export class OutdoorPart {
   }
 
   renderOutdoor(this: Fp3dEditor, floor: Floor) {
+    // one pass for every name on the plan (#341): an area's name shows when it has room
+    const shown = this.planLabels(floor);
     return svg`<g>${floor.outdoor.map((a) => {
       const pts = a.points.map((p) => this.toScreen(p).join(",")).join(" ");
       const [cx, cy] = this.toScreen(centroid(a.points));
-      const b = bounds(a.points);
-      const big = Math.min(b.x1 - b.x0, b.z1 - b.z0) * this._view.scale > 40;
       return svg`<g data-outdoor=${a.id} class=${`fp3d-out fp3d-out-${a.type}${a.id === this._outdoorId ? " fp3d-out-sel" : ""}`}>
         <polygon points=${pts} />
-        ${big ? svg`<text x=${cx} y=${cy + 4}>${this.t(`out_${a.type}` as I18nKey)}</text>` : nothing}
+        ${shown.has(`o:${a.id}`) ? svg`<text x=${cx} y=${cy + 4}>${this.t(`out_${a.type}` as I18nKey)}</text>` : nothing}
       </g>`;
     })}</g>`;
   }
