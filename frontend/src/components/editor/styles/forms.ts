@@ -615,6 +615,69 @@ export const formStyles = css`
         stroke: #1a1000;
         stroke-width: 1.5;
       }
+      /* the up, down and remove buttons of a reorderable Settings list: a fixed column at the right (#326) */
+      .fp3d-row.fp3d-ord-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+      }
+      .fp3d-ord-row .fp3d-dev-name {
+        min-width: 0;
+      }
+      .fp3d-ord-row .fp3d-dev-name span {
+        white-space: nowrap;
+      }
+      .fp3d-ord {
+        display: inline-grid;
+        grid-template-columns: repeat(3, 32px);
+        gap: 2px;
+        justify-self: end;
+      }
+      .fp3d-ord-v {
+        grid-template-columns: 32px;
+        align-self: start;
+        padding-top: 10px;
+      }
+      .fp3d-ord-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: start;
+        grid-auto-flow: dense;
+      }
+      .fp3d-ord-card > .fp3d-ord {
+        grid-column: 2;
+        grid-row: 1;
+      }
+      .fp3d-ord-card > .fp3d-form {
+        grid-column: 1;
+        grid-row: 1;
+        min-width: 0;
+      }
+      .fp3d-ord-btn {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--fp3d-muted);
+        background: none;
+        border: 0;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .fp3d-ord-btn:hover:not(:disabled) {
+        color: var(--fp3d-text);
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .fp3d-ord-btn:disabled {
+        opacity: 0.3;
+        cursor: default;
+      }
+      .fp3d-ord-remove:hover:not(:disabled) {
+        color: #ff6b6b;
+      }
       .fp3d-own-button {
         padding: 10px 0;
         border-top: 1px solid var(--fp3d-line);
@@ -838,6 +901,16 @@ export const formStyles = css`
         .fp3d-pin {
           min-width: 44px;
           min-height: 44px;
+        }
+        .fp3d-ord {
+          grid-template-columns: repeat(3, 44px);
+        }
+        .fp3d-ord-v {
+          grid-template-columns: 44px;
+        }
+        .fp3d-ord-btn {
+          width: 44px;
+          height: 44px;
         }
         .fp3d-more-btn,
         .fp3d-wv-zoom .fp3d-btn,

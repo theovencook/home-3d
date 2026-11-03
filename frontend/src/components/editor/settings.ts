@@ -1,7 +1,7 @@
 // House-wide settings shown in the editor and on the Settings page: favourites, media presets, own buttons, start
 // views, director triggers, editors and tablet users, presence.
 
-import { html, nothing } from "lit";
+import { html, nothing, svg, type TemplateResult } from "lit";
 import { entityName } from "../../devices.ts";
 import type { DirectorSettings } from "../../director.ts";
 import type { I18nKey } from "../../i18n.ts";
@@ -12,8 +12,35 @@ import { round, numberish } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 import { need, loadMultiSelect } from "./lazy.ts";
 
+/** A list with the entry at `i` moved by `by` places (stays inside the list). */
+const moveAt = <T,>(list: T[], i: number, by: number): T[] => {
+  const next = [...list];
+  const [x] = next.splice(i, 1);
+  next.splice(Math.max(0, Math.min(next.length, i + by)), 0, x);
+  return next;
+};
+
+const ORDER_PATHS = { up: "M6 15l6-6 6 6", down: "M6 9l6 6 6-6", remove: "M6 6l12 12M18 6L6 18" } as const;
+
 /** SettingsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class SettingsPart {
+  /**
+   * The same three compact icon buttons (up, down, remove) in a fixed column at the right of every reorderable list in
+   * Settings, so they line up whatever the names are (#326). `vertical` stacks them for a taller entry.
+   */
+  orderTools(this: Fp3dEditor, label: string, i: number, count: number, move: (by: number) => void, remove: () => void, vertical = false): TemplateResult {
+    const btn = (kind: keyof typeof ORDER_PATHS, text: string, off: boolean, run: () => void) => html`<button
+      class="fp3d-ord-btn ${kind === "remove" ? "fp3d-ord-remove" : ""}"
+      title=${text}
+      aria-label="${text}: ${label}"
+      ?disabled=${off}
+      @click=${run}
+    ><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${svg`<path d=${ORDER_PATHS[kind]}></path>`}</svg></button>`;
+    return html`<span class="fp3d-ord ${vertical ? "fp3d-ord-v" : ""}">
+      ${btn("up", this.t("move_up"), i === 0, () => move(-1))}${btn("down", this.t("move_down"), i === count - 1, () => move(1))}${btn("remove", this.t("delete"), false, remove)}
+    </span>`;
+  }
+
   /** Favourites of the house: scenes, scripts and switches in the central menu (star) of the 3D view (#145). */
   renderFavorites(this: Fp3dEditor) {
     const list = this._doc.settings.favorites ?? [];
@@ -30,11 +57,9 @@ export class SettingsPart {
       <summary>${this.t("favorites")}${list.length ? html` <span class="fp3d-lib-count">${list.length}</span>` : nothing}</summary>
       <p class="fp3d-sub">${this.t("favorites_hint")}</p>
       ${list.map(
-        (id, i) => html`<div class="fp3d-row fp3d-dev-row">
-          <span class="fp3d-dev-name"><span>${entityName(this.hass, id)}</span></span>
-          <button class="fp3d-pin" title=${this.t("move_up")} ?disabled=${i === 0} @click=${() => move(i, -1)}>↑</button>
-          <button class="fp3d-pin" title=${this.t("move_down")} ?disabled=${i === list.length - 1} @click=${() => move(i, 1)}>↓</button>
-          <button class="fp3d-pin" title=${this.t("delete")} @click=${() => set(list.filter((x) => x !== id))}>✕</button>
+        (id, i) => html`<div class="fp3d-row fp3d-dev-row fp3d-ord-row">
+          <span class="fp3d-dev-name" title=${entityName(this.hass, id)}><span>${entityName(this.hass, id)}</span></span>
+          ${this.orderTools(entityName(this.hass, id), i, list.length, (by) => move(i, by), () => set(list.filter((x) => x !== id)))}
         </div>`,
       )}
       ${list.length < 40
@@ -96,7 +121,9 @@ export class SettingsPart {
       <p class="fp3d-sub">${this.t("own_buttons_hint")}</p>
       ${!this.isHaAdmin ? html`<p class="fp3d-sub">${this.t("own_button_admin")}</p>` : nothing}
       ${list.map(
-        (b, i) => html`<div class="fp3d-form fp3d-own-button">
+        (b, i) => html`<div class="fp3d-ord-card">
+        ${this.orderTools(b.label, i, list.length, (by) => set(moveAt(list, i, by)), () => set(list.filter((_, j) => j !== i)), true)}
+        <div class="fp3d-form fp3d-own-button">
           <label class="fp3d-field"
             >${this.t("own_button_label")}
             <input type="text" maxlength="60" .value=${b.label} @change=${(e: Event) => upd(i, { label: (e.target as HTMLInputElement).value.trim() || this.t("own_button_new") })}
@@ -138,11 +165,7 @@ export class SettingsPart {
                 ></textarea></label
               >`
             : nothing}
-          <div class="fp3d-actions fp3d-wide">
-            <button class="fp3d-btn" ?disabled=${i === 0} @click=${() => set([...list.slice(0, i - 1), b, list[i - 1], ...list.slice(i + 1)])}>↑</button>
-            <button class="fp3d-btn fp3d-danger" @click=${() => set(list.filter((_, j) => j !== i))}>${this.t("delete")}</button>
-          </div>
-        </div>`,
+        </div></div>`,
       )}
       ${list.length < 20
         ? html`<div class="fp3d-actions">
