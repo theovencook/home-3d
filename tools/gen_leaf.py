@@ -1,12 +1,14 @@
-"""Writes the Nissan Leaf and its colourways (theovencook.outdoor/vehicle/nissan_leaf*.json), #242, #252.
+"""Writes the Nissan Leaf and its colourways (theovencook.outdoor/vehicle/nissan_leaf*.json), #242, #252, #345.
 
     python tools/gen_leaf.py
 
 The second-generation Leaf (ZE1, 2018 on) at 4490 x 1790 x 1540 mm, wheelbase 2700 mm: a rounded hatchback with a short
 bonnet sloping down to the nose, a steeply raked windscreen, a high rear with a kick in the window line, black pillars
-under a body-coloured roof (the "floating roof"), boomerang lamps front and rear and a V-shaped grille. The body,
-glasshouse and roof are curved shells (#252) traced from photos of the car; the rest are simple shapes. Modelled by
-us; no logos, no maker images, no 3D files. The other cars come from tools/gen_vehicles.py.
+under a body-coloured roof (the "floating roof") ending in a spoiler, slim LED headlights swept back round the
+corners to a blue-tinted V-motion grille, and at the back dark tailgate glass reaching down between boomerang tail
+lights. The body, glasshouse and roof are curved shells (#252) traced from photos of the car; the lamps are strips of
+turned lofts lying on the curved corners (#345); the rest are simple shapes. Modelled by us; no logos, no maker
+images, no 3D files. The other cars come from tools/gen_vehicles.py.
 
 Windows are in the palette role "glass" and the lamps in the colours the viewer lights for a linked car (headlights
 #e8f4ff, tail lights #ff3b4f): Auto Pro's lights and cabin glow show on it. Every part above the waist sits inside the
@@ -15,7 +17,9 @@ glasshouse or just proud of it, so nothing stands out of the body.
 
 from __future__ import annotations
 
+import itertools
 import json
+import math
 from pathlib import Path
 import sys
 
@@ -26,7 +30,7 @@ W, L, H = 1.79, 4.49, 1.54
 HEAD = "#e8f4ff"
 TAIL = "#ff3b4f"
 CHROME = "#c9ced6"
-GRILLE = "#16233a"
+GRILLE = "#1f3d63"
 
 # id, variant name, body colour, roof colour (None: the body's), mirror colour (None: the body's)
 COLOURWAYS = [
@@ -48,8 +52,8 @@ WHEEL, TYRE = 0.65, 0.215
 # to the rear, a short bonnet that rounds down to the nose, a long raked windscreen, a roof that falls gently to an
 # upright hatch, and the glasshouse narrowing to the rear (tumblehome).
 BODY_SIDE = [
-    (REAR, 0.30, 0.96),
-    (-2.18, 0.20, 1.02),
+    (REAR, 0.30, 0.88),
+    (-2.18, 0.20, 0.95),
     (-1.95, 0.17, 1.045),
     (-1.0, 0.17, 1.02),
     (0.0, 0.17, 0.99),
@@ -63,8 +67,9 @@ BODY_PLAN = [(REAR, 0.76), (-2.10, 0.855), (-1.60, 0.885), (-0.60, 0.87), (0.60,
 BODY_ROUND, BODY_TAPER = 0.28, 0.93
 # the glasshouse, its top under the roof
 GLASS_SIDE = [
-    (-2.15, 1.02, 1.06),
-    (-1.95, 1.005, 1.22),
+    (-2.235, 0.86, 0.92),
+    (-2.15, 0.93, 1.08),
+    (-1.95, 1.0, 1.24),
     (-1.72, 0.995, 1.38),
     (-1.45, 0.99, 1.455),
     (-0.90, 0.975, 1.50),
@@ -73,11 +78,12 @@ GLASS_SIDE = [
     (0.45, 0.955, 1.30),
     (0.95, 0.945, 0.965),
 ]
-GLASS_PLAN = [(-2.15, 0.70), (-1.80, 0.80), (-1.20, 0.83), (0.30, 0.83), (0.95, 0.80)]
+GLASS_PLAN = [(-2.235, 0.62), (-2.15, 0.70), (-1.80, 0.80), (-1.20, 0.83), (0.30, 0.83), (0.95, 0.80)]
 GLASS_ROUND, GLASS_TAPER = 0.3, 0.8
 # the floating roof over it
 ROOF_SIDE = [
-    (-1.80, 1.33, 1.38),
+    (-1.92, 1.25, 1.30),
+    (-1.80, 1.31, 1.38),
     (-1.66, 1.40, 1.45),
     (-1.40, 1.445, 1.495),
     (-0.90, 1.475, 1.53),
@@ -85,7 +91,7 @@ ROOF_SIDE = [
     (0.05, 1.46, 1.515),
     (0.14, 1.44, 1.47),
 ]
-ROOF_PLAN = [(-1.80, 0.60), (-1.50, 0.655), (-0.60, 0.675), (0.14, 0.665)]
+ROOF_PLAN = [(-1.92, 0.54), (-1.80, 0.60), (-1.50, 0.655), (-0.60, 0.675), (0.14, 0.665)]
 GLASS = Shell(GLASS_SIDE, GLASS_PLAN, GLASS_ROUND, GLASS_TAPER)
 
 
@@ -100,6 +106,20 @@ def pillar_band(v: V, za: float, zb: float) -> None:
     band_h = side[1][2] - side[1][1]
     v.shell(side, plan, "dark", round=round(min(0.5, (r + grow) / min(2 * (hw + grow), band_h)), 3), taper=GLASS_TAPER)
 
+
+def strip(
+    v: V, sx: int, pts: list[tuple[float, float]], y: float, h: float, thick: float, color: str, top_in: float = 0.0
+) -> None:
+    """A lamp as a strip along a line of plan points (x on the right side, z), one turned loft per segment, `thick`
+    deep, its top `top_in` metres further in (lying back on the curved body); sx -1 mirrors it to the left side."""
+    for (xa, za), (xb, zb) in itertools.pairwise(pts):
+        length = math.hypot(xb - xa, zb - za)
+        # turned to run along the segment; the top moves in towards the middle of the car (front or back)
+        rot = round(sx * math.degrees(math.atan2(zb - za, xb - xa)), 2)
+        inward = -1 if za > 0 else 1
+        cx, cz = sx * (xa + xb) / 2, (za + zb) / 2
+        tz, td = cz + inward * top_in, thick - top_in
+        v.add("loft", cx, cz, length + 0.01, thick, y, h, color, tx=cx, tz=tz, tw=length, td=td, rot=rot)
 
 def leaf(body: str, roof: str, mirror: str) -> list[dict]:
     v = V(W, L, H)
@@ -123,22 +143,28 @@ def leaf(body: str, roof: str, mirror: str) -> list[dict]:
     # door mirrors on the door, just behind the A pillar
     for sx in (-1, 1):
         v.rbox(sx * (W / 2 - 0.07), 0.80, 0.13, 0.09, 0.93, 0.10, mirror, round=0.4)
-    # boomerang headlights high on the nose, swept back into the wings
+    # slim LED headlights along the top of the nose, swept back round the corners into the wings; their inner ends
+    # meet the top of the V-motion grille
     for sx in (-1, 1):
-        v.loft(sx * 0.56, (2.02 + FRONT + 0.01) / 2, 0.44, FRONT + 0.01 - 2.02, 0.60, 0.20, HEAD, tcx=sx * 0.6, tcz=(1.92 + 2.13) / 2, tw=0.34, td=2.13 - 1.92)
-    # V-motion grille: a dark panel narrowing downwards with a chrome V round it
-    v.loft(0, FRONT - 0.005, 0.22, 0.03, 0.36, 0.25, GRILLE, tw=0.62)
+        housing = [(0.29, 2.246), (0.52, 2.232), (0.66, 2.172), (0.745, 2.06)]
+        strip(v, sx, housing, 0.60, 0.13, 0.05, "dark", top_in=0.02)
+        led = [(0.31, 2.250), (0.52, 2.238), (0.665, 2.177), (0.75, 2.065)]
+        strip(v, sx, led, 0.655, 0.055, 0.05, HEAD, top_in=0.01)
+    # V-motion grille: a blue-tinted panel (the charging lid) narrowing downwards, a chrome V round it
+    v.loft(0, FRONT - 0.005, 0.22, 0.03, 0.36, 0.26, GRILLE, tw=0.58)
     for sx in (-1, 1):
-        v.loft(sx * 0.125, FRONT - 0.003, 0.035, 0.026, 0.34, 0.28, CHROME, tcx=sx * 0.33)
+        v.loft(sx * 0.125, FRONT - 0.003, 0.035, 0.026, 0.34, 0.28, CHROME, tcx=sx * 0.31)
     # front plate on the bumper, a wide dark intake below it
     v.box(0, FRONT + 0.0, 0.52, 0.016, 0.24, 0.10, "white")
     v.box(0, FRONT - 0.04, 1.24, 0.08, 0.19, 0.10, "dark")
-    # boomerang tail lights: an arm across the tailgate wrapping round the corner, a leg down the corner
+    # boomerang tail lights: an arm along the bottom of the tailgate glass wrapping round the corner into the side,
+    # and a leg down the corner
     for sx in (-1, 1):
-        v.loft(sx * 0.58, -2.10, 0.42, 0.30, 0.84, 0.14, TAIL, tcx=sx * 0.57, tcz=-2.08, tw=0.40, td=0.24)
-        v.loft(sx * 0.75, -2.13, 0.12, 0.24, 0.66, 0.18, TAIL, tcz=-2.13, td=0.22)
-    # the black band across the tailgate between the lamps, under the hatch glass
-    v.box(0, REAR - 0.003, 0.80, 0.03, 0.88, 0.10, "dark")
+        arm = [(0.40, -2.246), (0.64, -2.244), (0.76, -2.15), (0.80, -2.00)]
+        strip(v, sx, arm, 0.835, 0.065, 0.05, TAIL, top_in=0.015)
+        strip(v, sx, [(0.64, -2.244), (0.735, -2.21), (0.79, -2.15)], 0.71, 0.13, 0.05, TAIL, top_in=0.03)
+    # a dark interior behind the glass: in the realistic look the glass is see-through and shows it
+    v.box(0, -0.62, 1.30, 2.30, 0.95, 0.24, "dark")
     # rear plate on the tailgate, dark diffuser below the bumper
     v.box(0, REAR + 0.0, 0.52, 0.016, 0.62, 0.10, "#e9c645")
     v.box(0, REAR + 0.03, 1.40, 0.08, 0.19, 0.14, "dark")
