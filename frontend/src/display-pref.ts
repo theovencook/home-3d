@@ -10,13 +10,14 @@ export const DISPLAY_HIDDEN_KEY = "display_hidden";
 export const SHOW_FURNITURE_KEY = "show_furniture";
 
 /**
- * The hidden kinds from the stored preference. Until the list is written, the old "Room names" switch (off) and the old
+ * The hidden kinds from the stored preference. Until the list is written, room names are hidden (#347) unless the old "Room names" switch was on; the old
  * Furniture switch (off, #306: now the furniture and decor kinds) still count.
  */
 export function parseHidden(raw: string | null, legacyRoomNames: string | null = null, legacyFurniture: string | null = null): Set<ObjectType> {
   if (raw === null) {
+    // #347: a device that never chose hides the room names; the old switch set to on ("1") was a choice and is kept
     const old = new Set<ObjectType>();
-    if (legacyRoomNames === "0") old.add("room_names");
+    if (legacyRoomNames !== "1") old.add("room_names");
     if (legacyFurniture === "0") old.add("furniture").add("decor");
     return old;
   }

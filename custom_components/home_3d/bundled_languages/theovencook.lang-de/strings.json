@@ -2609,6 +2609,8 @@
  "energy_solar": "Solar",
  "energy_battery": "Akku",
  "energy_tariff": "Tarif",
+ "energy_fold": "Nur Verbrauch zeigen",
+ "energy_unfold": "Alle Energiewerte zeigen",
  "energy": "Energie",
  "energy_meter": "Zählerplatz",
  "energy_grid": "Netz (W, + = Bezug)",

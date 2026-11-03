@@ -341,6 +341,7 @@ export class Fp3dView3d extends LitElement {
     _flows: { state: true },
     _legendMin: { state: true },
     _holoShow: { state: true },
+    _energyFold: { state: true },
     _swipe: { state: true },
     _menu: { state: true },
     _popup: { state: true },
@@ -466,7 +467,7 @@ export class Fp3dView3d extends LitElement {
   declare clock: ClockPos | null;
   /** What the clock looks like (#232); the default is digits with the date. */
   declare clockLook: ClockLook | null;
-  /** A weather tile by the clock (#333; a device preference, off by default). */
+  /** A weather tile by the clock (#333; a device preference, on by default since #347). */
   declare clockWeather: boolean;
   private declare _clockTick: number;
   private clockTimer: ReturnType<typeof setInterval> | undefined;
@@ -485,6 +486,8 @@ export class Fp3dView3d extends LitElement {
   /** View option "Door sensor pins" (#349): off, the contact sensors linked to a door or window show on the opening only. */
   declare doorPins: boolean;
   private declare _holoShow: boolean;
+  /** The energy row is folded to the Consumption tile (#348; kept per device). */
+  private declare _energyFold: boolean;
   /** Furnishing: furniture and lamps are dragged in 3D (admins, panel only). */
   declare furnish: boolean;
   /** Editor: moves solar fields and roof windows with rays from the camera (null: none). */
@@ -841,7 +844,7 @@ export class Fp3dView3d extends LitElement {
     this.theme = "neon";
     this.clock = null;
     this.clockLook = null;
-    this.clockWeather = false;
+    this.clockWeather = true;
     this._clockTick = 0;
     this.accent = null;
     this.furnish = false;
@@ -942,7 +945,9 @@ export class Fp3dView3d extends LitElement {
       this._flows = localStorage.getItem("home3d.flows") === "1";
       this._legendMin = localStorage.getItem("home3d.legendMin") === "1";
       this._holoShow = localStorage.getItem("home3d.holos") !== "0";
+      this._energyFold = localStorage.getItem("home3d.energy_fold") === "1";
     } catch {
+      this._energyFold = false;
       this._flows = false;
       this._legendMin = false;
       this._holoShow = true;
@@ -6630,6 +6635,16 @@ export class Fp3dView3d extends LitElement {
     return this.holograms ?? this._holoShow;
   }
 
+  /** Fold the energy row down to the Consumption tile, or unfold it again (#348). */
+  private toggleEnergyFold(): void {
+    this._energyFold = !this._energyFold;
+    try {
+      localStorage.setItem("home3d.energy_fold", this._energyFold ? "1" : "0");
+    } catch {
+      // private mode: the choice lasts for this page only
+    }
+  }
+
   private toggleFlows(): void {
     this._flows = !this._flows;
     try {
@@ -6657,13 +6672,20 @@ export class Fp3dView3d extends LitElement {
     }
     if (e.tariff) items.push({ cls: "tariff", label: t("energy_tariff"), value: `${formatNumber(this.hass, e.tariff.value, 3)} ${e.tariff.unit}`.trim() });
     if (this._costs) items.push({ cls: "cost", label: t(this._costs.net ? "energy_cost_net_today" : "energy_cost_today"), value: this._costs.value });
+    // a tap on any tile folds the row to Consumption (the first tile when there is none) and a tap again unfolds it (#348)
+    const foldable = items.length > 1;
+    const folded = foldable && this._energyFold;
+    const shown = folded ? items.slice(0, 1) : items;
     return html`<div class="fp3d-energy" aria-live="off">
-      ${this._cheap ? html`<div class="fp3d-energy-item fp3d-energy-cheap" role="status"><span>${t("cheap_rate")}</span><b>${t("cheap_rate_now")}</b></div>` : nothing}
-      ${items.map(
-        (i) =>
-          html`<div class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}">
-            <span>${i.label}</span><b>${i.value}</b>
-          </div>`,
+      ${this._cheap && !folded ? html`<div class="fp3d-energy-item fp3d-energy-cheap" role="status"><span>${t("cheap_rate")}</span><b>${t("cheap_rate_now")}</b></div>` : nothing}
+      ${shown.map((i) =>
+        foldable
+          ? html`<button type="button" class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls} fp3d-energy-fold" aria-expanded=${!folded} title=${t(folded ? "energy_unfold" : "energy_fold")} @click=${() => this.toggleEnergyFold()}>
+              <span>${i.label}</span><b>${i.value}</b>
+            </button>`
+          : html`<div class="fp3d-energy-item fp3d-energy-tile fp3d-energy-${i.cls}">
+              <span>${i.label}</span><b>${i.value}</b>
+            </div>`,
       )}
       ${this.flows !== null
         ? nothing
@@ -9174,6 +9196,19 @@ export class Fp3dView3d extends LitElement {
         .fp3d-energy-tile {
           transition: none;
         }
+      }
+      /* a tile that folds the row (#348): a button dressed as the plain tile */
+      .fp3d-energy-fold {
+        border: 0;
+        border-left: 3px solid var(--fp3d-line);
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-energy-fold:focus-visible {
+        outline: 2px solid var(--fp3d-accent);
+        outline-offset: 2px;
       }
       .fp3d-energy-item span {
         font-size: 11px;

@@ -54,7 +54,9 @@ test("the clock shows the tile only when the option is on and a weather entity e
   el.hass = hass();
   el.clock = "tr";
   el.now = () => Date.parse("2026-11-03T13:20:00Z");
-  assert.doesNotMatch(flat(el.renderClock()), /fp3d-weather-tile|fp3d-clockrow/, "off by default");
+  assert.equal(el.clockWeather, true, "on by default (#347)");
+  el.clockWeather = false;
+  assert.doesNotMatch(flat(el.renderClock()), /fp3d-weather-tile|fp3d-clockrow/, "off when switched off");
   el.clockWeather = true;
   const out = flat(el.renderClock());
   assert.match(out, /<div class="fp3d-clockrow fp3d-clock-tr">/);
@@ -67,12 +69,15 @@ test("the clock shows the tile only when the option is on and a weather entity e
   assert.equal(flat(el.renderClock()), "", "no clock, no tile");
 });
 
-test("the weather switch: a View row under the clock, off by default, kept on this device (#333)", () => {
+test("the weather switch: a View row under the clock, on by default (#347), kept on this device (#333)", () => {
   const s = viewSetting("clock_weather")!;
-  assert.equal(s.default, false);
+  assert.equal(s.default, true);
   assert.ok(viewSections({ floors: 1, floorOpen: false, roof: false, plan2d: false, kiosk: false }).find((x) => x.id === "clock")?.rows.some((r) => r.id === "clock_weather"));
   const store = new Map<string, string>();
   const env = { building: null, hass: undefined, prefs: { get: (k: string) => store.get(k) ?? null, set: (k: string, v: string | null) => void (v === null ? store.delete(k) : store.set(k, v)) } } as never;
+  assert.equal(s.read(env), true);
+  s.write!(env, false as never);
+  assert.equal(store.get("clock_weather"), "0", "an explicit off is kept");
   assert.equal(s.read(env), false);
   s.write!(env, true as never);
   assert.equal(store.get("clock_weather"), "1");

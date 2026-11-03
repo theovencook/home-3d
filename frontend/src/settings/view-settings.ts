@@ -116,7 +116,7 @@ export const LOOK: Setting[] = [
   deviceChoice("clock_style", "look", "clock", "clock_style", ["digital", "analogue"], "digital", "st_clock_face", opts([["digital", "clock_digital"], ["analogue", "clock_analogue"]]), undefined, ["time", "clock", "dial", "hands", "face"]),
   deviceSwitch("clock_seconds", "look", "clock", "clock_seconds", false, "st_clock_seconds", undefined, ["time", "clock", "seconds"]),
   deviceSwitch("clock_date", "look", "clock", "clock_date", true, "st_clock_date", undefined, ["time", "clock", "date", "day"]),
-  deviceSwitch("clock_weather", "look", "clock", "clock_weather", false, "st_clock_weather", "st_clock_weather_hint"),
+  deviceSwitch("clock_weather", "look", "clock", "clock_weather", true, "st_clock_weather", "st_clock_weather_hint"),
   ].map((s): Setting => ({ ...s, visible: (env) => ["tl", "tr", "bl", "br"].includes(env.prefs.get("clock") ?? "") })), // the clock's details only while it shows (#256)
   deviceChoice("markers", "view3d", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), "markers_important_hint", ["pins", "icons", "symbols", "devices", "markers"], "select"),
   deviceSwitch("pulse", "view3d", "markers", "pulse", true, "st_pulse", "st_pulse_hint", ["pins", "outline", "pulse", "animation", "motion"]),
@@ -153,7 +153,7 @@ export const LOOK: Setting[] = [
     hint: "st_display_what_hint",
     keywords: ["display", "show", "hide", "objects", "lights", "furniture", "room names", "cameras", "sensors", "layers"],
     control: { kind: "checks", options: OBJECT_TYPES.map((t): Option => ({ value: t, label: `ot_${t}` })) },
-    default: [...OBJECT_TYPES],
+    default: OBJECT_TYPES.filter((t) => t !== "room_names"),
     prefKeys: [DISPLAY_HIDDEN_KEY, "room_names"],
     read: (env) => {
       const hidden = parseHidden(env.prefs.get(DISPLAY_HIDDEN_KEY), env.prefs.get("room_names"), env.prefs.get(SHOW_FURNITURE_KEY));
