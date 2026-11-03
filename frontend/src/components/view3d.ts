@@ -196,6 +196,7 @@ import { sunPath, type SunPath } from "../sun-path.ts";
 import { cheapRate } from "../cheap-rate.ts";
 import { askConfirm } from "../ask.ts";
 import "./ask-dialog.ts";
+import { BackLayers, navHosted } from "../back-stack.ts";
 import { fetchTodayKwh, wireEnds, type WireEnd } from "../wire-ends.ts";
 import { forecastCurvePath, forecastSplit, solarMoreRows, solarPrefsInfo, type SolarForecast, type SolarPrefsInfo } from "../solar-more.ts";
 import { isPhoneWidth, NO_FIT_MARGIN, PHONE_FIT_MARGIN, PHONE_MEDIA, thumbsCompact } from "../phone.ts";
@@ -980,6 +981,7 @@ export class Fp3dView3d extends LitElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.backLayers.closeAll();
     clearInterval(this.wireTimer);
     clearInterval(this.meterTimer);
     this.meterTimer = undefined;
@@ -1225,7 +1227,23 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("hass") && this.hass) setHouseholdCountry(hassCountry(this.hass));
   }
 
+  /** Back closes a device's controls, a sheet, a rack's front, the star menu and a socket's menu first (#322): in the panel only, never on a dashboard. */
+  private readonly backLayers = new BackLayers("view3d", navHosted);
+
+  private syncBack(changed: PropertyValues): void {
+    const { _menu: menu, _sheet: sheet, _rackView: rack, _gangMenu: gang } = this;
+    const rows: Parameters<BackLayers["syncAll"]>[0] = [];
+    const row = (prop: string, ...r: (typeof rows)[number]) => changed.has(prop) && rows.push(r);
+    row("_menu", "menu", !!menu, () => (this._menu = null), menu ? () => (this._menu = menu) : undefined);
+    row("_sheet", "sheet", !!sheet, () => (this._sheet = null), sheet ? () => (this._sheet = sheet) : undefined);
+    row("_rackView", "rack", !!rack, () => (this._rackView = null), rack ? () => (this._rackView = rack) : undefined);
+    row("_gangMenu", "gang", !!gang, () => (this._gangMenu = null), gang ? () => (this._gangMenu = gang) : undefined);
+    row("_central", "central", this._central, () => (this._central = false), () => (this._central = true));
+    this.backLayers.syncAll(rows);
+  }
+
   protected updated(changed: PropertyValues): void {
+    this.syncBack(changed);
     // the camera wall as a free window (#314): its place and size are put on the element after each render
     this.wallWin?.attach(this.renderRoot.querySelector<HTMLElement>(".fp3d-wall"));
     // the chrome goes light with the Day look (#85): the shared tokens read the attribute, nested parts inherit it

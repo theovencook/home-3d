@@ -19,6 +19,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - Typed confirmations (deleting a home): a wrong name keeps the dialog open with the error under the field for a few seconds, and Delete stays disabled until the name matches (#330).
 - Settings: "Colour rooms by" is now "Show room climate as", with options named by what they do (floor colour or numbers at the room names) and a one-line description (#331).
 - Settings: "Switch on on this device" is now "Live director on this screen" and "Voice button on this screen", each with a plain description (#334).
+- Browser Back and Forward follow every page and pane of the panel: the editor, Extensions, each Settings section, the View panel, menus, sheets and questions; Back closes what is open before it leaves a page, coming back to a page opens again what was open on it, and a link to a Settings section or the editor survives a reload. A dashboard card never adds a history entry (#322).
 
 ## Home 3D 0.2.1 (2 November 2026)
 

@@ -9,14 +9,21 @@ g.__FP3D_VERSION__ = "0";
 g.window ??= {};
 Object.assign(g.window as object, { addEventListener: () => undefined, removeEventListener: () => undefined });
 const at = (search: string, hash = "") => (g.location = { search, hash, pathname: "/home_3d" });
-g.history = { state: null, replaceState: (_s: unknown, _t: string, url: string) => ((g.location as { hash: string }).hash = url.includes("#") ? url.slice(url.indexOf("#")) : "") };
+const setUrl = (_s: unknown, _t: string, url?: string) => url !== undefined && ((g.location as { hash: string }).hash = url.includes("#") ? url.slice(url.indexOf("#")) : "");
+g.history = { state: null, replaceState: setUrl, pushState: setUrl };
 at("");
 
-const { Floorplan3dPanel } = await import("./panel.ts");
+const { Floorplan3dPanel, pageOf } = await import("./panel.ts");
+const { navHost } = await import("./back-stack.ts");
+// the panel as Home Assistant shows it: the host of the history (#322), as connectedCallback makes it
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const host = (p: any) => (p.navRelease = navHost(p.pageNow(), pageOf, p.showPage));
 
 function flat(v: unknown): string {
   if (v === null || v === undefined || typeof v === "symbol" || typeof v === "boolean") return "";
   if (Array.isArray(v)) return v.map(flat).join("");
+  // a directive (keyed, #322): what it draws is its last value
+  if (typeof v === "object" && "_$litDirective$" in (v as object)) return flat((v as { values: unknown[] }).values.at(-1));
   if (typeof v === "object" && "strings" in (v as object)) {
     const r = v as { strings: readonly string[]; values: unknown[] };
     return r.strings.map((s, i) => s + (i < r.values.length ? flat(r.values[i]) : "")).join("");
@@ -62,6 +69,7 @@ test("everyone has the Settings tab; only editors the Editor and Extensions tabs
 test("a #settings/<section>/<id> address opens the Settings tab there; leaving it clears the address", () => {
   at("", "#settings/warnings/alert_unavailable");
   const p = panel(true);
+  host(p);
   assert.equal(p._mode, "settings");
   assert.deepEqual(p._settingsAt, { section: "warnings", id: "alert_unavailable" });
   p._settingsReady = true;
@@ -73,6 +81,7 @@ test("a #settings/<section>/<id> address opens the Settings tab there; leaving i
 test("other parts open the page with an open-settings event; locked tablet mode never shows it", () => {
   at("");
   const p = panel(true);
+  host(p);
   let prevented = false;
   p.onOpenSettings({ detail: { section: "look", id: "walls" }, stopPropagation: () => undefined, preventDefault: () => (prevented = true) });
   assert.equal(p._mode, "settings");

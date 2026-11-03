@@ -3,6 +3,7 @@
 import { defineElement } from "./define.ts";
 import { formatImperial, lengthUnit, parseLength, unitLabel } from "./units.ts";
 import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues, type TemplateResult } from "lit";
+import { keyed } from "lit/directives/keyed.js";
 import { uiIcon, type UiIcon } from "./ui-icons.ts";
 import { COMPACT_MAX_PX, PHONE_MEDIA } from "./phone.ts";
 import { BuildingController, type PlanChange } from "./building-controller.ts";
@@ -48,7 +49,7 @@ import { forwardHass, HASS_CHILDREN, HassWatch } from "./hass-watch.ts";
 import { loadSampleHome } from "./api.ts";
 import { tell } from "./ask.ts";
 import { announce, lookAnnouncement, viewChange, type ViewSpot } from "./announce.ts";
-import { BackLayers } from "./back-stack.ts";
+import { BackLayers, navFollowAddress, navHost, navPage } from "./back-stack.ts";
 import { DISPLAY_HIDDEN_KEY, hiddenText, parseHidden, SHOW_FURNITURE_KEY, type ObjectType } from "./display-pref.ts";
 
 type Mode = "view" | "editor" | "extensions" | "settings";
@@ -57,6 +58,18 @@ type Mode = "view" | "editor" | "extensions" | "settings";
 function settingsAddress(hash: string): { section: string | null; id: string | null } | null {
   const m = /^#settings(?:\/([a-z0-9_]+))?(?:\/([^/?#]+))?\/?$/.exec(hash);
   return m ? { section: m[1] ?? null, id: m[2] ? decodeURIComponent(m[2]) : null } : null;
+}
+
+/** The panel's page an address hash names (#322): "" the 3D view, "#editor", "#extensions", "#settings/…"; null: none. */
+export function pageOf(hash: string): string | null {
+  if (hash === "" || hash === "#") return "";
+  if (hash === "#editor" || hash === "#extensions") return hash;
+  return settingsAddress(hash) ? hash : null;
+}
+
+/** The mode a page shows. */
+function modeOf(page: string): Mode {
+  return page === "#editor" ? "editor" : page === "#extensions" ? "extensions" : page.startsWith("#settings") ? "settings" : "view";
 }
 
 /** What counts as someone using a wall tablet: its idle return waits again (#92). */
@@ -286,7 +299,8 @@ export class Floorplan3dPanel extends LitElement {
     this._settingsError = null;
     const address = settingsAddress(location.hash);
     this._settingsAt = address ?? { section: null, id: null };
-    if (address) this._mode = "settings";
+    // a deep link (#322): the page its address names opens, also after a reload
+    this._mode = modeOf(pageOf(location.hash) ?? "");
   }
 
   /**
@@ -461,7 +475,7 @@ export class Floorplan3dPanel extends LitElement {
   private followTablet(b: Building | null): void {
     const search = location.search;
     const on = tabletMode(search, this.hass?.user?.id, b?.settings.tablet_users);
-    if (on && this._mode !== "view") this.setMode("view");
+    if (on && this._mode !== "view") this.setMode("view", "replace");
     // a tablet shows the home on the displays (#160), also when this device remembered another one
     if (on && this.data.home !== undefined) this.data.setHome(undefined);
     if (on !== this._tablet) {
@@ -516,17 +530,19 @@ export class Floorplan3dPanel extends LitElement {
     }
   }
 
-  private setMode(mode: Mode): void {
+  /** Another page; `how` the history follows (#322): a new entry, this one rewritten, or none (Back and Forward). */
+  private setMode(mode: Mode, how: "push" | "replace" | "none" = "push"): void {
     if (mode === this._mode || (this._tablet && mode !== "view")) return;
     // the view as it stands is what the Settings page's "start view" takes (#139)
     if (this._mode === "view") this.lastView = this.view3d()?.currentView() ?? this.lastView;
     this.tt.stop();
     this._editorError = null;
+    // each page is an entry of the history (#322): what is open over this one stays in its entry, Back opens it again
+    if (how !== "none") navPage(this.pageNow(mode), how === "push");
     this._viewOpen = false;
+    this._roomsOpen = false;
+    this._findOpen = false;
     if (mode === "view") void this.data.flush();
-    // the Settings page keeps its address (#settings/…); leaving it clears it
-    if (this._mode === "settings" && mode !== "settings") this.setAddress("");
-    if (mode === "settings") this.setAddress(this.settingsLink(this._settingsAt.section, this._settingsAt.id));
     if (mode === "settings") this.settingsFrom = this._mode;
     if (mode !== "extensions") this._extFocus = null;
     this._mode = mode;
@@ -536,14 +552,24 @@ export class Floorplan3dPanel extends LitElement {
     return `#settings${section ? `/${section}${id ? `/${encodeURIComponent(id)}` : ""}` : ""}`;
   }
 
-  /** The page's address part, without a new history entry (the back button leaves the panel as before). */
-  private setAddress(hash: string): void {
-    try {
-      if (location.hash !== hash) history.replaceState(history.state, "", `${location.pathname}${location.search}${hash}`);
-    } catch {
-      // a sandboxed frame: the address just doesn't follow
-    }
+  /** The page (its address hash, #322) a mode shows; the Settings page's names its section and setting. */
+  private pageNow(mode: Mode = this._mode): string {
+    return mode === "view" ? "" : mode === "settings" ? this.settingsLink(this._settingsAt.section, this._settingsAt.id) : `#${mode}`;
   }
+
+  /** Back, Forward or a link brought another page (#322): shown without an entry of its own. */
+  private readonly showPage = (page: string): void => {
+    const mode = modeOf(page);
+    if (mode === "settings") {
+      this._settingsAt = settingsAddress(page) ?? { section: null, id: null };
+      if (!this._settingsAt.section && !this._settingsAt.id) this.settingsKey++;
+    }
+    this.setMode(mode, "none");
+  };
+
+  private navRelease: (() => void) | null = null;
+  /** A new one draws the Settings page afresh. */
+  private settingsKey = 0;
 
   /**
    * Opens the Settings page at a section and setting (#139): the editor's ⚙ menu, the view's popovers, the tool panels
@@ -552,7 +578,7 @@ export class Floorplan3dPanel extends LitElement {
   private openSettings(section: string | null = null, id: string | null = null): void {
     if (this._tablet) return;
     this._settingsAt = { section, id };
-    if (this._mode === "settings") this.setAddress(this.settingsLink(section, id));
+    if (this._mode === "settings") navPage(this.pageNow());
     else this.setMode("settings");
   }
 
@@ -570,11 +596,8 @@ export class Floorplan3dPanel extends LitElement {
     if (this.canEdit) this.setMode("extensions");
   };
 
-  /** A link to #settings/… typed or clicked while the panel is open. */
-  private readonly onHash = () => {
-    const at = settingsAddress(location.hash);
-    if (at) this.openSettings(at.section, at.id);
-  };
+  /** A link to #settings/… (or #editor, #extensions) typed or clicked while the panel is open (#322: back-stack.ts). */
+  private readonly onHash = () => navFollowAddress();
 
   /** A button on the Settings page that leaves it or opens something of the panel's. */
   private settingsAction(e: CustomEvent<{ action: string; id?: string | null; focus?: string | null }>): void {
@@ -892,11 +915,24 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   /** Android's back gesture closes the View panel before it leaves the page (#250, back-stack.ts). */
-  private readonly backLayers = new BackLayers();
+  private readonly backLayers = new BackLayers("panel");
+
+  /** What is open over the page follows Back and Forward (#322, back-stack.ts). */
+  private syncBack(changed: PropertyValues | Map<string, unknown>): void {
+    const rows: Parameters<BackLayers["syncAll"]>[0] = [];
+    const row = (prop: string, ...r: (typeof rows)[number]) => changed.has(prop) && rows.push(r);
+    row("_viewOpen", "view", this._viewOpen && this._mode === "view", () => this.setViewOpen(false, true), () => this.setViewOpen(true));
+    // the Rooms picker, the search, the camera wall and the microphone check follow Back too (#322)
+    row("_roomsOpen", "rooms", this._roomsOpen, () => (this._roomsOpen = false), () => (this._roomsOpen = true));
+    row("_findOpen", "find", this._findOpen, () => (this._findOpen = false), () => (this._findOpen = true));
+    row("_cameraWall", "cameras", this._cameraWall && this._mode === "view", () => (this._cameraWall = false), () => (this._cameraWall = true));
+    row("_micProbe", "mic", this._micProbe, () => ((this._micProbe = false), micProbeDone()));
+    this.backLayers.syncAll(rows);
+  }
 
   protected updated(changed: PropertyValues): void {
     this.announceView();
-    if (changed.has("_viewOpen")) this.backLayers.sync("view", this._viewOpen && this._mode === "view", () => this.setViewOpen(false, true));
+    this.syncBack(changed);
     // the floor row scrolls sideways on a phone: the chosen floor stays in view (#249), also when the Rooms button
     // beside it grows with a room's name
     if (changed.has("_floorId") || changed.has("_roomId")) {
@@ -945,6 +981,10 @@ export class Floorplan3dPanel extends LitElement {
       (err: unknown) => console.error("Home 3D: the 3D view failed to load", err),
     );
     window.addEventListener("keydown", this.onKey);
+    // the panel's page follows Back, Forward and its address (#322); a page a link asked for while it was away opens
+    const asked = pageOf(location.hash);
+    if (asked) this.showPage(asked);
+    this.navRelease = navHost(this.pageNow(), pageOf, this.showPage);
     window.addEventListener("hashchange", this.onHash);
     window.addEventListener("location-changed", this.onHash);
     this.addEventListener("open-settings", this.onOpenSettings);
@@ -960,6 +1000,8 @@ export class Floorplan3dPanel extends LitElement {
     this.removeEventListener("open-extensions", this.onOpenExtensions);
     this.listenTouches(false);
     this.backLayers.closeAll();
+    this.navRelease?.();
+    this.navRelease = null;
     this.tt.stop();
     this.locateLab?.();
     this.locateLab = null;
@@ -1202,7 +1244,8 @@ export class Floorplan3dPanel extends LitElement {
       );
       return html`<div class="fp3d-empty"><p>${this.t("loading")}</p></div>`;
     }
-    return html`<fp3d-settings-page
+    // Back to the page's plain address (#322) is a fresh page: a phone's list of sections, the first section elsewhere
+    return keyed(this.settingsKey, html`<fp3d-settings-page
       class="fp3d-body"
       .hass=${this.rawHass}
       .building=${b}
@@ -1224,8 +1267,12 @@ export class Floorplan3dPanel extends LitElement {
       @settings-action=${this.settingsAction}
       @home-reload=${() => void this.data.reopen()}
       @home-open=${(e: CustomEvent<{ home: string | null }>) => this.openHome(e.detail.home ?? undefined)}
-      @settings-nav=${(e: CustomEvent<{ section: string; id: string | null }>) => this.setAddress(this.settingsLink(e.detail.section, e.detail.id))}
-    ></fp3d-settings-page>`;
+      @settings-nav=${(e: CustomEvent<{ section: string | null; id: string | null }>) => {
+        // each section of the Settings page is an entry of the history (#322)
+        this._settingsAt = { section: e.detail.section, id: e.detail.id };
+        navPage(this.pageNow());
+      }}
+    ></fp3d-settings-page>`);
   }
 
   private versionsMemo: { frontend: string; backend: string | null } | undefined;
