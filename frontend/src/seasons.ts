@@ -1,6 +1,7 @@
 // Seasonal themes (#239): the main UK holidays, Halloween and Chinese New Year (#287); every holiday's dates can be changed. On its day a house gets a greeting, a soft colour glow and a light
 // falling or floating effect (fun/season.ts, a lazy bundle). This file is only the calendar: which holiday a day is.
-// Moving dates are worked out (Easter by the computus, the others from Easter or as the n-th Sunday of a month).
+// Moving dates are worked out from rules (#339): a fixed day, days from Easter (the computus), the n-th weekday of a month,
+// a one-off window; a holiday has one or more, each with a length and optional start and end times.
 
 import { SEASON_IDS, type SeasonId } from "./season-ids.ts";
 
@@ -45,35 +46,8 @@ export function easterSunday(year: number): [number, number] {
   return [Math.floor(n / 31), (n % 31) + 1];
 }
 
-/** The day `back` days before Easter Sunday (negative: after) as [month, day]. */
-export function beforeEaster(year: number, back: number): [number, number] {
-  const [m, d] = easterSunday(year);
-  const x = new Date(Date.UTC(year, m - 1, d - back));
-  return [x.getUTCMonth() + 1, x.getUTCDate()];
-}
-
-/** The day of the month of the n-th Sunday of a month (month 1-12). */
-export function nthSunday(year: number, month: number, n: number): number {
-  const first = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
-  return 1 + ((7 - first) % 7) + (n - 1) * 7;
-}
-
-/** Pancake Day (Shrove Tuesday): 47 days before Easter. */
-export const pancakeDay = (year: number) => beforeEaster(year, 47);
-/** Mother's Day in the UK (Mothering Sunday): 21 days before Easter. */
-export const mothersDay = (year: number) => beforeEaster(year, 21);
-/** Father's Day: the third Sunday of June. */
-export const fathersDay = (year: number): [number, number] => [6, nthSunday(year, 6, 3)];
-/** Remembrance Sunday: the second Sunday of November. */
-export const remembranceSunday = (year: number): [number, number] => [11, nthSunday(year, 11, 2)];
-
 /** A day as [month 1-12, day]. */
 export type MonthDay = readonly [number, number];
-/** A holiday's days: from the first to the last, both included (from after to: over the turn of the year). */
-export interface DayRange {
-  from: MonthDay;
-  to: MonthDay;
-}
 /** What a house stores to change a holiday's dates (#287): "MM-DD" text, no year (it repeats every year). */
 export interface SeasonDates {
   from: string;
@@ -117,47 +91,6 @@ export function chineseNewYear(year: number): MonthDay {
   return CNY_TABLE[year] ?? calendarChineseNewYear(year) ?? CNY_TABLE[2026]!;
 }
 
-/** The days a holiday is on in a year, as worked out (the dates before anyone changes them). */
-export function defaultRange(id: SeasonId, y: number): DayRange {
-  const day = (m: number, d: number): DayRange => ({ from: [m, d], to: [m, d] });
-  const one = (md: MonthDay): DayRange => ({ from: md, to: md });
-  switch (id) {
-    case "nye":
-      return day(12, 31);
-    case "new_year":
-      return day(1, 1);
-    case "christmas_eve":
-      return day(12, 24);
-    case "christmas":
-      return day(12, 25);
-    case "boxing_day":
-      return day(12, 26);
-    case "twixmas":
-      return { from: [12, 27], to: [12, 31] };
-    case "advent":
-      return { from: [12, 1], to: [12, 23] };
-    case "bonfire":
-      return day(11, 5);
-    case "remembrance":
-      return one(remembranceSunday(y));
-    case "valentines":
-      return day(2, 14);
-    case "pancake_day":
-      return one(pancakeDay(y));
-    case "mothers_day":
-      return one(mothersDay(y));
-    case "easter":
-      // Good Friday to Easter Monday
-      return { from: beforeEaster(y, 2), to: beforeEaster(y, -1) };
-    case "fathers_day":
-      return one(fathersDay(y));
-    case "halloween":
-      return day(10, 31);
-    case "chinese_new_year":
-      return one(chineseNewYear(y));
-  }
-}
-
 const DAYS_IN = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 /** "MM-DD" as [month, day]; null when it is not a day of the calendar (29 February is one). */
@@ -169,26 +102,109 @@ export function parseMonthDay(text: string | undefined): MonthDay | null {
   return month >= 1 && month <= 12 && day >= 1 && day <= DAYS_IN[month - 1]! ? [month, day] : null;
 }
 
-/** [month, day] as "MM-DD". */
-export function monthDayText([m, d]: MonthDay): string {
-  return `${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+/** One way a holiday's days are given (#339); stored in settings.season_rules. */
+export interface SeasonRule {
+  kind: "fixed" | "easter" | "nth" | "once" | "cny";
+  /** fixed: month and day (no year, repeats); nth: the month. */
+  month?: number;
+  day?: number;
+  /** easter: days from Easter Sunday (negative: before). */
+  offset?: number;
+  /** nth: 1-5, or -1 for the last; weekday 0 (Sunday) to 6. */
+  nth?: number;
+  weekday?: number;
+  /** once: the first and last day, "YYYY-MM-DD" (the last defaults to the first). */
+  from?: string;
+  to?: string;
+  /** How many days it lasts from its first day (1 when missing). */
+  days?: number;
+  /** "HH:MM" on the first day (midnight when missing) and on the last day (the day's end when missing). */
+  start?: string;
+  end?: string;
+}
+export type SeasonRulesMap = Readonly<Record<string, readonly SeasonRule[] | undefined>> | null | undefined;
+
+const DAY = 864e5;
+/** Days since 1970-01-01 of a calendar day (days may run over the month). */
+const ymd = (y: number, m: number, d: number) => Math.floor(Date.UTC(y, m - 1, d) / DAY);
+const clock = (t: string | undefined, or: number) => {
+  const m = /^(\d\d):(\d\d)$/.exec(t ?? "");
+  return m ? Number(m[1]) * 60 + Number(m[2]) : or;
+};
+
+/** The first and last day (days since 1970) a rule gives in a year; null when it gives none (31 February, a fifth Monday that is not). */
+export function ruleDays(r: SeasonRule, y: number): [number, number] | null {
+  const k = r.kind;
+  const month = r.month ?? 1;
+  const n = r.nth ?? 1;
+  let a: number;
+  if (k === "once") {
+    const p = (s?: string) => {
+      const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(s ?? "");
+      return m ? ymd(Number(m[1]), Number(m[2]), Number(m[3])) : NaN;
+    };
+    const first = p(r.from);
+    const last = r.to ? p(r.to) : first;
+    return first <= last ? [first, last] : null;
+  }
+  if (k === "easter") {
+    const [m, d] = easterSunday(y);
+    a = ymd(y, m, d) + (r.offset ?? 0);
+  } else if (k === "cny") a = ymd(y, ...chineseNewYear(y));
+  else if (k === "nth" && n < 0) {
+    const last = ymd(y, month + 1, 1) - 1;
+    a = last - ((((last + 4) % 7) - (r.weekday ?? 0) + 7) % 7);
+  } else {
+    // day 0 of 1970 was a Thursday
+    const first = ymd(y, month, 1);
+    a = k === "fixed" ? ymd(y, month, r.day ?? 1) : first + (((r.weekday ?? 0) - ((first + 4) % 7) + 7) % 7) + (n - 1) * 7;
+    if (new Date(a * DAY).getUTCMonth() + 1 !== month) return null;
+  }
+  return [a, a + (r.days ?? 1) - 1];
 }
 
-/** The days a holiday is on in a year: the house's own dates when it set valid ones, else the worked out ones. */
-export function seasonRange(id: SeasonId, y: number, dates?: SeasonDatesMap): DayRange & { custom: boolean } {
-  const own = dates?.[id];
-  const from = parseMonthDay(own?.from);
-  if (own && from) return { from, to: parseMonthDay(own.to) ?? from, custom: true };
-  return { ...defaultRange(id, y), custom: false };
+/** A rule's window in a year as minutes since 1970 (local clock): from its start to its end, not included. */
+export function ruleWindow(r: SeasonRule, y: number): [number, number] | null {
+  const d = ruleDays(r, y);
+  if (!d) return null;
+  const from = d[0] * 1440 + clock(r.start, 0);
+  const to = d[1] * 1440 + clock(r.end, 1440);
+  return [from, to > from ? to : to + 1440];
 }
 
-const key = ([m, d]: MonthDay) => m * 100 + d;
+const fx = (month: number, day: number, days = 1): SeasonRule => ({ kind: "fixed", month, day, days });
+const nth = (n: number, month: number): SeasonRule => ({ kind: "nth", nth: n, weekday: 0, month, days: 1 });
+const easter = (offset: number, days = 1): SeasonRule => ({ kind: "easter", offset, days });
 
-/** Whether a day (month 1-12) is within the holiday's days. */
-function matches(id: SeasonId, y: number, m: number, d: number, dates?: SeasonDatesMap): boolean {
-  const { from, to } = seasonRange(id, y, dates);
-  const x = m * 100 + d;
-  return key(from) <= key(to) ? x >= key(from) && x <= key(to) : x >= key(from) || x <= key(to);
+/** The usual days of each holiday (worked out each year; Easter runs from Good Friday to Easter Monday). */
+export const DEFAULT_RULES: Record<SeasonId, SeasonRule> = {
+  nye: fx(12, 31),
+  new_year: fx(1, 1),
+  chinese_new_year: { kind: "cny", days: 1 },
+  christmas_eve: fx(12, 24),
+  christmas: fx(12, 25),
+  boxing_day: fx(12, 26),
+  twixmas: fx(12, 27, 5),
+  advent: fx(12, 1, 23),
+  bonfire: fx(11, 5),
+  remembrance: nth(2, 11),
+  valentines: fx(2, 14),
+  pancake_day: easter(-47),
+  mothers_day: easter(-21),
+  easter: easter(-2, 4),
+  fathers_day: nth(3, 6),
+  halloween: fx(10, 31),
+};
+
+/** The rules of a holiday: the house's own; else its old "MM-DD" dates as a fixed date rule (#287 data, unchanged); else the usual ones. */
+export function seasonRules(id: SeasonId, dates?: SeasonDatesMap, rules?: SeasonRulesMap): readonly SeasonRule[] {
+  const own = rules?.[id];
+  if (own) return own;
+  const old = dates?.[id];
+  const f = parseMonthDay(old?.from);
+  if (!old || !f) return [DEFAULT_RULES[id]];
+  const t = parseMonthDay(old.to) ?? f;
+  return [fx(f[0], f[1], ((ymd(2023, t[0], t[1]) - ymd(2023, f[0], f[1]) + 365) % 365) + 1)];
 }
 
 /** The hours to midnight on New Year's Eve, then the minutes in the last hour. */
@@ -244,15 +260,24 @@ export type SeasonsOff = Readonly<Record<string, boolean | undefined>> | null | 
  * The holiday of a moment (local time), or null on a plain day. A holiday switched off is skipped, so on 31 December
  * with New Year's Eve off the day is Twixmas.
  */
-export function seasonAt(now: Date, off?: SeasonsOff, dates?: SeasonDatesMap): Season | null {
+export function seasonAt(now: Date, off?: SeasonsOff, dates?: SeasonDatesMap, rules?: SeasonRulesMap): Season | null {
   const y = now.getFullYear();
   const m = now.getMonth() + 1;
   const d = now.getDate();
+  const at = Math.floor(Date.UTC(y, m - 1, d, now.getHours(), now.getMinutes()) / 6e4);
+  let best: SeasonId | null = null;
+  let len = Infinity;
+  // a window can have started in the year before; where two overlap the shorter one wins, then the order of SEASON_IDS
   for (const id of SEASON_IDS) {
-    if (off?.[id] === false || !matches(id, y, m, d, dates)) continue;
-    return describe(id, y, now.getHours(), now.getMinutes(), m, d);
+    if (off?.[id] === false) continue;
+    for (const r of seasonRules(id, dates, rules)) {
+      for (const yy of [y - 1, y]) {
+        const w = ruleWindow(r, yy);
+        if (w && at >= w[0] && at < w[1] && w[1] - w[0] < len) [best, len] = [id, w[1] - w[0]];
+      }
+    }
   }
-  return null;
+  return best && describe(best, y, now.getHours(), now.getMinutes(), m, d);
 }
 
 /** "?fp3d_season=christmas" in the address bar shows that holiday on any day (to look at it). */
@@ -266,8 +291,8 @@ export function seasonPreview(): SeasonId | null {
 }
 
 /** The holiday to show now: the previewed one (unless switched off), else today's. */
-export function seasonNow(off?: SeasonsOff, now = new Date(), dates?: SeasonDatesMap): Season | null {
+export function seasonNow(off?: SeasonsOff, now = new Date(), dates?: SeasonDatesMap, rules?: SeasonRulesMap): Season | null {
   const p = seasonPreview();
-  if (!p) return seasonAt(now, off, dates);
+  if (!p) return seasonAt(now, off, dates, rules);
   return off?.[p] === false ? null : describe(p, now.getFullYear(), now.getHours(), now.getMinutes(), 12, 12);
 }

@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- Holiday dates are rules instead of raw days: a fixed date, days from Easter (Good Friday, Easter Monday, Mothering Sunday, Pancake Day), the n-th or last weekday of a month, or a one-off window, each with a length and optional start and end times. Each holiday shows when it is next on, lists its next three windows, adds and removes rules (remove has Undo) and has a Show now button; when two holidays overlap the shorter one shows. Old dates load unchanged as fixed date rules (#339).
 - Any item can show or hide from an entity's state: show it when the entity is on, off or has a state you type, with a choice for an unavailable entity (keeps showing by default); it combines with the date and time intervals, hides in 3D and 2D view and stays in the editor, dimmed (#338).
 - Set up locating, step 2 Devices: step-by-step guides for Android (Home Assistant app BLE Transmitter: on, power High, Low latency) and iPhone or Apple Watch (key helper, Private BLE Device), each with a link to the official Home Assistant docs and shown next to every warning (#329).
 - Every icon field (device, item and own-button icons) has an icon picker with a search filter: Home Assistant's icon picker where the page has it, otherwise a grid of icons with search; a typed name still works (#327).

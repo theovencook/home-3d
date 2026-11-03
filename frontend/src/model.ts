@@ -6,6 +6,7 @@ import { packItem, type PlanRecipe } from "./packs.ts";
 import type { LampModel } from "./viewer/viewer3d.ts";
 import type { ItemActions } from "./item-actions.ts";
 import type { RoleColours } from "./colour-roles.ts";
+import type { SeasonRule } from "./seasons.ts";
 import type { RoleMaterials } from "./role-materials.ts";
 
 export type Vec2 = [number, number];
@@ -884,6 +885,8 @@ export interface BuildingSettings {
   seasons?: Record<string, boolean> | null;
   /** Dates a holiday is on, when the house changed them (#287): "MM-DD" from and to, repeating every year; missing = the usual dates. */
   season_dates?: Record<string, { from: string; to?: string }> | null;
+  /** Date rules of a holiday (#339): fixed day, days from Easter, n-th weekday of a month, one-off window; wins over season_dates for that holiday (see seasons.ts SeasonRule). */
+  season_rules?: Record<string, SeasonRule[]> | null;
   /** Easter eggs (#139): one house-wide switch for every surprise (the Halloween ghost and later ones), on unless false. */
   easter_eggs?: boolean;
   /** Plan lock: rooms, walls, doors, windows and outdoor areas cannot be moved by accident. */
