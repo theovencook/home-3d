@@ -255,10 +255,10 @@ test("the editor opens at the room: its floor, Select, the room chosen and its p
 
 // ---- the editor toolbar
 
-test("one toolbar row: floor, the tools with icons, Wall view, Undo/Redo, then one Fit, 3D beside and More", () => {
+test("one toolbar row: floor, the tools with icons, Wall view, Undo/Redo, then 3D beside and More (no Fit: the plan has one, #321)", () => {
   const el = editor();
   const bar = flat(el.renderToolBar(el.floor));
-  const order = ["Select", "Build", "Outside", "Furniture", "Energy", "Wall view", "Undo", "Redo", "fp3d-tb-grow", "fp3d-fit-btn", "3D beside", "fp3d-more-btn"];
+  const order = ["Select", "Build", "Outside", "Furniture", "Energy", "Wall view", "Undo", "Redo", "fp3d-tb-grow", "3D beside", "fp3d-more-btn"];
   let at = -1;
   for (const w of order) {
     const i = bar.indexOf(w, at + 1);
@@ -266,6 +266,7 @@ test("one toolbar row: floor, the tools with icons, Wall view, Undo/Redo, then o
     at = i;
   }
   assert.equal(bar.match(/class="fp3d-ui-icon"/g)!.length >= 9, true, "every tool and view button has a line icon");
+  assert.doesNotMatch(bar, /fp3d-fit-btn/, "the plan's own Fit sits beside the zoom buttons (#321)");
   assert.doesNotMatch(bar, /fp3d-help-btn|>\?</, "the toolbar '?' repeated Help");
   assert.doesNotMatch(bar, /fp3d-seg-settings|⚙/, "the ⚙ menu is gone");
   assert.ok(!editorSource().includes("renderSettingsMenu"));

@@ -2,6 +2,7 @@
 // It lives in the editor bundle (loaded with it) and is shown to admins only. Since #248 it is also where each
 // extension's own settings are (a card per extension, opened in place), and the fun extras' switches sit here alone.
 
+import { formatDateTime, timeStyleOf } from "../time-text.ts";
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import {
@@ -217,7 +218,7 @@ export class Extensions extends LitElement {
   private time(seconds: number | Date | null | undefined): string {
     if (seconds == null) return "–";
     const date = seconds instanceof Date ? seconds : new Date(seconds * 1000);
-    return date.toLocaleString(this.hass?.language, { dateStyle: "medium", timeStyle: "short" });
+    return formatDateTime(date, timeStyleOf(this.hass), "medium");
   }
 
   /** Pack updates (#26): how often packs are checked, auto-update, and the placed items with an update. */

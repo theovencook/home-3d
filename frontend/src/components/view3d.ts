@@ -131,6 +131,7 @@ import type { RackDraw, RackElevation } from "../rack-elevation.ts";
 type RackView = RackElevation & { name: string };
 import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
+import { timeStyleOf } from "../time-text.ts";
 import { holdTarget } from "../hold.ts";
 import { popupKind, popupPosition } from "../device-popup-model.ts";
 import { loadDevicePopup, loadFind, loadQuickMenu, loadViewNav } from "../load-parts.ts";
@@ -1919,7 +1920,7 @@ export class Fp3dView3d extends LitElement {
     v.setSun(elevation !== null && typeof sun?.azimuth === "number" ? { elevation, azimuth: sun.azimuth } : null);
     // the compass ring's letters: the first letter of each direction in the user's language
     const letter = (k: I18nKey) => translate(hass, k).charAt(0).toUpperCase();
-    v.setSunPath(this.sunPathToday(hass), [letter("compass_n"), letter("compass_e"), letter("compass_s"), letter("compass_w")]);
+    v.setSunPath(this.sunPathToday(hass), [letter("compass_n"), letter("compass_e"), letter("compass_s"), letter("compass_w")], timeStyleOf(hass));
     // the automatic look follows the sun, the theme look this device's HA theme (setTheme ignores a look it already shows)
     if (this.theme === "auto" || this.theme === "theme") v.setTheme(this.effectiveTheme());
     // the weather outside: clouds darken the sky, rain, snow and fog fall over the plot

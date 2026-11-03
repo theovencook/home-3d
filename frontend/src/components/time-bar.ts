@@ -8,6 +8,7 @@ import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, svg } from "lit";
 import type { Session } from "../timetravel/entry.ts";
 import { CATEGORY, clusterEvents, groupByHour, type Category, type Cluster, type EventKind, type TTEvent } from "../timetravel/events.ts";
+import { formatTime, timeStyleOf } from "../time-text.ts";
 import { parseMoment } from "../timetravel/playback.ts";
 import type { AwayRow, DaySummary, RoomDay } from "../timetravel/summary.ts";
 import { dayStart, hourOf, hourStart, zoneOption } from "../timetravel/tz.ts";
@@ -268,7 +269,7 @@ export class Fp3dTimeBar extends LitElement {
   }
 
   private time(t: number): string {
-    return new Date(t).toLocaleTimeString(this.language, { hour: "2-digit", minute: "2-digit", ...zoneOption() });
+    return formatTime(t, timeStyleOf(this.session?.opts.live), zoneOption());
   }
 
   // ---- scrubbing on the track ----
@@ -497,17 +498,33 @@ export class Fp3dTimeBar extends LitElement {
     const rows = this.awayCache.rows;
     const pick = (span: [number, number]) => (this._awayFrom = span);
     const span = (a: number, b: number) => `${this.clockText(a)} – ${b >= s.end - 60000 ? t("tt_now") : this.clockText(b)}`;
+    // the "Since" time in the device's 12 or 24 hours (#318): hour, minute and, in 12 hour times, AM/PM lists. The timetravel
+    // bundle has no lazy chunks, so these are plain selects here instead of the settings' time field.
+    const h12 = timeStyleOf(s.opts.live).h12;
     const custom = (e: Event) => {
-      const at = parseMoment((e.target as HTMLInputElement).value, s.end);
+      const box = (e.currentTarget as HTMLElement).closest(".when")!;
+      const val = (k: string) => (box.querySelector(`[data-p="${k}"]`) as HTMLSelectElement | null)?.value ?? "";
+      if (val("h") === "") return;
+      const hour = h12 ? (Number(val("h")) % 12) + (val("p") === "pm" ? 12 : 0) : Number(val("h"));
+      const at = parseMoment(`${hour}:${String(Number(val("m"))).padStart(2, "0")}`, s.end);
       if (at !== null) pick([Math.max(pb.start, at), s.end]);
     };
+    const two = (n: number) => String(n).padStart(2, "0");
+    const hours = h12 ? [12, ...Array.from({ length: 11 }, (_, i) => i + 1)] : Array.from({ length: 24 }, (_, i) => i);
+    const since = html`<span class="when" role="group" aria-label=${t("tt_away_since")}>
+      <select data-p="h" aria-label=${t("time_hour")} @change=${custom}>
+        <option value="">–</option>${hours.map((h) => html`<option value=${h}>${h12 ? h : two(h)}</option>`)}
+      </select
+      >:<select data-p="m" aria-label=${t("time_minute")} @change=${custom}>${Array.from({ length: 12 }, (_, i) => html`<option value=${i * 5}>${two(i * 5)}</option>`)}</select>
+      ${h12 ? html`<select data-p="p" aria-label="AM/PM" @change=${custom}><option value="am">AM</option><option value="pm">PM</option></select>` : nothing}
+    </span>`;
     return html`<p class="since">${t("tt_away_since")}:</p>
       <div class="filters">
         ${s.lastClosed !== null && s.lastClosed >= pb.start
           ? html`<button class="fchip" aria-pressed=${from === s.lastClosed} @click=${() => pick([s.lastClosed!, s.end])}>${t("tt_away_last")}</button>`
           : nothing}
         ${offer ? html`<button class="fchip" aria-pressed=${from === offer[0] && to === offer[1]} @click=${() => pick(offer)}>${t("tt_away_quiet", { from: this.time(offer[0]), to: this.time(offer[1]) })}</button>` : nothing}
-        <input class="when" type="time" aria-label=${t("tt_away_since")} @change=${custom} />
+        ${since}
       </div>
       <h4>${span(from, to)}</h4>
       ${rows.length
@@ -1036,14 +1053,19 @@ export class Fp3dTimeBar extends LitElement {
       background: rgba(255, 176, 32, 0.14);
     }
     .when {
-      font: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
       font-size: 12px;
+      color-scheme: dark;
+    }
+    .when select {
+      font: inherit;
       color: inherit;
       background: transparent;
       border: 1px solid var(--fp3d-line, rgba(120, 170, 255, 0.16));
       border-radius: 999px;
-      padding: 3px 8px;
-      color-scheme: dark;
+      padding: 3px 4px;
     }
     .opt {
       display: flex;

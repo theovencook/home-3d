@@ -99,6 +99,7 @@ import { decorDelay, lowEndDevice, petDelay } from "./pace.ts";
 import { flowSpeed } from "./flow-style.ts";
 import { HALO_SIZE, haloSize } from "./halo-size.ts";
 import { fitDistance, plotBox, refitOnResize, startViewRadius, stillFitted, type FitMargin, type FitView } from "./fit.ts";
+import { formatTime, type TimeStyle } from "../time-text.ts";
 
 export type { RobotInfo } from "./robot.ts";
 
@@ -676,6 +677,8 @@ export class FloorplanViewer {
   private spillNight = "";
   /** N, E, S, W on the compass ring, in the user's language. */
   private compassLetters: [string, string, string, string] = ["N", "E", "S", "W"];
+  /** 12 or 24 hour times for the sun ring's rise and set labels (#318). */
+  private timeStyle: TimeStyle = { h12: false };
   /** Stripe phase per cable piece, kept when its speed changes so the stripes do not jump. */
   private flowPhase = new Map<string, { speed: number; offset: number }>();
   private readonly flowTime = { value: 0 };
@@ -1832,9 +1835,10 @@ export class FloorplanViewer {
   }
 
   /** The sun's way across the sky today (null: no place known): drawn as an arc over the house. */
-  setSunPath(path: SunPath | null, letters?: [string, string, string, string]): void {
+  setSunPath(path: SunPath | null, letters?: [string, string, string, string], timeStyle?: TimeStyle): void {
     this.sunPath = path;
     if (letters) this.compassLetters = letters;
+    if (timeStyle) this.timeStyle = timeStyle;
     this.buildSunFx();
     this.invalidate();
   }
@@ -1987,7 +1991,7 @@ export class FloorplanViewer {
     const path = this.sunPath;
     const arc = on && !!path && path.points.length > 1 && sun.elevation > -3;
     const frame = arc ? this.arcFrame() : null;
-    const arcSig = arc && frame ? `${this.theme},${sun.elevation.toFixed(1)},${sun.azimuth.toFixed(1)},${this.compassLetters.join("")},${path.points[0].t},${north},${frame.x.toFixed(2)},${frame.z.toFixed(2)},${frame.y.toFixed(2)},${frame.r.toFixed(2)},${cloud.toFixed(1)}` : "";
+    const arcSig = arc && frame ? `${this.theme},${sun.elevation.toFixed(1)},${sun.azimuth.toFixed(1)},${this.compassLetters.join("")},${this.timeStyle.h12 ? 12 : 24},${path.points[0].t},${north},${frame.x.toFixed(2)},${frame.z.toFixed(2)},${frame.y.toFixed(2)},${frame.r.toFixed(2)},${cloud.toFixed(1)}` : "";
     if (arcSig === this.arcSig) return;
     this.arcSig = arcSig;
     if (!arcSig || !frame || !path || !sun) return this.sunFx.hideArc();
@@ -1999,7 +2003,7 @@ export class FloorplanViewer {
     };
     const fade = 1 - 0.7 * cloud;
     const now = Date.now();
-    const time = (t: number) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const time = (t: number) => formatTime(t, this.timeStyle);
     const size = frame.r * 0.03;
     this.sunFx.setArc({
       points: path.points.map((p) => ({ at: at(p.azimuth, p.elevation), t: p.t, elevation: p.elevation })),

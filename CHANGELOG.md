@@ -8,6 +8,10 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - Any item can show or hide from an entity's state: show it when the entity is on, off or has a state you type, with a choice for an unavailable entity (keeps showing by default); it combines with the date and time intervals, hides in 3D and 2D view and stays in the editor, dimmed (#338).
 - Set up locating, step 2 Devices: step-by-step guides for Android (Home Assistant app BLE Transmitter: on, power High, Low latency) and iPhone or Apple Watch (key helper, Private BLE Device), each with a link to the official Home Assistant docs and shown next to every warning (#329).
 - Every icon field (device, item and own-button icons) has an icon picker with a search filter: Home Assistant's icon picker where the page has it, otherwise a grid of icons with search; a typed name still works (#327).
+- **Display what** in Settings (and the weather effects list) uses the same searchable multi-select as the View panel instead of a grid of checkboxes (#332).
+- The top bar no longer has a second Fit button in 2D; the one beside the zoom buttons stays (#321).
+- The furniture library's sticky search header is solid right up to the panel edge, so scrolled rows no longer show above it (#320).
+- **Time format** (Settings > Look): 12 hour, 24 hour or Automatic (follows your Home Assistant profile) for every time Home 3D shows or picks: the clock, the sun ring labels, time travel, trails, restore points, the device popup and every hour picker (24 hour pickers list 00-23 with no AM/PM) (#318).
 
 ## Home 3D 0.2.1 (2 November 2026)
 

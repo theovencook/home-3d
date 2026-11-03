@@ -81,7 +81,7 @@ export class ToolbarPart {
   /**
    * One toolbar row (#249, drawn for #219): the floor menu, then the tools with an icon and a label – "Select", the
    * drawing tools in menus by what they are for, "Build" (room, wall, door & window, floor opening, roof) and "Outside"
-   * (areas, pool), "Furniture" and "Energy" – Wall view (a mode), Undo and Redo, and at the end one "Fit", "3D beside"
+   * (areas, pool), "Furniture" and "Energy" – Wall view (a mode), Undo and Redo, and at the end "3D beside"
    * and More (Fit with garden when something stands outside, Help and shortcuts, Settings for this home). Tools with
    * choices unfold them in the menu; a group's button names the tool in use. The old ⚙ menu is gone: the panels link to
    * their settings, the room panel's "Edit room" opens the editor at the room, and Locating is in Settings › People.
@@ -149,7 +149,7 @@ export class ToolbarPart {
     const plain = (tool: Tool, label: string, icon: UiIcon) =>
       html`<button aria-pressed=${this._tool === tool} ?disabled=${off} @click=${() => (close(), this.setTool(tool))}>${uiIcon(icon)} ${label}</button>`;
     const groupIcon: Record<string, UiIcon> = { build: "wall", outside: "tree" };
-    // one Fit at the end of the row fits the floor plan; fitting the garden too is in More, when something stands outside
+    // no Fit in the row (#321): the plan has its own beside the zoom buttons; fitting the garden too is in More, when something stands outside
     return html`<span class="fp3d-tb-sep"></span>
       <div class="fp3d-seg fp3d-seg-menu fp3d-seg-tools" role="group" aria-label=${this.t("tools")}>
         <button aria-pressed=${this._tool === "select"} ?disabled=${!floor} @click=${() => (close(), this.setTool("select"))}>${uiIcon("pointer")} ${this.t("tool_select")}</button>
@@ -218,7 +218,6 @@ export class ToolbarPart {
       ${warn}
       <span class="fp3d-tb-grow"></span>
       <div class="fp3d-seg fp3d-seg-menu fp3d-seg-views">
-        <button class="fp3d-fit-btn" title=${this.t("fit_hint")} @click=${() => (close(), this.fit())}>${uiIcon("expand")} ${this.t("fit")}</button>
         <button class="fp3d-split-btn" aria-pressed=${this._split} title=${this.t("split_3d_hint")} @click=${() => (close(), this.toggleSplit())}>${uiIcon(this._split ? "split-on" : "split-off")} ${this.t("split_3d")}</button>
       </div>
       ${this.renderMoreMenu(close)}`;

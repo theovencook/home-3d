@@ -2,7 +2,8 @@
 // how it is drawn. The look is a device preference ("home3d.clock_*"); the corner is the older "home3d.clock".
 
 import { html, svg, type TemplateResult } from "lit";
-import { uses12Hours, type HassLocale } from "./time-of-day.ts";
+import { hourOptions } from "./time-text.ts";
+import { uses12Hours, type HassLocale } from "./time-format.ts";
 
 export interface ClockLook {
   /** 12 or 24 hour digits; "auto" follows Home Assistant's profile. */
@@ -44,8 +45,9 @@ const format = (env: ClockEnv, o: Intl.DateTimeFormatOptions): string => {
 
 /** The digits: 12 hour ("2:30 PM") or 24 hour ("14:30"), with seconds when asked. */
 export function digitalText(env: ClockEnv, look: ClockLook): string {
+  // "auto" follows this device's time format (#318), which follows the profile unless it was changed
   const h12 = look.hours === "auto" ? uses12Hours(env.locale, env.lang) : look.hours === "12";
-  return format(env, { hour: h12 ? "numeric" : "2-digit", minute: "2-digit", second: look.seconds ? "2-digit" : undefined, hour12: h12 });
+  return format(env, { hour: h12 ? "numeric" : "2-digit", minute: "2-digit", second: look.seconds ? "2-digit" : undefined, ...hourOptions(h12) });
 }
 
 export const dateText = (env: ClockEnv): string => format(env, { weekday: "short", day: "numeric", month: "short" });

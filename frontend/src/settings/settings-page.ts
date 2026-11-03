@@ -54,6 +54,7 @@ const loadTimeField = once(() => import("./pickers.ts"));
 const loadEntityPicker = loadTimeField;
 // the Homes page is a chunk of its own too (#296), loaded when it is first drawn
 const loadHomes = once(() => import("./homes.ts"));
+const loadMultiSelect = once(() => import("../components/multi-select.ts"));
 
 /** A line icon of the menu (#248, settings-icons.ts); `small` draws it at 16 px. Its code comes with the pickers. */
 function icon(name: string, small = false) {
@@ -711,25 +712,21 @@ export class SettingsPage extends LitElement {
           <i>${String(value ?? s.default)}</i>
         </span>`;
       case "checks": {
-        const on = new Set((value as string[] | null) ?? []);
-        return html`<div class="st-checks">
-          ${c.options.map(
-            (o) => html`<label class="st-check"
-              ><input
-                type="checkbox"
-                .checked=${on.has(o.value)}
-                ?disabled=${disabled}
-                @change=${(e: Event) => {
-                  const next = new Set(on);
-                  if ((e.target as HTMLInputElement).checked) next.add(o.value);
-                  else next.delete(o.value);
-                  this.write(s as Setting<string[]>, c.options.map((x) => x.value).filter((v) => next.has(v)));
-                }}
-              />
-              ${this.label(o)}</label
-            >`,
-          )}
-        </div>`;
+        // the same searchable multi-select as the View panel (#332); a long list reads "6 object types selected"
+        need(loadMultiSelect);
+        const on = (value as string[] | null) ?? [];
+        return html`<fp3d-multi-select
+          class="st-multi"
+          .options=${c.options.map((o) => ({ id: o.value, label: this.label(o) }))}
+          .value=${on}
+          .label=${aria}
+          .disabled=${disabled}
+          .summary=${c.options.length > 6 ? this.tr(on.length === 1 ? "display_count_one" : "display_count", { n: on.length }) : ""}
+          .searchLabel=${this.tr("multi_search")}
+          .emptyText=${this.tr("multi_none")}
+          .removeLabel=${this.tr("multi_remove")}
+          @change=${(e: CustomEvent<{ value: string[] }>) => this.write(s as Setting<string[]>, c.options.map((x) => x.value).filter((v) => e.detail.value.includes(v)))}
+        ></fp3d-multi-select>`;
       }
       case "action":
         return this.renderAction(s, c, disabled);
@@ -1217,22 +1214,9 @@ export class SettingsPage extends LitElement {
         border-radius: 8px;
         background: var(--fp3d-bg2);
       }
-      .st-checks {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px 16px;
-      }
-      .st-check {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        min-height: 36px;
-        font-size: 13.5px;
-      }
-      .st-check input {
-        width: 18px;
-        height: 18px;
-        accent-color: var(--fp3d-accent);
+      .st-multi {
+        width: 100%;
+        max-width: 460px;
       }
       .st-actions {
         display: flex;
