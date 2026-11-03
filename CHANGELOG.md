@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- Walk mode on a touch screen: the bottom bar stays pressable (the walk layer stops above it), "Exit walk" is a larger button where the Walk button was at the top right with the energy row stopping before it, the room name sits under the energy row, the clock is hidden while walking so the stick never covers it, and Back and Escape end the walk (the browser Back too) (#351).
 - Door and window contact sensors show their state on the door or window itself (leaf swung open, sash open); their pins are hidden unless View > Show > "Door sensor pins" is on (off by default). A tap on the opening still opens the sensor (#349).
 - Tap any energy tile to fold the row down to just Consumption, tap again to show them all; the choice is kept per device, and the tiles keep the small phone chip look (#348).
 - New defaults for devices that never chose: room names are off, and the weather tile sits beside the clock (tap it for today's forecast; it stays hidden without a weather entity). Anything already chosen on a device is kept (#347).

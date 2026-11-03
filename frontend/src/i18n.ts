@@ -226,7 +226,7 @@ const en = {
   close: "Close",
   walk_start: "Walk through the house",
   walk_title: "Walk",
-  walk_end: "End",
+  walk_end: "Exit walk",
   walk_hint: "Drag: look around · tap the floor: walk there · W A S D / arrow keys or the stick: walk · Esc: end",
   card_next: "next step …",
   card_step_hole: "Through a hole",
