@@ -179,6 +179,8 @@ All measures of a part are **fractions of the item's size**:
     knob). See [Round shapes](#round-shapes).
   - `lathe`: a `profile` turned around the part's upright axis (vases, lamp bases, bowls, planters).
   - `rbox`: a box with rounded edges (cushions, mattresses, appliances, soft seats); `round` sets how round.
+  - `shell`: a curved body lofted through cross-sections (car bodies, boats, bath tubs): `side` and `plan` give its
+    side and plan views. See [Curved shells](#curved-shells).
 - `color`: `#rrggbb` or a role of the built-in palette (`body`, `fabric`, `cushion`, `wood`, `white`, `metal`,
   `dark`, `glass`, `plant`, `pot`, `accent`, `paint`). Roles follow the look of the plan, so prefer them. `paint` is the body of a vehicle: the item panel offers ten base car colours and a hex value for it (the catalogue is in [vehicles.md](vehicles.md)). In the realistic
   look each role also has a material (`fabric` and `cushion` fabric, `metal` metal, `glass` glass, `white` gloss, the
@@ -200,7 +202,8 @@ All measures of a part are **fractions of the item's size**:
 - `screen` (optional): the part is a screen (TV, monitor). The item can then be linked to a media player and its
   front (+z) shows the colour and picture of the running app, like the built-in TVs.
 - `profile` (`lathe` only, required there): see [Round shapes](#round-shapes).
-- `round` (`rbox` only, optional): see [Round shapes](#round-shapes).
+- `round` (`rbox` and `shell` only, optional): see [Round shapes](#round-shapes) and [Curved shells](#curved-shells).
+- `side` (`shell` only, required there), `plan` and `taper` (`shell` only, optional): see [Curved shells](#curved-shells).
 
 ### Round shapes
 
@@ -282,8 +285,51 @@ to `0.5` (default `0.2`). At `0.5` the shortest side is fully round, like a bols
 }
 ```
 
+### Curved shells
+
+A shell (#252) is a body lofted through cross-sections along the part's depth, for shapes a box with sloped sides
+cannot make: a car's body, glasshouse and roof, a boat's hull, a bath tub. Like the other shapes it fills its part box
+(`x`, `z`, `w`, `d`, `y`, `h`), takes the colour roles, `top`, `edges`, `rot` and `fix`, and grows with the item.
+
+- `side` (required): 2 to 16 stations `[z, bottom, top]`, the side view. `z` runs along the part's depth from its
+  back (`0`) to its front (`1`) and never goes down; `bottom` and `top` are fractions of the part's height. The shell
+  starts at the first station and ends at the last, each end closed with a flat face.
+- `plan` (optional): 2 to 16 points `[z, width]`, the plan view; `width` is a fraction of the part's width (default
+  `1` all along). Narrow it at the ends for a rounded nose or tail.
+- `round` (optional): the corner radius of every cross-section as a fraction of its shorter side, from `0.01` to `0.5`
+  (default `0.25`; `0.5` is fully round).
+- `taper` (optional): the width at the top of every cross-section against its bottom, from `0.1` to `1.5` (default
+  `1`). Below 1 the sides lean in, like a car's glasshouse; the widest edge is the plan's width.
+
+Between the stations the side and plan run as smooth curves that pass through every station and never overshoot, so
+a few stations give a smooth body. The 3D view cuts a shell about 16 times along its length with 12 points round each
+cross-section (at most about 450 triangles); on the tablet level only at its stations, with 8 points round (about a
+quarter of that). Make windows a second shell in `glass` sitting on the body, and pillars a short slice of the
+glasshouse a centimetre proud of it. In the plan a shell shows as its part's rectangle.
+
+```json
+{
+  "id": "rowing_boat",
+  "name": { "en": "Rowing boat" },
+  "size": [1.4, 3.6, 0.6],
+  "group": "outdoor",
+  "parts": [
+    {
+      "shape": "shell", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "wood",
+      "side": [[0, 0.35, 0.95], [0.15, 0.05, 0.85], [0.6, 0, 0.85], [0.92, 0.2, 0.95], [1, 0.6, 1]],
+      "plan": [[0, 0.6], [0.3, 1], [0.7, 0.9], [1, 0.1]],
+      "round": 0.45,
+      "taper": 1.2
+    }
+  ]
+}
+```
+
+The cars of `theovencook.outdoor` (from release 3) are built this way: `tools/gen_vehicles.py` and `tools/gen_leaf.py`
+write them.
+
 A newer Home 3D shape in an older Home 3D is refused with `needs_update` (see below), so a pack that uses these
-shapes needs a Home 3D version that knows them.
+shapes needs a Home 3D version that knows them (shells: Home 3D after 0.2.1).
 
 ### Optional item fields
 

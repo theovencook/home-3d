@@ -14,8 +14,9 @@ import { COLOUR_ROLES, roleColour, type RoleColours } from "../colour-roles.ts";
 import { materialId, roleMaterial, type RoleMaterials } from "../role-materials.ts";
 import { binColors, binShape, householdCountry, mailboxShape, type BinShape, type MailboxShape } from "../household.ts";
 import type { Floor } from "../model.ts";
-import { ALWAYS, DEG, EDGE_TOP, GeoBuffer, LineBuffer, pushLoft, pushLyingCyl, pushPrism, pushRings, shade, type Ring } from "./geo.ts";
+import { ALWAYS, DEG, EDGE_TOP, GeoBuffer, LineBuffer, pushLoft, pushLyingCyl, pushPrism, pushRings, shade, shadedTri, type Ring } from "./geo.ts";
 import { latheRings, roundedBoxRings, sphereRings } from "./rings.ts";
+import { shellTriangles, type ShellDetail, type V3 } from "./shell.ts";
 
 /** The theme's colour per role (and a lighter top for some); the looks map them in the shaders. */
 const THEME = {
@@ -159,6 +160,26 @@ class Builder {
       const reach = (r: Ring) => Math.max(...r.pts.map(([x, z]) => Math.hypot(x - r.pts[0][0], z - r.pts[0][1])));
       const widest = world.reduce((m, r) => (reach(r) > reach(m) + 1e-9 ? r : m), world[0]);
       for (let i = 0; i < widest.pts.length; i++) this.line(widest.pts[i], widest.pts[(i + 1) % widest.pts.length], widest.y, widest.y, edges);
+    }
+  }
+
+  /**
+   * Triangles in local coordinates, each facing outwards (a curved shell, #252), shaded like the round shapes;
+   * `edges` outlines the silhouette's top line.
+   */
+  mesh(tris: [V3, V3, V3][], side: number, top = side, edges: Color | null = null): void {
+    const tri = shadedTri(this.buf, side, top);
+    const at = (q: V3): V3 => {
+      const [x, z] = this.tf(q[0], q[2]);
+      return [x, q[1], z];
+    };
+    // a mirroring transform turns every face inside out: the last two corners swap back
+    for (const [a, b, c] of tris) (this.mirrored ? tri(at(a), at(c), at(b)) : tri(at(a), at(b), at(c)));
+    if (edges) {
+      const tops = new Map<number, V3>();
+      for (const t of tris) for (const q of t) if ((tops.get(q[2])?.[1] ?? -Infinity) < q[1]) tops.set(q[2], q);
+      const line = [...tops.values()].sort((a, b) => a[2] - b[2]);
+      for (let i = 0; i + 1 < line.length; i++) this.seg(line[i][0], line[i][1], line[i][2], line[i + 1][0], line[i + 1][1], line[i + 1][2], edges);
     }
   }
 
@@ -2182,6 +2203,19 @@ export function hasOwnColours(f: Pick<Furniture, "type" | "colors">): boolean {
   return f.type === "waste_bin" || hasFixedColors(f.type) || COLOUR_ROLES.some((r) => roleColour(f.colors, r));
 }
 
+/** How finely curved shells are cut (#252): "low" on the tablet level, which the viewer sets before it builds. */
+let shellDetail: ShellDetail = "full";
+
+/** Sets how finely curved shells (#252) are cut from now on; the floors' item cache keys on it (build.ts). */
+export function setShellDetail(detail: ShellDetail): void {
+  shellDetail = detail;
+}
+
+/** How finely curved shells are cut now. */
+export function currentShellDetail(): ShellDetail {
+  return shellDetail;
+}
+
 /** Colour of a pack part: a palette role (so packs follow the look) or "#rrggbb". */
 function packColor(value: string | undefined, top: boolean): number | null {
   if (!value) return null;
@@ -2228,6 +2262,7 @@ function packModel(
       const r = (p.round ?? 0.2) * Math.min(p.w * w, p.d * d, y1 - y0);
       bb.rings(roundedBoxRings((p.x - p.w / 2) * w, (p.x + p.w / 2) * w, (p.z - p.d / 2) * d, (p.z + p.d / 2) * d, y0, y1, r), side, top, edges);
     }
+    else if (p.shape === "shell") bb.mesh(shellTriangles(p, { cx: p.x * w, cz: p.z * d, w: p.w * w, d: p.d * d, y0, h: y1 - y0 }, shellDetail), side, top, edges);
     else if (p.shape === "loft") {
       const tx = p.tx ?? p.x;
       const tz = p.tz ?? p.z;

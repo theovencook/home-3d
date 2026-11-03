@@ -34,7 +34,8 @@ const SHAPES: Record<(typeof PART_SHAPES)[number], string> = {
   loft: 'a box whose top face is another rectangle: "tx", "tz" give its centre and "tw", "td" its size (same ranges as x, z, w, d; default: the bottom\'s). For sloped or tapered things: lamp shades, splayed legs, bonnets.',
   sphere: "a ball filling the part's box, squashed when w, d and h differ (knobs, globe lamps, pouffes).",
   lathe: `a "profile" turned around the part's upright axis (vases, bowls, lamp bases, planters). The profile is 2 to ${ITEM_FORMAT.maxProfilePoints} points [radius, height], each ${range(ITEM_FORMAT.level)}: radius 1 touches the part's box, 0 is the axis; height 0 is the part's bottom, 1 its top. Write them from the bottom up the outside, like the right half of the silhouette; for a bowl go up the outside, over the rim and down the inside. A lathe must have a profile, and only a lathe may have one.`,
-  rbox: `a box with rounded edges (cushions, mattresses, appliances, soft seats); optional "round" ${range(ITEM_FORMAT.round)} of its shortest side (default 0.2; 0.5 is fully round). Only an rbox may have "round".`,
+  rbox: `a box with rounded edges (cushions, mattresses, appliances, soft seats); optional "round" ${range(ITEM_FORMAT.round)} of its shortest side (default 0.2; 0.5 is fully round). Only an rbox or a shell may have "round".`,
+  shell: `a curved body (car bodies, boats). "side" (required, shell only): 2 to ${ITEM_FORMAT.maxShellPoints} stations [z, bottom, top], each ${range(ITEM_FORMAT.level)}, z from the part's back (0) to its front (1), never going down. Optional "plan": [z, width] points (width of the part's, default 1), "round" (default 0.25) and "taper" ${range(ITEM_FORMAT.taper)} (top width against the bottom). Smooth curves join the stations. Windows: a second shell in "glass".`,
 };
 
 /** What each colour role is for: a new role breaks the build until it has a line here. */

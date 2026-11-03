@@ -64,7 +64,7 @@ import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { CameraProjections, PROJECTION_LAYER, type ProjectionSurface, type ProjectorPose } from "./projection.ts";
 import type { RoleColours } from "../colour-roles.ts";
 import type { RoleMaterials } from "../role-materials.ts";
-import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, pushFurniture, pushRackLeds, setLightLook, hasOwnColours, furnitureLook } from "./furniture.ts";
+import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, pushFurniture, pushRackLeds, setLightLook, hasOwnColours, furnitureLook, setShellDetail } from "./furniture.ts";
 import { pushPipeTube, type PipeTube } from "./pipes.ts";
 
 /** three.js classes lent to the fun packs' bundle (so it carries no copy of three.js). */
@@ -3127,6 +3127,8 @@ export class FloorplanViewer {
             return y === null ? null : y - floor.elevation;
           }
         : undefined;
+      // curved car bodies (#252) are cut coarsely on the tablet level
+      setShellDetail(this.lowQuality ? "low" : "full");
       const geo = buildFloorGeometry(withVehicles(this.placeBins(floor), this.parked), b.settings.wall_exterior, b.settings.wall_interior, stairHoleParts(b.floors, floor), garden, roofUnder);
       const mask: FoldMasks = { standing: { value: 0xffff }, glass: { value: 0 } };
       const materials = this.makeMaterials(mask);

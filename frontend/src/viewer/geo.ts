@@ -538,18 +538,14 @@ export interface Ring {
 }
 
 /**
- * A closed solid stitched from rings (spheres, lathes, rounded boxes, #4): each ring is joined to the next by a band
- * of quads; the first ring is closed with a flat cap facing down, the last with one facing up (a ring shrunk to a
- * point needs none). Rings run counter-clockwise and, as a profile seen from the side, counter-clockwise from the
- * bottom cap to the top cap: the faces then point outwards also where a profile turns back inwards (inside a bowl).
- * Like the prisms, sides fade darker towards the floor and vary with the direction they face; faces that tilt upwards
- * blend towards the top colour, faces that tilt downwards darken like an underside.
+ * Draws triangles shaded like the round shapes (#4, #252): sides fade darker towards the floor and vary with the
+ * direction they face; faces that tilt upwards blend towards the top colour, faces that tilt downwards darken like an
+ * underside. The triangles must face outwards (counter-clockwise seen from outside).
  */
-export function pushRings(buf: GeoBuffer, rings: Ring[], side: number, top: number): void {
-  if (rings.length < 2) return;
+export function shadedTri(buf: GeoBuffer, side: number, top: number): (a: V3, b: V3, c: V3) => void {
   const topC = new Color(top);
   const k = (y: number) => 0.5 + 0.5 * Math.min(1, Math.max(0, y / 1.6));
-  const tri = (a: V3, b: V3, c: V3) => {
+  return (a: V3, b: V3, c: V3) => {
     const ux = b[0] - a[0];
     const uy = b[1] - a[1];
     const uz = b[2] - a[2];
@@ -572,6 +568,19 @@ export function pushRings(buf: GeoBuffer, rings: Ring[], side: number, top: numb
     buf.paint(up > 0.5 ? top : side, side);
     buf.tri(a, b, c, col(a[1]), col(b[1]), col(c[1]));
   };
+}
+
+/**
+ * A closed solid stitched from rings (spheres, lathes, rounded boxes, #4): each ring is joined to the next by a band
+ * of quads; the first ring is closed with a flat cap facing down, the last with one facing up (a ring shrunk to a
+ * point needs none). Rings run counter-clockwise and, as a profile seen from the side, counter-clockwise from the
+ * bottom cap to the top cap: the faces then point outwards also where a profile turns back inwards (inside a bowl).
+ * Like the prisms, sides fade darker towards the floor and vary with the direction they face; faces that tilt upwards
+ * blend towards the top colour, faces that tilt downwards darken like an underside.
+ */
+export function pushRings(buf: GeoBuffer, rings: Ring[], side: number, top: number): void {
+  if (rings.length < 2) return;
+  const tri = shadedTri(buf, side, top);
   const P = (r: Ring, i: number): V3 => {
     const p = r.pts[i % r.pts.length];
     return [p[0], r.y, p[1]];

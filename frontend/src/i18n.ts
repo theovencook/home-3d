@@ -2653,6 +2653,7 @@ const en = {
   ie_remove_part: "Remove part",
   ie_part: "Part {n}",
   ie_turn_hint: "Drag the picture to turn the item; scroll to zoom, double-click to reset.",
+  ie_shape_shell: "Curved shell (car bodies)",
   item_picker_title: "Choose an item",
   item_picker_open: "Choose another item",
   item_picker_search: "Search items (name, pack, type)",

@@ -4,7 +4,8 @@
 
 The cars come from tools/vehicles_data.py (brand, model, body type and the real L x W x H) and are built from a few
 body shapes (hatchback, saloon, estate, SUV, MPV, pickup, coupe, van) scaled to those sizes, 20 to 30 parts each,
-with the body in the `paint` colour role so the item panel's paint picker works. Bikes, motorbikes, snowmobiles,
+with the body in the `paint` colour role so the item panel's paint picker works. Since #252 the lower body, the
+glasshouse and the roof are curved shells (the `shell` part shape); the vans stay boxes, which they are anyway. Bikes, motorbikes, snowmobiles,
 golf carts and the like are built here too, from simple shapes. No logos, no maker images, no 3D files.
 Existing hand-made vehicles in the folder (the first bikes) are left alone; the Leaf comes from tools/gen_leaf.py.
 """
@@ -65,6 +66,32 @@ class V:
     def loft(self, cx, cz, w, d, y, h, color, tcx=None, tcz=None, tw=None, td=None) -> None:
         self.add("loft", cx, cz, w, d, y, h, color, tx=cx if tcx is None else tcx, tz=cz if tcz is None else tcz, tw=w if tw is None else tw, td=d if td is None else td)
 
+    def shell(
+        self,
+        side: list[tuple[float, float, float]],
+        plan: list[tuple[float, float]],
+        color: str,
+        round: float | None = None,  # noqa: A002
+        taper: float | None = None,
+        cx: float = 0.0,
+    ) -> dict:
+        """A curved shell (#252) written in metres: side stations (z, bottom, top) from the back to the front, plan
+        points (z, half width); the part's box is what they span. Returns the part (fractions, as stored)."""
+        z0, z1 = side[0][0], side[-1][0]
+        y0 = min(b for _z, b, _t in side)
+        y1 = max(t for _z, _b, t in side)
+        half = max(hw for _z, hw in plan)
+        dz, dy = z1 - z0, y1 - y0
+        part_side = [[r4((z - z0) / dz), r4((b - y0) / dy), r4((t - y0) / dy)] for z, b, t in side]
+        part_plan = [[r4(min(1, max(0, (z - z0) / dz))), r4(hw / half)] for z, hw in plan]
+        kw: dict = {"side": part_side, "plan": part_plan}
+        if round is not None:
+            kw["round"] = round
+        if taper is not None:
+            kw["taper"] = taper
+        self.add("shell", cx, (z0 + z1) / 2, 2 * half, dz, y0, dy, color, **kw)
+        return self.parts[-1]
+
     def wheel(self, cx: float, cz: float, dia: float, width: float, y: float = 0.0, color: str = "dark") -> None:
         self.add("cyl", cx, cz, width, dia, y, dia, color, axis="x")
 
@@ -93,6 +120,89 @@ class V:
             item["electric"] = True
         item["parts"] = self.parts
         return item
+
+
+# ------------------------------------------------------------------------------------------------- shell curves
+
+
+def monotone(points: list[tuple[float, float]]):
+    """The curve frontend/src/viewer/shell.ts draws through a shell's stations (monotone cubic, level beyond the
+    ends), so parts can be placed on a shell's surface (pillars on the glass)."""
+    pts: list[list[float]] = []
+    for x, y in points:
+        if pts and x <= pts[-1][0] + 1e-6:
+            pts[-1] = [max(x, pts[-1][0]), y]
+        else:
+            pts.append([x, y])
+    n = len(pts)
+    if n == 1:
+        return lambda x: pts[0][1]
+    delta = [(pts[i + 1][1] - pts[i][1]) / (pts[i + 1][0] - pts[i][0]) for i in range(n - 1)]
+    m = [delta[0]] + [0.0 if delta[i - 1] * delta[i] <= 0 else (delta[i - 1] + delta[i]) / 2 for i in range(1, n - 1)] + [delta[-1]]
+    for i in range(n - 1):
+        if delta[i] == 0:
+            m[i] = m[i + 1] = 0.0
+            continue
+        a, b = m[i] / delta[i], m[i + 1] / delta[i]
+        if a * a + b * b > 9:
+            t = 3 / (a * a + b * b) ** 0.5
+            m[i], m[i + 1] = t * a * delta[i], t * b * delta[i]
+
+    def f(x: float) -> float:
+        if x <= pts[0][0]:
+            return pts[0][1]
+        if x >= pts[-1][0]:
+            return pts[-1][1]
+        i = 0
+        while i + 2 < n and x > pts[i + 1][0]:
+            i += 1
+        h = pts[i + 1][0] - pts[i][0]
+        t = (x - pts[i][0]) / h
+        return (2 * t**3 - 3 * t**2 + 1) * pts[i][1] + (t**3 - 2 * t**2 + t) * h * m[i] + (-2 * t**3 + 3 * t**2) * pts[i + 1][1] + (t**3 - t**2) * h * m[i + 1]
+
+    return f
+
+
+class Shell:
+    """A shell written in metres (as V.shell takes it), to ask where its surface is."""
+
+    def __init__(self, side: list[tuple[float, float, float]], plan: list[tuple[float, float]], round: float = 0.25, taper: float = 1.0) -> None:  # noqa: A002
+        self.side, self.plan, self.round, self.taper = side, plan, round, taper
+        self.bottom = monotone([(z, b) for z, b, _t in side])
+        self.top = monotone([(z, t) for z, _b, t in side])
+        self.width = monotone(plan)
+
+    def half_width(self, z: float, y: float) -> float:
+        """Half width (m) of the cross-section at z (m) and height y (m), on the outline the 3D view draws (each
+        corner 2 straight segments, shell.ts section on "full")."""
+        import math
+
+        yb, yt, hw = self.bottom(z), max(self.bottom(z), self.top(z)), self.width(z)
+        r = min(hw, (yt - yb) / 2, self.round * min(2 * hw, yt - yb))
+        lo, hi = (1 / self.taper, 1.0) if self.taper > 1 else (1.0, self.taper)
+        pts = []
+        for cx, cy, a0 in ((hw - r, yb + r, -90), (hw - r, yt - r, 0), (-hw + r, yt - r, 90), (-hw + r, yb + r, 180)):
+            for k in range(3):
+                ang = math.radians(a0 + k * 45)
+                py = cy + math.sin(ang) * r
+                t = (py - yb) / (yt - yb) if yt - yb > 1e-9 else 0.0
+                pts.append(((cx + math.cos(ang) * r) * (lo + (hi - lo) * t), py))
+        y = min(yt, max(yb, y))
+        reach = 0.0
+        for i, (ax, ay) in enumerate(pts):
+            bx, by = pts[(i + 1) % len(pts)]
+            if (ay - y) * (by - y) > 0 or ay == by:
+                continue
+            reach = max(reach, abs(ax + (bx - ax) * (y - ay) / (by - ay)))
+        return reach
+
+    def band(self, za: float, zb: float, grow: float, below: float = 0.0, n: int = 3) -> tuple[list[tuple[float, float, float]], list[tuple[float, float]]]:
+        """Side and plan of a slice of this shell from za to zb, `grow` metres larger all round and `below` metres
+        shorter at the bottom (a pillar standing on the glass)."""
+        zs = [za + (zb - za) * i / (n - 1) for i in range(n)]
+        side = [(z, self.bottom(z) + below, self.top(z) + grow) for z in zs]
+        plan = [(z, self.width(z) + grow) for z in zs]
+        return side, plan
 
 
 # ---------------------------------------------------------------------------------------------------------- cars
@@ -135,41 +245,84 @@ def car(brand_id: str, brand: str, model: str, body: str, length_mm: int, width_
         for sx in (-1, 1):
             v.box(sx * body_w * 0.485, zc(0.72), 0.02, L * 0.1, belt + 0.06 * H, 0.26 * H, "glass")
     else:
+        # curved shells (#252): the lower body, the glasshouse on it and the roof over that, lofted through stations
+        # along the length (fractions rear 0 .. front 1 of the gh and deck points above)
         rzr0, rzr1, fzf1, fzf0 = p["gh"]
         roof_t = 0.045
         rails = 0.025 if p.get("rails") else 0.0
         roof_y = H - rails - roof_t
-        v.rbox(0, 0, body_w, L, gc, belt - gc, "paint", round=0.3)
-        v.loft(0, zc((rzr0 + fzf0) / 2), body_w * 0.9, (fzf0 - rzr0) * L, belt, roof_y - belt, "glass", tcz=zc((rzr1 + fzf1) / 2), tw=body_w * 0.74, td=(fzf1 - rzr1) * L)
-        v.box(0, zc((rzr1 + fzf1) / 2), body_w * 0.76, (fzf1 - rzr1) * L + 0.04, roof_y, roof_t, "paint")
+        dh, _dtop = p.get("deck", (0.0, 0.0))
+        deck = belt + dh * H
+        half = body_w / 2
+        lower = Shell(
+            [
+                (zc(0), gc + 0.1, max(belt - 0.04, deck - 0.03)),
+                (zc(0.04), gc, deck),
+                (zc(max(0.05, rzr0)), gc, max(belt, deck - 0.01)),
+                (zc(0.5), gc, belt),
+                (zc(fzf0), gc, belt - 0.01),
+                (zc((fzf0 + 1) / 2), gc + 0.01, belt - 0.05 * H),
+                (zc(0.965), gc + 0.03, belt - 0.11 * H),
+                (zc(1), gc + 0.1, belt - 0.2 * H),
+            ],
+            [(zc(0), half * 0.86), (zc(0.06), half * 0.97), (zc(0.3), half), (zc(0.75), half), (zc(0.94), half * 0.95), (zc(1), half * 0.8)],
+            0.25,
+            0.94,
+        )
+        v.shell(lower.side, lower.plan, "paint", round=lower.round, taper=lower.taper)
+        gw = body_w * 0.45
+        glass = Shell(
+            [
+                (zc(rzr0), belt - 0.02, belt + 0.02),
+                (zc(rzr1), belt - 0.02, roof_y),
+                (zc(fzf1), belt - 0.03, roof_y),
+                (zc(fzf0), belt - 0.03, belt + 0.01),
+            ],
+            [(zc(rzr0), gw * 0.9), (zc((rzr0 + rzr1) / 2 + 0.03), gw), (zc(fzf1), gw), (zc(fzf0), gw * 0.96)],
+            0.3,
+            0.82,
+        )
+        v.shell(glass.side, glass.plan, "glass", round=glass.round, taper=glass.taper)
+        rw = glass.half_width(zc((rzr1 + fzf1) / 2), roof_y) + 0.01
+        rz0, rz1 = zc(rzr1) - 0.04, zc(fzf1) + 0.04
+        v.shell(
+            [(rz0, roof_y - 0.04, roof_y), (rz0 + 0.1, roof_y - 0.03, roof_y + roof_t), (rz1 - 0.1, roof_y - 0.03, roof_y + roof_t), (rz1, roof_y - 0.04, roof_y)],
+            [(rz0, rw * 0.94), (rz0 + 0.1, rw), (rz1 - 0.1, rw), (rz1, rw * 0.96)],
+            "paint",
+            round=0.45,
+            taper=0.95,
+        )
         if rails:
             for sx in (-1, 1):
                 v.box(sx * body_w * 0.33, zc((rzr1 + fzf1) / 2), 0.04, (fzf1 - rzr1) * L, H - rails, rails, "metal")
         if body != "coupe":
-            # the B pillar leans in with the side glass (from 0.45 to 0.37 of the body's width), standing just proud of it:
-            # upright, its top stood out beside the roof (#242)
-            for sx in (-1, 1):
-                bz = zc((rzr0 + rzr1 + fzf1 + fzf0) / 4)
-                v.loft(sx * (body_w * 0.45 - 0.008), bz, 0.025, 0.05, belt, roof_y - belt, "paint", tcx=sx * (body_w * 0.37 - 0.008))
-        # bonnet sloping down to the front
-        v.loft(0, zc((fzf0 - 0.03 + 1) / 2), body_w * 0.94, (1 - fzf0 + 0.03) * L, belt - 0.02, 0.06 * H + 0.03, "paint", tcz=zc((fzf0 + 1 - 0.06) / 2), td=(1 - 0.06 - fzf0) * L)
+            # the B pillar: a slice of the glasshouse just proud of the glass, its top under the roof (#242)
+            bz = zc((rzr0 + rzr1 + fzf1 + fzf0) / 4)
+            side, plan = glass.band(bz - 0.03, bz + 0.03, 0.01, below=0.03)
+            v.shell(side, plan, "paint", round=0.3, taper=glass.taper)
         if body == "pickup":
             bed = rzr0
             for sx in (-1, 1):
-                v.box(sx * (body_w / 2 - 0.03), zc(bed / 2), 0.06, bed * L, belt, 0.09 * H, "paint")
-            v.box(0, -L / 2 + 0.03, body_w * 0.94, 0.05, belt, 0.09 * H, "paint")
-        else:
-            dh, dtop = p["deck"]
-            v.loft(0, zc((rzr0 + 0.02) / 2), body_w * 0.94, (rzr0 + 0.02) * L, belt - 0.02, dh * H, "paint", tcz=zc((rzr0 + 0.02 + dtop) / 2), td=(rzr0 + 0.02 - dtop) * L)
+                v.box(sx * (body_w / 2 - 0.05), zc(bed / 2 + 0.01), 0.06, bed * L - 0.08, belt - 0.02, 0.09 * H, "paint")
+            v.box(0, -L / 2 + 0.06, body_w * 0.86, 0.05, belt - 0.02, 0.09 * H, "paint")
         if p.get("cladding"):
             for sx in (-1, 1):
-                v.box(sx * body_w / 2, 0, 0.03, L * 0.5, gc, 0.12, "dark")
-    for sx in (-1, 1):
-        v.box(sx * W * 0.33, L / 2 - 0.02, 0.26, 0.04, belt - 0.12, 0.08, "#fff3cf")
-        v.box(sx * W * 0.36, -L / 2 + 0.02, 0.24, 0.04, belt - 0.15, 0.08, "#b3141b")
-        v.box(sx * (W / 2 - 0.03), zc(0.69 if body != "van" else 0.8), 0.08, 0.12, belt + 0.03, 0.08, "paint")
-    v.box(0, L / 2 - 0.07, body_w * 0.94, 0.14, gc, 0.16, "dark")
-    v.box(0, -L / 2 + 0.07, body_w * 0.94, 0.14, gc, 0.16, "dark")
+                v.box(sx * (body_w / 2 - 0.02), 0, 0.03, L * 0.5, gc, 0.12, "dark")
+    if body == "van":
+        for sx in (-1, 1):
+            v.box(sx * W * 0.33, L / 2 - 0.02, 0.26, 0.04, belt - 0.12, 0.08, "#fff3cf")
+            v.box(sx * W * 0.36, -L / 2 + 0.02, 0.24, 0.04, belt - 0.15, 0.08, "#b3141b")
+            v.box(sx * (W / 2 - 0.03), zc(0.8), 0.08, 0.12, belt + 0.03, 0.08, "paint")
+    else:
+        # lamps sit on the curved nose and tail: under the nose's top, within its width
+        for sx in (-1, 1):
+            ny = lower.top(zc(0.985)) - 0.03
+            v.box(sx * min(W * 0.33, lower.half_width(L / 2 - 0.02, ny - 0.04) - 0.14), L / 2 - 0.035, 0.24, 0.05, ny - 0.08, 0.08, "#fff3cf")
+            ty = belt - 0.07
+            v.box(sx * min(W * 0.36, lower.half_width(-L / 2 + 0.02, ty - 0.04) - 0.13), -L / 2 + 0.025, 0.22, 0.04, ty - 0.08, 0.08, "#b3141b")
+            v.box(sx * (W / 2 - 0.04), zc(0.69), 0.08, 0.12, belt + 0.02, 0.08, "paint")
+    v.box(0, L / 2 - 0.07, body_w * (0.94 if body == "van" else 0.8), 0.14, gc, 0.16, "dark")
+    v.box(0, -L / 2 + 0.07, body_w * (0.94 if body == "van" else 0.84), 0.14, gc, 0.16, "dark")
     # no "car" or "vehicle" tag: the library knows those words from the item's kind, and 195 cars with the tag would bury the
     # hand-made ones (the Leaf) in a search for "car"
     words = [brand.lower(), model.lower(), BODY_WORDS[body]]
@@ -467,8 +620,9 @@ def checklist() -> str:
         "# Vehicles catalogue (#129)",
         "",
         "Cars: the most popular current UK models of 20 brands (by UK and European registrations; pick the latest generation",
-        "sold), about 200 in all. Each is built from simple shapes by `tools/gen_vehicles.py` and scaled to the outer size",
-        "below (length x width without mirrors x height, in mm). No logos, no maker pictures, no 3D files. The body is in the",
+        "sold), about 200 in all. Each is built by `tools/gen_vehicles.py` from curved shells (body, glasshouse and roof, #252;",
+        "the vans from boxes) and simple shapes, scaled to the outer size below (length x width without mirrors x height, in",
+        "mm). No logos, no maker pictures, no 3D files. The body is in the",
         "`paint` colour role: ten base colours and a hex value in the item panel.",
         "",
         "**Sizes were checked in #135.** The maker sites (ford.co.uk, bmw.co.uk and the rest) refuse automated fetches, so each",

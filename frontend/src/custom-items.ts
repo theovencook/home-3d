@@ -3,7 +3,7 @@
 // the pack "household.custom", so a placed custom item is the furniture type "pack:household.custom:<item id>".
 // An exported item is an item file, which imports on another install as it is. Pure logic, no DOM.
 
-import { MAX_PARTS, MAX_PROFILE_POINTS, PART_SHAPES } from "./item-format.ts";
+import { MAX_PARTS, MAX_PROFILE_POINTS, MAX_SHELL_POINTS, PART_SHAPES } from "./item-format.ts";
 import { hasRecipe, type FurniturePack, type PackItem, type PackPart } from "./packs.ts";
 
 /** The pack the backend offers the custom items as. */
@@ -47,7 +47,7 @@ export function newItem(name: string, taken: Iterable<string>): PackItem {
 }
 
 /** The shapes a part can have, the most parts an item may have, the most points of a lathe's profile. */
-export { MAX_PARTS, MAX_PROFILE_POINTS, PART_SHAPES };
+export { MAX_PARTS, MAX_PROFILE_POINTS, MAX_SHELL_POINTS, PART_SHAPES };
 // the shapes the packs know are the shapes a part can have
 PART_SHAPES satisfies readonly PackPart["shape"][];
 
@@ -58,6 +58,15 @@ const DEFAULT_PROFILE: [number, number][] = [
   [1, 0.4],
   [0.5, 1],
   [0, 1],
+];
+
+/** A shell to start from (#252): a low hump, rounded at both ends. */
+const DEFAULT_SIDE: [number, number, number][] = [
+  [0, 0.1, 0.6],
+  [0.15, 0, 0.9],
+  [0.5, 0, 1],
+  [0.85, 0, 0.9],
+  [1, 0.1, 0.6],
 ];
 
 const clamp = (v: number, lo: number, hi: number, fallback: number): number => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
@@ -77,7 +86,16 @@ function tidyPart(p: PackPart): PackPart {
   if (out.shape === "lathe") out.profile = out.profile?.length ? out.profile : DEFAULT_PROFILE.map((pt) => [...pt] as [number, number]);
   else delete out.profile;
   if (out.shape === "rbox") out.round = round3(clamp(out.round ?? 0.2, 0.01, 0.5, 0.2));
+  else if (out.shape === "shell" && out.round !== undefined) out.round = round3(clamp(out.round, 0.01, 0.5, 0.25));
   else delete out.round;
+  if (out.shape === "shell") {
+    out.side = out.side?.length ? out.side : DEFAULT_SIDE.map((pt) => [...pt] as [number, number, number]);
+    if (out.taper !== undefined) out.taper = round3(clamp(out.taper, 0.1, 1.5, 1));
+  } else {
+    delete out.side;
+    delete out.plan;
+    delete out.taper;
+  }
   if (out.shape !== "loft") for (const k of ["tx", "tz", "tw", "td"] as const) delete out[k];
   if (out.shape !== "cyl") delete out.axis;
   return out;
@@ -275,4 +293,24 @@ export function readProfile(text: string): [number, number][] | null {
   if (pairs.length < 2 || pairs.length > MAX_PROFILE_POINTS) return null;
   if (pairs.some((p) => p.length !== 2 || p.some((v) => !Number.isFinite(v)))) return null;
   return pairs.map(([r, y]) => [round3(clamp(r, 0, 1, 0)), round3(clamp(y, 0, 1, 0))]);
+}
+
+/** A shell's stations (#252) as the editor's field shows them: groups of numbers separated by commas. */
+export function stationsText(points: readonly (readonly number[])[] | undefined): string {
+  return (points ?? []).map((pt) => pt.join(" ")).join(", ");
+}
+
+/** A shell's side ([z, bottom, top], `size` 3) or plan ([z, width], `size` 2) typed into the field, each value cut to
+ * 0..1 and sorted by z; null when it is not 2 to 16 groups of that many numbers. */
+export function readStations<N extends 2 | 3>(text: string, size: N): (N extends 3 ? [number, number, number] : [number, number])[] | null {
+  const groups = text
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => s.split(/\s+/).map(Number));
+  if (groups.length < 2 || groups.length > MAX_SHELL_POINTS) return null;
+  if (groups.some((g) => g.length !== size || g.some((v) => !Number.isFinite(v)))) return null;
+  const out = groups.map((g) => g.map((v) => round3(clamp(v, 0, 1, 0))));
+  if (size === 3) for (const g of out) if (g[2] < g[1]) [g[1], g[2]] = [g[2], g[1]];
+  return out.sort((a, b) => a[0] - b[0]) as (N extends 3 ? [number, number, number] : [number, number])[];
 }

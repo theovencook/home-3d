@@ -1,5 +1,5 @@
-"""Furniture packs: data-only JSON, furniture models built from boxes, cylinders, lofts, spheres, lathes and
-rounded boxes.
+"""Furniture packs: data-only JSON, furniture models built from boxes, cylinders, lofts, spheres, lathes, rounded
+boxes and curved shells.
 
 A pack (format v2, see docs/packs.md) is a folder: a pack.json naming the pack, its publisher and its licence, and
 one JSON file per item, in subfolders if wanted. The pack id is "publisher.pack", an item's full id
@@ -14,6 +14,7 @@ This module only depends on voluptuous, so tools/fp3dpack.py (which checks packs
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import logging
 from pathlib import Path
@@ -26,7 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # The lists and limits of an item. The item editor's brief for an LLM (frontend/src/item-format.ts, #14) states the
 # same ones, and a frontend test reads them from here, so keep these names and keep each a plain literal.
-PART_SHAPES = ["box", "cyl", "loft", "sphere", "lathe", "rbox"]
+PART_SHAPES = ["box", "cyl", "loft", "sphere", "lathe", "rbox", "shell"]
 COLOUR_ROLES = [
     "body",
     "fabric",
@@ -98,13 +99,47 @@ _PROFILE = vol.All(
 ROUND_RANGE = (0.01, 0.5)
 _ROUND = _range(ROUND_RANGE)
 
+# A curved shell (#252): a body lofted through cross-sections, for car bodies and the like. `side` is its side view as
+# stations [z, bottom, top] from the part's back (z 0) to its front (z 1), the heights fractions of the part's height;
+# `plan` its plan view as [z, width], the width a fraction of the part's width (default: the whole width). Between the
+# stations both run as smooth curves. Each cross-section is a rectangle with rounded corners (`round`, default 0.25 of
+# its shorter side), its top `taper` times as wide as its bottom (default 1). 16 stations at most keeps it low-poly.
+MAX_SHELL_POINTS = 16
+TAPER_RANGE = (0.1, 1.5)
+_SIDE = vol.All(
+    [vol.All([_LEVEL], vol.Length(min=3, max=3))],
+    vol.Length(min=2, max=MAX_SHELL_POINTS),
+)
+_PLAN = vol.All(
+    [vol.All([_LEVEL], vol.Length(min=2, max=2))],
+    vol.Length(min=2, max=MAX_SHELL_POINTS),
+)
+
+
+def _rising(points: list[list[float]], path: str) -> None:
+    """Stations along a shell run from its back to its front: z never goes down."""
+    for before, after in itertools.pairwise(points):
+        if after[0] < before[0]:
+            raise vol.Invalid("a shell's stations run from z 0 (back) to z 1 (front)", path=[path])
+
 
 def _shape_fields(part: dict[str, Any]) -> dict[str, Any]:
-    """A lathe has a profile and only a lathe; only a rounded box has a rounding."""
+    """A lathe has a profile and only a lathe; only a rounded box or a shell has a rounding; a shell has a side view
+    and only a shell has one, a plan or a taper."""
     if (part["shape"] == "lathe") != ("profile" in part):
         raise vol.Invalid("a lathe part needs a profile, and only a lathe part has one", path=["profile"])
-    if "round" in part and part["shape"] != "rbox":
-        raise vol.Invalid("only a rounded box (rbox) part has a rounding", path=["round"])
+    if "round" in part and part["shape"] not in ("rbox", "shell"):
+        raise vol.Invalid("only a rounded box (rbox) or a shell part has a rounding", path=["round"])
+    if (part["shape"] == "shell") != ("side" in part):
+        raise vol.Invalid("a shell part needs a side view, and only a shell part has one", path=["side"])
+    for key in ("plan", "taper"):
+        if key in part and part["shape"] != "shell":
+            raise vol.Invalid(f"only a shell part has a {key}", path=[key])
+    if part["shape"] == "shell":
+        _rising(part["side"], "side")
+        if any(top < bottom for _z, bottom, top in part["side"]):
+            raise vol.Invalid("a shell's top is above its bottom at every station", path=["side"])
+        _rising(part.get("plan", []), "plan")
     return part
 
 
@@ -142,8 +177,12 @@ _PART_FIELDS = vol.Schema(
         vol.Optional("fix"): vol.All(str, vol.Match(r"^[wdh]{1,3}$")),
         # lathe: the profile turned around the upright axis (vases, lamp bases, bowls)
         vol.Optional("profile"): _PROFILE,
-        # rounded box: the radius of its edges (default 0.2 of the shortest side)
+        # rounded box: the radius of its edges (default 0.2 of the shortest side); shell: of its cross-sections' corners
         vol.Optional("round"): _ROUND,
+        # shell (#252): side view [z, bottom, top], plan view [z, width] and taper of its cross-sections
+        vol.Optional("side"): _SIDE,
+        vol.Optional("plan"): _PLAN,
+        vol.Optional("taper"): _range(TAPER_RANGE),
     }
 )
 PART_SCHEMA = vol.All(_PART_FIELDS, _shape_fields)
