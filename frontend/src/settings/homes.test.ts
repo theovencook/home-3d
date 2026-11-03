@@ -124,7 +124,6 @@ test("deleting a home asks in a warning dialog for the home's name and deletes o
     { ok: false, value: "Home" },
     { ok: true, value: "" },
     { ok: true, value: "Flat" },
-    { ok: true, value: "" },
     { ok: true, value: " home " },
   ]);
   const deletes = () => state.sent.filter((m) => m.type === "home_3d/homes/delete");
@@ -136,10 +135,12 @@ test("deleting a home asks in a warning dialog for the home's name and deletes o
     assert.deepEqual(deletes(), [], "a plain OK is not enough");
     await el.act("delete", HOMES[0]);
     assert.deepEqual(deletes(), [], "another home's name is not this one's");
-    assert.match(asked[3]!.text, /not the home's name/, "the user is told why nothing happened");
+    assert.match(asked[2]!.mismatch ?? "", /not the home's name/, "the dialog itself carries the error it shows under the field (#330)");
+    assert.equal(asked[2]!.matches?.("Flat"), false);
+    assert.equal(asked[2]!.matches?.(" HOME "), true, "Delete enables once the name matches, case and spaces aside");
     await el.act("delete", HOMES[0]);
-    assert.equal(asked[4]!.danger, true);
-    assert.equal(asked[4]!.input, "", "the field starts empty, the name is typed, not offered");
+    assert.equal(asked[3]!.danger, true);
+    assert.equal(asked[3]!.input, "", "the field starts empty, the name is typed, not offered");
     assert.deepEqual(deletes(), [{ type: "home_3d/homes/delete", home_id: "home" }]);
     assert.deepEqual(opened, [{ home: null }], "the home shown is gone: the view follows the active one");
   } finally {

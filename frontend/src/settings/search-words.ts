@@ -67,7 +67,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   "effects.tank_hot": ["boiler", "water", "immersion", "hot", "celsius", "degrees"],
   "effects.camera_seconds": ["cctv", "security", "recording", "afterglow", "timer", "duration"],
   // cameras and director
-  director_here: ["automatic", "wander", "roam", "stay", "still", "screensaver"],
+  director_here: ["automatic", "wander", "roam", "stay", "still", "screensaver", "live", "fly"],
   director_here_link: ["moved", "relocated", "notice", "note", "moving", "message"],
   "director.doorbell": ["bell", "chime", "visitor", "caller", "callers", "ding"],
   "director.doorbell_entity": ["bell", "button", "chime", "ring", "press", "entrance"],
@@ -81,9 +81,9 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   // household
   "household.bin_from": ["garbage", "recycling", "trash", "collection", "refuse", "lights"],
   "household.bin_until": ["collection", "garbage", "recycling", "trash", "end", "stop"],
-  "household.bin_next_only": ["next", "upcoming", "single", "only", "collection", "sticker"],
-  "household.bin_days": ["countdown", "lead", "advance", "notice", "tags", "timing"],
-  "household.kerb": ["kerbside", "curb", "pavement", "pickup", "collection", "verge"],
+  "household.bin_next_only": ["next", "upcoming", "single", "only", "collection", "sticker", "label", "hide"],
+  "household.bin_days": ["countdown", "lead", "advance", "notice", "tags", "timing", "hide", "pickup"],
+  "household.kerb": ["kerbside", "curb", "pavement", "pickup", "collection", "verge", "spot", "set"],
   "household.notes": ["note", "message", "memo", "board", "reminder", "post"],
   // favourites
   favorites: ["favorite", "favourite", "bookmark", "shortcut", "pinned", "saved"],
@@ -110,7 +110,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   explode: ["exploded", "separate", "spread", "gap", "split", "spacing"],
   floor_stack: ["stack", "ghost", "fade", "transparent", "layers", "underneath"],
   roof: ["lid", "lift", "fade", "attic", "cover", "top"],
-  heat: ["heat", "thermal", "climate", "overlay", "comfort", "warm"],
+  heat: ["heat", "thermal", "climate", "overlay", "comfort", "warm", "numbers", "tint"],
   display: ["layers", "filter", "visible", "declutter", "categories", "objects"],
   trail: ["path", "track", "movements", "breadcrumbs", "route", "journey"],
   weather: ["forecast", "clouds", "fog", "sunshine", "outdoor", "sky"],
@@ -123,7 +123,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   nav: ["arrows", "zoom", "rotate", "touch", "pad", "onscreen", "turn", "pan"],
   floor_pictures: ["picker", "thumbs", "gallery", "panel", "level", "selector"],
   // voice
-  voice_here: ["voice", "mic", "talk", "dictation", "spoken", "command"],
+  voice_here: ["voice", "mic", "talk", "dictation", "spoken", "command", "button"],
   screen_name: ["label", "title", "identifier", "tablet", "display", "ask"],
   voice_pipeline: ["stt", "transcription", "recognition", "engine", "speech", "provider"],
   voice_sentences: ["phrases", "words", "commands", "wording", "intents", "questions"],

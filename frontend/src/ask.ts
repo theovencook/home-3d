@@ -16,6 +16,13 @@ export interface AskRequest {
   detail?: string;
   /** The OK button deletes or overwrites something: drawn as a warning. */
   danger?: boolean;
+  /**
+   * A typed confirmation (#330): OK stays disabled until this says the text matches. A wrong answer (Enter, or leaving
+   * the field) keeps the dialog open and shows `mismatch` under the field for a few seconds.
+   */
+  matches?: (typed: string) => boolean;
+  /** The error shown under the field when the text does not match. */
+  mismatch?: string;
 }
 
 export interface AskAnswer {
@@ -88,6 +95,15 @@ export async function askText(text: string, value: string, labels: { ok: string;
   const a = await send({ text, input: value, ...labels });
   const typed = a.value.trim();
   return a.ok && typed ? typed : null;
+}
+
+/**
+ * A typed confirmation (delete a home: type its name): true only when the typed text matches. The dialog stays open
+ * with an error under the field and a disabled OK until it does, so a wrong answer never closes it (#330).
+ */
+export async function askTyped(text: string, labels: { ok: string; cancel: string; matches: (typed: string) => boolean; mismatch: string; danger?: boolean }): Promise<boolean> {
+  const a = await send({ text, input: "", ...labels });
+  return a.ok && labels.matches(a.value);
 }
 
 /** A message with only an OK button; resolves once it is closed. */

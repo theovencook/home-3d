@@ -349,3 +349,50 @@ test("no This home page holds a device setting; only link rows point to where on
     assert.equal(settingById(id!)!.section, section);
   }
 });
+
+test("the feet-and-inches typing tip shows only when lengths show in feet and inches (#324)", async () => {
+  const { planUnit } = await import("./registry.ts");
+  const e = env();
+  const s = settingById("units")!;
+  assert.equal(s.hintImperial, "units_tip");
+  const metric = { ...e, building: s.write!(e, "metric") as Building };
+  assert.equal(planUnit(metric), "metric");
+  assert.equal(planUnit(e), "metric");
+  const imperial = { ...e, building: s.write!(e, "imperial") as Building };
+  assert.equal(planUnit(imperial), "imperial");
+  assert.ok(!(englishTable() as Record<string, string>)[s.hint!].includes("8' 2"));
+});
+
+test("Ground height is under Plan and units, keeps its stored key and its default shows in the Lengths format (#325)", async () => {
+  const { shownLength } = await import("./registry.ts");
+  const s = settingById("terrain.level")!;
+  assert.equal(s.section, "general");
+  assert.equal(s.card, "plan");
+  assert.equal((englishTable() as Record<string, string>)[s.label], "Ground height");
+  const e = env();
+  const imperial = { ...e, building: settingById("units")!.write!(e, "imperial") as Building };
+  assert.equal(shownLength(imperial, s.default as number), '-7.9"');
+  assert.equal(shownLength(e, s.default as number), "-0.2");
+  const next = s.write!(e, -1 as never) as Building;
+  assert.equal(next.settings.terrain!.level, -1);
+});
+
+test("the room climate setting says what each choice does on the view (#331)", () => {
+  const s = settingById("heat")!;
+  const en = englishTable() as Record<string, string>;
+  assert.equal(s.control.kind, "select");
+  const labels = (s.control as { options(e: unknown): { value: string; label: string }[] }).options(env()).map((o) => en[o.label]);
+  assert.deepEqual(labels, ["Nothing", "Floor colour: temperature", "Floor colour: humidity", "Floor colour: CO₂", "Numbers at the room names"]);
+  assert.equal(en[s.label], "Show room climate as");
+  assert.ok(s.hint && /colour scale/.test(en[s.hint]) && /instead/.test(en[s.hint]));
+  assert.deepEqual(s.prefKeys, ["heat"], "the stored key is unchanged");
+});
+
+test("the two device switches are named after their feature, not after being switched on (#334)", () => {
+  const en = englishTable() as Record<string, string>;
+  assert.equal(en[settingById("director_here")!.label], "Live director on this screen");
+  assert.equal(en[settingById("voice_here")!.label], "Voice button on this screen");
+  assert.equal(en.director_here, "Live director on this screen");
+  assert.equal(en.voice_here, "Voice button on this screen");
+  for (const v of Object.values(en)) assert.ok(!/Switch on on this/.test(v), "no label of that old kind is left");
+});

@@ -175,6 +175,8 @@ export interface Setting<V = unknown> {
   permission: Permission;
   label: TextKey;
   hint?: TextKey;
+  /** A second sentence after the hint, shown only while lengths show in feet and inches (the typing tip, #324). */
+  hintImperial?: TextKey;
   /** Extra words search finds it by ("dark" finds the look). */
   keywords?: string[];
   control: Control;
@@ -472,6 +474,7 @@ const GENERAL: Setting[] = [
     permission: "editor",
     label: "units",
     hint: "units_hint",
+    hintImperial: "units_tip",
     keywords: ["feet", "inches", "metres", "meters", "imperial", "metric"],
     control: {
       kind: "segment",
@@ -498,6 +501,20 @@ const GENERAL: Setting[] = [
     read: (env) => settingsOf(env).grid ?? 0.05,
     write: (env, v) => withSettings(env.building!, { grid: clamp(v, 0.01, 1) }),
   } as Setting<number>,
+  {
+    id: "terrain.level",
+    section: "general",
+    card: "plan",
+    scope: "house",
+    permission: "editor",
+    label: "terrain_level",
+    hint: "terrain_hint",
+    keywords: ["ground", "cellar", "basement", "hill"],
+    control: { kind: "number", step: 0.05, min: -20, max: 20, unit: "m", clearable: true, length: true },
+    default: -0.2,
+    read: (env) => env.building?.settings.terrain?.level ?? null,
+    write: (env, v) => withPart(env.building!, "terrain", { level: v === null ? null : clamp(v, -20, 20) }),
+  } as Setting<number | null>,
   {
     id: "wall_exterior",
     section: "general",
@@ -891,20 +908,6 @@ const SCENE: Setting[] = [
     read: (env) => Math.round((backdropOf(env).dim ?? 0.45) * 100),
     write: (env, v) => withPart(env.building!, "backdrop", { dim: clamp(v, 0, 90) / 100 }),
   } as Setting<number>,
-  {
-    id: "terrain.level",
-    section: "scene",
-    card: "backdrop",
-    scope: "house",
-    permission: "editor",
-    label: "terrain_level",
-    hint: "terrain_hint",
-    keywords: ["ground", "cellar", "basement", "hill"],
-    control: { kind: "number", step: 0.05, min: -20, max: 20, unit: "m", clearable: true, length: true },
-    default: -0.2,
-    read: (env) => env.building?.settings.terrain?.level ?? null,
-    write: (env, v) => withPart(env.building!, "terrain", { level: v === null ? null : clamp(v, -20, 20) }),
-  } as Setting<number | null>,
   {
     id: "terrain.earth",
     section: "scene",

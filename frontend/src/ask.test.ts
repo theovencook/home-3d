@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { AskQueue, askConfirm, askText, setAskHost, showText, tell, type AskRequest } from "./ask.ts";
+import { AskQueue, askConfirm, askText, askTyped, setAskHost, showText, tell, type AskRequest } from "./ask.ts";
 
 const confirmQ = (text: string): AskRequest => ({ text, ok: "Delete", cancel: "Cancel", danger: true });
 
@@ -82,4 +83,33 @@ test("a long text is shown in the dialog to read and select, with an action and 
   } finally {
     setAskHost(null);
   }
+});
+
+test("a typed confirmation is true only when the typed text matches, and the request carries the rule and the error (#330)", async () => {
+  const asked: AskRequest[] = [];
+  const answers = [
+    { ok: true, value: "nope" },
+    { ok: true, value: " Flat " },
+    { ok: false, value: "Flat" },
+  ];
+  setAskHost({ ask: async (req) => (asked.push(req), answers.shift()!) });
+  const labels = { ok: "Delete", cancel: "Cancel", danger: true, matches: (t: string) => t.trim() === "Flat", mismatch: "Not the name" };
+  try {
+    assert.equal(await askTyped("Type Flat", labels), false, "a wrong name never confirms, even if a host let it through");
+    assert.equal(await askTyped("Type Flat", labels), true);
+    assert.equal(await askTyped("Type Flat", labels), false, "cancel is no");
+    assert.equal(asked[0]!.input, "");
+    assert.equal(asked[0]!.mismatch, "Not the name");
+    assert.equal(asked[0]!.matches!("Flat"), true);
+  } finally {
+    setAskHost(null);
+  }
+});
+
+test("the dialog keeps a typed confirmation open: OK is disabled until the text matches and the error shows under the field (#330)", () => {
+  const src = readFileSync(new URL("./components/ask-dialog.ts", import.meta.url), "utf8");
+  assert.match(src, /\?disabled=\$\{!!req\.matches && !req\.matches\(this\.typed\)\}/, "OK is disabled until the text matches");
+  assert.match(src, /if \(ok && req\.matches && !req\.matches\(this\.typed\)\) \{\s*this\.showWrong\(\);\s*return;/, "a wrong answer returns before the dialog is answered");
+  assert.match(src, /class="ask-error" role="alert"/, "the error is announced under the field");
+  assert.match(src, /setTimeout\([\s\S]*5000\)/, "and goes after a few seconds");
 });

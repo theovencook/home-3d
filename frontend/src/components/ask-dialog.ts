@@ -29,6 +29,9 @@ function mountPoint(): Element {
 export class Fp3dAskDialog extends LitElement implements AskHost {
   readonly queue = new AskQueue();
   private typed = "";
+  /** A typed confirmation was tried with the wrong text: the error shows for a few seconds (#330). */
+  private wrong = false;
+  private wrongTimer: ReturnType<typeof setTimeout> | undefined;
   private shown: AskRequest | null = null;
   private returnFocus: HTMLElement | null = null;
 
@@ -41,9 +44,25 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
     return this.queue.ask(req);
   }
 
+  /** Shows the mismatch error under the field for a few seconds. */
+  private showWrong(): void {
+    this.wrong = true;
+    clearTimeout(this.wrongTimer);
+    this.wrongTimer = setTimeout(() => {
+      this.wrong = false;
+      this.requestUpdate();
+    }, 5000);
+    this.requestUpdate();
+  }
+
   private answer(ok: boolean): void {
     const req = this.queue.current;
     if (!req) return;
+    // a typed confirmation stays open until the text matches (#330)
+    if (ok && req.matches && !req.matches(this.typed)) {
+      this.showWrong();
+      return;
+    }
     // a message has only OK: closing it any way counts as OK
     this.queue.answer(ok || req.cancel === undefined, req.input !== undefined ? this.typed : "");
   }
@@ -64,6 +83,8 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
     if (req === this.shown) return;
     if (req && !this.shown) this.returnFocus = deepActive();
     this.typed = req?.input ?? "";
+    this.wrong = false;
+    clearTimeout(this.wrongTimer);
     this.toggleAttribute("open", !!req);
   }
 
@@ -92,11 +113,18 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
         <p id="ask-text" class="text">${req.text}</p>
         ${req.detail !== undefined ? html`<textarea class="detail" readonly rows="14" spellcheck="false" aria-labelledby="ask-text" .value=${req.detail}></textarea>` : nothing}
         ${req.input !== undefined
-          ? html`<label class="fp3d-field"><input type="text" aria-labelledby="ask-text" .value=${live(this.typed)} @input=${(e: Event) => (this.typed = (e.target as HTMLInputElement).value)} /></label>`
+          ? html`<label class="fp3d-field"><input type="text" aria-labelledby="ask-text" .value=${live(this.typed)} @input=${(e: Event) => {
+              this.typed = (e.target as HTMLInputElement).value;
+              if (req.matches) {
+                if (req.matches(this.typed)) this.wrong = false;
+                this.requestUpdate();
+              }
+            }} @blur=${() => req.matches && this.typed.trim() && !req.matches(this.typed) && this.showWrong()} aria-invalid=${this.wrong ? "true" : "false"} aria-describedby=${this.wrong ? "ask-error" : "ask-text"} /></label>
+            ${this.wrong && req.mismatch ? html`<p id="ask-error" class="ask-error" role="alert">${req.mismatch}</p>` : nothing}`
           : nothing}
         <div class="buttons">
           ${req.cancel !== undefined ? html`<button class="fp3d-btn ask-cancel" @click=${() => this.answer(false)}>${req.cancel}</button>` : nothing}
-          <button class="fp3d-btn ask-ok ${req.danger ? "ask-danger" : "fp3d-primary"}" @click=${() => this.answer(true)}>${req.ok}</button>
+          <button class="fp3d-btn ask-ok ${req.danger ? "ask-danger" : "fp3d-primary"}" ?disabled=${!!req.matches && !req.matches(this.typed)} @click=${() => this.answer(true)}>${req.ok}</button>
         </div>
       </div>`;
   }
@@ -171,6 +199,16 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
       .buttons .fp3d-btn {
         min-height: 40px;
         min-width: 88px;
+      }
+      .ask-error {
+        margin: -6px 0 0;
+        font-size: 0.9rem;
+        line-height: 1.4;
+        color: var(--fp3d-danger);
+      }
+      .ask-ok:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
       }
       .ask-danger {
         background: var(--fp3d-danger);
