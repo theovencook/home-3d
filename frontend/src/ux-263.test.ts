@@ -167,3 +167,42 @@ test("Add floor hides HA floors the plan has by name; add, rename and a first op
   // only a home none of whose floors is linked: a link someone removed stays removed
   assert.match(floors, /if \(!this\.isEditor \|\| this\._doc\.floors\.some\(\(f\) => f\.ha_floor\)\) return;/);
 });
+
+// 8. What the red badge and "Not on displays" mean, and Make active for a new home
+
+test("the header chip explains 'not on displays' and its Make active makes the shown home the active one (#263)", async () => {
+  const { Fp3dHomeSwitcher } = await import("./components/home-switcher.ts");
+  const sent: Record<string, unknown>[] = [];
+  const homes = [
+    { id: "home", name: "Home", revision: 1, floors: 1, rooms: 3, furniture: 10 },
+    { id: "new", name: "New home", revision: 1, floors: 0, rooms: 0, furniture: 0 },
+  ];
+  let active = "home";
+  const hass = {
+    language: "en",
+    callWS: async (msg: Record<string, unknown>) => {
+      sent.push(msg);
+      if (typeof msg.home_id === "string" && /active/.test(String(msg.type))) active = msg.home_id;
+      return { homes, active };
+    },
+  };
+  const el = new Fp3dHomeSwitcher() as unknown as Record<string, any>;
+  el.hass = hass;
+  el.home = "new";
+  el.willUpdate(new Map());
+  await new Promise((r) => setTimeout(r, 0));
+  const opened: unknown[] = [];
+  el.dispatchEvent = (e: CustomEvent) => (opened.push(e.detail), true);
+  await el.makeActive();
+  assert.ok(sent.some((m) => /active/.test(String(m.type))), "the active home is set");
+  assert.equal(el._active, "new");
+  assert.deepEqual(opened, [{ home: null }], "the view follows the active home again");
+  const { englishTable } = await import("./i18n.ts");
+  const en = englishTable() as Record<string, string>;
+  assert.ok(en.home_make_active && en.home_not_on_displays_hint);
+  const { lateEnglish } = await import("./i18n-late.ts");
+  assert.match(lateEnglish.st_homes_legend!, /Active on displays/);
+  assert.equal(lateEnglish.st_homes_show, "Make active");
+  assert.match(src("./settings/homes.ts"), /<p class="sub legend">\$\{this\.t\("st_homes_legend"\)\}<\/p>/);
+  assert.match(src("./panel.ts"), /@home-settings=\$\{\(\) => this\.openSettings\("homes", "homes"\)\}\s*@home-open=/);
+});

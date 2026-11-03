@@ -1081,6 +1081,7 @@ export class Floorplan3dPanel extends LitElement {
             .hass=${this.rawHass}
             .home=${this.data.homeId}
             @home-settings=${() => this.openSettings("homes", "homes")}
+            @home-open=${(e: CustomEvent<{ home: string | null }>) => this.openHome(e.detail.home ?? undefined)}
           ></fp3d-home-switcher>`
         : nothing}
       <nav class="fp3d-tabs" aria-label=${this.t("modes")}>

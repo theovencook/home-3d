@@ -63,7 +63,7 @@ test("the Homes page is a This home page in Settings that search finds, for edit
   assert.equal(s.permission, "editor");
   const env = { building: sampleBuilding(), hass: sampleHass(), prefs: { get: () => null, set: () => undefined } };
   for (const q of ["homes", "rename", "duplicate", "sample", "displays"]) assert.ok(searchSettings(q, env, (k) => en[k] ?? k).some((r) => r.id === "homes"), q);
-  assert.match(en.st_homes_hint!, /Show on displays/);
+  assert.match(en.st_homes_hint!, /Make active/); // "Show on displays" became "Make active" (#263)
 });
 
 test("each home's buttons: Open while another home is shown, Show on displays while not active, Delete with two homes (#58, #160)", () => {

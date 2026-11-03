@@ -1,8 +1,8 @@
-// The Homes page in Settings (#296): the list of homes with New, Load sample, Open, Show on displays, Rename, Duplicate
+// The Homes page in Settings (#296): the list of homes with New, Load sample, Open, Make active (was Show on displays), Rename, Duplicate
 // and Delete. It moved here from the top bar (components/home-switcher.ts, now only an indicator): switching homes is
 // rare. A chunk of the Settings bundle of its own, loaded when the page is first shown. Texts come from the page (`t`),
 // never from i18n.ts. Opening a home only changes what this view shows ("home-open", null: follow the active home
-// again, #58); only "Show on displays" changes the active home, so an experiment never blanks a wall tablet. The
+// again, #58); only "Make active" changes the active home, so an experiment never blanks a wall tablet. The
 // backend checks every change again.
 
 import { defineElement } from "../define.ts";
@@ -15,7 +15,7 @@ import "../components/ask-dialog.ts";
 
 export type HomeAction = "open" | "show" | "rename" | "duplicate" | "delete";
 
-/** The buttons of a home's row: Open while this view shows another home, Show on displays while it is not the active one, Delete while there are two homes. */
+/** The buttons of a home's row: Open while this view shows another home, Make active while it is not the active one, Delete while there are two homes. */
 export function rowActions(home: HomeInfo, homes: readonly HomeInfo[], active: string | null, shown: string | null): HomeAction[] {
   const out: HomeAction[] = [];
   if (home.id !== shown) out.push("open");
@@ -162,7 +162,8 @@ export class Fp3dHomesPage extends LitElement {
             </div>
           </li>`,
         )}
-      </ul>`;
+      </ul>
+      <p class="sub legend">${this.t("st_homes_legend")}</p>`;
   }
 
   static styles = [
@@ -211,6 +212,11 @@ export class Fp3dHomesPage extends LitElement {
       }
       .badges i.live {
         border-color: #ff5d6c;
+      }
+      /* what the badges mean (#263): under the list */
+      .legend {
+        display: block;
+        margin: 10px 0 0;
       }
       .sub {
         color: var(--fp3d-muted, #94a3b8);

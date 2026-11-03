@@ -5,7 +5,7 @@
 
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
-import { listHomes, type HomeInfo, type HomesList } from "../api.ts";
+import { listHomes, setActiveHome, type HomeInfo, type HomesList } from "../api.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import type { HomeAssistant } from "../types.ts";
 
@@ -79,14 +79,29 @@ export class Fp3dHomeSwitcher extends LitElement {
     const chip = this._homes ? homeChip(this._homes, this._active, this.home) : null;
     if (!chip) return nothing;
     const text = `${chip.name} · ${this.t("home_not_on_displays")}`;
+    // what "not on displays" means, and the way to make this home the one they show (#263)
     return html`<button
       class="chip"
-      title=${text}
+      title=${`${text}. ${this.t("home_not_on_displays_hint")}`}
       aria-label=${`${this.t("home")}: ${text}. ${this.t("st_homes_open_page")}`}
       @click=${() => this.dispatchEvent(new CustomEvent("home-settings", { bubbles: true, composed: true }))}
     >
       <span class="name">${chip.name}</span><small aria-hidden="true">${this.t("home_not_on_displays")}</small>
-    </button>`;
+    </button>
+    <button class="make" title=${this.t("home_make_active_hint")} @click=${() => void this.makeActive()}>${this.t("home_make_active")}</button>`;
+  }
+
+  /** The home shown becomes the one on the displays (#263); the view follows the active home again. */
+  private async makeActive(): Promise<void> {
+    if (!this.hass || !this.home) return;
+    try {
+      const res = await setActiveHome(this.hass, this.home);
+      this._active = res.active ?? this.home;
+      globalThis.dispatchEvent?.(new CustomEvent(HOMES_CHANGED));
+      this.dispatchEvent(new CustomEvent("home-open", { detail: { home: null }, bubbles: true, composed: true }));
+    } catch {
+      this.load(); // not allowed or gone: the chip shows what is true
+    }
   }
 
   static styles = css`
@@ -126,6 +141,24 @@ export class Fp3dHomeSwitcher extends LitElement {
       color: #ffb547;
       font-size: 12px;
     }
+    .make {
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      height: 36px;
+      margin-left: 6px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: var(--fp3d-radius-control, 6px);
+      background: var(--fp3d-primary, #1f6fd1);
+      color: var(--fp3d-primary-text, #fff);
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .make:focus-visible {
+      outline: 2px solid var(--fp3d-accent, #03a9f4);
+      outline-offset: 1px;
+    }
     /* compact and phone screens: the name alone, the amber border still says it is not the home on the displays */
     @media (max-width: 1024px) {
       small {
@@ -137,6 +170,10 @@ export class Fp3dHomeSwitcher extends LitElement {
         height: 44px;
         max-width: 120px;
         padding: 0 6px;
+      }
+      /* no room for it in a phone's header: the chip opens Settings > Homes, which has Make active */
+      .make {
+        display: none;
       }
     }
   `;
