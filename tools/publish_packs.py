@@ -7,7 +7,9 @@ Assistant uses on import (tools/fp3dpack.py), and a pack whose content differs f
 a higher `release` than that copy: the update check compares releases only. If any pack fails, nothing is written.
 Otherwise each pack folder is copied into the checkout (files that are gone from the pack are removed from its copy),
 and README.md, NOTICE and LICENSE at the top of the checkout are written again. Git data and folders of other packs
-in the checkout are left alone. Commit, push and tag the checkout yourself; see docs/packs.md ("Publishing the packs").
+in the checkout are left alone. When the checkout has tools/build_index.py (#336), index.json (the list the Library's
+Browse packs tab shows) is built again from the packs, keeping the community entries it lists. Commit, push and tag
+the checkout yourself; see docs/packs.md ("Publishing the packs").
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -129,9 +132,17 @@ def readme(packs: list[dict]) -> str:
     lines += [
         "## Install a pack",
         "",
-        "In Home 3D open **Extensions**, choose **Install from GitHub**, paste a pack's install URL and confirm. Home",
+        "In Home 3D's editor open the Library's **Browse packs** tab, pick a pack and choose **Install**. It lists our",
+        "packs and community packs (`index.json`).",
+        "",
+        "Or open **Extensions**, choose **Install from GitHub**, paste a pack's install URL and confirm. Home",
         "Assistant downloads and checks the pack; nothing else is fetched. Pasting the repository URL",
         f"(`https://github.com/{REPO}`) lists the packs and asks for one folder URL.",
+        "",
+        "## Get your pack listed",
+        "",
+        "Made a pack? Add it to `community.json` by pull request and it shows under Browse packs. CI checks every",
+        "listed pack: MIT licence, Home 3D's pack check, a unique id, data only. See `CONTRIBUTING.md`.",
         "",
         "## Update a pack",
         "",
@@ -214,7 +225,25 @@ def publish(target: Path, source: Path = BUNDLED_DIR, moves_file: Path | None = 
         shutil.copyfile(licences[0], target / "LICENSE")
     if moves_file:
         _retire(target, [pack["id"] for pack in packs], moves_file)
+    rebuild_index(target)
     return [pack["id"] for pack in packs]
+
+
+def rebuild_index(target: Path) -> bool:
+    """Build the checkout's index.json again with its own tools/build_index.py (#336), checking the packs with this
+    repository's pack check; False when the checkout has no such script. Raises PublishError when the index fails."""
+    script = target / "tools" / "build_index.py"
+    if not script.is_file():
+        return False
+    done = subprocess.run(
+        [sys.executable, str(script), "build", str(target), "--home3d", str(ROOT)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if done.returncode != 0:
+        raise PublishError(f"the packs were copied, but index.json was not built: {done.stderr or done.stdout}")
+    return True
 
 
 def main() -> None:

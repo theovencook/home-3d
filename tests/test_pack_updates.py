@@ -198,7 +198,7 @@ async def test_the_settings_survive_a_restart(hass: HomeAssistant, hass_ws_clien
     client = await hass_ws_client(hass)
 
     settings = (await _call(client, type="home_3d/packs/updates"))["settings"]
-    assert settings == {"auto_update": True, "frequency": "weekly", "time": "05:30", "weekday": 6}
+    assert settings == {"auto_update": True, "frequency": "weekly", "time": "05:30", "weekday": 6, "index_url": ""}
     bad = await _send(client, type="home_3d/packs/updates/settings", time="25:00")
     assert not bad["success"]
 

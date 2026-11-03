@@ -42,7 +42,7 @@ import type { RackElevation } from "../rack-elevation.ts";
 import type { LibraryEntry } from "../library-index.ts";
 import { detectCameraModel, setCameraLook } from "../camera-models.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
-import { isPackType, packItem, setPacks, setPlanRecipes, type FurniturePack } from "../packs.ts";
+import { isPackType, packItem, setPacks, setPlanRecipes, type FurniturePack, type PackItem } from "../packs.ts";
 import { UndoHistory } from "../undo-history.ts";
 import { EntityOptionCache } from "../entity-options.ts";
 import { HassWatch } from "../hass-watch.ts";
@@ -98,6 +98,7 @@ export class Fp3dEditor extends LitElement {
     packs: { attribute: false },
     _preview: { state: true },
     _libUpdates: { state: true },
+    _libBrowse: { state: true },
     _itemPicker: { state: true },
     _doc: { state: true },
     _doc3d: { state: true },
@@ -243,6 +244,8 @@ export class Fp3dEditor extends LitElement {
   declare _preview: { type: string; url: string | null; left: number; top: number } | null;
   /** The furniture types of placed items with an update (#48), shown on the library's cards. */
   declare _libUpdates: ReadonlySet<string>;
+  /** The Library shows the Browse tab (#336): the packs the curated index lists. */
+  declare _libBrowse: boolean;
   declare _itemPicker: boolean;
   declare _doc: Building;
   /** The draft as the 3D pane shows it (follows _doc with a short delay, so drags stay smooth). */
@@ -660,6 +663,7 @@ export class Fp3dEditor extends LitElement {
     this._sideMin = min;
     this._preview = null;
     this._libUpdates = new Set();
+    this._libBrowse = false;
     this._itemPicker = false;
     this._measureLen = 0;
     this._packages = false;
@@ -1232,6 +1236,9 @@ export class Fp3dEditor extends LitElement {
     const [w, d, h] = entry.size;
     return mod.furniturePreview({ type: entry.type, w, d, h, variant: null, lamp: LAMP_MODEL[entry.type] ?? null }, size, this.packs ?? []);
   };
+
+  /** A listed pack's item before it is installed (#336): drawn from the index's copy, nothing is registered. */
+  indexPicture = async (item: PackItem, size: number): Promise<string | null> => (await load3d()).itemPicture(item, size);
 
   libUpdatesAsked = false;
 
