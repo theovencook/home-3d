@@ -2,7 +2,6 @@
 // and costs (`energy/get_prefs`, `energy/info`), and today's cost from the chosen cost sensors or statistics. The 3D
 // view loads this file only when a plan uses existing sensors with costs.
 
-import { fetchTodayChange } from "./energy.ts";
 import type { EnergySettings } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
 
@@ -64,12 +63,58 @@ export function prefsRates(prefs: RatePrefs | null | undefined, info: EnergyInfo
   return out;
 }
 
-/** Whether today's amount of a cost source comes from its statistics: a statistic that is no entity, or a counter (total). */
-function fromStatistics(hass: HomeAssistant, id: string): boolean {
+/** A cost sensor that starts again every day ("cost today", "daily cost"), by its id or name. */
+const DAILY = /today|daily|(^|[._\s-])day($|[._\s-])/i;
+
+/**
+ * Whether today's amount of a cost source is its state: a sensor that starts again every day (named so, or with a
+ * `last_reset`), or one that is no counter. A counter (state class total or total_increasing) and a statistic without
+ * an entity go by their statistics.
+ */
+export function readsState(hass: HomeAssistant, id: string): boolean {
   const s = hass.states[id];
-  if (!s) return true;
+  if (!s) return false;
+  if (s.attributes.last_reset != null) return true;
+  if (DAILY.test(id) || DAILY.test(String(s.attributes.friendly_name ?? ""))) return true;
   const cls = s.attributes.state_class;
-  return cls === "total" || cls === "total_increasing";
+  return cls !== "total" && cls !== "total_increasing";
+}
+
+/** A source's statistics since midnight: how much it went up, and whether it fell to under half on the way (it started again). */
+interface StatToday {
+  change: number;
+  dropped: boolean;
+}
+
+async function fetchStatsToday(hass: HomeAssistant, ids: string[]): Promise<Map<string, StatToday> | null> {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  try {
+    const rows = await hass.callWS<Record<string, { change?: number | null; state?: number | null }[]>>({
+      type: "recorder/statistics_during_period",
+      start_time: midnight.toISOString(),
+      statistic_ids: ids,
+      period: "5minute",
+      types: ["change", "state"],
+    });
+    const out = new Map<string, StatToday>();
+    for (const id of ids) {
+      let change = 0;
+      let dropped = false;
+      let last: number | null = null;
+      for (const r of rows?.[id] ?? []) {
+        if (typeof r.change === "number") change += r.change;
+        if (typeof r.state === "number") {
+          if (last !== null && last > 0 && r.state < last / 2) dropped = true;
+          last = r.state;
+        }
+      }
+      out.set(id, { change, dropped: dropped || change < 0 });
+    }
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 /** Today's cost and earnings (null: none readable) and their currency. */
@@ -80,27 +125,34 @@ export interface CostsToday {
 }
 
 /**
- * Today's cost and earnings from the plan's cost sensors (#323): a counter (or a statistic without an entity) by how
- * much it went up since midnight, from the short-term statistics; any other sensor (a "cost today" sensor) by its
- * state. Missing, unavailable or unrecorded sources are left out; null when nothing is chosen or nothing can be read.
+ * Today's cost and earnings from the plan's cost sensors (#323): a daily sensor by its state; a counter (or a
+ * statistic without an entity) by how much it went up since midnight, from the short-term statistics, unless those
+ * show it falling to under half (it started again: then its state). Missing, unavailable or unrecorded sources are
+ * left out; null when nothing is chosen or nothing can be read.
  */
 export async function fetchCostsToday(hass: HomeAssistant, energy: Pick<EnergySettings, "cost_sensors" | "earning_sensors">): Promise<CostsToday | null> {
   const costs = energy.cost_sensors ?? [];
   const earnings = energy.earning_sensors ?? [];
   const ids = [...new Set([...costs, ...earnings])];
   if (!ids.length) return null;
-  const stats = ids.filter((id) => fromStatistics(hass, id));
-  const change = stats.length ? await fetchTodayChange(hass, stats, "5minute") : null;
-  const value = (id: string): number | null => {
-    if (stats.includes(id)) return change?.get(id) ?? null;
+  const stats = ids.filter((id) => !readsState(hass, id));
+  const got = stats.length ? await fetchStatsToday(hass, stats) : null;
+  const stateOf = (id: string): number | null => {
     const state = hass.states[id]?.state;
     const v = Number(state);
     return state && Number.isFinite(v) ? v : null;
   };
-  const sum = (list: string[]): number | null => list.reduce<number | null>((t, id) => {
-    const v = value(id);
-    return v === null ? t : (t ?? 0) + v;
-  }, null);
+  const value = (id: string): number | null => {
+    if (!stats.includes(id)) return stateOf(id);
+    const st = got?.get(id);
+    if (!st) return null;
+    return st.dropped ? stateOf(id) : st.change;
+  };
+  const sum = (list: string[]): number | null =>
+    list.reduce<number | null>((t, id) => {
+      const v = value(id);
+      return v === null ? t : (t ?? 0) + v;
+    }, null);
   const cost = sum(costs);
   const earned = sum(earnings);
   if (cost === null && earned === null) return null;

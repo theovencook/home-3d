@@ -1295,6 +1295,9 @@ ENERGY_DEFAULTS: dict[str, Any] = {
     "price_fixed": None,
     "cost_sensors": [],
     "earning_sensors": [],
+    "price_mode": "one",
+    "price_peak": None,
+    "price_cheap": None,
 }
 
 # Further inverter / battery setups (#285). The top-level sensors of the energy settings are setup 1 and stay as they
@@ -1324,6 +1327,12 @@ _RATE_SOURCES = vol.All([vol.All(str, vol.Length(min=1, max=255))], vol.Length(m
 _CHEAP_STATES = vol.All([vol.All(str, vol.Length(max=255))], vol.Length(max=MAX_RATE_SOURCES))
 # a price per kWh (may be negative: some tariffs pay for use at times)
 _PRICE = vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000)))
+PRICE_MODES = ("one", "split")
+_PRICE_SOURCE = vol.Any(
+    None,
+    vol.All(vol.Any(int, float), vol.Range(min=-1000, max=1000)),
+    vol.All(str, vol.Length(min=1, max=255)),
+)
 
 # Power sensors in watts: grid positive = import, battery positive = discharging (both can be inverted)
 ENERGY_SCHEMA = vol.Schema(
@@ -1355,6 +1364,10 @@ ENERGY_SCHEMA = vol.Schema(
         vol.Optional("price_fixed", default=None): _PRICE,
         vol.Optional("cost_sensors", default=list): _RATE_SOURCES,
         vol.Optional("earning_sensors", default=list): _RATE_SOURCES,
+        # the price from one sensor (`tariff`) or a peak and a cheap price, each an entity or a typed number (#323)
+        vol.Optional("price_mode", default="one"): vol.In(PRICE_MODES),
+        vol.Optional("price_peak", default=None): _PRICE_SOURCE,
+        vol.Optional("price_cheap", default=None): _PRICE_SOURCE,
     },
     extra=vol.ALLOW_EXTRA,
 )

@@ -958,6 +958,17 @@ const en = {
   presence: "Presence",
   energy_cost_today: "Cost today",
   energy_cost_net_today: "Net cost today",
+  energy_rates_prefs_earnings: "Export earnings: {earnings}.",
+  energy_rates_prefs_price: "Price: {price}.",
+  energy_rates_prefs_no_price: "It sets no price: choose one below.",
+  energy_rates_and_more: "{names} and {n} more",
+  energy_price_title: "Price",
+  energy_price_one: "From one sensor",
+  energy_price_split: "Peak price + cheap price",
+  energy_price_peak: "Peak price (per kWh)",
+  energy_price_cheap: "Cheap price (per kWh)",
+  energy_price_typed: "or a fixed price",
+  energy_price_split_hint: "The peak / off-peak entity above picks the price that runs now.",
 
   // Settings page (was settings/texts.ts)
   st_sec_look: "Appearance",

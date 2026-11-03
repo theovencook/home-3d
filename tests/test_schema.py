@@ -794,3 +794,17 @@ def test_rates_from_existing_sensors_default_and_old_plan_untouched() -> None:
     ):
         with pytest.raises(vol.Invalid):
             ENERGY_SCHEMA(bad)
+
+
+def test_price_from_one_sensor_or_peak_and_cheap() -> None:
+    """With existing sensors the price is one sensor or a peak and a cheap price, each an entity or a number (#323)."""
+    assert (ENERGY_SCHEMA({})["price_mode"], ENERGY_SCHEMA({})["price_peak"]) == ("one", None)
+    split = ENERGY_SCHEMA({"price_mode": "split", "price_peak": "input_number.sample_peak", "price_cheap": 0.07})
+    assert (split["price_mode"], split["price_peak"], split["price_cheap"]) == (
+        "split",
+        "input_number.sample_peak",
+        0.07,
+    )
+    for bad in ({"price_mode": "three"}, {"price_peak": ""}, {"price_cheap": 5000}, {"price_peak": ["x"]}):
+        with pytest.raises(vol.Invalid):
+            ENERGY_SCHEMA(bad)

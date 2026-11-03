@@ -1679,7 +1679,7 @@ export const lateEnglish = {
   energy_rates_sensors: "Use existing sensors",
   energy_rates_hint: "Already have a tariff, price or cost sensors in Home Assistant (a utility meter's tariffs, a price sensor, daily cost sensors, the Energy dashboard)? Use existing sensors: Home 3D then shows those and asks for no rates.",
   energy_rates_prefs: "Use Home Assistant's Energy dashboard setup",
-  energy_rates_prefs_done: "Taken from the Energy dashboard: {n} cost and earning sources, price {price}.",
+  energy_rates_prefs_done: "Taken from the Energy dashboard – costs: {costs}.",
   energy_rates_prefs_none: "The Energy dashboard's grid has no price or costs set up – pick the sensors below.",
   energy_price_sensor: "Current price (e.g. GBP/kWh)",
   energy_price_fixed: "Fixed price from the Energy dashboard: {price}",

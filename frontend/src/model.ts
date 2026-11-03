@@ -1362,6 +1362,11 @@ export interface EnergySettings {
   cost_sensors?: string[];
   /** With "sensors": export earnings (the energy dashboard's compensation), taken off today's cost. */
   earning_sensors?: string[];
+  /** With "sensors": the price from one sensor (`tariff`, the default) or a peak and a cheap price chosen by `rate_entity`. */
+  price_mode?: "one" | "split";
+  /** With "split": the peak and the cheap price per kWh, each an entity (sensor, input_number, number) or a typed number. */
+  price_peak?: string | number | null;
+  price_cheap?: string | number | null;
 }
 
 /** Where a plan's energy rates and costs come from (#323). */

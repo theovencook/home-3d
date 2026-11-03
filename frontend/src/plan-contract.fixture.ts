@@ -934,6 +934,9 @@ export const PLAN_CONTRACT = {
     "price_fixed": 0.25,
     "cost_sensors": ["text"],
     "earning_sensors": ["text"],
+    "price_mode": "split",
+    "price_peak": "text",
+    "price_cheap": "text",
     "systems": [
       {
         "id": "text",

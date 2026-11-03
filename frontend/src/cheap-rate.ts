@@ -38,6 +38,27 @@ function cheapFromSensor(energy: EnergySettings, entity: HassEntity | undefined,
 }
 
 /**
+ * The price per kWh now with existing sensors (#323): with a peak and a cheap price, the one the tariff entity says
+ * runs (peak when it is unavailable); else the price sensor, or without one the energy dashboard's fixed price. Each
+ * source is an entity (its unit, else the home's currency per kWh) or a typed number; null when it cannot be read.
+ */
+export function priceNow(energy: EnergySettings, states: Record<string, HassEntity>, currency: string | undefined): { value: number; unit: string } | null {
+  const perKwh = `${currency ?? ""}/kWh`;
+  const read = (src: string | number | null | undefined) => {
+    if (typeof src === "number") return Number.isFinite(src) ? { value: src, unit: perKwh } : null;
+    const s = src && src !== "none" ? states[src] : undefined;
+    const v = Number(s?.state);
+    return s && s.state !== "" && Number.isFinite(v) ? { value: v, unit: String(s.attributes.unit_of_measurement || perKwh) } : null;
+  };
+  if (energy.price_mode === "split") {
+    const rate = energy.rate_entity;
+    const cheap = !!rate && rate !== "none" && cheapFromSensor(energy, states[rate], rate);
+    return read(cheap ? energy.price_cheap : energy.price_peak);
+  }
+  return energy.tariff ? read(energy.tariff) : read(energy.price_fixed);
+}
+
+/**
  * Whether the cheap rate runs now: true or false, null when the plan sets none up. The entity wins (it is "on" while
  * the rate runs; unavailable counts as not cheap); else the daily window, start and end both set. With existing
  * sensors (#323) only Home Assistant's tariff entity counts.
