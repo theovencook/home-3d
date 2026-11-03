@@ -185,3 +185,13 @@ def test_every_printer_in_the_makers_pack_gets_the_live_printer_state() -> None:
         assert item["electric"] is True, item["id"]
         if not item["id"].endswith("_mini"):  # the open-frame mini has no chamber to light
             assert any(part.get("glow") for part in item["parts"]), item["id"]
+
+
+def test_the_risholmen_wing_chair_is_in_the_ikea_pack_at_ikeas_size() -> None:
+    """Run 6: the rattan wing chair (68 x 67 x 80 cm on the IKEA UK page), found by its IKEA name."""
+    folder = BUNDLED / "theovencook.ikea-uk"
+    item = json.loads((folder / "seating" / "risholmen_wing_chair.json").read_text(encoding="utf-8"))
+    assert item["size"] == [0.68, 0.67, 0.8]
+    assert item["ikea"] == "RISHOLMEN"
+    assert "wing chair" in item["tags"]
+    assert json.loads((folder / "pack.json").read_text(encoding="utf-8"))["release"] >= 4

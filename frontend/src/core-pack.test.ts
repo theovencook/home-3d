@@ -112,6 +112,16 @@ test("theovencook.ikea-uk ships with Home 3D: every item has its IKEA name, and 
   assert.ok(find("kallax black-brown").some((t) => t.startsWith("pack:theovencook.ikea-uk:kallax_")));
 });
 
+test("the RISHOLMEN wing chair is in the IKEA UK pack at IKEA's size, found by both names (run 6)", () => {
+  const ikea = packs.find((p) => p.pack.id === "theovencook.ikea-uk");
+  const item = ikea?.pack.items.find((i) => i.id === "risholmen_wing_chair");
+  assert.ok(item, "risholmen_wing_chair");
+  assert.deepEqual(item.size, [0.68, 0.67, 0.8]);
+  assert.equal(item.ikea, "RISHOLMEN");
+  assert.ok(item.parts.some((part) => part.shape === "shell"), "its seat is a curved shell");
+  assert.ok((ikea?.pack.release ?? 0) >= 4);
+});
+
 test("theovencook.makers and theovencook.devices ship with Home 3D beside the others (#109)", () => {
   for (const [id, name] of [["theovencook.makers", "Makers"], ["theovencook.devices", "Smart-home devices"]] as const) {
     const bundled = packs.find((p) => p.pack.id === id);
