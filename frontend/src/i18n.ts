@@ -952,6 +952,8 @@ const en = {
   energy_solar: "Solar",
   energy_battery: "Battery",
   energy_tariff: "Tariff",
+  energy_fold: "Show only consumption",
+  energy_unfold: "Show all energy values",
   energy: "Energy",
   cheap_rate: "Cheap rate",
   cheap_rate_now: "now",

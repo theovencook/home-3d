@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- Tap any energy tile to fold the row down to just Consumption, tap again to show them all; the choice is kept per device, and the tiles keep the small phone chip look (#348).
 - New defaults for devices that never chose: room names are off, and the weather tile sits beside the clock (tap it for today's forecast; it stays hidden without a weather entity). Anything already chosen on a device is kept (#347).
 - The new controls look like the rest: the holiday dates (buttons, rule fields in a labelled grid), the icon picker without Home Assistant (styled fields, icon names when pictures are not available) and the pet panel (two-column spot and trigger rows, the shared entity picker for a trigger entity) (#343).
 - Names on the plan no longer sit on each other in the 2D editor, the 2D view or 3D (phones too): room, outdoor area and item names share one pass, where two would touch the smaller room's or the item's name gives way and comes back as you zoom in; the selected one always shows, and an item's hidden name shows while the pointer is over it (#341).
