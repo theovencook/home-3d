@@ -349,3 +349,14 @@ test("no This home page holds a device setting; only link rows point to where on
     assert.equal(settingById(id!)!.section, section);
   }
 });
+
+test("the feet-and-inches typing tip shows only when lengths show in feet and inches (#324)", () => {
+  const e = env();
+  const s = settingById("units")!;
+  assert.equal(s.hintMore?.(e), null);
+  const metric = { ...e, building: s.write!(e, "metric") as Building };
+  assert.equal(s.hintMore?.(metric), null);
+  const imperial = { ...e, building: s.write!(e, "imperial") as Building };
+  assert.equal(s.hintMore?.(imperial), "units_type_hint");
+  assert.ok(!englishTable()[s.hint!].includes("8' 2"));
+});

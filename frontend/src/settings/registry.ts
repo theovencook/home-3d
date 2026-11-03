@@ -175,6 +175,8 @@ export interface Setting<V = unknown> {
   permission: Permission;
   label: TextKey;
   hint?: TextKey;
+  /** A second sentence after the hint, shown only when this gives its key (the feet-and-inches typing tip, #324). */
+  hintMore?(env: SettingsEnv): TextKey | null;
   /** Extra words search finds it by ("dark" finds the look). */
   keywords?: string[];
   control: Control;
@@ -472,6 +474,7 @@ const GENERAL: Setting[] = [
     permission: "editor",
     label: "units",
     hint: "units_hint",
+    hintMore: (env) => (planUnit(env) === "imperial" ? "units_type_hint" : null),
     keywords: ["feet", "inches", "metres", "meters", "imperial", "metric"],
     control: {
       kind: "segment",

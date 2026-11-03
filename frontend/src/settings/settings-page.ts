@@ -593,7 +593,7 @@ export class SettingsPage extends LitElement {
       id=${index >= 0 ? `st-hit-${index}` : nothing}
     >
       ${s.id === "editors" ? nothing : html`<div class="st-lbl"><span class="st-name">${s.control.kind === "number" && s.control.length ? lengthLabel(this.env, this.tr(s.label)) : this.tr(s.label)}</span></div>`}
-      ${s.hint || rule ? html`<p class="st-hint">${s.hint ? this.tr(s.hint) : nothing}${rule ? html`<span class="st-rule">${this.tr(rule)}</span>` : nothing}</p>` : nothing}
+      ${s.hint || rule ? html`<p class="st-hint">${s.hint ? this.tr(s.hint) : nothing}${s.hintMore?.(this.env) ? html` ${this.tr(s.hintMore(this.env)!)}` : nothing}${rule ? html`<span class="st-rule">${this.tr(rule)}</span>` : nothing}</p>` : nothing}
       <div class="st-ctl">${this.renderControl(s, s.control, !may)}</div>
     </div>`;
   }
