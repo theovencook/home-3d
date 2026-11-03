@@ -140,7 +140,7 @@ export const LOOK: Setting[] = [
   deviceChoice("explode", "view3d", "show", "explode", ["1", "0"], "1", "st_floors", opts([["1", "floors_apart"], ["0", "floors_stacked"]]), undefined, ["floors", "apart", "stacked", "explode"]),
   deviceChoice("floor_stack", "view3d", "show", "floor_stack", ["dim", "stacked", "single"], "dim", "st_floor_stack", opts([["dim", "floor_stack_short_dim"], ["stacked", "floor_stack_short_stacked"], ["single", "floor_stack_short_single"]]), undefined, ["floors", "below", "dimmed"]),
   deviceSwitch("roof", "view3d", "show", "roof", false, "st_keep_roof", "roof_keep_hint", ["roof", "zoom"]),
-  deviceChoice("heat", "view3d", "show", "heat", ["none", "temperature", "humidity", "co2", "values"], "none", "st_heat", opts([["none", "heat_nothing"], ["temperature", "heat_temperature"], ["humidity", "heat_humidity"], ["co2", "heat_co2"], ["values", "heat_values"]]), undefined, ["heatmap", "temperature", "humidity", "co2", "colour"], "select"),
+  deviceChoice("heat", "view3d", "show", "heat", ["none", "temperature", "humidity", "co2", "values"], "none", "st_heat", opts([["none", "heat_nothing"], ["temperature", "heat_tint_temperature"], ["humidity", "heat_tint_humidity"], ["co2", "heat_tint_co2"], ["values", "heat_values"]]), "st_heat_hint", ["heatmap", "temperature", "humidity", "co2", "colour", "tint", "floor"], "select"),
   // #268: the kinds of objects the 3D view shows (what is ticked); the preference keeps the hidden ones, so a kind added later shows
   {
     id: "display",

@@ -374,3 +374,14 @@ test("Ground height is under Plan and units, keeps its stored key and its defaul
   const next = s.write!(e, -1 as never) as Building;
   assert.equal(next.settings.terrain!.level, -1);
 });
+
+test("the room climate setting says what each choice does on the view (#331)", () => {
+  const s = settingById("heat")!;
+  const en = englishTable() as Record<string, string>;
+  assert.equal(s.control.kind, "select");
+  const labels = (s.control as { options(e: unknown): { value: string; label: string }[] }).options(env()).map((o) => en[o.label]);
+  assert.deepEqual(labels, ["Nothing", "Floor colour: temperature", "Floor colour: humidity", "Floor colour: CO₂", "Numbers at the room names"]);
+  assert.equal(en[s.label], "Show room climate as");
+  assert.ok(s.hint && /colour scale/.test(en[s.hint]) && /instead/.test(en[s.hint]));
+  assert.deepEqual(s.prefKeys, ["heat"], "the stored key is unchanged");
+});

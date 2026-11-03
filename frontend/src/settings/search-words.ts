@@ -109,7 +109,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   explode: ["exploded", "separate", "spread", "gap", "split", "spacing"],
   floor_stack: ["stack", "ghost", "fade", "transparent", "layers", "underneath"],
   roof: ["lid", "lift", "fade", "attic", "cover", "top"],
-  heat: ["heat", "thermal", "climate", "overlay", "comfort", "warm"],
+  heat: ["heat", "thermal", "climate", "overlay", "comfort", "warm", "numbers", "tint"],
   display: ["layers", "filter", "visible", "declutter", "categories", "objects"],
   trail: ["path", "track", "movements", "breadcrumbs", "route", "journey"],
   weather: ["forecast", "clouds", "fog", "sunshine", "outdoor", "sky"],

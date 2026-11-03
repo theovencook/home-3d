@@ -10,6 +10,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - Settings: the favourites and own-buttons lists have up, down and remove as compact icon buttons in a fixed column at the right, so they line up whatever the names are (#326).
 - Bins: the two tag settings are named by what they do on the view ("Tag only the bins collected next", "Show a bin's tag from this many days before pickup"), and a bin's side panel has a clear Set kerb spot step with a one-line explanation (#328).
 - Typed confirmations (deleting a home): a wrong name keeps the dialog open with the error under the field for a few seconds, and Delete stays disabled until the name matches (#330).
+- Settings: "Colour rooms by" is now "Show room climate as", with options named by what they do (floor colour or numbers at the room names) and a one-line description (#331).
 
 ## Home 3D 0.2.1 (2 November 2026)
 
