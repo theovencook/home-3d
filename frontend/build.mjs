@@ -259,7 +259,8 @@ if (watch) {
   for (const f of readdirSync(out)) if (CHUNK.test(f)) rmSync(`${out}/${f}`);
   const metafiles = [];
   const run = async (config) => metafiles.push((await build(config)).metafile);
-  await run(viewerConfig);
+  // the 3D bundle knows the build too: the geometry it keeps in the browser between loads belongs to one (run 6 speed)
+  await run({ ...viewerConfig, define: { __FP3D_BUILD__: JSON.stringify(buildId) } });
   await run(locateConfig);
   const items = itemsConfig(hashOf(viewerConfig.outfile));
   await run(items);

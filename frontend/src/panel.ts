@@ -1004,7 +1004,7 @@ export class Floorplan3dPanel extends LitElement {
     if (!this._plan2d) preload3d();
     // the browser's number formatting is set up on its first use (tens of milliseconds on a slow tablet): in a pause of
     // the load, not in the 3D view's first device sync (run 6 speed)
-    if (typeof requestIdleCallback === "function") requestIdleCallback(() => formatNumber(this.hass, 0.5, 1), { timeout: 2000 });
+    if (typeof requestIdleCallback === "function") requestIdleCallback(() => [0, 1, 2].forEach((d) => formatNumber(this.hass, 0.5, d)), { timeout: 2000 });
     void loadView().then(
       () => this.requestUpdate(),
       (err: unknown) => console.error("Home 3D: the 3D view failed to load", err),

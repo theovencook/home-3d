@@ -52,12 +52,13 @@ export interface SliceJob<T> {
 
 /**
  * Runs `steps` (a generator: each `yield` is a point where it may stop for now) in slices of about `budget` ms, each in
- * a task of its own. Resolves with the generator's return value; rejects with SliceCancelled once cancelled (the
- * generator is closed, its `finally` blocks run) or with the error a step threw.
+ * a task of its own, the first once `after` (if given) has settled. Resolves with the generator's return value; rejects
+ * with SliceCancelled once cancelled (the generator is closed, its `finally` blocks run) or with the error a step threw.
  */
-export function runSliced<T>(steps: Generator<unknown, T, void>, clock: SliceClock = pageClock, budget = SLICE_MS): SliceJob<T> {
+export function runSliced<T>(steps: Generator<unknown, T, void>, clock: SliceClock = pageClock, budget = SLICE_MS, after?: Promise<unknown>): SliceJob<T> {
   let cancelled = false;
   const done = (async () => {
+    if (after) await after.catch(() => undefined);
     // the first slice runs in a task of its own too: the caller's task ends first
     await clock.pause();
     for (;;) {

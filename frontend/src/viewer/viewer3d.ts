@@ -57,8 +57,9 @@ import { buildEarth } from "./earth.ts";
 import { clampIntoRoom } from "../geometry/snap.ts";
 import { alignLines, halfSize, itemBox, snapPoint, SNAP_GUIDE_PX, type AlignLines, type Box } from "../geometry/snap-guides.ts";
 import { activeSections, roofRider, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
-import { buildFloorGeometry, buildRackGear, floorGeometrySteps, keepFurnitureOf, SLAB, stairHoleParts, type FloorGeometry, type RackGearAt } from "./build.ts";
-import { nextTask, runSliced, type SliceJob } from "./slices.ts";
+import { buildFloorGeometry, buildRackGear, floorGeometrySteps, keepFurnitureOf, primeStoredPieces, SLAB, stairHoleParts, takeCollected, type FloorGeometry, type RackGearAt } from "./build.ts";
+import { nextTask, pageClock, runSliced, SLICE_MS, type SliceJob } from "./slices.ts";
+import { openStore, readFloor, writeFloor, type StoredFloor } from "./piece-store.ts";
 import { compileInSlices } from "./warm.ts";
 import { rackDetailWanted } from "./rack-lod.ts";
 import { OrbitControls, type OrbitView } from "./controls.ts";
@@ -755,6 +756,8 @@ export class FloorplanViewer {
   private prep: { floorId: string; key: string; job: SliceJob<FloorGeometry> } | null = null;
   /** The plan the roof was last built for. */
   private roofFor: Building | null = null;
+  /** A new home's roof, modelled in the slices of its first floor (run 6 speed): buildRoofMesh takes it. */
+  private roofPrepared: { b: Building; windowsKey: string; geos: ReturnType<typeof buildRoof> } | null = null;
   /** The shaders compiling in slices (run 6 speed), stopped when another compile starts. */
   private warmJob: { cancel(): void } | null = null;
   /** A look's shaders compiling in the background (#131): no frames until they are ready. */
@@ -913,6 +916,8 @@ export class FloorplanViewer {
   private gpuName: string | null | undefined;
 
   constructor(host: HTMLElement, options: ViewerOptions = {}) {
+    // what earlier loads modelled is read from the browser's store: it opens while the viewer sets up (run 6 speed)
+    void openStore();
     this.host = host;
     this.options = options;
     this.explode = options.explode ?? true;
@@ -2905,14 +2910,8 @@ export class FloorplanViewer {
     fv.glowMesh.geometry.dispose();
     fv.glowMesh.geometry = g;
     fv.glowSig = "";
-    if (!glowLater) return this.buildGlow(fv);
-    // a new home's floor (run 6 speed): its lamps' light on the surface in a task of its own, before its first frame
-    // (the shaders still compile then)
-    void nextTask().then(() => {
-      if (this.disposed || this.floorMap.get(fv.floor.id) !== fv || fv.glowSig) return;
-      this.buildGlow(fv);
-      this.invalidate();
-    });
+    // a new home's floor: its glow comes with its lamps (rebuild, run 6 speed)
+    if (!glowLater) this.buildGlow(fv);
   }
 
   /**
@@ -3430,16 +3429,33 @@ export class FloorplanViewer {
     this.labelsDirty = true;
     if (this.floorId && !b.floors.some((f) => f.id === this.floorId)) this.floorId = null;
     for (const fv of built) {
-      this.buildLamps(fv);
+      if (!loading) this.buildLamps(fv);
       this.buildScreens(fv);
       const prev = previousOpenings.get(fv.floor.id);
       for (const info of fv.geo.openings) fv.openings.set(info.opening.id, prev?.get(info.opening.id) ?? this.openingTargets.get(info.opening.id) ?? CLOSED);
-      this.buildOpenings(fv);
+      if (!loading) this.buildOpenings(fv);
       this.buildFlows(fv);
       fv.poolGroup = undefined;
       this.buildPoolWater(fv);
       this.buildLightSurface(fv, loading);
       this.buildSun(fv);
+    }
+    // a new home's floor (run 6 speed): its lamps, doors and windows and its lamps' light on the surface in a task of
+    // their own, before its first frame (its shaders compile after this task)
+    if (loading && built.length) {
+      void nextTask().then(() => {
+        for (const fv of built) {
+          if (this.disposed || this.floorMap.get(fv.floor.id) !== fv) continue;
+          this.buildLamps(fv);
+          this.buildOpenings(fv);
+          if (!fv.glowSig) this.buildGlow(fv);
+        }
+        this.invalidate();
+        // the page's layout with the floor's pins and the view's cards, in a task of its own: the first frame reads
+        // the cards' sizes and would lay it all out itself
+        if (!fresh || this.disposed) return;
+        void nextTask().then(() => !this.disposed && this.host.getBoundingClientRect());
+      });
     }
     this.applyTargets(previous.size === 0 || loading);
     this.applyHighlight();
@@ -3455,7 +3471,8 @@ export class FloorplanViewer {
     this.updateGhost();
     this.pendingFloors = pending;
     // a new home's first floor: its shaders compile before its first frame (the floors after it use the same ones)
-    if (built.length && (fresh || previous.size === 0)) this.warm();
+    // and each floor after it (run 6 speed): one may need shaders the first did not, compiled before it is drawn
+    if (built.length && (fresh || previous.size === 0 || loading)) this.warm();
     if (pending.size && this.warming && this.floors.length) {
       // the first picture first: the next floor is modelled once the shaders are ready and that frame is drawn
       const warming = this.warming;
@@ -3518,7 +3535,14 @@ export class FloorplanViewer {
     const cell = this.lowQuality ? 0.5 : 0.25;
     const lightKey = (geo: FloorGeometry) => this.lightSurfaceKey(floor, geo.holes);
     const surfaces = this.lightSurfaces;
+    // what an earlier load modelled for this floor (piece-store.ts): read before the first slice
+    let record: StoredFloor | null = null;
+    const roofFor = this.roofFor !== b && !this.floors.length ? b : null;
+    // the roof windows as they are then (the devices sync while the floor is modelled)
+    const modelRoof = (pb: Building) => (this.roofPrepared = { b: pb, windowsKey: this.roofWindowsKey, geos: buildRoof(pb, this.roofWindows) });
+    const read = readFloor(floor.id).then((r) => (record = r));
     const steps = function* (): Generator<void, FloorGeometry, void> {
+      primeStoredPieces(floor.id, record);
       const it = floorGeometrySteps(...args);
       let r = it.next();
       while (!r.done) {
@@ -3528,22 +3552,37 @@ export class FloorplanViewer {
         r = it.next();
       }
       const geo = r.value;
+      const collected = takeCollected(floor.id);
       const lk = lightKey(geo);
+      const kept = (record as StoredFloor | null)?.light;
+      let lightFresh = false;
       if (surfaces.get(floor.id)?.key !== lk) {
-        yield;
-        const surface = yield* lightSurfaceSteps(floor, geo.walls2d, geo.wallBuckets, geo.openings, cell, geo.holes, geo.roofUnder);
-        surfaces.set(floor.id, { key: lk, surface });
+        if (kept?.key === lk) surfaces.set(floor.id, kept);
+        else {
+          yield;
+          const surface = yield* lightSurfaceSteps(floor, geo.walls2d, geo.wallBuckets, geo.openings, cell, geo.holes, geo.roofUnder);
+          surfaces.set(floor.id, { key: lk, surface });
+          lightFresh = true;
+        }
       }
+      // the home's roof, with its first floor (buildRoofMesh takes it)
+      if (roofFor) {
+        yield;
+        modelRoof(roofFor);
+      }
+      // kept for the next load when anything was modelled anew (written when the page is idle)
+      if (collected && (collected.fresh || lightFresh || kept?.key !== lk)) writeFloor(floor.id, { pieces: collected.pieces, light: surfaces.get(floor.id) ?? null });
       return geo;
     };
-    const job = runSliced(steps());
+    const job = runSliced(steps(), pageClock, SLICE_MS, read);
     this.prep = { floorId: floor.id, key, job };
     job.done.then(
       (geo) => {
         if (this.prep?.job !== job || this.disposed) return;
         this.prep = null;
         this.prepared.set(floor.id, { key, geo });
-        this.rebuilds.request(true);
+        // built in a task of its own, not after the last slice
+        void nextTask().then(() => !this.disposed && this.rebuilds.request(true));
       },
       () => {
         if (this.prep?.job === job) this.prep = null;
@@ -3572,7 +3611,9 @@ export class FloorplanViewer {
       this.scene.remove(this.roof.group);
       this.roof = null;
     }
-    const geos = this.building ? buildRoof(this.building, this.roofWindows) : [];
+    const ready = this.roofPrepared;
+    this.roofPrepared = null;
+    const geos = !this.building ? [] : ready && ready.b === this.building && ready.windowsKey === this.roofWindowsKey ? ready.geos : buildRoof(this.building, this.roofWindows);
     this.roofGeos = geos;
     this.shadowSig = "";
     if (!geos.length) return;

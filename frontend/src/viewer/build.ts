@@ -23,6 +23,7 @@ import { pushModules } from "./roof.ts";
 import type { RoofFace } from "../solar.ts";
 import { cutAbove, cutLinesAbove, FURN_OFFSET, ALWAYS, CAP_OFFSET, CUT_OFFSET, EDGE_BASE, EDGE_CUT, EDGE_SOFT, EDGE_TOP, GeoBuffer, LineBuffer, type GeoSlice, type LineSlice, LOWER_OFFSET, pushPrism, triangulate } from "./geo.ts";
 import { runAll } from "./slices.ts";
+import type { StoredFloor } from "./piece-store.ts";
 
 export { ALWAYS, CUT_OFFSET, FURN_OFFSET, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
 
@@ -504,6 +505,11 @@ export function* floorGeometrySteps(
   // only items in colours of their own draw differently in the neon and the light looks
   const lookOf = furnitureLook();
   const otherLook = furnitureLook(true);
+  // a floor modelled for the first picture of a home (run 6 speed): its pieces may come from an earlier load (stored)
+  // and what it draws is collected to be kept for the next one
+  const stored = storedPieces.get(floor.id);
+  const collect = collecting.get(floor.id);
+  const keptLook = `${cut}|${currentShellDetail()}`;
   for (const item of floor.furniture) {
     if (isLamp(item.type)) continue;
     const start = wallBuf.count;
@@ -525,7 +531,8 @@ export function* floorGeometrySteps(
     const own = hasOwnColours(f);
     const drawn = `|${base}|${JSON.stringify(f)}`;
     const key = `${own ? lookOf : ""}${drawn}`;
-    const piece = had?.get(key);
+    const sk = collect ? `${keptLook}|${key}|${packSignature(f.type)}` : "";
+    const piece = had?.get(key) ?? stored?.pieces.get(sk);
     if (piece) {
       wallBuf.append(piece.solid);
       lines.append(piece.lines);
@@ -542,8 +549,10 @@ export function* floorGeometrySteps(
       }
       cacheStats.misses++;
       pieces.set(key, { solid: wallBuf.slice(t0), lines: lines.slice(l0 * 2), shadow: shadow.slice(s0) });
+      if (collect) collect.fresh = true;
     }
     if (piece) pieces.set(key, piece);
+    if (collect) collect.pieces.set(sk, pieces.get(key)!);
     // the other look's copy stays too: a look switch back and forth models it only once
     const other = own ? had?.get(`${otherLook}${drawn}`) : undefined;
     if (other) pieces.set(`${otherLook}${drawn}`, other);
@@ -552,13 +561,20 @@ export function* floorGeometrySteps(
     yield;
   }
 
+  // the buffers for the GPU, one a step (the walls with every item are the biggest)
+  const floorGeo = floorBuf.geometry();
+  yield;
+  const wallsGeo = wallBuf.geometry();
+  yield;
+  const linesGeo = lines.geometry();
+  yield;
   return {
-    floor: floorBuf.geometry(),
+    floor: floorGeo,
     roomTris,
     holes: cutHoles,
-    walls: wallBuf.geometry(),
+    walls: wallsGeo,
     water: waterBuf.geometry(),
-    lines: lines.geometry(),
+    lines: linesGeo,
     shadow: shadow.geometry(),
     buckets,
     openings,
@@ -585,6 +601,57 @@ interface FurniturePiece {
  */
 const furnitureCache = new Map<string, { look: string; pieces: Map<string, FurniturePiece> }>();
 const cacheStats = { hits: 0, misses: 0 };
+
+/** Pieces of an earlier load, by floor (primeStoredPieces), and what this load's build drew, to keep for the next. */
+const storedPieces = new Map<string, StoredFloor>();
+const collecting = new Map<string, { pieces: Map<string, FurniturePiece>; fresh: boolean }>();
+
+/**
+ * The next build of this floor takes its pieces from `stored` (an earlier load's record, piece-store.ts) where they
+ * were drawn from the same item, pack item and look, and collects what it draws (takeCollected).
+ */
+export function primeStoredPieces(floorId: string, stored: StoredFloor | null): void {
+  storedPieces.set(floorId, stored ?? { pieces: new Map(), light: null });
+  collecting.set(floorId, { pieces: new Map(), fresh: false });
+}
+
+/** What the floor's last primed build drew, and whether it modelled any of it anew (then it is worth keeping). */
+export function takeCollected(floorId: string): { pieces: Map<string, FurniturePiece>; fresh: boolean } | null {
+  const c = collecting.get(floorId) ?? null;
+  collecting.delete(floorId);
+  storedPieces.delete(floorId);
+  return c;
+}
+
+/** A pack item as its pieces were modelled from (the plan's own recipe copy wins, #2), per type while the packs stay. */
+const signatures = new Map<string, string>();
+let signaturesOf = -1;
+function packSignature(type: string): string {
+  if (signaturesOf !== packsVersion()) {
+    signatures.clear();
+    signaturesOf = packsVersion();
+  }
+  let sig = signatures.get(type);
+  if (sig === undefined) {
+    sig = hashText(JSON.stringify(packItem(type) ?? null));
+    signatures.set(type, sig);
+  }
+  return sig;
+}
+
+/** A short hash of a text (cyrb53): a key part, not a security measure. */
+export function hashText(text: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
 
 /** Forget every floor's items (the next build models them all). */
 export function clearFurnitureCache(): void {
