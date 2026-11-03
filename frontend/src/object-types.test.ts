@@ -25,7 +25,8 @@ test("items and devices fall into the kinds the View lists", () => {
 });
 
 test("the preference keeps the hidden kinds; the old Room names switch counts until it is written", () => {
-  assert.deepEqual([...parseHidden(null)], []);
+  assert.deepEqual([...parseHidden(null)], ["room_names"], "never chosen: room names off (#347)");
+  assert.deepEqual([...parseHidden(null, "1")], [], "the old switch on was a choice and is kept (#347)");
   assert.deepEqual([...parseHidden(null, "0")], ["room_names"]);
   assert.deepEqual([...parseHidden("", "0")], [], "an empty list is written: nothing is hidden");
   assert.deepEqual([...parseHidden("lights,bogus,decor")], ["lights", "decor"]);

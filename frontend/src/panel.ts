@@ -354,7 +354,7 @@ export class Floorplan3dPanel extends LitElement {
     this._floorPics = prefs.get("floor_pictures") === "1";
     this._angleLock = prefs.get("angle_lock") === "1";
     this._windowSpill = prefs.get("window_spill") === "1";
-    this._clockWeather = prefs.get("clock_weather") === "1";
+    this._clockWeather = prefs.get("clock_weather") !== "0";
     const sunHeight = prefs.get("sun_height");
     this._sunHeight = sunHeight === "high" || sunHeight === "real" ? sunHeight : "auto";
     this._navButtons = prefs.get("nav") === "1";

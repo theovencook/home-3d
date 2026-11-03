@@ -464,7 +464,7 @@ export class Fp3dView3d extends LitElement {
   declare clock: ClockPos | null;
   /** What the clock looks like (#232); the default is digits with the date. */
   declare clockLook: ClockLook | null;
-  /** A weather tile by the clock (#333; a device preference, off by default). */
+  /** A weather tile by the clock (#333; a device preference, on by default since #347). */
   declare clockWeather: boolean;
   private declare _clockTick: number;
   private clockTimer: ReturnType<typeof setInterval> | undefined;
@@ -837,7 +837,7 @@ export class Fp3dView3d extends LitElement {
     this.theme = "neon";
     this.clock = null;
     this.clockLook = null;
-    this.clockWeather = false;
+    this.clockWeather = true;
     this._clockTick = 0;
     this.accent = null;
     this.furnish = false;

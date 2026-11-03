@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- New defaults for devices that never chose: room names are off, and the weather tile sits beside the clock (tap it for today's forecast; it stays hidden without a weather entity). Anything already chosen on a device is kept (#347).
 - The new controls look like the rest: the holiday dates (buttons, rule fields in a labelled grid), the icon picker without Home Assistant (styled fields, icon names when pictures are not available) and the pet panel (two-column spot and trigger rows, the shared entity picker for a trigger entity) (#343).
 - Names on the plan no longer sit on each other in the 2D editor, the 2D view or 3D (phones too): room, outdoor area and item names share one pass, where two would touch the smaller room's or the item's name gives way and comes back as you zoom in; the selected one always shows, and an item's hidden name shows while the pointer is over it (#341).
 - Small fixes from the UX pass: the clock's 12/24 hour choice says "Same as Time format" (one setting, one override); a show-when picker reads "Show only when this entity…" with room above its section; feet and inches fields drop the "(ft)" suffix because the value carries its own marks; a wrong name typed into a delete confirmation is called wrong after a short pause and when the dimmed Delete is tapped; the energy chips on a phone are one short row of small type (#344).
