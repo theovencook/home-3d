@@ -41,3 +41,25 @@ test("the phone View sheet opens at half height and its handle shows all of it (
   assert.match(phone, /:host\(\[full\]\) \{\s*max-height: calc\(100% - 12px\);/);
   assert.match(vp, /class="vp-grab" aria-expanded=/);
 });
+
+// 3. Colliding room names: the smaller room's gives way
+
+test("room names that would overlap: the larger room's shows, the smaller one's comes back when there is room (#263)", async () => {
+  const { clearLabels, pinSize, roomRank } = await import("./viewer/label-clear.ts");
+  const box = (x: number, y: number, rank: number) => ({ x, y, w: 80, h: 27, rank });
+  // two names on top of each other: the larger room wins, wherever it is in the list
+  assert.deepEqual(clearLabels([box(100, 100, 5), box(110, 105, 20)]), [false, true]);
+  // zoomed in, the same rooms are far apart on screen: both show
+  assert.deepEqual(clearLabels([box(100, 100, 5), box(300, 105, 20)]), [true, true]);
+  // a hidden name does not hide others: a chain keeps every other one
+  assert.deepEqual(clearLabels([box(0, 0, 30), box(70, 0, 20), box(140, 0, 10)]), [true, false, true]);
+  // a longer name is a wider box; a values line makes it taller
+  assert.ok(pinSize("Kitchen-diner").w > pinSize("WC").w);
+  assert.ok(pinSize("WC", "21.5 °C").h > pinSize("WC").h);
+  // a lawn never hides a room's name, however big it is
+  const room = { id: "r", name: "WC", points: [[0, 0], [1, 0], [1, 1], [0, 1]] } as never;
+  const lawn = { id: "l", name: "Lawn", outdoor: true, points: [[0, 0], [30, 0], [30, 30], [0, 30]] } as never;
+  assert.ok(roomRank(room) > roomRank(lawn));
+  // the viewer places room names through it
+  assert.match(src("./viewer/viewer3d.ts"), /const keep = clearLabels\(names\.map\(\(n\) => n\.box\)\);/);
+});

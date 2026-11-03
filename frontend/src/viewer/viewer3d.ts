@@ -51,6 +51,7 @@ import {
 } from "three";
 import type { Building, Floor, Furniture, Room, StartView, Vec2 } from "../model.ts";
 import { litShade, recolorLamps, SHADE_SENTINEL, shadeFactors, UNLIT_SHADE } from "./lamp-colors.ts";
+import { clearLabels, pinSize, roomRank, type LabelBox } from "./label-clear.ts";
 import { centroid, GANG_TYPES, outdoorZones, pointInPolygon, openingStyle, setTerrain, WALL_LAMP_Y, zonesOf } from "../model.ts";
 import { placeWallPlate } from "../geometry/walls.ts";
 import { buildEarth } from "./earth.ts";
@@ -5980,6 +5981,7 @@ export class FloorplanViewer {
       });
     }
     this.updateDevicePins(w, h);
+    const names: { pin: HTMLElement; box: LabelBox }[] = [];
     for (const fv of this.floors) {
       // in the house view, room labels would pile up between the floors; in a room its panel names it;
       // floors stacked below an opened floor carry no labels
@@ -5992,9 +5994,13 @@ export class FloorplanViewer {
         }
         v.set(rp.cx, y, rp.cz).project(this.camera);
         const off = v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1;
-        this.place(rp.pin, off ? null : `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -50%)`);
+        if (off) this.place(rp.pin, null);
+        else names.push({ pin: rp.pin, box: { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, ...pinSize(rp.room.name || "–", this.roomInfo.get(rp.room.id)), rank: roomRank(rp.room) } });
       }
     }
+    // names that would sit on each other: the smaller room's gives way until zooming in makes room (#263)
+    const keep = clearLabels(names.map((n) => n.box));
+    names.forEach((n, i) => this.place(n.pin, keep[i] ? `translate(${n.box.x}px, ${n.box.y}px) translate(-50%, -50%)` : null));
   }
 
   /** A floor other than the opened one (shown below it when floors are stacked). */
