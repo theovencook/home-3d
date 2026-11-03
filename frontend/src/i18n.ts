@@ -778,7 +778,7 @@ const en = {
   door_unlock_confirm: "Really unlock {name}?",
   clock: "Clock",
   clock_hours: "Clock hours",
-  clock_hours_auto: "Auto",
+  clock_hours_auto: "Same as Time format",
   clock_hours_12: "12 h",
   clock_hours_24: "24 h",
   clock_digital: "Digital",

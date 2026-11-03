@@ -75,7 +75,10 @@ export function areaText(m2: number, unit: LengthUnit, metric: (v: number) => st
   return unit === "imperial" ? `${trim(m2 / (FT * FT), 1)} ft²` : `${metric(m2)} m²`;
 }
 
-/** A field label in the unit shown: "Height (m)" becomes "Height (ft)". */
+/**
+ * A field label in the unit shown: "Height (m)" stays. In feet and inches the value carries its own marks (9' 4"), so the
+ * unit goes from the label: "Height (m)" becomes "Height" (#344).
+ */
 export function unitLabel(label: string, unit: LengthUnit): string {
-  return unit === "imperial" ? label.replace(/\((?:m|cm)([,)])/g, "(ft$1").replace(/\s(?:m|cm)$/, " ft") : label;
+  return unit === "imperial" ? label.replace(/\s*\((?:m|cm)\)/g, "").replace(/\((?:m|cm), /g, "(").replace(/\s(?:m|cm)$/, "") : label;
 }

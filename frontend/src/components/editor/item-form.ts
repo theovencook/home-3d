@@ -326,7 +326,7 @@ export class ItemFormPart {
           on(raw ? (kind === "date" ? raw.slice(5) : raw) : null);
         }}
       /></label>`;
-    return html`<details class="fp3d-section" ?open=${!!f.show_when}>
+    return html`<details class="fp3d-section fp3d-when-section" ?open=${!!f.show_when}>
       <summary>${this.t("show_when")}</summary>
       <div class="fp3d-form">
         ${this.entitySelect(this.t("show_when_entity"), rule.entity ?? null, undefined, this.entityOptions(() => true), (v) => set({ entity: v === "none" ? null : v }))}

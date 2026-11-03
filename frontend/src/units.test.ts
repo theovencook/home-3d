@@ -30,8 +30,9 @@ test("lengths show as feet and inches, areas in square feet", () => {
   assert.equal(formatImperial(2.5, 1), `8' 2"`);
   assert.equal(areaText(10, "imperial", String), "107.6 ft²");
   assert.equal(areaText(10, "metric", (v) => v.toFixed(1)), "10.0 m²");
-  assert.equal(unitLabel("Height (m)", "imperial"), "Height (ft)");
-  assert.equal(unitLabel("Offset (m, + = right)", "imperial"), "Offset (ft, + = right)");
+  // feet and inches carry their own marks (9' 4"), so no unit is added (#344)
+  assert.equal(unitLabel("Height (m)", "imperial"), "Height");
+  assert.equal(unitLabel("Offset (m, + = right)", "imperial"), "Offset (+ = right)");
   assert.equal(unitLabel("Height (m)", "metric"), "Height (m)");
 });
 
@@ -52,8 +53,8 @@ test("the length fields of the floor panel and the mobile rows follow the unit (
   const panel = readFileSync(new URL("./panel.ts", import.meta.url), "utf8");
   assert.match(editor, /unitLabel\(this\.t\("floor_shift"\), this\.unit\)/);
   assert.match(panel, /unitLabel\(label, unit\)/);
-  assert.equal(unitLabel("Shift the floor (m)", "imperial"), "Shift the floor (ft)");
-  assert.equal(unitLabel("Reach m", "imperial"), "Reach ft");
+  assert.equal(unitLabel("Shift the floor (m)", "imperial"), "Shift the floor");
+  assert.equal(unitLabel("Reach m", "imperial"), "Reach");
   // no kerb gate left: the bin form shows its calendar and kerb spot to everyone
   assert.doesNotMatch(editor, /hasFeature/);
 });

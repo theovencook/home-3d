@@ -9298,6 +9298,26 @@ export class Fp3dView3d extends LitElement {
           top: 118px;
         }
       }
+      /* a phone: the chips are one short row of small type, nothing wraps, so the house stays the focus (#344) */
+      @container fp3d (max-width: 600px) {
+        .fp3d-energy {
+          gap: 4px;
+        }
+        .fp3d-energy-item {
+          padding: 3px 8px 4px;
+          border-radius: 9px;
+          white-space: nowrap;
+          flex: none;
+        }
+        .fp3d-energy-item span {
+          font-size: 10px;
+          line-height: 1.2;
+        }
+        .fp3d-energy-item b {
+          font-size: 13px;
+          line-height: 1.25;
+        }
+      }
       /* the view's own controls on the right (#285); the room panel opens there, so they make way for it */
       .fp3d-side-right :is(.fp3d-thumbs, .fp3d-find-btn, .fp3d-central-btn, .fp3d-central, .fp3d-eye-clean, fp3d-find, .fp3d-legend) {
         left: auto;

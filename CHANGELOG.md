@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- Small fixes from the UX pass: the clock's 12/24 hour choice says "Same as Time format" (one setting, one override); a show-when picker reads "Show only when this entity…" with room above its section; feet and inches fields drop the "(ft)" suffix because the value carries its own marks; a wrong name typed into a delete confirmation is called wrong after a short pause and when the dimmed Delete is tapped; the energy chips on a phone are one short row of small type (#344).
 - Settings, Extensions, the editor and the ask dialogs (New home, Rename, Delete …) follow the chosen look: light under the Day look or a light Home Assistant theme, high contrast under High contrast (#263).
 - On a phone the View sheet opens at half height so the house stays in sight; drag its handle up (or tap it) for all of it, down to shrink or close it (#263).
 - Room names on a floor view no longer pile up: where two would overlap the smaller room's name gives way, and every name comes back as you zoom in (#263).
