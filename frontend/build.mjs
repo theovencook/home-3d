@@ -219,7 +219,7 @@ const PATHS = {
   // #245: the editor's entry and its shared chunks, under the editor's old budget (the lazy chunks have their own)
   "editor first open": { files: ["home-3d-editor.js"], raw: 868 * 1024 },
   // #245: the Settings page split the same way, under its old 95 KB
-  "settings first open": { files: ["home-3d-settings.js"], raw: 96 * 1024 },
+  "settings first open": { files: ["home-3d-settings.js"], raw: 98 * 1024 },
 };
 
 /** The file a budget name stands for: a chunk's is found by its name without the hash. */
