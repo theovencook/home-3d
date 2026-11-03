@@ -492,6 +492,9 @@ export const formStyles = css`
         text-anchor: middle;
         pointer-events: none;
       }
+      .fp3d-furn-ghost {
+        opacity: 0.35;
+      }
       .fp3d-furn-sel .fp3d-furn-body {
         fill: rgba(55, 224, 255, 0.16);
         stroke: var(--fp3d-accent);

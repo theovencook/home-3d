@@ -182,7 +182,7 @@ import { watchedEntities } from "../watched.ts";
 import { isPrinter, printerFaces, printerState } from "../printer.ts";
 import type { NavAction } from "./view-nav.ts";
 import { hiddenItemIds, typeOfEntity, type ObjectType } from "../object-types.ts";
-import { hasTimedRules, hiddenItems, shownBuilding } from "../show-when.ts";
+import { hasTimedRules, planHiddenItems, shownBuilding, stateHiddenItems } from "../show-when.ts";
 import { backdropCss } from "../backdrop.ts";
 import { loadVoice, micProbeAsked, micProbeDone, voicePipeline } from "../load-voice.ts";
 import { answerAsk, subscribeAsk, type Ask } from "../api.ts";
@@ -1195,7 +1195,7 @@ export class Fp3dView3d extends LitElement {
       // while a state holds (#15)
       if (this.watched.some((id) => old.states[id] !== hass.states[id])) return true;
       const b = this.building;
-      if (b && this.shownPlan?.from === b && hiddenItems(b, hass.states, new Date()).join("|") !== this.shownPlan.hidden) return true;
+      if (b && this.shownPlan?.from === b && planHiddenItems(b, hass.states, new Date()).join("|") !== this.shownPlan.hidden) return true;
     }
     forwardHass(this.renderRoot, HASS_CHILDREN["components/view3d.ts"], [[old, hass]]);
     if (this.live?.el) this.live.el.hass = hass;
@@ -1348,6 +1348,8 @@ export class Fp3dView3d extends LitElement {
       const e = links?.get(f.id)?.entity ?? f.entity ?? null;
       return e === "none" ? null : e;
     });
+    // items an entity's state hides (#338) collapse like the View's hidden kinds: no rebuild; the editor keeps them in sight
+    if (!this.furnish && this.hass) for (const id of stateHiddenItems(b, this.hass.states)) ids.add(id);
     const sig = [...ids].sort().join("|");
     if (sig !== this.hiddenIds.sig) this.hiddenIds = { sig, ids };
     return this.hiddenIds.ids;
@@ -5758,7 +5760,8 @@ export class Fp3dView3d extends LitElement {
   /** The plan as the 3D view shows it (#15): the same object while the same items are hidden, so the viewer does not rebuild. */
   private viewPlan(b: Building): Building {
     const now = new Date(this.replay?.t ?? Date.now());
-    const hidden = this.hass ? hiddenItems(b, this.hass.states, now).join("|") : "";
+    if (this.furnish) return b; // the editor keeps hidden items in sight
+    const hidden = this.hass ? planHiddenItems(b, this.hass.states, now).join("|") : "";
     if (this.shownPlan?.from !== b || this.shownPlan.hidden !== hidden) this.shownPlan = { from: b, hidden, plan: hidden && this.hass ? shownBuilding(b, this.hass.states, now) : b };
     return this.shownPlan.plan;
   }

@@ -331,6 +331,9 @@ export const PLAN_CONTRACT = {
           },
           "show_when": {
             "entity": "text",
+            "when": "on",
+            "state": "text",
+            "unavailable": "hide",
             "intervals": [
               {
                 "from": "06-01",

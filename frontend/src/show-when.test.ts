@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Furniture } from "./model.ts";
-import { hasTimedRules, hiddenItems, itemShown, setIntervalPart, shownBuilding, wholeInterval } from "./show-when.ts";
+import { hasTimedRules, hiddenItems, itemShown, planHiddenItems, setIntervalPart, shownBuilding, stateHiddenItems, wholeInterval } from "./show-when.ts";
 import type { HassEntity } from "./types.ts";
 
 const item = (extra: Partial<Furniture> = {}): Furniture => ({ id: "tree", type: "plant", x: 0, z: 0, rotation: 0, w: 1, d: 1, h: 2, variant: null, ...extra });
@@ -129,4 +129,67 @@ test("only plans with intervals need the clock", () => {
   assert.equal(hasTimedRules(b), true);
   b.floors[0].furniture[1].show_when = { entity: "switch.tree" };
   assert.equal(hasTimedRules(b), false);
+});
+
+const st = (id: string, state: string): HassEntity => ({ entity_id: id, state, attributes: {} }) as HassEntity;
+const car = "binary_sensor.sample_car_home";
+const noon = at("2026-07-14T12:00");
+
+test("show when on / off follows on, true, home, open and off, false, not_home, away, closed (#338)", () => {
+  const on = item({ show_when: { entity: car, when: "on" } });
+  const off = item({ show_when: { entity: car, when: "off" } });
+  for (const s of ["on", "true", "home", "open", "ON"]) {
+    assert.equal(itemShown(on, { [car]: st(car, s) }, noon), true, s);
+    assert.equal(itemShown(off, { [car]: st(car, s) }, noon), false, s);
+  }
+  for (const s of ["off", "false", "not_home", "away", "closed"]) {
+    assert.equal(itemShown(on, { [car]: st(car, s) }, noon), false, s);
+    assert.equal(itemShown(off, { [car]: st(car, s) }, noon), true, s);
+  }
+  // another state is neither on nor off
+  assert.equal(itemShown(on, { [car]: st(car, "playing") }, noon), false);
+  assert.equal(itemShown(off, { [car]: st(car, "playing") }, noon), false);
+});
+
+test("a person or tracker anywhere but home counts as off (#338)", () => {
+  const p = "person.sample_one";
+  const off = item({ show_when: { entity: p, when: "off" } });
+  assert.equal(itemShown(off, { [p]: st(p, "Sample Work") }, noon), true);
+  assert.equal(itemShown(off, { [p]: st(p, "home") }, noon), false);
+});
+
+test("show when a typed state matches any of the comma separated states, any letter case (#338)", () => {
+  const e = "sensor.sample_mode";
+  const f = item({ show_when: { entity: e, when: "state", state: "Party, guests" } });
+  assert.equal(itemShown(f, { [e]: st(e, "party") }, noon), true);
+  assert.equal(itemShown(f, { [e]: st(e, "guests") }, noon), true);
+  assert.equal(itemShown(f, { [e]: st(e, "quiet") }, noon), false);
+});
+
+test("an unavailable, unknown or missing entity keeps the item showing unless the rule says hide (#338)", () => {
+  const keep = item({ show_when: { entity: car, when: "on" } });
+  const hide = item({ show_when: { entity: car, when: "on", unavailable: "hide" } });
+  for (const states of [{} as Record<string, HassEntity>, { [car]: st(car, "unavailable") }, { [car]: st(car, "unknown") }]) {
+    assert.equal(itemShown(keep, states, noon), true);
+    assert.equal(itemShown(hide, states, noon), false);
+  }
+});
+
+test("the state condition and the intervals must both pass, and state hiding is separate from the plan's (#338)", () => {
+  const f = item({ show_when: { entity: car, when: "on", intervals: [{ start: "08:00", end: "18:00" }] } });
+  const b = { ...emptyBuilding(), floors: [{ ...newFloor("f1", "Ground", 0), furniture: [f] }] };
+  const onNoon = { [car]: st(car, "on") };
+  assert.equal(itemShown(f, onNoon, noon), true);
+  assert.equal(itemShown(f, onNoon, at("2026-07-14T20:00")), false);
+  assert.equal(itemShown(f, { [car]: st(car, "off") }, noon), false);
+  assert.deepEqual(stateHiddenItems(b, { [car]: st(car, "off") }), ["tree"]);
+  assert.deepEqual(planHiddenItems(b, { [car]: st(car, "off") }, noon), []);
+  assert.deepEqual(planHiddenItems(b, onNoon, at("2026-07-14T20:00")), ["tree"]);
+  assert.equal(shownBuilding(b, { [car]: st(car, "off") }, noon), b);
+});
+
+test("a rule without 'when' keeps the old behaviour: hidden only while unavailable (#338)", () => {
+  const f = item({ show_when: { entity: car } });
+  assert.equal(itemShown(f, { [car]: st(car, "off") }, noon), true);
+  assert.equal(itemShown(f, { [car]: st(car, "unavailable") }, noon), false);
 });

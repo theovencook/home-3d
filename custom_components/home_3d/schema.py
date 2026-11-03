@@ -297,6 +297,10 @@ def _whole_interval(interval: dict) -> dict:
 SHOW_WHEN_SCHEMA = vol.Schema(
     {
         vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # an entity's state decides (#338): on / off / a typed state; unset = only while available. New optional keys.
+        vol.Optional("when"): vol.Any(None, vol.In(["on", "off", "state"])),
+        vol.Optional("state"): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("unavailable"): vol.Any(None, vol.In(["show", "hide"])),
         vol.Optional("intervals", default=[]): vol.All(
             [
                 vol.All(

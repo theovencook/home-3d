@@ -22,6 +22,7 @@ import { furnitureSize, isElectric, isRobotVacuum, packItemName, packName, packT
 import { MAX_MOUNT_Y, round, isEnergyDevice, EN_HASS, type PlaceTarget } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 import { need, loadLibrary } from "./lazy.ts";
+import { itemShown } from "../../show-when.ts";
 
 /** FurniturePart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class FurniturePart {
@@ -412,8 +413,9 @@ export class FurniturePart {
       const reach = f.d / 2 + Math.max(0.3, 26 / k);
       const [hx, hy] = this.toScreen([f.x - Math.sin(a) * reach, f.z + Math.cos(a) * reach]);
       const [fx, fy] = this.toScreen([f.x - Math.sin(a) * (f.d / 2), f.z + Math.cos(a) * (f.d / 2)]);
+      const ghost = !!f.show_when && !!this.hass && !itemShown(f, this.hass.states, new Date());
       const lit = isLamp(f.type) && !!f.entity && f.entity !== "none" && this.hass?.states[f.entity]?.state === "on";
-      return svg`<g data-furniture=${f.id} class=${`fp3d-furn${sel || member ? " fp3d-furn-sel" : ""}${lit ? " fp3d-furn-lit" : ""}${isEnergyDevice(f.type) ? " fp3d-energy-item" : ""}`}>
+      return svg`<g data-furniture=${f.id} class=${`fp3d-furn${ghost ? " fp3d-furn-ghost" : ""}${sel || member ? " fp3d-furn-sel" : ""}${lit ? " fp3d-furn-lit" : ""}${isEnergyDevice(f.type) ? " fp3d-energy-item" : ""}`}>
         <g transform="translate(${cx} ${cy}) rotate(${f.rotation}) scale(${f.mirror ? -k : k} ${k})">
           <rect class="fp3d-furn-body" x=${-f.w / 2} y=${-f.d / 2} width=${f.w} height=${f.d} />
           <g class="fp3d-furn-sym">${furnitureSymbol(f.type, f.w, f.d)}</g>

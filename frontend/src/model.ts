@@ -211,7 +211,15 @@ export interface ShowInterval {
 export interface ShowWhen {
   entity?: EntityRef;
   intervals?: ShowInterval[];
+  /** Show from the entity's state (#338): "on" or "off" (on/true/home/open vs off/false/not_home/away/closed) or "state" (the typed `state`). Absent = only while the entity is available. */
+  when?: ShowWhenState | null;
+  /** The state(s) to match for `when: "state"`, comma separated, any letter case. */
+  state?: string | null;
+  /** What an unavailable or unknown entity does with `when` set (#338): "show" (the default, so a restart hides nothing) or "hide". */
+  unavailable?: "show" | "hide" | null;
 }
+
+export type ShowWhenState = "on" | "off" | "state";
 
 export interface Furniture {
   /** Colour per role (#12): "#rrggbb" for each overridden role; missing roles (or null) follow the theme. */
