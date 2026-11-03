@@ -126,6 +126,13 @@ export class PhonePart {
     if (this._sheet === "closed" && tool !== "select") this.showSheet("peek");
   }
 
+  /** Select several on or off (#263, the phone's More): on, the plan's taps add items, so the select tool comes first. */
+  toggleMultiMode(this: Fp3dEditor): void {
+    const on = !this._multiMode;
+    if (on && this._tool !== "select" && this._tool !== "furniture") this.setTool("select");
+    this._multiMode = on;
+  }
+
   /** The sheet's title row: what is chosen (name, kind, a room's area), else the tool and its hint, else the floor. */
   sheetHead(this: Fp3dEditor, floor: Floor | undefined): { title: string; kind: string; sub: string } {
     const f = this.furnitureItem;
@@ -200,6 +207,7 @@ export class PhonePart {
       .hasFloor=${!!floor}
       .editable=${this.isEditor}
       .outside=${more && this.hasOutside(floor)}
+      .multi=${this._multiMode}
       .lang=${this.hass?.language ?? "en"}
     ></fp3d-phone-bar>`;
   }

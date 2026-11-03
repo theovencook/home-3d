@@ -14,6 +14,11 @@ import { insertCorner } from "../../geometry/room-corners.ts";
 import { type FixKind, EDIT_DRAGS, wallPeers, SNAP_PX, round, patchItem, distToSegment } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
+/** Whether a long press (touch) on what this drag holds starts Select several (#263): an item, outside Select several. */
+export function holdStartsMulti(drag: { kind: string } | null, multiMode: boolean, editor: boolean): boolean {
+  return editor && !multiMode && (drag?.kind === "furniture" || drag?.kind === "furnset");
+}
+
 /** PointerPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class PointerPart {
   // ------------------------------------------------------------------ pointer input
@@ -40,6 +45,13 @@ export class PointerPart {
         const d = this.drag;
         if (d && "moved" in d && d.moved) return;
         this.drag = null;
+        // a long press on an item starts Select several with it (#263; touch has no Shift): the item stays chosen and
+        // the next taps add items. Held in Select several, or on anything else, it opens the menu as before
+        if (holdStartsMulti(d, this._multiMode, this.isEditor)) {
+          this._multiMode = true;
+          navigator.vibrate?.(15);
+          return;
+        }
         this.openContext(target, at, "touch");
       }, 550);
     }

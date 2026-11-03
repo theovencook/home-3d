@@ -69,6 +69,7 @@ export function definePhoneBar(kit: PhoneBarKit) {
       hasFloor: { attribute: false },
       editable: { attribute: false },
       outside: { attribute: false },
+      multi: { attribute: false },
       lang: { attribute: false },
       _focus: { state: true },
     };
@@ -83,6 +84,8 @@ export function definePhoneBar(kit: PhoneBarKit) {
     declare hasFloor: boolean;
     declare editable: boolean;
     declare outside: boolean;
+    /** Select several is on (#263). */
+    declare multi: boolean;
     declare lang: string;
     /** The bar's one tab stop (roving focus). */
     declare _focus: number;
@@ -118,6 +121,8 @@ export function definePhoneBar(kit: PhoneBarKit) {
       const off = !this.hasFloor || !this.editable;
       const close = () => ed.openToolMenu(null);
       const rows: MoreRow[] = [
+        // Select several (#263): on a phone it sat at the bottom of a long item form; a long press on an item starts it too
+        { id: "multi", icon: "pointer", label: this.t("multi_more"), sub: this.t("multi_more_sub"), checked: this.multi, disabled: off, run: () => (close(), ed.toggleMultiMode()) },
         { id: "outside", icon: "tree", label: this.t("tool_group_outside"), sub: this.t("outside_sub"), onward: true, disabled: off, run: () => ed.openToolMenu("outside") },
         { id: "energy", icon: "bolt", label: this.t("tool_energy"), disabled: off, run: () => ed.phoneTool("energy") },
         { id: "wall-view", icon: "wall", label: this.t("wall_view"), sub: this.t("wall_view_sub"), checked: this.wallPick, run: () => (close(), ed.toggleWallPick(this)) },

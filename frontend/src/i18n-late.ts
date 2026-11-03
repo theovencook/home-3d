@@ -2128,7 +2128,7 @@ export const lateEnglish = {
   hint_furniture_touch: "Tap a room, then pick an item below · drag items, resize them by their corners",
   hint_opening_touch: "Tap a wall to add: {kind} (change the kind under Details) – tap a door or window to select it, drag to slide it along the wall",
   floor_none: "No floor yet",
-  multi_hint_touch: "Turn on “Select several” to tap items or draw a frame over empty ground. Move, turn or copy them together, or join them into a block.",
+  multi_hint_touch: "Turn on “Select several” (or hold an item) to tap items or draw a frame over empty ground. Move, turn or copy them together, or join them into a block.",
   // the header, the floor bar's Rooms picker, Edit room / Edit floor and the editor's toolbar (#249)
   help_and_shortcuts: "Help and shortcuts",
   settings_home: "Settings for this home",
@@ -2139,6 +2139,8 @@ export const lateEnglish = {
   sheet_outdoor: "Outside area",
   outside_sub: "Areas, paths, pool",
   wall_view_sub: "See one wall from the front",
+  multi_more: "Select several",
+  multi_more_sub: "Tap items to add them (or hold an item)",
   hint_hide: "Hide the hint",
   // the device popup: lights, robot vacuums, cameras (#272 #271 #284); TV cards (#281)
   st_language: "Language",

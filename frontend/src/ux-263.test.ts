@@ -87,3 +87,26 @@ test("a narrow card keeps what fits in its bar and moves the rest into a ⋯ men
   const card = src("./card.ts");
   assert.match(card, /class="fp3d-chip fp3d-card-more" aria-haspopup="true"/);
 });
+
+// 5. Select several: in the phone's More, and a long press on an item starts it
+
+test("a long press on an item starts Select several; on anything else, or already in it, it opens the menu (#263)", async () => {
+  await import("./components/editor-harness.ts");
+  const { holdStartsMulti } = await import("./components/editor/pointer.ts");
+  assert.equal(holdStartsMulti({ kind: "furniture" }, false, true), true);
+  assert.equal(holdStartsMulti({ kind: "furnset" }, false, true), true);
+  assert.equal(holdStartsMulti({ kind: "furniture" }, true, true), false, "in Select several the menu opens");
+  assert.equal(holdStartsMulti({ kind: "room" }, false, true), false);
+  assert.equal(holdStartsMulti(null, false, true), false);
+  assert.equal(holdStartsMulti({ kind: "furniture" }, false, false), false, "a viewer only pans");
+  const pointer = src("./components/editor/pointer.ts");
+  assert.match(pointer, /if \(holdStartsMulti\(d, this\._multiMode, this\.isEditor\)\) \{\s*this\._multiMode = true;/);
+});
+
+test("the phone's More has a Select several switch that picks the select tool (#263)", async () => {
+  const bar = src("./components/editor/phone-bar.ts");
+  assert.match(bar, /\{ id: "multi", icon: "pointer", label: this\.t\("multi_more"\), sub: this\.t\("multi_more_sub"\), checked: this\.multi,/);
+  assert.match(src("./components/editor/phone.ts"), /\.multi=\$\{this\._multiMode\}/);
+  const { lateEnglish } = await import("./i18n-late.ts");
+  assert.equal(lateEnglish.multi_more, "Select several");
+});
