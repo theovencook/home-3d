@@ -24,3 +24,17 @@ test("the phone View panel is a full screen page with its Close button, no half 
   // the time bar's lift of the floating panel does not apply to the page
   assert.match(after(src("./panel.ts"), "full screen page on a phone (#346)"), /\.fp3d-tt fp3d-view-panel \{\s*bottom: 0;/);
 });
+
+// 2. The camera wall
+
+test("the phone camera wall is a full screen page and the bar's buttons step aside while it is open (#346)", () => {
+  const v = src("./components/view3d.ts");
+  const phone = after(v, "/* phones: the wall is a full screen page");
+  assert.match(phone, /\.fp3d-wall \{\s*inset: 0;\s*height: auto;\s*z-index: 12;/);
+  assert.doesNotMatch(v, /height: min\(60%, 420px\)/);
+  const panel = src("./panel.ts");
+  assert.match(panel, /\$\{this\._cameraWall && !tt \? "fp3d-cams-open" : ""\}/);
+  assert.match(panel, /\.fp3d-cams-open \.fp3d-overlay \{\s*display: none;/);
+  // Back closes it (#322)
+  assert.match(panel, /row\("_cameraWall", "cameras"/);
+});

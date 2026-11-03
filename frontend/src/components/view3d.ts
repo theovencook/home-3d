@@ -8186,11 +8186,17 @@ export class Fp3dView3d extends LitElement {
         background: var(--fp3d-accent);
         opacity: 0.45;
       }
+      /* phones: the wall is a full screen page over the view, like Settings and the View panel (#346) */
       @media ${unsafeCSS(PHONE_MEDIA)} {
         .fp3d-wall {
-          inset: auto 0 calc(var(--fp3d-bottom-inset, 0px) + 0px) 0;
-          height: min(60%, 420px);
-          border-radius: 16px 16px 0 0;
+          inset: 0;
+          height: auto;
+          z-index: 12;
+          border: 0;
+          border-radius: 0;
+          background: rgba(8, 16, 34, 0.97);
+          box-shadow: none;
+          padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
         }
         .fp3d-wall-rz {
           display: none;

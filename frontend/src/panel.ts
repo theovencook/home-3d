@@ -1548,7 +1548,7 @@ export class Floorplan3dPanel extends LitElement {
     </div>`;
     return html`
       ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : this.renderFloorBar(b, floor)}
-      <div class="fp3d-stage-wrap ${this._roomId ? "fp3d-room-open" : ""} ${this._controlsRight ? "fp3d-side-right" : ""} ${tt ? "fp3d-tt" : ""}">
+      <div class="fp3d-stage-wrap ${this._roomId ? "fp3d-room-open" : ""} ${this._controlsRight ? "fp3d-side-right" : ""} ${tt ? "fp3d-tt" : ""} ${this._cameraWall && !tt ? "fp3d-cams-open" : ""}">
         <!-- the floor bar picks the floor: the floor pictures beside the 3D view are a second picker, shown when Settings
              › Screen and controls says so (#249, #250; the card keeps its own switch) -->
         <fp3d-view3d
@@ -2331,6 +2331,10 @@ export class Floorplan3dPanel extends LitElement {
         /* the View panel is a full screen page on a phone (#346), the time bar under it too */
         .fp3d-tt fp3d-view-panel {
           bottom: 0;
+        }
+        /* so is the camera wall (view3d.ts): the bar's buttons go while it is open, its Close and Back shut it */
+        .fp3d-cams-open .fp3d-overlay {
+          display: none;
         }
       }
       /* touch screens, a tablet as much as a phone (#181): 44 px, and room for three rows of floor chips */
