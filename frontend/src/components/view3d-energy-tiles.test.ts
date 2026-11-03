@@ -38,33 +38,20 @@ function tileClass(el: Record<string, any>, cls: string): string {
   return m[1];
 }
 
-test("energy tiles are real buttons, so pointer and keyboard both grow them (#90, #180)", () => {
-  const out = flat(viewer().renderEnergy());
-  assert.match(out, /<button type="button" class="fp3d-energy-item fp3d-energy-tile fp3d-energy-solar[^>]*aria-pressed=false/);
-  assert.doesNotMatch(out, /<div class="fp3d-energy-item fp3d-energy-tile/);
-});
-
-test("tapping an energy tile enlarges it; tapping it again shrinks it back (#90)", () => {
+test("energy tiles are plain read-outs: no button, no enlarging (#316)", () => {
   const el = viewer();
-  assert.doesNotMatch(tileClass(el, "solar"), /fp3d-energy-big/);
-  el.toggleEnergyTile("solar");
-  assert.match(tileClass(el, "solar"), /fp3d-energy-big/);
-  assert.doesNotMatch(tileClass(el, "export"), /fp3d-energy-big/);
-  el.toggleEnergyTile("solar");
+  const out = flat(el.renderEnergy());
+  assert.match(out, /<div class="fp3d-energy-item fp3d-energy-tile fp3d-energy-solar">/);
+  assert.doesNotMatch(out, /<button type="button" class="fp3d-energy-item fp3d-energy-tile/);
+  assert.doesNotMatch(out, /fp3d-energy-big|aria-pressed/);
+  assert.equal(typeof el.toggleEnergyTile, "undefined");
   assert.doesNotMatch(tileClass(el, "solar"), /fp3d-energy-big/);
 });
 
-test("tapping another tile moves the enlargement to it (#90)", () => {
-  const el = viewer();
-  el.toggleEnergyTile("solar");
-  el.toggleEnergyTile("export");
-  assert.doesNotMatch(tileClass(el, "solar"), /fp3d-energy-big/);
-  assert.match(tileClass(el, "export"), /fp3d-energy-big/);
-});
-
-test("a hovered or focused tile grows smoothly with a mouse; reduced motion makes it grow without the animation (#90)", () => {
-  assert.match(css, /@media \(hover: hover\)[^@]*\.fp3d-energy-tile:hover/);
-  assert.match(css, /\.fp3d-energy-tile:focus-visible/);
+test("a hovered tile only lifts a hair and smoothly; reduced motion drops the animation (#316)", () => {
+  assert.match(css, /@media \(hover: hover\)[^@]*\.fp3d-energy-tile:hover\s*\{\s*transform: translateY\(-1px\)/);
+  assert.doesNotMatch(css, /fp3d-energy-tile:hover\s*\{[^}]*scale\(/);
+  assert.doesNotMatch(css, /fp3d-energy-big|fp3d-energy-tile:focus-visible/);
   assert.match(css, /\.fp3d-energy-tile\s*\{[^}]*transition: transform/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.fp3d-energy-tile\s*\{\s*transition: none/);
 });
