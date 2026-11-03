@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- Set up locating, step 2 Devices: step-by-step guides for Android (Home Assistant app BLE Transmitter: on, power High, Low latency) and iPhone or Apple Watch (key helper, Private BLE Device), each with a link to the official Home Assistant docs and shown next to every warning (#329).
+
 ## Home 3D 0.2.1 (2 November 2026)
 
 - A Home Assistant restart is no longer shown as motion: the camera detection pins only linger for a detection this page saw, and the motion trail skips sensors coming back from unavailable or unknown (#299).
