@@ -959,26 +959,26 @@ export class Extensions extends LitElement {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 8px 16px;
+        gap: 8px 12px;
         flex-basis: 100%;
       }
-      .fp3d-ext-dates-field {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .fp3d-ext-dates-field input {
-        width: 4.5em;
-      }
-      .fp3d-ext-dates-field input[type="date"] {
-        width: auto;
-      }
+      /* one rule: a grid of labelled fields (the shared field look), Remove at the end (#343) */
       .fp3d-ext-rule {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px 16px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        gap: 10px 12px;
+        align-items: end;
         flex-basis: 100%;
+        padding: 10px 0;
+        border-top: 1px solid var(--fp3d-line);
+      }
+      .fp3d-ext-rule .fp3d-field input,
+      .fp3d-ext-rule .fp3d-field select {
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .fp3d-ext-rule-remove {
+        justify-self: start;
       }
       .fp3d-ext-upcoming {
         flex-basis: 100%;

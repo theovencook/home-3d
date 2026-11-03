@@ -143,27 +143,33 @@ function ruleRow(v: SeasonDatesView, r: SeasonRule, i: number): TemplateResult {
   const months = Array.from({ length: 12 }, (_, m) => new Date(PICK, m, 1).toLocaleDateString(v.lang, { month: "long" }));
   const weekdays = Array.from({ length: 7 }, (_, w) => new Date(PICK, 0, 7 + w).toLocaleDateString(v.lang, { weekday: "long" }));
   const kinds: SeasonRule["kind"][] = r.kind === "cny" ? ["cny", "fixed", "easter", "nth", "once"] : ["fixed", "easter", "nth", "once"];
+  const field = (name: string, control: TemplateResult) => html`<label class="fp3d-field"><span>${name}</span>${control}</label>`;
   const pickDate = (key: "from" | "to", value: string | undefined, name: string) =>
-    html`<label class="fp3d-ext-dates-field"
-      ><span>${name}</span><input type="date" .value=${value ?? ""} @change=${(e: Event) => upd({ [key]: (e.target as HTMLInputElement).value || undefined })}
-    /></label>`;
-  const time = (key: "start" | "end", name: string) => html`<fp3d-time-field
-    .value=${r[key] ?? ""}
-    .hour12=${v.h12}
-    .clearable=${true}
-    .label=${name}
-    .hourLabel=${v.t("time_hour")}
-    .minuteLabel=${v.t("time_minute")}
-    @change=${(e: CustomEvent<{ value: string }>) => upd({ [key]: e.detail.value || undefined })}
-  ></fp3d-time-field>`;
+    field(name, html`<input type="date" .value=${value ?? ""} @change=${(e: Event) => upd({ [key]: (e.target as HTMLInputElement).value || undefined })} />`);
+  const time = (key: "start" | "end", name: string) => html`<div class="fp3d-field">
+    <span>${name}</span>
+    <fp3d-time-field
+      .value=${r[key] ?? ""}
+      .hour12=${v.h12}
+      .clearable=${true}
+      .label=${name}
+      .hourLabel=${v.t("time_hour")}
+      .minuteLabel=${v.t("time_minute")}
+      @change=${(e: CustomEvent<{ value: string }>) => upd({ [key]: e.detail.value || undefined })}
+    ></fp3d-time-field>
+  </div>`;
+  const select = (name: string, onChange: (e: Event) => void, options: TemplateResult[]) =>
+    field(name, html`<select aria-label=${name} @change=${onChange}>${options}</select>`);
   return html`<div class="fp3d-ext-rule">
-    <select aria-label=${v.t("season_rule_kind")} @change=${(e: Event) => v.set(v.rules.map((x, j) => (j === i ? asKind(x, (e.target as HTMLSelectElement).value as SeasonRule["kind"], new Date()) : x)))}>
-      ${kinds.map((k) => html`<option value=${k} ?selected=${r.kind === k}>${v.t(`season_kind_${k}`)}</option>`)}
-    </select>
+    ${select(
+      v.t("season_rule_kind"),
+      (e) => v.set(v.rules.map((x, j) => (j === i ? asKind(x, (e.target as HTMLSelectElement).value as SeasonRule["kind"], new Date()) : x))),
+      kinds.map((k) => html`<option value=${k} ?selected=${r.kind === k}>${v.t(`season_kind_${k}`)}</option>`),
+    )}
     ${r.kind === "fixed"
-      ? html`<label class="fp3d-ext-dates-field"
-          ><span>${v.t("season_date")}</span
-          ><input
+      ? field(
+          v.t("season_date"),
+          html`<input
             type="date"
             min=${iso(1, 1)}
             max=${iso(12, 31)}
@@ -172,38 +178,35 @@ function ruleRow(v: SeasonDatesView, r: SeasonRule, i: number): TemplateResult {
               const m = /^\d{4}-(\d\d)-(\d\d)$/.exec((e.target as HTMLInputElement).value);
               if (m) upd({ month: Number(m[1]), day: Number(m[2]) });
             }}
-        /></label>`
+          />`,
+        )
       : nothing}
     ${r.kind === "easter"
-      ? html`<label class="fp3d-ext-dates-field"
-          ><span>${v.t("season_easter_offset")}</span
-          ><input type="number" min="-366" max="366" .value=${String(r.offset ?? 0)} @change=${(e: Event) => upd({ offset: Math.round(Number((e.target as HTMLInputElement).value) || 0) })}
-        /></label>`
+      ? field(v.t("season_easter_offset"), html`<input type="number" min="-366" max="366" .value=${String(r.offset ?? 0)} @change=${(e: Event) => upd({ offset: Math.round(Number((e.target as HTMLInputElement).value) || 0) })} />`)
       : nothing}
     ${r.kind === "nth"
-      ? html`<span class="fp3d-ext-dates-field">
-          <select aria-label=${v.t("season_nth")} @change=${(e: Event) => upd({ nth: Number((e.target as HTMLSelectElement).value) })}>
-            ${[1, 2, 3, 4, 5, -1].map((n) => html`<option value=${n} ?selected=${(r.nth ?? 1) === n}>${v.t(n < 0 ? "season_nth_last" : `season_nth_${n}`)}</option>`)}
-          </select>
-          <select aria-label=${v.t("season_weekday")} @change=${(e: Event) => upd({ weekday: Number((e.target as HTMLSelectElement).value) })}>
-            ${weekdays.map((name, w) => html`<option value=${w} ?selected=${(r.weekday ?? 0) === w}>${name}</option>`)}
-          </select>
-          <span>${v.t("season_of")}</span>
-          <select aria-label=${v.t("season_dates_month")} @change=${(e: Event) => upd({ month: Number((e.target as HTMLSelectElement).value) })}>
-            ${months.map((name, m) => html`<option value=${m + 1} ?selected=${(r.month ?? 1) === m + 1}>${name}</option>`)}
-          </select>
-        </span>`
+      ? html`${select(
+          v.t("season_nth"),
+          (e) => upd({ nth: Number((e.target as HTMLSelectElement).value) }),
+          [1, 2, 3, 4, 5, -1].map((n) => html`<option value=${n} ?selected=${(r.nth ?? 1) === n}>${v.t(n < 0 ? "season_nth_last" : `season_nth_${n}`)}</option>`),
+        )}
+        ${select(
+          v.t("season_weekday"),
+          (e) => upd({ weekday: Number((e.target as HTMLSelectElement).value) }),
+          weekdays.map((name, w) => html`<option value=${w} ?selected=${(r.weekday ?? 0) === w}>${name}</option>`),
+        )}
+        ${select(
+          v.t("season_dates_month"),
+          (e) => upd({ month: Number((e.target as HTMLSelectElement).value) }),
+          months.map((name, m) => html`<option value=${m + 1} ?selected=${(r.month ?? 1) === m + 1}>${name}</option>`),
+        )}`
       : nothing}
     ${r.kind === "once" ? html`${pickDate("from", r.from, v.t("season_dates_from"))} ${pickDate("to", r.to, v.t("season_dates_to"))}` : nothing}
     ${r.kind !== "once"
-      ? html`<label class="fp3d-ext-dates-field"
-          ><span>${v.t("season_length")}</span
-          ><input type="number" min="1" max="366" .value=${String(r.days ?? 1)} @change=${(e: Event) => upd({ days: Math.min(366, Math.max(1, Math.round(Number((e.target as HTMLInputElement).value) || 1))) })}
-        /></label>`
+      ? field(v.t("season_length"), html`<input type="number" min="1" max="366" .value=${String(r.days ?? 1)} @change=${(e: Event) => upd({ days: Math.min(366, Math.max(1, Math.round(Number((e.target as HTMLInputElement).value) || 1))) })} />`)
       : nothing}
-    <span class="fp3d-ext-dates-field">${v.t("season_start_time")} ${time("start", v.t("season_start_time"))}</span>
-    <span class="fp3d-ext-dates-field">${v.t("season_end_time")} ${time("end", v.t("season_end_time"))}</span>
-    <button type="button" class="fp3d-btn" @click=${() => v.remove(i)}>${v.t("season_remove")}</button>
+    ${time("start", v.t("season_start_time"))} ${time("end", v.t("season_end_time"))}
+    <button type="button" class="fp3d-btn fp3d-danger fp3d-ext-rule-remove" @click=${() => v.remove(i)}>${v.t("season_remove")}</button>
   </div>`;
 }
 
@@ -214,9 +217,9 @@ export function seasonDates(v: SeasonDatesView): TemplateResult {
   return html`<div class="fp3d-ext-dates" data-ext=${`season:${v.id}`}>
     <span class="fp3d-sub">${nextShowingText(v.rules, v.now, st, v.t)}${v.custom ? ` · ${v.t("season_dates_changed")}` : ""}</span>
     ${v.editable
-      ? html`<button type="button" class="fp3d-link" aria-expanded=${v.open} @click=${v.toggle}>${v.t("season_dates")} ${v.open ? "▴" : "▾"}</button>
+      ? html`<button type="button" class="fp3d-btn" aria-expanded=${v.open} @click=${v.toggle}>${v.t("season_dates")} ${v.open ? "▴" : "▾"}</button>
           ${v.on
-            ? html`<button type="button" class="fp3d-link" @click=${() => window.open(`${location.pathname}?fp3d_season=${v.id}`, "_blank", "noopener")}>${v.t("season_show_now")}</button>`
+            ? html`<button type="button" class="fp3d-btn" @click=${() => window.open(`${location.pathname}?fp3d_season=${v.id}`, "_blank", "noopener")}>${v.t("season_show_now")}</button>`
             : nothing}`
       : nothing}
     ${v.open && v.editable
