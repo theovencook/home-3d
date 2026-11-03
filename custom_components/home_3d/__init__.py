@@ -28,6 +28,7 @@ from .const import (
     CONF_SHOW_IN_SIDEBAR,
     DATA_EDITORS,
     DATA_PACK_UPDATES,
+    DATA_PETS,
     DEFAULT_RESTORE_PICTURE_DAYS,
     DEFAULT_SHOW_IN_SIDEBAR,
     DOMAIN,
@@ -42,6 +43,7 @@ from .const import (
 from .editors import Editors
 from .locate.service import DATA_LOCATE, LocateService
 from .pack_updates import PackUpdates
+from .pets import PetRoutines
 from .storage import FloorplanData
 from .voice import async_remove_sentences, async_setup_voice, async_unload_voice
 from .websocket import async_register_commands
@@ -160,6 +162,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DATA_LOCATE] = locate
     # with the rooms and doors of the active home's plan, whenever it changes (#169)
     entry.async_on_unload(locate.follow_plan(lambda: data.active.building, lambda: data.active_id))
+
+    # roaming pets (#337): where each pet is now, the same on every screen
+    routines = PetRoutines(hass, lambda: {home_id: home.building for home_id, home in data.homes.items()})
+    entry.async_on_unload(partial(_forget, hass, DATA_PETS))
+    entry.async_on_unload(routines.start())
+    hass.data[DATA_PETS] = routines
 
     # Assist asks the house: service, intent and the sentences Assist understands (with the names locating knows)
     entry.async_on_unload(partial(async_unload_voice, hass))

@@ -23,6 +23,8 @@ export const loadItemPicker = once(() => import("../item-picker.ts"));
 export const loadIconPicker = once(() => import("./icon-picker.ts"));
 /** The Library's Browse tab (#336): a chunk of its own, as only an editor who opens the tab draws it. */
 export const loadPackBrowser = once(() => import("../pack-browser.ts"));
+/** A pet's panel (#337: its routine and triggers): a chunk of its own, as only an open pet draws it. */
+export const loadPetPanel = once(() => import("../pet-panel.ts"));
 /** The phone editor's bottom bar and More (#250): a chunk of its own, as only phone-wide screens draw it. */
 export const loadPhoneBar = once(() => import("./phone-bar.ts").then((m) => m.definePhoneBar({ LitElement, html, css, nothing, uiIcon, defineElement })));
 

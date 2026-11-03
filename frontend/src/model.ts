@@ -761,9 +761,46 @@ export interface Pet {
   z?: number | null;
   /** Which way a static pet faces, degrees like furniture (null: the front of what it lies on, else 0). */
   rotation?: number | null;
+  /**
+   * Roaming pets (#337): the daily routine, its spots in order (the first one wins when two windows overlap; the
+   * first is also where it stays with roaming off). Null: the pet has none and its old spot (x, z, pose, rotation
+   * above, from before #337) counts as its first.
+   */
+  spots?: PetSpot[] | null;
+  /** Things in Home Assistant that send the pet to a place for some minutes (the latest wins), as many as wanted. */
+  triggers?: PetTrigger[] | null;
 }
 
-export const PET_POSES = ["sit", "lie", "curl"] as const;
+/** A place a pet is sent to: on a floor (null: the pet's own), its pose and which way it faces (degrees, null: auto). */
+export interface PetPlace {
+  floor_id?: string | null;
+  x?: number | null;
+  z?: number | null;
+  pose?: PetPose | null;
+  rotation?: number | null;
+}
+
+/** A spot of a pet's daily routine (#337): its place, the time window ("HH:MM", none: all day) and days (0 = Monday, none: every day). */
+export interface PetSpot extends PetPlace {
+  id: string;
+  from?: string | null;
+  to?: string | null;
+  days?: number[] | null;
+}
+
+/** A pet's trigger (#337): an entity changing (to a state), an event (of an entity) or a time of day, then the place for `minutes`. */
+export interface PetTrigger extends PetPlace {
+  id: string;
+  kind?: "state" | "event" | "time";
+  entity?: string | null;
+  to?: string | null;
+  event?: string | null;
+  at?: string | null;
+  minutes?: number;
+}
+
+/** Sleeping is "curl", loafing "lie" (#337 adds standing and grooming). */
+export const PET_POSES = ["sit", "lie", "curl", "stand", "groom"] as const;
 export type PetPose = (typeof PET_POSES)[number];
 
 export const PET_FURS = ["orange", "tabby", "black", "white", "grey", "brown", "calico", "golden", "cream", "dilute_calico", "blue_grey"] as const;
@@ -820,7 +857,7 @@ export interface BuildingSettings {
     triggers?: { entity: string; camera: string | null }[] | null;
   } | null;
   /** Fun pack "pets": the animals and whether they are shown. */
-  pets?: { on: boolean; list: Pet[] } | null;
+  pets?: { on: boolean; list: Pet[]; /** Roaming (#337); off: every pet stays on its first spot. */ roam?: boolean } | null;
   /** Stations and playlists for the speakers' quick menu (Klang & Kino). */
   media_presets?: MediaPreset[];
   /** Favourites of the house: scenes, scripts, automations, buttons and switches in the central menu of the 3D view (#145). */
@@ -1338,7 +1375,7 @@ export interface PresenceLink {
  * version (custom_components/home_3d/migrations.py) before anyone sees it; the frontend never changes the version of a
  * plan it was given, so a plan it saves is migrated again where needed (an older backend keeps a version-1 plan).
  */
-export const PLAN_VERSION = 2;
+export const PLAN_VERSION = 3;
 
 /** Whether `version` is one of a plan this frontend reads (1 up to PLAN_VERSION). */
 export function knownPlanVersion(version: unknown): version is number {

@@ -230,6 +230,8 @@ export class SelectionPart {
   selectItem(this: Fp3dEditor, kind: "room" | "opening" | "furniture" | "device" | "outdoor" | "wall", id: string | null): void {
     this._notice = null;
     this._kerbPick = false;
+    this._petId = null;
+    this._petPick = null;
     // a selection made in the plan (or by a tool) opens the folded sidebar
     if (id) this._sideOpen = true;
     this._outdoorId = kind === "outdoor" ? id : null;

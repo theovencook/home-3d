@@ -21,12 +21,14 @@ from .const import (
     DATA_ASK,
     DATA_EDITORS,
     DATA_PACK_UPDATES,
+    DATA_PETS,
     DATA_VOICE,
     DOMAIN,
     PROTOCOL,
     SIGNAL_ASK,
     SIGNAL_BUILDING_UPDATED,
     SIGNAL_HOMES_UPDATED,
+    SIGNAL_PETS_UPDATED,
 )
 from .custom_items import not_reserved
 from .editors import Editors, EditorsError, can_edit, performed_actions
@@ -108,6 +110,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_homes_duplicate,
         ws_homes_delete,
         ws_homes_set_active,
+        ws_pets_subscribe,
     ):
         websocket_api.async_register_command(hass, command)
     for command in LOCATE_COMMANDS:
@@ -1229,3 +1232,47 @@ async def ws_homes_set_active(
         connection.send_error(msg["id"], err.code, err.detail)
         return
     _send_homes(data, connection, msg)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_3d/pets/subscribe", **_HOME})
+@callback
+def ws_pets_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Roaming pets (#337): where each pet of a home is now (by pet id: floor, x, z, pose, facing, and the routine
+    spot or the trigger that put it there with when that runs out), at once and whenever it changes. Without a home
+    this follows the active home, like building/subscribe."""
+    if (home := _home(hass, connection, msg)) is None:
+        return
+    named = msg.get("home_id")
+    followed = [home.id]
+
+    def send(home_id: str) -> None:
+        routines = hass.data.get(DATA_PETS)
+        pets = routines.targets(home_id) if routines is not None else {}
+        connection.send_message(websocket_api.event_message(msg["id"], {"home_id": home_id, "pets": pets}))
+
+    @callback
+    def forward(home_id: str, _targets: dict[str, Any]) -> None:
+        if home_id == followed[0]:
+            send(home_id)
+
+    @callback
+    def homes_changed() -> None:
+        if (data := hass.data.get(DOMAIN)) is None:
+            return
+        if named is None and data.active_id != followed[0] and data.active_id in data.homes:
+            followed[0] = data.active_id
+            send(data.active_id)
+
+    unsubs = [
+        async_dispatcher_connect(hass, SIGNAL_PETS_UPDATED, forward),
+        async_dispatcher_connect(hass, SIGNAL_HOMES_UPDATED, homes_changed),
+    ]
+
+    @callback
+    def unsubscribe() -> None:
+        for unsub in unsubs:
+            unsub()
+
+    connection.subscriptions[msg["id"]] = unsubscribe
+    connection.send_result(msg["id"])
+    send(home.id)

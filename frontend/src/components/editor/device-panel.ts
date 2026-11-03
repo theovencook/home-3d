@@ -8,7 +8,7 @@ import { TOGGLE_KINDS } from "../../devices.ts";
 import { iconPath } from "../../icons.ts";
 import { bounds, centroid, splitAliases, FURNITURE_SIZE, isLamp, pointInPolygon, uid, type Floor, type LampMount, type Placement, type Room, type Vec2 } from "../../model.ts";
 import { detectCameraModel, setCameraLook } from "../../camera-models.ts";
-import { staticPetsOn } from "../../pet-place.ts";
+import { petMarks } from "../../pet-place.ts";
 import { pinsShown, readPinZoom } from "../../plan-pins.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { hiddenUnplaced, setUnplacedHidden, suggestLinks, unplacedByArea, type LinkSuggestion } from "../../unplaced.ts";
@@ -202,18 +202,23 @@ export class DevicePanelPart {
     });
   }
 
-  /** Fun pack "pets": the static pets of this floor (#17), a paw at each one's spot, dragged to move it. */
+  /**
+   * Fun pack "pets": a paw at each pet's first spot on this floor (#17), and for the pet whose panel is open every
+   * spot of its routine (numbered) and its triggers' places (⚡, #337); dragged to move, tapped to open the panel.
+   */
   renderPets(this: Fp3dEditor, floor: Floor) {
     if (this._doc.settings.pets?.on === false) return nothing;
     const far = !pinsShown(this._view.scale, readPinZoom());
-    return svg`<g>${staticPetsOn(this._doc, floor.id).map((pet) => {
-      // zoomed far out the markers hide (#220); the selected room's stay
-      if (far && !(this.room && pointInPolygon([pet.x!, pet.z!], this.room.points))) return nothing;
-      const [x, y] = this.toScreen([pet.x!, pet.z!]);
-      return svg`<g data-pet=${pet.id} class="fp3d-device fp3d-pet" transform="translate(${x} ${y})">
-        <title>${pet.name || this.t(`pet_kind_${pet.kind}`)}</title>
+    return svg`<g>${petMarks(this._doc, floor.id, this._petId).map((m) => {
+      const sel = m.pet.id === this._petId;
+      // zoomed far out the markers hide (#220); the selected room's and the open pet's stay
+      if (far && !sel && !(this.room && pointInPolygon([m.x, m.z], this.room.points))) return nothing;
+      const [x, y] = this.toScreen([m.x, m.z]);
+      return svg`<g data-pet=${m.pet.id} data-pet-ref=${m.ref} class="fp3d-device fp3d-pet${sel ? " fp3d-device-sel" : ""}" transform="translate(${x} ${y})">
+        <title>${m.pet.name || this.t(`pet_kind_${m.pet.kind}`)}</title>
         <circle r="18" class="fp3d-hit" /><circle r="12" />
         <path d=${PAW} transform="translate(-7.2 -7.2) scale(0.6)" />
+        ${sel ? svg`<text class="fp3d-pet-n" x="11" y="-9">${m.trigger ? "⚡" : ""}${m.n}</text>` : nothing}
       </g>`;
     })}</g>`;
   }

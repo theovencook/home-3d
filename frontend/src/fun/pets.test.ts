@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { createHash } from "node:crypto";
 import * as THREE from "three";
-import { emptyBuilding, newFloor, PET_EYES, PET_FURS, PET_FURS_OF, type Building, type Furniture, type Pet, type Room } from "../model.ts";
+import { emptyBuilding, newFloor, PET_EYES, PET_FURS, PET_FURS_OF, PET_POSES, type Building, type Furniture, type Pet, type Room } from "../model.ts";
+import type { PetLive } from "../pet-place.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import { FloorMap } from "../viewer/walk.ts";
 import { buildModel, startPets, type FunLib, type PetsController } from "./pets.ts";
@@ -449,4 +450,118 @@ test("a rebuild and a dispose free the GPU objects of the pets they replace (#20
   run.dispose();
   assert.ok(geometries > 0 && materials > 0 && textures > 0, "dispose frees the model");
   assert.equal(group.children.length, 0);
+});
+
+// Roaming pets (#337): the daily routine and triggers, placed by the server, walked there, held at no cost
+
+/** A house whose pets follow a stand-in server: `send` hands the pets' places over as home_3d/pets/subscribe does. */
+function served(pets: Pet[], roam = true) {
+  const floor = { ...newFloor("f", "Ground", 0), rooms: [rect("r", 0, 0, 6, 5)], furniture: [sofa] };
+  const b = { ...emptyBuilding(), floors: [floor] };
+  b.settings = { ...b.settings, pets: { on: true, roam, list: pets } };
+  const group = new THREE.Group();
+  const viewer = { floorMap: new Map([["f", { group, floor }]]), invalidate() {}, animate() {}, low: false, resting: false };
+  const asked: Record<string, unknown>[] = [];
+  let push: ((m: { pets: Record<string, PetLive> }) => void) | null = null;
+  const connection = {
+    subscribeMessage: <T,>(cb: (m: T) => void, msg: Record<string, unknown>) => {
+      asked.push(msg);
+      push = cb as never;
+      return Promise.resolve(async () => undefined);
+    },
+  };
+  const run = startPets({ lib, FloorMap, viewer, building: b, pets, night: () => false, base: () => 0, hass: () => ({ connection }), home: () => "second" });
+  const send = (p: Record<string, Partial<PetLive>>) => push!({ pets: Object.fromEntries(Object.entries(p).map(([k, v]) => [k, { floor_id: null, pose: "sit", rotation: null, spot: null, trigger: null, until: null, ...v } as PetLive])) });
+  return { group, run, send, asked };
+}
+
+const routine: Pet = { ...cat, spots: [{ id: "s1", x: 1, z: 4, pose: "lie" }, { id: "s2", x: 5, z: 4, pose: "curl" }] };
+const at = (o: THREE.Object3D) => [o.position.x, o.position.z].map((v) => Math.round(v * 100) / 100);
+
+test("a pet with a routine starts on its first spot and follows the server's place for the home shown (#337)", () => {
+  const { group, run, send, asked } = served([routine]);
+  running = run;
+  assert.deepEqual(asked, [{ type: "home_3d/pets/subscribe", home_id: "second" }]);
+  assert.deepEqual(at(group.children[0]), [1, 4]);
+  // the first answer puts it there at once: no walk on opening the view
+  send({ p: { x: 5, z: 4, pose: "curl", spot: "s2" } });
+  assert.deepEqual(at(group.children[0]), [5, 4]);
+  assert.equal(frames.length, 0, "holding its pose, it asks for no frames");
+});
+
+test("sent somewhere new, a pet walks there along the way, then holds its pose and no frames run (#337)", () => {
+  const { group, run, send } = served([routine]);
+  running = run;
+  send({ p: { x: 1, z: 4, pose: "lie", spot: "s1" } });
+  const held = poseOf(group.children[0]);
+  // a trigger: standing at the bowls
+  send({ p: { x: 5, z: 1.5, pose: "stand", trigger: "t1" } });
+  assert.ok(frames.length > 0, "it walks");
+  const path: number[][] = [];
+  play(1);
+  path.push(at(group.children[0]));
+  play(20);
+  assert.ok(path[0][0] > 1 && path[0][0] < 5, `on its way: ${path[0]}`);
+  assert.deepEqual(at(group.children[0]), [5, 1.5]);
+  assert.notEqual(poseOf(group.children[0]), held, "standing now");
+  assert.equal(frames.length, 0, "there: no more frames");
+  // the same place again changes nothing
+  send({ p: { x: 5, z: 1.5, pose: "stand", trigger: "t1" } });
+  assert.equal(frames.length, 0);
+});
+
+test("a pet sent up onto the sofa jumps up from its front and lies on the seat (#337)", () => {
+  const { group, run, send } = served([routine]);
+  running = run;
+  send({ p: { x: 1, z: 4, spot: "s1" } });
+  send({ p: { x: 2, z: 1, pose: "curl", spot: "s2" } });
+  play(30);
+  const p = group.children[0].position;
+  assert.deepEqual(at(group.children[0]), [2, 1]);
+  assert.ok(Math.abs(p.y - 0.85 * 0.58) < 1e-6, `on the seat: ${p.y}`);
+});
+
+test("with less motion asked for, a pet is put at its new place, not walked (#337)", () => {
+  g.matchMedia = (q: string) => ({ matches: q.includes("reduce") });
+  try {
+    const { group, run, send } = served([routine]);
+    running = run;
+    send({ p: { x: 1, z: 4, spot: "s1" } });
+    send({ p: { x: 5, z: 1.5, pose: "stand", trigger: "t1" } });
+    assert.deepEqual(at(group.children[0]), [5, 1.5]);
+    assert.equal(frames.length, 0);
+  } finally {
+    delete g.matchMedia;
+  }
+});
+
+test("with roaming off a pet stays on its first spot, whatever the server says (#337)", () => {
+  const { group, run, send } = served([routine], false);
+  running = run;
+  send({ p: { x: 5, z: 1.5, pose: "stand", trigger: "t1" } });
+  play(5);
+  assert.deepEqual(at(group.children[0]), [1, 4]);
+  assert.equal(frames.length, 0);
+});
+
+test("a pet the server has no place for wanders the house as before (#337)", () => {
+  const { group, run, send } = served([{ ...cat, triggers: [{ id: "t1", x: 5, z: 1 }] }]);
+  running = run;
+  send({});
+  const start = at(group.children[0]);
+  assert.ok(frames.length > 0, "it roams");
+  play(30);
+  assert.notDeepEqual(at(group.children[0]), start);
+});
+
+test("cats and dogs hold five different poses: sitting, loafing, sleeping, standing, grooming (#337)", () => {
+  for (const pet of [cat, { ...cat, kind: "dog" as const, fur: "golden" }]) {
+    const looks = PET_POSES.map((pose) => {
+      const { group, run } = house([{ ...pet, static: true, spots: [{ id: "s", x: 4, z: 4, pose }] }]);
+      const s = poseOf(group.children[0]);
+      run.dispose();
+      return s;
+    });
+    assert.equal(new Set(looks).size, 5, pet.kind);
+  }
 });

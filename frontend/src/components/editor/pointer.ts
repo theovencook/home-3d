@@ -9,7 +9,7 @@ import { clampField, faceAt, fieldFace, pointOnFace, roofFaces, turnGroundField,
 import { type FreeWall, poolShapePoints } from "../../model.ts";
 import { openingHost } from "../../geometry/walls.ts";
 import { bounds, DEFAULT_HOLOGRAM, isAxisRect, resizeFurniture, pointInPolygon, polygonArea, type Room, type Vec2 } from "../../model.ts";
-import { movePet } from "../../pet-place.ts";
+import { movePet, placeOfRef } from "../../pet-place.ts";
 import { insertCorner } from "../../geometry/room-corners.ts";
 import { type FixKind, EDIT_DRAGS, wallPeers, SNAP_PX, round, patchItem, distToSegment } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
@@ -90,6 +90,11 @@ export class PointerPart {
     }
     if (this._kerbPick) {
       this.setKerb(world);
+      return;
+    }
+    if (this._petPick) {
+      // roaming pets (#337): the tap sets the place the pet's panel asked for
+      this.petPickAt(world);
       return;
     }
     if (this._bgLevel && this.isEditor && this.floor?.background) {
@@ -326,8 +331,8 @@ export class PointerPart {
     }
     const petEl = target.closest("[data-pet]");
     if (petEl && this.isEditor) {
-      // a static pet (#17): dragged to its spot
-      this.drag = { kind: "pet", id: petEl.getAttribute("data-pet")!, start: world, startScreen: local, base: this._doc, moved: false };
+      // a pet's spot (#17, #337: or its trigger's place): dragged there; a tap opens the pet's panel
+      this.drag = { kind: "pet", id: petEl.getAttribute("data-pet")!, ref: petEl.getAttribute("data-pet-ref") ?? undefined, start: world, startScreen: local, base: this._doc, moved: false };
       return;
     }
     const deviceEl = target.closest("[data-device]");
@@ -1000,9 +1005,10 @@ export class PointerPart {
         if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
         drag.moved = true;
         const pet = drag.base.settings.pets?.list.find((p) => p.id === drag.id);
-        if (pet?.x == null || pet.z == null) return;
-        const [px, pz] = [pet.x, pet.z];
-        this.change((doc) => movePet(doc, drag.id, px + world[0] - drag.start[0], pz + world[1] - drag.start[1], e.altKey ? 0.01 : this._doc.settings.grid), drag.base, false);
+        const at = pet && drag.ref ? placeOfRef(pet, drag.ref) : undefined;
+        if (at?.x == null || at.z == null) return;
+        const [px, pz] = [at.x, at.z];
+        this.change((doc) => movePet(doc, drag.id, px + world[0] - drag.start[0], pz + world[1] - drag.start[1], e.altKey ? 0.01 : this._doc.settings.grid, drag.ref), drag.base, false);
         break;
       }
     }
@@ -1115,6 +1121,7 @@ export class PointerPart {
       }
       case "pet":
         if (drag.moved) this.pushHistory(drag.base);
+        else this.selectPet(drag.id);
         break;
       case "device":
         if (drag.moved) this.pushHistory(drag.base);

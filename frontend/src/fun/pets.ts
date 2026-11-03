@@ -9,7 +9,8 @@ import type * as THREE from "three";
 import type { Building, Floor, Furniture, Pet, Vec2 } from "../model.ts";
 import type { FloorMap, Obstacle } from "../viewer/walk.ts";
 import { stairLinks, type Link } from "../geometry/stair-links.ts";
-import { BED, isStaticPet, itemOf, petFloor, SOFA, staticPlace, type StaticPlace } from "../pet-place.ts";
+import { BED, isStaticPet, itemOf, petFloor, petSpots, placeAt, placeFloor, SOFA, subscribePets, type PetLive, type StaticPlace } from "../pet-place.ts";
+import type { PetPlace } from "../model.ts";
 import { disposeTree } from "./dispose.ts";
 
 /** The three.js classes the pets need, lent by the 3D bundle (it has no ready-made spheres or boxes: shapes are made here). */
@@ -40,6 +41,9 @@ export interface PetsContext {
   closedDoors?: () => ReadonlySet<string>;
   /** Height of the plan's surfaces (desk, table) at a point: a static pet put there sits on top. */
   surface?: (floor: Floor, x: number, z: number) => number;
+  /** Roaming pets (#337): Home Assistant's connection and the home shown, to follow where the server puts the pets. */
+  hass?: () => { connection: Parameters<typeof subscribePets>[0] } | undefined;
+  home?: () => string | null | undefined;
 }
 
 export interface PetsController {
@@ -213,7 +217,7 @@ interface Model {
   set?: (pose: CatPose, phase: number, headDown?: boolean) => void;
 }
 
-type CatPose = "walk" | "stand" | "sit" | "lie" | "curl";
+type CatPose = "walk" | "stand" | "sit" | "lie" | "curl" | "groom";
 
 /** A round, friendly animal in the colours of its fur: big head, dark eyes with a shine, a little nose. */
 export function buildModel(lib: FunLib, pet: Pet): Model {
@@ -572,7 +576,10 @@ function buildCat(lib: FunLib, pet: Pet): Model {
   const zzz = zzzCard(lib, by * 2 + hy * 2 + 0.12);
   root.add(zzz);
 
-  const set = (pose: CatPose, phase: number, headDown = false) => {
+  const set = (as: CatPose, phase: number, headDown = false) => {
+    // grooming (#337): sitting, the head bent to a raised front paw
+    const groom = as === "groom";
+    const pose = groom ? "sit" : as;
     const walking = pose === "walk";
     const upright = walking || pose === "stand";
     stand.visible = upright || pose === "lie";
@@ -590,16 +597,21 @@ function buildCat(lib: FunLib, pet: Pet): Model {
       if (pose === "sit") g.position.set(HIPS[i][0] * 0.7, hipY, sz0 + bx * 0.72);
       // lying: the front paws peek out in front, under the chest
       if (pose === "lie") g.position.set(HIPS[i][0] * 0.8, LIE + hipY, bz * 0.82);
+      if (groom && !i) {
+        g.position.y += 0.05;
+        g.rotation.x = -1.2;
+      }
     });
     // the head close on the shoulders: over the chest standing, on top of the pear sitting, resting curled up
     if (pose === "sit") head.position.set(0, hs + hy * 0.5, sz0 + bx * 0.35);
     else if (pose === "curl") head.position.set(-R * 0.36, hy * 0.92, R * 0.6);
     else head.position.set(0, cy + by * 0.85 + hy * 0.5, bz * 0.72);
     if (pose === "curl") head.rotation.set(0.25, 0.35, 0.15);
+    else if (groom) head.rotation.set(0.45, -0.5, 0);
     else head.rotation.set(headDown ? 0.5 : walking ? Math.sin(phase * 2) * 0.04 : pose === "lie" ? 0.06 : 0, 0, 0);
     tailGroup.rotation.set(0, 0, walking ? Math.sin(phase * 0.7) * 0.3 : 0.08);
     // eyes shut asleep, and a blink now and then while it walks
-    const closed = pose === "curl" || (walking && (phase * 0.035) % 1 < 0.06);
+    const closed = pose === "curl" || groom || (walking && (phase * 0.035) % 1 < 0.06);
     for (const o of open) o.visible = !closed;
     for (const o of shut) o.visible = closed;
   };
@@ -739,7 +751,7 @@ function spotsFor(floor: Floor, kind: Pet["kind"], map: FloorMap, base: (floor: 
   return out;
 }
 
-type Mode = "walk" | "rest" | "sleep" | "stand" | "climb";
+type Mode = "walk" | "rest" | "sleep" | "stand" | "climb" | "hold";
 
 /** The water of the pets pack's aquariums: its share of the item's width, depth and height (bottom, top). */
 const TANKS: Record<string, { w: number; d: number; y0: number; y1: number; fish: number }> = {
@@ -769,7 +781,7 @@ interface Animal {
   heading: number;
   path: Vec2[];
   /** Where the way ends: the spot (a cat then jumps up onto it). */
-  goal: Spot | null;
+  goal: (Spot & { hold?: boolean }) | null;
   /** The spot it lies on now (to jump down from it towards the front). */
   on: Spot | null;
   /** The favourite place it went to last (not the same one again right away). */
@@ -787,6 +799,9 @@ interface Animal {
   climb: { pts: [number, number, number][]; to: string } | null;
   /** A static pet (#17): where it stays and in which pose (it never walks). */
   still: StaticPlace | null;
+  /** Roaming pets (#337): where it is bound (its routine spot or trigger's place), and that place as a key. */
+  dest: { floorId: string; place: StaticPlace } | null;
+  want: string | null;
 }
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -860,9 +875,105 @@ export function startPets(ctx: PetsContext): PetsController {
     for (const x of animals) if (!x.climb) toFloor(x, x.floorId);
   };
 
+  // Roaming pets (#337): where the server puts each pet (known once its first message is here), and whether the
+  // screen asks for less motion (the pets are then put there, not walked)
+  let live: Record<string, PetLive> = {};
+  let liveKnown = false;
+  const reduced = !!globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  /** Where a pet should be: its first spot with roaming off, else the server's place (before it answers: the first spot). */
+  const wanted = (pet: Pet): PetPlace | null => {
+    const first = petSpots(pet)[0] ?? null;
+    if (plan.settings.pets?.roam === false || isStaticPet(pet)) return first;
+    return liveKnown ? (live[pet.id] ?? null) : first;
+  };
+  const keyOf = (p: PetPlace | null) => (p ? [p.floor_id, p.x, p.z, p.pose, p.rotation].join() : null);
+
+  /** Hold the pose where it is bound: put there at once (no frames after). */
+  const settle = (a: Animal) => {
+    const d = a.dest!;
+    if (d.floorId !== a.floorId) toFloor(a, d.floorId);
+    Object.assign(a, { still: d.place, pos: d.place.pos, y: d.place.y, heading: d.place.heading, path: [], goal: null, on: null, jump: null, stairs: null, climb: null, mode: "hold", until: Infinity });
+    posture(a, d.place);
+    viewer.invalidate();
+  };
+
+  /** Up or down a stair: the way to its foot (or top); false when there is none. */
+  const toStairs = (a: Animal, link: Link, up: boolean, start: Vec2): boolean => {
+    for (const c of up ? link.foot : link.top) {
+      if (a.map.blocked(c) || !a.map.roomAt(c)) continue;
+      const path = a.map.path(start, c);
+      if (!path) continue;
+      Object.assign(a, { stairsEntry: c, path, goal: null, stairs: { link, up }, mode: "walk" });
+      return true;
+    }
+    return false;
+  };
+
+  /** Off down from a sofa or bed first, towards its front. */
+  const jumpDown = (a: Animal) => {
+    if (a.on?.approach && a.y > 0.05) a.jump = { from: [a.pos[0], a.y, a.pos[1]], to: [a.on.approach[0], 0, a.on.approach[1]], t: 0, then: "walk" };
+    a.on = null;
+  };
+
+  /** On its way to where it is bound: to the stairs when that is on another floor, else there (jumping up at the end). */
+  const headTo = (a: Animal) => {
+    const d = a.dest!;
+    const start: Vec2 = a.on?.approach ?? a.pos;
+    if (d.floorId !== a.floorId) {
+      const elev = (id: string) => plan.floors.find((f) => f.id === id)?.elevation ?? 0;
+      const up = elev(d.floorId) > elev(a.floorId);
+      const fits = (l: Link) => (up ? l.lower === a.floorId : l.upper === a.floorId);
+      const link = links.find((l) => fits(l) && (up ? l.upper : l.lower) === d.floorId) ?? links.find(fits);
+      if (link && toStairs(a, link, up, start)) jumpDown(a);
+      else settle(a);
+      return;
+    }
+    const goal = d.place.pos;
+    const approach = d.place.y > 0.05 || a.map.blocked(goal) ? a.map.freeNear(goal) : null;
+    const end = approach ?? goal;
+    const path = Math.hypot(end[0] - start[0], end[1] - start[1]) < 0.05 ? [] : a.map.path(start, end);
+    if (!path) return settle(a);
+    Object.assign(a, { path, goal: { p: goal, y: d.place.y, approach, face: d.place.heading, sleep: false, hold: true }, stairs: null, mode: "walk" });
+    jumpDown(a);
+  };
+
+  /** Send a pet where it should be now: walked there, or put there (at once, or with less motion, or no way there). */
+  const go = (a: Animal, place: PetPlace | null, instant: boolean) => {
+    const key = keyOf(place);
+    if (key === a.want) return;
+    a.want = key;
+    const floor = place && placeFloor(plan, a.pet, place);
+    const spot = floor && viewer.floorMap.get(floor.id) && floorInfo(floor.id).rooms.length ? placeAt(floor, place, ctx.surface) : null;
+    if (!spot) {
+      // nowhere to be: it wanders as before (in place, with roaming off or less motion)
+      if (!a.dest) return;
+      a.dest = null;
+      if (plan.settings.pets?.roam === false || reduced) return;
+      Object.assign(a, { still: null, mode: "rest", until: 0 });
+      return wake();
+    }
+    a.dest = { floorId: floor!.id, place: spot };
+    if (instant || reduced) return settle(a);
+    if (a.still) {
+      // up on something: down to the floor in front first
+      Object.assign(a, { pos: a.still.pos, y: a.still.y, on: a.still.y > 0.05 ? { p: a.still.pos, y: a.still.y, approach: a.map.freeNear(a.still.pos), face: null, sleep: false } : null, still: null });
+    }
+    if (!a.climb && !a.jump) Object.assign(a, { mode: "rest", until: 0 });
+    wake();
+  };
+
+  /** Frames again (a pet has somewhere to go). */
+  const wake = () => {
+    cancelAnimationFrame(raf);
+    clearTimeout(timer);
+    last = 0;
+    raf = requestAnimationFrame(tick);
+  };
+
   /** What next: at night to a sleeping place, by day to a favourite place or anywhere; then rest there a while. */
   const decide = (a: Animal, now: number) => {
     checkDoors();
+    if (a.dest) return headTo(a);
     const night = ctx.night();
     const sleepers = a.spots.filter((s) => s.sleep);
     const choices: Spot[] = night && sleepers.length ? sleepers : a.spots;
@@ -874,26 +985,7 @@ export function startPets(ctx: PetsContext): PetsController {
       const link = here[Math.floor(Math.random() * here.length)];
       const up = link.lower === a.floorId;
       // the first way on that works: in front of the stair, else from either side
-      let path: Vec2[] | null = null;
-      let entry: Vec2 | null = null;
-      for (const c of up ? link.foot : link.top) {
-        if (a.map.blocked(c) || !a.map.roomAt(c)) continue;
-        path = a.map.path(start, c);
-        if (path) {
-          entry = c;
-          break;
-        }
-      }
-      if (path && entry) {
-        a.stairsEntry = entry;
-        a.path = path;
-        a.goal = null;
-        a.stairs = { link, up };
-        a.mode = "walk";
-        if (a.on?.approach && a.y > 0.05) a.jump = { from: [a.pos[0], a.y, a.pos[1]], to: [a.on.approach[0], 0, a.on.approach[1]], t: 0, then: "walk" };
-        a.on = null;
-        return;
-      }
+      if (toStairs(a, link, up, start)) return jumpDown(a);
     }
     for (let tries = 0; tries < 6; tries++) {
       const fav = choices.length && (night || Math.random() < 0.45) ? choices[Math.floor(Math.random() * choices.length)] : null;
@@ -907,9 +999,7 @@ export function startPets(ctx: PetsContext): PetsController {
       if (fav) a.last = fav;
       a.stairs = null;
       a.mode = "walk";
-      if (a.on?.approach && a.y > 0.05) a.jump = { from: [a.pos[0], a.y, a.pos[1]], to: [a.on.approach[0], 0, a.on.approach[1]], t: 0, then: "walk" };
-      a.on = null;
-      return;
+      return jumpDown(a);
     }
     a.mode = night ? "sleep" : "rest";
     a.until = now + rnd(20, 60) * 1000;
@@ -936,6 +1026,9 @@ export function startPets(ctx: PetsContext): PetsController {
       l.scale.y = lying ? 0.08 : 1;
     });
     const hop = a.pet.kind === "rabbit" && moving ? Math.abs(Math.sin(a.phase)) * 0.07 : 0;
+    // (a held pose may have tilted the body and turned the head)
+    a.model.body.rotation.x = 0;
+    a.model.head.rotation.y = 0;
     a.model.body.position.y = (lying ? -(L.leg + L.hi * 0.12) : 0) + hop;
     a.model.head.rotation.x = a.mode === "sleep" ? 0.45 : a.mode === "stand" ? 0.5 : lying ? 0.12 : Math.sin(a.phase * 2) * 0.04;
     if (lying) a.model.tail.rotation.set(-1.45, 0, 0.9);
@@ -944,7 +1037,8 @@ export function startPets(ctx: PetsContext): PetsController {
   };
 
   /**
-   * A static pet's pose, held: sitting upright on its haunches, lying like a loaf, or curled up asleep (head tucked,
+   * A held pose (a static pet, a pet at its routine spot or trigger's place): sitting upright on its haunches,
+   * grooming (sitting, the head bent to a raised paw), standing, lying like a loaf, or curled up asleep (head tucked,
    * eyes shut, the tail round it).
    */
   const posture = (a: Animal, s: StaticPlace) => {
@@ -954,10 +1048,13 @@ export function startPets(ctx: PetsContext): PetsController {
     m.root.rotation.y = s.heading;
     m.zzz.visible = false;
     if (m.set) {
-      m.set(s.pose === "sit" ? "sit" : s.pose === "curl" ? "curl" : "lie", 0);
+      m.set(s.pose === "lie" ? "lie" : (s.pose ?? "sit"), 0);
       return;
     }
-    if (s.pose === "sit") {
+    const groom = s.pose === "groom";
+    // standing: as it stands still between its walks
+    if (s.pose === "stand") return pose(Object.assign(a, { pos: s.pos, y: s.y, heading: s.heading }));
+    if (s.pose === "sit" || groom) {
       // the body tilts up at the front round its feet, the rear down on the floor; front legs straight, rear tucked
       const tilt = -0.5;
       const ry = L.leg + L.hi * 0.2;
@@ -965,12 +1062,12 @@ export function startPets(ctx: PetsContext): PetsController {
       m.body.rotation.x = tilt;
       m.body.position.y = -(ry * Math.cos(tilt) - rz * Math.sin(tilt));
       m.legs.forEach((l, i) => {
-        l.rotation.x = i < 2 ? -tilt : 0;
+        l.rotation.x = i < 2 ? -tilt - (groom && !i ? 1 : 0) : 0;
         l.scale.y = i < 2 ? 1 : 0.08;
       });
-      m.head.rotation.set(-tilt * 0.8, 0, 0);
+      m.head.rotation.set(-tilt * 0.8 + (groom ? 0.5 : 0), groom ? -0.6 : 0, 0);
       m.tail.rotation.set(-1.5, 0, 0.7);
-      for (const e of m.eyes) e.scale.y = 1;
+      for (const e of m.eyes) e.scale.y = groom ? 0.12 : 1;
       return;
     }
     const curl = s.pose === "curl";
@@ -1008,6 +1105,12 @@ export function startPets(ctx: PetsContext): PetsController {
     }
     const s = a.goal;
     a.goal = null;
+    if (s?.hold) {
+      // at its routine spot or trigger's place: up onto it from the front, then holding its pose
+      if (s.approach) a.jump = { from: [a.pos[0], a.y, a.pos[1]], to: [s.p[0], s.y, s.p[1]], t: 0, then: "hold" };
+      else settle(a);
+      return;
+    }
     if (s?.visit) {
       a.mode = "stand";
       a.until = now + rnd(4, 9) * 1000;
@@ -1042,6 +1145,10 @@ export function startPets(ctx: PetsContext): PetsController {
       if (k >= 1) {
         a.y = j.to[1];
         a.jump = null;
+        if (j.then === "hold") {
+          settle(a);
+          return true;
+        }
         a.mode = j.then;
         // up there: turn round to face the room
         if (j.then !== "walk" && a.on?.face != null) a.heading = a.on.face;
@@ -1121,10 +1228,10 @@ export function startPets(ctx: PetsContext): PetsController {
     if (active && viewer.low) timer = setTimeout(() => (raf = requestAnimationFrame(tick)), 180);
     else if (active) raf = requestAnimationFrame(tick);
     else {
-      // all of them rest: wake up when the first one wants to go on
-      const wait = Math.max(500, Math.min(...animals.map((a) => a.until - performance.now()), 60000));
+      // all of them rest: wake up when the first one wants to go on (none, when every one holds its pose: #337)
+      const resting = animals.filter((a) => !a.still);
       last = 0;
-      timer = setTimeout(() => (raf = requestAnimationFrame(tick)), wait);
+      if (resting.length) timer = setTimeout(() => (raf = requestAnimationFrame(tick)), Math.max(500, Math.min(...resting.map((a) => a.until - performance.now()), 60000)));
     }
   };
 
@@ -1211,7 +1318,9 @@ export function startPets(ctx: PetsContext): PetsController {
     for (const pet of pets) {
       // a pet that went up or down the stairs stays on that floor
       const prev = before.get(pet.id);
-      const still = isStaticPet(pet);
+      const place = wanted(pet);
+      // with roaming off or less motion a pet without spots stays at one of its places
+      const still = isStaticPet(pet) || b.settings.pets?.roam === false || reduced;
       const floor = (!still && prev && !prev.still && prev.pet.floor_id === pet.floor_id ? b.floors.find((f) => f.id === prev.floorId) : undefined) ?? floorFor(b, pet);
       if (!floor || !viewer.floorMap.get(floor.id) || !floorInfo(floor.id).rooms.length) continue;
       const old = prev;
@@ -1237,12 +1346,23 @@ export function startPets(ctx: PetsContext): PetsController {
         stairsEntry: null,
         climb: null,
         still: null,
+        dest: null,
+        want: null,
       };
       toFloor(a, floor.id);
+      if (place) {
+        // its routine spot or trigger's place (#337): there at once
+        go(a, place, true);
+        if (a.dest) {
+          animals.push(a);
+          continue;
+        }
+      }
       if (still) {
         // a static pet: at its spot, else (none set yet) at one of its own places or anywhere in a room
         const own = a.spots.find((s) => s.sleep && !s.approach) ?? a.spots.find((s) => s.sleep);
-        a.still = staticPlace(floor, pet, ctx.surface) ?? (own ? { pos: own.p, y: own.y, heading: own.face ?? 0, pose: pet.pose ?? "sit" } : { pos: somewhere(a), y: 0, heading: 0, pose: pet.pose ?? "sit" });
+        // (one with a spot is placed above, #337)
+        a.still = own ? { pos: own.p, y: own.y, heading: own.face ?? 0, pose: pet.pose ?? "sit" } : { pos: somewhere(a), y: 0, heading: 0, pose: pet.pose ?? "sit" };
         a.pos = a.still.pos;
         a.y = a.still.y;
         a.until = Infinity;
@@ -1262,6 +1382,38 @@ export function startPets(ctx: PetsContext): PetsController {
     if (animals.some((a) => !a.still)) raf = requestAnimationFrame(tick);
   };
 
+  // where the server puts the pets (#337): followed for the home shown; an older Home 3D refuses it, and the pets
+  // then stay on their first spots
+  let sub: Promise<() => Promise<void>> | null = null;
+  let subHome: string | null | undefined;
+  const unfollow = () => void sub?.then((u) => u()).catch(() => undefined);
+  const follow = () => {
+    const conn = ctx.hass?.()?.connection;
+    const home = ctx.home?.();
+    if (!conn || (sub && home === subHome)) return;
+    unfollow();
+    subHome = home;
+    liveKnown = false;
+    sub = subscribePets(conn, home, (pets) => {
+      const first = !liveKnown;
+      live = pets;
+      liveKnown = true;
+      for (const a of animals) go(a, wanted(a.pet), first);
+    });
+    sub.catch(() => undefined);
+  };
+
   update(ctx.building, ctx.pets);
-  return { update, dispose: clear };
+  follow();
+  return {
+    update(b, pets) {
+      update(b, pets);
+      follow();
+    },
+    dispose() {
+      clear();
+      unfollow();
+      sub = null;
+    },
+  };
 }

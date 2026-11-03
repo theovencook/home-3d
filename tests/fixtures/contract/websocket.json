@@ -1,6 +1,6 @@
 {
-  "protocol": 3,
-  "plan_version": 2,
+  "protocol": 4,
+  "plan_version": 3,
   "commands": {
     "home_3d/backup/export": {
       "required": [],
@@ -296,6 +296,12 @@
         "index_url",
         "time",
         "weekday"
+      ]
+    },
+    "home_3d/pets/subscribe": {
+      "required": [],
+      "optional": [
+        "home_id"
       ]
     },
     "home_3d/timetravel/history": {

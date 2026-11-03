@@ -124,8 +124,39 @@ def lights_to_lamps(plan: dict[str, Any]) -> dict[str, Any]:
     return {**plan, "floors": migrated} if changed else plan
 
 
+# ---------------------------------------------------------------------------- 2 -> 3: a pet's spot becomes its routine
+
+# roaming pets (#337): a pet's places are a list (`spots`, its daily routine); a static pet (#17) gets its spot as the
+# first (with roaming off, or static, a pet stays on its first spot). A roaming pet that kept a spot from before keeps
+# roaming freely: its spot stays in the old fields only. The old fields stay as they were (a Home 3D from before reads
+# them).
+_PET_PLACE = ("floor_id", "x", "z", "pose", "rotation")
+
+
+def _has_spot(pet: Any) -> bool:
+    if not isinstance(pet, dict) or pet.get("spots") is not None or pet.get("static") is not True:
+        return False
+    return all(isinstance(pet.get(k), (int, float)) and not isinstance(pet.get(k), bool) for k in ("x", "z"))
+
+
+def pet_spots(plan: dict[str, Any]) -> dict[str, Any]:
+    """Version 2 -> 3: a pet's own spot (x, z, pose, facing) becomes the first spot of its routine."""
+    settings = plan.get("settings")
+    pets = settings.get("pets") if isinstance(settings, dict) else None
+    pet_list = pets.get("list") if isinstance(pets, dict) else None
+    if not isinstance(settings, dict) or not isinstance(pets, dict) or not isinstance(pet_list, list):
+        return plan
+    if not any(map(_has_spot, pet_list)):
+        return plan
+    moved = [
+        {**pet, "spots": [{"id": "spot_1", **{k: pet.get(k) for k in _PET_PLACE}}]} if _has_spot(pet) else pet
+        for pet in pet_list
+    ]
+    return {**plan, "settings": {**settings, "pets": {**pets, "list": moved}}}
+
+
 # MIGRATIONS[n - 1] turns a plan of version n into one of version n + 1
-MIGRATIONS: tuple[Callable[[dict[str, Any]], dict[str, Any]], ...] = (lights_to_lamps,)
+MIGRATIONS: tuple[Callable[[dict[str, Any]], dict[str, Any]], ...] = (lights_to_lamps, pet_spots)
 assert len(MIGRATIONS) == PLAN_VERSION - 1, "every plan version but the first has its migration"
 
 
