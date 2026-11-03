@@ -74,7 +74,13 @@ var Me=Symbol.for("home-3d.custom-elements");function se(){let i=globalThis;retu
           </p>`:m}`}notifySelect(e,t){let n=this.hass.services,r=Object.keys(n?.notify??{}).filter(o=>o.startsWith("mobile_app_"));return r.length?u`<select title=${this.t.ring_hint} @change=${o=>t(o.target.value||null)}>
       <option value="" ?selected=${!e}>🔔 ${this.t.ring}: ${this.t.none}</option>
       ${r.map(o=>u`<option value=${`notify.${o}`} ?selected=${e===`notify.${o}`}>🔔 ${o.replace(/^mobile_app_/,"").replace(/_/g," ")}</option>`)}
-    </select>`:m}unheardBadge(e){let t=this._live;if(!t?.running)return m;let n=t.devices.find(r=>r.id===e);return!n||n.room||n.last_seen&&Date.now()/1e3-n.last_seen<120?m:u`<small class="warn" title=${this.t.unheard_hint}>${this.t.unheard}</small>`}addDevice(e,t,n=null){let r=`${t.kind}_${t.key.replace(/[^a-z0-9]/gi,"").slice(-10).toLowerCase()}`;e.devices.some(o=>o.id===r)||this.save({devices:[...e.devices,{...t,id:r,person:n,icon:null}]})}renderDevices(e){let t=this.t,n=s=>e.devices.some(a=>a.key.toLowerCase()===s.toLowerCase()),r=(s,a)=>{this.save({devices:e.devices.map(l=>l.id===s?{...l,...a}:l)})},o=rt(this.hass);return u`<p>${t.devices_intro}</p>
+    </select>`:m}phoneGuide(e,t=!1,n){let r=this.t,o=e==="android",s=o?[r.guide_android_1,r.guide_android_2,r.guide_android_3,r.guide_android_4]:[r.guide_iphone_1,r.guide_iphone_2,r.guide_iphone_3,r.guide_iphone_4],a=o?"https://companion.home-assistant.io/docs/core/sensors/#bluetooth-sensors":"https://www.home-assistant.io/integrations/private_ble_device/";return u`<details class="guide" ?open=${t}>
+      <summary>${o?r.guide_android_title:r.guide_iphone_title}</summary>
+      <ol>
+        ${s.map(l=>u`<li class=${n&&l!==n?"dim":""}>${l}</li>`)}
+      </ol>
+      <a href=${a} target="_blank" rel="noopener noreferrer">${o?r.guide_android_link:r.guide_iphone_link}</a>
+    </details>`}unheardBadge(e,t){let n=this._live;if(!n?.running)return m;let r=n.devices.find(o=>o.id===e);return!r||r.room||r.last_seen&&Date.now()/1e3-r.last_seen<120?m:u`<small class="warn" title=${this.t.unheard_hint}>${this.t.unheard}</small>${this.phoneGuide(t==="irk"?"iphone":"android")}`}addDevice(e,t,n=null){let r=`${t.kind}_${t.key.replace(/[^a-z0-9]/gi,"").slice(-10).toLowerCase()}`;e.devices.some(o=>o.id===r)||this.save({devices:[...e.devices,{...t,id:r,person:n,icon:null}]})}renderDevices(e){let t=this.t,n=s=>e.devices.some(a=>a.key.toLowerCase()===s.toLowerCase()),r=(s,a)=>{this.save({devices:e.devices.map(l=>l.id===s?{...l,...a}:l)})},o=rt(this.hass);return u`<p>${t.devices_intro}</p>
       ${e.devices.length?u`<ul class="list">
             ${e.devices.map(s=>u`<li>
                 <input .value=${s.name} @change=${a=>r(s.id,{name:a.target.value})} />
@@ -84,19 +90,21 @@ var Me=Symbol.for("home-3d.custom-elements");function se(){let i=globalThis;retu
                   ><input type="checkbox" .checked=${!!s.wearable} @change=${a=>r(s.id,{wearable:a.target.checked})} />⌚
                   ${t.worn}</label
                 >
-                ${this.unheardBadge(s.id)}
+                ${this.unheardBadge(s.id,s.kind)}
                 <button @click=${()=>{this.save({devices:e.devices.filter(a=>a.id!==s.id)})}}>${t.remove}</button>
               </li>`)}
           </ul>`:m}
       ${o.length?u`<h4>📱 ${t.app_title}</h4>
             <ul class="list">
-              ${o.map(s=>{let a=[s.state!=="Transmitting"?t.app_off:null,s.power==="ultraLow"||s.power==="low"?t.app_power:null,s.mode==="lowPower"?t.app_mode:null].filter(l=>!!l);return u`<li>
+              ${o.map(s=>{let a=[s.state!=="Transmitting"?{text:t.app_off,step:t.guide_android_2}:null,s.power==="ultraLow"||s.power==="low"?{text:t.app_power,step:t.guide_android_3}:null,s.mode==="lowPower"?{text:t.app_mode,step:t.guide_android_4}:null].filter(l=>!!l);return u`<li>
                   <span
-                    ><b>${s.name}</b>${a.map(l=>u`<small class="warn">⚠ ${l}</small>`)}</span
+                    ><b>${s.name}</b>${a.map(l=>u`<small class="warn">⚠ ${l.text}</small>`)}${a.length?this.phoneGuide("android",!0,a[0].step):m}</span
                   >
                   ${n(s.key)?u`<small>${t.added}</small>`:u`<button @click=${()=>this.addDevice(e,{name:s.name,kind:"ibeacon",key:s.key},s.person)}>${t.add}</button>`}
                 </li>`})}
             </ul>`:m}
+      ${o.length?m:this.phoneGuide("android")}
+      ${this.phoneGuide("iphone")}
       ${this.renderKeyHelper(e)}
       <details
         class="pbd"
@@ -314,6 +322,24 @@ var Me=Symbol.for("home-3d.custom-elements");function se(){let i=globalThis;retu
     .hint {
       opacity: 0.8;
       font-size: 13px;
+    }
+    details.guide {
+      font-size: 13px;
+      margin: 4px 0;
+    }
+    details.guide summary {
+      cursor: pointer;
+      opacity: 0.9;
+    }
+    details.guide ol {
+      margin: 4px 0;
+      padding-left: 20px;
+    }
+    details.guide li.dim {
+      opacity: 0.65;
+    }
+    details.guide a {
+      color: #37e0ff;
     }
     .warn {
       display: block;
