@@ -1506,6 +1506,8 @@ export class Floorplan3dPanel extends LitElement {
           @clean-toggle=${() => {
             this._clean = !this._clean;
             prefs.set("clean", this._clean ? "1" : "0");
+            // the Rooms list and the search close with the bar they hang from, so they do not come back open (#317)
+            if (this._clean) this._roomsOpen = this._findOpen = false;
           }}
           .weather=${this._weather}
           .flows=${this._flows}
@@ -2093,6 +2095,10 @@ export class Floorplan3dPanel extends LitElement {
       }
       .fp3d-clean fp3d-view3d {
         --fp3d-bottom-inset: 0px;
+      }
+      /* the floor bar goes with the other controls (#317) */
+      .fp3d-clean .fp3d-nav {
+        display: none;
       }
       .fp3d-furnish-bar {
         bottom: 68px;

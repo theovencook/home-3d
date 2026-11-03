@@ -7,6 +7,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 - The power-flow and hologram switches moved from the 3D view's energy row into the View panel (Show), under the same device keys, so a choice made before still holds (#315).
 - Energy values no longer grow or react to a click; they only lift a hair when hovered (#316).
+- Hiding the controls (the eye) hides the floor bar with them (Whole house, floors, Rooms, search); the Rooms list and the search no longer come back open (#317).
 
 ## Home 3D 0.2.1 (2 November 2026)
 
