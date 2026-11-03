@@ -175,8 +175,8 @@ export interface Setting<V = unknown> {
   permission: Permission;
   label: TextKey;
   hint?: TextKey;
-  /** A second sentence after the hint, shown only when this gives its key (the feet-and-inches typing tip, #324). */
-  hintMore?(env: SettingsEnv): TextKey | null;
+  /** A second sentence after the hint, shown only while lengths show in feet and inches (the typing tip, #324). */
+  hintImperial?: TextKey;
   /** Extra words search finds it by ("dark" finds the look). */
   keywords?: string[];
   control: Control;
@@ -474,7 +474,7 @@ const GENERAL: Setting[] = [
     permission: "editor",
     label: "units",
     hint: "units_hint",
-    hintMore: (env) => (planUnit(env) === "imperial" ? "units_type_hint" : null),
+    hintImperial: "units_tip",
     keywords: ["feet", "inches", "metres", "meters", "imperial", "metric"],
     control: {
       kind: "segment",
@@ -509,7 +509,7 @@ const GENERAL: Setting[] = [
     permission: "editor",
     label: "terrain_level",
     hint: "terrain_hint",
-    keywords: ["ground", "cellar", "basement", "hill", "earth", "lawn"],
+    keywords: ["ground", "cellar", "basement", "hill"],
     control: { kind: "number", step: 0.05, min: -20, max: 20, unit: "m", clearable: true, length: true },
     default: -0.2,
     read: (env) => env.building?.settings.terrain?.level ?? null,
@@ -951,7 +951,6 @@ const HOUSEHOLD: Setting[] = [
     scope: "house",
     permission: "editor",
     label: "bin_next_only",
-    hint: "bin_next_only_hint",
     keywords: ["bin", "tag", "label", "pickup"],
     control: { kind: "switch" },
     default: false,

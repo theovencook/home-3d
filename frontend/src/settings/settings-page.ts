@@ -516,7 +516,7 @@ export class SettingsPage extends LitElement {
 
   /** Whose a row is, in words, when it differs from its page's sentence (or on a search hit, where there is no page). */
   private rule(s: Setting, hit: boolean, page: { side: Audience; install: boolean; admin: boolean }): TextKey | null {
-    if (s.control.kind === "note" || s.control.kind === "info") return null;
+    if (["note", "info"].includes(s.control.kind)) return null;
     if (hit) return s.scope === "device" ? "st_row_device" : s.scope === "install" ? "st_row_install" : "st_row_home";
     if (s.scope === "device" && page.side !== "device") return "st_row_device";
     if (s.scope === "house" && page.side === "device") return "st_row_home";
@@ -585,15 +585,16 @@ export class SettingsPage extends LitElement {
     // the start view's two buttons and its state line go under the label, so the label keeps its width (#246)
     // a segment of three or more choices and a select with long choices go under their label too, so the hint keeps its width (#256)
     const c = s.control;
-    const wide = (c.kind === "select" && c.options(this.env).some((o) => this.label(o).length > 24)) || (c.kind === "segment" && this.options(c).length > 2) || s.control.kind === "embed" || s.control.kind === "homes" || s.control.kind === "list" || s.control.kind === "checks" || s.control.kind === "entity" || (s.control.kind === "action" && s.control.action === "start_view");
+    const wide = (c.kind === "select" && c.options(this.env).some((o) => this.label(o).length > 24)) || (c.kind === "segment" && this.options(c).length > 2) || c.kind === "embed" || c.kind === "homes" || c.kind === "list" || c.kind === "checks" || c.kind === "entity" || (c.kind === "action" && c.action === "start_view");
     const rule = showRule ? this.rule(s, hit, page) : null;
+    const more = planUnit(this.env) === "imperial" && s.hintImperial;
     return html`<div
-      class="st-row st-k-${s.control.kind} ${s.hint || rule ? "" : "st-nohint"} ${wide ? "st-row-wide" : ""} ${(hit && index === cursor) || this._flash === s.id ? "st-hit" : ""} ${hit && index === cursor ? "st-active" : ""}"
+      class="st-row st-k-${c.kind} ${s.hint || rule ? "" : "st-nohint"} ${wide ? "st-row-wide" : ""} ${(hit && index === cursor) || this._flash === s.id ? "st-hit" : ""} ${hit && index === cursor ? "st-active" : ""}"
       data-id=${s.id}
       id=${index >= 0 ? `st-hit-${index}` : nothing}
     >
-      ${s.id === "editors" ? nothing : html`<div class="st-lbl"><span class="st-name">${s.control.kind === "number" && s.control.length ? lengthLabel(this.env, this.tr(s.label)) : this.tr(s.label)}</span></div>`}
-      ${s.hint || rule ? html`<p class="st-hint">${s.hint ? this.tr(s.hint) : nothing}${s.hintMore?.(this.env) ? html` ${this.tr(s.hintMore(this.env)!)}` : nothing}${rule ? html`<span class="st-rule">${this.tr(rule)}</span>` : nothing}</p>` : nothing}
+      ${s.id === "editors" ? nothing : html`<div class="st-lbl"><span class="st-name">${c.kind === "number" && c.length ? lengthLabel(this.env, this.tr(s.label)) : this.tr(s.label)}</span></div>`}
+      ${s.hint || rule ? html`<p class="st-hint">${s.hint ? this.tr(s.hint) : nothing}${more ? html` ${this.tr(more)}` : nothing}${rule ? html`<span class="st-rule">${this.tr(rule)}</span>` : nothing}</p>` : nothing}
       <div class="st-ctl">${this.renderControl(s, s.control, !may)}</div>
     </div>`;
   }
@@ -654,7 +655,7 @@ export class SettingsPage extends LitElement {
             min=${c.min ?? ""}
             max=${c.max ?? ""}
             .value=${shown}
-            placeholder=${c.empty ? this.tr(c.empty) : c.clearable ? (c.length && typeof s.default === "number" ? shownLength(env, s.default) : String(s.default ?? "")) : ""}
+            placeholder=${c.empty ? this.tr(c.empty) : c.clearable ? String(s.default ?? "") : ""}
             aria-label=${aria}
             ?disabled=${disabled}
             @change=${(e: Event) => {

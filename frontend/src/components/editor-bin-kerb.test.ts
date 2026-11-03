@@ -72,7 +72,6 @@ test("the two bin tag settings say what changes on the view (#328)", async () =>
   const next = SETTINGS.find((x) => x.id === "household.bin_next_only")!;
   const days = SETTINGS.find((x) => x.id === "household.bin_days")!;
   assert.equal(en[next.label], "Tag only the bins collected next");
-  assert.ok(next.hint && /every bin wears a tag/.test(en[next.hint]));
   assert.equal(en[days.label], "Show a bin's tag from this many days before pickup");
   assert.ok(/three days before pickup/.test(en[days.hint!]));
 });

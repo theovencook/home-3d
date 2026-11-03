@@ -350,14 +350,16 @@ test("no This home page holds a device setting; only link rows point to where on
   }
 });
 
-test("the feet-and-inches typing tip shows only when lengths show in feet and inches (#324)", () => {
+test("the feet-and-inches typing tip shows only when lengths show in feet and inches (#324)", async () => {
+  const { planUnit } = await import("./registry.ts");
   const e = env();
   const s = settingById("units")!;
-  assert.equal(s.hintMore?.(e), null);
+  assert.equal(s.hintImperial, "units_tip");
   const metric = { ...e, building: s.write!(e, "metric") as Building };
-  assert.equal(s.hintMore?.(metric), null);
+  assert.equal(planUnit(metric), "metric");
+  assert.equal(planUnit(e), "metric");
   const imperial = { ...e, building: s.write!(e, "imperial") as Building };
-  assert.equal(s.hintMore?.(imperial), "units_type_hint");
+  assert.equal(planUnit(imperial), "imperial");
   assert.ok(!(englishTable() as Record<string, string>)[s.hint!].includes("8' 2"));
 });
 
