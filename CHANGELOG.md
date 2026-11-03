@@ -6,6 +6,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 ## Unreleased
 
 - Set up locating, step 2 Devices: step-by-step guides for Android (Home Assistant app BLE Transmitter: on, power High, Low latency) and iPhone or Apple Watch (key helper, Private BLE Device), each with a link to the official Home Assistant docs and shown next to every warning (#329).
+- Every icon field (device, item and own-button icons) has an icon picker with a search filter: Home Assistant's icon picker where the page has it, otherwise a grid of icons with search; a typed name still works (#327).
 
 ## Home 3D 0.2.1 (2 November 2026)
 

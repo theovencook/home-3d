@@ -2474,6 +2474,8 @@
  "floor_shift_all_hint": "Verschieben und Drehen wirken auf alle Etagen samt Dachflächen, Außenflächen, Leitungen, Zähler und Hologramm – das ganze Haus wandert als Ganzes.",
  "floor_turn_hint": "Dreht alles auf der Etage um 90° im Uhrzeigersinn um die Mitte der Räume – wenn eine Etage verdreht gezeichnet wurde. Dreimal = 270°.",
  "marker_icon_hint": "Name eines Material-Design-Icons wie bei Home Assistant, z. B. mdi:thermometer oder mdi:water-alert. Leer = Symbol nach Geräteart.",
+ "icon_search": "Icons suchen",
+ "icon_none": "Kein Icon dieses Namens. Der Name lässt sich oben trotzdem eintippen.",
  "furn_power": "Leistungssensor (W)",
  "furn_meter_reading": "Zählerstand (m³ oder Liter)",
  "energy_circuit": "Hängt am Stromkreis",

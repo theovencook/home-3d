@@ -2482,6 +2482,8 @@ const en = {
   floor_shift_all_hint: "Shift and turn act on every floor with the roof sections, outdoor areas, cables, meter and hologram – the whole house moves as one.",
   floor_turn_hint: "Turns everything on the floor by 90° clockwise about the middle of its rooms – when a floor was drawn the wrong way round. Three times = 270°.",
   marker_icon_hint: "The name of a Material Design icon as in Home Assistant, e.g. mdi:thermometer or mdi:water-alert. Empty = the icon of the device kind.",
+  icon_search: "Search icons",
+  icon_none: "No icon of that name. You can still type it above.",
   furn_power: "Power sensor (W)",
   furn_meter_reading: "Meter reading (m³ or litres)",
   energy_circuit: "Inside circuit",
