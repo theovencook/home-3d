@@ -12,6 +12,8 @@ export interface PackUpdateSettings {
   time: string;
   /** The day of a weekly check, 0 = Monday (a monthly check runs on the 1st). */
   weekday: number;
+  /** Where the Library's Browse tab gets its pack list (#336); "" is Home 3D's own. Missing from an older backend. */
+  index_url?: string;
 }
 
 export interface PackUpdateState {

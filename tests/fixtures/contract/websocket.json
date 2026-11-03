@@ -1,5 +1,5 @@
 {
-  "protocol": 2,
+  "protocol": 3,
   "plan_version": 2,
   "commands": {
     "home_3d/backup/export": {
@@ -226,6 +226,12 @@
         "pack"
       ]
     },
+    "home_3d/packs/index": {
+      "required": [],
+      "optional": [
+        "refresh"
+      ]
+    },
     "home_3d/packs/install_url": {
       "required": [
         "url"
@@ -287,6 +293,7 @@
       "optional": [
         "auto_update",
         "frequency",
+        "index_url",
         "time",
         "weekday"
       ]

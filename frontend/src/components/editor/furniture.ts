@@ -21,7 +21,7 @@ import { furnitureName } from "../../furniture-names.ts";
 import { furnitureSize, isElectric, isRobotVacuum, packItemName, packName, packType, type FurniturePack } from "../../packs.ts";
 import { MAX_MOUNT_Y, round, isEnergyDevice, EN_HASS, type PlaceTarget } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
-import { need, loadLibrary } from "./lazy.ts";
+import { need, loadLibrary, loadPackBrowser } from "./lazy.ts";
 
 /** FurniturePart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class FurniturePart {
@@ -517,7 +517,13 @@ export class FurniturePart {
             <button class="fp3d-btn" @click=${() => this.cancelPlacing()}>${this.t("cancel")}</button>
           </div>`
         : nothing}
-      <fp3d-library
+      ${this.isEditor
+        ? html`<div class="fp3d-seg fp3d-lib-tabs" role="tablist">
+            <button role="tab" aria-selected=${!this._libBrowse} aria-pressed=${!this._libBrowse} @click=${() => (this._libBrowse = false)}>${this.t("pb_tab_items")}</button>
+            <button role="tab" aria-selected=${this._libBrowse} aria-pressed=${this._libBrowse} @click=${() => (this._libBrowse = true)}>${this.t("pb_tab_browse")}</button>
+          </div>`
+        : nothing}
+      ${this._libBrowse && this.isEditor ? this.renderPackBrowser() : html`<fp3d-library
         .entries=${this.libraryEntries(lang)}
         .language=${lang}
         .roomHint=${room ? roomKindOf(room.name) : null}
@@ -531,13 +537,19 @@ export class FurniturePart {
           if (e.detail.type && e.detail.element) void this.showPreview(e.detail.type, e.detail.element);
           else this._preview = null;
         }}
-      ></fp3d-library>
+      ></fp3d-library>`}
     </section>
     <div class="fp3d-ext-teaser">
       <b>${this.t("ext_teaser_title")}</b>
       <span class="fp3d-sub">${this.t("ext_teaser_text")}</span>
       <button class="fp3d-btn fp3d-primary" @click=${() => this.dispatchEvent(new CustomEvent("open-extensions", { bubbles: true, composed: true }))}>${this.t("ext_open")}</button>
     </div>`;
+  }
+
+  /** The Library's Browse tab (#336), a chunk of its own: the packs the curated index lists, to install or update. */
+  renderPackBrowser(this: Fp3dEditor) {
+    need(loadPackBrowser);
+    return html`<fp3d-pack-browser .hass=${this.hass} .packs=${this.packs ?? []} .picture=${this.indexPicture}></fp3d-pack-browser>`;
   }
 
   /** Picture of an item, drawn by the 3D bundle and shown left of its button. */

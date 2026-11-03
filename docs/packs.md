@@ -823,7 +823,8 @@ use, and the packs repository is a generated copy so other installs can add or u
    packs, their install URLs, licence), `NOTICE` (with the IKEA trademark note while the IKEA UK pack is in) and
    `LICENSE`. A pack that was retired (all its items are in `moved_items.json` and its folder is gone, like the former
    core pack) has its folder in the checkout replaced by a README pointing at the packs its items went to. Git data
-   and folders of other packs in the checkout are not touched.
+   and folders of other packs in the checkout are not touched. Last it rebuilds `index.json` (the Browse packs list,
+   see below) with the checkout's `tools/build_index.py`, keeping its community entries.
 3. Commit and push the checkout. Every pack that changed needs a higher `release` in its `pack.json` (raise it in
    this repository; the script names the packs that need one): the update check compares each pack's own
    `release`, so a pack whose release did not move shows no update.
@@ -837,6 +838,37 @@ Assistant's packages, so run it in the test virtualenv).
 Each pack installs by its folder URL, for example
 `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.ikea-uk`. The repository URL alone is refused
 with the list of folders to pick from.
+
+## Browse packs (the pack index)
+
+The editor's Library has two tabs: **Items** (what can be placed) and **Browse packs** (editors only). Browse packs
+lists the packs in `index.json` of [`theovencook/home-3d-packs`](https://github.com/theovencook/home-3d-packs): our
+packs and community packs added there by pull request (its `CONTRIBUTING.md` says how; CI there checks every listed
+pack with the rules of this repository's `packs.py`, plus MIT licence and unique ids).
+
+- **Search and filters.** The search matches a pack's name, description, publisher, id and categories; the
+  categories are the item groups of the packs (a language pack is under Languages), the publishers those listed.
+- **A pack's page** shows its details, its categories with item counts and pictures of up to six of its items. The
+  index carries those items whole, so the pictures are drawn before anything is installed.
+- **Install / Update / Remove** use the paths described above: Install and Update fetch the pack by its GitHub URL
+  (Installing from GitHub), show what changes and install exactly the commit shown; Remove is the Extensions page's.
+  A listed pack with a higher `release` than the installed one shows "Update to vN". Pin and roll back stay on the
+  Extensions page.
+- **Home Assistant fetches the index**, never the browser (websocket `home_3d/packs/index`, editors only), and keeps
+  it in memory for six hours; the tab's refresh button asks again. Without internet the tab says the list could not
+  be loaded; nothing else changes, and the bundled and installed packs keep working. A failed refresh keeps showing
+  the list it had.
+- **Another index.** "Pack list (index URL)" at the bottom of the tab sets where the list comes from (kept with the
+  update settings as `index_url`; empty means the default,
+  `https://raw.githubusercontent.com/theovencook/home-3d-packs/main/index.json`). It must be a file on
+  raw.githubusercontent.com (a github.com file link is turned into one). Every pack it lists still installs only
+  through its GitHub URL and the same checks.
+
+The index is built by `tools/build_index.py` in the packs repository; `tools/publish_packs.py` here runs it after
+publishing, so `index.json` follows our packs. Each entry holds `id`, `name`, `description`, `publisher`,
+`licence`, `release` (and `release_note`), `url` (the GitHub folder URL), `source` (`official` or `community`),
+`kind` (`furniture` or `language`, with `language` and `texts`), `items`, `categories` (item group -> count),
+`thumbnail` (an item id) and `previews` (whole items). An entry Home 3D cannot read is left out, not the whole list.
 
 ## Your own items
 

@@ -104,6 +104,7 @@ async def test_someone_not_on_the_list_cannot_install_or_change_packs(
         {"type": "home_3d/packs/check"},
         {"type": "home_3d/packs/pin", "pack_id": "test.starter", "pinned": True},
         {"type": "home_3d/packs/rollback", "pack_id": "test.starter"},
+        {"type": "home_3d/packs/index"},
         {"type": "home_3d/items/save", "item": {"id": "x"}},
         {"type": "home_3d/items/remove", "item_id": "x"},
     ):

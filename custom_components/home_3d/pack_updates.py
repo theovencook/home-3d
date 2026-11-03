@@ -47,6 +47,7 @@ from .custom_items import not_reserved
 from .moves import migrate_pins, moved_copy, moved_out_of, retired_packs
 from .off_loop import OFF_LOOP
 from .pack_github import checked_origin, fetch_pack, latest_release
+from .pack_index import PackIndex, checked_setting, index_url
 from .pack_preview import pack_preview
 from .packs import CUSTOM_PACK_ID, ITEM_SCHEMA, PackError, checked_folder, recipe_hash, with_bundled
 from .recipes import installed_copies, placed_types, recipe_copy
@@ -66,12 +67,15 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "time": "04:00",
     # the day of a weekly check, 0 = Monday (a monthly check runs on the 1st)
     "weekday": 0,
+    # where the Library's Browse tab gets its list of packs (#336): "" is the default index (pack_index.py)
+    "index_url": "",
 }
 SETTINGS_FIELDS: dict[Any, Any] = {
     vol.Optional("auto_update"): bool,
     vol.Optional("frequency"): vol.In(FREQUENCIES),
     vol.Optional("time"): vol.All(str, vol.Match(TIME_PATTERN)),
     vol.Optional("weekday"): vol.All(int, vol.Range(min=0, max=6)),
+    vol.Optional("index_url"): checked_setting,
 }
 SETTINGS_SCHEMA = vol.Schema(SETTINGS_FIELDS)
 
@@ -169,6 +173,8 @@ class PackUpdates:
         self._unsub: Callable[[], None] | None = None
         self._unsub_started: Callable[[], None] | None = None
         self._lock = asyncio.Lock()
+        # the pack index the Browse tab shows (#336), kept in memory for a while
+        self.index = PackIndex(hass)
 
     async def async_load(self) -> None:
         stored = await self._store.async_load() or {}
@@ -276,6 +282,10 @@ class PackUpdates:
         await self._async_save()
         self.schedule()
         await self.async_auto_update()
+
+    async def async_index(self, *, refresh: bool = False) -> dict[str, Any]:
+        """The pack index at the set URL (#336), fresh or kept; raises PackError ("offline" with nothing kept)."""
+        return await self.index.async_get(index_url(self.settings["index_url"]), refresh=refresh)
 
     # ------------------------------------------------------------------------ placed items
 

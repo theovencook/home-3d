@@ -52,7 +52,7 @@ export function makeFakeHass(plan, build) {
   const unknown = new Set();
   let revision = 1;
   // the websocket protocol of the backend of this release (#166: const.PROTOCOL, api.ts PROTOCOL)
-  const protocol = 2;
+  const protocol = 3;
   const answer = (msg) => {
     calls.push(msg.type);
     switch (msg.type) {

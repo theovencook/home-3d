@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- **Browse packs**: a tab in the editor's Library lists the packs of the curated index (ours and community packs), with search, category and publisher filters, a page per pack with pictures of its items, and Install / Update / Remove; without internet it says so quietly and the installed packs keep working (#336).
+
 ## Home 3D 0.2.1 (2 November 2026)
 
 - A Home Assistant restart is no longer shown as motion: the camera detection pins only linger for a detection this page saw, and the motion trail skips sensors coming back from unavailable or unknown (#299).

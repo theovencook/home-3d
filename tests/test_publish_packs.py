@@ -222,3 +222,49 @@ def test_a_retired_pack_folder_is_replaced_by_a_readme_pointing_at_its_successor
     assert "tree/main/test.new" in readme
     assert "retired" in readme.lower()
     assert (target / "test.new" / "pack.json").exists()
+
+
+# a stand-in for the packs repository's tools/build_index.py (#336): notes how it was run, or fails
+_FAKE_INDEX_SCRIPT = """
+import json, sys
+from pathlib import Path
+args = sys.argv[1:]
+if (Path(args[1]) / "fail").exists():
+    sys.exit("the index breaks these rules: test.one")
+(Path(args[1]) / "index.json").write_text(json.dumps({"args": args}), encoding="utf-8")
+"""
+
+
+def test_publishing_builds_the_checkouts_pack_index_again(tmp_path: Path) -> None:
+    source, target = tmp_path / "source", tmp_path / "packs"
+    _pack(source, "test.one")
+    (target / "tools").mkdir(parents=True)
+    (target / "tools" / "build_index.py").write_text(_FAKE_INDEX_SCRIPT, encoding="utf-8")
+
+    publish_packs.publish(target, source)
+
+    args = json.loads((target / "index.json").read_text(encoding="utf-8"))["args"]
+    # built from the checkout, checked with this repository's pack check, community entries kept (no --fetch)
+    assert args == ["build", str(target), "--home3d", str(ROOT)]
+    assert "Get your pack listed" in (target / "README.md").read_text(encoding="utf-8")
+
+
+def test_a_checkout_without_the_index_script_gets_no_index(tmp_path: Path) -> None:
+    source, target = tmp_path / "source", tmp_path / "packs"
+    _pack(source, "test.one")
+    target.mkdir()
+
+    publish_packs.publish(target, source)
+
+    assert not (target / "index.json").exists()
+
+
+def test_an_index_that_fails_its_rules_stops_the_publish_with_its_reason(tmp_path: Path) -> None:
+    source, target = tmp_path / "source", tmp_path / "packs"
+    _pack(source, "test.one")
+    (target / "tools").mkdir(parents=True)
+    (target / "tools" / "build_index.py").write_text(_FAKE_INDEX_SCRIPT, encoding="utf-8")
+    (target / "fail").write_text("", encoding="utf-8")
+
+    with pytest.raises(publish_packs.PublishError, match=r"index\.json was not built"):
+        publish_packs.publish(target, source)

@@ -87,6 +87,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_packs_check,
         ws_packs_pin,
         ws_packs_rollback,
+        ws_packs_index,
         ws_languages_get,
         ws_items_save,
         ws_items_remove,
@@ -695,6 +696,24 @@ async def ws_packs_check(hass: HomeAssistant, connection: websocket_api.ActiveCo
         return
     result = await updates.async_check()
     connection.send_result(msg["id"], {**updates.status(), **result})
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "home_3d/packs/index", vol.Optional("refresh", default=False): bool}
+)
+@require_editor
+@websocket_api.async_response
+async def ws_packs_index(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The pack index for the Library's Browse tab (#336): fetched by Home Assistant from GitHub and kept for a few
+    hours (`refresh` fetches it now). Without internet it answers "offline"; the installed packs are not touched."""
+    if (updates := _updates(hass, connection, msg)) is None:
+        return
+    try:
+        result = await updates.async_index(refresh=msg["refresh"])
+    except PackError as err:
+        connection.send_error(msg["id"], err.code, err.detail or err.code)
+        return
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command(

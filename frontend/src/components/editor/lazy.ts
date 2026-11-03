@@ -19,6 +19,8 @@ export const loadTimeField = loadParts;
 export const loadExtensions = loadParts;
 /** The item picker (#293): a chunk of its own, as only an open Item field draws it. */
 export const loadItemPicker = once(() => import("../item-picker.ts"));
+/** The Library's Browse tab (#336): a chunk of its own, as only an editor who opens the tab draws it. */
+export const loadPackBrowser = once(() => import("../pack-browser.ts"));
 /** The phone editor's bottom bar and More (#250): a chunk of its own, as only phone-wide screens draw it. */
 export const loadPhoneBar = once(() => import("./phone-bar.ts").then((m) => m.definePhoneBar({ LitElement, html, css, nothing, uiIcon, defineElement })));
 

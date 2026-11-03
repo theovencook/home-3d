@@ -261,6 +261,10 @@ export const sideStyles = css`
         font-weight: 500;
         font-size: 13px;
       }
+      /* the Library's Items / Browse packs tabs (#336) */
+      .fp3d-lib-tabs {
+        margin: 2px 0 6px;
+      }
       /* the background picture while it is edited: a dashed frame and a corner handle */
       .fp3d-bg-frame {
         fill: none;
