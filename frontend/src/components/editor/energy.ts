@@ -584,7 +584,7 @@ export class EnergyPart {
     const e = this._doc.energy;
     const admin = this.isEditor;
     const sensors = ratesFromSensors(e);
-    const priceSelect = this.entitySelect(this.t(sensors ? "energy_price_sensor" : "energy_tariff_sensor"), e.tariff, undefined, tariff, (v) => this.setEnergy({ tariff: v === "none" ? null : v }));
+    const priceSelect = this.entitySelect(this.t("energy_tariff_sensor"), e.tariff, undefined, tariff, (v) => this.setEnergy({ tariff: v === "none" ? null : v }));
     return html`<h4 class="fp3d-lib-head">${this.t("energy_rates_title")}</h4>
       <div class="fp3d-seg" role="group" aria-label=${this.t("energy_rates_title")}>
         <button aria-pressed=${!sensors} ?disabled=${!admin} @click=${() => this.setEnergy({ rates_from: "here" })}>${this.t("energy_rates_here")}</button>
@@ -592,7 +592,7 @@ export class EnergyPart {
       </div>
       <p class="fp3d-sub">${this.t("energy_rates_hint")}</p>
       ${sensors
-        ? this.renderRateSensors(priceSelect)
+        ? this.renderRateSensors()
         : html`<div class="fp3d-form">
               ${priceSelect}
               ${this.entitySelect(this.t("energy_cheap_rate"), e.cheap_rate ?? null, undefined, cheap, (v) => this.setEnergy({ cheap_rate: v === "none" ? null : v }))}
@@ -608,14 +608,44 @@ export class EnergyPart {
             <p class="fp3d-sub">${this.t("energy_cheap_hint")}</p>`}`;
   }
 
-  /** The existing-sensor side of the rates (#323): the Energy dashboard button, price, tariff entity and its cheap states, costs. */
-  renderRateSensors(this: Fp3dEditor, priceSelect: unknown) {
+  /** Up to three entity names, then "and N more" (#323: a home can have dozens of unavailable cost sensors). */
+  someNames(this: Fp3dEditor, ids: string[]): string {
+    const shown = ids.slice(0, 3).map((id) => (id.includes(".") ? entityName(this.hass, id) : id)).join(", ");
+    return ids.length > 3 ? this.t("energy_rates_and_more", { names: shown, n: ids.length - 3 }) : shown;
+  }
+
+  /** A price that is an entity (sensor, input_number, number) or a typed number per kWh (#323). */
+  priceSource(this: Fp3dEditor, label: string, value: string | number | null | undefined, options: EntityOption[], onChange: (v: string | number | null) => void) {
+    const typed = typeof value === "number" ? String(value) : "";
+    return html`${this.entitySelect(label, typeof value === "string" ? value : null, undefined, options, (v) => onChange(v === "none" ? null : v), ["input_number", "number", "sensor"])}
+      <label class="fp3d-field"
+        >${this.t("energy_price_typed")}
+        <input
+          type="number"
+          step="any"
+          inputmode="decimal"
+          .value=${typed}
+          ?disabled=${!this.isEditor}
+          @change=${(ev: Event) => {
+            const raw = (ev.target as HTMLInputElement).value.trim();
+            const n = Number(raw);
+            onChange(raw !== "" && Number.isFinite(n) ? n : null);
+          }}
+      /></label>`;
+  }
+
+  /** The existing-sensor side of the rates (#323): the Energy dashboard button, tariff entity and its cheap states, price, costs. */
+  renderRateSensors(this: Fp3dEditor) {
     const e = this._doc.energy;
     const admin = this.isEditor;
     const states = this.hass?.states ?? {};
     const attr = (id: string, key: string) => states[id]?.attributes[key] as string | undefined;
     // the rate now: a tariff select (utility meter), a sensor naming it (not a number), or anything on while it is cheap
     const rates = this.entityOptions((id) => ON_OFF_RATE.test(id) || /^(select|input_select)\./.test(id) || (id.startsWith("sensor.") && !numberish(id)));
+    // a price: a number helper or number entity, a monetary sensor or one per kWh
+    const prices = this.entityOptions(
+      (id) => numberish(id) && (/^(input_number|number)\./.test(id) || attr(id, "device_class") === "monetary" || /\/(kWh|MWh)$/.test(attr(id, "unit_of_measurement") ?? "")),
+    );
     // money: a monetary sensor, or one in the home's currency
     const currency = this.hass?.config?.currency;
     const money = this.entityOptions((id) => numberish(id) && (attr(id, "device_class") === "monetary" || (!!currency && attr(id, "unit_of_measurement") === currency)), currency);
@@ -625,17 +655,16 @@ export class EnergyPart {
     const toggle = (s: string, on: boolean) => this.setEnergy({ cheap_states: on ? [...picked.filter((x) => x !== s), s] : picked.filter((x) => x !== s) });
     const costs = e.cost_sensors ?? [];
     const earnings = e.earning_sensors ?? [];
+    const split = e.price_mode === "split";
     // a chosen statistic without an entity (the dashboard's external statistics) stays a choice
     const withPicked = (list: EntityOption[], ids: string[]) => [...list, ...ids.filter((id) => !list.some((o) => o.id === id)).map((id) => ({ id, label: id }))];
-    const gone = (id: string | null | undefined): id is string => !!id && id !== "none" && id.includes(".") && (!states[id] || states[id].state === "unavailable");
-    const missing = [e.tariff, rate, ...costs, ...earnings].filter(gone);
-    const fixed = !e.tariff && typeof e.price_fixed === "number" ? `${formatNumber(this.hass, e.price_fixed, 4)} ${currency ?? ""}/kWh` : null;
+    const gone = (id: unknown): id is string => typeof id === "string" && id !== "none" && id.includes(".") && (!states[id] || states[id].state === "unavailable");
+    const missing = [...(split ? [e.price_peak, e.price_cheap] : [e.tariff]), rate, ...costs, ...earnings].filter(gone);
+    const fixed = !split && !e.tariff && typeof e.price_fixed === "number" ? `${formatNumber(this.hass, e.price_fixed, 4)} ${currency ?? ""}/kWh` : null;
     return html`<div class="fp3d-actions">
         <button class="fp3d-btn" ?disabled=${!admin || !this.hass} @click=${() => this.importRatePrefs()}>${this.t("energy_rates_prefs")}</button>
       </div>
       <div class="fp3d-form">
-        ${priceSelect}
-        ${fixed ? html`<p class="fp3d-sub fp3d-wide">${this.t("energy_price_fixed", { price: fixed })}</p>` : nothing}
         ${this.entitySelect(this.t("energy_rate_entity"), rate, undefined, rates, (v) => this.setEnergy({ rate_entity: v === "none" ? null : v, cheap_states: [] }), ["select", "sensor", "binary_sensor"])}
         ${choices.length
           ? html`<div class="fp3d-field fp3d-wide" role="group" aria-label=${this.t("energy_cheap_states")}>
@@ -649,6 +678,16 @@ export class EnergyPart {
               ${picked.length ? nothing : html`<span class="fp3d-sub">${this.t("energy_cheap_states_guess")}</span>`}
             </div>`
           : nothing}
+        <div class="fp3d-seg fp3d-wide" role="group" aria-label=${this.t("energy_price_title")}>
+          <button aria-pressed=${!split} ?disabled=${!admin} @click=${() => this.setEnergy({ price_mode: "one" })}>${this.t("energy_price_one")}</button>
+          <button aria-pressed=${split} ?disabled=${!admin} @click=${() => this.setEnergy({ price_mode: "split" })}>${this.t("energy_price_split")}</button>
+        </div>
+        ${split
+          ? html`${this.priceSource(this.t("energy_price_peak"), e.price_peak, prices, (v) => this.setEnergy({ price_peak: v }))}
+              ${this.priceSource(this.t("energy_price_cheap"), e.price_cheap, prices, (v) => this.setEnergy({ price_cheap: v }))}
+              <p class="fp3d-sub fp3d-wide">${this.t("energy_price_split_hint")}</p>`
+          : html`${this.entitySelect(this.t("energy_price_sensor"), e.tariff, undefined, prices, (v) => this.setEnergy({ tariff: v === "none" ? null : v }), ["sensor", "input_number", "number"])}
+              ${fixed ? html`<p class="fp3d-sub fp3d-wide">${this.t("energy_price_fixed", { price: fixed })}</p>` : nothing}`}
         <div class="fp3d-field fp3d-wide">
           <span>${this.t("energy_cost_sensors")}</span>
           ${this.moneySelect(withPicked(money, costs), costs, this.t("energy_cost_sensors"), (ids) => this.setEnergy({ cost_sensors: ids }))}
@@ -658,7 +697,7 @@ export class EnergyPart {
           ${this.moneySelect(withPicked(money, earnings), earnings, this.t("energy_earning_sensors"), (ids) => this.setEnergy({ earning_sensors: ids }))}
         </div>
       </div>
-      ${missing.length ? html`<p class="fp3d-sub fp3d-pack-error">${this.t("energy_rates_missing", { ids: missing.map((id) => entityName(this.hass, id)).join(", ") })}</p>` : nothing}`;
+      ${missing.length ? html`<p class="fp3d-sub fp3d-pack-error">${this.t("energy_rates_missing", { ids: this.someNames(missing) })}</p>` : nothing}`;
   }
 
   /** A searchable multi-select of money sensors (#323). */
@@ -694,16 +733,31 @@ export class EnergyPart {
     }
     const info = await hass.callWS<EnergyInfo>({ type: "energy/info" }).catch(() => null);
     const r = prefsRates(prefs, info);
-    const n = r.cost_sensors.length + r.earning_sensors.length;
-    if (!n && !r.tariff && r.price_fixed === null) {
+    if (!r.cost_sensors.length && !r.earning_sensors.length && !r.tariff && r.price_fixed === null) {
       this._energyNote = this.t("energy_rates_prefs_none");
       return;
     }
     // a price from the dashboard replaces the chosen one; without one, the chosen price sensor stays
     const e = this._doc.energy;
-    this.setEnergy({ rates_from: "sensors", tariff: r.tariff ?? (r.price_fixed !== null ? null : e.tariff), price_fixed: r.price_fixed, cost_sensors: r.cost_sensors, earning_sensors: r.earning_sensors });
-    const price = r.tariff ? entityName(hass, r.tariff) : r.price_fixed !== null ? `${formatNumber(hass, r.price_fixed, 4)} ${hass.config?.currency ?? ""}/kWh` : "–";
-    this._energyNote = this.t("energy_rates_prefs_done", { n, price });
+    const priced = r.tariff !== null || r.price_fixed !== null;
+    this.setEnergy({
+      rates_from: "sensors",
+      tariff: r.tariff ?? (r.price_fixed !== null ? null : e.tariff),
+      price_fixed: r.price_fixed,
+      cost_sensors: r.cost_sensors,
+      earning_sensors: r.earning_sensors,
+      ...(priced ? { price_mode: "one" as const } : {}),
+    });
+    // e.g. "Taken from the Energy dashboard – costs: Grid import cost. It sets no price: choose one below."
+    const names = (ids: string[]) => (ids.length ? this.someNames(ids) : this.t("entity_none"));
+    const price = r.tariff ? entityName(hass, r.tariff) : r.price_fixed !== null ? `${formatNumber(hass, r.price_fixed, 4)} ${hass.config?.currency ?? ""}/kWh` : null;
+    this._energyNote = [
+      this.t("energy_rates_prefs_done", { costs: names(r.cost_sensors) }),
+      r.earning_sensors.length ? this.t("energy_rates_prefs_earnings", { earnings: names(r.earning_sensors) }) : "",
+      price ? this.t("energy_rates_prefs_price", { price }) : this.t("energy_rates_prefs_no_price"),
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
 
 

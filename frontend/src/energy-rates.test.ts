@@ -2,9 +2,9 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cheapRate, looksCheap, ratesFromSensors, tariffStates } from "./cheap-rate.ts";
+import { cheapRate, looksCheap, priceNow, ratesFromSensors, tariffStates } from "./cheap-rate.ts";
 import { energySummary } from "./energy.ts";
-import { costTile, fetchCostsToday, formatMoney, prefsRates } from "./energy-rates.ts";
+import { costTile, fetchCostsToday, formatMoney, prefsRates, readsState } from "./energy-rates.ts";
 import { DEFAULT_ENERGY, emptyBuilding, normalizeBuilding, type Building } from "./model.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 
@@ -77,7 +77,7 @@ test("the Energy dashboard's grid: cost statistics, Home Assistant's own cost se
 });
 
 /** A Home Assistant with these states whose statistics answer with `rows`. */
-function hassWith(list: HassEntity[], rows: Record<string, { change: number }[]>, calls: Record<string, unknown>[] = []): HomeAssistant {
+function hassWith(list: HassEntity[], rows: Record<string, { change: number; state?: number }[]>, calls: Record<string, unknown>[] = []): HomeAssistant {
   return {
     language: "en",
     states: states(...list),
@@ -138,4 +138,66 @@ test("the tariff tile: the price sensor, else with existing sensors the Energy d
   // set up here: no fixed price is shown
   b.energy = { ...b.energy, tariff: null, rates_from: "here" };
   assert.equal(energySummary(hass([]), b, []).tariff, null);
+});
+
+test("the Energy dashboard's flat grid layout (no flow lists, energy/info without cost sensors): one cost, no price (#323)", () => {
+  const grid = {
+    type: "grid",
+    stat_energy_from: "sensor.sample_import_energy",
+    stat_energy_to: "sensor.sample_export_energy",
+    stat_cost: "sensor.sample_import_cost",
+    entity_energy_price: null,
+    number_energy_price: null,
+    stat_compensation: null,
+  };
+  assert.deepEqual(prefsRates({ energy_sources: [grid] }, { cost_sensors: {} }), { tariff: null, price_fixed: null, cost_sensors: ["sensor.sample_import_cost"], earning_sensors: [] });
+});
+
+test("which cost sensors are read by their state: daily ones by name or last_reset, and anything that is no counter", () => {
+  const hass = (s: HassEntity) => ({ states: states(s) }) as unknown as HomeAssistant;
+  const total = { state_class: "total", unit_of_measurement: "GBP" };
+  assert.equal(readsState(hass(st("sensor.sample_cost_today", "1.2", total)), "sensor.sample_cost_today"), true);
+  assert.equal(readsState(hass(st("sensor.sample_cost_daily", "1.2", total)), "sensor.sample_cost_daily"), true);
+  assert.equal(readsState(hass(st("sensor.sample_x", "1.2", { ...total, friendly_name: "Electricity cost day" })), "sensor.sample_x"), true);
+  assert.equal(readsState(hass(st("sensor.sample_x", "1.2", { ...total, last_reset: "2026-11-03T00:00:00+00:00" })), "sensor.sample_x"), true);
+  assert.equal(readsState(hass(st("sensor.sample_import_cost", "412", total)), "sensor.sample_import_cost"), false);
+  assert.equal(readsState(hass(st("sensor.sample_import_cost", "412", { state_class: "total_increasing" })), "sensor.sample_import_cost"), false);
+  assert.equal(readsState(hass(st("sensor.sample_holiday_cost", "4", { state_class: "measurement" })), "sensor.sample_holiday_cost"), true);
+  assert.equal(readsState(hass(st("sensor.sample_import_cost", "412", total)), "external:sample_cost"), false);
+});
+
+test("today's cost: a daily 'total' sensor by its state, a cumulative one by its change since midnight (#323)", async () => {
+  const calls: Record<string, unknown>[] = [];
+  const hass = hassWith(
+    [
+      st("sensor.sample_cost_today", "2.10", { state_class: "total", unit_of_measurement: "GBP" }),
+      st("sensor.sample_import_cost", "640.5", { state_class: "total", unit_of_measurement: "GBP" }),
+    ],
+    { "sensor.sample_import_cost": [{ change: 0.6, state: 639.9 }, { change: 0.6, state: 640.5 }] },
+    calls,
+  );
+  assert.deepEqual(await fetchCostsToday(hass, { cost_sensors: ["sensor.sample_cost_today"] }), { cost: 2.1, earned: null, unit: "GBP" });
+  assert.equal(calls.length, 0, "a daily sensor needs no statistics");
+  assert.deepEqual(await fetchCostsToday(hass, { cost_sensors: ["sensor.sample_import_cost"] }), { cost: 1.2, earned: null, unit: "GBP" });
+  assert.deepEqual(calls[0].types, ["change", "state"]);
+});
+
+test("today's cost: a counter whose statistics fall to under half since midnight started again, so its state counts (#323)", async () => {
+  const hass = hassWith(
+    [st("sensor.sample_cost_counter", "0.90", { state_class: "total", unit_of_measurement: "GBP" })],
+    { "sensor.sample_cost_counter": [{ change: 0.2, state: 3.4 }, { change: -3.4, state: 0 }, { change: 0.9, state: 0.9 }] },
+  );
+  assert.deepEqual(await fetchCostsToday(hass, { cost_sensors: ["sensor.sample_cost_counter"] }), { cost: 0.9, earned: null, unit: "GBP" });
+});
+
+test("peak price + cheap price: the tariff entity picks one; each is an entity or a typed number (#323)", () => {
+  const energy = { ...DEFAULT_ENERGY, rates_from: "sensors" as const, price_mode: "split" as const, rate_entity: "binary_sensor.sample_cheap", price_peak: "input_number.sample_peak", price_cheap: 0.07 };
+  const peak = st("input_number.sample_peak", "0.2745", { unit_of_measurement: "GBP/kWh" });
+  assert.deepEqual(priceNow(energy, states(peak, st("binary_sensor.sample_cheap", "off")), "GBP"), { value: 0.2745, unit: "GBP/kWh" });
+  assert.deepEqual(priceNow(energy, states(peak, st("binary_sensor.sample_cheap", "on")), "GBP"), { value: 0.07, unit: "GBP/kWh" });
+  assert.deepEqual(priceNow(energy, states(peak), "GBP"), { value: 0.2745, unit: "GBP/kWh" }, "a missing tariff entity: peak");
+  assert.equal(priceNow({ ...energy, price_cheap: "input_number.sample_gone" }, states(st("binary_sensor.sample_cheap", "on")), "GBP"), null);
+  // a number entity without a unit as the one price
+  const one = { ...DEFAULT_ENERGY, rates_from: "sensors" as const, tariff: "number.sample_price_now" };
+  assert.deepEqual(priceNow(one, states(st("number.sample_price_now", "0.25")), "GBP"), { value: 0.25, unit: "GBP/kWh" });
 });

@@ -90,7 +90,7 @@ test("one tap takes the Energy dashboard's price and cost sources and switches t
   assert.equal(e.rates_from, "sensors");
   assert.equal(e.tariff, "sensor.sample_price");
   assert.deepEqual(e.cost_sensors, ["sensor.sample_import_cost"]);
-  assert.match(el._energyNote, /Taken from the Energy dashboard: 1 cost/);
+  assert.equal(el._energyNote, "Taken from the Energy dashboard – costs: sensor.sample_import_cost. Price: sensor.sample_price.");
 });
 
 test("an Energy dashboard without prices or costs changes nothing and says so; one that is not set up too", async () => {
@@ -104,4 +104,43 @@ test("an Energy dashboard without prices or costs changes nothing and says so; o
   await failing.importRatePrefs();
   assert.equal(failing._doc.energy.rates_from, undefined);
   assert.match(failing._energyNote, /not set up/);
+});
+
+test("the Energy dashboard's flat grid layout: one cost statistic, no price; the note says to choose one (#323)", async () => {
+  const grid = {
+    type: "grid",
+    name: "Grid",
+    stat_energy_from: "sensor.sample_import_energy",
+    stat_energy_to: "sensor.sample_export_energy",
+    stat_cost: "sensor.sample_import_cost",
+    entity_energy_price: null,
+    number_energy_price: null,
+    stat_compensation: null,
+    entity_energy_price_export: null,
+    number_energy_price_export: null,
+    cost_adjustment_day: 0,
+  };
+  const el = editor({ tariff: "number.sample_price_now" }, (msg) => (msg.type === "energy/get_prefs" ? { energy_sources: [grid] } : { cost_sensors: {} }));
+  await el.importRatePrefs();
+  const e = el._doc.energy;
+  assert.equal(e.rates_from, "sensors");
+  assert.deepEqual([e.cost_sensors, e.earning_sensors, e.price_fixed], [["sensor.sample_import_cost"], [], null]);
+  assert.equal(e.tariff, "number.sample_price_now", "the chosen price stays");
+  assert.equal(el._energyNote, "Taken from the Energy dashboard – costs: sensor.sample_import_cost. It sets no price: choose one below.");
+});
+
+test("peak price + cheap price: two price fields, each an entity or a typed number (#323)", () => {
+  const el = editor({ rates_from: "sensors", rate_entity: "binary_sensor.sample_cheap", price_mode: "split", price_peak: "input_number.sample_peak", price_cheap: 0.07 });
+  const out = flat(el.renderEnergyRates([], []));
+  assert.match(out, /aria-pressed=true[^>]*>Peak price \+ cheap price/);
+  assert.match(out, /Peak price \(per kWh\)/);
+  assert.match(out, /Cheap price \(per kWh\)/);
+  assert.match(out, /or a fixed price/);
+  assert.doesNotMatch(out, /Current price/);
+});
+
+test("many missing sensors: three names and how many more (#323)", () => {
+  const ids = Array.from({ length: 7 }, (_, i) => `sensor.sample_${i}_energy_cost`);
+  const out = flat(editor({ rates_from: "sensors", cost_sensors: ids }).renderEnergyRates([], []));
+  assert.match(out, /Not found or unavailable right now: sensor.sample_0_energy_cost, sensor.sample_1_energy_cost, sensor.sample_2_energy_cost and 4 more/);
 });

@@ -13,6 +13,7 @@ import { entityAreaId, isHubDevice, powerSensorsOf } from "./devices.ts";
 import { pointInPolygon, signedArea } from "./model.ts";
 import { energyRole, type EnergyRole } from "./packs.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
+import { priceNow } from "./cheap-rate.ts";
 
 export type FlowKind = "consumer" | "grid" | "export" | "solar" | "battery" | "inverter" | "wallbox";
 
@@ -395,12 +396,12 @@ export function energySummary(hass: HomeAssistant, building: Building, consumers
     solar: solar === null ? null : Math.max(0, solar),
     battery,
     soc: Number.isFinite(socState) ? socState : null,
+    // existing sensors (#323): one price sensor (or the energy dashboard's fixed price), or a peak and a cheap price
     tariff:
-      tariffState && Number.isFinite(tariffValue)
-        ? { value: tariffValue, unit: String(tariffState.attributes.unit_of_measurement ?? "") }
-        : // existing sensors (#323): the energy dashboard's fixed price when there is no price sensor
-          e.rates_from === "sensors" && !e.tariff && typeof e.price_fixed === "number" && Number.isFinite(e.price_fixed)
-          ? { value: e.price_fixed, unit: `${hass.config?.currency ?? ""}/kWh` }
+      e.rates_from === "sensors"
+        ? priceNow(e, hass.states, hass.config?.currency)
+        : tariffState && Number.isFinite(tariffValue)
+          ? { value: tariffValue, unit: String(tariffState.attributes.unit_of_measurement ?? "") }
           : null,
     consumption,
     ...(more.length ? { systems: more } : {}),
