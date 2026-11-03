@@ -118,9 +118,60 @@ def test_spheres_lathes_and_rounded_boxes_are_accepted_in_a_v2_item() -> None:
     assert parts[0]["fix"] == "wdh"
 
 
+def test_a_curved_shell_is_accepted_in_a_v2_item() -> None:
+    """A curved shell (#252): side stations, an optional plan, a rounding and a taper."""
+    box = {"x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "paint"}
+    side = [[0, 0.3, 0.6], [0.1, 0, 0.8], [0.9, 0, 0.7], [1, 0.3, 0.5]]
+    car = _item(
+        "car",
+        parts=[
+            {"shape": "shell", **box, "side": side, "plan": [[0, 0.8], [0.5, 1], [1, 0.7]], "round": 0.3, "taper": 0.9},
+            {"shape": "shell", **box, "color": "glass", "side": [[0, 0, 0], [1, 0, 1]]},
+        ],
+    )
+    pack = packs.verify_folder(_folder(**{"vehicle/car.json": car}))
+    parts = pack["items"][0]["parts"]
+    assert [p["shape"] for p in parts] == ["shell", "shell"]
+    assert parts[0]["side"] == side
+    assert parts[0]["plan"] == [[0, 0.8], [0.5, 1], [1, 0.7]]
+    assert parts[0]["round"] == 0.3
+    assert parts[0]["taper"] == 0.9
+    assert "plan" not in parts[1]
+
+
+def test_an_older_home_3d_asks_for_an_update_for_a_shell() -> None:
+    """A version without shells refuses one as a value it does not know yet (needs_update), not as broken content."""
+    shapes = packs.PART_SHAPES
+    try:
+        packs.PART_SHAPES = [s for s in shapes if s != "shell"]
+        old = packs._PART_FIELDS.schema.copy()
+        old[next(k for k in old if str(k) == "shape")] = vol.In(packs.PART_SHAPES)
+        schema = vol.All(vol.Schema(old), packs._shape_fields)
+        box = {"x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "paint"}
+        part = {"shape": "shell", **box, "side": [[0, 0, 1], [1, 0, 1]]}
+        with pytest.raises(packs.PackError) as err:
+            packs._check(schema, "car.json", part)
+        assert err.value.code == "needs_update"
+    finally:
+        packs.PART_SHAPES = shapes
+
+
 @pytest.mark.parametrize(
     ("part", "why"),
     [
+        ({"shape": "shell"}, "a shell needs its side view"),
+        ({"shape": "shell", "side": [[0, 0, 1]]}, "a side has at least two stations"),
+        ({"shape": "shell", "side": [[n / 16, 0, 1] for n in range(17)]}, "at most sixteen stations"),
+        ({"shape": "shell", "side": [[0.5, 0, 1], [0.2, 0, 1]]}, "stations run from the back to the front"),
+        ({"shape": "shell", "side": [[0, 0.8, 0.2], [1, 0, 1]]}, "the top is above the bottom"),
+        ({"shape": "shell", "side": [[0, 0, 1.2], [1, 0, 1]]}, "the top stays within the part"),
+        ({"shape": "shell", "side": [[0, 0], [1, 0]]}, "a station is z, bottom and top"),
+        ({"shape": "shell", "side": [[0, 0, 1], [1, 0, 1]], "plan": [[1, 1], [0, 1]]}, "the plan runs back to front"),
+        ({"shape": "shell", "side": [[0, 0, 1], [1, 0, 1]], "plan": [[0, 1.5], [1, 1]]}, "the plan stays in the part"),
+        ({"shape": "shell", "side": [[0, 0, 1], [1, 0, 1]], "taper": 2}, "a taper is at most 1.5"),
+        ({"shape": "box", "side": [[0, 0, 1], [1, 0, 1]]}, "only a shell has a side view"),
+        ({"shape": "box", "plan": [[0, 1], [1, 1]]}, "only a shell has a plan"),
+        ({"shape": "rbox", "taper": 0.5}, "only a shell has a taper"),
         ({"shape": "lathe"}, "a lathe needs its profile"),
         ({"shape": "lathe", "profile": [[0.5, 0]]}, "a profile has at least two points"),
         ({"shape": "lathe", "profile": [[0.5, n / 20] for n in range(13)]}, "at most twelve points"),

@@ -40,6 +40,8 @@ test("the brief's lists and limits are the ones the backend checks an item again
   assert.deepEqual(ITEM_FORMAT.lights, pyConstant("LIGHTS"));
   assert.equal(ITEM_FORMAT.maxParts, pyConstant("MAX_PARTS"));
   assert.equal(ITEM_FORMAT.maxProfilePoints, pyConstant("MAX_PROFILE_POINTS"));
+  assert.equal(ITEM_FORMAT.maxShellPoints, pyConstant("MAX_SHELL_POINTS"));
+  assert.deepEqual(ITEM_FORMAT.taper, pyConstant("TAPER_RANGE"));
   assert.deepEqual(ITEM_FORMAT.metres, pyConstant("METRES_RANGE"));
   assert.deepEqual(ITEM_FORMAT.centre, pyConstant("FRACTION_RANGE"));
   assert.deepEqual(ITEM_FORMAT.extent, pyConstant("SPAN_RANGE"));

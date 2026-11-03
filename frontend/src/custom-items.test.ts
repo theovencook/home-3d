@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addPart, changePart, CUSTOM_PACK_ID, customPack, duplicatePart, itemFile, newItem, PART_SHAPES, profileText, readItemFile, readItemFiles, readProfile, removePart, setDetails, toggleFix, type CustomItem } from "./custom-items.ts";
+import { addPart, changePart, CUSTOM_PACK_ID, customPack, duplicatePart, itemFile, newItem, PART_SHAPES, profileText, readItemFile, readItemFiles, readProfile, readStations, removePart, setDetails, stationsText, toggleFix, type CustomItem } from "./custom-items.ts";
 import { buildIndex, filterEntries } from "./library-index.ts";
 import { furnitureSize, packItem, setPacks, type PackItem, type PackPart } from "./packs.ts";
 
@@ -25,8 +25,13 @@ function assertValidPart(p: PackPart): void {
     assert.ok(p.profile.length >= 2 && p.profile.length <= 12);
     for (const [r, y] of p.profile) assert.ok(r >= 0 && r <= 1 && y >= 0 && y <= 1);
   }
+  assert.equal(p.shape === "shell", "side" in p, `${p.shape}: only a shell has a side view`);
+  if (p.side) {
+    assert.ok(p.side.length >= 2 && p.side.length <= 16);
+    for (const [z, b, t] of p.side) assert.ok(z >= 0 && z <= 1 && b >= 0 && b <= t && t <= 1);
+  }
   if ("round" in p) {
-    assert.equal(p.shape, "rbox", "only a rounded box has a rounding");
+    assert.ok(p.shape === "rbox" || p.shape === "shell", "only a rounded box or a shell has a rounding");
     assert.ok(p.round! >= 0.01 && p.round! <= 0.5);
   }
 }
@@ -37,7 +42,25 @@ test("a part of every shape the packs know can be added, with what that shape ne
   assert.deepEqual(item.parts.map((p) => p.shape), ["box", ...PART_SHAPES]);
   for (const p of item.parts) assertValidPart(p);
   assert.ok(item.parts.find((p) => p.shape === "lathe")!.profile);
-  assert.deepEqual(PART_SHAPES, ["box", "cyl", "loft", "sphere", "lathe", "rbox"]);
+  assert.deepEqual(PART_SHAPES, ["box", "cyl", "loft", "sphere", "lathe", "rbox", "shell"]);
+  assert.ok(item.parts.find((p) => p.shape === "shell")!.side);
+});
+
+test("a shell's side and plan are typed as groups of numbers, and leave with its shape (#252)", () => {
+  assert.equal(stationsText([[0, 0.1, 0.5], [1, 0, 0.9]]), "0 0.1 0.5, 1 0 0.9");
+  // sorted by z, cut to 0..1, a top below its bottom swapped
+  assert.deepEqual(readStations("1 0 0.9, 0 0.5 0.1; 0.5 -1 2", 3), [[0, 0.1, 0.5], [0.5, 0, 1], [1, 0, 0.9]]);
+  assert.deepEqual(readStations("0 0.8, 1 0.7", 2), [[0, 0.8], [1, 0.7]]);
+  assert.equal(readStations("0 0.8", 2), null);
+  assert.equal(readStations("0 0.8 1, 1 0.7", 3), null);
+  assert.equal(readStations(Array.from({ length: 17 }, (_, i) => `${i / 16} 0.5`).join(", "), 2), null);
+  let item = addPart(newItem("Boat", []), "shell");
+  item = changePart(item, 1, { plan: [[0, 0.5], [1, 1]], taper: 3, round: 0.4 });
+  assert.equal(item.parts[1].taper, 1.5);
+  assert.equal(item.parts[1].round, 0.4);
+  assertValidPart(item.parts[1]);
+  item = changePart(item, 1, { shape: "box" });
+  for (const k of ["side", "plan", "taper", "round"]) assert.ok(!(k in item.parts[1]), k);
 });
 
 test("changing a part's shape keeps its place and drops what the old shape needed", () => {

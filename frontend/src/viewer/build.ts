@@ -16,7 +16,7 @@ import { furnitureFootprint, GANG_TYPES, isLamp, pointInPolygon, polygonArea, ST
 import { freeWallRoomLeft, generateWalls, locateOpening, openingHost, placeWallPlate, slopeTop, wallContinuation, type Wall } from "../geometry/walls.ts";
 import { clipConvex, isConvex } from "../geometry/area.ts";
 import { holeInRoom, insetHole, mergeHoles } from "../geometry/holes.ts";
-import { furnitureLook, hasOwnColours, pushFurniture, pushRackGear } from "./furniture.ts";
+import { currentShellDetail, furnitureLook, hasOwnColours, pushFurniture, pushRackGear } from "./furniture.ts";
 import { mountBase, packItem, packsVersion } from "../packs.ts";
 import { pushOutdoor } from "./outdoor.ts";
 import { pushModules } from "./roof.ts";
@@ -482,7 +482,7 @@ export function buildFloorGeometry(
   const racks: RackGearAt[] = [];
   // an item drawn exactly as in this floor's last build is copied from it instead of modelled again (#131): an edit
   // in the editor's 3D beside moves one item, the other hundreds stay as they were
-  const look = `${packsVersion()}|${cut}`;
+  const look = `${packsVersion()}|${cut}|${currentShellDetail()}`;
   const last = furnitureCache.get(floor.id);
   const had = last?.look === look ? last.pieces : null;
   const pieces = new Map<string, FurniturePiece>();

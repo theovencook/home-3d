@@ -22,9 +22,10 @@ export function isPackCooktop(type: string): boolean {
 export interface PackPart {
   /**
    * A box, a cylinder, a loft (a box whose top face is another rectangle: sloped sides), a sphere filling the part's
-   * box, a lathe (`profile` turned around the upright axis) or a box with rounded edges (`round`).
+   * box, a lathe (`profile` turned around the upright axis), a box with rounded edges (`round`) or a curved shell
+   * lofted through side and plan stations (`side`, `plan`, #252).
    */
-  shape: "box" | "cyl" | "loft" | "sphere" | "lathe" | "rbox";
+  shape: "box" | "cyl" | "loft" | "sphere" | "lathe" | "rbox" | "shell";
   /** Centre across and in depth (fractions -0.5..0.5 of the item's width and depth, front at +z). */
   x: number;
   z: number;
@@ -56,8 +57,17 @@ export interface PackPart {
   rot?: number;
   /** Lathe: [radius, height] points, the radius a fraction of the part's half width and depth, the height of its height. */
   profile?: [number, number][];
-  /** Rounded box: the radius of its edges as a fraction of the part's shortest side (0.01 to 0.5, default 0.2). */
+  /**
+   * Rounded box: the radius of its edges as a fraction of the part's shortest side (0.01 to 0.5, default 0.2). Shell:
+   * the corner radius of its cross-sections as a fraction of their shorter side (default 0.25).
+   */
   round?: number;
+  /** Shell (#252): side-view stations [z, bottom, top] from the part's back (z 0) to its front (z 1), 2 to 16. */
+  side?: [number, number, number][];
+  /** Shell: plan-view widths [z, width] along it (default: the part's whole width). */
+  plan?: [number, number][];
+  /** Shell: the width at the top of its cross-sections against their bottom (0.1 to 1.5, default 1). */
+  taper?: number;
 }
 
 export type PackSymbol =

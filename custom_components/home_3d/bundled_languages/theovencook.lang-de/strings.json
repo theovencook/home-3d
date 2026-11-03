@@ -2662,6 +2662,7 @@
  "ie_remove_part": "Teil entfernen",
  "ie_part": "Teil {n}",
  "ie_turn_hint": "Bild ziehen, um den Gegenstand zu drehen; mit dem Mausrad zoomen, Doppelklick setzt zurück.",
+ "ie_shape_shell": "Gewölbte Schale (Karosserien)",
  "item_picker_title": "Gegenstand wählen",
  "item_picker_open": "Anderen Gegenstand wählen",
  "item_picker_search": "Gegenstände suchen (Name, Paket, Art)",

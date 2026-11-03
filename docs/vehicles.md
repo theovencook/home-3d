@@ -1,8 +1,9 @@
 # Vehicles catalogue (#129)
 
 Cars: the most popular current UK models of 20 brands (by UK and European registrations; pick the latest generation
-sold), about 200 in all. Each is built from simple shapes by `tools/gen_vehicles.py` and scaled to the outer size
-below (length x width without mirrors x height, in mm). No logos, no maker pictures, no 3D files. The body is in the
+sold), about 200 in all. Each is built by `tools/gen_vehicles.py` from curved shells (body, glasshouse and roof, #252;
+the vans from boxes) and simple shapes, scaled to the outer size below (length x width without mirrors x height, in
+mm). No logos, no maker pictures, no 3D files. The body is in the
 `paint` colour role: ten base colours and a hex value in the item panel.
 
 **Sizes were checked in #135.** The maker sites (ford.co.uk, bmw.co.uk and the rest) refuse automated fetches, so each

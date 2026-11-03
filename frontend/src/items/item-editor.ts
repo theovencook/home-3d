@@ -18,6 +18,8 @@ import {
   newItem,
   PART_SHAPES,
   profileText,
+  readStations,
+  stationsText,
   readItemFiles,
   readProfile,
   removePart,
@@ -571,14 +573,14 @@ export class ItemEditor extends LitElement {
 
   private renderPart(draft: CustomItem, p: PackPart, i: number) {
     const change = (patch: Partial<PackPart>) => this.edit(changePart(draft, i, patch));
-    const num = (key: "x" | "z" | "w" | "d" | "y" | "h" | "round", min: number, max: number) =>
+    const num = (key: "x" | "z" | "w" | "d" | "y" | "h" | "round" | "taper", min: number, max: number) =>
       html`<label class="ie-num"
         >${key === "round" ? this.t("ie_round") : key}<input
           type="number"
           min=${min}
           max=${max}
           step="0.01"
-          .value=${String(p[key] ?? 0.2)}
+          .value=${String(p[key] ?? (key === "taper" ? 1 : p.shape === "shell" ? 0.25 : 0.2))}
           @change=${(e: Event) => change({ [key]: Number((e.target as HTMLInputElement).value) })}
       /></label>`;
     const own = HEX.test(p.color);
@@ -602,7 +604,7 @@ export class ItemEditor extends LitElement {
         <button class="fp3d-btn" ?disabled=${draft.parts.length >= MAX_PARTS} @click=${() => this.edit(duplicatePart(draft, i))}>${this.t("ie_duplicate")}</button>
         <button class="fp3d-btn fp3d-danger" title=${this.t("ie_remove_part")} aria-label=${this.t("ie_remove_part")} ?disabled=${draft.parts.length <= 1} @click=${() => this.edit(removePart(draft, i))}>✕</button>
       </div>
-      <div class="ie-nums">${num("x", -0.5, 0.5)} ${num("z", -0.5, 0.5)} ${num("w", 0.001, 1)} ${num("d", 0.001, 1)} ${num("y", 0, 1)} ${num("h", 0.001, 1)} ${p.shape === "rbox" ? num("round", 0.01, 0.5) : nothing}</div>
+      <div class="ie-nums">${num("x", -0.5, 0.5)} ${num("z", -0.5, 0.5)} ${num("w", 0.001, 1)} ${num("d", 0.001, 1)} ${num("y", 0, 1)} ${num("h", 0.001, 1)} ${p.shape === "rbox" || p.shape === "shell" ? num("round", 0.01, 0.5) : nothing} ${p.shape === "shell" ? num("taper", 0.1, 1.5) : nothing}</div>
       ${p.shape === "lathe"
         ? html`<label class="fp3d-field"
             >profile<input
@@ -615,6 +617,22 @@ export class ItemEditor extends LitElement {
                 else input.value = profileText(p.profile);
               }}
           /></label>`
+        : nothing}
+      ${p.shape === "shell"
+        ? (["side", "plan"] as const).map(
+            (key) => html`<label class="fp3d-field"
+              >${key}<input
+                type="text"
+                .value=${stationsText(p[key])}
+                @change=${(e: Event) => {
+                  const input = e.target as HTMLInputElement;
+                  if (key === "plan" && !input.value.trim()) return change({ plan: undefined });
+                  const read = key === "side" ? readStations(input.value, 3) : readStations(input.value, 2);
+                  if (read) change({ [key]: read });
+                  else input.value = stationsText(p[key]);
+                }}
+            /></label>`,
+          )
         : nothing}
       <div class="ie-fix" title=${this.t("ie_fixed_hint")}>
         <span class="ie-sub">${this.t("ie_fixed")}</span>
