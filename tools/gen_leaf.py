@@ -24,7 +24,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gen_vehicles import OUT, Shell, V, dump
+from gen_vehicles import OUT, Shell, V, arched, dump, wheel_wells
 
 W, L, H = 1.79, 4.49, 1.54
 HEAD = "#e8f4ff"
@@ -128,7 +128,8 @@ def leaf(body: str, roof: str, mirror: str) -> list[dict]:
         for z in (FRONT_AXLE, REAR_AXLE):
             v.wheel(sx * (W / 2 - TYRE / 2 - 0.005), z, WHEEL, TYRE)
             v.add("cyl", sx * (W / 2 - 0.009), z, 0.014, 0.44, (WHEEL - 0.44) / 2, 0.44, "metal", axis="x")
-    v.shell(BODY_SIDE, BODY_PLAN, body, round=BODY_ROUND, taper=BODY_TAPER)
+    v.shell(arched(BODY_SIDE, [REAR_AXLE, FRONT_AXLE], WHEEL), BODY_PLAN, body, round=BODY_ROUND, taper=BODY_TAPER)
+    wheel_wells(v, [REAR_AXLE, FRONT_AXLE], WHEEL, W - 2 * TYRE - 0.06, 0.17)
     v.shell(GLASS_SIDE, GLASS_PLAN, "glass", round=GLASS_ROUND, taper=GLASS_TAPER)
     v.shell(ROOF_SIDE, ROOF_PLAN, roof, round=0.45, taper=0.95)
     # black pillars: B, and the wide C pillar that lets the roof float

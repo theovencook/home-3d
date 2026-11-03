@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- Cars no longer look sunk into the ground: every car with a curved body (the Leaf too) has wheel arches over its tyres with dark wheel wells behind, so the tyres show down to the ground; Garden & outdoor pack release 5 (run 6).
 - Robot vacuum maps on the plan: a map camera (dreame_vacuum's map camera, or the Xiaomi Cloud Map Extractor for Roborock and other Xiaomi robots) lies on its floor in the 3D view, aligned to the plan by up to three point pairs picked once in the editor, with the robot and its dock as live markers; opacity per map, and a View switch "Vacuum maps" (#350).
 - Walk mode on a touch screen: the bottom bar stays pressable (the walk layer stops above it), "Exit walk" is a larger button where the Walk button was at the top right with the energy row stopping before it, the room name sits under the energy row, the clock is hidden while walking so the stick never covers it, and Back and Escape end the walk (the browser Back too) (#351).
 - Door and window contact sensors show their state on the door or window itself (leaf swung open, sash open); their pins are hidden unless View > Show > "Door sensor pins" is on (off by default). A tap on the opening still opens the sensor (#349).

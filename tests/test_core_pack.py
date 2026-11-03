@@ -195,3 +195,29 @@ def test_the_risholmen_wing_chair_is_in_the_ikea_pack_at_ikeas_size() -> None:
     assert item["ikea"] == "RISHOLMEN"
     assert "wing chair" in item["tags"]
     assert json.loads((folder / "pack.json").read_text(encoding="utf-8"))["release"] >= 4
+
+
+def test_every_curved_car_has_wheel_arches_so_its_tyres_show() -> None:
+    """Run 6: the curved bodies (#252) hid the tyres down to the sill and the cars looked sunk into the ground. The
+    tyres stand on the ground, and over each axle the body's bottom rises above the middle of the wheel."""
+    folder = BUNDLED / "theovencook.outdoor"
+    checked = 0
+    for path in sorted((folder / "vehicle").glob("*.json")):
+        item = json.loads(path.read_text(encoding="utf-8"))
+        shells = [p for p in item["parts"] if p["shape"] == "shell" and p.get("color") not in ("glass", "dark")]
+        tyres = [p for p in item["parts"] if p["shape"] == "cyl" and p.get("axis") == "x" and p["color"] == "dark" and p["y"] == 0]
+        if not shells or len(tyres) < 4:
+            continue
+        body = min(shells, key=lambda p: p["y"])  # the lower body
+        tyre = tyres[0]
+        assert min(t["y"] for t in tyres) == 0, item["id"]
+        z0 = body["z"] - body["d"] / 2
+        wheel_mid = tyre["h"] / 2  # fraction of the height
+        for t in {round(t["z"], 4) for t in tyres}:
+            zf = (t - z0) / body["d"]  # the axle in the body's own fractions
+            over = [s for s in body["side"] if abs(s[0] - zf) < 1e-3]
+            assert over, f"{item['id']}: a station over the axle"
+            assert body["y"] + over[0][1] * body["h"] > wheel_mid, f"{item['id']}: the arch clears the wheel's middle"
+        checked += 1
+    assert checked > 190
+    assert json.loads((folder / "pack.json").read_text(encoding="utf-8"))["release"] >= 5

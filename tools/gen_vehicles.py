@@ -205,6 +205,36 @@ class Shell:
         return side, plan
 
 
+def arched(side: list[tuple[float, float, float]], axles: list[float], dia: float) -> list[tuple[float, float, float]]:
+    """A body's side stations with a wheel arch over each axle (run 6: without arches the body hid the tyres down to
+    its sill and the car looked sunk into the ground). The bottom rises from the sill 1.25 tyre radii before the axle
+    to 3 cm over the tyre above it and back down; stations inside an arch keep their top and get the raised bottom."""
+    shell = Shell(side, [(side[0][0], 1.0), (side[-1][0], 1.0)])
+    reach, peak = 0.625 * dia, dia + 0.03
+
+    def lift(z: float) -> float:
+        for a in axles:
+            t = 1 - abs(z - a) / reach
+            if t > 0:
+                top = min(peak, shell.top(z) - 0.15)  # a low nose keeps 15 cm of body over its arch
+                return shell.bottom(z) + max(0.0, top - shell.bottom(z)) * (3 * t * t - 2 * t**3)
+        return 0.0
+
+    out = {round(z, 4): (z, max(b, lift(z)), t) for z, b, t in side}
+    for a in axles:
+        for z in (a - reach, a, a + reach):
+            out.setdefault(round(z, 4), (z, max(shell.bottom(z), lift(z)), shell.top(z)))
+    stations = [out[k] for k in sorted(out)]
+    assert len(stations) <= 16, len(stations)
+    return stations
+
+
+def wheel_wells(v: V, axles: list[float], dia: float, inner: float, y0: float) -> None:
+    """Dark wheel wells between a pair of wheels: what shows through an arch above the tyre (and under the car)."""
+    for a in axles:
+        v.box(0, a, inner, 1.1 * dia, y0, dia + 0.02 - y0, "dark")
+
+
 # ---------------------------------------------------------------------------------------------------------- cars
 
 # gc: ground clearance (m); belt: where the windows start (fraction of the height); wheel/tyre in m; wb: wheelbase as
@@ -269,7 +299,8 @@ def car(brand_id: str, brand: str, model: str, body: str, length_mm: int, width_
             0.25,
             0.94,
         )
-        v.shell(lower.side, lower.plan, "paint", round=lower.round, taper=lower.taper)
+        v.shell(arched(lower.side, [rear_axle, front_axle], dia), lower.plan, "paint", round=lower.round, taper=lower.taper)
+        wheel_wells(v, [rear_axle, front_axle], dia, W - 2 * tyre - 0.06, gc)
         gw = body_w * 0.45
         glass = Shell(
             [
