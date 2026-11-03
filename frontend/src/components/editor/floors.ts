@@ -12,6 +12,7 @@ import { formatNumber } from "../../i18n.ts";
 import { bounds, newFloor, floorElevation, roomTiles, unplacedAreas, uid, type Floor, type Vec2 } from "../../model.ts";
 import type { HassArea, HassFloor } from "../../types.ts";
 import { shiftBy, transformPlan, turnAbout } from "../../plan-transform.ts";
+import { firstHaFloor, floorLinks, haFloorNamed } from "../../floor-link.ts";
 import { round } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
@@ -24,6 +25,8 @@ export class FloorsPart {
 
   addFloor(this: Fp3dEditor, ha: HassFloor | null = null): void {
     const floors = this._doc.floors;
+    // a home's first floor stands for Home Assistant's ground floor (or its lowest) by itself (#263)
+    if (!ha && floors.length === 0) ha = firstHaFloor(this.freeHaFloors);
     const id = uid("floor");
     const name = ha?.name ?? (floors.length === 0 ? this.t("default_floor") : this.t("new_floor", { n: floors.length }));
     const floor = { ...newFloor(id, name, floorElevation(floors, ha?.level)), ha_floor: ha?.floor_id ?? null };
@@ -125,7 +128,21 @@ export class FloorsPart {
   }
 
   updateFloor(this: Fp3dEditor, patch: Partial<Floor>): void {
-    this.change((_, floor) => Object.assign(floor, patch));
+    this.change((doc, floor) => {
+      Object.assign(floor, patch);
+      // a floor renamed like a Home Assistant floor links to it, when it has no link yet (#263; editable below)
+      if (patch.name !== undefined && !floor.ha_floor) {
+        const hit = haFloorNamed(floor.name, Object.values(this.hass?.floors ?? {}), new Set(doc.floors.map((f) => f.ha_floor)));
+        if (hit) floor.ha_floor = hit.floor_id;
+      }
+    });
+  }
+
+  /** A home none of whose floors is linked to Home Assistant's yet: floors link by name, once, undoable (#263). */
+  linkFloorsByName(this: Fp3dEditor): void {
+    if (!this.isEditor || this._doc.floors.some((f) => f.ha_floor)) return;
+    const links = floorLinks(this._doc.floors, Object.values(this.hass?.floors ?? {}));
+    if (links.size) this.change((doc) => doc.floors.forEach((f) => (f.ha_floor = links.get(f.id) ?? f.ha_floor)));
   }
 
   async loadImage(this: Fp3dEditor, imageId: string): Promise<void> {

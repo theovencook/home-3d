@@ -79,6 +79,7 @@ import { preloadParts } from "./editor/lazy.ts";
 import { BackupPart } from "./editor/backup.ts";
 import { PhonePart, type SheetHeight } from "./editor/phone.ts";
 import { PetsPart } from "./editor/pets.ts";
+import { sameFloorName } from "../floor-link.ts";
 import { BackLayers } from "../back-stack.ts";
 export type { EditorTopic };
 
@@ -798,6 +799,8 @@ export class Fp3dEditor extends LitElement {
       if (!this.startChecked && this._doc) {
         this.startChecked = true;
         if (startsFullWidth(this._doc, this._split)) this._split = false;
+        // floors named like Home Assistant's link to them (#263)
+        queueMicrotask(() => this.linkFloorsByName());
       }
     }
     // the plan's recipe copies (#2): placed items keep their look whatever the installed packs say
@@ -1031,8 +1034,9 @@ export class Fp3dEditor extends LitElement {
   /** Floors of Home Assistant's floor registry that no floor of the plan stands for yet, lowest first. */
   get freeHaFloors(): HassFloor[] {
     const used = new Set(this._doc.floors.map((f) => f.ha_floor));
+    // nor one the plan has under its name, linked or not (#263)
     return Object.values(this.hass?.floors ?? {})
-      .filter((f) => !used.has(f.floor_id))
+      .filter((f) => !used.has(f.floor_id) && !this._doc.floors.some((p) => sameFloorName(p.name, f.name)))
       .sort((a, b) => (a.level ?? 99) - (b.level ?? 99) || a.name.localeCompare(b.name));
   }
 

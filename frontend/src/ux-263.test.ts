@@ -125,3 +125,45 @@ test("on a phone 3D beside covers the plan, its button goes back to 2D, Back clo
   assert.match(phone, /if \(this\._phone && !was\) this\._split = false;/);
   assert.match(src("./components/editor.ts"), /this\.houseTool && !this\._split && !this\.narrow && !this\._phone\) this\._split = true;/);
 });
+
+// 7. Add floor never offers a floor the plan has; floors link to HA floors by name
+
+test("floor names match Home Assistant's whatever the case, punctuation or a trailing 'floor' (#263)", async () => {
+  const { floorKey, sameFloorName, floorLinks, firstHaFloor, haFloorNamed } = await import("./floor-link.ts");
+  assert.equal(floorKey("Ground Floor"), "ground");
+  assert.ok(sameFloorName("Ground floor", "ground"));
+  assert.ok(sameFloorName("First-Floor", "first floor"));
+  assert.ok(!sameFloorName("Floor 1", "First floor"));
+  assert.ok(!sameFloorName("", ""), "an empty name matches nothing");
+  const ha = [
+    { floor_id: "g", name: "Ground Floor", level: 0 },
+    { floor_id: "f", name: "First Floor", level: 1 },
+    { floor_id: "b", name: "Basement", level: -1 },
+  ];
+  // unlinked plan floors link by name, a linked one keeps its link, each HA floor once
+  const links = floorLinks(
+    [
+      { id: "p1", name: "Ground floor", ha_floor: null },
+      { id: "p2", name: "First floor", ha_floor: "b" },
+      { id: "p3", name: "ground", ha_floor: null },
+      { id: "p4", name: "Attic", ha_floor: null },
+    ],
+    ha,
+  );
+  assert.deepEqual([...links], [["p1", "g"]]);
+  assert.equal(haFloorNamed("first floor", ha, new Set(["f"])), null, "taken by another floor");
+  // a home's first floor: level 0 before the basement
+  assert.equal(firstHaFloor(ha.slice().sort((a, b) => a.level - b.level))?.floor_id, "g");
+  assert.equal(firstHaFloor([]), null);
+});
+
+test("Add floor hides HA floors the plan has by name; add, rename and a first open link floors (#263)", () => {
+  const ed = src("./components/editor.ts");
+  assert.match(ed, /\.filter\(\(f\) => !used\.has\(f\.floor_id\) && !this\._doc\.floors\.some\(\(p\) => sameFloorName\(p\.name, f\.name\)\)\)/);
+  assert.match(ed, /queueMicrotask\(\(\) => this\.linkFloorsByName\(\)\);/);
+  const floors = src("./components/editor/floors.ts");
+  assert.match(floors, /if \(!ha && floors\.length === 0\) ha = firstHaFloor\(this\.freeHaFloors\);/);
+  assert.match(floors, /if \(patch\.name !== undefined && !floor\.ha_floor\) \{/);
+  // only a home none of whose floors is linked: a link someone removed stays removed
+  assert.match(floors, /if \(!this\.isEditor \|\| this\._doc\.floors\.some\(\(f\) => f\.ha_floor\)\) return;/);
+});
