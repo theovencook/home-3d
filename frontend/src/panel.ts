@@ -943,6 +943,12 @@ export class Floorplan3dPanel extends LitElement {
     row("_findOpen", "find", this._findOpen, () => (this._findOpen = false), () => (this._findOpen = true));
     row("_cameraWall", "cameras", this._cameraWall && this._mode === "view", () => (this._cameraWall = false), () => (this._cameraWall = true));
     row("_micProbe", "mic", this._micProbe, () => ((this._micProbe = false), micProbeDone()));
+    // a picked floor and an open room are steps of their own (#346): Back (Android's gesture, the browser's) takes the
+    // same steps as the Back button on the bar, the room first, then the floor, before it leaves the page
+    const floor = this._floorId;
+    const room = this._roomId;
+    row("_floorId", "floor", !!floor && (this.data.building?.floors.length ?? 0) > 1, () => ((this._roomId = null), (this._floorId = null)), floor ? () => (this._floorId = floor) : undefined);
+    row("_roomId", "room", !!room, () => (this._roomId = null), room ? () => (this._roomId = room) : undefined);
     this.backLayers.syncAll(rows);
   }
 
