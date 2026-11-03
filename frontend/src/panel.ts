@@ -13,6 +13,8 @@ import { loadLocate } from "./load-locate.ts";
 import { loadView, readyView } from "./load-view.ts";
 import { loadFind, loadHomeSwitcher, loadRoomPanel, loadRoomsPicker, loadViewPanel } from "./load-parts.ts";
 import { need } from "./lazy-part.ts";
+import { setTimeFormat } from "./time-format.ts";
+import { formatDateTime, timeStyleOf } from "./time-text.ts";
 import { languageReady, loadLanguage, setChosenLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
 import type { Building, Floor, StartView } from "./model.ts";
 import type { SearchItem } from "./search.ts";
@@ -336,6 +338,7 @@ export class Floorplan3dPanel extends LitElement {
     this._screen = screenName();
     // this device's own language (#292): its texts load now when it just changed
     setChosenLanguage(prefs.get("language"));
+    setTimeFormat(prefs.get("time_format"));
     if (this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language, this.hass).then(() => this.requestUpdate());
   }
 
@@ -1087,7 +1090,7 @@ export class Floorplan3dPanel extends LitElement {
       notices.push({ key: "save", body: html`<div class="fp3d-notice fp3d-notice-error"><span>${this.t("save_failed_detail", { error: d.saveError })}</span></div>` });
     }
     if (d.draft && this.canEdit && !this._tablet) {
-      const at = new Date(d.draft.savedAt).toLocaleString(this.hass?.language);
+      const at = formatDateTime(d.draft.savedAt, timeStyleOf(this.hass));
       notices.push({
         key: `draft:${d.draft.savedAt}`,
         body: html`<div class="fp3d-notice">

@@ -3,6 +3,7 @@
 
 import { LANGUAGE_PREF } from "../i18n-core.ts";
 import { deviceChoice } from "./view-settings.ts";
+import { setTimeFormat } from "../time-format.ts";
 import type { Option, Setting } from "./registry.ts";
 
 /** The languages that come with Home 3D (bundled_languages/), besides English. */
@@ -29,6 +30,8 @@ export function languageOptions(): Option[] {
 
 const KEY = LANGUAGE_PREF.replace(/^home3d\./, "");
 
+const TIME_FORMAT = deviceChoice("time_format", "look", "look", "time_format", ["auto", "12", "24"], "auto", "st_time_format", ["auto", "12", "24"].map((value) => ({ value, label: `st_time_format_${value}` as const })), "st_time_format_hint");
+
 export const LANGUAGE: Setting[] = [
   deviceChoice(
     "language",
@@ -43,5 +46,7 @@ export const LANGUAGE: Setting[] = [
     ["language", "translation", "translate", "locale", "english", "german", "deutsch", "french", "francais", "spanish", "espanol", "dutch", "nederlands", "italian", "italiano", "polish", "swedish", "norwegian", "danish", "finnish", "czech", "hungarian", "romanian", "slovenian", "portuguese", "chinese"],
     "select",
   ),
+  // 12 or 24 hour times, everywhere a time is shown or picked (#318); Automatic follows the Home Assistant profile
+  { ...TIME_FORMAT, write: (env, v: string) => (TIME_FORMAT.write!(env, v), setTimeFormat(v)) } as Setting,
 ];
 LANGUAGE[0] = { ...LANGUAGE[0]!, control: { kind: "select", options: () => languageOptions() } };

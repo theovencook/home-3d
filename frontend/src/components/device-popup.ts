@@ -2,6 +2,7 @@
 // (name, state, close, a "More" link to Home Assistant's details) and a body per kind. A chunk of its own, loaded the
 // first time one opens (view3d.ts). `mode="hover"` is the camera's floating preview: no controls, no pointer events.
 
+import { formatDateTime, timeStyleOf } from "../time-text.ts";
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import { entityName, isUnavailable } from "../devices.ts";
@@ -213,7 +214,7 @@ export class Fp3dDevicePopup extends LitElement {
     const busy = vacuumBusy(st.state);
     const lines: [string, string][] = [];
     if (run.battery !== null) lines.push([this.t("dp_vac_battery"), `${run.battery} %`]);
-    if (run.when) lines.push([this.t("dp_vac_last_run"), new Date(run.when).toLocaleString(this.hass.locale?.language ?? this.hass.language, { dateStyle: "short", timeStyle: "short" })]);
+    if (run.when) lines.push([this.t("dp_vac_last_run"), formatDateTime(new Date(run.when), timeStyleOf(this.hass))]);
     if (run.area) lines.push([this.t("dp_vac_area"), run.area]);
     if (run.seconds !== null) lines.push([this.t("dp_vac_duration"), durationText(run.seconds)]);
     const btn = (label: string, act: () => void, on = false) => html`<button class="dp-btn ${on ? "dp-on" : ""}" @click=${act}>${label}</button>`;

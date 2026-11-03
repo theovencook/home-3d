@@ -9,6 +9,7 @@
 import { areaEntities, kindOf } from "./devices.ts";
 import { cameraMotionSensors } from "./markers.ts";
 import { centroid, type Building } from "./model.ts";
+import { formatTime, timeStyleOf } from "./time-text.ts";
 import type { HomeAssistant } from "./types.ts";
 
 export const TRAIL_WINDOW_MS = 30 * 60 * 1000;
@@ -116,7 +117,7 @@ export function trailPoints(sources: TrailSource[], events: TrailEvent[], now: n
 
 /** "12:04" in the user's language. */
 export function trailTime(hass: HomeAssistant, time: number): string {
-  return new Date(time).toLocaleTimeString(hass.language, { hour: "2-digit", minute: "2-digit" });
+  return formatTime(time, timeStyleOf(hass));
 }
 
 /** A walking figure (mdi:walk), the icon of a trail point. */

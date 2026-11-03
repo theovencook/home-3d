@@ -1,5 +1,6 @@
 // Backups and restore points: the history list, restoring, exporting and importing a backup or a plan.
 
+import { formatDateTime, timeStyleOf } from "../../time-text.ts";
 import { html, nothing } from "lit";
 import { fetchImage, listHistory, restoreSnapshot, storeImage, takeSnapshot, type Snapshot } from "../../api.ts";
 import { download, exportFile, parseExport } from "../../transfer.ts";
@@ -186,7 +187,7 @@ export class BackupPart {
   }
 
   snapshotTime(this: Fp3dEditor, snap: Snapshot): string {
-    return new Date(snap.saved_at * 1000).toLocaleString(this.hass?.language, { dateStyle: "short", timeStyle: "short" });
+    return formatDateTime(snap.saved_at * 1000, timeStyleOf(this.hass));
   }
 
   renderBackup(this: Fp3dEditor) {
