@@ -502,19 +502,63 @@ async def test_remove_entry_keeps_the_stores(hass: HomeAssistant, hass_ws_client
     assert DOMAIN not in hass.data
 
 
+BUILD = "0123456789ab"
+
+
 async def test_panel_and_card_are_registered_and_removed(hass: HomeAssistant, mock_frontend) -> None:
-    entry = await _setup(hass)
+    with patch("custom_components.home_3d.read_build", return_value=BUILD):
+        entry = await _setup(hass)
     mock_frontend["register"].assert_awaited_once()
     assert mock_frontend["register"].await_args.kwargs["frontend_url_path"] == "home_3d"
     url = mock_frontend["add_js"].call_args.args[1]
-    # one URL for the bundle (#218): the extra module and the panel's module_url are the same
-    assert url == "/api/home_3d/static/home-3d.js"
+    # one URL for the bundle (#218): the extra module and the panel's module_url are the same, with the build id (#340)
+    assert url == f"/api/home_3d/static/home-3d.js?v={BUILD}"
     assert mock_frontend["register"].await_args.kwargs["module_url"] == url
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     mock_frontend["remove_panel"].assert_called_once_with(hass, "home_3d", warn_if_unknown=False)
     mock_frontend["remove_js"].assert_called_once_with(hass, url)
+
+
+async def test_the_card_resource_and_the_loader_carry_the_build_id(hass: HomeAssistant, mock_frontend) -> None:
+    """#340: the dashboard resource is the loader under the build id, and the loader imports the bundle under it too, so
+    an update changes every URL a cache could hold. Without a build file (a development checkout) the URLs are plain."""
+    with (
+        patch("custom_components.home_3d.read_build", return_value=BUILD),
+        patch("custom_components.home_3d.async_schedule_card_resource") as schedule,
+    ):
+        await _setup(hass)
+    assert schedule.call_args.args[1] == f"/api/home_3d/static/home-3d-loader.js?v={BUILD}"
+    with (
+        patch("custom_components.home_3d.read_build", return_value=None),
+        patch("custom_components.home_3d.async_schedule_card_resource") as schedule,
+    ):
+        assert await hass.config_entries.async_reload(hass.config_entries.async_entries(DOMAIN)[0].entry_id)
+        await hass.async_block_till_done()
+    assert schedule.call_args.args[1] == "/api/home_3d/static/home-3d-loader.js"
+    assert mock_frontend["register"].await_args.kwargs["module_url"] == "/api/home_3d/static/home-3d.js"
+
+
+async def test_the_versioned_entry_is_kept_and_the_old_urls_still_work(hass: HomeAssistant, hass_client) -> None:
+    """#340: the entry and the loader under the current build id are immutable; the plain URL and an old id still
+    work (a page or a dashboard resource from before an update) and are checked on each load."""
+    await _setup(hass)
+    client = await hass_client()
+    immutable = "public, max-age=31536000, immutable"
+    with patch("custom_components.home_3d.read_build", return_value=BUILD):
+        res = await client.get(f"/api/home_3d/static/home-3d.js?v={BUILD}")
+        assert res.status == 200
+        assert res.headers["Cache-Control"] == immutable
+        loader = await client.get(f"/api/home_3d/static/home-3d-loader.js?v={BUILD}")
+        assert loader.headers["Cache-Control"] == immutable
+        assert f'const url = "/api/home_3d/static/home-3d.js?v={BUILD}";' in await loader.text()
+        for old in ("/api/home_3d/static/home-3d.js", "/api/home_3d/static/home-3d.js?v=ffffffffffff"):
+            res = await client.get(old)
+            assert res.status == 200
+            assert res.headers["Cache-Control"] == "no-cache"
+        assert (await client.get("/api/home_3d/static/home-3d-loader.js")).headers["Cache-Control"] == "no-cache"
+        assert (await client.get(f"/home_3d_static/home-3d.js?v={BUILD}")).status == 200
 
 
 async def test_the_bundle_keeps_its_url_across_a_reload(hass: HomeAssistant, mock_frontend) -> None:
@@ -547,7 +591,8 @@ async def test_frontend_files_are_served_without_caching(hass: HomeAssistant, ha
     assert (await client.get("/home_3d_static/home-3d.js?v=1")).status == 200
     assert (await client.get("/home_3d_static/nothing.js")).status == 404
     # the card loader comes from our own path, nothing is written into the user's www folder
-    loader = await client.get("/api/home_3d/static/home-3d-loader.js")
+    with patch("custom_components.home_3d.read_build", return_value=None):
+        loader = await client.get("/api/home_3d/static/home-3d-loader.js")
     assert loader.status == 200
     text = await loader.text()
     assert 'const tag = "home-3d-card";' in text

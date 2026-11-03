@@ -43,6 +43,7 @@ from .const import (
     URL_BASE,
 )
 from .editors import Editors
+from .frontend_build import read_build, versioned_url
 from .locate.service import DATA_LOCATE, LocateService
 from .pack_updates import PackUpdates
 from .pets import PetRoutines
@@ -92,8 +93,12 @@ class FrontendView(HomeAssistantView):
         hass: HomeAssistant = request.app[KEY_HASS]
         if path == LOADER_FILE:
             # the dashboard resource: loads the bundle and tries again while it is not there yet (#461)
-            text = loader_source(MAIN_URL)
-            return web.Response(text=text, content_type="text/javascript", headers={"Cache-Control": "no-cache"})
+            # it names the bundle under the current build id, so a new build is a new URL for the bundle (#340)
+            build = await hass.async_add_executor_job(read_build)
+            version = request.query.get("v")
+            cache = CACHE_IMMUTABLE if build and version == build else CACHE_CHECK
+            text = loader_source(versioned_url(MAIN_URL, build))
+            return web.Response(text=text, content_type="text/javascript", headers={"Cache-Control": cache})
         found = await hass.async_add_executor_job(_frontend_file_cached, path, request.query.get("v"))
         if found is None:
             raise web.HTTPNotFound
@@ -116,6 +121,11 @@ def _frontend_file_cached(path: str, version: str | None) -> tuple[Path, str] | 
         return None
     if _HASHED_NAME.fullmatch(file.name):
         return file, CACHE_IMMUTABLE
+    # the entry under the current build id (#340): a proxy that applies its own cache time cannot keep an old entry
+    # past an update, because the update is a new URL; the same file asked for without the id, or with an old one,
+    # is still served, checked on each load
+    if version and version == read_build():
+        return file, CACHE_IMMUTABLE
     if version and _CONTENT_HASH.fullmatch(version):
         stat = file.stat()
         if _content_hash(file, stat.st_mtime_ns, stat.st_size) == version:
@@ -136,6 +146,14 @@ async def _async_register_static(hass: HomeAssistant) -> None:
         return
     hass.http.register_view(FrontendView())
     hass.data[_STATIC_REGISTERED] = True
+
+
+async def _async_bundle_urls(hass: HomeAssistant) -> tuple[str, str]:
+    """The URLs of the main bundle and of the card loader with the build id on them (#340), else the plain ones (a
+    development checkout without a build file). The same URL goes to the extra module, the panel and the loader, so
+    the browser still runs one copy of the bundle (#218)."""
+    build = await hass.async_add_executor_job(read_build)
+    return versioned_url(MAIN_URL, build), versioned_url(LOADER_URL, build)
 
 
 async def _async_register_panel(hass: HomeAssistant, entry: ConfigEntry, url: str) -> None:
@@ -160,7 +178,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     if (data := hass.data.get(DOMAIN)) is not None:
         data.picture_days = entry.options.get(CONF_RESTORE_PICTURE_DAYS, DEFAULT_RESTORE_PICTURE_DAYS)
     frontend.async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
-    await _async_register_panel(hass, entry, MAIN_URL)
+    await _async_register_panel(hass, entry, (await _async_bundle_urls(hass))[0])
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -212,12 +230,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_register_static(hass)
 
     # one URL for the bundle everywhere: the extra module, the panel's module_url and the card loader (#218)
-    url = MAIN_URL
+    url, loader_url = await _async_bundle_urls(hass)
     entry.async_on_unload(partial(_remove_frontend, hass, url))
     frontend.add_extra_js_url(hass, url)
     # and as a dashboard resource, so a dashboard never draws the card before its script is there (#252), through
     # the loader on our own path, which tries again while the bundle is not there yet (#461)
-    entry.async_on_unload(async_schedule_card_resource(hass, LOADER_URL))
+    entry.async_on_unload(async_schedule_card_resource(hass, loader_url))
     await _async_register_panel(hass, entry, url)
     # the sidebar option (#8) applies at once: the panel is registered again, the entry is not reloaded
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))

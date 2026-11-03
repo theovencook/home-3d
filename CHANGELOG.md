@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- An update can no longer break loading behind a caching proxy: the panel, the extra module and the dashboard card loader are registered with `?v=<build id>`, so each update is a new URL (served immutable); the plain URLs still work. A failed chunk import reloads the page once instead of leaving a broken panel (#340).
 - Settings, Extensions, the editor and the ask dialogs (New home, Rename, Delete …) follow the chosen look: light under the Day look or a light Home Assistant theme, high contrast under High contrast (#263).
 - On a phone the View sheet opens at half height so the house stays in sight; drag its handle up (or tap it) for all of it, down to shrink or close it (#263).
 - Room names on a floor view no longer pile up: where two would overlap the smaller room's name gives way, and every name comes back as you zoom in (#263).

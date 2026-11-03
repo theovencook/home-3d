@@ -1,5 +1,6 @@
 // Loads the three.js bundle only when a 3D view is opened.
 
+import { guardImport } from "./guard-import.ts";
 import type * as Viewer from "./viewer/viewer3d.ts";
 
 export type ViewerModule = typeof Viewer;
@@ -13,7 +14,7 @@ const url = new URL(`./home-3d-3d.js?v=${__FP3D_VIEWER_HASH__}`, base).href;
 let loading: Promise<ViewerModule> | undefined;
 
 export function load3d(): Promise<ViewerModule> {
-  loading ??= import(/* @vite-ignore */ url) as Promise<ViewerModule>;
+  loading ??= guardImport(import(/* @vite-ignore */ url) as Promise<ViewerModule>);
   return loading;
 }
 
