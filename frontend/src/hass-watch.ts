@@ -143,7 +143,7 @@ export class HassWatch {
 export const HASS_CHILDREN = {
   "panel.ts": ["fp3d-mic-probe", "ha-menu-button", "fp3d-home-switcher", "fp3d-extensions", "fp3d-settings-page", "fp3d-editor", "fp3d-view3d", "fp3d-room-panel", "fp3d-view-panel", "fp3d-find"],
   "card.ts": ["fp3d-view3d", "fp3d-room-panel"],
-  "components/view3d.ts": ["fp3d-quick-menu", "fp3d-device-popup", "fp3d-mic-probe", "fp3d-find"],
+  "components/view3d.ts": ["fp3d-quick-menu", "fp3d-device-popup", "fp3d-mic-probe", "fp3d-find", "fp3d-weather-tile"],
 } as const;
 
 /**

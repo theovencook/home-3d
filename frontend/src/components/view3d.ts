@@ -135,7 +135,7 @@ import { fetchImage, saveBuilding } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { holdTarget } from "../hold.ts";
 import { popupKind, popupPosition } from "../device-popup-model.ts";
-import { loadDevicePopup, loadFind, loadQuickMenu, loadViewNav } from "../load-parts.ts";
+import { loadDevicePopup, loadFind, loadQuickMenu, loadViewNav, loadWeatherTile } from "../load-parts.ts";
 import { need } from "../lazy-part.ts";
 import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packsVersion, recipeHashes } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
@@ -294,6 +294,7 @@ export class Fp3dView3d extends LitElement {
     theme: { attribute: false },
     clock: { attribute: false },
     clockLook: { attribute: false },
+    clockWeather: { attribute: false },
     _clockTick: { state: true },
     accent: { attribute: false },
     packs: { attribute: false },
@@ -459,6 +460,8 @@ export class Fp3dView3d extends LitElement {
   declare clock: ClockPos | null;
   /** What the clock looks like (#232); the default is digits with the date. */
   declare clockLook: ClockLook | null;
+  /** A weather tile by the clock (#333; a device preference, off by default). */
+  declare clockWeather: boolean;
   private declare _clockTick: number;
   private clockTimer: ReturnType<typeof setInterval> | undefined;
   private clockEvery = 0;
@@ -830,6 +833,7 @@ export class Fp3dView3d extends LitElement {
     this.theme = "neon";
     this.clock = null;
     this.clockLook = null;
+    this.clockWeather = false;
     this._clockTick = 0;
     this.accent = null;
     this.furnish = false;
@@ -4692,7 +4696,12 @@ export class Fp3dView3d extends LitElement {
     if (this.clockTimer && this.clockEvery !== every) clearInterval(this.clockTimer), (this.clockTimer = undefined);
     this.clockEvery = every;
     this.clockTimer ??= setInterval(() => (this._clockTick = Date.now()), every);
-    return renderClock(pos, { now: new Date(this.now()), lang: (this.hass.language || "en").replace("_", "-"), timeZone: this.hass.config?.time_zone, locale: this.hass.locale }, look);
+    const clock = renderClock(pos, { now: new Date(this.now()), lang: (this.hass.language || "en").replace("_", "-"), timeZone: this.hass.config?.time_zone, locale: this.hass.locale }, look);
+    // the weather tile beside it (#333): its code loads when the option is on, its forecast on the first tap
+    const wx = this.clockWeather ? weatherEntity(this.hass, this.weatherEntityId ?? this.building?.settings.weather_entity) : null;
+    if (!wx) return clock;
+    need(loadWeatherTile);
+    return html`<div class="fp3d-clockrow fp3d-clock-${pos}">${clock}<fp3d-weather-tile .hass=${this.hass} .entity=${wx} .look=${look} .pos=${pos} ?light=${this.hasAttribute("light")}></fp3d-weather-tile></div>`;
   }
 
   private renderAlerts() {
@@ -7645,6 +7654,23 @@ export class Fp3dView3d extends LitElement {
       }
       :host([light]) .fp3d-clock span {
         color: #3d4d63;
+      }
+      /* at the top it sits under the energy strip and the walk button */
+      /* the clock with the weather tile beside it (#333): the row takes the clock's corner, the clock sits in it */
+      .fp3d-clockrow {
+        position: absolute;
+        z-index: 1;
+        display: flex;
+        align-items: stretch;
+        gap: 8px;
+        pointer-events: none;
+      }
+      .fp3d-clockrow > .fp3d-clock {
+        position: static;
+      }
+      .fp3d-clock-tr.fp3d-clockrow,
+      .fp3d-clock-br.fp3d-clockrow {
+        flex-direction: row-reverse;
       }
       /* at the top it sits under the energy strip and the walk button */
       .fp3d-clock-tl {

@@ -128,6 +128,7 @@ export class Floorplan3dPanel extends LitElement {
     _angleLock: { state: true },
     _windowSpill: { state: true },
     _sunHeight: { state: true },
+    _clockWeather: { state: true },
     _navButtons: { state: true },
     _trail: { state: true },
     _cameraWall: { state: true },
@@ -212,6 +213,7 @@ export class Floorplan3dPanel extends LitElement {
   private declare _angleLock: boolean;
   private declare _windowSpill: boolean;
   private declare _sunHeight: SunHeight;
+  private declare _clockWeather: boolean;
   private declare _navButtons: boolean;
   /** Motion trail of the last half hour in 3D. */
   private declare _trail: boolean;
@@ -335,6 +337,7 @@ export class Floorplan3dPanel extends LitElement {
     this._floorPics = prefs.get("floor_pictures") === "1";
     this._angleLock = prefs.get("angle_lock") === "1";
     this._windowSpill = prefs.get("window_spill") === "1";
+    this._clockWeather = prefs.get("clock_weather") === "1";
     const sunHeight = prefs.get("sun_height");
     this._sunHeight = sunHeight === "high" || sunHeight === "real" ? sunHeight : "auto";
     this._navButtons = prefs.get("nav") === "1";
@@ -1533,6 +1536,7 @@ export class Floorplan3dPanel extends LitElement {
           .theme=${this._theme}
           .clock=${this._clock}
           .clockLook=${this._clockLook}
+          .clockWeather=${this._clockWeather}
           .accent=${this.shownAccent()}
           ?furnish=${this._furnish && !tt}
           .selectedFurniture=${this._selFurniture}

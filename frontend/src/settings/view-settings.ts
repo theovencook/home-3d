@@ -116,6 +116,7 @@ export const LOOK: Setting[] = [
   deviceChoice("clock_style", "look", "clock", "clock_style", ["digital", "analogue"], "digital", "st_clock_face", opts([["digital", "clock_digital"], ["analogue", "clock_analogue"]]), undefined, ["time", "clock", "dial", "hands", "face"]),
   deviceSwitch("clock_seconds", "look", "clock", "clock_seconds", false, "st_clock_seconds", undefined, ["time", "clock", "seconds"]),
   deviceSwitch("clock_date", "look", "clock", "clock_date", true, "st_clock_date", undefined, ["time", "clock", "date", "day"]),
+  deviceSwitch("clock_weather", "look", "clock", "clock_weather", false, "st_clock_weather", "st_clock_weather_hint"),
   ].map((s): Setting => ({ ...s, visible: (env) => ["tl", "tr", "bl", "br"].includes(env.prefs.get("clock") ?? "") })), // the clock's details only while it shows (#256)
   deviceChoice("markers", "view3d", "markers", "markers", ["none", "room", "important", "all"], "important", "markers", opts([["none", "markers_none"], ["room", "markers_room"], ["important", "markers_important"], ["all", "markers_all"]]), "markers_important_hint", ["pins", "icons", "symbols", "devices", "markers"], "select"),
   deviceSwitch("pulse", "view3d", "markers", "pulse", true, "st_pulse", "st_pulse_hint", ["pins", "outline", "pulse", "animation", "motion"]),
@@ -241,7 +242,7 @@ export function viewSections(ctx: ViewContext): ViewSection[] {
     { id: "look", title: "theme", rows: [{ id: "theme" }, { id: "accent" }], openOnPhone: true },
     shows,
     { id: "markers", title: "markers", rows: [{ id: "markers" }, { id: "pinSize" }, { id: "pulse" }], hint: "markers_important_hint", openOnPhone: true },
-    { id: "clock", title: "st_clock", rows: [{ id: "clock" }], openOnPhone: false },
+    { id: "clock", title: "st_clock", rows: [{ id: "clock" }, { id: "clock_weather" }], openOnPhone: false },
   ];
 }
 

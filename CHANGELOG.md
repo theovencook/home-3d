@@ -10,6 +10,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - Hiding the controls (the eye) hides the floor bar with them (Whole house, floors, Rooms, search); the Rooms list and the search no longer come back open (#317).
 - Sun path height (Settings, 3D view): the sun and its way are drawn over the highest roof by default; Higher and Real angle are the other choices. The real sun angle still lights and shades the house (#319).
 - The TV and player card grows as a whole box while hovered (wider, titles in full) instead of scaling its text inside a fixed box, and stays inside the view (#335).
+- Weather tile by the clock (View panel and Settings, clock rows): the outside temperature and a condition symbol from the home's weather entity; a tap opens today's forecast (hourly, else daily) from weather.get_forecasts. Both parts load only when used (#333).
 
 ## Home 3D 0.2.1 (2 November 2026)
 

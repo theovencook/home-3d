@@ -19,3 +19,7 @@ export const loadRoomsPicker = once(() => import("./components/rooms-picker.ts")
 export const loadFind = once(() => import("./components/find.ts"));
 /** The quick menu (<fp3d-quick-menu>): a device's controls; loaded the first time one opens. */
 export const loadQuickMenu = once(() => import("./components/quick-menu.ts"));
+/** The weather tile by the clock (<fp3d-weather-tile>, #333): loaded when the option is on and the clock shows. */
+export const loadWeatherTile = once(() => import("./components/weather-tile.ts"));
+/** Today's forecast under the weather tile (<fp3d-weather-forecast>, #333): loaded the first time the tile is tapped. */
+export const loadWeatherForecast = once(() => import("./components/weather-forecast.ts"));

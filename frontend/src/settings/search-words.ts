@@ -96,6 +96,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   clock_hours: ["format", "military", "twelve", "hourly", "meridiem", "hour"],
   clock_style: ["analogue", "analog", "digital", "design", "style", "numerals"],
   clock_seconds: ["tick", "ticking", "hand", "sweep", "precise", "second"],
+  clock_weather: ["temperature", "forecast", "conditions", "outdoor", "tile", "degrees", "today"],
   clock_date: ["calendar", "dates", "weekday", "month", "today", "year"],
   language: ["tongue", "dialect", "languages", "region", "text", "country"],
   quality: ["lag", "lightweight", "detail", "resolution", "sharpness", "stutter"],
