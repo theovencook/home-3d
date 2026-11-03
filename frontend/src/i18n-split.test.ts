@@ -10,7 +10,7 @@ import type { HomeAssistant } from "./types.ts";
 // Home Assistant (home_3d/languages/get) like any installed language pack; English is the fallback for every key.
 
 // The English table (the bundles carry only this one) and the source, to check no German is left in it.
-const src = readFileSync(new URL("./i18n.ts", import.meta.url), "utf8");
+const src = readFileSync(new URL("./i18n.ts", import.meta.url), "utf8") + readFileSync(new URL("./i18n-late.ts", import.meta.url), "utf8");
 const en: Record<string, string> = englishTable();
 const holes = (s: string) => (s.match(/\{[a-z_]+\}/g) ?? []).sort().join();
 const DE = { language: "de" } as unknown as HomeAssistant;
@@ -135,7 +135,7 @@ test("every bundled language pack holds only known keys and no unknown placehold
 // Every key the code names literally, by the table it is read from.
 const sources = (dir: URL): URL[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? sources(new URL(`${e.name}/`, dir)) : e.name.endsWith(".ts") && !e.name.endsWith(".test.ts") && e.name !== "i18n.ts" ? [new URL(e.name, dir)] : [],
+    e.isDirectory() ? sources(new URL(`${e.name}/`, dir)) : e.name.endsWith(".ts") && !e.name.endsWith(".test.ts") && e.name !== "i18n.ts" && e.name !== "i18n-late.ts" ? [new URL(e.name, dir)] : [],
   );
 const CALL = /\b(?:this\.t|t|tr|translate)\(\s*(?:[\w.?]+\s*,\s*)?"([a-z][a-z0-9_]*)"/g;
 

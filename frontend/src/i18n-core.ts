@@ -21,6 +21,8 @@ interface Shared {
   en?: Table;
   /** This device's chosen language (#292); undefined: not read yet, null: follow Home Assistant. */
   chosen?: string | null;
+  /** Loads the English texts of the lazy bundles (the main bundle sets it, i18n.ts). */
+  late?: () => Promise<void>;
 }
 const shared: Shared = ((globalThis as { __fp3dLanguages?: Shared }).__fp3dLanguages ??= { extra: new Map(), pending: new Map() });
 const { extra, pending } = shared;
@@ -32,6 +34,21 @@ const { extra, pending } = shared;
  */
 export function registerEnglish(table: Table): void {
   shared.en = shared.en && shared.en !== table ? { ...shared.en, ...table } : table;
+}
+
+/** The main bundle's way to fetch the English texts that only the lazy bundles show (i18n-late.ts). */
+export function setLateTexts(load: () => Promise<void>): void {
+  let loading: Promise<void> | undefined;
+  shared.late = () =>
+    (loading ??= load().catch((err: unknown) => {
+      loading = undefined;
+      throw err;
+    }));
+}
+
+/** Resolves once the English texts of the editor, Settings, time travel … are registered (at once where there is nothing to load). */
+export function lateTextsReady(): Promise<void> {
+  return shared.late ? shared.late() : Promise.resolve();
 }
 
 /** The page's English texts (empty until the main bundle registered them). */

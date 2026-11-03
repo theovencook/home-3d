@@ -13,3 +13,16 @@ export const borrowEnglish: Plugin = {
     b.onResolve({ filter: /(?:^|[\/])i18n\.ts$/ }, (args) => (args.importer === BORROWED ? undefined : { path: BORROWED }));
   },
 };
+
+const NO_LATE = fileURLToPath(new URL("./i18n-late-none.ts", import.meta.url));
+
+/**
+ * The main bundle's plugin: the English texts only the lazy bundles show (i18n-late.ts, two thirds of the table) are
+ * not part of i18n.ts there; they are the chunk i18n-register-late.ts, fetched before such a bundle loads.
+ */
+export const lateTextsChunk: Plugin = {
+  name: "late-texts-chunk",
+  setup(b) {
+    b.onResolve({ filter: /(?:^|[\/])i18n-late\.ts$/ }, (args) => (args.importer.endsWith("i18n.ts") ? { path: NO_LATE } : undefined));
+  },
+};

@@ -1,6 +1,8 @@
 // The loader of a bundle that is fetched only when it is needed (the editor, time travel, voice …). The bundles sit
 // next to the main one; the content hash in the URL means a new build is never taken from the browser cache.
 
+import { lateTextsReady } from "./i18n-core.ts";
+
 /**
  * A function that loads the bundle `name` (the file `<name>.js`, `hash` returns its content hash from the build) once
  * and returns the same promise afterwards. A failed download (a short network hiccup) is forgotten, so the next call
@@ -20,7 +22,8 @@ export function lazyBundle<T = unknown>(name: string, hash: () => string, chunks
     if (!loading) {
       const url = new URL(`./${name}.js?v=${hash()}`, new URL(import.meta.url)).href;
       for (const chunk of chunks?.() ?? []) import(/* @vite-ignore */ new URL(`./${chunk}`, new URL(import.meta.url)).href).catch(() => undefined);
-      loading = (import(/* @vite-ignore */ url) as Promise<T>).catch((err) => {
+      // the English texts only these bundles show come as a chunk of their own, fetched alongside
+      loading = Promise.all([import(/* @vite-ignore */ url) as Promise<T>, lateTextsReady()]).then(([bundle]) => bundle).catch((err) => {
         loading = undefined;
         throw err;
       });

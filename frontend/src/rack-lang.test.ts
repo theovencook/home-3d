@@ -6,7 +6,7 @@ import { translate } from "./i18n.ts";
 import type { HomeAssistant } from "./types.ts";
 
 // The rack strings (#122) in the English table, read from the source.
-const src = readFileSync(new URL("./i18n.ts", import.meta.url), "utf8");
+const src = readFileSync(new URL("./i18n.ts", import.meta.url), "utf8") + readFileSync(new URL("./i18n-late.ts", import.meta.url), "utf8");
 const en: Record<string, string> = {};
 for (const m of src.slice(src.indexOf("const en")).matchAll(/^ {2}([a-z0-9_]+): ("(?:[^"\\]|\\.)*"),?$/gm)) en[m[1]!] = JSON.parse(m[2]!);
 const keys = Object.keys(en).filter((k) => /^(rack_|voice_rack_|card_rack_)/.test(k));
