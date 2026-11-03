@@ -22,6 +22,7 @@ import { pushOutdoor } from "./outdoor.ts";
 import { pushModules } from "./roof.ts";
 import type { RoofFace } from "../solar.ts";
 import { cutAbove, cutLinesAbove, FURN_OFFSET, ALWAYS, CAP_OFFSET, CUT_OFFSET, EDGE_BASE, EDGE_CUT, EDGE_SOFT, EDGE_TOP, GeoBuffer, LineBuffer, type GeoSlice, type LineSlice, LOWER_OFFSET, pushPrism, triangulate } from "./geo.ts";
+import { runAll } from "./slices.ts";
 
 export { ALWAYS, CUT_OFFSET, FURN_OFFSET, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
 
@@ -133,7 +134,15 @@ interface Span {
   cont?: boolean;
 }
 
-export function buildFloorGeometry(
+export function buildFloorGeometry(...args: Parameters<typeof floorGeometrySteps>): FloorGeometry {
+  return runAll(floorGeometrySteps(...args));
+}
+
+/**
+ * buildFloorGeometry in steps (run 6 speed): it stops for now (`yield`) after each part and each item, so a new home's
+ * floors can be modelled in short slices (slices.ts) with the page free in between. Run to the end, the same result.
+ */
+export function* floorGeometrySteps(
   floor: Floor,
   wallExterior: number,
   wallInterior: number,
@@ -145,7 +154,7 @@ export function buildFloorGeometry(
    * there: knee walls at the eaves, gables up to the ridge, inner walls cut by the slope.
    */
   roofUnder?: (x: number, z: number) => number | null,
-): FloorGeometry {
+): Generator<void, FloorGeometry, void> {
   const { walls, open: openRooms } = generateWalls(floor.rooms, { exterior: wallExterior, interior: wallInterior }, floor.walls ?? []);
   // the top of a wall at a point: its own height (a sloping wall's at that point), or the roof above when lower
   const topAt = (x: number, z: number, H: number, wall?: Wall): number => {
@@ -225,6 +234,7 @@ export function buildFloorGeometry(
     }
   }
 
+  yield;
   // ---------------------------------------------------------------- buckets and openings
   const bucketIndex = new Map<string, number>();
   const buckets: (Vec2 | null)[] = [];
@@ -324,6 +334,7 @@ export function buildFloorGeometry(
     }
   }
 
+  yield;
   // ---------------------------------------------------------------- wall solids
   const cut = Math.min(floor.cut_height, floor.height);
   const wallBuf = new GeoBuffer();
@@ -408,8 +419,10 @@ export function buildFloorGeometry(
         if (y1 > cut + 1e-6 && roofTop > cut + 1e-6) pushPrism(wallBuf, poly, Math.max(y0, cut), sloped ? topOf : y1, NEON.wall, NEON.wallTop, { aoFrom: 0, fold: b, bottom: lintel && y0 >= cut, skipSide });
       }
     }
+    yield;
   }
 
+  yield;
   // ---------------------------------------------------------------- edges
   const points = walls.flatMap((w) => w.footprint);
   const outline = outlineOf(walls, points);
@@ -471,6 +484,7 @@ export function buildFloorGeometry(
   }
   for (const list of spans.values()) for (const sp of list) if (!sp.cont) pushOpeningLines(lines, sp, cut);
 
+  yield;
   // ---------------------------------------------------------------- furniture and shadows
   const shadow = buildShadow(outline.edges, floor.rooms, spans);
   const waterBuf = new GeoBuffer();
@@ -535,6 +549,7 @@ export function buildFloorGeometry(
     if (other) pieces.set(`${otherLook}${drawn}`, other);
     if (gear) racks.push({ f, base });
     furnitureTris.push({ id: f.id, start, end: wallBuf.count, line: [lineStart, lines.count], shadow: [shadowStart, shadow.count * 3] });
+    yield;
   }
 
   return {

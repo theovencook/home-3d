@@ -16,3 +16,19 @@ export function load3d(): Promise<ViewerModule> {
   loading ??= import(/* @vite-ignore */ url) as Promise<ViewerModule>;
   return loading;
 }
+
+let preloaded = false;
+
+/**
+ * Fetches and compiles the 3D bundle without running it (run 6 speed), as the panel starts: it is the biggest file and
+ * was asked for only once the 3D view's own code had arrived and started, one round trip after it. load3d then finds
+ * it ready. Not on a page that shows the plan flat (#41).
+ */
+export function preload3d(): void {
+  if (preloaded || loading || typeof document === "undefined") return;
+  preloaded = true;
+  const link = document.createElement("link");
+  link.rel = "modulepreload";
+  link.href = url;
+  document.head.append(link);
+}

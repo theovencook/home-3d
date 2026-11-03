@@ -170,6 +170,7 @@ import { pipePieces, poolAreas, poolNodeAt, poolWallNormal, underBasin, PIPE_IDL
 import type { PipeTube } from "../viewer/viewer3d.ts";
 import type { PoolPiece } from "../viewer/pool-water.ts";
 import { sensorSyncDelay } from "../viewer/pace.ts";
+import { nextTask } from "../viewer/slices.ts";
 import { flowWidth } from "../viewer/flow-style.ts";
 import { roomSentence, sceneSummary, type FloorSummary } from "../room-summary.ts";
 import { floorCounts, floorInfoText, locatedPersons, personLook, personsInRooms, personsShown } from "../presence.ts";
@@ -1154,15 +1155,17 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setHideRoof(this.hideRoof);
       this._low = this.viewer.low;
       this.viewer.setPacks([...getPacks()], getPlanRecipes());
-      if (this.hass) void syncModules(this.hass, getPacks()).then(() => this.syncDevices(true));
+      if (this.hass) void syncModules(this.hass, getPacks()).then(() => this.syncDevicesSoon());
       this.shownPacks = packsVersion();
+      // the open floor is the one built first (run 6 speed)
+      this.viewer.setFloor(this.floorId, false);
       if (this.building) {
         this.shownStartView = JSON.stringify(this.startViewOf());
         this.viewer.setStartView(this.startViewOf());
         this.viewer.setBuilding(this.viewPlan(this.building));
       }
       this.scheduleThumbs();
-      this.syncDevices(true);
+      this.syncDevicesSoon();
       void this.syncPets();
       void this.syncGhost();
       void this.syncSeason();
@@ -1174,6 +1177,21 @@ export class Fp3dView3d extends LitElement {
       this.starting = false;
       if (this.isConnected && !this.viewer && flat !== this.plan2d) void this.start();
     }
+  }
+
+  private deviceSyncQueued = false;
+
+  /**
+   * The devices synced in a task of their own (run 6 speed), once for any number of asks before it: on the 3D view's
+   * start (the viewer models the floors in slices meanwhile) and when the modules have synced.
+   */
+  private syncDevicesSoon(): void {
+    if (this.deviceSyncQueued) return;
+    this.deviceSyncQueued = true;
+    void nextTask().then(() => {
+      this.deviceSyncQueued = false;
+      if (this.viewer && this.isConnected) this.syncDevices(true);
+    });
   }
 
   /** Between the 2D plan and the 3D view (#41): the one shown goes, the other starts with everything it shows. */
@@ -2443,6 +2461,29 @@ export class Fp3dView3d extends LitElement {
   private holoBoxes: { i: number; x0: number; x1: number; y0: number; y1: number }[] = [];
   private holoSizes = new Map<number, { w: number; h: number; at: number }>();
 
+  /** The stage's size as last measured with the cards (#335's media cards stay inside it). */
+  private holoStage = { w: 0, h: 0 };
+
+  /**
+   * A card's size, measured at most every 2 s (run 6 speed): when one is due, every shown card and the stage are read
+   * in one go, before this frame writes any card. Read one by one between the writes, each read laid out the page again
+   * (a first frame with a dozen cards took a quarter of a second on a 4x slower CPU).
+   */
+  private holoSize(index: number, now: number): { w: number; h: number; at: number } | undefined {
+    const size = this.holoSizes.get(index);
+    if (size && now - size.at <= 2000) return size;
+    const stage = this.renderRoot.querySelector<HTMLElement>(".fp3d-stage");
+    this.holoStage = { w: stage?.clientWidth ?? 0, h: stage?.clientHeight ?? 0 };
+    for (const card of this.renderRoot.querySelectorAll<HTMLElement>(".fp3d-holo[data-holo]")) {
+      const i = Number(card.dataset.holo);
+      const had = this.holoSizes.get(i);
+      if (card.hidden || (had && now - had.at <= 2000) || (this._holoBig && this._holos[i]?.kind === "main")) continue;
+      const w = card.offsetWidth;
+      if (w > 0) this.holoSizes.set(i, { w, h: card.offsetHeight || 1, at: now });
+    }
+    return this.holoSizes.get(index);
+  }
+
   private placeHolo(index: number, x: number, y: number, on: boolean, scale: number, facing: boolean): void {
     if (index >= this.holoCount) return this.placeWire(index - this.holoCount, x, y, on);
     // a new frame starts with the first anchor again
@@ -2470,8 +2511,8 @@ export class Fp3dView3d extends LitElement {
       }
       if (far) t = 1;
       // tags that would cover one placed before step up above it (bins in two rows, a mailbox beside them)
-      let size = this.holoSizes.get(index);
       const now = performance.now();
+      let size = this.holoSize(index, now);
       if (!size || now - size.at > 2000) {
         size = { w: el.offsetWidth || 90, h: el.offsetHeight || 40, at: now };
         this.holoSizes.set(index, size);
@@ -2497,8 +2538,8 @@ export class Fp3dView3d extends LitElement {
     let cy = y - dy;
     // cards that would cover one placed before step up above it (two devices side by side, D178);
     // the card's size is read now and then, not every frame
-    let size = this.holoSizes.get(index);
     const now = performance.now();
+    let size = main && this._holoBig ? this.holoSizes.get(index) : this.holoSize(index, now);
     // the grown solar card (#144) overlays its neighbours: they keep stepping round its small size
     if (!size || (now - size.at > 2000 && !(main && this._holoBig))) {
       size = { w: el.offsetWidth || 184, h: el.offsetHeight || 90, at: now };
@@ -2511,8 +2552,7 @@ export class Fp3dView3d extends LitElement {
     let x0 = facing ? cx : cx - w;
     let x1 = x0 + w;
     if (media) {
-      const stage = this.renderRoot.querySelector<HTMLElement>(".fp3d-stage");
-      const sw = stage?.clientWidth ?? 0;
+      const sw = this.holoStage.w;
       if (sw > 0) {
         const shift = x1 > sw - 6 ? sw - 6 - x1 : x0 < 6 ? 6 - x0 : 0;
         cx += shift;
@@ -2520,7 +2560,7 @@ export class Fp3dView3d extends LitElement {
         x1 += shift;
       }
       const top = 6 - (cy - h);
-      if (top > 0 && stage?.clientHeight) cy += top;
+      if (top > 0 && this.holoStage.h) cy += top;
     }
     for (let pass = 0; pass < 6; pass++) {
       const hit = this.holoBoxes.find((b) => x0 < b.x1 + 4 && x1 > b.x0 - 4 && cy - h < b.y1 + 4 && cy > b.y0 - 4);

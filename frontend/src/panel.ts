@@ -12,11 +12,12 @@ import { loadSettings } from "./load-settings.ts";
 import { extensionAnchor } from "./settings/extension-anchor.ts";
 import { loadLocate } from "./load-locate.ts";
 import { loadView, readyView } from "./load-view.ts";
+import { preload3d } from "./load3d.ts";
 import { loadFind, loadHomeSwitcher, loadRoomPanel, loadRoomsPicker, loadViewPanel } from "./load-parts.ts";
 import { need } from "./lazy-part.ts";
 import { setTimeFormat } from "./time-format.ts";
 import { formatDateTime, timeStyleOf } from "./time-text.ts";
-import { languageReady, loadLanguage, setChosenLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
+import { formatNumber, languageReady, loadLanguage, setChosenLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
 import type { Building, Floor, StartView } from "./model.ts";
 import type { SearchItem } from "./search.ts";
 import type { RoomGroup } from "./components/rooms-picker.ts";
@@ -950,12 +951,20 @@ export class Floorplan3dPanel extends LitElement {
     this.syncBack(changed);
     // the floor row scrolls sideways on a phone: the chosen floor stays in view (#249), also when the Rooms button
     // beside it grows with a room's name
-    if (changed.has("_floorId") || changed.has("_roomId")) {
-      const on = this.renderRoot.querySelector<HTMLElement>(".fp3d-floors [aria-pressed='true']");
-      const row = on?.parentElement;
-      if (on && row && row.scrollWidth > row.clientWidth) on.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-    }
-    this.markNavEdges();
+    // both read the layout: once in the next frame, where it is laid out anyway, not straight after every update
+    // (run 6 speed: the first update forced the whole panel's first layout in the middle of its load)
+    if (changed.has("_floorId") || changed.has("_roomId")) this.navScroll = true;
+    if (!this.navFrame)
+      this.navFrame = requestAnimationFrame(() => {
+        this.navFrame = 0;
+        if (this.navScroll) {
+          this.navScroll = false;
+          const on = this.renderRoot.querySelector<HTMLElement>(".fp3d-floors [aria-pressed='true']");
+          const row = on?.parentElement;
+          if (on && row && row.scrollWidth > row.clientWidth) on.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+        }
+        this.markNavEdges();
+      });
     // the page's language is the one its texts are in (#196): English while a language has no texts here
     const lang = uiLanguage(this.hass);
     if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);
@@ -990,7 +999,12 @@ export class Floorplan3dPanel extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    // the 3D view's code is a chunk of its own (#179); what the panel asks of it waits until it is there
+    // the 3D view's code is a chunk of its own (#179); what the panel asks of it waits until it is there. The 3D bundle
+    // it starts is fetched alongside (run 6 speed)
+    if (!this._plan2d) preload3d();
+    // the browser's number formatting is set up on its first use (tens of milliseconds on a slow tablet): in a pause of
+    // the load, not in the 3D view's first device sync (run 6 speed)
+    if (typeof requestIdleCallback === "function") requestIdleCallback(() => formatNumber(this.hass, 0.5, 1), { timeout: 2000 });
     void loadView().then(
       () => this.requestUpdate(),
       (err: unknown) => console.error("Home 3D: the 3D view failed to load", err),
@@ -1343,6 +1357,9 @@ export class Floorplan3dPanel extends LitElement {
    * A floors row wider than its room fades out at the end(s) with more chips (#259, V12/ND-11): a chip half under the
    * Rooms button reads as "scroll for more", not as a floor called "G". Written straight onto the row, no re-render.
    */
+  private navFrame = 0;
+  private navScroll = false;
+
   private readonly markNavEdges = () => {
     const row = this.renderRoot?.querySelector<HTMLElement>(".fp3d-floors");
     if (!row) return;

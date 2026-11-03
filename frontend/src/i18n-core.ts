@@ -180,6 +180,21 @@ export function translate(hass: HomeAssistant | undefined, key: I18nKey, vars: R
   return s;
 }
 
+/** One number format per language and digits (run 6 speed): `toLocaleString` with options builds a new one each call. */
+const numberFormats = new Map<string, Intl.NumberFormat>();
+
 export function formatNumber(hass: HomeAssistant | undefined, value: number, digits = 2): string {
-  return value.toLocaleString(hass?.language ?? undefined, { maximumFractionDigits: digits });
+  const lang = hass?.language ?? "";
+  const key = `${lang}|${digits}`;
+  let f = numberFormats.get(key);
+  if (!f) {
+    try {
+      f = new Intl.NumberFormat(lang || undefined, { maximumFractionDigits: digits });
+    } catch {
+      // a language tag the browser does not know: as toLocaleString would have thrown, but the page keeps going
+      f = new Intl.NumberFormat(undefined, { maximumFractionDigits: digits });
+    }
+    numberFormats.set(key, f);
+  }
+  return f.format(value);
 }
