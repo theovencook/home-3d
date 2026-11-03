@@ -1654,25 +1654,33 @@ export class Floorplan3dPanel extends LitElement {
         ${showsDemo(hass) && !this.tt.session ? html`<div class="fp3d-demo-chip" title=${this.t("demo_hint")}>${this.t("demo_chip")}</div>` : nothing}
         ${this._clean ? nothing : html`<div class="fp3d-overlay">
           ${this._tablet ? nothing : planView}
+          ${this._tablet
+            ? nothing
+            : html`<button class="fp3d-chip fp3d-plan-toggle" title=${this.t("plan_view")} aria-label=${`${this.t("plan_view")}: ${this.t(this._plan2d ? "view_3d" : "view_2d")}`} @click=${() => this.setPlan2d(!this._plan2d)}>
+                ${this.t(this._plan2d ? "view_3d" : "view_2d")}
+              </button>`}
           <button
             class="fp3d-chip fp3d-view-btn"
             aria-haspopup="dialog"
             aria-expanded=${this._viewOpen}
             aria-controls="fp3d-view-panel"
+            aria-label=${this.t("view_btn")}
             @pointerenter=${() => need(loadViewPanel)}
             @focus=${() => need(loadViewPanel)}
             @click=${() => this.setViewOpen(!this._viewOpen)}
           >
-            ${this.t("view_btn")} <span class="fp3d-caret" aria-hidden="true">${this._viewOpen ? "▴" : "▾"}</span>
+            <span class="fp3d-bar-icon">${uiIcon("sliders")}</span><span class="fp3d-bar-word">${this.t("view_btn")}</span> <span class="fp3d-caret" aria-hidden="true">${this._viewOpen ? "▴" : "▾"}</span>
           </button>
           ${!tt && this.hasCameras(b)
-            ? html`<button class="fp3d-chip fp3d-cam-btn" aria-pressed=${this._cameraWall} title=${this.t("camera_wall_hint")} @click=${() => (this._cameraWall = !this._cameraWall)}>${this.t("cameras_short")}</button>`
+            ? html`<button class="fp3d-chip fp3d-cam-btn" aria-pressed=${this._cameraWall} aria-label=${this.t("cameras_short")} title=${this.t("camera_wall_hint")} @click=${() => (this._cameraWall = !this._cameraWall)}>
+                <span class="fp3d-bar-icon">${uiIcon("camera")}</span><span class="fp3d-bar-word">${this.t("cameras_short")}</span>
+              </button>`
             : nothing}
           ${this._tablet ? nothing : html`<button class="fp3d-chip fp3d-tt-chip" aria-pressed=${tt} title=${this.t("tt_hint")} aria-label=${this.t("tt_chip")} @click=${() => this.toggleTimeTravel()}>
             ⏪ <span class="fp3d-tt-label">${this.t("tt_chip")}</span>
           </button>`}
           ${this._roomId || (this._floorId && b.floors.length > 1)
-            ? html`<button class="fp3d-chip" @click=${() => this.back()}>${this.t("back")}</button>`
+            ? html`<button class="fp3d-chip fp3d-back-btn" aria-label=${this.t("back")} @click=${() => this.back()}><span class="fp3d-bar-icon">${uiIcon("back")}</span><span class="fp3d-bar-word">${this.t("back")}</span></button>`
             : nothing}
         </div>`}
         ${this._viewOpen && !this._clean
@@ -2323,6 +2331,11 @@ export class Floorplan3dPanel extends LitElement {
         font-size: 0.8em;
         opacity: 0.7;
       }
+      /* the phone bar's symbols and its one 3D/2D button (#346); wider screens show the words and the segment */
+      .fp3d-bar-icon,
+      .fp3d-plan-toggle {
+        display: none;
+      }
       .fp3d-message,
       .fp3d-empty {
         padding: 32px 20px;
@@ -2386,6 +2399,73 @@ export class Floorplan3dPanel extends LitElement {
         /* so is the camera wall (view3d.ts): the bar's buttons go while it is open, its Close and Back shut it */
         .fp3d-cams-open .fp3d-overlay {
           display: none;
+        }
+        /* one bar along the foot (#346): the star and the eye (view3d.ts) at its start, then 3D/2D, View, Cameras, time
+           travel and Back, each a 44 px square at the same pitch; it never wraps (seven fit a 360 px phone) */
+        .fp3d-overlay {
+          left: 108px;
+          right: 8px;
+          bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+          flex-wrap: nowrap;
+          justify-content: flex-start;
+          gap: 6px;
+        }
+        .fp3d-side-right .fp3d-overlay {
+          left: 8px;
+          right: 108px;
+          justify-content: flex-end;
+        }
+        .fp3d-overlay > .fp3d-seg {
+          display: none;
+        }
+        .fp3d-overlay .fp3d-chip {
+          flex: none;
+          display: inline-grid;
+          place-items: center;
+          width: 44px;
+          min-width: 44px;
+          height: 44px;
+          padding: 0;
+          border-radius: 14px;
+        }
+        .fp3d-overlay .fp3d-bar-icon {
+          display: contents;
+        }
+        .fp3d-overlay :is(.fp3d-bar-word, .fp3d-caret) {
+          display: none;
+        }
+        .fp3d-overlay .fp3d-bar-icon svg {
+          width: 22px;
+          height: 22px;
+        }
+        /* the 3D view's star and eye join the bar (view3d.ts reads these; without them, as in a card, they keep their corner) */
+        fp3d-view3d {
+          --fp3d-dock-left: 8px;
+          --fp3d-dock-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+          --fp3d-dock-menu: calc(60px + env(safe-area-inset-bottom, 0px));
+        }
+        /* time travel has no star (nothing is switched): the eye takes its place and the bar moves up to it */
+        .fp3d-tt fp3d-view3d {
+          --fp3d-dock-left: -42px;
+          --fp3d-dock-bottom: calc(var(--fp3d-tt-h) + 4px);
+          --fp3d-dock-menu: calc(var(--fp3d-tt-h) + 56px);
+        }
+        .fp3d-tt .fp3d-overlay {
+          left: 58px;
+        }
+        .fp3d-side-right.fp3d-tt .fp3d-overlay {
+          left: 8px;
+          right: 58px;
+        }
+        /* a room sheet: the pair waits in one row above it */
+        .fp3d-room-open fp3d-view3d {
+          --fp3d-dock-bottom: calc(55% + 18px);
+          --fp3d-dock-menu: calc(55% + 70px);
+        }
+        .fp3d-clean fp3d-view3d {
+          --fp3d-dock-left: initial;
+          --fp3d-dock-bottom: initial;
+          --fp3d-dock-menu: initial;
         }
       }
       /* touch screens, a tablet as much as a phone (#181): 44 px, and room for three rows of floor chips */

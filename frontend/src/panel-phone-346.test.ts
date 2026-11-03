@@ -74,3 +74,33 @@ test("phones pick the floor from a dropdown: the whole house first, the top floo
   const phone = src.slice(src.indexOf("@media ${unsafeCSS(PHONE_MEDIA)} {\n        .fp3d-header {"));
   assert.match(phone, /\.fp3d-nav \.fp3d-floors \{\s*display: none;\s*\}\s*\.fp3d-floor-pick \{\s*display: block;/);
 });
+
+test("the phone bottom bar: one row of 44 px squares, symbols with their names kept, one 3D/2D button (#346)", () => {
+  const p = panel("f1");
+  p.hasCameras = () => true;
+  const out = flat(p.renderView(p.data.building));
+  const bar = out.slice(out.indexOf('<div class="fp3d-overlay">'));
+  // the segment stays for wider screens; the phone's one button names what it switches to
+  assert.match(bar, /class="fp3d-chip fp3d-plan-toggle" title=2D or 3D aria-label=2D or 3D: 2D @click=<fn>>\s*2D\s*</);
+  assert.match(bar, /class="fp3d-chip fp3d-view-btn"[\s\S]*?aria-label=View[\s\S]*?<span class="fp3d-bar-icon"><svg[\s\S]*?<span class="fp3d-bar-word">View<\/span>/);
+  assert.match(bar, /class="fp3d-chip fp3d-cam-btn" aria-pressed=false aria-label=Cameras[\s\S]*?<span class="fp3d-bar-word">Cameras<\/span>/);
+  assert.match(bar, /class="fp3d-chip fp3d-back-btn" aria-label=Back[\s\S]*?<span class="fp3d-bar-word">Back<\/span>/);
+  const [toggle] = handlers(p.renderView(p.data.building), /@click=$/).filter((h) => h.toString().includes("setPlan2d(!this._plan2d)"));
+  assert.ok(toggle, "the 3D/2D button");
+  const src = readFileSync(new URL("./panel.ts", import.meta.url), "utf8");
+  const phone = src.slice(src.indexOf("/* one bar along the foot (#346)"));
+  assert.match(phone, /\.fp3d-overlay \{\s*left: 108px;\s*right: 8px;[\s\S]*?flex-wrap: nowrap;/);
+  assert.match(phone, /\.fp3d-overlay \.fp3d-chip \{[^}]*width: 44px;[^}]*height: 44px;[^}]*border-radius: 14px;/);
+  assert.match(phone, /\.fp3d-overlay > \.fp3d-seg \{\s*display: none;/);
+  // the star and the eye dock at the bar's start (in a row above a room sheet), except with the controls hidden
+  assert.match(phone, /fp3d-view3d \{\s*--fp3d-dock-left: 8px;\s*--fp3d-dock-bottom: calc\(8px \+ env\(safe-area-inset-bottom, 0px\)\);/);
+  assert.match(phone, /\.fp3d-room-open fp3d-view3d \{\s*--fp3d-dock-bottom: calc\(55% \+ 18px\);/);
+  assert.match(phone, /\.fp3d-clean fp3d-view3d \{\s*--fp3d-dock-left: initial;\s*--fp3d-dock-bottom: initial;/);
+  // time travel shows no star: the eye and the bar close the gap
+  assert.match(phone, /\.fp3d-tt fp3d-view3d \{\s*--fp3d-dock-left: -42px;/);
+  const view = readFileSync(new URL("./components/view3d.ts", import.meta.url), "utf8");
+  assert.match(view, /\.fp3d-eye \{\s*left: calc\(var\(--fp3d-dock-left, 12px\) \+ 50px\);\s*bottom: var\(--fp3d-dock-bottom, calc\(10px \+ var\(--fp3d-bottom-inset, 0px\)\)\);/);
+  assert.match(view, /\.fp3d-central-btn \{\s*left: var\(--fp3d-dock-left, 12px\);\s*bottom: var\(--fp3d-dock-bottom, calc\(62px \+ var\(--fp3d-bottom-inset, 0px\)\)\);/);
+  // seven squares at a 50 px pitch from an 8 px edge end 8 px short of a 360 px screen
+  assert.equal(8 + 7 * 44 + 6 * 6 + 8, 360);
+});

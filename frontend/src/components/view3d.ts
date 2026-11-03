@@ -8194,7 +8194,7 @@ export class Fp3dView3d extends LitElement {
           z-index: 12;
           border: 0;
           border-radius: 0;
-          background: rgba(8, 16, 34, 0.97);
+          background: rgb(8, 16, 34);
           box-shadow: none;
           padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
         }
@@ -9471,11 +9471,34 @@ export class Fp3dView3d extends LitElement {
           width: 44px;
           height: 44px;
         }
+        /* the star and the eye: the panel docks them at the start of its bottom bar (--fp3d-dock-*, #346), same size
+           and shape as its buttons; elsewhere (a card) they keep their corner */
         .fp3d-eye {
-          left: 62px;
+          left: calc(var(--fp3d-dock-left, 12px) + 50px);
+          bottom: var(--fp3d-dock-bottom, calc(10px + var(--fp3d-bottom-inset, 0px)));
+          border: 0;
+          border-radius: 14px;
+          background: var(--fp3d-chrome);
+          box-shadow: var(--fp3d-shadow);
+        }
+        .fp3d-eye-clean {
+          left: var(--fp3d-dock-left, 12px);
         }
         .fp3d-central-btn {
-          bottom: calc(62px + var(--fp3d-bottom-inset, 0px));
+          left: var(--fp3d-dock-left, 12px);
+          bottom: var(--fp3d-dock-bottom, calc(62px + var(--fp3d-bottom-inset, 0px)));
+          border-radius: 14px;
+        }
+        .fp3d-central {
+          bottom: var(--fp3d-dock-menu, calc(104px + var(--fp3d-bottom-inset, 0px)));
+        }
+        .fp3d-side-right :is(.fp3d-central-btn, .fp3d-eye-clean) {
+          left: auto;
+          right: var(--fp3d-dock-left, 12px);
+        }
+        .fp3d-side-right .fp3d-eye {
+          left: auto;
+          right: calc(var(--fp3d-dock-left, 12px) + 50px);
         }
         .fp3d-thumbs-compact .fp3d-thumb,
         .fp3d-thumb-house {

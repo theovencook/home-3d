@@ -4,7 +4,7 @@
 import { svg, type TemplateResult } from "lit";
 
 // the header's tabs and the editor's toolbar (#249) join the one line family of the redesign (#219)
-export type UiIcon = "split-off" | "split-on" | "panel-left" | "panel-right" | "holo" | "flow" | "undo" | "redo" | "expand" | "cube" | "pencil" | "puzzle" | "gear" | "pointer" | "wall" | "tree" | "sofa" | "bolt" | "more" | "help" | "down" | "x" | "right";
+export type UiIcon = "split-off" | "split-on" | "panel-left" | "panel-right" | "holo" | "flow" | "undo" | "redo" | "expand" | "cube" | "pencil" | "puzzle" | "gear" | "pointer" | "wall" | "tree" | "sofa" | "bolt" | "more" | "help" | "down" | "x" | "right" | "sliders" | "camera" | "back";
 
 const PATHS: Record<UiIcon, TemplateResult> = {
   // a plan with a second pane beside it: outline, divider, the 3D pane filled when it is open
@@ -33,6 +33,10 @@ const PATHS: Record<UiIcon, TemplateResult> = {
   // the phone editor's sheet and More (#250)
   x: svg`<path d="M6 6l12 12M18 6 6 18"/>`,
   right: svg`<path d="m9 6 6 6-6 6"/>`,
+  // the phone's bottom bar (#346): the View panel, the camera wall and Back as symbols
+  sliders: svg`<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>`,
+  camera: svg`<path d="M3 8a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m16 10.5 5-3v9l-5-3"/>`,
+  back: svg`<path d="M19 12H5M11 6l-6 6 6 6"/>`,
 };
 
 /** A toolbar icon: sized by the font (1.15em), decorative (the button carries the label). */
