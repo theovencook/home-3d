@@ -6,6 +6,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 ## Unreleased
 
 - Settings, Lengths: the feet-and-inches typing tip shows only when lengths are in feet and inches (#324).
+- Settings: Ground height moved under Plan and units; its description is in plain words and the placeholder uses the Lengths unit (#325).
 
 ## Home 3D 0.2.1 (2 November 2026)
 

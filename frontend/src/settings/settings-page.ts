@@ -654,7 +654,7 @@ export class SettingsPage extends LitElement {
             min=${c.min ?? ""}
             max=${c.max ?? ""}
             .value=${shown}
-            placeholder=${c.empty ? this.tr(c.empty) : c.clearable ? String(s.default ?? "") : ""}
+            placeholder=${c.empty ? this.tr(c.empty) : c.clearable ? (c.length && typeof s.default === "number" ? shownLength(env, s.default) : String(s.default ?? "")) : ""}
             aria-label=${aria}
             ?disabled=${disabled}
             @change=${(e: Event) => {

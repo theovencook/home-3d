@@ -358,5 +358,19 @@ test("the feet-and-inches typing tip shows only when lengths show in feet and in
   assert.equal(s.hintMore?.(metric), null);
   const imperial = { ...e, building: s.write!(e, "imperial") as Building };
   assert.equal(s.hintMore?.(imperial), "units_type_hint");
-  assert.ok(!englishTable()[s.hint!].includes("8' 2"));
+  assert.ok(!(englishTable() as Record<string, string>)[s.hint!].includes("8' 2"));
+});
+
+test("Ground height is under Plan and units, keeps its stored key and its default shows in the Lengths format (#325)", async () => {
+  const { shownLength } = await import("./registry.ts");
+  const s = settingById("terrain.level")!;
+  assert.equal(s.section, "general");
+  assert.equal(s.card, "plan");
+  assert.equal((englishTable() as Record<string, string>)[s.label], "Ground height");
+  const e = env();
+  const imperial = { ...e, building: settingById("units")!.write!(e, "imperial") as Building };
+  assert.equal(shownLength(imperial, s.default as number), '-7.9"');
+  assert.equal(shownLength(e, s.default as number), "-0.2");
+  const next = s.write!(e, -1 as never) as Building;
+  assert.equal(next.settings.terrain!.level, -1);
 });
