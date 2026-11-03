@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- The Nissan Leaf reads as a Leaf: slim swept headlamps on a blue-tinted V grille, dark tailgate glass between boomerang tail lamps, a roof spoiler, and the sample home carries the new model (#345).
 - Settings, Extensions, the editor and the ask dialogs (New home, Rename, Delete …) follow the chosen look: light under the Day look or a light Home Assistant theme, high contrast under High contrast (#263).
 - On a phone the View sheet opens at half height so the house stays in sight; drag its handle up (or tap it) for all of it, down to shrink or close it (#263).
 - Room names on a floor view no longer pile up: where two would overlap the smaller room's name gives way, and every name comes back as you zoom in (#263).
