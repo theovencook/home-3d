@@ -67,7 +67,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   "effects.tank_hot": ["boiler", "water", "immersion", "hot", "celsius", "degrees"],
   "effects.camera_seconds": ["cctv", "security", "recording", "afterglow", "timer", "duration"],
   // cameras and director
-  director_here: ["automatic", "wander", "roam", "stay", "still", "screensaver"],
+  director_here: ["automatic", "wander", "roam", "stay", "still", "screensaver", "live", "fly"],
   director_here_link: ["moved", "relocated", "notice", "note", "moving", "message"],
   "director.doorbell": ["bell", "chime", "visitor", "caller", "callers", "ding"],
   "director.doorbell_entity": ["bell", "button", "chime", "ring", "press", "entrance"],
@@ -122,7 +122,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   nav: ["arrows", "zoom", "rotate", "touch", "pad", "onscreen", "turn", "pan"],
   floor_pictures: ["picker", "thumbs", "gallery", "panel", "level", "selector"],
   // voice
-  voice_here: ["voice", "mic", "talk", "dictation", "spoken", "command"],
+  voice_here: ["voice", "mic", "talk", "dictation", "spoken", "command", "button"],
   screen_name: ["label", "title", "identifier", "tablet", "display", "ask"],
   voice_pipeline: ["stt", "transcription", "recognition", "engine", "speech", "provider"],
   voice_sentences: ["phrases", "words", "commands", "wording", "intents", "questions"],

@@ -385,3 +385,12 @@ test("the room climate setting says what each choice does on the view (#331)", (
   assert.ok(s.hint && /colour scale/.test(en[s.hint]) && /instead/.test(en[s.hint]));
   assert.deepEqual(s.prefKeys, ["heat"], "the stored key is unchanged");
 });
+
+test("the two device switches are named after their feature, not after being switched on (#334)", () => {
+  const en = englishTable() as Record<string, string>;
+  assert.equal(en[settingById("director_here")!.label], "Live director on this screen");
+  assert.equal(en[settingById("voice_here")!.label], "Voice button on this screen");
+  assert.equal(en.director_here, "Live director on this screen");
+  assert.equal(en.voice_here, "Voice button on this screen");
+  for (const v of Object.values(en)) assert.ok(!/Switch on on this/.test(v), "no label of that old kind is left");
+});
