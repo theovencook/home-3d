@@ -195,3 +195,14 @@ def test_the_risholmen_wing_chair_is_in_the_ikea_pack_at_ikeas_size() -> None:
     assert item["ikea"] == "RISHOLMEN"
     assert "wing chair" in item["tags"]
     assert json.loads((folder / "pack.json").read_text(encoding="utf-8"))["release"] >= 4
+
+
+def test_the_smastad_platsa_white_birch_units_are_in_the_ikea_pack_at_ikeas_size() -> None:
+    """Run 6: the 6-drawer bookcase and the 2-door wardrobe, white with birch fronts, 60 x 57 x 181 cm."""
+    folder = BUNDLED / "theovencook.ikea-uk" / "kids"
+    for name in ("smastad_platsa_bookcase_6_drawers_60x57x181", "smastad_platsa_wardrobe_60x57x181"):
+        item = json.loads((folder / f"{name}.json").read_text(encoding="utf-8"))
+        assert item["size"] == [0.6, 0.57, 1.81]
+        assert item["ikea"] == "SMÅSTAD / PLATSA"
+        assert {part["color"] for part in item["parts"]} >= {"white", "wood", "metal"}
+

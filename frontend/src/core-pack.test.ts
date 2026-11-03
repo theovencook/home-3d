@@ -122,6 +122,16 @@ test("the RISHOLMEN wing chair is in the IKEA UK pack at IKEA's size, found by b
   assert.ok((ikea?.pack.release ?? 0) >= 4);
 });
 
+test("the SMÅSTAD / PLATSA white/birch bookcase and wardrobe are in the IKEA UK pack at IKEA's size (run 6)", () => {
+  const ikea = packs.find((p) => p.pack.id === "theovencook.ikea-uk");
+  for (const id of ["smastad_platsa_bookcase_6_drawers_60x57x181", "smastad_platsa_wardrobe_60x57x181"]) {
+    const item = ikea?.pack.items.find((i) => i.id === id);
+    assert.ok(item, id);
+    assert.deepEqual(item.size, [0.6, 0.57, 1.81]);
+    assert.ok(item.parts.some((part) => part.color === "wood") && item.parts.some((part) => part.color === "white"));
+  }
+});
+
 test("theovencook.makers and theovencook.devices ship with Home 3D beside the others (#109)", () => {
   for (const [id, name] of [["theovencook.makers", "Makers"], ["theovencook.devices", "Smart-home devices"]] as const) {
     const bundled = packs.find((p) => p.pack.id === id);
