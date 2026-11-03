@@ -2328,6 +2328,10 @@ export class Floorplan3dPanel extends LitElement {
           min-width: 44px;
           justify-content: center;
         }
+        /* the View panel is a full screen page on a phone (#346), the time bar under it too */
+        .fp3d-tt fp3d-view-panel {
+          bottom: 0;
+        }
       }
       /* touch screens, a tablet as much as a phone (#181): 44 px, and room for three rows of floor chips */
       @media (pointer: coarse), ${unsafeCSS(PHONE_MEDIA)} {
