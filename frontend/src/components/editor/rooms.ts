@@ -407,6 +407,7 @@ export class RoomsPart {
   }
 
   renderRooms(this: Fp3dEditor, floor: Floor) {
+    const shown = this.planLabels(floor);
     return svg`
       <g>${floor.rooms.map((r) => {
         const pts = r.points.map((p) => this.toScreen(p).join(",")).join(" ");
@@ -414,6 +415,8 @@ export class RoomsPart {
       })}</g>
       ${this.renderEdgeHighlight()}
       <g pointer-events="none">${floor.rooms.map((r) => {
+        // names that would sit on another's give way (#341)
+        if (!shown.has(`r:${r.id}`)) return nothing;
         const [cx, cy] = this.toScreen(centroid(r.points));
         return svg`<text class="fp3d-room-name" x=${cx} y=${cy - 2}>${r.name}</text>
           <text class="fp3d-room-area" x=${cx} y=${cy + 14}>${this.area(polygonArea(r.points))}</text>`;

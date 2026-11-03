@@ -832,6 +832,8 @@ export class FloorplanViewer {
   private readonly viewKey = new Float64Array(6);
   private readonly placed = new WeakMap<HTMLElement, string>();
   private readonly pinMode = new WeakMap<HTMLElement, string>();
+  /** Each room pin's size on screen, measured once per text (#341); the fonts arriving measure again. */
+  private pinSizes = new WeakMap<HTMLElement, { w: number; h: number }>();
   private size = { w: 1, h: 1 };
   /** Width taken on the left by the host (the floor pictures); floor labels keep clear of it. */
   private labelInset = 0;
@@ -947,6 +949,7 @@ export class FloorplanViewer {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(host);
     document.addEventListener("visibilitychange", this.onVisibility);
+    document.fonts?.addEventListener?.("loadingdone", this.onFonts);
     // any touch on the view (canvas, pins, cards over it) wakes resting animations on the tablet level
     for (const type of ["pointerdown", "pointerup", "wheel", "keydown"]) host.addEventListener(type, this.onInput, { capture: true, passive: true });
     if (typeof IntersectionObserver === "function") {
@@ -2224,6 +2227,7 @@ export class FloorplanViewer {
 
   /** The room name, with a line of values below it when there is one. */
   private fillRoomPin(pin: HTMLElement, name: string, info: string | undefined): void {
+    this.pinSizes.delete(pin);
     pin.textContent = name || "–";
     if (info) {
       const small = document.createElement("small");
@@ -2579,6 +2583,7 @@ export class FloorplanViewer {
     this.resizeObserver.disconnect();
     this.intersection?.disconnect();
     document.removeEventListener("visibilitychange", this.onVisibility);
+    document.fonts?.removeEventListener?.("loadingdone", this.onFonts);
     for (const type of ["pointerdown", "pointerup", "wheel", "keydown"]) this.host.removeEventListener(type, this.onInput, { capture: true });
     clearTimeout(this.decorTimer);
     this.controls.dispose();
@@ -2708,6 +2713,13 @@ export class FloorplanViewer {
       },
     });
   }
+
+  /** The fonts arrived: the room pins are measured again (#341). */
+  private readonly onFonts = () => {
+    this.pinSizes = new WeakMap();
+    this.labelsDirty = true;
+    this.invalidate();
+  };
 
   private readonly onVisibility = () => {
     if (!document.hidden) this.invalidate();
@@ -6139,7 +6151,7 @@ export class FloorplanViewer {
       });
     }
     this.updateDevicePins(w, h);
-    const names: { pin: HTMLElement; box: LabelBox }[] = [];
+    const names: { pin: HTMLElement; box: LabelBox; room: Room }[] = [];
     for (const fv of this.floors) {
       // in the house view, room labels would pile up between the floors; in a room its panel names it;
       // floors stacked below an opened floor carry no labels
@@ -6153,8 +6165,16 @@ export class FloorplanViewer {
         v.set(rp.cx, y, rp.cz).project(this.camera);
         const off = v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1;
         if (off) this.place(rp.pin, null);
-        else names.push({ pin: rp.pin, box: { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, ...pinSize(rp.room.name || "–", this.roomInfo.get(rp.room.id)), rank: roomRank(rp.room) } });
+        else names.push({ pin: rp.pin, box: { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, w: 0, h: 0, rank: roomRank(rp.room) }, room: rp.room });
       }
+    }
+    // the pins' real size (a phone's pins are larger, #341): measured once per text, all in one layout read
+    const fresh = names.filter((n) => !this.pinSizes.has(n.pin));
+    for (const n of fresh) n.pin.hidden = false;
+    for (const n of fresh) this.pinSizes.set(n.pin, { w: n.pin.offsetWidth, h: n.pin.offsetHeight });
+    for (const n of names) {
+      const s = this.pinSizes.get(n.pin)!;
+      Object.assign(n.box, s.w ? s : pinSize(n.room.name || "–", this.roomInfo.get(n.room.id)));
     }
     // names that would sit on each other: the smaller room's gives way until zooming in makes room (#263)
     const keep = clearLabels(names.map((n) => n.box));

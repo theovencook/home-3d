@@ -12,6 +12,7 @@ import { setPacks, setPlanRecipes } from "../packs.ts";
 import type { OpeningState } from "../viewer/openings.ts";
 import { pinsShown, readPinZoom } from "../plan-pins.ts";
 import { lowEndDevice } from "../viewer/pace.ts";
+import { clearLabels, roomRank, type LabelBox } from "../viewer/label-clear.ts";
 import type { DeviceMarker, FlowPiece, ScreenState, Theme, ViewerOptions } from "../viewer/viewer3d.ts";
 import type { ViewerSurface } from "../viewer-surface.ts";
 import { Gestures } from "./gestures.ts";
@@ -64,6 +65,10 @@ export class Plan2dViewer implements ViewerSurface {
   private frame = 0;
   private moveFrame = 0;
   private downRoom: string | null = null;
+  /** The room names on the layer, where they sit (m) and how big (px), for the collision pass (#341). */
+  private names: { el: HTMLElement; x: number; z: number; key: string; box: LabelBox }[] = [];
+  /** Each name's size (px) by its text, measured once (#341). */
+  private nameSizes = new Map<string, { w: number; h: number }>();
 
   constructor(host: HTMLElement, options: ViewerOptions = {}) {
     this.host = host;
@@ -113,14 +118,19 @@ export class Plan2dViewer implements ViewerSurface {
     this.resizer?.observe(host);
     // the bottom bar's height changes on its own (time travel opens): the probe's size follows it
     this.resizer?.observe(this.probe);
+    document.fonts?.addEventListener?.("loadingdone", this.onFonts);
     this.resize();
   }
+
+  /** The fonts arrived: the names are measured again at the next pan, zoom or draw (#341). */
+  private readonly onFonts = () => this.nameSizes.clear();
 
   dispose(): void {
     cancelAnimationFrame(this.frame);
     cancelAnimationFrame(this.moveFrame);
     this.resizer?.disconnect();
     this.gestures.dispose();
+    document.fonts?.removeEventListener?.("loadingdone", this.onFonts);
     this.root.remove();
   }
 
@@ -426,6 +436,23 @@ export class Plan2dViewer implements ViewerSurface {
     // the ones set to always show and the one flashing; zooming in brings them back
     this.layer.classList.toggle("fp3d-p2d-far", !pinsShown(v.k, this.pinCut));
     this.placeAnchors();
+    this.clearNames();
+  }
+
+  /** Room names that would sit on each other: the smaller room's hides until zooming in makes room (#263, #341). */
+  private clearNames(): void {
+    const { k, tx, ty } = this.view;
+    for (const n of this.names) {
+      // each name's size by its text: only a text not seen before is measured (a plan not on screen measures
+      // nothing and asks again next time), so a pan or zoom reads no layout
+      let size = this.nameSizes.get(n.key);
+      if (!size && n.el.offsetWidth) this.nameSizes.set(n.key, (size = { w: n.el.offsetWidth, h: n.el.offsetHeight }));
+      // the name sits 22 px above the room's middle (the label's margin)
+      Object.assign(n.box, size, { x: n.x * k + tx, y: n.z * k + ty - 22 });
+    }
+    const keep = clearLabels(this.names.map((n) => n.box));
+    // a toggle to the state the class already has writes nothing
+    this.names.forEach((n, i) => n.el.classList.toggle("fp3d-p2d-off", !keep[i]));
   }
 
   private floor(): Floor | null {
@@ -496,8 +523,9 @@ export class Plan2dViewer implements ViewerSurface {
       this.content,
     );
     // room names and device pins keep their size on screen: they sit in a layer that only moves
+    const named = floor.rooms.filter((r) => r.points.length >= 3 && !r.outdoor);
     render(
-      html`${floor.rooms.filter((r) => r.points.length >= 3 && !r.outdoor).map((r) => {
+      html`${named.map((r) => {
           const [x, z] = centroid(r.points);
           const info = this.roomInfo.get(r.id);
           return html`<span class="fp3d-p2d-label" style=${`--x:${x};--z:${z}`}>${r.name}${info ? html`<small>${info}</small>` : nothing}</span>`;
@@ -517,6 +545,14 @@ export class Plan2dViewer implements ViewerSurface {
         })}`,
       this.layer,
     );
+    const els = this.layer.querySelectorAll<HTMLElement>(".fp3d-p2d-label");
+    this.names = named.map((r, i) => {
+      const [x, z] = centroid(r.points);
+      // by the values line's length, not its text: "21.5 °C" and "21.6 °C" are one size, and the sizes kept stay few
+      return { el: els[i]!, x, z, key: `${r.name}
+${this.roomInfo.get(r.id)?.length}`, box: { x: 0, y: 0, w: 0, h: 0, rank: roomRank(r), keep: r.id === this.roomId } };
+    });
+    this.clearNames();
   }
 
   private opening(o: PlanOpening) {
@@ -802,6 +838,7 @@ export const PLAN2D_CSS = `
 }
 .fp3d-p2d[data-theme="day"] .fp3d-p2d-label,
 .fp3d-p2d[data-theme="realistic"] .fp3d-p2d-label { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8); }
+.fp3d-p2d-off { visibility: hidden; }
 .fp3d-p2d-label small {
   font: 500 11px var(--fp3d-font, sans-serif);
 }

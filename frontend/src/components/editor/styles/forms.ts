@@ -492,6 +492,12 @@ export const formStyles = css`
         text-anchor: middle;
         pointer-events: none;
       }
+      .fp3d-furn .fp3d-lbl-off {
+        display: none;
+      }
+      .fp3d-furn:hover .fp3d-lbl-off {
+        display: inline;
+      }
       .fp3d-furn-ghost {
         opacity: 0.35;
       }
