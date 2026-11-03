@@ -322,6 +322,45 @@ _PET_TRIGGER = vol.Schema(
 )
 
 
+_SEASON_DATE = vol.Match(r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
+
+
+def _season_rule(rule: dict) -> dict:
+    """A holiday date rule (#339) has the fields its kind needs (a fixed day, days from Easter, ...)."""
+    need = {
+        "fixed": ("month", "day"),
+        "easter": ("offset",),
+        "nth": ("month", "nth", "weekday"),
+        "once": ("from",),
+        "cny": (),
+    }
+    for key in need[rule["kind"]]:
+        if key not in rule:
+            raise vol.Invalid(f"a {rule['kind']} rule needs {key}")
+    return rule
+
+
+SEASON_RULE_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Required("kind"): vol.In(["fixed", "easter", "nth", "once", "cny"]),
+            vol.Optional("month"): vol.All(int, vol.Range(min=1, max=12)),
+            vol.Optional("day"): vol.All(int, vol.Range(min=1, max=31)),
+            vol.Optional("offset"): vol.All(int, vol.Range(min=-366, max=366)),
+            vol.Optional("nth"): vol.In([-1, 1, 2, 3, 4, 5]),
+            vol.Optional("weekday"): vol.All(int, vol.Range(min=0, max=6)),
+            vol.Optional("from"): _SEASON_DATE,
+            vol.Optional("to"): _SEASON_DATE,
+            vol.Optional("days"): vol.All(int, vol.Range(min=1, max=366)),
+            vol.Optional("start"): vol.Match(TIME_PATTERN),
+            vol.Optional("end"): vol.Match(TIME_PATTERN),
+        },
+        extra=vol.ALLOW_EXTRA,
+    ),
+    _season_rule,
+)
+
+
 def _whole_interval(interval: dict) -> dict:
     """Both first and last day and both start and end, or neither: one end alone is no interval (#46)."""
     for first, last in (("from", "to"), ("start", "end")):
@@ -1145,6 +1184,12 @@ SETTINGS_SCHEMA = vol.Schema(
                 },
                 extra=vol.ALLOW_EXTRA,
             ),
+        ),
+        # date rules of a holiday (#339): fixed day, days from Easter, n-th weekday of a month, one-off window; a
+        # holiday with rules here ignores its season_dates (which still load, as fixed day rules)
+        vol.Optional("season_rules"): vol.Any(
+            None,
+            vol.Schema({vol.Optional(str): vol.All([SEASON_RULE_SCHEMA], vol.Length(max=24))}, extra=vol.ALLOW_EXTRA),
         ),
         # the ground around the house: its height and the earth around cellars
         vol.Optional("terrain", default=None): vol.Any(

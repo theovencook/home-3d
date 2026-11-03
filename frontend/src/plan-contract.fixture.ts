@@ -831,6 +831,23 @@ export const PLAN_CONTRACT = {
         "to": "11-01"
       }
     },
+    "season_rules": {
+      "easter": [
+        {
+          "kind": "fixed",
+          "month": 4,
+          "day": 3,
+          "offset": -2,
+          "nth": 1,
+          "weekday": 5,
+          "from": "2027-03-26",
+          "to": "2027-03-29",
+          "days": 4,
+          "start": "08:00",
+          "end": "22:00"
+        }
+      ]
+    },
     "terrain": {
       "level": -10.0,
       "earth": true

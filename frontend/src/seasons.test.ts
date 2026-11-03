@@ -1,8 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { SEASON_IDS, beforeEaster, calendarChineseNewYear, chineseNewYear, defaultRange, easterSunday, fathersDay, mothersDay, nthSunday, pancakeDay, parseMonthDay, remembranceSunday, seasonAt, seasonRange } from "./seasons.ts";
+import { DEFAULT_RULES, SEASON_IDS, calendarChineseNewYear, chineseNewYear, easterSunday, parseMonthDay, ruleDays, seasonAt, seasonRules, type SeasonRule } from "./seasons.ts";
 
 const at = (y: number, m: number, d: number, h = 12, min = 0) => new Date(y, m - 1, d, h, min);
+/** The first day of a rule in a year as [month, day]. */
+const first = (r: SeasonRule, y: number): [number, number] => {
+  const t = new Date(ruleDays(r, y)![0] * 864e5);
+  return [t.getUTCMonth() + 1, t.getUTCDate()];
+};
+const pancakeDay = (y: number) => first(DEFAULT_RULES.pancake_day, y);
+const mothersDay = (y: number) => first(DEFAULT_RULES.mothers_day, y);
+const fathersDay = (y: number) => first(DEFAULT_RULES.fathers_day, y);
+const remembranceSunday = (y: number) => first(DEFAULT_RULES.remembrance, y);
 const id = (y: number, m: number, d: number, off?: Record<string, boolean>, h = 12) => seasonAt(at(y, m, d, h), off)?.id ?? null;
 
 test("Easter Sunday follows the computus across years (#239)", () => {
@@ -27,7 +36,7 @@ test("Easter Sunday follows the computus across years (#239)", () => {
 test("Pancake Day is 47 days before Easter (#239)", () => {
   const known: Record<number, [number, number]> = { 2023: [2, 21], 2024: [2, 13], 2025: [3, 4], 2026: [2, 17], 2027: [2, 9], 2028: [2, 29], 2029: [2, 13], 2030: [3, 5] };
   for (const [y, md] of Object.entries(known)) assert.deepEqual(pancakeDay(Number(y)), md, y);
-  assert.equal(beforeEaster(2024, 47)[0], 2);
+  assert.equal(first({ kind: "easter", offset: -47 }, 2024)[0], 2);
 });
 
 test("Mother's Day (UK) is Easter minus 21 days, always a Sunday (#239)", () => {
@@ -48,10 +57,10 @@ test("Remembrance Sunday is the second Sunday of November (#239)", () => {
   for (const [y, d] of Object.entries(known)) assert.deepEqual(remembranceSunday(Number(y)), [11, d], y);
 });
 
-test("nthSunday handles a month that starts on a Sunday (#239)", () => {
+test("the n-th weekday handles a month that starts on a Sunday (#239)", () => {
   // 1 June 2025 is a Sunday: the third is the 15th; 1 Feb 2026 too
-  assert.equal(nthSunday(2025, 6, 3), 15);
-  assert.equal(nthSunday(2026, 2, 1), 1);
+  assert.equal(first({ kind: "nth", nth: 3, weekday: 0, month: 6 }, 2025)[1], 15);
+  assert.equal(first({ kind: "nth", nth: 1, weekday: 0, month: 2 }, 2026)[1], 1);
 });
 
 test("each moving holiday shows on its day and not the day before or after (#239)", () => {
@@ -184,14 +193,16 @@ test("dates that are not a day of the calendar are ignored: the usual dates stay
   assert.deepEqual(parseMonthDay("02-29"), [2, 29]);
   assert.equal(parseMonthDay("2-3"), null);
   assert.equal(seasonAt(at(2026, 10, 31), undefined, { halloween: { from: "13-40" } })?.id, "halloween");
-  assert.deepEqual(seasonRange("halloween", 2026, { halloween: { from: "13-40" } }).custom, false);
+  assert.deepEqual(seasonRules("halloween", { halloween: { from: "13-40" } }), [DEFAULT_RULES.halloween]);
 });
 
-test("the usual dates of every holiday are in the year and form a range (#287)", () => {
+test("the usual days of every holiday give a window in the year (#287)", () => {
   for (const sid of SEASON_IDS) {
-    const r = defaultRange(sid, 2026);
-    assert.ok(r.from[0] >= 1 && r.from[0] <= 12 && r.to[0] >= 1 && r.to[0] <= 12, sid);
+    const d = ruleDays(DEFAULT_RULES[sid], 2026)!;
+    assert.ok(d && d[0] <= d[1], sid);
+    assert.equal(new Date(d[0] * 864e5).getUTCFullYear(), 2026, sid);
   }
-  assert.deepEqual(defaultRange("easter", 2026), { from: [4, 3], to: [4, 6] });
-  assert.deepEqual(defaultRange("advent", 2026), { from: [12, 1], to: [12, 23] });
+  const range = (sid: (typeof SEASON_IDS)[number]) => ruleDays(DEFAULT_RULES[sid], 2026)!.map((x) => new Date(x * 864e5).toISOString().slice(5, 10));
+  assert.deepEqual(range("easter"), ["04-03", "04-06"]);
+  assert.deepEqual(range("advent"), ["12-01", "12-23"]);
 });

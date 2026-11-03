@@ -118,6 +118,38 @@ def test_season_dates_change_a_holidays_days() -> None:
             SETTINGS_SCHEMA({**base, "season_dates": {"halloween": bad}})
 
 
+def test_season_rules_give_a_holidays_days_by_rule() -> None:
+    """Holiday date rules (#339): fixed day, Easter offset, n-th weekday, one-off window; each kind needs its fields."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    assert "season_rules" not in SETTINGS_SCHEMA(base)
+    rules = {
+        "halloween": [{"kind": "fixed", "month": 10, "day": 31, "days": 2, "start": "18:00", "end": "02:00"}],
+        "easter": [{"kind": "easter", "offset": -2, "days": 4}],
+        "fathers_day": [{"kind": "nth", "month": 6, "nth": -1, "weekday": 0}],
+        "bonfire": [{"kind": "once", "from": "2027-11-05", "to": "2027-11-06"}],
+        "chinese_new_year": [{"kind": "cny"}],
+    }
+    assert SETTINGS_SCHEMA({**base, "season_rules": rules})["season_rules"] == rules
+    assert SETTINGS_SCHEMA({**base, "season_rules": None})["season_rules"] is None
+    # old MM-DD dates still load next to rules, unchanged
+    both = {**base, "season_dates": {"halloween": {"from": "10-29", "to": "11-01"}}, "season_rules": rules}
+    assert SETTINGS_SCHEMA(both)["season_dates"] == both["season_dates"]
+    bad_rules = (
+        {"kind": "fixed", "month": 10},
+        {"kind": "easter"},
+        {"kind": "nth", "month": 5, "nth": 6, "weekday": 1},
+        {"kind": "nth", "month": 5, "nth": 1, "weekday": 7},
+        {"kind": "once", "from": "11-05"},
+        {"kind": "fixed", "month": 13, "day": 1},
+        {"kind": "fixed", "month": 1, "day": 1, "days": 0},
+        {"kind": "fixed", "month": 1, "day": 1, "start": "25:00"},
+        {"kind": "moon"},
+    )
+    for bad in bad_rules:
+        with pytest.raises(vol.Invalid):
+            SETTINGS_SCHEMA({**base, "season_rules": {"halloween": [bad]}})
+
+
 def test_furniture_block() -> None:
     """Furniture blocks: items with the same group id move together; none by default."""
     item = {"id": "f1", "type": "kitchen", "x": 0, "z": 0, "rotation": 0, "w": 0.6, "d": 0.6, "h": 0.9, "variant": None}

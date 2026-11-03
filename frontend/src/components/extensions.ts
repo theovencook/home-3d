@@ -3,6 +3,7 @@
 // extension's own settings are (a card per extension, opened in place), and the fun extras' switches sit here alone.
 
 import { formatDateTime, timeStyleOf } from "../time-text.ts";
+import { uses12Hours } from "../time-format.ts";
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import {
@@ -57,6 +58,7 @@ export class Extensions extends LitElement {
     _packMsg: { state: true },
     _itemsError: { state: true },
     _open: { state: true },
+    _undo: { state: true },
     _packUrl: { state: true },
     _installing: { state: true },
     _preview: { state: true },
@@ -87,6 +89,9 @@ export class Extensions extends LitElement {
   private declare _updatesMsg: { ok: boolean; text: string } | null;
   /** Long lists opened by the viewer (the installed packs); closed, a bar sums them up. */
   private declare _open: Set<string>;
+  /** The last removed holiday rule, offered back for a few seconds (#339). */
+  private declare _undo: import("./season-dates.ts").SeasonUndo | null;
+  private undoTimer: ReturnType<typeof setTimeout> | undefined;
   /** The holidays' dates part (season-dates.ts, #287): a chunk of its own, loaded when the holidays are first drawn. */
   private seasonDatesPart: typeof import("./season-dates.ts") | undefined;
 
@@ -107,6 +112,7 @@ export class Extensions extends LitElement {
       // nothing remembered
     }
     this._open = new Set(open);
+    this._undo = null;
   }
 
   private toggleOpen(key: string): void {
@@ -468,8 +474,15 @@ export class Extensions extends LitElement {
       building: this.building,
       editor: this.isEditor && !!this.building,
       lang: this.hass?.language,
+      h12: uses12Hours(this.hass?.locale, this.hass?.language),
       open: this._open,
-      t: (key) => this.t(key as I18nKey),
+      undo: this._undo,
+      setUndo: (u) => {
+        clearTimeout(this.undoTimer);
+        this._undo = u;
+        if (u) this.undoTimer = setTimeout(() => (this._undo = null), 8000);
+      },
+      t: (key, vars) => this.t(key as I18nKey, vars),
       toggle: (key) => this.toggleOpen(key),
       funSwitch: (on, label, set, disabled) => this.funSwitch(on, label, set, disabled),
       edit: (fn) => this.editBuilding(fn),
@@ -956,6 +969,29 @@ export class Extensions extends LitElement {
       }
       .fp3d-ext-dates-field input {
         width: 4.5em;
+      }
+      .fp3d-ext-dates-field input[type="date"] {
+        width: auto;
+      }
+      .fp3d-ext-rule {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 16px;
+        flex-basis: 100%;
+      }
+      .fp3d-ext-upcoming {
+        flex-basis: 100%;
+      }
+      .fp3d-ext-upcoming ul {
+        margin: 4px 0;
+        padding-left: 18px;
+      }
+      .fp3d-ext-undo {
+        margin: 6px 0;
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: var(--fp3d-surface-2, rgba(128, 128, 128, 0.15));
       }
       .fp3d-ext-sub {
         margin: 0 0 8px 12px;
