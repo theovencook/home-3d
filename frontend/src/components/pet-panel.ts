@@ -4,11 +4,57 @@
 // Places are set by a tap in the plan: the panel asks with "pet-pick" {ref}, the editor sets it. Every change goes out
 // as "pet-change" {pet}. Drawn in the editor's own styles (no shadow root). A lazy chunk of its own (editor/lazy.ts).
 
-import { html, LitElement, nothing, type TemplateResult } from "lit";
+import { css, html, LitElement, nothing, type TemplateResult } from "lit";
 import { defineElement } from "../define.ts";
+import { entityOptionList, type EntityOption } from "../entity-options.ts";
 import { PET_POSES, uid, type Pet, type PetPlace, type PetSpot, type PetTrigger } from "../model.ts";
 import { petSpots, subscribePets, type PetLive } from "../pet-place.ts";
 import type { HomeAssistant } from "../types.ts";
+
+// The rows' styles come with this chunk (the element draws in the editor's shadow root, so a style tag reaches them).
+const STYLE = css`
+/* a spot or trigger: a two-column grid of labelled fields; the title, the days, the place and the buttons span both (#343) */
+.fp3d-pet-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+  align-items: end;
+  padding: 10px 0;
+  border-top: 1px solid var(--fp3d-line, rgba(127, 127, 127, 0.25));
+}
+.fp3d-pet-wide {
+  grid-column: 1 / -1;
+}
+.fp3d-pet-row select,
+.fp3d-pet-row input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.fp3d-pet-place,
+.fp3d-pet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.fp3d-pet-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.fp3d-pet-days button {
+  min-width: 0;
+  padding: 2px 0;
+}
+.fp3d-pet-days button[aria-pressed="false"] {
+  opacity: 0.45;
+}
+.fp3d-pet-on {
+  color: var(--fp3d-accent);
+  font-weight: 600;
+}
+`.cssText;
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
 const TURNS = [0, 45, 90, 135, 180, 225, 270, 315];
@@ -37,6 +83,7 @@ export class PetPanel extends LitElement {
   declare t: Translate;
   /** Where the server puts the pet now (null: nowhere, it wanders; undefined: no answer yet, or an older Home 3D). */
   private declare _live: PetLive | null | undefined;
+  private entityCache: { count: number; registry: unknown; list: EntityOption[] } | null = null;
   private unsub: Promise<() => Promise<void>> | null = null;
 
   constructor() {
@@ -105,12 +152,14 @@ export class PetPanel extends LitElement {
           ${TURNS.map((d) => html`<option value=${d} ?selected=${p.rotation === d}>${d}°</option>`)}
         </select></label
       >
-      ${this.readonly
-        ? nothing
-        : html`<button class="fp3d-btn" aria-pressed=${this.picking === ref} @click=${() => this.pick(this.picking === ref ? null : ref)}>
-            📍 ${this.picking === ref ? this.t("pet_place_picking") : this.t("pet_place_pick")}
-          </button>`}
-      <span class="fp3d-sub">${placed ? (floor?.name ?? "") : this.t("pet_place_none")}</span>`;
+      <div class="fp3d-pet-wide fp3d-pet-place">
+        ${this.readonly
+          ? nothing
+          : html`<button class="fp3d-btn" aria-pressed=${this.picking === ref} @click=${() => this.pick(this.picking === ref ? null : ref)}>
+              📍 ${this.picking === ref ? this.t("pet_place_picking") : this.t("pet_place_pick")}
+            </button>`}
+        <span class="fp3d-sub">${placed ? (floor?.name ?? "") : this.t("pet_place_none")}</span>
+      </div>`;
   }
 
   private days(s: PetSpot) {
@@ -122,7 +171,7 @@ export class PetPanel extends LitElement {
       this.setSpot(s.id, { days: next.length === 7 || !next.length ? null : next });
     };
     // 1 Jan 2024 was a Monday (day 0)
-    return html`<div class="fp3d-pet-days" role="group" aria-label=${this.t("pet_days")}>
+    return html`<div class="fp3d-pet-days fp3d-pet-wide" role="group" aria-label=${this.t("pet_days")}>
       ${[0, 1, 2, 3, 4, 5, 6].map((d) => html`<button class="fp3d-btn" aria-pressed=${on(d)} ?disabled=${this.readonly} @click=${() => toggle(d)}>${fmt.format(new Date(2024, 0, 1 + d))}</button>`)}
     </div>`;
   }
@@ -141,26 +190,53 @@ export class PetPanel extends LitElement {
       this.emit({ ...this.pet, spots: next });
     };
     return html`<div class="fp3d-pet-row">
-      <b class=${now ? "fp3d-pet-on" : ""}>${this.t("pet_spot_n", { n: i + 1 })}${now ? ` · ${this.t("pet_active")}` : ""}</b>
+      <b class="fp3d-pet-wide ${now ? "fp3d-pet-on" : ""}">${this.t("pet_spot_n", { n: i + 1 })}${now ? ` · ${this.t("pet_active")}` : ""}</b>
       ${this.place(`spot:${s.id}`, s, (patch) => this.setSpot(s.id, patch))}
       ${this.time(this.t("pet_from"), s.from, (v) => this.setSpot(s.id, { from: v }))} ${this.time(this.t("pet_to"), s.to, (v) => this.setSpot(s.id, { to: v }))} ${this.days(s)}
       ${this.readonly
         ? nothing
-        : html`<button class="fp3d-pin" title=${this.t("move_up")} ?disabled=${!i} @click=${() => move(-1)}>↑</button>
+        : html`<div class="fp3d-pet-wide fp3d-pet-actions"><button class="fp3d-pin" title=${this.t("move_up")} ?disabled=${!i} @click=${() => move(-1)}>↑</button>
             <button class="fp3d-pin" title=${this.t("move_down")} ?disabled=${i === list.length - 1} @click=${() => move(1)}>↓</button>
-            <button class="fp3d-btn fp3d-danger" @click=${() => this.drop("spots", s.id)}>${this.t("delete")}</button>`}
+            <button class="fp3d-btn fp3d-danger" @click=${() => this.drop("spots", s.id)}>${this.t("delete")}</button></div>`}
     </div>`;
+  }
+
+  /** The entities of Home Assistant for the trigger picker, kept while none comes or goes. */
+  private entities(): EntityOption[] {
+    const states = this.hass?.states ?? {};
+    const count = Object.keys(states).length;
+    if (!this.entityCache || this.entityCache.count !== count || this.entityCache.registry !== this.hass?.entities)
+      this.entityCache = { count, registry: this.hass?.entities, list: entityOptionList(this.hass, () => true) };
+    return this.entityCache.list;
+  }
+
+  /** An entity field: the shared searchable entity picker ("none" clears it). */
+  private entity(label: string, value: string | null | undefined, set: (v: string | null) => void) {
+    return html`<label class="fp3d-field fp3d-pet-wide"
+      >${label}
+      <fp3d-entity-picker
+        .options=${this.entities()}
+        .fixed=${[{ id: "none", label: this.t("entity_none") }]}
+        .value=${value || "none"}
+        .placeholder=${this.t("entity_search")}
+        ?disabled=${this.readonly}
+        @change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          set(e.detail.value === "none" ? null : e.detail.value);
+        }}
+      ></fp3d-entity-picker
+    ></label>`;
   }
 
   private triggerRow(x: PetTrigger, i: number): TemplateResult {
     const kind = x.kind ?? "state";
     const now = this._live?.trigger === x.id;
     const until = now && this._live?.until ? new Date(this._live.until).toLocaleTimeString(this.hass?.language, { hour: "2-digit", minute: "2-digit" }) : "";
-    const text = (label: string, value: string | null | undefined, set: (v: string | null) => void, list?: string) =>
-      html`<label class="fp3d-field">${label}<input type="text" list=${list ?? nothing} .value=${value ?? ""} ?disabled=${this.readonly} @change=${(e: Event) => set((e.target as HTMLInputElement).value.trim() || null)} /></label>`;
+    const text = (label: string, value: string | null | undefined, set: (v: string | null) => void) =>
+      html`<label class="fp3d-field fp3d-pet-wide">${label}<input type="text" .value=${value ?? ""} ?disabled=${this.readonly} @change=${(e: Event) => set((e.target as HTMLInputElement).value.trim() || null)} /></label>`;
     return html`<div class="fp3d-pet-row">
-      <b class=${now ? "fp3d-pet-on" : ""}>⚡ ${i + 1}${now ? ` · ${this.t("pet_active_until", { time: until })}` : ""}</b>
-      <label class="fp3d-field"
+      <b class="fp3d-pet-wide ${now ? "fp3d-pet-on" : ""}">⚡ ${i + 1}${now ? ` · ${this.t("pet_active_until", { time: until })}` : ""}</b>
+      <label class="fp3d-field fp3d-pet-wide"
         >${this.t("pet_trigger_kind")}
         <select ?disabled=${this.readonly} @change=${(e: Event) => this.setTrigger(x.id, { kind: (e.target as HTMLSelectElement).value as PetTrigger["kind"] })}>
           ${(["state", "event", "time"] as const).map((k) => html`<option value=${k} ?selected=${kind === k}>${this.t(`pet_trigger_${k}`)}</option>`)}
@@ -169,14 +245,16 @@ export class PetPanel extends LitElement {
       ${kind === "time"
         ? this.time(this.t("pet_trigger_at"), x.at, (v) => this.setTrigger(x.id, { at: v }))
         : kind === "event"
-          ? html`${text(this.t("pet_trigger_event_type"), x.event, (v) => this.setTrigger(x.id, { event: v }))} ${text(this.t("pet_trigger_event_entity"), x.entity, (v) => this.setTrigger(x.id, { entity: v }), "fp3d-pet-entities")}`
-          : html`${text(this.t("pet_trigger_entity"), x.entity, (v) => this.setTrigger(x.id, { entity: v }), "fp3d-pet-entities")} ${text(this.t("pet_trigger_to"), x.to, (v) => this.setTrigger(x.id, { to: v }))}`}
+          ? html`${text(this.t("pet_trigger_event_type"), x.event, (v) => this.setTrigger(x.id, { event: v }))}
+            ${this.entity(this.t("pet_trigger_event_entity"), x.entity, (v) => this.setTrigger(x.id, { entity: v }))}`
+          : html`${this.entity(this.t("pet_trigger_entity"), x.entity, (v) => this.setTrigger(x.id, { entity: v }))}
+            ${text(this.t("pet_trigger_to"), x.to, (v) => this.setTrigger(x.id, { to: v }))}`}
       ${this.place(`trigger:${x.id}`, x, (patch) => this.setTrigger(x.id, patch))}
       <label class="fp3d-field"
         >${this.t("pet_trigger_minutes")}
         <input type="number" min="0.5" max="1440" step="1" .value=${String(x.minutes ?? 10)} ?disabled=${this.readonly} @change=${(e: Event) => this.setTrigger(x.id, { minutes: Math.min(1440, Math.max(0.5, Number((e.target as HTMLInputElement).value) || 10)) })}
       /></label>
-      ${this.readonly ? nothing : html`<button class="fp3d-btn fp3d-danger" @click=${() => this.drop("triggers", x.id)}>${this.t("delete")}</button>`}
+      ${this.readonly ? nothing : html`<div class="fp3d-pet-wide fp3d-pet-actions"><button class="fp3d-btn fp3d-danger" @click=${() => this.drop("triggers", x.id)}>${this.t("delete")}</button></div>`}
     </div>`;
   }
 
@@ -188,8 +266,8 @@ export class PetPanel extends LitElement {
     const live = this._live;
     const at = live?.trigger ? triggers.findIndex((x) => x.id === live.trigger) : spots.findIndex((s) => s.id === live?.spot);
     const now = live === undefined ? "" : !live ? this.t("pet_now_free") : live.trigger ? this.t("pet_now_trigger", { n: at + 1 }) : this.t("pet_now_spot", { n: at + 1 });
-    const entities = triggers.some((x) => (x.kind ?? "state") !== "time") ? Object.keys(this.hass?.states ?? {}).sort() : [];
-    return html`<section>
+    return html`<style>${STYLE}</style>
+      <section>
         <h3>🐾 ${pet.name || this.t(`pet_kind_${pet.kind}`)}</h3>
         ${this.roamOff ? html`<p class="fp3d-note">${this.t("pet_roam_off")}</p>` : now ? html`<p class="fp3d-sub">${now}</p>` : nothing}
       </section>
@@ -204,7 +282,6 @@ export class PetPanel extends LitElement {
         <p class="fp3d-sub">${this.t("pet_triggers_hint")}</p>
         ${triggers.map((x, i) => this.triggerRow(x, i))}
         ${this.readonly ? nothing : html`<button class="fp3d-btn" @click=${() => this.emit({ ...pet, triggers: [...triggers, { id: uid("trigger"), kind: "state", entity: null, to: null, event: null, at: null, floor_id: null, x: null, z: null, pose: "sit", rotation: null, minutes: 10 }] })}>+ ${this.t("pet_trigger_add")}</button>`}
-        ${entities.length ? html`<datalist id="fp3d-pet-entities">${entities.map((e) => html`<option value=${e}></option>`)}</datalist>` : nothing}
       </section>`;
   }
 }
