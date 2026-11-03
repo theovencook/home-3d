@@ -7,7 +7,7 @@
 
 import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
-import { askText, tell } from "../ask.ts";
+import { askText, askTyped, tell } from "../ask.ts";
 import { createHome, deleteHome, duplicateHome, listHomes, loadSampleHome, renameHome, setActiveHome, type HomeInfo, type HomesList } from "../api.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
@@ -126,12 +126,15 @@ export class Fp3dHomesPage extends LitElement {
       if (res) this.open(res.home.id);
     } else {
       // deleting needs the home's name typed (#160): a slip cannot take the real house with it
-      const typed = await askText(this.t("home_delete_type", { name: home.name }), "", { ok: this.t("delete"), cancel: this.t("cancel"), danger: true });
-      if (typed === null) return;
-      if (!namesHome(typed, home.name)) {
-        await tell(this.t("home_delete_mismatch", { name: home.name }), { ok: this.t("ask_ok") });
-        return;
-      }
+      // a wrong name keeps the dialog open with the error under the field and Delete disabled (#330)
+      const sure = await askTyped(this.t("home_delete_type", { name: home.name }), {
+        ok: this.t("delete"),
+        cancel: this.t("cancel"),
+        danger: true,
+        matches: (typed) => namesHome(typed, home.name),
+        mismatch: this.t("home_delete_mismatch", { name: home.name }),
+      });
+      if (!sure) return;
       // the home this view shows is gone: show the active one (the backend picks another if it was the active one)
       if ((await this.run(() => deleteHome(hass, home.id))) && home.id === this.home) this.open(null);
     }

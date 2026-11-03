@@ -1066,7 +1066,7 @@
  "home_name_prompt": "Name des Zuhauses",
  "home_copy_name": "{name} (Kopie)",
  "home_delete_type": "„{name}“ mit Plan, Wiederherstellungspunkten und Bildern löschen? Das lässt sich nicht rückgängig machen. Zum Löschen den Namen des Zuhauses eingeben.",
- "home_delete_mismatch": "Das ist nicht der Name des Zuhauses, „{name}“ wurde nicht gelöscht.",
+ "home_delete_mismatch": "Das ist nicht der Name des Zuhauses. Löschen bleibt aus, bis du „{name}“ eintippst.",
  "home_failed": "Das hat nicht geklappt: {error}",
  "demo_states": "Demo-Zustände",
  "demo_states_hint": "Verknüpfte Geräte, die es in diesem Home Assistant nicht gibt, zeigen feste Zustände (einige Lampen an, Heizung an, Solarstrom). Echte Entitäten haben immer Vorrang.",

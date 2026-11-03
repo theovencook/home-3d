@@ -1072,7 +1072,7 @@ const en = {
   home_name_prompt: "Name of the home",
   home_copy_name: "{name} (copy)",
   home_delete_type: "Delete \"{name}\" with its plan, restore points and pictures? This cannot be undone. Type the home's name to delete it.",
-  home_delete_mismatch: "That is not the home's name, so \"{name}\" was not deleted.",
+  home_delete_mismatch: "That is not the home's name. Delete stays off until you type \"{name}\".",
   home_failed: "That did not work: {error}",
   demo_states: "Demo states",
   demo_states_hint: "Linked devices this Home Assistant does not have show fixed states (some lights on, heating on, solar producing). Real entities always win.",
