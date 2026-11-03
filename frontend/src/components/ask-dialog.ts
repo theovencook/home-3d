@@ -19,6 +19,20 @@ function deepActive(): HTMLElement | null {
   return el;
 }
 
+/**
+ * The look of the part that asked (#263): the innermost Home 3D host along the focus with a scheme attribute (the
+ * panel or a card under the Day look is "light", under High contrast "contrast"); null keeps the dark look. The
+ * dialog sits on the page, outside the panel, so it can't inherit the scheme and copies it instead.
+ */
+export function focusScheme(start: Element | null = typeof document === "undefined" ? null : document.activeElement): "light" | "contrast" | null {
+  let scheme: "light" | "contrast" | null = null;
+  for (let el = start; el; el = el.shadowRoot?.activeElement ?? null) {
+    if (el.hasAttribute("contrast")) scheme = "contrast";
+    else if (el.hasAttribute("light")) scheme = "light";
+  }
+  return scheme;
+}
+
 /** Where the dialog goes: into the element shown full screen (a card on a wall tablet), else the page. */
 function mountPoint(): Element {
   let fs: Element | null = document.fullscreenElement;
@@ -81,7 +95,13 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
   protected willUpdate(): void {
     const req = this.queue.current;
     if (req === this.shown) return;
-    if (req && !this.shown) this.returnFocus = deepActive();
+    if (req && !this.shown) {
+      this.returnFocus = deepActive();
+      // the dialog shows in the look of the screen that asked (#263): New home in Settings under the Day look is light
+      const scheme = focusScheme();
+      this.toggleAttribute("light", scheme === "light");
+      this.toggleAttribute("contrast", scheme === "contrast");
+    }
     this.typed = req?.input ?? "";
     this.wrong = false;
     clearTimeout(this.wrongTimer);

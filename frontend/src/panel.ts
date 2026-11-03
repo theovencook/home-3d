@@ -959,9 +959,9 @@ export class Floorplan3dPanel extends LitElement {
     // the page's language is the one its texts are in (#196): English while a language has no texts here
     const lang = uiLanguage(this.hass);
     if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);
-    // the viewer's chrome goes light with the Day look (#85); the editor and the extensions page stay dark (deferred)
-    this.toggleAttribute("light", this._mode === "view" && lightChrome(shownLook(this._theme, this.hass)));
-    this.toggleAttribute("contrast", this._mode === "view" && contrastChrome(shownLook(this._theme, this.hass)));
+    // the chrome goes light with the Day look (#85); Settings, Extensions and the editor follow it too (#263)
+    this.toggleAttribute("light", lightChrome(shownLook(this._theme, this.hass)));
+    this.toggleAttribute("contrast", contrastChrome(shownLook(this._theme, this.hass)));
     // lab: the locating recorder box for admins (feasibility test, not a feature yet)
     if (!this.locateLab && this.hass?.user?.is_admin && this.data.building && labOn()) {
       this.locateLab = mountLocateLab(() => ({ hass: this.hass, building: this.data.building }));
