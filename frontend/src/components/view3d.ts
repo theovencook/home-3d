@@ -4758,6 +4758,9 @@ export class Fp3dView3d extends LitElement {
         night: () => this.hass?.states["sun.sun"]?.state === "below_horizon",
         base: (floor, f) => mountBase(floor, f),
         surface: (floor, x, z) => surfaceHeight(floor, x, z),
+        // roaming pets (#337): where the server puts them, for the home shown (time travel's read-only hass refuses it)
+        hass: () => (this.replay ? undefined : this.hass),
+        home: () => this.home,
         closedDoors: () => {
           const out = new Set<string>();
           const states = this.hass?.states ?? {};

@@ -8,12 +8,12 @@ STORAGE_VERSION = 1
 # minor versions of the building store; each step has a migration in storage.py
 STORAGE_MINOR_VERSION = 2
 # the format of a plan (#165): its `version`; an older plan is brought up to this one by the steps in migrations.py
-PLAN_VERSION = 2
+PLAN_VERSION = 3
 # the websocket protocol (#166): one up whenever a command or a field of one is added, changed or removed, so the
 # frontend can tell what the backend it talks to understands (building/get and version send it). The commands are
 # listed in tests/fixtures/contract/websocket.json, which tests/test_contract.py keeps in step and the frontend
 # checks its calls against
-PROTOCOL = 2
+PROTOCOL = 3
 STORAGE_KEY_BUILDING = f"{DOMAIN}.building"
 STORAGE_KEY_IMAGES = f"{DOMAIN}.images"
 STORAGE_KEY_HISTORY = f"{DOMAIN}.history"
@@ -53,6 +53,10 @@ DEFAULT_RESTORE_PICTURE_DAYS = 90
 SIGNAL_BUILDING_UPDATED = f"{DOMAIN}_building_updated"
 # the homes changed (one added, renamed, removed, or another one made active)
 SIGNAL_HOMES_UPDATED = f"{DOMAIN}_homes_updated"
+# roaming pets (#337): where each pet of a home is now, worked out on the server: (home id, targets), and the
+# hass.data key of the routines
+SIGNAL_PETS_UPDATED = f"{DOMAIN}_pets_updated"
+DATA_PETS = f"{DOMAIN}_pets"
 # a sentence for the open views (see voice.py) and the hass.data key of its broker
 SIGNAL_ASK = f"{DOMAIN}_ask"
 DATA_ASK = f"{DOMAIN}_ask"

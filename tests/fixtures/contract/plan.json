@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "floors": [
     {
       "id": "text",
@@ -818,6 +818,7 @@
     ],
     "pets": {
       "on": true,
+      "roam": true,
       "list": [
         {
           "id": "text",
@@ -831,7 +832,38 @@
           "pose": "sit",
           "x": -500,
           "z": -500,
-          "rotation": -180
+          "rotation": -180,
+          "spots": [
+            {
+              "id": "text",
+              "floor_id": "text",
+              "x": -500,
+              "z": -500,
+              "pose": "groom",
+              "rotation": -180,
+              "from": "22:00",
+              "to": "07:00",
+              "days": [
+                0
+              ]
+            }
+          ],
+          "triggers": [
+            {
+              "id": "text",
+              "kind": "state",
+              "entity": "text",
+              "to": "text",
+              "event": "text",
+              "at": "07:30",
+              "floor_id": "text",
+              "x": -500,
+              "z": -500,
+              "pose": "stand",
+              "rotation": -180,
+              "minutes": 10
+            }
+          ]
         }
       ]
     },

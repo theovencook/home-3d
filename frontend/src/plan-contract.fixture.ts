@@ -18,7 +18,7 @@ export type Complete<T> = T extends readonly (infer U)[]
 
 // the recipe copies are checked by the pack format's own tests (packs.md); here the plan only has the field
 export const PLAN_CONTRACT = {
-  "version": 2,
+  "version": 3,
   "floors": [
     {
       "id": "text",
@@ -837,6 +837,7 @@ export const PLAN_CONTRACT = {
     ],
     "pets": {
       "on": true,
+      "roam": true,
       "list": [
         {
           "id": "text",
@@ -850,7 +851,36 @@ export const PLAN_CONTRACT = {
           "pose": "sit",
           "x": -500.0,
           "z": -500.0,
-          "rotation": -180.0
+          "rotation": -180.0,
+          "spots": [
+            {
+              "id": "text",
+              "floor_id": "text",
+              "x": -500.0,
+              "z": -500.0,
+              "pose": "groom",
+              "rotation": -180.0,
+              "from": "22:00",
+              "to": "07:00",
+              "days": [0]
+            }
+          ],
+          "triggers": [
+            {
+              "id": "text",
+              "kind": "state",
+              "entity": "text",
+              "to": "text",
+              "event": "text",
+              "at": "07:30",
+              "floor_id": "text",
+              "x": -500.0,
+              "z": -500.0,
+              "pose": "stand",
+              "rotation": -180.0,
+              "minutes": 10.0
+            }
+          ]
         }
       ]
     },

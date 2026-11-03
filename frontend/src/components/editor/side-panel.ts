@@ -175,7 +175,9 @@ export class SidePanelPart {
                 ? this.renderOutdoorForm(this.outdoorArea)
                 : this.freeWall
                   ? this.renderFreeWallForm(this.freeWall)
-                  : null;
+                  : this._petId
+                    ? this.renderPetPanel()
+                    : null;
     // Doors & windows mode: the kind the next tap adds, chosen up front (#63); it stays within reach while an
     // opening is selected, so choosing it never has to go through that opening's own chips (#159)
     const nextKind =
@@ -286,7 +288,7 @@ export class SidePanelPart {
           : room
             ? html`${this.renderRoomForm(room, areas)}`
             : floor
-              ? html`${this.renderRoomList(floor)} ${this.renderItemsList(floor.furniture, true)} ${this.renderUnplaced()} ${this.renderHomeLinks()}`
+              ? html`${this.renderRoomList(floor)} ${this.renderPetList(floor)} ${this.renderItemsList(floor.furniture, true)} ${this.renderUnplaced()} ${this.renderHomeLinks()}`
               : nothing}
       ${this.renderHelpLinks()}
       ${admin && SHOW_PRESENCE ? this.renderPresenceSettings() : nothing}

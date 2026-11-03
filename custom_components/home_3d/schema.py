@@ -285,6 +285,42 @@ _DAY = vol.Any(None, vol.Match(r"^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"))
 _MONTH_DAY = vol.Match(r"^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
 _TIME = vol.Any(None, vol.Match(TIME_PATTERN))
 
+# roaming pets (#337): the poses (sleeping is "curl", loafing "lie"), a place on a floor, a routine spot (a place with a
+# time window and days, 0 = Monday) and a trigger (an HA state, event or time that sends the pet to a place for a while)
+_PET_POSE = vol.In(["sit", "lie", "curl", "stand", "groom"])
+_PET_PLACE: dict[Any, Any] = {
+    vol.Optional("floor_id", default=None): vol.Any(None, vol.All(str, vol.Length(max=64))),
+    vol.Optional("x", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000))),
+    vol.Optional("z", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000))),
+    vol.Optional("pose", default=None): vol.Any(None, _PET_POSE),
+    vol.Optional("rotation", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=-360, max=360))),
+}
+_PET_SPOT = vol.Schema(
+    {
+        vol.Required("id"): vol.All(str, vol.Length(min=1, max=64)),
+        **_PET_PLACE,
+        vol.Optional("from", default=None): _TIME,
+        vol.Optional("to", default=None): _TIME,
+        vol.Optional("days", default=None): vol.Any(
+            None, vol.All([vol.All(int, vol.Range(min=0, max=6))], vol.Length(max=7))
+        ),
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+_PET_TRIGGER = vol.Schema(
+    {
+        vol.Required("id"): vol.All(str, vol.Length(min=1, max=64)),
+        vol.Optional("kind", default="state"): vol.In(["state", "event", "time"]),
+        vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("to", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("event", default=None): vol.Any(None, vol.All(str, vol.Length(max=64))),
+        vol.Optional("at", default=None): _TIME,
+        **_PET_PLACE,
+        vol.Optional("minutes", default=10): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=1440)),
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
 
 def _whole_interval(interval: dict) -> dict:
     """Both first and last day and both start and end, or neither: one end alone is no interval (#46)."""
@@ -1128,6 +1164,8 @@ SETTINGS_SCHEMA = vol.Schema(
             vol.Schema(
                 {
                     vol.Optional("on", default=True): bool,
+                    # roaming (#337): off, every pet stays on its first spot
+                    vol.Optional("roam", default=True): bool,
                     vol.Optional("list", default=list): vol.All(
                         [
                             vol.Schema(
@@ -1148,7 +1186,7 @@ SETTINGS_SCHEMA = vol.Schema(
                                     ),
                                     # static (#17): stays at its spot in a pose instead of roaming
                                     vol.Optional("static", default=False): bool,
-                                    vol.Optional("pose", default=None): vol.Any(None, vol.In(["sit", "lie", "curl"])),
+                                    vol.Optional("pose", default=None): vol.Any(None, _PET_POSE),
                                     vol.Optional("x", default=None): vol.Any(
                                         None, vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000))
                                     ),
@@ -1158,6 +1196,12 @@ SETTINGS_SCHEMA = vol.Schema(
                                     vol.Optional("rotation", default=None): vol.Any(
                                         None, vol.All(vol.Coerce(float), vol.Range(min=-360, max=360))
                                     ),
+                                    # roaming pets (#337): the daily routine (null: the old spot above, if any) and
+                                    # the triggers, as many as wanted
+                                    vol.Optional("spots", default=None): vol.Any(
+                                        None, vol.All([_PET_SPOT], vol.Length(max=48))
+                                    ),
+                                    vol.Optional("triggers", default=None): vol.Any(None, [_PET_TRIGGER]),
                                 },
                                 extra=vol.ALLOW_EXTRA,
                             )

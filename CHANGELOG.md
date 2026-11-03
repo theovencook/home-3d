@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- **Roaming pets**: each pet has a daily routine (spots with a pose, facing, times and days) and any number of triggers (an entity changing, an event or a time of day) that send it to a place for some minutes; Home Assistant works out where each pet is, so every screen shows it in the same place, and the pets walk there (stairs too) and hold still at no cost. New poses: standing and grooming. Set in the pet's panel in the editor (tap its paw); a Roaming switch on the Extensions page keeps every pet on its first spot. Static pets keep their spot as their routine's first (plan format 3) (#337).
+
 ## Home 3D 0.2.1 (2 November 2026)
 
 - A Home Assistant restart is no longer shown as motion: the camera detection pins only linger for a detection this page saw, and the motion trail skips sensors coming back from unavailable or unknown (#299).

@@ -697,6 +697,38 @@ export const formStyles = css`
         stroke: var(--fp3d-accent);
         stroke-width: 3;
       }
+      /* roaming pets (#337): the numbers on the open pet's places, and its panel's rows */
+      .fp3d-pet-n {
+        font: 700 11px system-ui, sans-serif;
+        fill: var(--fp3d-accent);
+        pointer-events: none;
+      }
+      .fp3d-pet-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        padding: 8px 0;
+        border-top: 1px solid var(--fp3d-line, rgba(127, 127, 127, 0.25));
+      }
+      .fp3d-pet-row select,
+      .fp3d-pet-row input {
+        min-width: 0;
+      }
+      .fp3d-pet-row input[type="number"] {
+        width: 5em;
+      }
+      .fp3d-pet-days button {
+        min-width: 2.4em;
+        padding: 2px 4px;
+      }
+      .fp3d-pet-days button[aria-pressed="false"] {
+        opacity: 0.45;
+      }
+      .fp3d-pet-on {
+        color: var(--fp3d-accent);
+        font-weight: 600;
+      }
       .fp3d-dev-row {
         align-items: center;
         cursor: default;

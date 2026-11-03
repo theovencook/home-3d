@@ -1,6 +1,6 @@
 {
-  "protocol": 2,
-  "plan_version": 2,
+  "protocol": 3,
+  "plan_version": 3,
   "commands": {
     "home_3d/backup/export": {
       "required": [],
@@ -289,6 +289,12 @@
         "frequency",
         "time",
         "weekday"
+      ]
+    },
+    "home_3d/pets/subscribe": {
+      "required": [],
+      "optional": [
+        "home_id"
       ]
     },
     "home_3d/timetravel/history": {

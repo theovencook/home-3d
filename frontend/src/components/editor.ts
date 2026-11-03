@@ -78,6 +78,7 @@ import { SettingsPart } from "./editor/settings.ts";
 import { preloadParts } from "./editor/lazy.ts";
 import { BackupPart } from "./editor/backup.ts";
 import { PhonePart, type SheetHeight } from "./editor/phone.ts";
+import { PetsPart } from "./editor/pets.ts";
 import { BackLayers } from "../back-stack.ts";
 export type { EditorTopic };
 
@@ -122,6 +123,8 @@ export class Fp3dEditor extends LitElement {
     _single: { state: true },
     _multiMode: { state: true },
     _deviceId: { state: true },
+    _petId: { state: true },
+    _petPick: { state: true },
     _deviceQuery: { state: true },
     _devSource: { state: true },
     _unplacedOpen: { state: true },
@@ -292,6 +295,9 @@ export class Fp3dEditor extends LitElement {
   kitPics = new Map<string, string>();
   kitPicsAsked = new Set<string>();
   declare _deviceId: string | null;
+  /** Roaming pets (#337): the pet whose panel is open, and the place the next tap in the plan sets ("spot:new", "spot:<id>", "trigger:<id>"). */
+  declare _petId: string | null;
+  declare _petPick: string | null;
   declare _deviceQuery: string;
   /** Which devices the room form lists: its own area, other areas, or entities without an area. */
   declare _devSource: "area" | "other" | "none";
@@ -578,6 +584,8 @@ export class Fp3dEditor extends LitElement {
     this._wallPicTick = 0;
     this._wallPick = false;
     this._kerbPick = false;
+    this._petId = null;
+    this._petPick = null;
     this._runMode = null;
     this._runDraft = null;
     this._runSel = null;
@@ -1252,8 +1260,8 @@ export class Fp3dEditor extends LitElement {
 }
 
 /** The area modules' methods (#202): one class per editor area under editor/, all on this element. */
-export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart {}
-mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart]);
+export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart {}
+mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart]);
 
 defineElement("fp3d-editor", Fp3dEditor);
 

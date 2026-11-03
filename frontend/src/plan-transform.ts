@@ -5,7 +5,7 @@
 
 import type { Building, Floor, OutdoorArea, RoofSection, RoofWindow, SlopeDir, SolarField, StartView, Vec2 } from "./model.ts";
 import { fieldFace, fieldModules, fieldSize, GROUND, groundFace, groundFloor, roofFaces, rowCounts, topFloor, wallFaces, windowAsField, type RoofFace } from "./solar.ts";
-import { petFloor } from "./pet-place.ts";
+import { petFloor, placeFloor } from "./pet-place.ts";
 
 /** A move of the plan: a shift (no turn) or a quarter turn clockwise in the plan about a point. */
 export interface PlanTransform {
@@ -80,6 +80,9 @@ export const PLAN_FIELDS = {
   "Pet.x": "moved with its floor",
   "Pet.z": "moved with its floor",
   "Pet.rotation": "turned",
+  "PetPlace.x": "a routine spot or trigger place (#337): moved with its floor",
+  "PetPlace.z": "as x",
+  "PetPlace.rotation": "turned",
   "BuildingSettings.north": "turned (all floors)",
   "BuildingSettings.start_view": "a StartView, moved with the whole house (all floors)",
   "StartView.target": "moved",
@@ -288,6 +291,8 @@ export function transformPlan(doc: Building, floorIds: readonly string[] | null,
   for (const w of roof.windows ?? []) hosted(w, windowAsField(w));
   const ground = groundFloor(doc)?.id;
   const pets = (doc.settings.pets?.list ?? []).filter((p) => p.x != null && p.z != null && moved.has(petFloor(doc, p)?.id ?? ""));
+  // a pet's routine spots and trigger places (#337), each on its own floor
+  const places = (doc.settings.pets?.list ?? []).flatMap((p) => [...(p.spots ?? []), ...(p.triggers ?? [])].filter((s) => s.x != null && s.z != null && moved.has(placeFloor(doc, p, s)?.id ?? "")));
 
   for (const f of doc.floors) if (moved.has(f.id)) moveFloor(t, f);
   for (const f of doc.floors) {
@@ -296,7 +301,7 @@ export function transformPlan(doc: Building, floorIds: readonly string[] | null,
   for (const c of roof.cables ?? []) if (moved.has(c.floor_id)) c.points = c.points.map(t.point);
   const meter = doc.energy.meter;
   if (meter && moved.has(meter.floor_id)) [meter.x, meter.z] = t.point([meter.x, meter.z]);
-  for (const p of pets) {
+  for (const p of [...pets, ...places]) {
     [p.x, p.z] = t.point([p.x!, p.z!]);
     if (t.quarter && p.rotation != null) p.rotation = deg(t, p.rotation);
   }

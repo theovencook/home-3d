@@ -23,7 +23,7 @@ import { KINDS, ROOMS } from "../library-index.ts";
 import { loadItems } from "../load-items.ts";
 import { FUN, released } from "../features.ts";
 import { DOG_BREEDS, PET_EYES, PET_FURS_OF, PET_POSES, type Building, type Pet } from "../model.ts";
-import { isStaticPet, petFloor, setPetStatic } from "../pet-place.ts";
+import { firstSpot, isStaticPet, petFloor, petSpots, setPetStatic } from "../pet-place.ts";
 import { languageCode, loadLanguage, translate, type I18nKey } from "../i18n.ts";
 import { askConfirm } from "../ask.ts";
 import { ISSUES_URL } from "../help.ts";
@@ -356,9 +356,9 @@ export class Extensions extends LitElement {
     const on = pets?.on !== false;
     // the floors to live on, lowest first (a pet without a floor lives on the lowest)
     const floors = (this.building?.floors ?? []).filter((f) => f.rooms.length).sort((a, b) => a.elevation - b.elevation);
-    const set = (fn: (p: { on: boolean; list: Pet[] }) => void) =>
+    const set = (fn: (p: { on: boolean; list: Pet[]; roam?: boolean }) => void) =>
       this.editBuilding((b) => {
-        const p = { on: b.settings.pets?.on !== false, list: [...(b.settings.pets?.list ?? [])] };
+        const p = { ...b.settings.pets, on: b.settings.pets?.on !== false, list: [...(b.settings.pets?.list ?? [])] };
         fn(p);
         b.settings.pets = p;
       });
@@ -377,6 +377,8 @@ export class Extensions extends LitElement {
               <span class="fp3d-sub">${this.t("fun_feature_pets")}</span>
               ${this.isEditor && this.building
                 ? html`${this.funSwitch(on, this.t("pets_show"), (v) => set((p) => (p.on = v)))}
+                    ${this.funSwitch(pets?.roam !== false, this.t("pets_roam"), (v) => set((p) => (p.roam = v)))}
+                    <span class="fp3d-sub">${this.t("pets_roam_hint")}</span>
                     ${list.map(
                       (pet) => html`<div class="fp3d-pet-row">
                         <select
@@ -420,19 +422,19 @@ export class Extensions extends LitElement {
                           <option value="static" ?selected=${isStaticPet(pet)}>${this.t("pet_static")}</option>
                         </select>
                         ${isStaticPet(pet)
-                          ? html`<select title=${this.t("pet_pose")} aria-label=${this.t("pet_pose")} @change=${(e: Event) => change(pet.id, { pose: (e.target as HTMLSelectElement).value as Pet["pose"] })}>
-                                ${PET_POSES.map((k) => html`<option value=${k} ?selected=${(pet.pose ?? "sit") === k}>${this.t(`pet_pose_${k}`)}</option>`)}
+                          ? html`<select title=${this.t("pet_pose")} aria-label=${this.t("pet_pose")} @change=${(e: Event) => change(pet.id, firstSpot(pet, { pose: (e.target as HTMLSelectElement).value as Pet["pose"] }))}>
+                                ${PET_POSES.map((k) => html`<option value=${k} ?selected=${(petSpots(pet)[0]?.pose ?? "sit") === k}>${this.t(`pet_pose_${k}`)}</option>`)}
                               </select>
                               <select
                                 title=${this.t("pet_turn")}
                                 aria-label=${this.t("pet_turn")}
                                 @change=${(e: Event) => {
                                   const v = (e.target as HTMLSelectElement).value;
-                                  change(pet.id, { rotation: v === "" ? null : Number(v) });
+                                  change(pet.id, firstSpot(pet, { rotation: v === "" ? null : Number(v) }));
                                 }}
                               >
-                                <option value="" ?selected=${pet.rotation == null}>${this.t("pet_turn_auto")}</option>
-                                ${[0, 45, 90, 135, 180, 225, 270, 315].map((d) => html`<option value=${d} ?selected=${pet.rotation === d}>${d}°</option>`)}
+                                <option value="" ?selected=${petSpots(pet)[0]?.rotation == null}>${this.t("pet_turn_auto")}</option>
+                                ${[0, 45, 90, 135, 180, 225, 270, 315].map((d) => html`<option value=${d} ?selected=${petSpots(pet)[0]?.rotation === d}>${d}°</option>`)}
                               </select>
                               <span class="fp3d-sub">${this.t("pet_static_hint")}</span>`
                           : nothing}
