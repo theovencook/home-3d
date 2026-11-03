@@ -2,10 +2,15 @@
 // meter, circuit and wiring pickers and the energy balance.
 
 import { html, nothing, svg } from "lit";
-import { furnitureEntities } from "../../devices.ts";
+import { entityName, furnitureEntities } from "../../devices.ts";
 import { snapToWall } from "../../geometry/snap.ts";
 import { deviceSensors, energySummary, flowSegments, gridPoint, proposeEnergySensors, type EnergyPrefs, type FlowSegment, proposeMeters } from "../../energy.ts";
 import { energySensorFor } from "../../wire-ends.ts";
+import { ON_OFF_RATE, ratesFromSensors, tariffStates } from "../../cheap-rate.ts";
+import { prefsRates, type EnergyInfo, type RatePrefs } from "../../energy-rates.ts";
+import { formatNumber } from "../../i18n-core.ts";
+import { need, loadMultiSelect } from "./lazy.ts";
+import type { EntityOption } from "../../entity-options.ts";
 import { type I18nKey } from "../../i18n.ts";
 import { centroid, ENERGY_DEVICES, DEFAULT_HOLOGRAM, type HologramSettings, signedArea, pointInPolygon, uid, type Building, type EnergySystem, MAX_ENERGY_SYSTEMS, type Floor, type Furniture, type SolarField, type Room, type Vec2 } from "../../model.ts";
 import { energyRole, furnitureSize, packInfo, packItemName } from "../../packs.ts";
@@ -570,6 +575,138 @@ export class EnergyPart {
     </div>`;
   }
 
+  /**
+   * Rates and costs (#323), either/or: set up here (the price sensor, the cheap rate entity or daily window; the default)
+   * or Home Assistant's existing sensors (price, peak/off-peak tariff entity, cost and earning sensors, or the Energy
+   * dashboard's grid setup in one tap). Switching keeps the other side's choices.
+   */
+  renderEnergyRates(this: Fp3dEditor, tariff: EntityOption[], cheap: EntityOption[]) {
+    const e = this._doc.energy;
+    const admin = this.isEditor;
+    const sensors = ratesFromSensors(e);
+    const priceSelect = this.entitySelect(this.t(sensors ? "energy_price_sensor" : "energy_tariff_sensor"), e.tariff, undefined, tariff, (v) => this.setEnergy({ tariff: v === "none" ? null : v }));
+    return html`<h4 class="fp3d-lib-head">${this.t("energy_rates_title")}</h4>
+      <div class="fp3d-seg" role="group" aria-label=${this.t("energy_rates_title")}>
+        <button aria-pressed=${!sensors} ?disabled=${!admin} @click=${() => this.setEnergy({ rates_from: "here" })}>${this.t("energy_rates_here")}</button>
+        <button aria-pressed=${sensors} ?disabled=${!admin} @click=${() => this.setEnergy({ rates_from: "sensors", ...(!e.rate_entity && e.cheap_rate && e.cheap_rate !== "none" ? { rate_entity: e.cheap_rate } : {}) })}>${this.t("energy_rates_sensors")}</button>
+      </div>
+      <p class="fp3d-sub">${this.t("energy_rates_hint")}</p>
+      ${sensors
+        ? this.renderRateSensors(priceSelect)
+        : html`<div class="fp3d-form">
+              ${priceSelect}
+              ${this.entitySelect(this.t("energy_cheap_rate"), e.cheap_rate ?? null, undefined, cheap, (v) => this.setEnergy({ cheap_rate: v === "none" ? null : v }))}
+              <div class="fp3d-field">
+                <span>${this.t("energy_cheap_from")}</span>
+                ${this.timeField(this.t("energy_cheap_from"), e.cheap_from ?? "", !admin, (v) => this.setEnergy({ cheap_from: v || null }))}
+              </div>
+              <div class="fp3d-field">
+                <span>${this.t("energy_cheap_to")}</span>
+                ${this.timeField(this.t("energy_cheap_to"), e.cheap_to ?? "", !admin, (v) => this.setEnergy({ cheap_to: v || null }))}
+              </div>
+            </div>
+            <p class="fp3d-sub">${this.t("energy_cheap_hint")}</p>`}`;
+  }
+
+  /** The existing-sensor side of the rates (#323): the Energy dashboard button, price, tariff entity and its cheap states, costs. */
+  renderRateSensors(this: Fp3dEditor, priceSelect: unknown) {
+    const e = this._doc.energy;
+    const admin = this.isEditor;
+    const states = this.hass?.states ?? {};
+    const attr = (id: string, key: string) => states[id]?.attributes[key] as string | undefined;
+    // the rate now: a tariff select (utility meter), a sensor naming it (not a number), or anything on while it is cheap
+    const rates = this.entityOptions((id) => ON_OFF_RATE.test(id) || /^(select|input_select)\./.test(id) || (id.startsWith("sensor.") && !numberish(id)));
+    // money: a monetary sensor, or one in the home's currency
+    const currency = this.hass?.config?.currency;
+    const money = this.entityOptions((id) => numberish(id) && (attr(id, "device_class") === "monetary" || (!!currency && attr(id, "unit_of_measurement") === currency)), currency);
+    const rate = e.rate_entity ?? null;
+    const choices = rate && !ON_OFF_RATE.test(rate) ? tariffStates(states[rate]) : [];
+    const picked = e.cheap_states ?? [];
+    const toggle = (s: string, on: boolean) => this.setEnergy({ cheap_states: on ? [...picked.filter((x) => x !== s), s] : picked.filter((x) => x !== s) });
+    const costs = e.cost_sensors ?? [];
+    const earnings = e.earning_sensors ?? [];
+    // a chosen statistic without an entity (the dashboard's external statistics) stays a choice
+    const withPicked = (list: EntityOption[], ids: string[]) => [...list, ...ids.filter((id) => !list.some((o) => o.id === id)).map((id) => ({ id, label: id }))];
+    const gone = (id: string | null | undefined): id is string => !!id && id !== "none" && id.includes(".") && (!states[id] || states[id].state === "unavailable");
+    const missing = [e.tariff, rate, ...costs, ...earnings].filter(gone);
+    const fixed = !e.tariff && typeof e.price_fixed === "number" ? `${formatNumber(this.hass, e.price_fixed, 4)} ${currency ?? ""}/kWh` : null;
+    return html`<div class="fp3d-actions">
+        <button class="fp3d-btn" ?disabled=${!admin || !this.hass} @click=${() => this.importRatePrefs()}>${this.t("energy_rates_prefs")}</button>
+      </div>
+      <div class="fp3d-form">
+        ${priceSelect}
+        ${fixed ? html`<p class="fp3d-sub fp3d-wide">${this.t("energy_price_fixed", { price: fixed })}</p>` : nothing}
+        ${this.entitySelect(this.t("energy_rate_entity"), rate, undefined, rates, (v) => this.setEnergy({ rate_entity: v === "none" ? null : v, cheap_states: [] }), ["select", "sensor", "binary_sensor"])}
+        ${choices.length
+          ? html`<div class="fp3d-field fp3d-wide" role="group" aria-label=${this.t("energy_cheap_states")}>
+              <span>${this.t("energy_cheap_states")}</span>
+              ${choices.map(
+                (s) => html`<label class="fp3d-check"
+                  ><input type="checkbox" .checked=${picked.includes(s)} ?disabled=${!admin} @change=${(ev: Event) => toggle(s, (ev.target as HTMLInputElement).checked)} />
+                  ${s}</label
+                >`,
+              )}
+              ${picked.length ? nothing : html`<span class="fp3d-sub">${this.t("energy_cheap_states_guess")}</span>`}
+            </div>`
+          : nothing}
+        <div class="fp3d-field fp3d-wide">
+          <span>${this.t("energy_cost_sensors")}</span>
+          ${this.moneySelect(withPicked(money, costs), costs, this.t("energy_cost_sensors"), (ids) => this.setEnergy({ cost_sensors: ids }))}
+        </div>
+        <div class="fp3d-field fp3d-wide">
+          <span>${this.t("energy_earning_sensors")}</span>
+          ${this.moneySelect(withPicked(money, earnings), earnings, this.t("energy_earning_sensors"), (ids) => this.setEnergy({ earning_sensors: ids }))}
+        </div>
+      </div>
+      ${missing.length ? html`<p class="fp3d-sub fp3d-pack-error">${this.t("energy_rates_missing", { ids: missing.map((id) => entityName(this.hass, id)).join(", ") })}</p>` : nothing}`;
+  }
+
+  /** A searchable multi-select of money sensors (#323). */
+  moneySelect(this: Fp3dEditor, options: EntityOption[], value: string[], label: string, onChange: (ids: string[]) => void) {
+    need(loadMultiSelect);
+    return html`<fp3d-multi-select
+      .options=${options}
+      .value=${value}
+      .locked=${[]}
+      .label=${label}
+      .placeholder=${this.t("entity_none")}
+      .searchLabel=${this.t("multi_search")}
+      .emptyText=${this.t("multi_none")}
+      .removeLabel=${this.t("multi_remove")}
+      ?disabled=${!this.isEditor}
+      @change=${(ev: CustomEvent<{ value: string[] }>) => {
+        ev.stopPropagation();
+        onChange(ev.detail.value);
+      }}
+    ></fp3d-multi-select>`;
+  }
+
+  /** "Use Home Assistant's Energy dashboard setup" (#323): its grid's price and cost sources become the existing sensors. */
+  async importRatePrefs(this: Fp3dEditor): Promise<void> {
+    const hass = this.hass;
+    if (!hass) return;
+    let prefs: RatePrefs;
+    try {
+      prefs = await hass.callWS<RatePrefs>({ type: "energy/get_prefs" });
+    } catch {
+      this._energyNote = this.t("energy_import_failed");
+      return;
+    }
+    const info = await hass.callWS<EnergyInfo>({ type: "energy/info" }).catch(() => null);
+    const r = prefsRates(prefs, info);
+    const n = r.cost_sensors.length + r.earning_sensors.length;
+    if (!n && !r.tariff && r.price_fixed === null) {
+      this._energyNote = this.t("energy_rates_prefs_none");
+      return;
+    }
+    // a price from the dashboard replaces the chosen one; without one, the chosen price sensor stays
+    const e = this._doc.energy;
+    this.setEnergy({ rates_from: "sensors", tariff: r.tariff ?? (r.price_fixed !== null ? null : e.tariff), price_fixed: r.price_fixed, cost_sensors: r.cost_sensors, earning_sensors: r.earning_sensors });
+    const price = r.tariff ? entityName(hass, r.tariff) : r.price_fixed !== null ? `${formatNumber(hass, r.price_fixed, 4)} ${hass.config?.currency ?? ""}/kWh` : "–";
+    this._energyNote = this.t("energy_rates_prefs_done", { n, price });
+  }
+
+
   /** Grid, solar, battery and house sensors: from the devices in the plan unless chosen here. */
   renderEnergyBalance(this: Fp3dEditor) {
     const e = this._doc.energy;
@@ -617,28 +754,16 @@ export class EnergyPart {
         ${this.entitySelect(this.t("energy_battery_soc"), e.battery_soc, devices.soc[0] ?? null, soc, pick("battery_soc"))}
         ${this.renderEnergySystems(power, soc)}
         ${this.entitySelect(this.t("energy_consumption_sensor"), e.consumption, null, power, pick("consumption"))}
-        ${this.entitySelect(this.t("energy_tariff_sensor"), e.tariff, undefined, tariff, pick("tariff"))}
         ${this.entitySelect(this.t("energy_gas_meter"), e.gas ?? null, undefined, meter("gas"), (v) => this.setEnergy({ gas: v === "none" ? null : v }))}
         ${this.entitySelect(this.t("energy_water_meter"), e.water ?? null, undefined, meter("water"), (v) => this.setEnergy({ water: v === "none" ? null : v }))}
       </div>
       <p class="fp3d-sub">${this.t("energy_meters_hint")}</p>
-      <div class="fp3d-form">
-        ${this.entitySelect(this.t("energy_cheap_rate"), e.cheap_rate ?? null, undefined, cheap, (v) => this.setEnergy({ cheap_rate: v === "none" ? null : v }))}
-        <div class="fp3d-field">
-          <span>${this.t("energy_cheap_from")}</span>
-          ${this.timeField(this.t("energy_cheap_from"), e.cheap_from ?? "", !admin, (v) => this.setEnergy({ cheap_from: v || null }))}
-        </div>
-        <div class="fp3d-field">
-          <span>${this.t("energy_cheap_to")}</span>
-          ${this.timeField(this.t("energy_cheap_to"), e.cheap_to ?? "", !admin, (v) => this.setEnergy({ cheap_to: v || null }))}
-        </div>
-      </div>
-      <p class="fp3d-sub">${this.t("energy_cheap_hint")}</p>
       <div class="fp3d-actions">
         <button class="fp3d-btn" ?disabled=${!admin || !this.hass} @click=${() => this.importEnergyPrefs()}>${this.t("energy_import_prefs")}</button>
       </div>
-      ${this._energyNote ? html`<p class="fp3d-sub">${this._energyNote}</p>` : nothing}
       <p class="fp3d-sub">${this.t("energy_hint")}</p>
+      ${this.renderEnergyRates(tariff, cheap)}
+      ${this._energyNote ? html`<p class="fp3d-sub" role="status">${this._energyNote}</p>` : nothing}
     </section>`;
   }
 }

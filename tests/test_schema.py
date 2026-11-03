@@ -717,3 +717,48 @@ def test_energy_systems_default_and_old_plan_untouched() -> None:
     assert more["systems"][0]["inverter"] == "inv1"
     with pytest.raises(vol.Invalid):
         ENERGY_SCHEMA({"systems": [{"name": "no id"}]})
+
+
+def test_rates_from_existing_sensors_default_and_old_plan_untouched() -> None:
+    """A plan from before #323 keeps its cheap rate and tariff and sets its rates up itself ("here"); a plan using
+    existing sensors keeps its tariff entity, cheap states, fixed price and cost and earning sources."""
+    old_energy = {
+        "tariff": "sensor.sample_price",
+        "cheap_rate": "binary_sensor.sample_off_peak",
+        "cheap_from": "23:00",
+        "cheap_to": "06:00",
+    }
+    plan = {**empty_building(), "energy": old_energy}
+    loaded = BUILDING_SCHEMA(plan)
+    assert loaded["version"] == plan["version"]
+    energy = loaded["energy"]
+    assert {key: energy[key] for key in old_energy} == old_energy
+    assert energy["rates_from"] == "here"
+    assert (energy["rate_entity"], energy["cheap_states"], energy["price_fixed"]) == (None, [], None)
+    assert (energy["cost_sensors"], energy["earning_sensors"]) == ([], [])
+    # loading again changes nothing (a stored plan reads the same after a save)
+    assert BUILDING_SCHEMA(loaded)["energy"] == energy
+
+    sensors = ENERGY_SCHEMA(
+        {
+            "rates_from": "sensors",
+            "rate_entity": "select.sample_tariff",
+            "cheap_states": ["offpeak"],
+            "price_fixed": "0.245",
+            "cost_sensors": ["sensor.sample_import_cost", "external:sample_cost"],
+            "earning_sensors": ["sensor.sample_export_compensation"],
+        }
+    )
+    assert sensors["rates_from"] == "sensors"
+    assert sensors["cheap_states"] == ["offpeak"]
+    assert sensors["price_fixed"] == 0.245
+    assert sensors["cost_sensors"] == ["sensor.sample_import_cost", "external:sample_cost"]
+    for bad in (
+        {"rates_from": "elsewhere"},
+        {"cost_sensors": "sensor.sample_import_cost"},
+        {"cost_sensors": [""]},
+        {"cheap_states": ["x"] * 21},
+        {"price_fixed": "cheap"},
+    ):
+        with pytest.raises(vol.Invalid):
+            ENERGY_SCHEMA(bad)

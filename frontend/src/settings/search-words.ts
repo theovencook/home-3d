@@ -29,7 +29,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   "terrain.level": ["terrain", "elevation", "height", "slope", "level", "grade"],
   "terrain.earth": ["underground", "excavation", "dig", "buried", "pit", "subterranean"],
   // energy
-  "energy.balance": ["power", "electricity", "usage", "consumption", "sensors", "kwh"],
+  "energy.balance": ["power", "electricity", "usage", "consumption", "sensors", "kwh", "cost", "price"],
   hologram: ["projection", "floating", "float", "field", "plant", "panel"],
   // fun
   easter_eggs: ["hidden", "secret", "extras", "treats", "novelty", "surprises"],

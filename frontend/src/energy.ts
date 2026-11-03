@@ -215,8 +215,8 @@ export function proposeMeters(prefs: EnergyPrefs): { gas: string | null; water: 
   return { gas: sensor(of("gas")), water: sensor(of("water")) };
 }
 
-/** How much counters (gas, water) went up since midnight, from the recorder's hourly statistics (null when it has none). */
-export async function fetchTodayChange(hass: HomeAssistant, ids: string[]): Promise<Map<string, number> | null> {
+/** How much counters (gas, water) went up since midnight, from the recorder's hourly statistics (null when it has none). `period` "5minute": the short-term statistics, up to the last five minutes (#323). */
+export async function fetchTodayChange(hass: HomeAssistant, ids: string[], period: "hour" | "5minute" = "hour"): Promise<Map<string, number> | null> {
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
   try {
@@ -224,7 +224,7 @@ export async function fetchTodayChange(hass: HomeAssistant, ids: string[]): Prom
       type: "recorder/statistics_during_period",
       start_time: midnight.toISOString(),
       statistic_ids: ids,
-      period: "hour",
+      period,
       types: ["change"],
     });
     const out = new Map<string, number>();
@@ -395,7 +395,13 @@ export function energySummary(hass: HomeAssistant, building: Building, consumers
     solar: solar === null ? null : Math.max(0, solar),
     battery,
     soc: Number.isFinite(socState) ? socState : null,
-    tariff: tariffState && Number.isFinite(tariffValue) ? { value: tariffValue, unit: String(tariffState.attributes.unit_of_measurement ?? "") } : null,
+    tariff:
+      tariffState && Number.isFinite(tariffValue)
+        ? { value: tariffValue, unit: String(tariffState.attributes.unit_of_measurement ?? "") }
+        : // existing sensors (#323): the energy dashboard's fixed price when there is no price sensor
+          e.rates_from === "sensors" && !e.tariff && typeof e.price_fixed === "number" && Number.isFinite(e.price_fixed)
+          ? { value: e.price_fixed, unit: `${hass.config?.currency ?? ""}/kWh` }
+          : null,
     consumption,
     ...(more.length ? { systems: more } : {}),
   };

@@ -1307,7 +1307,25 @@ export interface EnergySettings {
   cheap_to?: string | null;
   /** Further inverter / battery setups next to the one in the fields above (#285). */
   systems?: EnergySystem[];
+  /**
+   * Where rates and costs come from (#323): "here" (the cheap rate entity or window above; also what a plan without the
+   * field means) or "sensors" (Home Assistant's own tariff, price and cost sensors; no window is asked for).
+   */
+  rates_from?: EnergyRatesFrom;
+  /** With "sensors": the entity naming the rate now (a utility meter's tariff select, a peak/off-peak sensor) or one that is on while the cheap rate runs. */
+  rate_entity?: string | null;
+  /** The states of `rate_entity` that mean the cheap rate; none picked: guessed from the names (off-peak, night …). */
+  cheap_states?: string[];
+  /** With "sensors": a fixed price per kWh from the energy dashboard, shown when there is no price sensor (`tariff`). */
+  price_fixed?: number | null;
+  /** With "sensors": cost sensors or statistics (money, e.g. the energy dashboard's grid costs); today's total shows. */
+  cost_sensors?: string[];
+  /** With "sensors": export earnings (the energy dashboard's compensation), taken off today's cost. */
+  earning_sensors?: string[];
 }
+
+/** Where a plan's energy rates and costs come from (#323). */
+export type EnergyRatesFrom = "here" | "sensors";
 
 /** A person and the sensor whose state names the room they are in (ESPresense, Bermuda, …). */
 export interface PresenceLink {
