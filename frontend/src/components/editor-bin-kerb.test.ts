@@ -23,7 +23,7 @@ test("a selected bin shows Set kerb spot before its shape, colours and collectio
   const at = (s: string) => out.indexOf(s);
   assert.ok(at("Set kerb spot") > 0, "the button is there");
   for (const later of ["Waste calendar or sensor", "Word in the calendar", "Shape"]) assert.ok(at("Set kerb spot") < at(later), `before "${later}"`);
-  assert.equal(out.split("Set kerb spot").length - 1, 1, "once, not twice");
+  assert.equal(out.split("fp3d-kerb-btn").length - 1, 1, "one button, not two");
   // a bin with a spot offers Move and Remove
   ed.updateFurniture({ bin_kerb: { x: 3, z: 4 } });
   const set = flat(ed.renderFurnitureForm(ed.furnitureItem));
@@ -50,4 +50,29 @@ test("the household bins settings have a button that goes to the bin's kerb spot
   const s = SETTINGS.find((x) => x.id === "household.kerb");
   assert.ok(s && s.card === "bins" && s.control.kind === "action");
   assert.equal((s.control as { action: string }).action, "kerb");
+});
+
+test("the kerb spot is a step: the button, one line saying what to do next, and the state (#328)", async () => {
+  const ed = await makeEditor([square("r1", 0, 0, 6, 6)], [bin()]);
+  ed.selectItem("furniture", "bin");
+  const idle = flat(ed.renderFurnitureForm(ed.furnitureItem));
+  assert.ok(idle.includes("No kerb spot yet."));
+  assert.ok(idle.includes("then tap the plan where the bin stands on collection day"));
+  ed._kerbPick = true;
+  const picking = flat(ed.renderFurnitureForm(ed.furnitureItem));
+  assert.ok(picking.includes("fp3d-kerb-picking") && picking.includes("click where the bin stands"));
+  ed._kerbPick = false;
+  ed.updateFurniture({ bin_kerb: { x: 3, z: 4 } });
+  assert.ok(flat(ed.renderFurnitureForm(ed.furnitureItem)).includes("Kerb spot is set."));
+});
+
+test("the two bin tag settings say what changes on the view (#328)", async () => {
+  const { englishTable } = await import("../i18n.ts");
+  const en = englishTable() as Record<string, string>;
+  const next = SETTINGS.find((x) => x.id === "household.bin_next_only")!;
+  const days = SETTINGS.find((x) => x.id === "household.bin_days")!;
+  assert.equal(en[next.label], "Tag only the bins collected next");
+  assert.ok(next.hint && /every bin wears a tag/.test(en[next.hint]));
+  assert.equal(en[days.label], "Show a bin's tag from this many days before pickup");
+  assert.ok(/three days before pickup/.test(en[days.hint!]));
 });

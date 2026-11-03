@@ -442,17 +442,20 @@ export class ItemFormPart {
    */
   renderBinKerb(this: Fp3dEditor, f: Furniture) {
     const admin = this.isEditor;
-    return html`<div class="fp3d-form fp3d-links fp3d-bin-kerb">
+    const picking = this._kerbPick;
+    // a step with a button: press it, then tap the plan (#328)
+    return html`<div class="fp3d-form fp3d-links fp3d-bin-kerb ${picking ? "fp3d-kerb-picking" : ""}">
       <div class="fp3d-field fp3d-wide">
-        <span>${this.t("bin_kerb")}</span>
+        <span>${this.t("bin_kerb")}: ${this.t(f.bin_kerb ? "bin_kerb_is_set" : "bin_kerb_not_set")}</span>
         <div class="fp3d-actions">
-          <button class="fp3d-btn" aria-pressed=${this._kerbPick} ?disabled=${!admin} @click=${() => (this._kerbPick = !this._kerbPick)}>
-            ${this._kerbPick ? "✓ " : ""}${this.t(f.bin_kerb ? "bin_kerb_move" : "bin_kerb_set")}
+          <button class="fp3d-btn fp3d-kerb-btn" aria-pressed=${picking} ?disabled=${!admin} @click=${() => (this._kerbPick = !picking)}>
+            ${picking ? "✓ " : ""}${this.t(f.bin_kerb ? "bin_kerb_move" : "bin_kerb_set")}
           </button>
           ${f.bin_kerb ? html`<button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ bin_kerb: null })}>${this.t("bin_kerb_clear")}</button>` : nothing}
         </div>
       </div>
-      <p class="fp3d-sub fp3d-wide">${this.t(this._kerbPick ? "hint_kerb_pick" : "bin_kerb_hint")}</p>
+      <p class="fp3d-sub fp3d-wide" role="status">${this.t(picking ? "hint_kerb_pick" : "bin_kerb_hint")}</p>
+      ${picking ? nothing : html`<p class="fp3d-sub fp3d-wide">${this.t("bin_kerb_effect")}</p>`}
     </div>`;
   }
 

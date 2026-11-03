@@ -951,6 +951,7 @@ const HOUSEHOLD: Setting[] = [
     scope: "house",
     permission: "editor",
     label: "bin_next_only",
+    hint: "bin_next_only_hint",
     keywords: ["bin", "tag", "label", "pickup"],
     control: { kind: "switch" },
     default: false,

@@ -81,9 +81,9 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   // household
   "household.bin_from": ["garbage", "recycling", "trash", "collection", "refuse", "lights"],
   "household.bin_until": ["collection", "garbage", "recycling", "trash", "end", "stop"],
-  "household.bin_next_only": ["next", "upcoming", "single", "only", "collection", "sticker"],
-  "household.bin_days": ["countdown", "lead", "advance", "notice", "tags", "timing"],
-  "household.kerb": ["kerbside", "curb", "pavement", "pickup", "collection", "verge"],
+  "household.bin_next_only": ["next", "upcoming", "single", "only", "collection", "sticker", "label", "hide"],
+  "household.bin_days": ["countdown", "lead", "advance", "notice", "tags", "timing", "hide", "pickup"],
+  "household.kerb": ["kerbside", "curb", "pavement", "pickup", "collection", "verge", "spot", "set"],
   "household.notes": ["note", "message", "memo", "board", "reminder", "post"],
   // favourites
   favorites: ["favorite", "favourite", "bookmark", "shortcut", "pinned", "saved"],

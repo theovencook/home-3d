@@ -8,6 +8,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - Settings, Lengths: the feet-and-inches typing tip shows only when lengths are in feet and inches (#324).
 - Settings: Ground height moved under Plan and units; its description is in plain words and the placeholder uses the Lengths unit (#325).
 - Settings: the favourites and own-buttons lists have up, down and remove as compact icon buttons in a fixed column at the right, so they line up whatever the names are (#326).
+- Bins: the two tag settings are named by what they do on the view ("Tag only the bins collected next", "Show a bin's tag from this many days before pickup"), and a bin's side panel has a clear Set kerb spot step with a one-line explanation (#328).
 
 ## Home 3D 0.2.1 (2 November 2026)
 

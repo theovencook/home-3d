@@ -678,6 +678,18 @@ export const formStyles = css`
       .fp3d-ord-remove:hover:not(:disabled) {
         color: #ff6b6b;
       }
+      .fp3d-bin-kerb {
+        padding: 10px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 12px;
+      }
+      .fp3d-bin-kerb .fp3d-kerb-btn {
+        border-color: var(--fp3d-accent);
+      }
+      .fp3d-bin-kerb.fp3d-kerb-picking {
+        border-color: var(--fp3d-accent);
+        background: rgba(55, 224, 255, 0.08);
+      }
       .fp3d-own-button {
         padding: 10px 0;
         border-top: 1px solid var(--fp3d-line);
