@@ -12,6 +12,7 @@ import type { Wall } from "../geometry/walls.ts";
 import type { OpeningInfo } from "./build.ts";
 import { LOWER_OFFSET, triangulate } from "./geo.ts";
 import { clipConvex } from "../geometry/area.ts";
+import { runAll } from "./slices.ts";
 
 /** How a lamp spreads its light. */
 export type LightKind = "omni" | "ceiling" | "spot" | "pendant" | "up" | "wall";
@@ -64,7 +65,12 @@ const FACE_GAP = 0.012;
  * Builds the light surface of a floor: a grid of `cell` metres on every room floor and strips on the
  * room side of every wall face, split at the cut height and left out where doors and windows are.
  */
-export function buildLightSurface(
+export function buildLightSurface(...args: Parameters<typeof lightSurfaceSteps>): LightSurface {
+  return runAll(lightSurfaceSteps(...args));
+}
+
+/** buildLightSurface in steps (run 6 speed): it stops for now after each room, row of outdoor cells and wall. */
+export function* lightSurfaceSteps(
   floor: Floor,
   walls: Wall[],
   wallBuckets: number[],
@@ -72,7 +78,7 @@ export function buildLightSurface(
   cell: number,
   holes: Vec2[][] = [],
   roofUnder?: (x: number, z: number) => number | null,
-): LightSurface {
+): Generator<void, LightSurface, void> {
   const pos: number[] = [];
   const normal: number[] = [];
   const room: number[] = [];
@@ -88,8 +94,8 @@ export function buildLightSurface(
 
   // floors: the grid's cells, cut to the room – a cell the room's edge runs through keeps only its part inside, so the
   // light reaches every wall (no dark strip where a wall is off the grid) and never spills past it (#300)
-  floor.rooms.forEach((r, ri) => {
-    if (r.points.length < 3) return;
+  for (const [ri, r] of floor.rooms.entries()) {
+    if (r.points.length < 3) continue;
     const xs = r.points.map((p) => p[0]);
     const zs = r.points.map((p) => p[1]);
     const x0 = Math.min(...xs);
@@ -131,7 +137,8 @@ export function buildLightSurface(
         }
       }
     }
-  });
+    yield;
+  }
 
   // outside: one zone (index rooms.length) for all outdoor areas and the outer faces of the walls. All areas
   // share one grid and every cell belongs to the topmost area over its centre (the one listed last, so a bed
@@ -160,20 +167,21 @@ export function buildLightSurface(
         const v = (x: number, z: number): [number, number, number] => [x, yAt(a, x, z), z];
         quad(v(px, pz), v(px, pz + cell), v(px + cell, pz + cell), v(px + cell, pz), [0, 1, 0], outside, -1);
       }
+      yield;
     }
   }
 
   // walls: the face towards each room
   const cut = Math.min(floor.cut_height, floor.height);
   const blockers: Blocker[] = [];
-  walls.forEach((w, wi) => {
+  for (const [wi, w] of walls.entries()) {
     // rows of light cells up to the wall's own height
     const H = Math.min(floor.height, w.height ?? floor.height);
     const c = Math.min(cut, H - 0.02);
     const dx = w.b[0] - w.a[0];
     const dz = w.b[1] - w.a[1];
     const len = Math.hypot(dx, dz);
-    if (len < 0.05) return;
+    if (len < 0.05) continue;
     const u: Vec2 = [dx / len, dz / len];
     const nLeft: Vec2 = [-u[1], u[0]];
     const bucket = wallBuckets[wi];
@@ -222,7 +230,8 @@ export function buildLightSurface(
         }
       }
     }
-  });
+    yield;
+  }
 
   // doors between two rooms
   const doors: LightSurface["doors"] = [];

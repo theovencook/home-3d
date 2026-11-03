@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import contextlib
-from functools import partial
+from functools import lru_cache, partial
+import hashlib
 import logging
 from pathlib import Path
+import re
 
 from aiohttp import web
 from homeassistant.components import frontend, panel_custom
@@ -66,10 +68,20 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 
 
+# A file named after its content (a chunk, home-3d-chunk-<hash>.js) or asked for by its content hash (the bundles the
+# main one loads, home-3d-3d.js?v=<hash>) never changes under that URL: the browser keeps it for a year and does not
+# ask again (run 6 speed). Before, every load checked each of the thirty-odd files with a request of its own.
+_HASHED_NAME = re.compile(r"home-3d-[\w-]+-[A-Z0-9]{8}\.js")
+_CONTENT_HASH = re.compile(r"[0-9a-f]{12}")
+CACHE_IMMUTABLE = "public, max-age=31536000, immutable"
+CACHE_CHECK = "no-cache"
+
+
 class FrontendView(HomeAssistantView):
-    """The bundles, languages and pictures of the frontend, served without caching: a browser checks every file on
-    each load (and gets a short 304 when it is unchanged), so an update of the files shows after a reload, with no
-    restart of Home Assistant for the frontend alone. Also under the path before #218 (see URL_BASE)."""
+    """The bundles, languages and pictures of the frontend. A file whose URL names its content is kept by the browser
+    (CACHE_IMMUTABLE); anything else is served without caching: a browser checks it on each load (and gets a short
+    304 when it is unchanged), so an update of the files shows after a reload, with no restart of Home Assistant for
+    the frontend alone. Also under the path before #218 (see URL_BASE)."""
 
     url = f"{URL_BASE}/{{path:.+}}"
     extra_urls = [f"{LEGACY_URL_BASE}/{{path:.+}}"]  # noqa: RUF012 (HomeAssistantView declares it a list)
@@ -82,10 +94,11 @@ class FrontendView(HomeAssistantView):
             # the dashboard resource: loads the bundle and tries again while it is not there yet (#461)
             text = loader_source(MAIN_URL)
             return web.Response(text=text, content_type="text/javascript", headers={"Cache-Control": "no-cache"})
-        file = await hass.async_add_executor_job(_frontend_file, path)
-        if file is None:
+        found = await hass.async_add_executor_job(_frontend_file_cached, path, request.query.get("v"))
+        if found is None:
             raise web.HTTPNotFound
-        return web.FileResponse(file, headers={"Cache-Control": "no-cache"})
+        file, cache = found
+        return web.FileResponse(file, headers={"Cache-Control": cache})
 
 
 def _frontend_file(path: str) -> Path | None:
@@ -93,6 +106,28 @@ def _frontend_file(path: str) -> Path | None:
     root = FRONTEND_DIR.resolve()
     file = (root / path).resolve()
     return file if root in file.parents and file.is_file() else None
+
+
+def _frontend_file_cached(path: str, version: str | None) -> tuple[Path, str] | None:
+    """The file for a request path and how long the browser may keep it (in the executor): a year when its name or
+    the asked `v` is its content hash, else it checks again on each load."""
+    file = _frontend_file(path)
+    if file is None:
+        return None
+    if _HASHED_NAME.fullmatch(file.name):
+        return file, CACHE_IMMUTABLE
+    if version and _CONTENT_HASH.fullmatch(version):
+        stat = file.stat()
+        if _content_hash(file, stat.st_mtime_ns, stat.st_size) == version:
+            return file, CACHE_IMMUTABLE
+    return file, CACHE_CHECK
+
+
+@lru_cache(maxsize=64)
+def _content_hash(file: Path, mtime_ns: int, size: int) -> str:
+    """The build's content hash of a file (the first 12 hex digits of its SHA-256, build.mjs hashOf), kept while the
+    file stays the same (its time and size are part of the key)."""
+    return hashlib.sha256(file.read_bytes()).hexdigest()[:12]
 
 
 async def _async_register_static(hass: HomeAssistant) -> None:

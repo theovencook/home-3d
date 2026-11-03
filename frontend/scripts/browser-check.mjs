@@ -15,11 +15,14 @@
 //   npm run speed -- --throttle 4     with DevTools CPU throttling (about a budget wall tablet)
 //   options: --plan <file.json>  --bundles <dir>  --browser <path>  --gpu / --swiftshader (the GPU, or WebGL on the
 //   CPU)  --json (one line of JSON instead of the table)  --latency <ms> (each request takes that much longer, as
-//   through a proxy: a bundle split into more files shows in the editor's first open, #245)
+//   through a proxy: a bundle split into more files shows in the editor's first open, #245)  --trace <file.json> (a
+//   DevTools performance trace of the first load, with JS samples: open it in DevTools' Performance tab)  --cache (the
+//   bundles with the integration's cache headers: the second load, "load again", takes what the first one kept)
 //
 // The browser is found at HOME3D_BROWSER, else the usual Chrome, Chromium or Edge paths. Nothing here talks to a real
 // Home Assistant.
 
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, resolve } from "node:path";
@@ -38,6 +41,7 @@ const flag = (name) => args.includes(`--${name}`);
 const speed = flag("speed");
 const throttle = Number(opt("throttle", "1"));
 const latency = Number(opt("latency", "0"));
+const cached = flag("cache");
 // the smoke check draws with SwiftShader (CI has no GPU); the speed check uses the machine's GPU, as the numbers in
 // docs/performance.md do (SwiftShader draws every 3D frame on the CPU, which swamps the measures)
 const gpu = speed ? !flag("swiftshader") : flag("gpu");
@@ -84,8 +88,8 @@ function serve() {
   const plan = readFileSync(planFile);
   const server = createServer((req, res) => {
     const path = decodeURIComponent(new URL(req.url, "http://x").pathname);
-    const send = (status, body, type = "text/plain") => {
-      res.writeHead(status, { "content-type": type, "cache-control": "no-store" });
+    const send = (status, body, type = "text/plain", cache = "no-store") => {
+      res.writeHead(status, { "content-type": type, "cache-control": cache });
       res.end(body);
     };
     if (path === "/") return send(200, PAGE, "text/html");
@@ -97,7 +101,13 @@ function serve() {
     const [root, rest] = path.startsWith("/static/") ? [bundles, path.slice(8)] : path.startsWith("/old/") ? [bundles, path.slice(5)] : path.startsWith("/check/") ? [join(here, "browser-check"), path.slice(7)] : [null, ""];
     const file = root && resolve(root, rest);
     if (!file || !file.startsWith(root) || !existsSync(file) || !statSync(file).isFile()) return send(404, "not found");
-    send(200, readFileSync(file), TYPES[extname(file)] ?? "application/octet-stream");
+    // --cache: the bundles as the integration serves them (run 6 speed, __init__.py): kept when the URL names their
+    // content, else checked on every load (the first load of the check starts with an empty cache either way); without
+    // it nothing is kept, as the check always did
+    const body = readFileSync(file);
+    const v = new URL(req.url, "http://x").searchParams.get("v");
+    const named = /^home-3d-[\w-]+-[A-Z0-9]{8}\.js$/.test(rest) || (!!v && /^[0-9a-f]{12}$/.test(v) && createHash("sha256").update(body).digest("hex").slice(0, 12) === v);
+    send(200, body, TYPES[extname(file)] ?? "application/octet-stream", cached && root === bundles ? (named ? "public, max-age=31536000, immutable" : "no-cache") : "no-store");
   });
   return new Promise((ok) => server.listen(0, "127.0.0.1", () => ok(server)));
 }
@@ -152,7 +162,10 @@ function checkKnown(load, where) {
 try {
   // the full check runs with two copies of the main bundle, as on a page Home Assistant's service worker kept (#218)
   const { page, run } = await openPage("two");
+  const trace = opt("trace");
+  if (trace) await page.tracing.start({ path: resolve(trace), categories: ["devtools.timeline", "v8.execute", "disabled-by-default-devtools.timeline", "disabled-by-default-devtools.timeline.frame", "disabled-by-default-v8.cpu_profiler", "blink.user_timing", "loading"] });
   results.load = await run("start");
+  if (trace) await page.tracing.stop();
   checkKnown(results.load, "");
   results.render = await run("renderInfo");
   if (!results.render) problems.push("the 3D view has no renderer");
@@ -203,8 +216,11 @@ try {
   for (const copies of ["one", "older"]) {
     const other = await openPage(copies);
     try {
-      checkKnown(await other.run("start"), other.where);
+      const loaded = await other.run("start");
+      checkKnown(loaded, other.where);
       // #245: the editor's first open, timed on a page that has not loaded it yet
+      // run 6 speed: the second load in this browser (its cache holds what the first one kept)
+      if (copies === "one") results.loadAgain = loaded;
       if (copies === "one") results.editorOpen = await other.run("editorOpen");
       await other.run("reenter", { times: 2 });
     } catch (err) {
@@ -242,6 +258,9 @@ else {
   console.log(`\nHome 3D browser check: ${speed ? "speed" : "smoke"}, CPU ${throttle}x, ${gpu ? "GPU" : "SwiftShader"}, ${l.items ?? "?"} items, ${l.entities ?? "?"} states\n`);
   console.log("| Measure | Value |\n|---|---|");
   row("Load: ready / longest task / total blocking", `${l.ready} / ${l.longestTask} / ${l.blocking} ms`);
+  if (l.firstPicture !== undefined) row("Load: first picture of the house", `${l.firstPicture} ms`);
+  const a = results.loadAgain;
+  if (a) row("Load again (same browser): ready / first picture / longest task / total blocking", `${a.ready} / ${a.firstPicture} / ${a.longestTask} / ${a.blocking} ms`);
   if (results.render) row("3D: draw calls / triangles", `${results.render.calls} / ${results.render.triangles}`);
   for (const [key, label] of [["idleView", "unwatched states"], ["idleWatched", "1 in 5 watched"]]) {
     const r = results[key];

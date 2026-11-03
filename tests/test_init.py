@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -552,6 +553,30 @@ async def test_frontend_files_are_served_without_caching(hass: HomeAssistant, ha
     assert 'const tag = "home-3d-card";' in text
     assert 'const url = "/api/home_3d/static/home-3d.js";' in text
     assert not (Path(hass.config.path("www")) / "home_3d").exists()
+
+
+async def test_frontend_files_named_by_their_content_are_kept(hass: HomeAssistant, hass_client) -> None:
+    """Run 6 speed: a chunk (its name holds its content hash) and a bundle asked for by its content hash are kept by
+    the browser for a year; the same bundle with any other `v`, the main bundle and the loader are checked each load."""
+    await _setup(hass)
+    client = await hass_client()
+    frontend_dir = Path(__file__).parent.parent / "custom_components" / "home_3d" / "frontend"
+    chunk = next(f.name for f in sorted(frontend_dir.glob("home-3d-chunk-*.js")))
+    res = await client.get(f"/api/home_3d/static/{chunk}")
+    assert res.status == 200
+    assert res.headers["Cache-Control"] == "public, max-age=31536000, immutable"
+    bundle = frontend_dir / "home-3d-3d.js"
+    content = hashlib.sha256(bundle.read_bytes()).hexdigest()[:12]
+    res = await client.get(f"/api/home_3d/static/home-3d-3d.js?v={content}")
+    assert res.headers["Cache-Control"] == "public, max-age=31536000, immutable"
+    # an older hash (a page from before an update) gets the new file, checked again next time
+    other = "0" * 12 if content != "0" * 12 else "1" * 12
+    assert (await client.get(f"/api/home_3d/static/home-3d-3d.js?v={other}")).headers["Cache-Control"] == "no-cache"
+    assert (await client.get("/api/home_3d/static/home-3d-3d.js")).headers["Cache-Control"] == "no-cache"
+    assert (await client.get("/api/home_3d/static/home-3d.js?v=0.2.1")).headers["Cache-Control"] == "no-cache"
+    assert (await client.get("/api/home_3d/static/home-3d-loader.js")).headers["Cache-Control"] == "no-cache"
+    # a chunk name outside the folder is still not served
+    assert (await client.get("/api/home_3d/static/home-3d-chunk-ABCDEFGH.js")).status == 404
 
 
 def _sidebar(register) -> tuple[str | None, str | None]:

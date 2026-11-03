@@ -14,6 +14,7 @@ import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
 import { showsPlan2d, type CardConfig, type CardControl } from "./card-config.ts";
 import { fitBar, type BarItem } from "./card-fit.ts";
+import { preload3d } from "./load3d.ts";
 import { nightActive } from "./kiosk.ts";
 import { lookOf } from "./themes.ts";
 import { contrastChrome, lightChrome } from "./scheme.ts";
@@ -219,7 +220,9 @@ export class Floorplan3dCard extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    // the 3D view's code is a chunk of its own (#179); what the card asks of it waits until it is there
+    // the 3D view's code is a chunk of its own (#179); what the card asks of it waits until it is there. The 3D bundle
+    // it starts is fetched alongside (run 6 speed)
+    if (this._config && !showsPlan2d(this._config, this._plan2d)) preload3d();
     void loadView().then(
       () => this.requestUpdate(),
       (err: unknown) => console.error("Home 3D: the 3D view failed to load", err),

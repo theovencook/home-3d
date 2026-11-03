@@ -467,3 +467,75 @@ Today's numbers (31 Oct 2026, this desktop, sample home, integration @ `08ad7c1`
 **Timing `render` by hand (#213).** three.js gives every `WebGLRenderer` its own `render`, set in the constructor; there is none on the prototype. A live speed check once wrapped it and then "restored" it with `delete renderer.render`, which left the renderer with no `render` at all. Every later frame and floor picture then threw `this.renderer.render is not a function` until the page was reloaded, while the canvas kept its last frame. Since #213 the viewer's renderers (and the library preview's) keep `render` as a property that cannot be deleted: a wrapper can still be assigned, and assigning anything that is not a function puts the renderer's own `render` back. To time it by hand, keep the original and assign it back (`const orig = r.render; r.render = wrapper; ...; r.render = orig;`), or use the `3D: renderer.render` row of `npm run speed`.
 
 Not covered: a real wall tablet, a live Home Assistant, the time travel, the phone layouts and touch.
+
+## First load: short slices, open floor first, kept geometry (run 6 speed)
+
+Measured 3 Nov 2026 with `npm run speed -- --throttle 4` (headless Edge, desktop GPU, 4x CPU throttling, sample home: 110 items, 2 floors), before (run 6 integration @ `0066f90`) and after this change. Before and after alternated on the same machine, 3 runs each; other work was running on it, so compare within a table.
+
+### What the first load spent its time on
+
+A DevTools performance trace of the load (`npm run speed -- --throttle 4 --trace load.json`, then summed per function) showed one task of 1.3 to 1.6 s and a few more of 0.5 s:
+
+- the whole first floor built in one go: walls and rooms, every item modelled (about 40% of a floor), the light surface on floors and walls, the roof;
+- the shaders set up in one go (`compileAsync` does the CPU part of every program at once), then each program's uniforms read back by the first frame;
+- the second floor in a task of its own, before the first frame;
+- two full device syncs in the 3D view's start task, and the first `Intl` number format built in it (`toLocaleString` built a new format on every call);
+- the hologram cards measured one by one between writes, and the floor bar's edges read in the middle of the panel's first update (each a forced layout);
+- the 3D bundle asked for only once the 3D view's own chunk had arrived and started, one round trip later.
+
+### What changed
+
+- **Slices.** A new home's floors are modelled a few milliseconds at a time (`viewer/slices.ts`: `scheduler.yield()` where the browser has it, else a message to the page), with the page free in between. `buildFloorGeometry` and `buildLightSurface` are generators that stop after each part, wall, room and item (`floorGeometrySteps`, `lightSurfaceSteps`); run to the end they give the same result, and edits after the load still use them at once. A floor is built from what was modelled for it, keyed by its floor key, so a plan or pack change in between models it again.
+- **Open floor first.** The open floor (or the ground floor) is modelled and built first, with the roof. Its lamps, doors and windows and their light follow in the next task, and its shaders compile a material at a time with each program's uniforms read ahead (`viewer/warm.ts`). Then the first picture is drawn, and only then is the next floor modelled. No frame is drawn while a new home has no floor yet. Each later floor compiles what it needs before it is drawn.
+- **Kept between loads.** Each floor's modelled items and light surface are kept in the browser (IndexedDB, `viewer/piece-store.ts`). The next load of the same home takes them instead of modelling again. A record belongs to one build of Home 3D, and every piece carries the key it was drawn from (the item, its mount height, the look, the cut height, the curve detail and a hash of its pack item), so a moved item or a changed pack item is modelled anew. Records of other builds go once a session; a missing or slow store (over 1.5 s) is left out.
+- **Device sync once**, in a task of its own. Number formats are kept per language and digits, and set up in an idle moment of the load. Hologram cards and the stage are measured in one go before a frame writes any card; the floor bar's edges are read in the next frame.
+- **Network.** The panel and the card preload the 3D bundle (`modulepreload`) as they start, unless they show the plan flat. The integration now serves files whose URL names their content (the chunks, `home-3d-chunk-<hash>.js`, and the bundles asked for with `?v=<content hash>`) with `Cache-Control: public, max-age=31536000, immutable`; the main bundle, the card loader, languages and fonts stay `no-cache`, so an update still shows after a reload. Before, every load asked again for each of the thirty-odd files.
+- **The speed check** reports the first picture of the house (the first frame after a floor is built and its shaders compiled) next to "ready" (everything built), takes `--trace <file>`, and with `--cache` serves the bundles with the integration's cache headers and reports the second page's load as "load again".
+
+### Results at 4x CPU throttling
+
+Before and after alternated, 3 runs each (ranges). "Ready" is what the check always measured: every floor built and its shaders compiled. "First picture" is the first frame that shows the house; before, it came with "ready", since the house appeared all at once.
+
+| Measure | Before | After |
+|---|---|---|
+| First picture of the house | 2.12 to 2.26 s | **1.87 to 1.91 s** |
+| Ready (every floor built) | 2.12 to 2.26 s | 2.23 to 2.31 s |
+| Longest task | 988 to 1,020 ms | **264 to 328 ms** |
+| Total blocking | 1,383 to 1,741 ms | **679 to 713 ms** |
+| Load again (same browser): first picture | 1.97 to 2.02 s | **1.47 to 1.52 s** |
+| Load again: ready | 1.97 to 2.02 s | **1.72 to 1.81 s** |
+| Load again: longest task / total blocking | 942 to 968 / 1,606 to 1,671 ms | **272 to 307 / 675 to 687 ms** |
+| Editor first open | 460 to 500 ms | 458 to 533 ms |
+
+With 50 ms added to every request (`--latency 50`, as through a proxy; after with `--cache`), 2 runs each:
+
+| Measure | Before | After |
+|---|---|---|
+| First picture | 2.59 to 3.02 s | **2.11 to 2.30 s** |
+| Load again: first picture | 2.09 to 2.66 s | **1.75 to 1.89 s** |
+
+Each step on its own, measured as it went in (3 runs each). The machine was busier early in the session, so these absolute numbers are higher than in the table above; compare down the column.
+
+| Step | Ready | First picture | Longest task | Total blocking |
+|---|---|---|---|---|
+| Start | 2.85 to 3.39 s | (= ready) | 1,304 to 1,566 ms | 1,905 to 2,373 ms |
+| Number formats kept, cards measured in one go, floor bar read in the next frame | 2.70 to 2.81 s | (= ready) | 1,226 to 1,245 ms | 1,764 to 1,845 ms |
+| Floors modelled in slices, shaders compiled in slices | 2.69 to 3.01 s | (= ready) | 883 to 980 ms | 1,378 to 1,612 ms |
+| No frame before the first floor, roof once, devices in their own task | 2.43 to 2.50 s | (= ready) | 417 to 456 ms | 773 to 865 ms |
+| First picture before the next floor | 2.48 to 2.54 s | 2.19 to 2.23 s | 414 to 419 ms | 1,019 to 1,058 ms |
+| One device sync (it ran twice), lamp light in its own task | 2.36 to 2.42 s | 2.09 to 2.13 s | 266 to 292 ms | 858 to 863 ms |
+| 3D bundle preloaded, number formats set up early | 2.29 to 2.35 s | 2.01 to 2.08 s | 288 to 357 ms | 806 to 842 ms |
+| Geometry kept between loads, floor built in its own task, roof in the slices | 2.38 to 2.66 s | 1.92 to 2.16 s (again: 1.45 to 1.59 s) | 261 to 307 ms | 808 to 975 ms |
+| Later floors compile before they are drawn | 2.30 to 2.32 s | 1.90 to 1.96 s | 232 to 363 ms | 675 to 737 ms |
+
+### Findings
+
+- **The page stays usable while the house loads.** The longest task is a quarter of what it was and the page is blocked half as long. What used to be one task of a second is now slices of 15 to 40 ms.
+- **The house shows sooner**: about 0.3 s on a first load and 0.5 s on a second one (the kept items and light surfaces), more through a proxy, where the kept files save a round trip each. "Ready" stays where it was, because the second floor is now modelled after the first picture instead of before it.
+- **The targets are not all met.** Ready under 1.5 s and total blocking under 500 ms are not reached at 4x; a second load's first picture comes close at about 1.5 s. Three tasks stay over 200 ms: the 3D view's device sync (about 200 ms at 4x: markers, cards and the viewer's devices for 110 items), the first frame (the hologram cards' first layout as they show, about 130 ms, plus the draw), and the panel's first layout in a fresh browser (about 170 ms; the trace puts it in layout itself, and it stayed when the web fonts or glyph fallbacks were warmed up first). What remains is mostly real work: modelling the items the first time, walls and rooms, the device sync and the first layout. Splitting the device sync and caching whole floors (not only their items) between loads are the next candidates.
+- **Hot paths touched:** a new home's load (the viewer's `rebuild` while floors are pending), `formatNumber` (every number shown) and the hologram cards' placement after each frame. Edits, look switches and selection rebuild as before.
+
+### Not measured
+
+- A real wall tablet and its GPU, and a live Home Assistant. The network side (preload, cache headers) shows little on a local server; on a remote screen each request saved is a round trip.
+- A home much larger than the sample home: slices keep each task short whatever the size, but the total work grows with it.
