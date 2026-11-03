@@ -501,6 +501,10 @@ export const formStyles = css`
       .fp3d-furn-ghost {
         opacity: 0.35;
       }
+      /* "When it shows" sits below the help paragraph before it, not against it (#344) */
+      details.fp3d-when-section {
+        margin-top: 16px;
+      }
       .fp3d-furn-sel .fp3d-furn-body {
         fill: rgba(55, 224, 255, 0.16);
         stroke: var(--fp3d-accent);

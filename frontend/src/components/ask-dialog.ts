@@ -46,6 +46,8 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
   /** A typed confirmation was tried with the wrong text: the error shows for a few seconds (#330). */
   private wrong = false;
   private wrongTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The pause after the last keystroke before a wrong name is called wrong (#344). */
+  private pauseTimer: ReturnType<typeof setTimeout> | undefined;
   private shown: AskRequest | null = null;
   private returnFocus: HTMLElement | null = null;
 
@@ -59,13 +61,15 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
   }
 
   /** Shows the mismatch error under the field for a few seconds. */
-  private showWrong(): void {
+  private showWrong(sticky = false): void {
     this.wrong = true;
     clearTimeout(this.wrongTimer);
-    this.wrongTimer = setTimeout(() => {
-      this.wrong = false;
-      this.requestUpdate();
-    }, 5000);
+    // after a pause in typing it stays until the text is right or changes; after a tap or blur it goes in a few seconds
+    if (!sticky)
+      this.wrongTimer = setTimeout(() => {
+        this.wrong = false;
+        this.requestUpdate();
+      }, 5000);
     this.requestUpdate();
   }
 
@@ -105,6 +109,7 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
     this.typed = req?.input ?? "";
     this.wrong = false;
     clearTimeout(this.wrongTimer);
+    clearTimeout(this.pauseTimer);
     this.toggleAttribute("open", !!req);
   }
 
@@ -148,7 +153,10 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
           ? html`<label class="fp3d-field"><input type="text" aria-labelledby="ask-text" .value=${live(this.typed)} @input=${(e: Event) => {
               this.typed = (e.target as HTMLInputElement).value;
               if (req.matches) {
-                if (req.matches(this.typed)) this.wrong = false;
+                if (req.matches(this.typed) || !this.typed.trim()) this.wrong = false;
+                // a wrong name is called wrong once typing pauses, not only on Enter or leaving the field (#344)
+                clearTimeout(this.pauseTimer);
+                if (this.typed.trim() && !req.matches(this.typed)) this.pauseTimer = setTimeout(() => this.showWrong(true), 900);
                 this.requestUpdate();
               }
             }} @blur=${() => req.matches && this.typed.trim() && !req.matches(this.typed) && this.showWrong()} aria-invalid=${this.wrong ? "true" : "false"} aria-describedby=${this.wrong ? "ask-error" : "ask-text"} /></label>
@@ -156,7 +164,7 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
           : nothing}
         <div class="buttons">
           ${req.cancel !== undefined ? html`<button class="fp3d-btn ask-cancel" @click=${() => this.answer(false)}>${req.cancel}</button>` : nothing}
-          <button class="fp3d-btn ask-ok ${req.danger ? "ask-danger" : "fp3d-primary"}" ?disabled=${!!req.matches && !req.matches(this.typed)} @click=${() => this.answer(true)}>${req.ok}</button>
+          <button class="fp3d-btn ask-ok ${req.danger ? "ask-danger" : "fp3d-primary"}" aria-disabled=${!!req.matches && !req.matches(this.typed) ? "true" : "false"} @click=${() => this.answer(true)}>${req.ok}</button>
         </div>
       </div>`;
   }
@@ -238,7 +246,7 @@ export class Fp3dAskDialog extends LitElement implements AskHost {
         line-height: 1.4;
         color: var(--fp3d-danger);
       }
-      .ask-ok:disabled {
+      .ask-ok[aria-disabled="true"] {
         opacity: 0.45;
         cursor: not-allowed;
       }

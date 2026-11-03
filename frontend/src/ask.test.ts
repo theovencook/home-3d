@@ -108,7 +108,9 @@ test("a typed confirmation is true only when the typed text matches, and the req
 
 test("the dialog keeps a typed confirmation open: OK is disabled until the text matches and the error shows under the field (#330)", () => {
   const src = readFileSync(new URL("./components/ask-dialog.ts", import.meta.url), "utf8");
-  assert.match(src, /\?disabled=\$\{!!req\.matches && !req\.matches\(this\.typed\)\}/, "OK is disabled until the text matches");
+  // aria-disabled, not disabled, so tapping the dimmed button still answers with the error (#344)
+  assert.match(src, /aria-disabled=\$\{!!req\.matches && !req\.matches\(this\.typed\) \? "true" : "false"\} @click=\$\{\(\) => this\.answer\(true\)\}/, "OK is dimmed until the text matches");
+  assert.match(src, /setTimeout\(\(\) => this\.showWrong\(true\), 900\)/, "a wrong name is called wrong after a pause in typing (#344)");
   assert.match(src, /if \(ok && req\.matches && !req\.matches\(this\.typed\)\) \{\s*this\.showWrong\(\);\s*return;/, "a wrong answer returns before the dialog is answered");
   assert.match(src, /class="ask-error" role="alert"/, "the error is announced under the field");
   assert.match(src, /setTimeout\([\s\S]*5000\)/, "and goes after a few seconds");

@@ -141,7 +141,7 @@ test("an imperial plan's length rows are text boxes in feet and inches (#117)", 
   const text = sectionText(p, "general");
   assert.match(text, /st-len/);
   assert.ok(text.includes('9.4"'), "exterior wall 0.24 m");
-  assert.ok(text.includes("(ft)"), "labels in feet");
+  assert.ok(!text.includes("(ft)"), "no unit on a length that shows its own marks (#344)");
   const metric = sectionText(page(), "general");
   assert.doesNotMatch(metric, /st-len/);
 });

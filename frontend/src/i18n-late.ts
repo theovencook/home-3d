@@ -1503,7 +1503,7 @@ export const lateEnglish = {
   battery_std: "Tower (stacked modules)",
   battery_wall: "Wall battery (flat, hanging)",
   battery_cube: "Compact (balcony battery)",
-  show_when_entity: "Only while available",
+  show_when_entity: "Show only when this entity…",
   show_from: "From",
   show_to: "To",
   show_start: "From",
