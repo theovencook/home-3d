@@ -171,3 +171,12 @@ test("the Recently used block is hidden while a search is typed (#192)", () => {
   lib._query = "stool";
   assert.equal(text(lib.render()).includes("lib_recent"), false);
 });
+
+test("the sticky search header is opaque and reaches up over the panel's top padding (#320)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("./library.ts", import.meta.url), "utf8");
+  const rule = css.slice(css.indexOf(".fp3d-lib-top {"), css.indexOf(".fp3d-lib-bar {"));
+  assert.match(rule, /position: sticky/);
+  assert.match(rule, /background: var\(--fp3d-chrome-solid/);
+  assert.match(rule, /box-shadow: 0 -\d+px 0 var\(--fp3d-chrome-solid/, "the strip above the header is painted too");
+});

@@ -569,6 +569,9 @@ export class FurnitureLibrary extends LitElement {
         margin: 0 -2px;
         padding: 6px 2px 2px;
         background: var(--fp3d-chrome-solid, var(--fp3d-panel, #0d1424));
+        /* solid up to the panel's top edge too (#320): the side panel's top padding sits above a top:0 sticky box, and
+           the rows scrolled up into it showed through */
+        box-shadow: 0 -14px 0 var(--fp3d-chrome-solid, var(--fp3d-panel, #0d1424));
       }
       .fp3d-lib-bar {
         display: flex;
