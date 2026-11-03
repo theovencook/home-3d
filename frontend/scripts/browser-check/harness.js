@@ -138,6 +138,15 @@ const check = {
     // the 3D view is a chunk of its own (#179): it is counted once its code is there
     void customElements.whenDefined("fp3d-view3d").then(() => countUpdates("fp3d-view3d"));
     const t0 = performance.now();
+    // the first picture of the house (run 6 speed): the first frame after a floor is built and its shaders compiled;
+    // the other floors may still come in after it
+    let firstPicture;
+    const watch = () => {
+      const v = host.querySelector("home-3d-panel")?.shadowRoot?.querySelector("fp3d-view3d")?.viewer;
+      if (v?.floors?.length && !v.warming) requestAnimationFrame(() => (firstPicture = performance.now() - t0));
+      else requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
     await showPanel();
     const ready = performance.now() - t0;
     // Home Assistant asks its registry (the polyfill's) for our elements: the dashboard card and the loader look the
@@ -148,6 +157,7 @@ const check = {
     const during = longFrames.filter((f) => f.at + f.ms >= t0 && f.at <= t0 + ready);
     return {
       ready: +ready.toFixed(0),
+      firstPicture: firstPicture === undefined ? undefined : +firstPicture.toFixed(0),
       longestTask: +Math.max(0, ...during.map((f) => f.ms)).toFixed(0),
       blocking: +during.reduce((s, f) => s + f.blocking, 0).toFixed(0),
       entities: Object.keys(fake.hass.states).length,
