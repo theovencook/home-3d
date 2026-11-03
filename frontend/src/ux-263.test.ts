@@ -63,3 +63,27 @@ test("room names that would overlap: the larger room's shows, the smaller one's 
   // the viewer places room names through it
   assert.match(src("./viewer/viewer3d.ts"), /const keep = clearLabels\(names\.map\(\(n\) => n\.box\)\);/);
 });
+
+// 4. Narrow cards: what doesn't fit goes into a ⋯ menu
+
+test("a narrow card keeps what fits in its bar and moves the rest into a ⋯ menu; Back always stays (#263)", async () => {
+  const { fitBar, itemWidth, MENU_W } = await import("./card-fit.ts");
+  const items = [
+    { id: "back", keep: true, texts: ["Back"] },
+    { id: "tt", texts: ["⏪ Time travel"] },
+    { id: "view", texts: ["3D", "2D"] },
+    { id: "walls", texts: ["Tall walls", "Cut"] },
+    { id: "heat", texts: ["Normal", "Temp.", "Humidity", "CO₂"] },
+  ];
+  const all = items.reduce((s, it) => s + itemWidth(it), 0) + 8 * (items.length - 1);
+  assert.deepEqual(fitBar(items, all), { bar: ["back", "tt", "view", "walls", "heat"], menu: [] });
+  const phone = fitBar(items, 320);
+  assert.deepEqual(phone.bar.slice(0, 1), ["back"]);
+  assert.ok(phone.menu.includes("heat"));
+  assert.deepEqual([...phone.bar, ...phone.menu].sort(), items.map((i) => i.id).sort(), "nothing is lost");
+  // the bar keeps its order: once one control went into the menu, the later ones follow it there
+  const narrow = fitBar(items, itemWidth(items[0]!) + 8 + MENU_W + 4);
+  assert.deepEqual(narrow, { bar: ["back"], menu: ["tt", "view", "walls", "heat"] });
+  const card = src("./card.ts");
+  assert.match(card, /class="fp3d-chip fp3d-card-more" aria-haspopup="true"/);
+});

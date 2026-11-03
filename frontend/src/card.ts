@@ -13,6 +13,7 @@ import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
 import { showsPlan2d, type CardConfig, type CardControl } from "./card-config.ts";
+import { fitBar, type BarItem } from "./card-fit.ts";
 import { nightActive } from "./kiosk.ts";
 import { lookOf } from "./themes.ts";
 import { contrastChrome, lightChrome } from "./scheme.ts";
@@ -53,6 +54,8 @@ export class Floorplan3dCard extends LitElement {
     _clean: { state: true },
     _night: { state: true },
     _orbit: { state: true },
+    _barW: { state: true },
+    _barMenu: { state: true },
   };
 
   /** Home Assistant as handed in; `hass` reads it through `hassWatch` while rendering (#177, as the editor #130).
@@ -95,6 +98,11 @@ export class Floorplan3dCard extends LitElement {
   /** Kiosk: the night dimming is active; the screensaver turn runs (after an idle return). */
   private declare _night: boolean;
   private declare _orbit: boolean;
+  /** The card's width (px, measured): what fits in the bar of switches (#263); 0 until measured. */
+  private declare _barW: number;
+  /** The bar's ⋯ menu is open. */
+  private declare _barMenu: boolean;
+  private barSizer: ResizeObserver | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
   private nightTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -118,6 +126,8 @@ export class Floorplan3dCard extends LitElement {
     this._clean = false;
     this._night = false;
     this._orbit = false;
+    this._barW = 0;
+    this._barMenu = false;
   }
 
   /** Any touch ends the screensaver and restarts the idle clock. */
@@ -236,6 +246,8 @@ export class Floorplan3dCard extends LitElement {
 clearTimeout(this.cleanTimer);
         clearTimeout(this.idleTimer);
     clearInterval(this.nightTimer);
+    this.barSizer?.disconnect();
+    this.barSizer = null;
   }
 
   /**
@@ -380,7 +392,23 @@ clearTimeout(this.cleanTimer);
     // the language its texts are in (#196)
     const lang = uiLanguage(this.hass);
     if (this.getAttribute("lang") !== lang) this.setAttribute("lang", lang);
+    // the card's width decides what fits in the bar of switches (#263)
+    const body = this.renderRoot.querySelector(".fp3d-card-body");
+    if (body && !this.barSizer && typeof ResizeObserver === "function") {
+      this.barSizer = new ResizeObserver(([e]) => {
+        const w = Math.round(e?.contentRect.width ?? 0);
+        if (Math.abs(w - this._barW) > 1) this._barW = w;
+      });
+      this.barSizer.observe(body);
+    }
   }
+
+  /** A press outside the bar's ⋯ menu closes it (#263). */
+  private readonly closeBarMenu = (e: Event) => {
+    if (!this._barMenu) return;
+    const path = e.composedPath() as Element[];
+    if (!path.some((n) => n.classList?.contains("fp3d-card-menu") || n.classList?.contains("fp3d-card-more"))) this._barMenu = false;
+  };
 
   /** One level up: room -> floor -> house. */
   /** Floors can be switched (no fixed floor, or floor pictures to switch with). */
@@ -453,7 +481,7 @@ clearTimeout(this.cleanTimer);
     const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
     // the card's own accent, else (while the look follows the HA theme) the theme's primary colour (#38)
     const accent = shownAccent(lookOf(c?.theme), c?.accent, this.hass, (n) => getComputedStyle(this).getPropertyValue(n));
-    return html`<ha-card class="${this._night ? "fp3d-night" : ""} ${this._pseudoFull ? "fp3d-pseudo-full" : ""}" style=${accentVars(accent)} @pointerdown=${this.touch} @keydown=${this.onKey} @wheel=${this.touch}>
+    return html`<ha-card class="${this._night ? "fp3d-night" : ""} ${this._pseudoFull ? "fp3d-pseudo-full" : ""}" style=${accentVars(accent)} @pointerdown=${(e: PointerEvent) => (this.closeBarMenu(e), this.touch())} @keydown=${this.onKey} @wheel=${this.touch}>
       <div class="fp3d-card-body ${tt ? "fp3d-tt" : ""}" style="height:${size}">
         ${b && b.floors.some((f) => f.rooms.length)
           ? html`<fp3d-view3d
@@ -557,45 +585,7 @@ clearTimeout(this.cleanTimer);
               @close=${() => (this._roomId = null)}
             ></fp3d-room-panel>`)
           : nothing}
-        ${bar && b
-          ? html`<div class="fp3d-card-controls">
-              ${canGoBack ? html`<button class="fp3d-chip" @click=${() => this.back()}>${t("back")}</button>` : nothing}
-              ${c?.time_travel
-                ? html`<button class="fp3d-chip fp3d-tt-chip" aria-pressed=${tt} title=${t("tt_hint")} @click=${() => this.toggleTimeTravel()}>
-                    ⏪ ${t("tt_chip")}
-                  </button>`
-                : nothing}
-              ${c?.camera_wall ? html`<button class="fp3d-chip" aria-pressed=${this._cameraWall} title=${t("camera_wall_hint")} @click=${() => (this._cameraWall = !this._cameraWall)}>${t("cameras_short")}</button>` : nothing}
-              ${shows("view")
-                ? html`<div class="fp3d-seg" role="group" aria-label=${t("plan_view")}>
-                    <button aria-pressed=${!flat} @click=${() => (this._plan2d = false)}>${t("view_3d")}</button>
-                    <button aria-pressed=${flat} @click=${() => (this._plan2d = true)}>${t("view_2d")}</button>
-                  </div>`
-                : nothing}
-              ${shows("walls") && !flat
-                ? html`<div class="fp3d-seg">
-                    <button aria-pressed=${walls === "auto"} @click=${() => this.setWalls("auto")}>${t("walls_auto")}</button>
-                    <button aria-pressed=${walls === "cut"} @click=${() => this.setWalls("cut")}>${t("walls_cut")}</button>
-                  </div>`
-                : nothing}
-              ${shows("floors") && !flat && b.floors.length > 1 && !floorId
-                ? html`<div class="fp3d-seg">
-                    <button aria-pressed=${explode} @click=${() => (this._explode = true)}>${t("floors_apart")}</button>
-                    <button aria-pressed=${!explode} @click=${() => (this._explode = false)}>${t("floors_stacked")}</button>
-                  </div>`
-                : nothing}
-              ${heats.length
-                ? html`<div class="fp3d-seg" role="group" aria-label=${t("heatmap")}>
-                    ${(["none", ...heats] as HeatMode[]).map(
-                      (m) =>
-                        html`<button aria-pressed=${heat === m} @click=${() => (this._heat = m)}>
-                          ${t(m === "none" ? "heat_off" : (`heat_short_${m}` as Parameters<typeof translate>[1]))}
-                        </button>`,
-                    )}
-                  </div>`
-                : nothing}
-            </div>`
-          : nothing}
+        ${bar && b ? this.renderBar(b, canGoBack, flat, walls, explode, floorId, heats, heat, t) : nothing}
         ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session}></fp3d-time-bar>` : nothing}
         ${c?.fullscreen_button && !this._clean && !(this._roomId && c.room_panel !== false)
           ? html`<button class="fp3d-card-full" title=${t(this._fullscreen ? "fullscreen_exit" : "fullscreen")} aria-label=${t(this._fullscreen ? "fullscreen_exit" : "fullscreen")} @click=${() => this.toggleFullscreen()}>
@@ -609,6 +599,88 @@ clearTimeout(this.cleanTimer);
           : nothing}
       </div>
     </ha-card>`;
+  }
+
+  /**
+   * The bar of switches. On a narrow card the controls that don't fit go into a ⋯ menu at its end (#263); Back stays.
+   */
+  private renderBar(
+    b: Building,
+    canGoBack: boolean,
+    flat: boolean,
+    walls: WallMode,
+    explode: boolean,
+    floorId: string | null,
+    heats: readonly HeatMode[],
+    heat: HeatMode,
+    t: (k: I18nKey) => string,
+  ) {
+    const c = this._config;
+    const tt = this.tt.active;
+    const shows = (x: CardControl) => c?.controls === true || (Array.isArray(c?.controls) && c.controls.includes(x));
+    const heatKey = (m: HeatMode) => (m === "none" ? "heat_off" : (`heat_short_${m}` as I18nKey));
+    const items: (BarItem & { tpl: unknown })[] = [];
+    if (canGoBack) items.push({ id: "back", keep: true, texts: [t("back")], tpl: html`<button class="fp3d-chip" @click=${() => this.back()}>${t("back")}</button>` });
+    if (c?.time_travel)
+      items.push({
+        id: "tt",
+        texts: ["⏪ " + t("tt_chip")],
+        tpl: html`<button class="fp3d-chip fp3d-tt-chip" aria-pressed=${tt} title=${t("tt_hint")} @click=${() => this.toggleTimeTravel()}>⏪ ${t("tt_chip")}</button>`,
+      });
+    if (c?.camera_wall)
+      items.push({
+        id: "cameras",
+        texts: [t("cameras_short")],
+        tpl: html`<button class="fp3d-chip" aria-pressed=${this._cameraWall} title=${t("camera_wall_hint")} @click=${() => (this._cameraWall = !this._cameraWall)}>${t("cameras_short")}</button>`,
+      });
+    if (shows("view"))
+      items.push({
+        id: "view",
+        texts: [t("view_3d"), t("view_2d")],
+        tpl: html`<div class="fp3d-seg" role="group" aria-label=${t("plan_view")}>
+          <button aria-pressed=${!flat} @click=${() => (this._plan2d = false)}>${t("view_3d")}</button>
+          <button aria-pressed=${flat} @click=${() => (this._plan2d = true)}>${t("view_2d")}</button>
+        </div>`,
+      });
+    if (shows("walls") && !flat)
+      items.push({
+        id: "walls",
+        texts: [t("walls_auto"), t("walls_cut")],
+        tpl: html`<div class="fp3d-seg">
+          <button aria-pressed=${walls === "auto"} @click=${() => this.setWalls("auto")}>${t("walls_auto")}</button>
+          <button aria-pressed=${walls === "cut"} @click=${() => this.setWalls("cut")}>${t("walls_cut")}</button>
+        </div>`,
+      });
+    if (shows("floors") && !flat && b.floors.length > 1 && !floorId)
+      items.push({
+        id: "floors",
+        texts: [t("floors_apart"), t("floors_stacked")],
+        tpl: html`<div class="fp3d-seg">
+          <button aria-pressed=${explode} @click=${() => (this._explode = true)}>${t("floors_apart")}</button>
+          <button aria-pressed=${!explode} @click=${() => (this._explode = false)}>${t("floors_stacked")}</button>
+        </div>`,
+      });
+    if (heats.length) {
+      const modes = ["none", ...heats] as HeatMode[];
+      items.push({
+        id: "heat",
+        texts: modes.map((m) => t(heatKey(m))),
+        tpl: html`<div class="fp3d-seg" role="group" aria-label=${t("heatmap")}>
+          ${modes.map((m) => html`<button aria-pressed=${heat === m} @click=${() => (this._heat = m)}>${t(heatKey(m))}</button>`)}
+        </div>`,
+      });
+    }
+    // the bar sits between 60 px on the left and 10 px on the right; before the card is measured everything shows
+    const fit = this._barW ? fitBar(items, this._barW - 70) : { bar: items.map((i) => i.id), menu: [] };
+    const tpl = (id: string) => items.find((i) => i.id === id)!.tpl;
+    const open = this._barMenu && fit.menu.length > 0;
+    return html`<div class="fp3d-card-controls">
+      ${fit.bar.map(tpl)}
+      ${fit.menu.length
+        ? html`<button class="fp3d-chip fp3d-card-more" aria-haspopup="true" aria-expanded=${open ? "true" : "false"} title=${t("more")} aria-label=${t("more")} @click=${() => (this._barMenu = !this._barMenu)}>⋯</button>`
+        : nothing}
+      ${open ? html`<div class="fp3d-card-menu" role="group" aria-label=${t("more")} @keydown=${(e: KeyboardEvent) => e.key === "Escape" && (this._barMenu = false)}>${fit.menu.map(tpl)}</div>` : nothing}
+    </div>`;
   }
 
   static styles = [
@@ -628,6 +700,30 @@ clearTimeout(this.cleanTimer);
       }
       .fp3d-card-controls > * {
         pointer-events: auto;
+      }
+      /* the ⋯ menu of a narrow card (#263): the controls that did not fit, one under the other above the bar */
+      .fp3d-card-more {
+        min-width: 44px;
+        font-size: 18px;
+        line-height: 1;
+      }
+      .fp3d-card-menu {
+        position: absolute;
+        right: 0;
+        bottom: calc(100% + 8px);
+        display: grid;
+        justify-items: end;
+        gap: 8px;
+        padding: 8px;
+        border-radius: 14px;
+        background: var(--fp3d-chrome-solid);
+        border: 1px solid var(--fp3d-line);
+        box-shadow: var(--fp3d-shadow);
+        max-width: calc(100% - 16px);
+      }
+      .fp3d-card-menu .fp3d-seg {
+        box-shadow: none;
+        flex-wrap: wrap;
       }
       /* time travel: its bar at the bottom, the switches and the room panel above it */
       .fp3d-tt > * {
