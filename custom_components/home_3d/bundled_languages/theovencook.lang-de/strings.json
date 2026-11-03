@@ -3308,5 +3308,16 @@
  "room_unhide_named": "{room} wieder in dieser Liste zeigen",
  "rooms_show_hidden": "Ausgeblendete zeigen",
  "room_hide_in_picker": "In der Raumliste ausblenden",
- "room_hide_hint": "Ein Raum, den du kaum brauchst (Schornstein, Spitzboden), verschwindet aus der Raumliste. Er wird weiter gezeichnet; \"Ausgeblendete zeigen\" in der Liste holt ihn zurück."
+ "room_hide_hint": "Ein Raum, den du kaum brauchst (Schornstein, Spitzboden), verschwindet aus der Raumliste. Er wird weiter gezeichnet; \"Ausgeblendete zeigen\" in der Liste holt ihn zurück.",
+ "st_vacuum_maps": "Saugroboter-Karten",
+ "st_vacuum_maps_hint": "Die Karten der Saugroboter auf ihren Geschossen, mit Roboter und Station",
+ "vac_no_map": "Noch keine Karte vom Roboter.",
+ "vac_vacuum": "Roboter",
+ "vac_show": "In 3D zeigen",
+ "vac_align": "Am Plan ausrichten",
+ "vac_pairs": "{n}/3 Punkte zugeordnet",
+ "vac_align_reset": "Neu beginnen",
+ "vac_add": "Karte hinzufügen",
+ "vac_tap_map": "Tippe auf eine Stelle der Karte",
+ "vac_tap_plan": "Jetzt dieselbe Stelle im Plan"
 }

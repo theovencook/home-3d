@@ -352,6 +352,7 @@ export class Fp3dView3d extends LitElement {
     pivotMark: { attribute: false },
     petsOn: { attribute: false },
     ghostOn: { attribute: false },
+    vacuumMaps: { attribute: false },
     _central: { state: true },
     _sheet: { state: true },
     _rackView: { state: true },
@@ -736,6 +737,12 @@ export class Fp3dView3d extends LitElement {
   declare petsOn: boolean;
   /** The card can leave the Halloween ghost out (card option "ghost: false"). */
   declare ghostOn: boolean;
+  /** Robot vacuum maps on the floors (#350): the View's switch (default on). */
+  declare vacuumMaps: boolean;
+  /** The maps' overlay (a lazy chunk, loaded only for a plan with maps while the switch is on). */
+  private vacuums: { update(b: Building): void; setHass(h: HomeAssistant | undefined): void; dispose(): void } | null = null;
+  private vacuumsFor: Building | null = null;
+  private vacuumsLoading = false;
   /** The walk: the room one stands in (null between rooms), or false when not walking. */
   private declare _walk: { room: string | null; hint: boolean } | false;
   private walker: { dispose(): void; setStick(v: { x: number; y: number } | null): void } | null = null;
@@ -887,6 +894,7 @@ export class Fp3dView3d extends LitElement {
     this.pivotMark = false;
     this.petsOn = true;
     this.ghostOn = true;
+    this.vacuumMaps = true;
     this._walk = false;
     this.buttons = null;
     this._thumbs = [];
@@ -1007,6 +1015,7 @@ export class Fp3dView3d extends LitElement {
     this.pets?.dispose();
     this.pets = null;
     this.petsFor = null;
+    this.dropVacuums();
     this.ghost?.dispose();
     this.ghost = null;
     this.season?.dispose();
@@ -1167,6 +1176,7 @@ export class Fp3dView3d extends LitElement {
       this.scheduleThumbs();
       this.syncDevicesSoon();
       void this.syncPets();
+      void this.syncVacuums();
       void this.syncGhost();
       void this.syncSeason();
       this.viewer.setFloor(this.floorId, false);
@@ -1200,6 +1210,7 @@ export class Fp3dView3d extends LitElement {
     this.pets?.dispose();
     this.pets = null;
     this.petsFor = null;
+    this.dropVacuums();
     this.ghost?.dispose();
     this.ghost = null;
     this._through = null;
@@ -1223,6 +1234,8 @@ export class Fp3dView3d extends LitElement {
     const old = changed.get("hass") as HomeAssistant | undefined;
     const hass = this.rawHass;
     // a replay ticks with updates of its own: it is never skipped
+    // robot vacuum maps (#350): their markers follow every new state, rendered or not
+    if (changed.has("hass")) this.vacuums?.setHass(hass);
     if (changed.size !== 1 || !changed.has("hass") || !old || !hass || this.replay || this.hassWatch.matters(old, hass)) return true;
     if (old.states !== hass.states) {
       // what the scene shows (syncDevices notes no reads, see there): the watched entities and the items shown only
@@ -1318,6 +1331,7 @@ export class Fp3dView3d extends LitElement {
         v.setBuilding(this.viewPlan(this.building));
       }
       if (changed.has("building") || changed.has("packs") || changed.has("petsOn")) void this.syncPets();
+      if (changed.has("building") || changed.has("vacuumMaps")) void this.syncVacuums();
       if (changed.has("building") || changed.has("packs") || changed.has("ghostOn")) void this.syncGhost();
       if (changed.has("building") || changed.has("ghostOn")) void this.syncSeason();
       if (changed.has("startView") && changed.get("startView") !== undefined) {
@@ -4907,6 +4921,39 @@ export class Fp3dView3d extends LitElement {
       console.error("Home 3D: the pets failed to load", err);
     } finally {
       this.petsLoading = false;
+    }
+  }
+
+  private dropVacuums(): void {
+    this.vacuums?.dispose();
+    this.vacuums = null;
+    this.vacuumsFor = null;
+  }
+
+  /**
+   * Robot vacuum maps (#350): while the plan has some and the View's switch is on, their chunk draws them on the floors
+   * (three.js from the 3D bundle); a new plan hands them over again. Off, or none: nothing is loaded or kept.
+   */
+  private async syncVacuums(): Promise<void> {
+    const b = this.building;
+    if (!this.viewer || !b || this.plan2d || this.vacuumMaps === false || !b.settings.vacuum_maps?.some((m) => m.show !== false)) return this.dropVacuums();
+    if (this.vacuums) {
+      if (this.vacuumsFor !== b) this.vacuums.update((this.vacuumsFor = b));
+      return;
+    }
+    if (this.vacuumsLoading) return;
+    this.vacuumsLoading = true;
+    try {
+      const [chunk, mod] = await Promise.all([import("../vacuum-maps.ts"), load3d()]);
+      if (!this.viewer || this.plan2d || this.vacuums || !this.building) return;
+      this.vacuumsFor = this.building;
+      this.vacuums = chunk.startVacuumMaps({ lib: mod.funLib, viewer: this.viewer as never, building: this.building, hass: this.rawHass });
+      // the switch or the plan may have changed while it loaded
+      void this.syncVacuums();
+    } catch (err) {
+      console.error("Home 3D: the vacuum maps failed to load", err);
+    } finally {
+      this.vacuumsLoading = false;
     }
   }
 

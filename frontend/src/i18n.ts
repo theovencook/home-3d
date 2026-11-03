@@ -1133,6 +1133,8 @@ const en = {
   room_hide_named: "Hide {room} from this list",
   room_unhide_named: "Show {room} in this list again",
   rooms_show_hidden: "Show hidden",
+  st_vacuum_maps: "Vacuum maps",
+  st_vacuum_maps_hint: "The robot vacuums' maps on their floors, with the robot and its dock",
 };
 
 type Key = keyof typeof en | keyof typeof lateEnglish;

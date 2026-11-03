@@ -817,6 +817,25 @@ export type PetEyes = (typeof PET_EYES)[number];
 /** Dog breeds, small to large. */
 export const DOG_BREEDS = ["dachshund", "pug", "terrier", "labrador", "shepherd"] as const;
 
+/**
+ * A robot vacuum's map on a floor (#350): the map camera's picture laid on the floor, with the robot and its dock.
+ * `points`: up to three pairs of the same point on the robot's map (`v`, its own coordinates) and on the plan (`p`,
+ * metres), picked once in the editor; none: the picture lies upright at its true size in the floor's middle.
+ */
+export interface VacuumMap {
+  id: string;
+  /** The map camera (dreame_vacuum's camera.<name>_map, or the Xiaomi Cloud Map Extractor's camera). */
+  camera: string;
+  floor_id: string;
+  /** The robot vacuum entity it belongs to (null: none chosen). */
+  vacuum?: string | null;
+  points?: { v: [number, number]; p: [number, number] }[] | null;
+  /** How opaque the picture is, 0.1–1 (null: 0.6). */
+  opacity?: number | null;
+  /** Shown in the 3D view (null: yes). */
+  show?: boolean | null;
+}
+
 /** Live room effects (#10); a missing value takes its default (EFFECT_DEFAULTS in room-effects.ts). */
 export interface EffectSettings {
   /** Seconds a room stays lit after motion starts (0 = motion lights nothing). */
@@ -857,6 +876,8 @@ export interface BuildingSettings {
     /** Own triggers (D615): an entity that goes on or open (a second doorbell, the garage door) and the camera to show. */
     triggers?: { entity: string; camera: string | null }[] | null;
   } | null;
+  /** Robot vacuum maps on the floors (#350). */
+  vacuum_maps?: VacuumMap[] | null;
   /** Fun pack "pets": the animals and whether they are shown. */
   pets?: { on: boolean; list: Pet[]; /** Roaming (#337); off: every pet stays on its first spot. */ roam?: boolean } | null;
   /** Stations and playlists for the speakers' quick menu (Klang & Kino). */

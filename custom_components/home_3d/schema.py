@@ -321,6 +321,32 @@ _PET_TRIGGER = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+# robot vacuum maps (#350): a map camera's picture on a floor; up to three pairs of the same point on the robot's map
+# (`v`, its own coordinates, millimetres) and on the plan (`p`, metres) align it
+_VACUUM_PAIR = vol.Schema(
+    {
+        vol.Required("v"): vol.All(
+            [vol.All(vol.Coerce(float), vol.Range(min=-1e6, max=1e6))], vol.Length(min=2, max=2)
+        ),
+        vol.Required("p"): vol.All(
+            [vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000))], vol.Length(min=2, max=2)
+        ),
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+_VACUUM_MAP = vol.Schema(
+    {
+        vol.Required("id"): vol.All(str, vol.Length(min=1, max=64)),
+        vol.Required("camera"): vol.All(str, vol.Length(min=1, max=255)),
+        vol.Required("floor_id"): vol.All(str, vol.Length(min=1, max=64)),
+        vol.Optional("vacuum", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("points", default=None): vol.Any(None, vol.All([_VACUUM_PAIR], vol.Length(max=3))),
+        vol.Optional("opacity", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.1, max=1))),
+        vol.Optional("show", default=None): vol.Any(None, bool),
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
 
 _SEASON_DATE = vol.Match(r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
 
@@ -1207,6 +1233,8 @@ SETTINGS_SCHEMA = vol.Schema(
         vol.Optional("weather_effects", default=None): vol.Any(
             None, [vol.In(["rain", "snow", "fog", "clouds", "lightning", "sky"])]
         ),
+        # robot vacuum maps on the floors (#350)
+        vol.Optional("vacuum_maps", default=None): vol.Any(None, vol.All([_VACUUM_MAP], vol.Length(max=16))),
         # fun pack "pets": animals that live in the 3D house (switched on and off)
         vol.Optional("pets", default=None): vol.Any(
             None,

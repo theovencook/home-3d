@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- Robot vacuum maps on the plan: a map camera (dreame_vacuum's map camera, or the Xiaomi Cloud Map Extractor for Roborock and other Xiaomi robots) lies on its floor in the 3D view, aligned to the plan by up to three point pairs picked once in the editor, with the robot and its dock as live markers; opacity per map, and a View switch "Vacuum maps" (#350).
 - The new controls look like the rest: the holiday dates (buttons, rule fields in a labelled grid), the icon picker without Home Assistant (styled fields, icon names when pictures are not available) and the pet panel (two-column spot and trigger rows, the shared entity picker for a trigger entity) (#343).
 - Settings, Extensions, the editor and the ask dialogs (New home, Rename, Delete …) follow the chosen look: light under the Day look or a light Home Assistant theme, high contrast under High contrast (#263).
 - On a phone the View sheet opens at half height so the house stays in sight; drag its handle up (or tap it) for all of it, down to shrink or close it (#263).

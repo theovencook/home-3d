@@ -99,6 +99,7 @@ function plan(): Building {
   b.floors = [g, u];
   b.settings.north = 20;
   b.settings.start_view = { theta: -0.6, phi: 0.85, radius: 20, target: { x: 4, y: 1, z: 3 } };
+  b.settings.vacuum_maps = [{ id: "vm", camera: "camera.sample_vacuum_map", floor_id: "g", points: [{ v: [1200, -300], p: [2.5, 1.5] }] }];
   b.settings.pets = { on: true, list: [{ id: "pet", kind: "cat", name: "Sample", fur: "orange", floor_id: "g", static: true, x: 6, z: 4, rotation: 90, spots: [{ id: "s1", floor_id: "g", x: 5, z: 3, rotation: 90 }], triggers: [{ id: "t1", floor_id: "g", x: 2, z: 1, rotation: 180 }] }] };
   b.settings.roof = {
     type: "custom",
@@ -221,6 +222,11 @@ const CHECKS: Record<keyof typeof PLAN_FIELDS, (t: PlanTransform, a: Building, b
   },
   "PetPlace.z": (t, a, b) => assert.deepEqual(xz(b.settings.pets!.list[0].spots![0]), pt(t, xz(a.settings.pets!.list[0].spots![0]))),
   "PetPlace.rotation": (t, a, b) => assert.equal(b.settings.pets!.list[0].triggers![0].rotation, rot(t, a.settings.pets!.list[0].triggers![0].rotation!)),
+  "VacuumMap.points": (t, a, b) => {
+    const [p0, p1] = [a.settings.vacuum_maps![0].points![0], b.settings.vacuum_maps![0].points![0]];
+    assert.deepEqual(p1.p, t.point(p0.p));
+    assert.deepEqual(p1.v, p0.v);
+  },
   "BuildingSettings.north": (t, a, b) => assert.equal(b.settings.north, rot(t, a.settings.north)),
   "BuildingSettings.start_view": (t, a, b) => assert.deepEqual(xz(b.settings.start_view!.target!), pt(t, a.settings.start_view!.target!)),
   "StartView.target": (t, a, b) => assert.deepEqual(xz(b.settings.start_view!.target!), pt(t, a.settings.start_view!.target!)),

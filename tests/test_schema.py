@@ -554,6 +554,28 @@ def test_pets_roam_unless_set_static() -> None:
         SETTINGS_SCHEMA({**base, "pets": {"list": [{**pet, "pose": "fly"}]}})
 
 
+def test_vacuum_maps() -> None:
+    """Robot vacuum maps (#350): optional; a map keeps its camera, floor and up to three alignment pairs."""
+    base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
+    assert SETTINGS_SCHEMA(base)["vacuum_maps"] is None
+    vm = {
+        "id": "vm",
+        "camera": "camera.sample_vacuum_map",
+        "floor_id": "f1",
+        "points": [{"v": [25500, -300], "p": [1.5, 2]}],
+    }
+    out = SETTINGS_SCHEMA({**base, "vacuum_maps": [vm]})["vacuum_maps"][0]
+    assert out["points"] == [{"v": [25500.0, -300.0], "p": [1.5, 2.0]}]
+    assert out["vacuum"] is None and out["opacity"] is None and out["show"] is None
+    pair = {"v": [0, 0], "p": [0, 0]}
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "vacuum_maps": [{**vm, "points": [pair] * 4}]})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "vacuum_maps": [{**vm, "opacity": 0}]})
+    with pytest.raises(vol.Invalid):
+        SETTINGS_SCHEMA({**base, "vacuum_maps": [{**vm, "camera": ""}]})
+
+
 def test_pet_coats_and_eye_colours() -> None:
     """Pet coats and eye colours (#42): the new coats are kept, eyes are dark unless set to a known colour."""
     base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}

@@ -2209,4 +2209,13 @@ export const lateEnglish = {
   pet_now_trigger: "Now at the place of trigger {n}.",
   pet_now_free: "Now wandering the house.",
   pet_roam_off: "Roaming is off: it stays on its first spot.",
+  vac_no_map: "No map from the robot yet.",
+  vac_vacuum: "Robot",
+  vac_show: "Show in 3D",
+  vac_align: "Align on the plan",
+  vac_pairs: "{n}/3 points matched",
+  vac_align_reset: "Start again",
+  vac_add: "Add a map",
+  vac_tap_map: "Tap a spot on the map",
+  vac_tap_plan: "Now the same spot on the plan",
 };

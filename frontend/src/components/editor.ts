@@ -79,6 +79,7 @@ import { preloadParts } from "./editor/lazy.ts";
 import { BackupPart } from "./editor/backup.ts";
 import { PhonePart, type SheetHeight } from "./editor/phone.ts";
 import { PetsPart } from "./editor/pets.ts";
+import { vacuumTag } from "./editor/vacuums.ts";
 import { sameFloorName } from "../floor-link.ts";
 import { BackLayers } from "../back-stack.ts";
 export type { EditorTopic };
@@ -127,6 +128,7 @@ export class Fp3dEditor extends LitElement {
     _deviceId: { state: true },
     _petId: { state: true },
     _petPick: { state: true },
+    _vacAlign: { state: true },
     _deviceQuery: { state: true },
     _devSource: { state: true },
     _unplacedOpen: { state: true },
@@ -302,6 +304,9 @@ export class Fp3dEditor extends LitElement {
   /** Roaming pets (#337): the pet whose panel is open, and the place the next tap in the plan sets ("spot:new", "spot:<id>", "trigger:<id>"). */
   declare _petId: string | null;
   declare _petPick: string | null;
+  /** Robot vacuum maps (#350): the map being aligned over the plan, and where the plan's taps go meanwhile. */
+  declare _vacAlign: string | null;
+  _vacPick: ((p: Vec2) => void) | null = null;
   declare _deviceQuery: string;
   /** Which devices the room form lists: its own area, other areas, or entities without an area. */
   declare _devSource: "area" | "other" | "none";
@@ -590,6 +595,7 @@ export class Fp3dEditor extends LitElement {
     this._kerbPick = false;
     this._petId = null;
     this._petPick = null;
+    this._vacAlign = null;
     this._runMode = null;
     this._runDraft = null;
     this._runSel = null;
@@ -1155,7 +1161,7 @@ export class Fp3dEditor extends LitElement {
               ${this._tool === "roof" ? svg`${this.renderRoofSections()}${this.renderRoofWindows()}` : this._tool === "energy" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}${this.renderCables()}${this.renderEnergyMarkers()}` : this._tool === "pool" && floor && this.pipeRules ? this.renderPoolPlan(floor) : nothing} ${this.renderDraft()} ${this.renderGuides()}
               ${floor ? this.renderKerb(floor) : nothing}
             </svg>
-            ${this.renderContext()}
+            ${vacuumTag(this, floor, true)} ${this.renderContext()}
             ${this.renderNav()}
             ${this.renderHint()}
           </div>

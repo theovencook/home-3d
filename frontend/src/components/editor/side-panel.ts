@@ -12,6 +12,7 @@ import { furnitureName } from "../../furniture-names.ts";
 import { type EditorTopic } from "./helpers.ts";
 import { moduleSettings } from "../../modules.ts";
 import type { Fp3dEditor } from "../editor.ts";
+import { vacuumTag } from "./vacuums.ts";
 
 /** SidePanelPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class SidePanelPart {
@@ -292,7 +293,7 @@ export class SidePanelPart {
               : nothing}
       ${this.renderHelpLinks()}
       ${admin && SHOW_PRESENCE ? this.renderPresenceSettings() : nothing}
-      ${floor && admin ? this.renderBackgroundForm(floor) : nothing}
+      ${floor && admin ? this.renderBackgroundForm(floor) : nothing} ${admin ? vacuumTag(this, floor) : nothing}
     `;
   }
 

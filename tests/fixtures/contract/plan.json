@@ -836,6 +836,28 @@
     "weather_effects": [
       "rain"
     ],
+    "vacuum_maps": [
+      {
+        "id": "text",
+        "camera": "camera.sample_vacuum_map",
+        "floor_id": "text",
+        "vacuum": "vacuum.sample_vacuum",
+        "points": [
+          {
+            "v": [
+              1200,
+              -300
+            ],
+            "p": [
+              2.5,
+              1.5
+            ]
+          }
+        ],
+        "opacity": 0.6,
+        "show": true
+      }
+    ],
     "pets": {
       "on": true,
       "roam": true,

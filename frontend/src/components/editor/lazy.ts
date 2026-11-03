@@ -25,6 +25,8 @@ export const loadIconPicker = once(() => import("./icon-picker.ts"));
 export const loadPackBrowser = once(() => import("../pack-browser.ts"));
 /** A pet's panel (#337: its routine and triggers): a chunk of its own, as only an open pet draws it. */
 export const loadPetPanel = once(() => import("../pet-panel.ts"));
+/** Robot vacuum maps (#350): the floor's section and the alignment over the plan, a chunk of their own. */
+export const loadVacuumPanel = once(() => import("../vacuum-panel.ts"));
 /** The phone editor's bottom bar and More (#250): a chunk of its own, as only phone-wide screens draw it. */
 export const loadPhoneBar = once(() => import("./phone-bar.ts").then((m) => m.definePhoneBar({ LitElement, html, css, nothing, uiIcon, defineElement })));
 

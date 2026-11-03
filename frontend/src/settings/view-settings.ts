@@ -174,6 +174,8 @@ export const LOOK: Setting[] = [
   // #319: how high the sun's way is drawn; the lighting and shadows keep the real sun angle
   deviceChoice("sun_height", "view3d", "show", "sun_height", ["auto", "high", "real"], "auto", "st_sun_height", opts([["auto", "sun_height_auto"], ["high", "sun_height_high"], ["real", "sun_height_real"]]), "st_sun_height_hint"),
   ...["flows", "holos"].map((k) => deviceSwitch(k, "view3d", "show", k, k === "holos", k as TextKey, `${k}_hint` as TextKey)),
+  // #350: robot vacuum maps on the floors (offered only for a plan with maps); on by default
+  { ...deviceSwitch("vacuum_maps", "view3d", "show", "vacuum_maps", true, "st_vacuum_maps", "st_vacuum_maps_hint"), visible: (env) => !!env.building?.settings.vacuum_maps?.length },
 ];
 
 /**
@@ -205,6 +207,8 @@ export interface ViewContext {
   plan2d: boolean;
   /** A locked wall tablet (#92): only what the 3D shows (and 3D or 2D) is offered, as before. */
   kiosk: boolean;
+  /** The plan has robot vacuum maps (#350): their switch is offered. */
+  vacuums?: boolean;
 }
 
 /** A row of the View panel: a setting of LOOK or SCREEN by its id. */
@@ -236,6 +240,7 @@ export function viewSections(ctx: ViewContext): ViewSection[] {
   show.push({ id: "heat" }, { id: "display" });
   if (ctx.roof && !ctx.plan2d) show.push({ id: "roof", disabled: ctx.floorOpen });
   show.push({ id: "trail" }, { id: "weather" }, { id: "nav" }, ...["flows", "holos"].map((id) => ({ id })));
+  if (ctx.vacuums && !ctx.plan2d) show.push({ id: "vacuum_maps" });
   const shows: ViewSection = { id: "show", title: "st_card_show", rows: show, hint: show.some((r) => r.disabled) ? "pick_all_floors" : undefined, openOnPhone: false };
   if (ctx.kiosk) return [{ ...shows, openOnPhone: true }];
   return [

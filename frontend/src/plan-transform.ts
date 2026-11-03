@@ -45,6 +45,8 @@ const SLOPE_TURN: Record<SlopeDir, SlopeDir> = { x: "z", z: "-x", "-x": "-z", "-
  */
 export const PLAN_FIELDS = {
   "Room.points": "moved",
+  // #350: the pairs' plan ends (p) move, the robot's own (v) stay
+  "VacuumMap.points": "moved",
   "Room.start_view": "a StartView, moved with its room",
   "Furniture.x": "moved",
   "Furniture.z": "moved",
@@ -301,6 +303,8 @@ export function transformPlan(doc: Building, floorIds: readonly string[] | null,
   for (const c of roof.cables ?? []) if (moved.has(c.floor_id)) c.points = c.points.map(t.point);
   const meter = doc.energy.meter;
   if (meter && moved.has(meter.floor_id)) [meter.x, meter.z] = t.point([meter.x, meter.z]);
+  // the plan ends of a robot vacuum map's alignment pairs (#350)
+  for (const m of doc.settings.vacuum_maps ?? []) if (moved.has(m.floor_id)) for (const pr of m.points ?? []) pr.p = t.point(pr.p);
   for (const p of [...pets, ...places]) {
     [p.x, p.z] = t.point([p.x!, p.z!]);
     if (t.quarter && p.rotation != null) p.rotation = deg(t, p.rotation);

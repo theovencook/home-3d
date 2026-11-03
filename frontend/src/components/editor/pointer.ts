@@ -104,6 +104,11 @@ export class PointerPart {
       this.setKerb(world);
       return;
     }
+    if (this._vacPick) {
+      // robot vacuum maps (#350): the alignment's taps
+      this._vacPick(world);
+      return;
+    }
     if (this._petPick) {
       // roaming pets (#337): the tap sets the place the pet's panel asked for
       this.petPickAt(world);
