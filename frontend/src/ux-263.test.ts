@@ -110,3 +110,18 @@ test("the phone's More has a Select several switch that picks the select tool (#
   const { lateEnglish } = await import("./i18n-late.ts");
   assert.equal(lateEnglish.multi_more, "Select several");
 });
+
+// 6. 3D beside on a phone opens full screen with a way back to 2D
+
+test("on a phone 3D beside covers the plan, its button goes back to 2D, Back closes it and it is not remembered (#263)", () => {
+  const css = src("./components/editor/styles/phone.ts");
+  assert.match(css, /\.fp3d-phone \.fp3d-split > \.fp3d-editor-3d \{\s*position: absolute;\s*inset: 0;/);
+  assert.match(css, /\.fp3d-phone \.fp3d-split > \.fp3d-canvas-wrap \{\s*flex: 1 1 auto;/);
+  const pane = src("./components/editor/pane3d.ts");
+  assert.match(pane, /this\._phone\s*\? html`<button class="fp3d-3d-fold" title=\$\{this\.t\("split_back_2d_hint"\)\}/);
+  assert.match(pane, /this\._split = !this\._split;\s*\/\/[^\n]*\n\s*if \(this\._phone\) return;/);
+  const phone = src("./components/editor/phone.ts");
+  assert.match(phone, /this\.backLayers\.sync\("3d", this\._phone && this\._split, \(\) => \(this\._split = false\), \(\) => \(this\._split = true\)\);/);
+  assert.match(phone, /if \(this\._phone && !was\) this\._split = false;/);
+  assert.match(src("./components/editor.ts"), /this\.houseTool && !this\._split && !this\.narrow && !this\._phone\) this\._split = true;/);
+});

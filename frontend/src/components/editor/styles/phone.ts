@@ -282,6 +282,41 @@ export const phoneStyles = css`
       .fp3d-sheet[data-sheet="peek"] > .fp3d-sheet-body {
         display: none;
       }
+      /* 3D beside on a phone (#263): the 3D view takes the whole plan area, its button goes back to the 2D plan; the
+         plan stays laid out under it, so it is where it was when the 3D view closes */
+      .fp3d-phone .fp3d-stage-pair.fp3d-split {
+        position: relative;
+      }
+      .fp3d-phone .fp3d-split > .fp3d-editor-3d {
+        position: absolute;
+        inset: 0;
+        z-index: 6;
+        border: 0;
+        min-width: 0;
+      }
+      .fp3d-phone .fp3d-split > .fp3d-canvas-wrap {
+        flex: 1 1 auto;
+      }
+      /* the floor chip floats at the top left: the wall switch goes to the right */
+      .fp3d-phone .fp3d-3d-walls {
+        left: auto;
+        right: 12px;
+      }
+      .fp3d-phone .fp3d-split-handle {
+        display: none;
+      }
+      .fp3d-phone .fp3d-3d-fold {
+        top: auto;
+        right: auto;
+        left: 12px;
+        bottom: 12px;
+        min-height: 44px;
+        padding: 6px 16px;
+        font-weight: 600;
+        background: var(--fp3d-primary);
+        color: var(--fp3d-primary-text);
+        border-color: transparent;
+      }
       @media (prefers-reduced-motion: reduce) {
         .fp3d-editor.fp3d-sheeted > .fp3d-sheet,
         .fp3d-phone > fp3d-phone-bar {

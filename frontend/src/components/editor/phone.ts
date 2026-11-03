@@ -46,7 +46,10 @@ export class PhonePart {
     const media =
       typeof matchMedia === "function" ? [matchMedia(PHONE_MEDIA), matchMedia(`${COMPACT_MEDIA} and (orientation: portrait)`), matchMedia(`(max-width: ${COMPACT_MAX_PX}px) and ${SHORT_MEDIA}`)] : [];
     const onMedia = () => {
+      const was = this._phone;
       this._phone = !!media[0]?.matches;
+      // the 3D view covers the plan on a phone (#263): a phone's editor opens on the plan, whatever the desktop kept
+      if (this._phone && !was) this._split = false;
       this._sheeted = media.some((m) => m.matches);
     };
     const onFocus = (e: Event) => {
@@ -255,6 +258,8 @@ export class PhonePart {
     this.backLayers.sync("ctx", phone && !!this._ctx, () => (this._ctx = null));
     this.backLayers.sync("wall", phone && !!this._wallView, () => (this._wallView = null));
     this.backLayers.sync("rack", phone && !!this._rackSheet, () => (this._rackSheet = null));
+    // the full-screen 3D view of a phone (#263): Back goes to the 2D plan, Forward opens it again
+    this.backLayers.sync("3d", this._phone && this._split, () => (this._split = false), () => (this._split = true));
     if (!phone || this._sheet === "closed") return;
     const moved = changed.has("_sheet") || changed.has("_roomId") || changed.has("_furnitureId") || changed.has("_deviceId") || changed.has("_outdoorId");
     if (!moved) return;

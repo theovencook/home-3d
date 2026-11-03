@@ -2141,6 +2141,8 @@ export const lateEnglish = {
   wall_view_sub: "See one wall from the front",
   multi_more: "Select several",
   multi_more_sub: "Tap items to add them (or hold an item)",
+  split_back_2d: "2D plan",
+  split_back_2d_hint: "Back to the 2D plan",
   hint_hide: "Hide the hint",
   // the device popup: lights, robot vacuums, cameras (#272 #271 #284); TV cards (#281)
   st_language: "Language",

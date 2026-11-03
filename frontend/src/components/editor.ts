@@ -772,7 +772,7 @@ export class Fp3dEditor extends LitElement {
     if (changed.has("_doc") && (this._split || this._wallView)) this.queue3d();
     if ((changed.has("_split") && this._split) || (changed.has("_wallView") && this._wallView)) this._doc3d = this._doc;
     if (changed.has("_runDraft") && this._wallView) this._doc3d = this.docWithDraft();
-    if (changed.has("_tool") && this.houseTool && !this._split && !this.narrow) this._split = true;
+    if (changed.has("_tool") && this.houseTool && !this._split && !this.narrow && !this._phone) this._split = true;
     // entering or leaving the roof tool: the 3D half frames the whole house (or the floor) again
     if (changed.has("_tool") && (this.houseTool || changed.get("_tool") === "roof" || changed.get("_tool") === "energy")) this.reframe3d = true;
     // an armed library card (#76) belongs to the floor and home it was picked on (#126)

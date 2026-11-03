@@ -50,6 +50,8 @@ export class Pane3dPart {
 
   toggleSplit(this: Fp3dEditor): void {
     this._split = !this._split;
+    // on a phone the 3D view opens full screen over the plan (#263): asked for each time, not remembered
+    if (this._phone) return;
     try {
       localStorage.setItem("home3d.editor3d", this._split ? "1" : "0");
     } catch {
@@ -257,7 +259,9 @@ export class Pane3dPart {
             <button aria-pressed=${this._wall3d === "auto"} @click=${() => this.setWall3d("auto")}>${this.t("walls_auto")}</button>
             <button aria-pressed=${this._wall3d === "cut"} @click=${() => this.setWall3d("cut")}>${this.t("walls_cut")}</button>
           </div>`}
-      <button class="fp3d-3d-fold" title=${this.t("split_fold_hint")} aria-label=${this.t("split_fold_hint")} @click=${() => this.toggleSplit()}>✕ 3D</button>
+      ${this._phone
+        ? html`<button class="fp3d-3d-fold" title=${this.t("split_back_2d_hint")} aria-label=${this.t("split_back_2d_hint")} @click=${() => this.toggleSplit()}>← ${this.t("split_back_2d")}</button>`
+        : html`<button class="fp3d-3d-fold" title=${this.t("split_fold_hint")} aria-label=${this.t("split_fold_hint")} @click=${() => this.toggleSplit()}>✕ 3D</button>`}
       ${this.render3dBar()}
       <fp3d-view3d
               .walkable=${false}
