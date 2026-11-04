@@ -1,0 +1,1 @@
+var d="__fp3dImportFailed";function e(n){return n.catch(o=>{throw globalThis[d]?.(o),o})}function c(n){let o;return()=>o??=e(n()).then(()=>{},r=>{throw o=void 0,r})}function f(n){n().catch(o=>console.error("Home 3D: a part of the page failed to load",o))}export{d as a,e as b,c,f as d};
