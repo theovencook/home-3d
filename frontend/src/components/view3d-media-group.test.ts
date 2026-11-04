@@ -59,6 +59,47 @@ test("a paused player with a title beats an idle one; players far apart off any 
   assert.equal(cards({ [IDS[0]]: ["playing"], [IDS[1]]: ["playing"] }, { onItem: false, spread: 0.2 }).length, 1);
 });
 
+test("the lounge layout: a chain of players on a bench beside the TV item, one missing, shares one card (#356)", () => {
+  const el = new Fp3dView3d();
+  const b = emptyBuilding();
+  const floor = newFloor("g", "Ground", 0);
+  const P = ["media_player.sample_a", "media_player.sample_b", "media_player.sample_c", "media_player.sample_d"];
+  floor.furniture = [
+    { id: "tv", type: "tv", name: "TV", x: 2.83, z: 9.3, rotation: 270, w: 1.479, d: 0.075, h: 0.8, variant: null },
+    { id: "bench", type: "bench", name: "Bench", x: 3, z: 9.3, rotation: 270, w: 1.79, d: 0.42, h: 0.5, variant: null },
+  ] as Furniture[];
+  floor.placements = [
+    { entity_id: P[0], x: 2.95, z: 9.2, y: 1.4, rotation: 270, marker: null },
+    { entity_id: P[1], x: 2.95, z: 9.4, y: 1.4, rotation: 270, marker: "never" },
+    { entity_id: P[2], x: 2.95, z: 9.0, y: 1.4, rotation: 270, marker: "never" },
+    { entity_id: P[3], x: 2.95, z: 9.6, y: 1.4, rotation: 270, marker: "never" },
+    { entity_id: "light.sample_lamp", x: 3.141, z: 9.2, y: 1.4, rotation: 270, marker: null },
+  ] as never;
+  b.floors = [floor];
+  el.building = b;
+  el.hass = {
+    language: "en",
+    locale: { language: "en", number_format: "language" },
+    config: { unit_system: {} },
+    entities: {},
+    states: { [P[0]]: state(P[0], "on"), [P[1]]: state(P[1], "on"), [P[3]]: state(P[3], "paused"), "light.sample_lamp": { entity_id: "light.sample_lamp", state: "on", attributes: {} } },
+  };
+  el.viewer = new Proxy(() => undefined, { get: (_t, k) => (k === "then" ? undefined : el.viewer), apply: () => undefined });
+  try {
+    el.syncDevices(true);
+  } catch {
+    /* only the cards are looked at */
+  }
+  const got = (el._holos ?? []).filter((c: { kind: string }) => c.kind === "media");
+  assert.deepEqual(got.map((c: { media: { id: string } }) => c.media.id), [P[0]]);
+});
+
+test("players in a chain, each within half a metre of the next, are one group (#356)", () => {
+  const c = (id: string, z: number) => ({ id, floorId: "g", x: 0, z, rank: 1 });
+  assert.deepEqual([...losers([c("a", 0), c("b", 0.4), c("c", 0.8), c("d", 1.2)])], ["b", "c", "d"]);
+  assert.deepEqual([...losers([c("d", 1.2), c("a", 0), c("b", 0.4), c("c", 0.8)])], ["a", "b", "c"]);
+});
+
 test("a single player behaves as before (#356)", () => {
   assert.deepEqual(cards({ [IDS[0]]: ["off"] }).map((c) => c.id), [IDS[0]]);
   assert.deepEqual(cards({ [IDS[0]]: ["playing", { media_title: "Sample" }] }).map((c) => c.id), [IDS[0]]);
