@@ -1,6 +1,7 @@
 // Lit wrapper around the lazily loaded 3D viewer.
 
 import { defineElement } from "../define.ts";
+import { hostAt, losers, type MediaCandidate } from "../media-groups.ts";
 import { css, html, LitElement, nothing, svg, unsafeCSS, type PropertyValues } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { actionIndex, gestureAction, runItemAction, TapSequencer, type ActionOwner, type ItemAction } from "../item-actions.ts";
@@ -1783,10 +1784,22 @@ export class Fp3dView3d extends LitElement {
     const sound: SoundSource[] = [];
     {
       const seenMedia = new Set<string>();
+      // one card per TV or speaker group (#356): a first walk collects the players, the second draws
+      let collect: MediaCandidate[] | null = [];
+      let yields = new Set<string>();
       const holoSize = (b.settings.roof.hologram ?? DEFAULT_HOLOGRAM).size;
-      const add = (floor: Building["floors"][number], id: string, x: number, z: number, top: number, name: string, tvItem = false) => {
+      const add = (floor: Building["floors"][number], id: string, x: number, z: number, top: number, name: string, tvItem = false, hostId?: string) => {
         const st = hass.states[id];
         if (!st || kindOf(id) !== "media") return;
+        if (collect) {
+          if (collect.some((c) => c.id === id)) return;
+          const tvCard = tvItem || st.attributes.device_class === "tv";
+          const live = !isUnavailable(st);
+          const rank = st.state === "playing" && live ? 5 : this.mediaCardUp(hass, id) || (live && st.state === "on" && !!st.attributes.source) ? 4 : !this.ro && (this.mediaGrace.get(id)?.until ?? 0) > Date.now() ? 2 : tvCard && live ? 1 : 0;
+          collect.push({ id, floorId: floor.id, x, z, hostId: hostId ?? hostAt(floor.furniture, x, z), rank });
+          return;
+        }
+        if (yields.has(id)) return;
         if (seenMedia.has(id)) {
           // a second speaker linked to the same player (a Sonos group or stereo pair known as one entity): it
           // plays along – its own rings, a line to the first, the one card stays with the first (#475)
@@ -1852,12 +1865,18 @@ export class Fp3dView3d extends LitElement {
         for (const f of floor.furniture) {
           if ((f.entity != null && f.entity !== "none") !== byHand) continue;
           const e = this.furnitureLinks?.get(f.id)?.entity;
-          if (e) add(floor, e, f.x, f.z, mountBase(floor, f) + f.h, f.name || furnitureName(hass, f.type), isMediaFurniture(f.type));
+          if (e) add(floor, e, f.x, f.z, mountBase(floor, f) + f.h, f.name || furnitureName(hass, f.type), isMediaFurniture(f.type), f.id);
         }
       };
-      for (const floor of b.floors) furn(floor, true);
-      for (const floor of b.floors) for (const pl of floor.placements) add(floor, pl.entity_id, pl.x, pl.z, pl.y ?? 1.1, pl.name || entityName(hass, pl.entity_id));
-      for (const floor of b.floors) furn(floor, false);
+      const walk = () => {
+        for (const floor of b.floors) furn(floor, true);
+        for (const floor of b.floors) for (const pl of floor.placements) add(floor, pl.entity_id, pl.x, pl.z, pl.y ?? 1.1, pl.name || entityName(hass, pl.entity_id));
+        for (const floor of b.floors) furn(floor, false);
+      };
+      walk();
+      yields = losers(collect);
+      collect = null;
+      walk();
     }
     // Auto Pro: a glass card over the car in its spot, in the same look as the energy and music cards
     {

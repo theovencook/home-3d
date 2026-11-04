@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- A TV reached through several integrations (several media players on one item or within half a metre) shows one now-playing card: the playing player, else a paused one with a title, else the first (#356).
 - The apex shed's end window sits in the middle of its wall (run 6).
 
 - IKEA UK pack release 5: SKRUVBY coffee table 60x60x50 cm in black-blue, with its low shelf (run 6).
