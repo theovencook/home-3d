@@ -94,7 +94,7 @@ test("the phone bottom bar: one row of 44 px squares, symbols with their names k
   assert.match(phone, /\.fp3d-overlay > \.fp3d-seg \{\s*display: none;/);
   // the star and the eye dock at the bar's start (in a row above a room sheet), except with the controls hidden
   assert.match(phone, /fp3d-view3d \{\s*--fp3d-dock-left: 8px;\s*--fp3d-dock-bottom: calc\(8px \+ env\(safe-area-inset-bottom, 0px\)\);/);
-  assert.match(phone, /\.fp3d-room-open fp3d-view3d \{\s*--fp3d-dock-bottom: calc\(55% \+ 18px\);/);
+  assert.match(phone, /\.fp3d-room-open fp3d-view3d \{\s*--fp3d-dock-bottom: calc\(var\(--fp3d-sheet-h, 55%\) \+ 18px\);/);
   assert.match(phone, /\.fp3d-clean fp3d-view3d \{\s*--fp3d-dock-left: initial;\s*--fp3d-dock-bottom: initial;/);
   // time travel shows no star: the eye and the bar close the gap
   assert.match(phone, /\.fp3d-tt fp3d-view3d \{\s*--fp3d-dock-left: -42px;/);

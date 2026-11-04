@@ -4819,8 +4819,9 @@ export class Fp3dView3d extends LitElement {
 
   private renderClock() {
     const pos = this.clock;
-    // not while walking: the stick takes the corner and the clock would sit under it (#351)
-    if (!pos || pos === "off" || !this.hass || this._walk) {
+    // not while walking: the stick takes the corner and the clock would sit under it (#351); not with a room panel
+    // open either: the clock and the weather would cover the room (#352)
+    if (!pos || pos === "off" || !this.hass || this._walk || this.panelOpen) {
       if (this.clockTimer) {
         clearInterval(this.clockTimer);
         this.clockTimer = undefined;

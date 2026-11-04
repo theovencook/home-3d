@@ -199,23 +199,12 @@ function roomPanel(canEdit: boolean, readOnly = false) {
   return { el, events };
 }
 
-test("the room panel's Edit room and Edit floor open the editor at that room and floor; not for viewers or in time travel", () => {
-  const { el, events } = roomPanel(true);
-  const out = el.render();
-  assert.match(flat(out), /fp3d-edit-room[^>]*>Edit room</);
-  assert.match(flat(out), /fp3d-edit-floor[^>]*>Edit floor</);
-  for (const h of handlers(out, /fp3d-edit-(room|floor)" @click=$/)) h();
-  assert.deepEqual(events, [
-    { type: "edit-room", detail: { floorId: "f1", roomId: "k" } },
-    { type: "edit-floor", detail: { floorId: "f1" } },
-  ]);
-  assert.doesNotMatch(flat(roomPanel(false).el.render()), /fp3d-edit-room/);
-  assert.doesNotMatch(flat(roomPanel(true, true).el.render()), /fp3d-edit-room/);
-  // the panel hands them to the editor
-  const code = src("./panel.ts");
-  assert.match(code, /@edit-room=\$\{[^\n]*this\.openInEditor\(e\.detail\.floorId, e\.detail\.roomId\)/);
-  assert.match(code, /@edit-floor=\$\{[^\n]*this\.openInEditor\(e\.detail\.floorId, null\)/);
-  assert.match(code, /ed\?\.goToRoom\(floorId, roomId\)/);
+test("the room panel has no Edit room or Edit floor buttons (#355); editing stays on the Edit tab", () => {
+  const { el } = roomPanel(true);
+  const out = flat(el.render());
+  assert.doesNotMatch(out, /fp3d-edit-room|fp3d-edit-floor/);
+  assert.doesNotMatch(src("./panel.ts"), /@edit-room=/);
+  assert.match(src("./panel.ts"), /ed\?\.goToRoom\(floorId, roomId\)/);
 });
 
 function editor(): Record<string, any> {

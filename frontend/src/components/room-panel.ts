@@ -17,7 +17,7 @@ import type { Building, Floor, Room } from "../model.ts";
 import { roofWindowsOver } from "../solar.ts";
 import { arrangePanel, groupOrder, type ArrangedPanel, type PanelGroup } from "../panel-layout.ts";
 import { controls, tokens } from "../styles.ts";
-import { FloatResize, type Edge } from "../float-panel.ts";
+import { FloatResize, SheetResize, type Edge } from "../float-panel.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
 
 const CAMERA_REFRESH_MS = 3000;
@@ -104,11 +104,14 @@ export class Fp3dRoomPanel extends LitElement {
 
   /** The panel's own size, set by dragging its edges (#267), kept per device. */
   private readonly resizer = new FloatResize(this, "room_size");
+  /** The sheet's height on phones, set by dragging its grab bar (#353), kept per device. */
+  private readonly sheetSizer = new SheetResize(this, "room_sheet");
   private readonly onWindow = () => this.resizer.apply();
 
   connectedCallback(): void {
     super.connectedCallback();
     this.resizer.load();
+    this.sheetSizer.load();
     window.addEventListener("resize", this.onWindow);
     // snapshots every few seconds are much lighter for a wall tablet than a permanent stream
     this.cameraTimer = setInterval(() => {
@@ -225,8 +228,29 @@ export class Fp3dRoomPanel extends LitElement {
     const lightsOn = lights.filter((l) => l.state === "on");
     const editable = this.canEdit && !this.readOnly && !!room.area_id;
     const editing = editable && this._editing;
+    const sheet = this.sheetSizer;
     return html`<section class="fp3d-rp ${this.readOnly ? "fp3d-rp-ro" : ""}" aria-label=${room.name}>
-      <header class="fp3d-rp-head">
+      <div
+        class="fp3d-rp-grab"
+        role="separator"
+        aria-orientation="horizontal"
+        tabindex="0"
+        aria-label=${this.t("room_sheet_hint")}
+        title=${this.t("room_sheet_hint")}
+        @pointerdown=${(e: PointerEvent) => sheet.begin(e)}
+        @pointermove=${(e: PointerEvent) => sheet.move(e)}
+        @pointerup=${() => sheet.end()}
+        @pointercancel=${() => sheet.end()}
+        @keydown=${(e: KeyboardEvent) => sheet.key(e)}
+        @dblclick=${() => sheet.reset()}
+      ><span aria-hidden="true"></span></div>
+      <header
+        class="fp3d-rp-head"
+        @pointerdown=${(e: PointerEvent) => sheet.begin(e)}
+        @pointermove=${(e: PointerEvent) => sheet.move(e)}
+        @pointerup=${() => sheet.end()}
+        @pointercancel=${() => sheet.end()}
+      >
         <div>
           <h2 tabindex="-1">${room.name}</h2>
           ${facts.length ? html`<p class="fp3d-rp-facts">${facts.join(" · ")}</p>` : nothing}
@@ -241,7 +265,6 @@ export class Fp3dRoomPanel extends LitElement {
                 )}
               </div>`
             : nothing}
-          ${this.renderEditLinks(room)}
         </div>
         ${editable
           ? html`<button class="fp3d-btn fp3d-rp-small fp3d-rp-edit" aria-pressed=${editing ? "true" : "false"} @click=${() => this.toggleEdit()}>
@@ -643,16 +666,6 @@ export class Fp3dRoomPanel extends LitElement {
    * "Edit room" and "Edit floor" (#249, editors): the editor opens on this floor with the room chosen, or at the floor's
    * settings. Not while travelling in time or on a wall tablet (the panel hands canEdit false there).
    */
-  private renderEditLinks(room: Room) {
-    if (!this.canEdit || this.readOnly) return nothing;
-    const floorId = this.floor?.id ?? null;
-    const go = (type: string, detail: object) => this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
-    return html`<div class="fp3d-rp-links">
-      <button class="fp3d-btn fp3d-rp-small fp3d-edit-room" @click=${() => go("edit-room", { floorId, roomId: room.id })}>${this.t("edit_room")}</button>
-      ${floorId ? html`<button class="fp3d-btn fp3d-rp-small fp3d-edit-floor" @click=${() => go("edit-floor", { floorId })}>${this.t("edit_floor")}</button>` : nothing}
-    </div>`;
-  }
-
   private fire(type: string): void {
     this.dispatchEvent(new CustomEvent(type, { bubbles: true, composed: true }));
   }
@@ -699,10 +712,37 @@ export class Fp3dRoomPanel extends LitElement {
         background: var(--fp3d-accent);
         opacity: 0.45;
       }
-      /* a sheet (phones, portrait tablets) keeps its own size: no edges to drag */
+      /* the sheet's grab bar (#353): phones and portrait tablets only */
+      .fp3d-rp-grab {
+        display: none;
+      }
+      /* a sheet (phones, portrait tablets) has no edges to drag: its grab bar sets its height (#353) */
       @container fp3d ((max-width: 700px) or ((orientation: portrait) and (max-width: 1000px))) {
         .fp3d-rz {
           display: none;
+        }
+        .fp3d-rp-grab {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          flex: none;
+          height: 22px;
+          cursor: ns-resize;
+          touch-action: none;
+        }
+        .fp3d-rp-grab span {
+          width: 40px;
+          height: 5px;
+          border-radius: 3px;
+          background: var(--fp3d-muted);
+          opacity: 0.6;
+        }
+        .fp3d-rp-grab:focus-visible {
+          outline: 2px solid var(--fp3d-accent);
+          outline-offset: -2px;
+        }
+        .fp3d-rp-head {
+          touch-action: none;
         }
       }
       .fp3d-rp {
@@ -746,12 +786,6 @@ export class Fp3dRoomPanel extends LitElement {
       .fp3d-rp-head > div {
         flex: 1;
         min-width: 0;
-      }
-      .fp3d-rp-links {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 8px;
       }
       .fp3d-rp-sheets {
         display: flex;

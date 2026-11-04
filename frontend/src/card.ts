@@ -42,6 +42,7 @@ export class Floorplan3dCard extends LitElement {
     hass: { attribute: false },
     _config: { state: true },
     _roomId: { state: true },
+    _shutRoom: { state: true },
     _floorId: { state: true },
     _walls: { state: true },
     _heat: { state: true },
@@ -76,6 +77,8 @@ export class Floorplan3dCard extends LitElement {
   }
   private declare _config: CardConfig;
   private declare _roomId: string | null;
+  /** The room whose panel was closed with its X (#354): the room stays selected and in view, only the panel goes. */
+  private declare _shutRoom: string | null;
   /** The configured start room was applied once the building arrived. */
   private roomApplied = false;
   /** Floor chosen in the card (null: the house; undefined: none chosen, the configured floor applies). */
@@ -114,6 +117,7 @@ export class Floorplan3dCard extends LitElement {
   constructor() {
     super();
     this._roomId = null;
+    this._shutRoom = null;
     this._floorId = undefined;
     this._walls = savedWalls();
     this._heat = null;
@@ -372,6 +376,8 @@ clearTimeout(this.cleanTimer);
   }
 
   protected willUpdate(changed: PropertyValues): void {
+    // another room (or none): its panel opens again (#354)
+    if (changed.has("_roomId") && this._shutRoom !== this._roomId) this._shutRoom = null;
     if (changed.has("hass") && this.rawHass) {
       this.takeHass(this.rawHass);
       // a language other than English: its texts are loaded first, then everything renders
@@ -475,7 +481,7 @@ clearTimeout(this.cleanTimer);
           : "calc(100vh - var(--header-height, 56px) - 2px)"
         : `${height}px`;
     // the bar of switches at the bottom (the back button belongs to it)
-    const bar = !!b && !this._clean && (canGoBack || ((!!c?.controls || !!c?.time_travel) && !(this._roomId && c.room_panel !== false)));
+    const bar = !!b && !this._clean && (canGoBack || ((!!c?.controls || !!c?.time_travel) && !(this._roomId && this._shutRoom !== this._roomId && c.room_panel !== false)));
     const tt = this.tt.active;
     // a sample / demo home: devices this Home Assistant lacks show fixed demo states (#100)
     const hass = this.viewHass(this.rawHass!, b);
@@ -524,7 +530,7 @@ clearTimeout(this.cleanTimer);
               .keepView=${c?.keep_view === true}
               .angleLock=${c?.angle_lock === true}
               .floorStack=${c?.floor_stack ?? "dim"}
-              .panelOpen=${!!this._roomId && c?.room_panel !== false}
+              .panelOpen=${!!this._roomId && this._shutRoom !== this._roomId && c?.room_panel !== false}
               .alerts=${c?.alerts !== false}
               .householdCard=${c?.household_card !== false}
               .rackCards=${c?.rack_cards !== false}
@@ -560,6 +566,11 @@ clearTimeout(this.cleanTimer);
                   return;
                 }
                 if (!e.detail.roomId) return;
+                // the room whose panel was closed (#354): a tap opens its panel again
+                if (e.detail.roomId === this._roomId && this._shutRoom === this._roomId) {
+                  this._shutRoom = null;
+                  return;
+                }
                 this._roomId = e.detail.roomId === this._roomId ? null : e.detail.roomId;
               }}
               @floor-tap=${(e: CustomEvent<{ floorId: string | null }>) => {
@@ -570,7 +581,7 @@ clearTimeout(this.cleanTimer);
               @plan-change=${this.onPlanChange}
             ></fp3d-view3d>`
           : html`<p class="fp3d-card-msg">${this.data.error ?? (b ? translate(this.hass, "no_building") : translate(this.hass, "loading"))}</p>`}
-        ${this._roomId && b && this._config?.room_panel !== false
+        ${this._roomId && this._shutRoom !== this._roomId && b && this._config?.room_panel !== false
           ? (need(loadRoomPanel), html`<fp3d-room-panel
               @camera-look=${(e: CustomEvent<{ entity: string }>) => this.view3d()?.lookThrough(e.detail.entity)}
               class="fp3d-card-panel"
@@ -585,17 +596,17 @@ clearTimeout(this.cleanTimer);
               .confirmEntities=${confirmEntities(this.hass, b.floors)}
               .sheets=${this._roomId ? (this.view3d()?.roomSheets(this._roomId) ?? null) : null}
               @sheet-open=${(e: CustomEvent<{ id: string }>) => this._roomId && this.view3d()?.openRoomSheet(this._roomId, e.detail.id)}
-              @close=${() => (this._roomId = null)}
+              @close=${() => (this._shutRoom = this._roomId)}
             ></fp3d-room-panel>`)
           : nothing}
         ${bar && b ? this.renderBar(b, canGoBack, flat, walls, explode, floorId, heats, heat, t) : nothing}
         ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session}></fp3d-time-bar>` : nothing}
-        ${c?.fullscreen_button && !this._clean && !(this._roomId && c.room_panel !== false)
+        ${c?.fullscreen_button && !this._clean && !(this._roomId && this._shutRoom !== this._roomId && c.room_panel !== false)
           ? html`<button class="fp3d-card-full" title=${t(this._fullscreen ? "fullscreen_exit" : "fullscreen")} aria-label=${t(this._fullscreen ? "fullscreen_exit" : "fullscreen")} @click=${() => this.toggleFullscreen()}>
               ${this._fullscreen ? "✕" : uiIcon("expand")}
             </button>`
           : nothing}
-        ${c?.dashboard && !this._clean && !(this._roomId && c.room_panel !== false)
+        ${c?.dashboard && !this._clean && !(this._roomId && this._shutRoom !== this._roomId && c.room_panel !== false)
           ? html`<button class="fp3d-card-full fp3d-card-dash ${c.fullscreen_button ? "fp3d-card-dash-2" : ""}" title=${c.dashboard_label || c.dashboard} aria-label=${c.dashboard_label || c.dashboard} @click=${() => this.openDashboard(c.dashboard!)}>
               ${c.dashboard_label ? html`<span>${c.dashboard_label}</span>` : "⌂"}
             </button>`
@@ -841,7 +852,8 @@ clearTimeout(this.cleanTimer);
           right: 8px;
           bottom: 8px;
           width: auto;
-          height: 55%;
+          /* dragged taller or shorter by its grab bar (#353) */
+          height: var(--fp3d-sheet-h, 55%);
           justify-content: flex-end;
         }
         /* the time bar takes two rows here (#257) */

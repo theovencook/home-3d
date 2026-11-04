@@ -2,7 +2,7 @@
 // read defensively.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clampOffset, clampSize, parseOffset, parseSize } from "./float-panel.ts";
+import { clampOffset, clampSheet, clampSize, parseOffset, parseSheet, parseSize } from "./float-panel.ts";
 
 const stage = { left: 0, top: 0, right: 1000, bottom: 600 };
 
@@ -37,4 +37,15 @@ test("stored values that are not numbers are ignored", () => {
   assert.equal(parseOffset(null), null);
   assert.deepEqual(parseSize('{"w":400,"h":500}'), { w: 400, h: 500 });
   assert.equal(parseSize('{"w":0,"h":500}'), null);
+});
+
+test("the room sheet's height stays between 20 % and 90 % of the stage (#353)", () => {
+  assert.equal(clampSheet(0.05), 0.2);
+  assert.equal(clampSheet(1.4), 0.9);
+  assert.equal(clampSheet(0.6123), 0.612);
+  assert.equal(parseSheet("0.7"), 0.7);
+  assert.equal(parseSheet("2"), 0.9);
+  assert.equal(parseSheet("nope"), null);
+  assert.equal(parseSheet(null), null);
+  assert.equal(parseSheet("0"), null);
 });

@@ -118,6 +118,7 @@ export class Floorplan3dPanel extends LitElement {
     _editorError: { state: true },
     _floorId: { state: true },
     _roomId: { state: true },
+    _shutRoom: { state: true },
     _wallMode: { state: true },
     _explode: { state: true },
     _plan2d: { state: true },
@@ -198,6 +199,8 @@ export class Floorplan3dPanel extends LitElement {
   private declare _editorError: string | null;
   private declare _floorId: string | null;
   private declare _roomId: string | null;
+  /** The room whose panel was closed with its X (#354): the room stays selected and in view, only the panel goes. */
+  private declare _shutRoom: string | null;
   private declare _wallMode: WallMode;
   private declare _explode: boolean;
   /** The read-only 2D plan (#41) instead of the 3D view; remembered per browser, "?view=2d" in the address opens it. */
@@ -301,6 +304,7 @@ export class Floorplan3dPanel extends LitElement {
     this._editorError = null;
     this._floorId = null;
     this._roomId = null;
+    this._shutRoom = null;
     this.readPrefs();
     this._furnish = false;
     this._selFurniture = null;
@@ -429,6 +433,8 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   protected willUpdate(changed: PropertyValues): void {
+    // another room (or none): its panel opens again (#354)
+    if (changed.has("_roomId") && this._shutRoom !== this._roomId) this._shutRoom = null;
     if (changed.has("hass") && this.rawHass) this.takeHass(this.rawHass);
     // a language other than English: its texts are loaded first, then everything renders
     if (changed.has("hass") && this.hass && !languageReady(this.hass.language)) void loadLanguage(this.hass.language, this.hass).then(() => this.requestUpdate());
@@ -675,7 +681,17 @@ export class Floorplan3dPanel extends LitElement {
       return;
     }
     if (!roomId) return;
+    // the room whose panel was closed (#354): a tap opens its panel again
+    if (roomId === this._roomId && this._shutRoom === roomId) {
+      this._shutRoom = null;
+      return;
+    }
     this._roomId = roomId === this._roomId ? null : roomId;
+  }
+
+  /** A room is selected and its panel is showing (closing the panel keeps the room, #354). */
+  private get roomPanelShown(): boolean {
+    return !!this._roomId && this._shutRoom !== this._roomId;
   }
 
   private setPlan2d(on: boolean): void {
@@ -1445,6 +1461,7 @@ export class Floorplan3dPanel extends LitElement {
                     @room-pick=${(e: CustomEvent<{ floorId: string; roomId: string }>) => {
                       if (many) this._floorId = e.detail.floorId;
                       this._roomId = e.detail.roomId;
+                      this._shutRoom = null;
                       this._roomsOpen = false;
                       void this.focusRoomPanel();
                     }}
@@ -1569,7 +1586,7 @@ export class Floorplan3dPanel extends LitElement {
     </div>`;
     return html`
       ${this._clean || (this._tablet && b.floors.length < 2) ? nothing : this.renderFloorBar(b, floor)}
-      <div class="fp3d-stage-wrap ${this._roomId ? "fp3d-room-open" : ""} ${this._controlsRight ? "fp3d-side-right" : ""} ${tt ? "fp3d-tt" : ""} ${this._cameraWall && !tt ? "fp3d-cams-open" : ""}">
+      <div class="fp3d-stage-wrap ${this.roomPanelShown ? "fp3d-room-open" : ""} ${this._controlsRight ? "fp3d-side-right" : ""} ${tt ? "fp3d-tt" : ""} ${this._cameraWall && !tt ? "fp3d-cams-open" : ""}">
         <!-- the floor bar picks the floor: the floor pictures beside the 3D view are a second picker, shown when Settings
              › Screen and controls says so (#249, #250; the card keeps its own switch) -->
         <fp3d-view3d
@@ -1615,7 +1632,7 @@ export class Floorplan3dPanel extends LitElement {
           .director=${this._director}
           .voice=${this._voiceHere}
           .screen=${this._screen || null}
-          .panelOpen=${!!this._roomId}
+          .panelOpen=${this.roomPanelShown}
           .floorId=${b.floors.length > 1 ? this._floorId : (b.floors[0]?.id ?? null)}
           .roomId=${this._roomId}
           .wallMode=${this._wallMode}
@@ -1646,7 +1663,7 @@ export class Floorplan3dPanel extends LitElement {
           @back=${() => this.back()}
           @plan-change=${this.onPlanChange}
         ></fp3d-view3d>
-        ${this._roomId
+        ${this.roomPanelShown
           ? (need(loadRoomPanel), html`<fp3d-room-panel
               class="fp3d-room-panel"
               @camera-look=${(e: CustomEvent<{ entity: string }>) => this.view3d()?.lookThrough(e.detail.entity)}
@@ -1661,9 +1678,7 @@ export class Floorplan3dPanel extends LitElement {
               .confirmEntities=${confirmEntities(this.hass, b.floors)}
               .sheets=${this._roomId ? (this.view3d()?.roomSheets(this._roomId) ?? null) : null}
               @sheet-open=${(e: CustomEvent<{ id: string }>) => this._roomId && this.view3d()?.openRoomSheet(this._roomId, e.detail.id)}
-              @close=${() => (this._roomId = null)}
-              @edit-room=${(e: CustomEvent<{ floorId: string | null; roomId: string }>) => this.openInEditor(e.detail.floorId, e.detail.roomId)}
-              @edit-floor=${(e: CustomEvent<{ floorId: string | null }>) => this.openInEditor(e.detail.floorId, null)}
+              @close=${() => (this._shutRoom = this._roomId)}
             ></fp3d-room-panel>`)
           : nothing}
         ${this.tt.session ? html`<fp3d-time-bar .session=${this.tt.session} ?demo=${showsDemo(hass)}></fp3d-time-bar>` : nothing}
@@ -2275,7 +2290,8 @@ export class Floorplan3dPanel extends LitElement {
           right: 8px;
           bottom: 8px;
           width: auto;
-          height: 55%;
+          /* dragged taller or shorter by its grab bar (#353) */
+          height: var(--fp3d-sheet-h, 55%);
           justify-content: flex-end;
         }
         .fp3d-room-open .fp3d-overlay,
@@ -2284,7 +2300,7 @@ export class Floorplan3dPanel extends LitElement {
         }
         /* the view's own buttons (search, eye) step up above the sheet */
         .fp3d-room-open fp3d-view3d {
-          --fp3d-bottom-inset: calc(55% + 8px);
+          --fp3d-bottom-inset: calc(var(--fp3d-sheet-h, 55%) + 8px);
         }
         /* phones: the time bar takes two rows (its height here, the safe area included); the switches, the time
            travel chip among them, stay on the screen above it (#257) */
@@ -2475,8 +2491,8 @@ export class Floorplan3dPanel extends LitElement {
         }
         /* a room sheet: the pair waits in one row above it */
         .fp3d-room-open fp3d-view3d {
-          --fp3d-dock-bottom: calc(55% + 18px);
-          --fp3d-dock-menu: calc(55% + 70px);
+          --fp3d-dock-bottom: calc(var(--fp3d-sheet-h, 55%) + 18px);
+          --fp3d-dock-menu: calc(var(--fp3d-sheet-h, 55%) + 70px);
         }
         .fp3d-clean fp3d-view3d {
           --fp3d-dock-left: initial;

@@ -247,3 +247,91 @@ export class FloatResize {
     this.apply();
   }
 }
+
+/** A sheet height (a share of the stage) between 20 % and 90 %, or null when it is not a usable number. */
+export function clampSheet(frac: number): number {
+  return Math.round(Math.min(SheetResize.MAX, Math.max(SheetResize.MIN, frac)) * 1000) / 1000;
+}
+export const parseSheet = (s: string | null): number | null => {
+  const n = s === null ? NaN : Number(s);
+  return Number.isFinite(n) && n > 0 ? clampSheet(n) : null;
+};
+
+/**
+ * The bottom sheet's height on phones and portrait tablets (#353): dragged by its grab bar (or the empty part of its
+ * header), as a share of the stage, kept per device. It is set as `--fp3d-sheet-h` on the element holding both the
+ * sheet and the view, so the view's own buttons step up with it; a double tap puts the stylesheet's height back.
+ */
+export class SheetResize {
+  static readonly MIN = 0.2;
+  static readonly MAX = 0.9;
+  frac: number | null = null;
+  private drag: { py: number; h: number; stage: number } | null = null;
+
+  private readonly host: HTMLElement;
+  private readonly name: string;
+
+  constructor(host: HTMLElement, name: string) {
+    this.host = host;
+    this.name = name;
+  }
+
+  /** The sheet's height only counts as a sheet (`top: auto`); elsewhere the panel keeps its own size. */
+  get sheet(): boolean {
+    return getComputedStyle(this.host).top === "auto";
+  }
+
+  load(): void {
+    this.frac = parseSheet(read(this.name));
+    this.apply();
+  }
+
+  apply(): void {
+    const at = this.host.parentElement;
+    if (!at) return;
+    if (this.frac === null) at.style.removeProperty("--fp3d-sheet-h");
+    else at.style.setProperty("--fp3d-sheet-h", `${Math.round(this.frac * 1000) / 10}%`);
+  }
+
+  /** Pointer down on the grab bar or the header: buttons and fields keep their own clicks. */
+  begin(e: PointerEvent): void {
+    if (e.button !== 0 || !this.sheet || (e.target as HTMLElement).closest?.("button, input, select, a")) return;
+    const stage = this.host.parentElement?.clientHeight ?? window.innerHeight;
+    if (!stage) return;
+    this.drag = { py: e.clientY, h: this.host.getBoundingClientRect().height, stage };
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+  }
+
+  move(e: PointerEvent): void {
+    const d = this.drag;
+    if (!d) return;
+    this.frac = clampSheet((d.h + d.py - e.clientY) / d.stage);
+    this.apply();
+  }
+
+  end(): void {
+    if (!this.drag) return;
+    this.drag = null;
+    write(this.name, this.frac === null ? null : String(this.frac));
+  }
+
+  /** Arrow up makes the sheet taller, arrow down shorter: 5 % of the stage a press. */
+  key(e: KeyboardEvent): void {
+    const step = { ArrowUp: 0.05, ArrowDown: -0.05 }[e.key];
+    if (!step || !this.sheet) return;
+    e.preventDefault();
+    const stage = this.host.parentElement?.clientHeight || window.innerHeight;
+    const cur = this.frac ?? this.host.getBoundingClientRect().height / stage;
+    this.frac = clampSheet(cur + step);
+    this.apply();
+    write(this.name, String(this.frac));
+  }
+
+  reset(): void {
+    this.drag = null;
+    this.frac = null;
+    write(this.name, null);
+    this.apply();
+  }
+}

@@ -201,6 +201,7 @@ const en = {
   float_snap_back: "Put the panel back in its place",
   camera_wall_move: "Drag to move, drag an edge to resize, double click to reset",
   room_resize_hint: "Drag the edge to resize the panel; double-click to reset",
+  room_sheet_hint: "Drag up or down to resize the panel; double-tap to reset",
   panel_all_open: "All up",
   panel_all_close: "All down",
   central: "Central: all lights, blinds and favourites",
