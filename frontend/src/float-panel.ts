@@ -151,6 +151,12 @@ export class FloatDrag {
   }
 }
 
+/**
+ * The panel is a bottom sheet (phones, portrait tablets): its stylesheet sets `--fp3d-sheet: 1` on the host in the
+ * sheet layout. (`top` cannot tell: a computed `top` of an absolutely placed element is its used value in pixels.)
+ */
+export const isSheet = (host: HTMLElement): boolean => getComputedStyle(host).getPropertyValue("--fp3d-sheet").trim() === "1";
+
 /** The room panel's own size (#267): remembered per device; null means the stylesheet's size. */
 export const savedSize = (name: string) => parseSize(read(name));
 export const saveSize = (name: string, size: { w: number; h: number } | null) => write(name, size ? JSON.stringify(size) : null);
@@ -160,7 +166,7 @@ export type Edge = "w" | "s" | "sw";
 /**
  * Resizes a panel that is anchored at its top right corner by dragging its left edge, its bottom edge or the corner
  * between them (#267). The size is set inline on the host, kept inside the stage and per device, and given up (the
- * stylesheet's own size) when the panel is a bottom sheet (`top: auto`).
+ * stylesheet's own size) when the panel is a bottom sheet (isSheet).
  */
 export class FloatResize {
   size: { w: number; h: number } | null = null;
@@ -177,7 +183,7 @@ export class FloatResize {
 
   /** A sheet (phones, portrait tablets): the stylesheet decides, the saved size waits. */
   get sheet(): boolean {
-    return getComputedStyle(this.host).top === "auto";
+    return isSheet(this.host);
   }
 
   load(): void {
@@ -276,9 +282,9 @@ export class SheetResize {
     this.name = name;
   }
 
-  /** The sheet's height only counts as a sheet (`top: auto`); elsewhere the panel keeps its own size. */
+  /** Only a sheet is dragged by its grab bar; elsewhere the panel keeps its own size. */
   get sheet(): boolean {
-    return getComputedStyle(this.host).top === "auto";
+    return isSheet(this.host);
   }
 
   load(): void {

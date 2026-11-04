@@ -718,6 +718,10 @@ export class Fp3dRoomPanel extends LitElement {
       }
       /* a sheet (phones, portrait tablets) has no edges to drag: its grab bar sets its height (#353) */
       @container fp3d ((max-width: 700px) or ((orientation: portrait) and (max-width: 1000px))) {
+        /* tells the size controllers this is a sheet (float-panel.ts isSheet) */
+        :host {
+          --fp3d-sheet: 1;
+        }
         .fp3d-rz {
           display: none;
         }

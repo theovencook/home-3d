@@ -124,3 +124,10 @@ test("the sheet takes its dragged height from --fp3d-sheet-h, the view's buttons
   assert.match(panelCss, /--fp3d-bottom-inset: calc\(var\(--fp3d-sheet-h, 55%\) \+ 8px\)/);
   assert.match(src("./card.ts"), /height: var\(--fp3d-sheet-h, 55%\)/);
 });
+
+test("the sheet is told by the stylesheet's --fp3d-sheet, not by top (a computed top is in pixels) (#353)", () => {
+  const fp = src("./float-panel.ts");
+  assert.doesNotMatch(fp, /\.top === "auto"/);
+  assert.match(fp, /getPropertyValue\("--fp3d-sheet"\)/);
+  assert.match(src("./components/room-panel.ts"), /:host \{\s*--fp3d-sheet: 1;\s*\}/);
+});
