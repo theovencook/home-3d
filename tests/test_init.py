@@ -511,8 +511,9 @@ async def test_panel_and_card_are_registered_and_removed(hass: HomeAssistant, mo
     mock_frontend["register"].assert_awaited_once()
     assert mock_frontend["register"].await_args.kwargs["frontend_url_path"] == "home_3d"
     url = mock_frontend["add_js"].call_args.args[1]
-    # one URL for the bundle (#218): the extra module and the panel's module_url are the same, with the build id (#340)
-    assert url == f"/api/home_3d/static/home-3d.js?v={BUILD}"
+    # one URL for every build (#218, #357): the extra module and the panel's module_url are the start file, which picks
+    # the build; a page the service worker kept from before an update names the same module
+    assert url == "/api/home_3d/static/home-3d.js"
     assert mock_frontend["register"].await_args.kwargs["module_url"] == url
 
     assert await hass.config_entries.async_unload(entry.entry_id)
@@ -521,15 +522,17 @@ async def test_panel_and_card_are_registered_and_removed(hass: HomeAssistant, mo
     mock_frontend["remove_js"].assert_called_once_with(hass, url)
 
 
-async def test_the_card_resource_and_the_loader_carry_the_build_id(hass: HomeAssistant, mock_frontend) -> None:
-    """#340: the dashboard resource is the loader under the build id, and the loader imports the bundle under it too, so
-    an update changes every URL a cache could hold. Without a build file (a development checkout) the URLs are plain."""
+async def test_the_card_resource_and_the_loader_keep_one_url_for_every_build(
+    hass: HomeAssistant, mock_frontend
+) -> None:
+    """#357 (replaces #340's versioned URLs): the dashboard resource is the loader's plain URL, with a build file and
+    without one, so a dashboard opened before the resource is updated after a restart names the same loader."""
     with (
         patch("custom_components.home_3d.read_build", return_value=BUILD),
         patch("custom_components.home_3d.async_schedule_card_resource") as schedule,
     ):
         await _setup(hass)
-    assert schedule.call_args.args[1] == f"/api/home_3d/static/home-3d-loader.js?v={BUILD}"
+    assert schedule.call_args.args[1] == "/api/home_3d/static/home-3d-loader.js"
     with (
         patch("custom_components.home_3d.read_build", return_value=None),
         patch("custom_components.home_3d.async_schedule_card_resource") as schedule,
@@ -540,25 +543,72 @@ async def test_the_card_resource_and_the_loader_carry_the_build_id(hass: HomeAss
     assert mock_frontend["register"].await_args.kwargs["module_url"] == "/api/home_3d/static/home-3d.js"
 
 
-async def test_the_versioned_entry_is_kept_and_the_old_urls_still_work(hass: HomeAssistant, hass_client) -> None:
-    """#340: the entry and the loader under the current build id are immutable; the plain URL and an old id still
-    work (a page or a dashboard resource from before an update) and are checked on each load."""
+def _frontend_folder(tmp_path: Path, build: str) -> Path:
+    """A frontend folder with a start file, the app of `build` and its build.json."""
+    (tmp_path / "home-3d.js").write_text('await import("home-3d-app.js");', encoding="utf-8")
+    (tmp_path / "home-3d-app.js").write_text(f'const FRONTEND_BUILD = "{build}";', encoding="utf-8")
+    (tmp_path / "build.json").write_text(f'{{"build": "{build}"}}', encoding="utf-8")
+    return tmp_path
+
+
+async def test_only_the_app_under_the_current_build_is_kept(hass: HomeAssistant, hass_client, tmp_path: Path) -> None:
+    """#340's proxy case with #357: the one URL a cache may keep for long is the app under the current build id, which
+    only the start file names after asking which build is served. A proxy that turns no-cache into hours can then keep
+    nothing that outlives an update: the start file and the loader are the same for every build, and the app's URL
+    changes with it. Chunks stay immutable (test_frontend_files_named_by_their_content_are_kept)."""
+    folder = _frontend_folder(tmp_path, BUILD)
     await _setup(hass)
     client = await hass_client()
     immutable = "public, max-age=31536000, immutable"
-    with patch("custom_components.home_3d.read_build", return_value=BUILD):
-        res = await client.get(f"/api/home_3d/static/home-3d.js?v={BUILD}")
+    with (
+        patch("custom_components.home_3d.FRONTEND_DIR", folder),
+        patch("custom_components.home_3d.read_build", return_value=BUILD),
+    ):
+        res = await client.get(f"/api/home_3d/static/home-3d-app.js?v={BUILD}")
         assert res.status == 200
         assert res.headers["Cache-Control"] == immutable
-        loader = await client.get(f"/api/home_3d/static/home-3d-loader.js?v={BUILD}")
-        assert loader.headers["Cache-Control"] == immutable
-        assert f'const url = "/api/home_3d/static/home-3d.js?v={BUILD}";' in await loader.text()
-        for old in ("/api/home_3d/static/home-3d.js", "/api/home_3d/static/home-3d.js?v=ffffffffffff"):
-            res = await client.get(old)
+        # the app without the id or with an old one: the current file, checked on each load
+        for other in ("/api/home_3d/static/home-3d-app.js", "/api/home_3d/static/home-3d-app.js?v=ffffffffffff"):
+            res = await client.get(other)
             assert res.status == 200
             assert res.headers["Cache-Control"] == "no-cache"
-        assert (await client.get("/api/home_3d/static/home-3d-loader.js")).headers["Cache-Control"] == "no-cache"
-        assert (await client.get(f"/home_3d_static/home-3d.js?v={BUILD}")).status == 200
+        # the start file and the loader are never kept, whatever `v` an old page or resource puts on them
+        for start in ("home-3d.js", f"home-3d.js?v={BUILD}", "home-3d-loader.js", f"home-3d-loader.js?v={BUILD}"):
+            assert (await client.get(f"/api/home_3d/static/{start}")).headers["Cache-Control"] == "no-cache", start
+        assert (await client.get(f"/home_3d_static/home-3d-app.js?v={BUILD}")).status == 200
+        # a deploy that wrote build.json before the app: the old app is not kept under the new build's URL
+        (folder / "home-3d-app.js").write_text('const FRONTEND_BUILD = "ffffffffffff";', encoding="utf-8")
+        res = await client.get(f"/api/home_3d/static/home-3d-app.js?v={BUILD}")
+        assert res.headers["Cache-Control"] == "no-cache"
+
+
+async def test_a_page_naming_the_previous_build_gets_the_current_one(
+    hass: HomeAssistant, hass_client, tmp_path: Path
+) -> None:
+    """#357: a page Home Assistant's service worker kept, or a dashboard opened before the resource was updated, names
+    the previous build's entry and loader (`?v=<old>`). Both are answered with the start file and the loader of now
+    (never kept), the loader imports the start file, and build.json names the current build: so the next load imports
+    `home-3d-app.js?v=<current>`, the current build's code."""
+    folder = _frontend_folder(tmp_path, BUILD)
+    await _setup(hass)
+    client = await hass_client()
+    old = "ffffffffffff"
+    with (
+        patch("custom_components.home_3d.FRONTEND_DIR", folder),
+        patch("custom_components.home_3d.read_build", return_value=BUILD),
+    ):
+        entry = await client.get(f"/api/home_3d/static/home-3d.js?v={old}")
+        assert entry.status == 200
+        assert entry.headers["Cache-Control"] == "no-cache"
+        assert await entry.text() == (folder / "home-3d.js").read_text(encoding="utf-8")
+        loader = await client.get(f"/api/home_3d/static/home-3d-loader.js?v={old}")
+        assert loader.headers["Cache-Control"] == "no-cache"
+        assert 'const url = "/api/home_3d/static/home-3d.js";' in await loader.text()
+        build = await client.get(f"/api/home_3d/static/build.json?t={old}")
+        assert build.headers["Cache-Control"] == "no-cache"
+        assert (await build.json())["build"] == BUILD
+        app = await client.get(f"/api/home_3d/static/home-3d-app.js?v={BUILD}")
+        assert f'"{BUILD}"' in await app.text()
 
 
 async def test_the_bundle_keeps_its_url_across_a_reload(hass: HomeAssistant, mock_frontend) -> None:

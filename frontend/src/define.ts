@@ -16,6 +16,12 @@
 // then keeps using the browser's definition for those tags and builds them again. A copy of an older build keeps no
 // record: a tag the browser already builds a class for is carried over with that class (see builtByTheBrowser).
 // A later copy never defines its own class for a tag that is taken, so only one copy's elements are ever built.
+//
+// One build per page (#357): the first copy of the main bundle to define an element claims the page for its build. A
+// copy of another build (a page that named an older entry, next to the current one) then defines nothing at all, not
+// even the tags the first one has no class for, so the panel and the card never mix two builds; main.ts sees that
+// (mayDefine) and gets the page onto the current build. A copy of the same build is a second copy as above. A copy that
+// keeps no claim (a build before #357) but already defined our elements counts as another build.
 
 interface Defined {
   cls: CustomElementConstructor;
@@ -29,10 +35,43 @@ interface Shared {
 }
 
 const KEY = Symbol.for("home-3d.custom-elements");
+/** The build that claimed the page (#357), on the page for every copy to see. */
+const CLAIM = Symbol.for("home-3d.build");
+/** The elements an older copy defines first (the ones Home Assistant asks for). */
+const OURS = ["home-3d-panel", "home-3d-card"];
+
+declare const __FP3D_BUILD__: string;
+/** This copy's build (build.mjs); "dev" in tests and in the bundles built without it (they load from the main one and
+ * take no part in the claim). */
+export const OWN_BUILD = typeof __FP3D_BUILD__ === "string" ? __FP3D_BUILD__ : "dev";
+/** Whether this copy may define elements, once decided. */
+let verdict: boolean | undefined;
 
 function shared(): Shared {
   const page = globalThis as unknown as Record<symbol, Shared | undefined>;
   return (page[KEY] ??= { defined: new Map(), watching: false });
+}
+
+/**
+ * Whether this copy may define elements (#357): the page is unclaimed and no older copy defined ours, or it is claimed
+ * by this build. Decided once, at this copy's first define; the first copy's build is put on the page.
+ */
+export function mayDefine(): boolean {
+  if (verdict !== undefined) return verdict;
+  if (OWN_BUILD === "dev") return (verdict = true);
+  const page = globalThis as unknown as Record<symbol, string | undefined>;
+  const claimed = page[CLAIM];
+  if (claimed !== undefined) return (verdict = claimed === OWN_BUILD);
+  const registry = globalThis.customElements;
+  const older = shared().defined.size > 0 || OURS.some((tag) => registry?.get(tag) || builtByTheBrowser(tag, undefined));
+  if (older) return (verdict = false);
+  page[CLAIM] = OWN_BUILD;
+  return (verdict = true);
+}
+
+/** The build that claimed the page, undefined before any did (or for a build before #357). */
+export function pageBuild(): string | undefined {
+  return (globalThis as unknown as Record<symbol, string | undefined>)[CLAIM];
 }
 
 /** Defines the elements defined in an earlier registry in the current one, once `window.customElements` changed. */
@@ -57,7 +96,7 @@ export function adoptElements(): void {
  * newer one). The browser keeps building that class for the tag whatever is defined later, so it is the one the new
  * registry has to know. Undefined when the browser has nothing for the tag (a plain element comes back).
  */
-function builtByTheBrowser(tag: string, cls: CustomElementConstructor): CustomElementConstructor | undefined {
+function builtByTheBrowser(tag: string, cls: CustomElementConstructor | undefined): CustomElementConstructor | undefined {
   if (typeof document === "undefined") return undefined;
   let probe: Element;
   try {
@@ -73,8 +112,9 @@ function builtByTheBrowser(tag: string, cls: CustomElementConstructor): CustomEl
 }
 
 /** `customElements.define`, once per tag (a second copy of the bundle leaves the first one's), see above. True when
- * this call defined it. */
+ * this call defined it; a copy of another build than the page's defines nothing (#357). */
 export function defineElement(tag: string, cls: CustomElementConstructor): boolean {
+  if (!mayDefine()) return false;
   adoptElements();
   const registry = globalThis.customElements;
   if (registry.get(tag)) return false;

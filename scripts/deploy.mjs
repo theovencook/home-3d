@@ -46,5 +46,7 @@ if (existsSync(target)) {
     }
   }
 }
-for (const rel of wanted) cpSync(join(source, rel), join(target, rel), { force: true });
+// build.json last (#357): until it names the new build, the start file imports the app it had before
+const last = (rel) => (rel.endsWith("build.json") ? 1 : 0);
+for (const rel of [...wanted].sort((a, b) => last(a) - last(b))) cpSync(join(source, rel), join(target, rel), { force: true });
 console.log(`Deployed ${wanted.size} files to ${target}${removed ? `, removed ${removed} old files` : ""}.`);

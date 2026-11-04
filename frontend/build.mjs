@@ -113,11 +113,15 @@ const buildId = (() => {
 // shared chunks, home-3d-chunk-<hash>.js); a chunk's name carries its content hash, so it is never taken stale.
 // #245: the editor's chunks too, and a chunk named after a module with a hyphen (home-3d-room-panel-<hash>.js)
 const CHUNK = /^home-3d-[\w-]+-[A-Z0-9]{8}\.js$/;
+// #357: the start file every page names (boot.ts): it asks build.json which build is served and imports that app. A
+// bundle of its own, no chunks, so nothing in it changes with the app.
+const bootConfig = { ...common, plugins: [], entryPoints: ["src/boot.ts"], outfile: `${out}/home-3d.js` };
 const mainConfig = (hashes) => ({
   ...common,
   // the one bundle with the English table (its chunks share it)
   plugins: [shrinkShaders, shrinkViewCss, lateTextsChunk],
-  entryPoints: { "home-3d": "src/main.ts" },
+  // #357: the app is home-3d-app.js; home-3d.js is the start file (bootConfig) that imports the current build of it
+  entryPoints: { "home-3d-app": "src/main.ts" },
   outdir: out,
   splitting: true,
   chunkNames: "home-3d-[name]-[hash]",
@@ -207,16 +211,18 @@ function copyFonts() {
 // #336: the Library's Browse tab (home-3d-editor-pack-browser-<hash>.js, 15.5 KB) is a lazy chunk of its own, loaded when an editor opens the tab. A new budget.
 // run 6 (#318 #332): Settings has its own copy of the multi-select (separate entry), and the time format row tips settings first open over 95 KB.
 // run 6 (#252 #327 #338): curved shells, the icon field and show-when rules land together in the item forms (editor-only): items 68 -> 72 KB.
+// #357: the main bundle is home-3d-app.js now (its budgets moved with it, unchanged), and home-3d.js is the start file
+// that imports it (well under 1 KB, a new budget of its own); both are on the "every page" and "wall tablet" paths.
 // #350: robot vacuum maps: the 3D overlay (home-3d-vacuum-maps-<hash>.js, only for a plan with maps while the View switch is on) and the editor's section and alignment (home-3d-editor-vacuum-panel-<hash>.js) are lazy chunks with new budgets of their own.
-const BUDGET = { "home-3d-editor-vacuum-panel.js": 13 * 1024, "home-3d-vacuum-maps.js": 8 * 1024, "home-3d-editor-pet-panel.js": 11 * 1024, "home-3d-i18n-register-late.js": 124 * 1024, "home-3d-energy-rates.js": 4 * 1024, "home-3d-editor-pack-browser.js": 18 * 1024, "home-3d-weather-tile.js": 6 * 1024, "home-3d-weather-forecast.js": 8 * 1024, "home-3d-float-window.js": 8 * 1024, "home-3d-find.js": 8 * 1024, "home-3d-settings-extensions-index.js": 4 * 1024, "home-3d-multi-select.js": 8 * 1024, "home-3d-settings-multi-select.js": 9 * 1024, "home-3d-view-nav.js": 3 * 1024, "home-3d-quick-menu.js": 20 * 1024, "home-3d-settings-search-words.js": 10 * 1024, "home-3d-editor-season-dates.js": 13 * 1024, "home-3d-settings-homes.js": 14 * 1024, "home-3d-device-popup.js": 16 * 1024, "home-3d-editor-item-picker.js": 14 * 1024, "home-3d-editor-icon-picker.js": 8 * 1024, "home-3d-editor-phone-bar.js": 12 * 1024, "home-3d-rooms-picker.js": 8 * 1024, "home-3d-view-panel.js": 28 * 1024, "home-3d-room-panel.js": 33 * 1024, "home-3d-home-switcher.js": 12 * 1024, "home-3d-editor-lazy-parts.js": 92 * 1024, "home-3d-settings-pickers.js": 12 * 1024, "home-3d-settings-reset.js": 4 * 1024, "home-3d.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-listedit.js": 12 * 1024, "home-3d-fun.js": 42 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 74 * 1024, "home-3d-settings.js": 95 * 1024 };
-const GZIP_BUDGET = { "home-3d.js": 45 * 1024, "home-3d-view3d.js": 100 * 1024, "home-3d-3d.js": 280 * 1024 };
+const BUDGET = { "home-3d-editor-vacuum-panel.js": 13 * 1024, "home-3d-vacuum-maps.js": 8 * 1024, "home-3d-editor-pet-panel.js": 11 * 1024, "home-3d-i18n-register-late.js": 124 * 1024, "home-3d-energy-rates.js": 4 * 1024, "home-3d-editor-pack-browser.js": 18 * 1024, "home-3d-weather-tile.js": 6 * 1024, "home-3d-weather-forecast.js": 8 * 1024, "home-3d-float-window.js": 8 * 1024, "home-3d-find.js": 8 * 1024, "home-3d-settings-extensions-index.js": 4 * 1024, "home-3d-multi-select.js": 8 * 1024, "home-3d-settings-multi-select.js": 9 * 1024, "home-3d-view-nav.js": 3 * 1024, "home-3d-quick-menu.js": 20 * 1024, "home-3d-settings-search-words.js": 10 * 1024, "home-3d-editor-season-dates.js": 13 * 1024, "home-3d-settings-homes.js": 14 * 1024, "home-3d-device-popup.js": 16 * 1024, "home-3d-editor-item-picker.js": 14 * 1024, "home-3d-editor-icon-picker.js": 8 * 1024, "home-3d-editor-phone-bar.js": 12 * 1024, "home-3d-rooms-picker.js": 8 * 1024, "home-3d-view-panel.js": 28 * 1024, "home-3d-room-panel.js": 33 * 1024, "home-3d-home-switcher.js": 12 * 1024, "home-3d-editor-lazy-parts.js": 92 * 1024, "home-3d-settings-pickers.js": 12 * 1024, "home-3d-settings-reset.js": 4 * 1024, "home-3d.js": 2 * 1024, "home-3d-app.js": 145 * 1024, "home-3d-view3d.js": 335 * 1024, "home-3d-walk.js": 16 * 1024, "home-3d-listedit.js": 12 * 1024, "home-3d-fun.js": 42 * 1024, "home-3d-voice.js": 40 * 1024, "home-3d-locate.js": 48 * 1024, "home-3d-timetravel.js": 105 * 1024, "home-3d-3d.js": 900 * 1024, "home-3d-editor.js": 860 * 1024, "home-3d-card-editor.js": 40 * 1024, "home-3d-items.js": 72 * 1024, "home-3d-align.js": 12 * 1024, "home-3d-2d.js": 74 * 1024, "home-3d-settings.js": 95 * 1024 };
+const GZIP_BUDGET = { "home-3d-app.js": 45 * 1024, "home-3d-view3d.js": 100 * 1024, "home-3d-3d.js": 280 * 1024 };
 
 // What is loaded before something shows, raw and as sent (gzip), with everything those files import (#179): a module
 // moved from one bundle to another does not slip through. Every page of Home Assistant loads the main bundle; a wall
 // tablet showing the house (the panel or a card) loads the 3D view and the 3D bundle on top.
 const PATHS = {
-  "every page": { files: ["home-3d.js"], raw: 425 * 1024, gzip: 146 * 1024 },
-  "wall tablet": { files: ["home-3d.js", "home-3d-view3d.js", "home-3d-3d.js"], raw: 1630 * 1024, gzip: 500 * 1024 },
+  "every page": { files: ["home-3d.js", "home-3d-app.js"], raw: 425 * 1024, gzip: 146 * 1024 },
+  "wall tablet": { files: ["home-3d.js", "home-3d-app.js", "home-3d-view3d.js", "home-3d-3d.js"], raw: 1630 * 1024, gzip: 500 * 1024 },
   // #245: the editor's entry and its shared chunks, under the editor's old budget (the lazy chunks have their own)
   "editor first open": { files: ["home-3d-editor.js"], raw: 868 * 1024 },
   // #245: the Settings page split the same way, under its old 95 KB
@@ -256,7 +262,7 @@ function topInputs(metafile, file, n = 15) {
 copyFonts();
 if (watch) {
   // in watch mode the hash is not tracked; a dev reload fetches the bundle anyway
-  for (const c of [viewerConfig, itemsConfig("dev"), editorConfig("dev", "dev", "dev", "dev"), alignConfig, cardEditorConfig, timeTravelConfig, funConfig, voiceConfig, locateConfig, plan2dConfig, settingsConfig, mainConfig(Object.fromEntries(HASHED.map((name) => [name, "dev"])))]) await (await context(c)).watch();
+  for (const c of [bootConfig, viewerConfig, itemsConfig("dev"), editorConfig("dev", "dev", "dev", "dev"), alignConfig, cardEditorConfig, timeTravelConfig, funConfig, voiceConfig, locateConfig, plan2dConfig, settingsConfig, mainConfig(Object.fromEntries(HASHED.map((name) => [name, "dev"])))]) await (await context(c)).watch();
 } else {
   // the main bundle's chunks of an earlier build go (their names change with their content)
   for (const f of readdirSync(out)) if (CHUNK.test(f)) rmSync(`${out}/${f}`);
@@ -275,6 +281,7 @@ if (watch) {
   await run(voiceConfig);
   await run(plan2dConfig);
   await run(settingsConfig);
+  await run(bootConfig);
   await run(
     mainConfig({
       viewer: hashOf(viewerConfig.outfile),

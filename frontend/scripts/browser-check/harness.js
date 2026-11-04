@@ -67,8 +67,12 @@ let host;
 // Which copies of the main bundle the page loads (#218), from the page's ?copies=:
 // - "two" (the default): the extra module from a page Home Assistant's service worker kept from before an update
 //   names another URL (another path: its own chunks and Lit too) than the panel's module_url, so two copies run;
-// - "older": the same, and the first copy keeps no record of its elements, like a build before #218;
-// - "one": one URL for both, as the integration registers them.
+// - "one": one URL for both, as the integration registers them;
+// - "early" (#357): no extra module first (a cold load straight onto the panel). The start file waits for build.json
+//   before it imports the app, and a module script's load event does not wait for that, so the panel host creates the
+//   panel element before it is defined and Home Assistant's polyfill upgrades it once the app defines it.
+// (A copy that keeps no record of its elements, a build before #218, counts as another build since #357: the current
+// one then stays out of the page and reloads it once, chunk-reload.ts; define-builds.test.ts covers it.)
 const COPIES = new URLSearchParams(location.search).get("copies") ?? "two";
 const PANEL_URL = "/static/home-3d.js";
 const EXTRA_URL = COPIES === "one" ? PANEL_URL : "/old/home-3d.js?v=cached";
@@ -82,10 +86,11 @@ const EXTRA_URL = COPIES === "one" ? PANEL_URL : "/old/home-3d.js?v=cached";
  * with a NEW panel element.
  */
 async function loadLikeHomeAssistant() {
-  await import(EXTRA_URL);
-  // the dashboard card's loader (a Lovelace resource) imports the bundle as well
-  await import(EXTRA_URL);
-  if (COPIES === "older") delete globalThis[Symbol.for("home-3d.custom-elements")];
+  if (COPIES !== "early") {
+    await import(EXTRA_URL);
+    // the dashboard card's loader (a Lovelace resource) imports the bundle as well
+    await import(EXTRA_URL);
+  }
   await import("/vendor/scoped-custom-element-registry.js");
   customElements.define("home-assistant", class extends HTMLElement {});
   customElements.define(
