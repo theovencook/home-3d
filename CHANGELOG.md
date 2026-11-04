@@ -3,7 +3,7 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
-## Unreleased
+## Home 3D 1.0.0 (4 November 2026)
 
 - A TV reached through several integrations (several media players on one item or within half a metre) shows one now-playing card: the playing player, else a paused one with a title, else the first (#356).
 - After an update every page runs the new build after at most one reload, also a page Home Assistant's service worker kept and a dashboard opened before the update: home-3d.js is now a tiny start file that asks which build is served and loads that build's app (home-3d-app.js), and a page never runs two builds at once (#357).
