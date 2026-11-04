@@ -29,15 +29,19 @@ HISTORY_MAX = 20
 HISTORY_INTERVAL = 600
 
 # The frontend files are served under /api/ (#218): Home Assistant's service worker takes /api/ paths from the network
-# only, while it answers any other path, and Home Assistant's own page, from its cache first. So the main bundle keeps
-# ONE URL for every restart, and a page the service worker kept from before an update names the same module as the
-# panel's module_url: the browser runs one copy of the bundle, not two. Since #340 that one URL carries the build id
-# (`?v=`), the same everywhere (extra module, panel, card loader), so an update is a new URL and a cache with a time
-# of its own (a proxy) cannot keep the old entry. The URL without the id still works and is sent with no-cache.
+# only, while it answers any other path, and Home Assistant's own page, from its cache first. The extra module, the
+# panel's module_url and the card loader all name ONE URL, the start file (MAIN_BUNDLE), for every restart and every
+# update, so a page the service worker kept from before an update names the same module as the panel. The start file
+# (frontend boot.ts) holds no build: it asks build.json at a URL no cache has seen which build is served and imports
+# that build's app (APP_BUNDLE?v=<build>, kept for a year). So a page that names an old entry, a proxy that turns
+# no-cache into hours (#340) or a browser that kept the start file still run the current build after one load (#357).
+# The start file and the loader are never kept (no-cache); a stale one does no harm.
 URL_BASE = "/api/home_3d/static"
 # the path before #218, still served: a cached page or an old dashboard resource can name it
 LEGACY_URL_BASE = "/home_3d_static"
 MAIN_BUNDLE = "home-3d.js"
+# the app the start file imports (#357)
+APP_BUNDLE = "home-3d-app.js"
 MAIN_URL = f"{URL_BASE}/{MAIN_BUNDLE}"
 PANEL_URL_PATH = "home_3d"
 PANEL_COMPONENT = "home-3d-panel"

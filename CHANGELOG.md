@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- After an update every page runs the new build after at most one reload, also a page Home Assistant's service worker kept and a dashboard opened before the update: home-3d.js is now a tiny start file that asks which build is served and loads that build's app (home-3d-app.js), and a page never runs two builds at once (#357).
 - The apex shed's end window sits in the middle of its wall (run 6).
 
 - IKEA UK pack release 5: SKRUVBY coffee table 60x60x50 cm in black-blue, with its low shelf (run 6).

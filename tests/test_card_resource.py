@@ -77,6 +77,10 @@ async def test_loader_resource_replaces_the_bundle_and_goes_on_removal() -> None
     loader = LOADER_URL
     await async_ensure_card_resource(hass, loader)
     assert [i["url"] for i in res.items] == [loader]
+    # #357: the loader under a build id (#340) goes back to the one URL for every build
+    res.items[0]["url"] = f"{LOADER_URL}?v=0123456789ab"
+    await async_ensure_card_resource(hass, loader)
+    assert [i["url"] for i in res.items] == [loader]
     await async_remove_card_resource(hass)
     assert res.items == []
 

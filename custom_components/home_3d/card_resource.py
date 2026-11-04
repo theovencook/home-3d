@@ -9,6 +9,9 @@ While Home Assistant starts, a dashboard (a wall tablet reloading itself) may as
 there and keep "Configuration error" until the next reload (#461). The resource is therefore a small loader that
 loads the bundle and tries again every few seconds while it is not there yet. It is served from the integration's
 own path (registered in async_setup, as early as possible); nothing is written into the user's `www` folder.
+
+The resource is the loader's plain URL, the same for every build (#357): the loader imports the start file, which picks
+the build Home Assistant serves now. A resource from before (`?v=<build>`, #340) is changed to it.
 """
 
 from __future__ import annotations

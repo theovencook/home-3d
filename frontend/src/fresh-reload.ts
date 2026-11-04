@@ -4,7 +4,8 @@
 // JavaScript again (the update notice comes back, and the old bundle's chunks that are gone leave the plan blank),
 // until the four hours are up or the cache is cleared by hand. So before the page reloads, those two files are fetched
 // once past the browser cache (`cache: "reload"`), which puts the new ones in it; every other file has its content
-// hash in its name or URL and is never taken stale.
+// hash in its name or URL and is never taken stale. Since #357 home-3d.js is the start file (boot.ts): it asks for the
+// current build each time, so a stale copy of it still runs the new app; refreshing it is only tidiness.
 
 /** The files that keep one URL for every build. */
 const FIXED = ["home-3d.js", "home-3d-loader.js"];

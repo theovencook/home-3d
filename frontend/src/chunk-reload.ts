@@ -3,6 +3,7 @@
 // in sessionStorage stops a loop (a real outage reloads once, then shows the error); it is cleared after a quiet spell,
 // so a later update can recover the same way.
 
+import { bootBase, currentBuild } from "./boot-core.ts";
 import { IMPORT_FAILED } from "./guard-import.ts";
 
 const KEY = "fp3d_chunk_reload";
@@ -71,4 +72,38 @@ export function installChunkReloadGuard(): void {
   if (typeof addEventListener !== "function") return;
   addEventListener("unhandledrejection", (event) => void reloadOnceFor((event as PromiseRejectionEvent).reason));
   clearReloadFlagLater();
+}
+
+const BUILD_KEY = "fp3d_build_reload";
+/** How long after the page started a copy that lost the page to another build may still reload it (#357). */
+const YOUNG_MS = 60_000;
+
+export interface BuildReloadEnv extends ReloadEnv {
+  /** The build Home Assistant serves now (boot-core.ts currentBuild), null when unknown. */
+  current?: () => Promise<string | null>;
+  /** Milliseconds since the page started. */
+  age?: number;
+}
+
+/**
+ * This copy of the main bundle found the page claimed by another build (#357, define.ts mayDefine): a page that named
+ * an older entry runs that one, and this copy defines nothing. When this copy is the build Home Assistant serves now, the
+ * page reloads once so it runs this one, only while the page is young (later, the running copy's "updated, reload"
+ * notice asks, #60) and once per build per tab (sessionStorage), so a page that keeps naming the old entry cannot loop.
+ * A copy that is not the current build leaves the page alone. Returns whether it reloaded.
+ */
+export async function reloadForCurrentBuild(own: string, env: BuildReloadEnv = {}): Promise<boolean> {
+  const { storage, reload } = { ...defaults(), ...env };
+  const age = env.age ?? globalThis.performance?.now() ?? 0;
+  if (!storage || age > YOUNG_MS) return false;
+  const current = env.current ?? (() => currentBuild(bootBase(import.meta.url)));
+  if ((await current().catch(() => null)) !== own) return false;
+  try {
+    if (storage.getItem(BUILD_KEY) === own) return false;
+    storage.setItem(BUILD_KEY, own);
+  } catch {
+    return false;
+  }
+  reload();
+  return true;
 }

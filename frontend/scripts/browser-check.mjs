@@ -5,8 +5,8 @@
 // or failed request. It loads like Home Assistant's page (#218): the main bundle first, then Home Assistant's scoped
 // custom element registry polyfill, the panel created by name through a fake panel host from a second URL (two
 // copies of the bundle, as on a page Home Assistant's service worker kept); at the end it leaves the panel and comes
-// back twice without a reload, and does load-leave-return again with one copy and with an older copy that keeps no
-// record of its elements. It also measures, as in docs/performance.md: load, background load in view mode (5 hass
+// back twice without a reload, and does load-leave-return again with one copy and with the panel created before the
+// start file's app has defined it (#357). It also measures, as in docs/performance.md: load, background load in view mode (5 hass
 // updates a second), the renderer's render and editor selection; with --speed it fails when a measure is past its
 // limit.
 //
@@ -213,7 +213,7 @@ try {
   results.unknownCalls = await run("unknownCalls");
   await page.close();
   // #218: the other ways the bundle can be on the page, each loaded and left and entered again
-  for (const copies of ["one", "older"]) {
+  for (const copies of ["one", "early"]) {
     const other = await openPage(copies);
     try {
       const loaded = await other.run("start");
