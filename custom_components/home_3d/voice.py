@@ -417,11 +417,13 @@ async def async_remove_sentences(hass: HomeAssistant) -> None:
 
 @dataclass(eq=False)
 class _View:
-    """An open view listening for sentences (voice/subscribe): how to reach it and its screen name in lower case
-    ("": a view without a name; None: a view of an older frontend that did not say and picks its sentences itself)."""
+    """An open view listening for sentences (voice/subscribe): how to reach it, its screen name in lower case
+    ("": a view without a name; None: a view of an older frontend that did not say and picks its sentences itself)
+    and whether its user is an admin (#367)."""
 
     send: Callable[[dict[str, Any]], None]
     screen: str | None
+    admin: bool = False
 
 
 @dataclass(eq=False)
@@ -446,10 +448,11 @@ def _views(hass: HomeAssistant) -> list[_View]:
 
 @callback
 def subscribe_view(
-    hass: HomeAssistant, send: Callable[[dict[str, Any]], None], screen: str | None
+    hass: HomeAssistant, send: Callable[[dict[str, Any]], None], screen: str | None, admin: bool = False
 ) -> Callable[[], None]:
-    """An open view listens for sentences (voice/subscribe); returns how it stops."""
-    view = _View(send, None if screen is None else _screen_key(screen))
+    """An open view listens for sentences (voice/subscribe); returns how it stops. `admin`: the view's user is an
+    admin, so it may be shown where people are while people are shown to admins only."""
+    view = _View(send, None if screen is None else _screen_key(screen), admin)
     views = _views(hass)
     views.append(view)
 
@@ -479,10 +482,12 @@ class AskBroker:
         return [view for view in _views(self.hass) if not key or view.screen is None or view.screen == key]
 
     @callback
-    def show(self, message: dict[str, Any], screen: str | None) -> None:
-        """Something for the views to show that nobody waits for (the rooms of a locating answer)."""
+    def show(self, message: dict[str, Any], screen: str | None, admins_only: bool = False) -> None:
+        """Something for the views to show that nobody waits for (the rooms of a locating answer). `admins_only`:
+        only the views of admins get it at all; the server filters, the screen is not trusted to hide it (#367)."""
         for view in self._views_for(screen):
-            view.send(message)
+            if view.admin or not admins_only:
+                view.send(message)
 
     async def ask(self, text: str, screen: str | None, speak: bool) -> dict[str, Any] | None:
         """The answer of the first view that understands ({"text", "answered": True}). A view that did not
@@ -544,11 +549,13 @@ def satellite_screen(
 def show_located(hass: HomeAssistant, located: Located, screen: str | None = None) -> None:
     """The open views fly into the room of the answer ("Where is Torsten?"), or tour the rooms of everyone at home.
     Nobody waits for them. Not when switched off in the locating settings; while people are shown to admins only,
-    a view of someone else does not fly to people (a wall tablet would show everyone where they are)."""
+    only the views of admins fly to people (a wall tablet would show everyone where they are): the rooms are not
+    sent to any other view at all (#367)."""
     service = hass.data.get(DATA_LOCATE)
     broker: AskBroker | None = hass.data.get(DATA_ASK)
     if not located.rooms or service is None or not service.fly or broker is None:
         return
+    admins_only = bool(located.persons and service.admins_only)
     broker.show(
         {
             "ask_id": "",
@@ -556,9 +563,11 @@ def show_located(hass: HomeAssistant, located: Located, screen: str | None = Non
             "screen": screen,
             "speak": False,
             "show_rooms": located.rooms,
-            "admins_only": located.persons and service.admins_only,
+            # kept for the views of older frontends, which hide such rooms themselves
+            "admins_only": admins_only,
         },
         screen,
+        admins_only,
     )
 
 

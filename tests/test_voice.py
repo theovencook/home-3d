@@ -166,6 +166,39 @@ async def test_a_satellite_asks_the_screen_next_to_it(hass: HomeAssistant, hass_
         assert (await hall.receive_json())["event"]["ask_id"] == got["ask_id"]
 
 
+async def test_where_people_are_reaches_only_the_views_of_admins(
+    hass: HomeAssistant, hass_ws_client, hass_read_only_access_token
+) -> None:
+    """People shown to admins only: the rooms of people go over voice/subscribe to admins' views alone; the server
+    filters, the screen is not trusted to hide them (#367). Rooms of things, and sentences, reach every view."""
+    from custom_components.home_3d.locate.answers import Located
+    from custom_components.home_3d.locate.service import DATA_LOCATE
+    from custom_components.home_3d.voice import show_located
+
+    await _setup(hass)
+    service = hass.data[DATA_LOCATE]
+    service.fly = True
+    service.admins_only = True
+    admin = await _view(hass_ws_client, hass, "")
+    other = await _view(hass_ws_client, hass, "", hass_read_only_access_token)
+
+    show_located(hass, Located("Sample person is in the Kitchen.", ["kitchen"], True))
+    show_located(hass, Located("The keys are in the Hall.", ["hall"], False))
+    first = (await admin.receive_json())["event"]
+    assert first["show_rooms"] == ["kitchen"] and first["admins_only"] is True
+    assert (await admin.receive_json())["event"]["show_rooms"] == ["hall"]
+    # the other view's first message is the rooms of the keys: the people's rooms never came
+    got = (await other.receive_json())["event"]
+    assert got["show_rooms"] == ["hall"] and got["admins_only"] is False
+    # a sentence goes to both: either may be the one that answers
+    task = _ask_service(hass, "what is open")
+    ask = (await other.receive_json())["event"]
+    assert ask["text"] == "what is open"
+    assert (await admin.receive_json())["event"]["ask_id"] == ask["ask_id"]
+    await _reply(other, ask, "Nothing is open.", True)
+    assert (await task)["answer"] == "Nothing is open."
+
+
 async def test_the_views_still_listen_after_a_reload(hass: HomeAssistant, hass_ws_client) -> None:
     entry = await _setup(hass)
     view = await _view(hass_ws_client, hass, "")

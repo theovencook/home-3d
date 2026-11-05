@@ -1012,13 +1012,21 @@ async def _async_restore_backup(
 )
 @callback
 def ws_voice_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """The sentences Assist (or the service `home_3d.ask`) hands to the views; each open view listens."""
+    """The sentences Assist (or the service `home_3d.ask`) hands to the views; each open view listens.
+
+    What a view gets (#367): the sentences for every screen and for its own screen name, with their text (the view
+    needs it to answer, and answering is what a wall tablet of a user who is no admin is for; the text is what was
+    said to the house, never an answer); never a sentence for another screen. Where people are (a locating answer's
+    rooms) only while the view's user is an admin, when people are shown to admins only; the server filters, the
+    screen is not trusted to hide it."""
 
     @callback
     def forward(ask: dict[str, Any]) -> None:
         connection.send_message(websocket_api.event_message(msg["id"], ask))
 
-    connection.subscriptions[msg["id"]] = subscribe_view(hass, forward, msg.get("screen"))
+    connection.subscriptions[msg["id"]] = subscribe_view(
+        hass, forward, msg.get("screen"), bool(connection.user and connection.user.is_admin)
+    )
     connection.send_result(msg["id"])
 
 

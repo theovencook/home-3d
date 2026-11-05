@@ -286,15 +286,17 @@ async def test_located_answers_fly_the_views_into_the_room(hass: HomeAssistant) 
     await _setup(hass)
     service: LocateService = hass.data[DATA_LOCATE]
     sent: list[dict] = []
+    others: list[dict] = []
 
     @callback
     def collect(msg: dict) -> None:
         sent.append(msg)
 
-    subscribe_view(hass, collect, None)
+    subscribe_view(hass, collect, None, True)
+    subscribe_view(hass, others.append, None, False)
     show_located(hass, Located("Torsten is in the Kitchen.", ["kitchen"], True))
     show_located(hass, Located("I can't hear Torsten right now.", [], True))
-    # people shown to admins only: the views of others stay where they are (the message says so)
+    # people shown to admins only: only the views of admins get the rooms of people
     service.admins_only = True
     show_located(hass, Located("Torsten is in the Kitchen.", ["kitchen"], True))
     show_located(hass, Located("The keys are in the Hall.", ["hall"], False))
@@ -306,6 +308,8 @@ async def test_located_answers_fly_the_views_into_the_room(hass: HomeAssistant) 
         (["kitchen"], True),
         (["hall"], False),
     ]
+    # the view of a user who is no admin never gets the rooms of people shown to admins only (#367)
+    assert [(m["show_rooms"], m["admins_only"]) for m in others] == [(["kitchen"], False), (["hall"], False)]
 
 
 async def test_a_view_asks_locating_first(hass: HomeAssistant, hass_ws_client) -> None:
