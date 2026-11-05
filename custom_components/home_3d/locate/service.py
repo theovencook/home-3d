@@ -10,13 +10,14 @@ import re
 import time
 from typing import Any
 
-from homeassistant.const import EVENT_STATE_CHANGED
+from homeassistant.const import EVENT_COMPONENT_LOADED, EVENT_STATE_CHANGED
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
+from homeassistant.setup import EventComponentLoaded
 
 from ..const import SIGNAL_BUILDING_UPDATED, SIGNAL_HOMES_UPDATED
 from .engine import AWAY_AFTER, OWN_SHARE, STEP, THING_AWAY_AFTER, Fingerprints, RoomTracker, evidence
@@ -41,6 +42,11 @@ LAST_SEEN_REFRESH = 60.0
 PRESENCE_CLASSES = {"motion", "occupancy", "presence"}
 # worn on the body: it tells where its person is (a phone may lie somewhere)
 WORN = re.compile(r"watch|uhr|band|ring|fit|garmin|wear", re.IGNORECASE)
+
+
+@callback
+def _is_bluetooth(data: EventComponentLoaded) -> bool:
+    return data["component"] == "bluetooth"
 
 
 def worn_by_name(device: dict[str, Any]) -> bool:
@@ -96,7 +102,9 @@ class LocateService:
         # the rooms and doors the trackers were made for: they are kept while these stay (#169)
         self._tracker_plan: tuple[tuple[str, ...], tuple[tuple[str, str], ...]] | None = None
         self._unsub: Callable[[], None] | None = None
-        self._unsub_sensors: Callable[[], None] | None = None
+        self._listeners: list[Callable[[], None]] = []  # presence sensors and registry changes, while running
+        self._unsub_wait: Callable[[], None] | None = None  # waiting for Bluetooth to load (#368)
+        self._save_pending = False
         self._sensor_rooms: dict[str, str | None] = {}
         self._last_step = 0.0
         self._last_sample = 0.0
@@ -145,7 +153,20 @@ class LocateService:
 
     @callback
     def _save(self) -> None:
-        self._store.async_delay_save(self._data, 5)
+        self._save_pending = True
+        self._store.async_delay_save(self._written, 5)
+
+    def _written(self) -> dict[str, Any]:
+        """The data the delayed save writes now (it is no longer pending)."""
+        self._save_pending = False
+        return self._data()
+
+    async def async_unload(self) -> None:
+        """Stop, and write a save still waiting for its delay (#368): the entry loaded again right after a change
+        reads it, and the old delayed save cannot land on top of the new service's."""
+        self.stop()
+        if self._save_pending:
+            await self._store.async_save(self._written())
 
     def _rebuild(self) -> None:
         """Trackers for the devices, rooms and doors. A device keeps its tracker (and so its current room) while the
@@ -349,9 +370,39 @@ class LocateService:
 
     @callback
     def start(self) -> None:
-        if self._unsub is None and self._bluetooth():
-            self._unsub = async_track_time_interval(self.hass, self._tick, POLL)
-            self._unsub_sensors = self.hass.bus.async_listen(EVENT_STATE_CHANGED, self._presence_changed)
+        if self._unsub is not None:
+            return
+        if not self._bluetooth():
+            # Bluetooth may set up after Home 3D (at a start, or added later): start once it has loaded (#368)
+            if self._unsub_wait is None:
+                self._unsub_wait = self.hass.bus.async_listen(
+                    EVENT_COMPONENT_LOADED, self._bluetooth_loaded, event_filter=_is_bluetooth
+                )
+            return
+        self._unsub = async_track_time_interval(self.hass, self._tick, POLL)
+        self._sensor_rooms = {}  # the areas may have changed while it was off
+        self._listeners = [
+            self.hass.bus.async_listen(EVENT_STATE_CHANGED, self._presence_changed),
+            # a presence sensor (or its device) moved to another area confirms that area's room from now on (#368)
+            self.hass.bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, self._registry_changed),
+            self.hass.bus.async_listen(dr.EVENT_DEVICE_REGISTRY_UPDATED, self._registry_changed),
+        ]
+
+    @callback
+    def _bluetooth_loaded(self, _event: Event[EventComponentLoaded]) -> None:
+        self._stop_waiting()
+        # the next tick stops it again when nothing asks for it any more
+        self.start()
+
+    @callback
+    def _stop_waiting(self) -> None:
+        if self._unsub_wait is not None:
+            self._unsub_wait()
+            self._unsub_wait = None
+
+    @callback
+    def _registry_changed(self, _event: Event[Any]) -> None:
+        self._sensor_rooms = {}  # looked up again on the next presence change (cheap, one registry read each)
 
     def _sensor_room(self, entity_id: str) -> str | None:
         """The plan room of a presence sensor: its area (or its device's) linked to a room of the plan."""
@@ -394,12 +445,13 @@ class LocateService:
 
     @callback
     def stop(self) -> None:
+        self._stop_waiting()
         if self._unsub is not None:
             self._unsub()
             self._unsub = None
-        if self._unsub_sensors is not None:
-            self._unsub_sensors()
-            self._unsub_sensors = None
+        for unsub in self._listeners:
+            unsub()
+        self._listeners = []
         self.state = {}
         self.calibration = None
         async_dispatcher_send(self.hass, SIGNAL_LOCATE)

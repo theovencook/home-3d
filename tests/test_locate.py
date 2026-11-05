@@ -643,3 +643,143 @@ async def test_last_seen_is_sent_on_while_the_room_stays(hass: HomeAssistant) ->
         service._estimate(now + second)
     # the first estimate, then once more a minute later: not every second
     assert len(signals) == 2
+
+
+async def test_a_subscription_follows_the_service_after_a_reload(hass: HomeAssistant, hass_ws_client) -> None:
+    """#368: an open view gets the new service's devices after a reload, and a change made just before the reload
+    (its save still waiting for the delay) is what the new service loads."""
+    entry = await _setup(hass)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "home_3d/locate/subscribe"})
+    assert (await client.receive_json())["success"]
+    assert (await client.receive_json())["event"]["devices"] == []
+    old: LocateService = hass.data[DATA_LOCATE]
+    await old.async_configure({"devices": [WATCH], "rooms": ROOMS})
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    new: LocateService = hass.data[DATA_LOCATE]
+    assert new is not old
+    assert [d["id"] for d in new.devices] == ["irk_watch"]
+    events = []
+    while True:
+        msg = await client.receive_json()
+        events.append(msg["event"])
+        if msg["event"]["devices"]:
+            break
+    assert [d["id"] for d in events[-1]["devices"]] == ["irk_watch"]
+    # from now on the new service answers
+    new.state["irk_watch"] = {"room": "kitchen", "room_name": "Kitchen", "probability": 0.9}
+    async_dispatcher_send(hass, SIGNAL_LOCATE)
+    for _ in range(5):  # after the events of the reload still on their way
+        devices = (await client.receive_json())["event"]["devices"]
+        if devices and "room" in devices[0]:
+            break
+    assert devices[0]["room"] == "kitchen"
+
+
+async def test_the_lab_recorder_stops_with_the_entry_and_goes_on_removal(
+    hass: HomeAssistant, hass_ws_client, tmp_path
+) -> None:
+    """#368: a recording running at unload stops (timer and listener) and writes its last lines; the recorder is
+    dropped; no new recording starts while Home 3D is unloaded; removing Home 3D deletes the recordings."""
+    import gzip
+    from pathlib import Path
+
+    from custom_components.home_3d.locate.recorder import DATA_RECORDER, FOLDER, get_recorder
+
+    hass.config.config_dir = str(tmp_path)
+    entry = await _setup(hass)
+    recorder = get_recorder(hass)
+    stopped = []
+    recorder.path = Path(hass.config.path(FOLDER, "rec-test.jsonl.gz"))
+    recorder.started = time.time()
+    recorder._unsubs = [lambda: stopped.append("timer"), lambda: stopped.append("listener")]
+    recorder.set_mark("kitchen", "Kitchen")
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert stopped == ["timer", "listener"]
+    assert DATA_RECORDER not in hass.data and not recorder.running
+    with gzip.open(tmp_path / FOLDER / "rec-test.jsonl.gz", "rt", encoding="utf-8") as f:
+        assert [line.split(",")[0] for line in f.read().split()] == ['{"type":"mark"', '{"type":"stop"']
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "home_3d/locate/rec", "action": "status"})
+    res = await client.receive_json()
+    assert res["error"]["code"] == "not_loaded"
+    assert DATA_RECORDER not in hass.data
+
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert not (tmp_path / FOLDER).exists()
+
+
+async def test_the_lab_recorder_forgets_old_addresses(hass: HomeAssistant, monkeypatch) -> None:
+    """#368: rotating Bluetooth addresses do not grow the recorder's memory for six hours."""
+    import sys
+    from types import SimpleNamespace
+
+    from custom_components.home_3d.locate import recorder as rec_module
+
+    await _setup(hass)
+    recorder = rec_module.get_recorder(hass)
+    for n in range(rec_module.MAX_RESOLVED):
+        recorder._resolved[f"addr{n}"] = None
+    recorder._who("AA:BB:CC:DD:EE:FF")
+    assert len(recorder._resolved) <= rec_module.MAX_RESOLVED
+    assert "AA:BB:CC:DD:EE:FF" in recorder._resolved and "addr0" not in recorder._resolved
+
+    monkeypatch.setitem(sys.modules, "homeassistant.components.bluetooth", SimpleNamespace(async_current_scanners=lambda _hass: []))
+    mono = time.monotonic()
+    recorder.started = time.time()
+    recorder._seen = {("s1", "old"): mono - rec_module.SEEN_KEEP - 1, ("s1", "new"): mono - 1}
+    recorder._polls = rec_module.PRUNE_EVERY - 1
+    recorder._poll(None)
+    assert list(recorder._seen) == [("s1", "new")]
+
+
+async def test_a_moved_presence_sensor_confirms_its_new_room(hass: HomeAssistant) -> None:
+    """#368: the room of a presence sensor follows its area (the registry), not the one it had at the first look."""
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    areas = ar.async_get(hass)
+    hall, kitchen = areas.async_create("Hall"), areas.async_create("Kitchen")
+    rooms = [{**ROOMS[0], "area_id": kitchen.id}, {**ROOMS[1], "area_id": hall.id}, ROOMS[2]]
+    await service.async_configure({"devices": [WATCH], "rooms": rooms})
+    registry = er.async_get(hass)
+    entry = registry.async_get_or_create("binary_sensor", "test", "motion_1")
+    registry.async_update_entity(entry.entity_id, area_id=hall.id)
+    hass.config.components.add("bluetooth")  # running (the timer is not reached in this test)
+    service.start()
+    try:
+        assert service._sensor_room(entry.entity_id) == "hall"
+        registry.async_update_entity(entry.entity_id, area_id=kitchen.id)
+        await hass.async_block_till_done()
+        assert service._sensor_room(entry.entity_id) == "kitchen"
+    finally:
+        service.stop()
+
+
+async def test_locating_starts_once_bluetooth_has_loaded(hass: HomeAssistant) -> None:
+    """#368: switched on before Bluetooth is set up, it waits for it instead of giving up silently."""
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    assert "bluetooth" not in hass.config.components
+    await service.async_configure({"devices": [WATCH], "rooms": ROOMS, "enabled": True})
+    assert not service.running
+    hass.config.components.add("bluetooth")
+    hass.bus.async_fire("component_loaded", {"component": "bluetooth"})
+    await hass.async_block_till_done()
+    try:
+        assert service.running
+    finally:
+        service.stop()
+    # switched off while waiting: Bluetooth loading later starts nothing
+    hass.config.components.remove("bluetooth")
+    service.start()
+    service.stop()
+    hass.config.components.add("bluetooth")
+    hass.bus.async_fire("component_loaded", {"component": "bluetooth"})
+    await hass.async_block_till_done()
+    assert not service.running

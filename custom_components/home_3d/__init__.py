@@ -15,6 +15,7 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.http import KEY_HASS
 from homeassistant.helpers.typing import ConfigType
 
@@ -46,7 +47,8 @@ from .const import (
 )
 from .editors import Editors
 from .frontend_build import read_build
-from .locate.service import DATA_LOCATE, LocateService
+from .locate.recorder import async_remove_recordings, async_unload_recorder
+from .locate.service import DATA_LOCATE, SIGNAL_LOCATE, LocateService
 from .pack_updates import PackUpdates
 from .pets import PetRoutines
 from .storage import FloorplanData
@@ -220,10 +222,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # locating (who and what is where, from the Bluetooth scanners): idle unless an admin switched it on
     locate = LocateService(hass)
-    entry.async_on_unload(locate.stop)  # before the load, which starts it when it was on
+    # before the load, which starts it when it was on; also writes a save still waiting for its delay (#368)
+    entry.async_on_unload(locate.async_unload)
     entry.async_on_unload(partial(_forget, hass, DATA_LOCATE))
+    # the lab recorder (locate/rec) stops with the entry too (#368)
+    entry.async_on_unload(partial(async_unload_recorder, hass))
     await locate.async_load()
     hass.data[DATA_LOCATE] = locate
+    # open views follow the new service at once after a reload (their subscription outlives it, #368)
+    async_dispatcher_send(hass, SIGNAL_LOCATE)
     # with the rooms and doors of the active home's plan, whenever it changes (#169)
     entry.async_on_unload(locate.follow_plan(lambda: data.active.building, lambda: data.active_id))
 
@@ -274,8 +281,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """The plan, its pictures and packs stay in .storage when the integration is removed: they are the
-    user's work, and removing and re-adding the integration must never cost it."""
+    user's work, and removing and re-adding the integration must never cost it. The lab recordings of locating
+    (config/home_3d_locate) are not: they hold the Bluetooth addresses heard in the house and go (#368)."""
     await async_remove_card_resource(hass)
     # the Assist sentence files Home 3D wrote (a file the user changed stays)
     with contextlib.suppress(OSError):
         await async_remove_sentences(hass)
+    await async_remove_recordings(hass)

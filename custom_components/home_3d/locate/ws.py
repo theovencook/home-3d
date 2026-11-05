@@ -117,10 +117,15 @@ async def ws_locate_quality(
 @callback
 def ws_locate_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Where everyone is, now and on every change. With "admins only", other users get an empty list."""
-    if (service := _service(hass, connection, msg)) is None:
+    if _service(hass, connection, msg) is None:
         return
 
     def payload() -> dict[str, Any]:
+        # looked up each time: the subscription outlives a reload of the integration (#190, #368), and the stopped
+        # service of before must neither answer nor be kept alive by it
+        service: LocateService | None = hass.data.get(DATA_LOCATE)
+        if service is None:
+            return {"running": False, "devices": [], "calibration": None}
         if service.admins_only and not connection.user.is_admin:
             return {"running": service.running, "devices": [], "calibration": None}
         return service.snapshot()

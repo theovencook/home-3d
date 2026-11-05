@@ -6,6 +6,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 ## Unreleased
 
 - The locating room sensors write a state only when their own room or settings change, and once a minute while the device is heard; probability, since and last_seen stay in the state but are no longer recorded (#365).
+- Locating after a reload of Home 3D: open views follow the new service at once, a change made just before is kept, the lab recorder stops with the entry (and its recordings are deleted when Home 3D is removed), a presence sensor moved to another area confirms its new room, and locating switched on before Bluetooth has loaded starts once it has (#368).
 
 ## Home 3D 1.0.0 (4 November 2026)
 
