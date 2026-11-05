@@ -794,6 +794,8 @@ export class Fp3dEditor extends LitElement {
       // from anywhere else (another home, the server, someone else's edit) starts a fresh history
       this.history.adopt(this.building, this.home);
       this.showHistory();
+      // a drag still holding the plan from before would write it back over this one (#382)
+      this.dropPlanGestures();
       this._doc = this.building;
       this._doc3d = this.building;
       // the first plan: the floor chosen in the house settings (D418), else the first of the list
