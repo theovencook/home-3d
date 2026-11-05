@@ -3,8 +3,9 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
-## Unreleased
+## Home 3D 1.0.1 (5 November 2026)
 
+- Every bundled language now has all the texts: about 1,300 texts that were missing in the 16 languages other than English and German (and some Home Assistant service and options texts) are translated, so they no longer show in English.
 - Restoring a backup with a home whose plan can't be read (of a newer Home 3D, or invalid) restores the other homes; the unreadable one is skipped and named in the notice, and the homes here stay as they are (#380)
 - A pet's event trigger can no longer name `*` or a very frequent core event (state_changed, call_service and the like); a stored plan with such a trigger loads with it left out, and the editor says why (#359).
 - A failed load of the app (a network blip, Home Assistant still starting) is tried again under a new URL, by the start file and by the card loader, instead of failing until a manual reload; a loaded app is never loaded twice (#360).

@@ -29,5 +29,20 @@
         }
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Home 3D",
+        "description": "Wo Home 3D erscheint. Der Panel-Link und die Dashboard-Karte funktionieren so oder so, und den Eintrag kannst du in den Seitenleisten-Einstellungen von Home Assistant trotzdem für dich ausblenden.",
+        "data": {
+          "show_in_sidebar": "In Seitenleiste anzeigen",
+          "restore_picture_days": "Bilder von Wiederherstellungspunkten behalten (Tage)"
+        },
+        "data_description": {
+          "restore_picture_days": "Ein Hintergrund- oder Bildschirmbild, das nur ein älterer Wiederherstellungspunkt noch verwendet, wird so viele Tage nach dessen Erstellung behalten und beim nächsten Start entfernt. Ein Wiederherstellungspunkt, dessen Bild fehlt, wird ohne Bild wiederhergestellt. 0 entfernt solche Bilder sofort."
+        }
+      }
+    }
   }
 }
