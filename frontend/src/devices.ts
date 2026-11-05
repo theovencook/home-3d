@@ -3,7 +3,7 @@
 
 import type { Furniture, EntityRef, Floor, LampMount, Opening, Placement, RoofWindow, Room, Vec2 } from "./model.ts";
 import { centroid, outdoorZones, pointInPolygon } from "./model.ts";
-import { isCameraItem, isRobotVacuum, isThermostatItem, packMotion, packScreen } from "./packs.ts";
+import { isCameraItem, isRobotVacuum, isThermostatItem, packInfo, packMotion, packScreen } from "./packs.ts";
 import { callServiceSafe } from "./failure.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 
@@ -979,6 +979,16 @@ export function pictureRuleMatches(hass: HomeAssistant, rule: { entity: string; 
 /** Furniture with a screen that shows a media player: the built-in TVs, or a pack item with a screen part. */
 export function isMediaFurniture(type: string): boolean {
   return MEDIA_FURNITURE.has(type) || !!packScreen(type);
+}
+/**
+ * Whether a furniture type is a television (#362): the built-in TV items, or a pack item with a screen whose family
+ * or tags say TV / television (the Ambilight and Frame TVs). A monitor, projector screen or smart display is no TV.
+ */
+export function isTvItemType(type: string): boolean {
+  if (type === "tv" || type === "tv_board" || type === "tv_wall") return true;
+  if (!packScreen(type)) return false;
+  const info = packInfo(type);
+  return /(^|_)(tv|television)(_|$)/.test(info?.family ?? "") || (info?.tags ?? []).some((t) => /^(tv|television)$/i.test(t));
 }
 /** Furniture with a screen that can show a media player or a picture rule (media furniture and the desk's monitor). */
 export function hasScreen(type: string): boolean {
