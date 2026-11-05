@@ -7,6 +7,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 - Voice: a view that did not understand a sentence no longer beats one that does (its reply counts only when no view understands); with no Home 3D screen open Assist answers at once instead of after 6 seconds; a sentence said to a voice satellite goes only to the open screen named like the satellite's device or its area (other screens stay where they are), and a sentence for a screen reaches only the views of that name (#366).
 - Voice: while people are shown to admins only, where people are (a locating answer's rooms) is sent only to the views of admins; the server filters instead of trusting each screen to hide it (#367).
+- Voice sentences: only a sentence file exactly as Home 3D wrote it counts as Home 3D's; a file you trimmed (for example without "show [me] {text}") is no longer rewritten or removed. Refreshing the file when locating learns new names and switching the sentences off no longer race (one write at a time), and a waiting refresh stops when the integration unloads (#369).
 
 ## Home 3D 1.0.0 (4 November 2026)
 

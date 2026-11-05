@@ -27,7 +27,6 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import intent
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.storage import Store
-from homeassistant.util.yaml import parse_yaml
 import voluptuous as vol
 
 from .const import DATA_ASK, DATA_VOICE, DOMAIN, STORAGE_KEY_VOICE
@@ -215,38 +214,13 @@ def _path(config_dir: Path, language: str) -> Path:
     return config_dir / "custom_sentences" / language / SENTENCES_FILE
 
 
-def _ours(text: str) -> bool:
-    """A file Home 3D wrote (in any mode, by any version): the user has not changed it."""
-    return (
-        any(text == sentences_yaml(language, mode) for language in _DISTINCT for mode in ("distinct", "all"))
-        or (text.startswith("# Written by Home 3D") and text in _old_files())
-        or _only_our_sentences(text)
-    )
-
-
-def _only_our_sentences(text: str) -> bool:
-    """Home 3D's header and nothing but sentences Home 3D writes: an older version's file (it had fewer
-    sentences, the names of other people), never one the user added a sentence or an intent to."""
-    if not text.startswith("# Written by Home 3D"):
-        return False
-    try:
-        data = parse_yaml(text)
-    except Exception:  # anything unreadable is not ours to overwrite
-        return False
-    if not isinstance(data, dict) or set(data) != {"language", "intents", "lists"}:
-        return False
-    language = data.get("language")
-    intents = data.get("intents")
-    lists = data.get("lists")
-    if language not in _DISTINCT or not isinstance(intents, dict) or set(intents) != {INTENT_ASK}:
-        return False
-    blocks = (intents[INTENT_ASK] or {}).get("data")
-    if not isinstance(blocks, list) or len(blocks) != 1 or set(blocks[0]) != {"sentences"}:
-        return False
-    known = set(_DISTINCT[language]) | set(_QUESTIONS[language]) | set(_WHO_SENTENCES[language])
-    if not set(blocks[0]["sentences"] or []) <= known:
-        return False
-    return isinstance(lists, dict) and lists.get("text") == {"wildcard": True} and set(lists) <= {"text", WHO_LIST}
+def _ours(text: str, language: str, names: list[str] | tuple[str, ...] = ()) -> bool:
+    """Exactly a file Home 3D writes for the language (in any mode, with the names locating knows now or none) or
+    an older version wrote: the user has not changed it. Anything else is the user's, also a file of Home 3D's with
+    a sentence taken out (#369); a file Home 3D wrote with other names is known by its hash."""
+    return any(
+        text == sentences_yaml(language, mode, known) for mode in ("distinct", "all") for known in ((), names)
+    ) or (text.startswith("# Written by Home 3D") and text in _old_files())
 
 
 # the file as 1.22.0 - 1.23 wrote it (the header without the line about changed files): still ours
@@ -294,7 +268,7 @@ def write_sentences(
             current: str | None = path.read_text(encoding="utf-8")
         except OSError:
             current = None
-        if current is not None and _sha(current) != written.get(language) and not _ours(current):
+        if current is not None and _sha(current) != written.get(language) and not _ours(current, language, names):
             # the user wrote or changed this file: it stays as it is
             kept.append(language)
             continue
@@ -321,7 +295,7 @@ def remove_sentences(config_dir: Path, written: dict[str, str]) -> None:
             current = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        if _sha(current) == written.get(language) or _ours(current):
+        if _sha(current) == written.get(language) or _ours(current, language):
             path.unlink()
 
 
@@ -336,6 +310,9 @@ class VoiceSettings:
         self.sentences = DEFAULT_SENTENCE_MODE
         self.written: dict[str, str] = {}
         self.unsub: Callable[[], None] | None = None
+        # one write of the sentence files at a time: a refresh never writes back what an admin just switched off
+        self._lock = asyncio.Lock()
+        self._tasks: set[asyncio.Task[None]] = set()
 
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
@@ -347,40 +324,60 @@ class VoiceSettings:
             self.written = {str(k): str(v) for k, v in written.items()}
         elif mode in SENTENCE_MODES and mode != "off":
             # stored by 1.22.1 - 1.23 (no hashes yet), or nothing recognised then: the files there are ours as
-            # long as they hold nothing but Home 3D's sentences
-            self.written = await self.hass.async_add_executor_job(self._adopt)
+            # long as they are exactly what Home 3D writes (#369)
+            self.written = await self.hass.async_add_executor_job(self._adopt, located_names(self.hass))
 
-    def _adopt(self) -> dict[str, str]:
+    def _adopt(self, names: list[str]) -> dict[str, str]:
         out: dict[str, str] = {}
         for language in _DISTINCT:
             try:
                 text = _path(Path(self.hass.config.config_dir), language).read_text(encoding="utf-8")
             except OSError:
                 continue
-            if _ours(text):
+            if _ours(text, language, names):
                 out[language] = _sha(text)
         return out
+
+    @callback
+    def schedule_refresh(self) -> None:
+        """A device added or renamed, locating switched on or off: the files learn the names, after any write
+        under way (#369)."""
+        task = self.hass.async_create_task(self.async_refresh())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    @callback
+    def async_stop(self) -> None:
+        """The integration unloads: no more refreshes, and one waiting or under way is cancelled."""
+        if self.unsub is not None:
+            self.unsub()
+            self.unsub = None
+        for task in self._tasks:
+            task.cancel()
+        self._tasks.clear()
 
     async def async_refresh(self) -> None:
         """After an update: the sentence files an admin picked get the sentences of this version (a file the user
         changed stays as it is). Nothing happens while the sentences are off."""
-        if self.sentences == "off" or not self.written:
-            return
-        try:
-            hashes, _kept, changed = await self.hass.async_add_executor_job(
-                write_sentences,
-                Path(self.hass.config.config_dir),
-                self.sentences,
-                self.written,
-                located_names(self.hass),
-            )
-        except OSError:
-            _LOGGER.warning("Could not refresh the Assist sentences", exc_info=True)
-            return
-        if not changed:
-            return
-        self.written = hashes
-        await self._store.async_save({"sentences": self.sentences, "written": hashes})
+        async with self._lock:
+            # read under the lock: an admin's choice made meanwhile is the one that counts
+            if self.sentences == "off" or not self.written:
+                return
+            try:
+                hashes, _kept, changed = await self.hass.async_add_executor_job(
+                    write_sentences,
+                    Path(self.hass.config.config_dir),
+                    self.sentences,
+                    self.written,
+                    located_names(self.hass),
+                )
+            except OSError:
+                _LOGGER.warning("Could not refresh the Assist sentences", exc_info=True)
+                return
+            if not changed:
+                return
+            self.written = hashes
+            await self._store.async_save({"sentences": self.sentences, "written": hashes})
         if self.hass.services.has_service("conversation", "reload"):
             await self.hass.services.async_call("conversation", "reload", {}, blocking=False)
 
@@ -389,16 +386,17 @@ class VoiceSettings:
         languages whose file was left alone because the user changed it."""
         if mode not in SENTENCE_MODES:
             raise ValueError(mode)
-        try:
-            hashes, kept, changed = await self.hass.async_add_executor_job(
-                write_sentences, Path(self.hass.config.config_dir), mode, self.written, located_names(self.hass)
-            )
-        except OSError:
-            _LOGGER.warning("Could not write the Assist sentences", exc_info=True)
-            raise
-        self.sentences = mode
-        self.written = hashes
-        await self._store.async_save({"sentences": mode, "written": hashes})
+        async with self._lock:
+            try:
+                hashes, kept, changed = await self.hass.async_add_executor_job(
+                    write_sentences, Path(self.hass.config.config_dir), mode, self.written, located_names(self.hass)
+                )
+            except OSError:
+                _LOGGER.warning("Could not write the Assist sentences", exc_info=True)
+                raise
+            self.sentences = mode
+            self.written = hashes
+            await self._store.async_save({"sentences": mode, "written": hashes})
         # Assist reads custom sentences at its start: a changed file is loaded now
         if changed and self.hass.services.has_service("conversation", "reload"):
             await self.hass.services.async_call("conversation", "reload", {}, blocking=False)
@@ -639,11 +637,7 @@ async def async_setup_voice(hass: HomeAssistant) -> None:
     await settings.async_refresh()
 
     # a device added or renamed, locating switched on or off: "Wo ist …?" learns the names
-    @callback
-    def names_changed() -> None:
-        hass.async_create_task(settings.async_refresh())
-
-    settings.unsub = async_dispatcher_connect(hass, SIGNAL_LOCATE_DEVICES, names_changed)
+    settings.unsub = async_dispatcher_connect(hass, SIGNAL_LOCATE_DEVICES, settings.schedule_refresh)
 
 
 def async_unload_voice(hass: HomeAssistant) -> None:
@@ -652,6 +646,5 @@ def async_unload_voice(hass: HomeAssistant) -> None:
     intent.async_remove(hass, INTENT_ASK)
     hass.data.pop(DATA_ASK, None)
     settings: VoiceSettings | None = hass.data.pop(DATA_VOICE, None)
-    if settings is not None and settings.unsub is not None:
-        settings.unsub()
-        settings.unsub = None
+    if settings is not None:
+        settings.async_stop()

@@ -199,6 +199,52 @@ async def test_where_people_are_reaches_only_the_views_of_admins(
     assert (await task)["answer"] == "Nothing is open."
 
 
+async def test_switching_off_while_a_refresh_waits_writes_nothing_back(hass: HomeAssistant, tmp_path: Path) -> None:
+    """A locate change lands while an admin switches the sentences off: the refresh waits for the switch, then
+    finds the sentences off, so no file comes back (before the lock it read the old mode and wrote it back, #369)."""
+    from homeassistant.helpers.dispatcher import async_dispatcher_send
+
+    from custom_components.home_3d.const import DATA_VOICE
+    from custom_components.home_3d.locate.service import SIGNAL_LOCATE_DEVICES
+
+    await _setup(hass)
+    settings = hass.data[DATA_VOICE]
+    # the files land in a folder of this test's own
+    hass.config.config_dir = str(tmp_path)
+    en = tmp_path / "custom_sentences" / "en" / "home_3d.yaml"
+    try:
+        await settings.async_set_sentences("distinct")
+        assert en.is_file()
+        with patch("custom_components.home_3d.voice.located_names", return_value=["Sample Phone"]):
+            async with settings._lock:
+                off = hass.async_create_task(settings.async_set_sentences("off"))
+                await asyncio.sleep(0)
+                async_dispatcher_send(hass, SIGNAL_LOCATE_DEVICES)
+                await asyncio.sleep(0)
+                assert len(settings._tasks) == 1
+            await off
+            await hass.async_block_till_done()
+        assert settings.sentences == "off"
+        assert not en.exists()
+        assert not settings._tasks
+    finally:
+        await settings.async_set_sentences("off")
+
+
+async def test_unload_cancels_a_waiting_refresh(hass: HomeAssistant) -> None:
+    from custom_components.home_3d.const import DATA_VOICE
+
+    entry = await _setup(hass)
+    settings = hass.data[DATA_VOICE]
+    async with settings._lock:
+        settings.schedule_refresh()
+        (task,) = settings._tasks
+        assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert task.cancelled()
+    assert settings.unsub is None and not settings._tasks
+
+
 async def test_the_views_still_listen_after_a_reload(hass: HomeAssistant, hass_ws_client) -> None:
     entry = await _setup(hass)
     view = await _view(hass_ws_client, hass, "")
@@ -364,15 +410,15 @@ lists:
 """
 
 
-def test_an_early_file_with_other_sentences_is_still_ours(tmp_path: Path) -> None:
-    """Only Home 3D's sentences under Home 3D's header: replaced (it lacked "wer ist zu hause"); one sentence of
-    the user's own in it, and it stays."""
+def test_a_file_with_only_some_of_our_sentences_is_the_users(tmp_path: Path) -> None:
+    """Home 3D's header over a subset of its sentences is no file Home 3D wrote (no Home 3D release wrote
+    home_3d.yaml with fewer sentences): it stays, also with a sentence of the user's own in it (#369)."""
     de = tmp_path / "custom_sentences" / "de" / "home_3d.yaml"
     de.parent.mkdir(parents=True)
     de.write_text(_EARLY_FILE, encoding="utf-8")
-    _, kept, changed = write_sentences(tmp_path, "distinct", {})
-    assert kept == [] and changed
-    assert "wer ist [gerade] (zu hause|zuhause|daheim)" in de.read_text(encoding="utf-8")
+    _, kept, _ = write_sentences(tmp_path, "distinct", {})
+    assert kept == ["de"]
+    assert de.read_text(encoding="utf-8") == _EARLY_FILE
     de.write_text(
         _EARLY_FILE.replace('          - "gute nacht"\n', '          - "mach das licht aus"\n'), encoding="utf-8"
     )
@@ -389,35 +435,41 @@ def test_the_names_locating_knows_are_a_list_not_a_wildcard(tmp_path: Path) -> N
     assert "wo (ist|steckt|sind) [der|die|das|mein|meine] {home3d_who}" in text
     assert '      - "Torsten Apple Watch"' in text and '      - "Frau \\"K\\""' in text
     # the names change: the file follows; no names: the list goes
-    _, _, changed = write_sentences(tmp_path, "distinct", hashes, ["Torsten"])
+    hashes, _, changed = write_sentences(tmp_path, "distinct", hashes, ["Torsten"])
     assert changed and "Apple Watch" not in de.read_text(encoding="utf-8")
-    write_sentences(tmp_path, "distinct", {}, [])
+    write_sentences(tmp_path, "distinct", hashes, [])
     assert "home3d_who" not in de.read_text(encoding="utf-8")
 
 
-def test_an_older_file_with_fewer_sentences_is_still_ours(tmp_path: Path) -> None:
-    """A file of an older version had fewer sentences (no "wer ist zu hause"): replaced, not kept as the user's."""
-    de = tmp_path / "custom_sentences" / "de" / "home_3d.yaml"
-    de.parent.mkdir(parents=True)
-    de.write_text(
-        "# Written by Home 3D: the sentences Assist hands to the open Home 3D views (the first one that\n"
-        "# understands answers). Rewritten on every start: put your own sentences for Home3DAsk into another file.\n"
-        'language: "de"\nintents:\n  Home3DAsk:\n    data:\n      - sentences:\n'
-        '          - "zeig[e] [mir] [mal] [bitte] {text}"\n          - "wo (ist|sind|steht|stehen) {text}"\n'
-        "lists:\n  text:\n    wildcard: true\n",
-        encoding="utf-8",
-    )
-    _, kept, changed = write_sentences(tmp_path, "distinct", {})
+def test_a_file_the_user_trimmed_is_left_alone(tmp_path: Path) -> None:
+    """The user took "show [me] {text}" out of Home 3D's file (it competes with Home Assistant's own): the file
+    is theirs now, never rewritten, never removed with the sentences switched off or the integration (#369)."""
+    en = tmp_path / "custom_sentences" / "en" / "home_3d.yaml"
+    hashes, _, _ = write_sentences(tmp_path, "distinct", {}, ["Sample Phone"])
+    trimmed = en.read_text(encoding="utf-8").replace('          - "show [me] {text}"\n', "")
+    assert trimmed != en.read_text(encoding="utf-8")
+    en.write_text(trimmed, encoding="utf-8")
+    for mode in ("distinct", "all", "off"):
+        _, kept, _ = write_sentences(tmp_path, mode, hashes, ["Sample Phone"])
+        assert kept == ["en"], mode
+        assert en.read_text(encoding="utf-8") == trimmed
+    remove_sentences(tmp_path, hashes)
+    assert en.read_text(encoding="utf-8") == trimmed
+
+
+def test_a_file_we_wrote_is_ours_without_its_hash(tmp_path: Path) -> None:
+    """Exactly what Home 3D writes (with the names locating knows now, or none) is ours even when the stored hash
+    is gone; the same file with other names is known by its hash only."""
+    en = tmp_path / "custom_sentences" / "en" / "home_3d.yaml"
+    write_sentences(tmp_path, "distinct", {}, ["Sample Phone"])
+    hashes, kept, changed = write_sentences(tmp_path, "all", {}, ["Sample Phone"])
     assert kept == [] and changed
-    # one sentence of the user's own in it: kept
-    de.write_text(
-        de.read_text(encoding="utf-8")
-        .replace("wildcard: true", "wildcard: true\n")
-        .replace('          - "zeig', '          - "mach das licht an"\n          - "zeig'),
-        encoding="utf-8",
-    )
-    _, kept, _ = write_sentences(tmp_path, "distinct", {})
-    assert kept == ["de"]
+    hashes, _, _ = write_sentences(tmp_path, "distinct", hashes, [])
+    assert "Sample Phone" not in en.read_text(encoding="utf-8")
+    # written with names that are gone now, and the hash lost: nothing tells it from a file the user wrote
+    write_sentences(tmp_path, "distinct", hashes, ["Sample Watch"])
+    _, kept, _ = write_sentences(tmp_path, "distinct", {}, ["Sample Phone"])
+    assert sorted(kept) == ["de", "en"]
 
 
 def test_the_names_locating_knows_are_sentences(tmp_path: Path) -> None:
