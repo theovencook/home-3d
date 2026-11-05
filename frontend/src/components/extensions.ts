@@ -1059,7 +1059,8 @@ export class Extensions extends LitElement {
         margin-top: 6px;
       }
       .fp3d-pet-row input[type="text"],
-      .fp3d-pet-row select {
+      .fp3d-pet-row select,
+      .fp3d-ext-season select {
         padding: 6px 10px;
         border-radius: 10px;
         border: 1px solid var(--fp3d-line, rgba(120, 190, 255, 0.25));
