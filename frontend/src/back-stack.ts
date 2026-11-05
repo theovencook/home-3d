@@ -231,6 +231,8 @@ export function navHosted(): boolean {
  */
 export class BackLayers {
   private readonly open = new Map<string, () => void>();
+  /** The openers this owner set, to take them out again when it leaves (#384). */
+  private readonly mine = new Map<string, { open: () => void; close: () => void }>();
   private readonly scope: string;
   private readonly on: () => boolean;
 
@@ -242,7 +244,11 @@ export class BackLayers {
   sync(name: string, isOpen: boolean, close: () => void, reopen?: () => void): void {
     const key = this.scope ? `${this.scope}:${name}` : name;
     const on = this.on();
-    if (reopen && on) nav().openers.set(key, { open: reopen, close });
+    if (reopen && on) {
+      const opener = { open: reopen, close };
+      this.mine.set(key, opener);
+      nav().openers.set(key, opener);
+    }
     const release = this.open.get(name);
     if (isOpen && !release && on) {
       this.open.set(
@@ -270,5 +276,9 @@ export class BackLayers {
   closeAll(): void {
     for (const release of [...this.open.values()].reverse()) release();
     this.open.clear();
+    // the closures hold the owner (an editor, a 3D view and its plan): they go with it, unless a newer owner took the key
+    const openers = nav().openers;
+    for (const [key, opener] of this.mine) if (openers.get(key) === opener) openers.delete(key);
+    this.mine.clear();
   }
 }

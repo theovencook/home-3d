@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- The 3D view's quick changes (settings, hiding a room) now count as undo steps, so opening the editor afterwards keeps the history. A picture on a screen that failed to load is tried again after a minute, and the picture cache is emptied when the home changes and kept small. A closed editor or 3D view no longer stays in memory through the back button's bookkeeping. A link on an item to another website always asks first and names the site; paths like `//host` and `/\host` are no longer accepted as paths (a stored plan with one loads with that link target left out). The media cover in the quick menu no longer breaks on addresses with spaces or brackets (#384).
+
 ## Home 3D 1.0.0 (4 November 2026)
 
 - A TV reached through several integrations (several media players on one item or within half a metre) shows one now-playing card: the playing player, else a paused one with a title, else the first (#356).

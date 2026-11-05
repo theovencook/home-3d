@@ -669,7 +669,20 @@ export class Floorplan3dPanel extends LitElement {
    * plan when someone else saved meanwhile. */
   private onPlanChange(e: CustomEvent<{ change: PlanChange }>): void {
     e.preventDefault();
-    this.data.update(e.detail.change);
+    this.updatePlan(e.detail.change);
+  }
+
+  /** A saved-at-once change (3D view settings, hiding a room): also one more step of the undo history, so an editor
+   * opened next keeps its steps (#384). */
+  private updatePlan(change: PlanChange): void {
+    const b = this.data.building;
+    if (!b) return;
+    const next = structuredClone(b);
+    change(next);
+    this.undoHistory.record(b, next, this.data.homeId);
+    this.data.update(change);
+    // the controller made its own copy of the result: that one is the plan the steps now lead up to
+    if (this.data.building) this.undoHistory.track(this.data.building);
   }
 
   private onRoomTap(e: CustomEvent<{ floorId: string; roomId: string | null }>): void {
@@ -1511,7 +1524,7 @@ export class Floorplan3dPanel extends LitElement {
 
   /** An editor hides a room from the selector, or brings it back (#298); the room stays drawn. Saved like any plan change. */
   private hideRoom(roomId: string, hide: boolean): void {
-    this.data.update((b) => {
+    this.updatePlan((b) => {
       for (const f of b.floors) for (const r of f.rooms) if (r.id === roomId) hide ? (r.hide_in_picker = true) : delete r.hide_in_picker;
     });
   }

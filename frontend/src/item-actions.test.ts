@@ -16,6 +16,8 @@ function recorder(answer = true) {
       done.push(["confirm", text]);
       return answer;
     },
+    ownHost: "ha.example:8123",
+    externalText: (host) => `open ${host}?`,
   };
   return { env, done };
 }
@@ -49,6 +51,7 @@ test("navigate opens a dashboard path and url opens an address; without one noth
   assert.equal(await runItemAction({ action: "url" }, "light.desk", env), false);
   assert.deepEqual(done, [
     ["navigate", "/lovelace/garden"],
+    ["confirm", "open example.org?"],
     ["url", "https://example.org/manual"],
   ]);
 });
@@ -61,10 +64,38 @@ test("url opens only http(s) addresses and paths on this Home Assistant (#51)", 
   for (const bad of ["javascript:alert(1)", " JavaScript:alert(1)", "data:text/html,x", "//evil.example", "vbscript:x"]) {
     assert.equal(await runItemAction({ action: "url", target: bad }, null, env), false, bad);
   }
+  // the address of another host asks first, naming it (#384)
   assert.deepEqual(done, [
+    ["confirm", "open 192.168.1.10?"],
     ["url", "http://192.168.1.10/"],
     ["url", "/local/manual.pdf"],
   ]);
+});
+
+test("a link to another host always asks first, naming the host; no means it does not open (#384)", async () => {
+  const yes = recorder();
+  assert.equal(await runItemAction({ action: "url", target: "https://login.example.net/x?y=1" }, null, yes.env), true);
+  assert.deepEqual(yes.done, [["confirm", "open login.example.net?"], ["url", "https://login.example.net/x?y=1"]]);
+  const no = recorder(false);
+  assert.equal(await runItemAction({ action: "url", target: "https://user@login.example.net/" }, null, no.env), false);
+  assert.deepEqual(no.done, [["confirm", "open login.example.net?"]]);
+  // the item's own question comes first, then the one naming the host
+  const both = recorder();
+  await runItemAction({ action: "url", target: "https://example.org/", confirm: true, confirm_text: "Sure?" }, null, both.env);
+  assert.deepEqual(both.done, [["confirm", "Sure?"], ["confirm", "open example.org?"], ["url", "https://example.org/"]]);
+  // this Home Assistant's own host and its paths do not ask
+  const own = recorder();
+  await runItemAction({ action: "url", target: "http://HA.example:8123/lovelace/0" }, null, own.env);
+  await runItemAction({ action: "url", target: "/lovelace/0" }, null, own.env);
+  assert.deepEqual(own.done, [["url", "http://HA.example:8123/lovelace/0"], ["url", "/lovelace/0"]]);
+});
+
+test("paths starting // or /backslash are other hosts, not paths, and do not open (#384)", async () => {
+  const { env, done } = recorder();
+  for (const bad of ["/\\evil.example", "/\\/evil.example", "/\\", "//evil.example", "/\\evil.example/x", "https://"]) {
+    assert.equal(await runItemAction({ action: "url", target: bad }, null, env), false, bad);
+  }
+  assert.deepEqual(done, []);
 });
 
 test("an action that asks first shows the editor's text and runs nothing when cancelled", async () => {

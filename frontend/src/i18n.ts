@@ -95,6 +95,7 @@ const en = {
   action_confirm_ok: "Do it",
   action_confirm_default: "{name}: are you sure?",
   action_this_item: "This item",
+  action_external_ask: "This opens {host}, a site outside Home Assistant. Open it?",
   action_failed: "The action failed: {error}",
   confirm_switch: "Really switch {name}?",
   wall_exterior: "Exterior wall (m)",
