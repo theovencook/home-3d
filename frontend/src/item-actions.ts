@@ -37,6 +37,23 @@ export function performActionLocked(action: ItemAction | null | undefined, isAdm
   return action?.action === "perform_action" && !isAdmin;
 }
 
+/**
+ * A non-admin editor's copy of items (paste, duplicate) loses every perform_action: the server keys them by item id, so
+ * on a copy one counts as new and refuses the whole save (#383). Those gestures go back to the default, in place.
+ * Returns how many were dropped.
+ */
+export function dropAdminActions(items: readonly Furniture[]): number {
+  let dropped = 0;
+  for (const m of items) {
+    for (const [gesture, action] of Object.entries(m.actions ?? {})) {
+      if (action?.action !== "perform_action") continue;
+      (m.actions as Record<string, ItemAction | null>)[gesture] = { action: "default" };
+      dropped++;
+    }
+  }
+  return dropped;
+}
+
 /** What the app lets an action do. */
 export interface ActionEnv {
   callService(domain: string, service: string, data: Record<string, unknown>): Promise<unknown>;

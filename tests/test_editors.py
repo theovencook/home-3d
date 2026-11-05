@@ -249,6 +249,41 @@ async def test_only_an_admin_adds_or_changes_a_perform_action(
         assert (await editor.receive_json())["error"]["code"] == "unauthorized", changed
 
 
+async def test_a_refused_save_names_the_item_needing_an_admin(
+    hass: HomeAssistant, hass_ws_client, hass_admin_user, hass_read_only_user, hass_read_only_access_token
+) -> None:
+    """The unauthorized error says which item carries the new perform action (#383)."""
+    await _setup(hass)
+    _, editor = await _non_admin_editor(
+        hass, hass_ws_client, hass_admin_user.id, hass_read_only_user.id, hass_read_only_access_token
+    )
+    unlock = {"action": "perform_action", "target": "lock.unlock", "data": {}}
+    building = _with_tap(unlock)
+    building["floors"][0]["placements"][0]["name"] = "Front door"
+    await editor.send_json_auto_id({"type": "home_3d/building/save", "building": building})
+    error = (await editor.receive_json())["error"]
+    assert error["code"] == "unauthorized"
+    assert "Front door (lock.front)" in error["message"]
+
+    item = {
+        "id": "m-copy",
+        "type": "tv_board",
+        "x": 1,
+        "z": 1,
+        "rotation": 0,
+        "w": 1,
+        "d": 0.4,
+        "h": 0.5,
+        "variant": None,
+    }
+    building = copy.deepcopy(BUILDING)
+    building["floors"][0]["furniture"] = [{**item, "actions": {"hold": unlock}}]
+    await editor.send_json_auto_id({"type": "home_3d/building/save", "building": building})
+    error = (await editor.receive_json())["error"]
+    assert error["code"] == "unauthorized"
+    assert error["message"].endswith(": m-copy")
+
+
 async def test_only_an_admin_adds_or_changes_a_service_or_event_button(
     hass: HomeAssistant, hass_ws_client, hass_admin_user, hass_read_only_user, hass_read_only_access_token
 ) -> None:

@@ -12,6 +12,7 @@ import { moveToFloor } from "../../item-floor.ts";
 import { bounds, centroid, FURNITURE_GROUPS, FURNITURE_TYPES, isLamp, LAMP_MODEL, uid, type Floor, type Furniture, type Placement, type Vec2, STAIR_TYPES, stairLimits, stairOptionPatch } from "../../model.ts";
 import { fetchPackUpdates, updatePlacedItems } from "../../api.ts";
 import { libraryUpdates } from "../../pack-updates.ts";
+import { dropAdminActions } from "../../item-actions.ts";
 import { load3d } from "../../load3d.ts";
 import { ensureRecipes } from "../../pack-recipes.ts";
 import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../../library-index.ts";
@@ -344,13 +345,27 @@ export class FurniturePart {
       const items = this.floor!.furniture.filter((m) => set.includes(m.id));
       const blocks = new Map<string, string>();
       const copies = items.map((m) => ({ ...structuredClone(m), id: uid("furniture"), x: round(m.x + 0.3), z: round(m.z + 0.3), group: m.group ? (blocks.get(m.group) ?? blocks.set(m.group, uid("block")).get(m.group)!) : null, locked: null }));
+      const dropped = this.dropCopiedAdminActions(copies);
       this.change((_, floor) => floor.furniture.push(...copies));
       this.setMulti(copies.map((c) => c.id));
+      this.noteDroppedActions(dropped);
       return;
     }
     const copy = { ...structuredClone(f), id: uid("furniture"), x: round(f.x + 0.3), z: round(f.z + 0.3), group: this._single ? f.group : null };
+    const dropped = this.dropCopiedAdminActions([copy]);
     this.change((_, floor) => floor.furniture.push(copy));
     this.selectItem("furniture", copy.id);
+    this.noteDroppedActions(dropped);
+  }
+
+  /** A non-admin's copies lose their perform actions (#383); an admin's keep them. How many went. */
+  dropCopiedAdminActions(this: Fp3dEditor, copies: Furniture[]): number {
+    return this.isHaAdmin ? 0 : dropAdminActions(copies);
+  }
+
+  /** The short notice for that (after the selection, which clears notices). */
+  noteDroppedActions(this: Fp3dEditor, n: number): void {
+    if (n) this._notice = this.t("copy_actions_dropped", { n });
   }
 
   /**
