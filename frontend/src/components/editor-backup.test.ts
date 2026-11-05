@@ -26,6 +26,7 @@ async function importing(file: unknown, fail?: string) {
         return { revision: 2, building, home_id: msg.homes?.[0]?.id ?? "home", packs: msg.packs?.length ?? 0, skipped: [] };
       }
       if (msg.type === "home_3d/image/set") return null;
+      if (msg.type === "home_3d/backup/stage") return { token: msg.token ?? "t1" };
       throw new Error(`unexpected ${msg.type}`);
     },
   };
@@ -123,4 +124,41 @@ test("each restore point shows its size next to the date and the counts (#240)",
   assert.match(out, /4 rooms, 9 items · 42 KB/);
   // a point from a server that sent no size shows none
   assert.match(out, /3 rooms, 2 items<\/span>/);
+});
+
+/** A pack entry as a backup carries it: the payload and its source, each about `kb` kilobytes. */
+const bigPack = (id: string, kb: number) => {
+  const text = "x".repeat(kb * 1024);
+  return { id, name: id, items: [{ id: "a", note: text }], source: { files: { "pack.json": text } } };
+};
+
+test("a backup's packs go with their source only, and ahead in parts when they don't fit with the rest (#375)", async () => {
+  const file = { ...twoHomes, packs: [bigPack("a.one", 1500), bigPack("a.two", 1500), bigPack("a.three", 1500)] };
+  const { sent, told } = await importing(file);
+  assert.deepEqual(told, []);
+  const stages = sent.filter((m) => m.type === "home_3d/backup/stage");
+  // every import that carries the packs (the check and the restore) sends them ahead: two parts of at most 4 MiB
+  assert.equal(stages.length, 4);
+  for (const m of stages) assert.ok(new TextEncoder().encode(JSON.stringify(m)).length < 4 * 1024 * 1024);
+  assert.deepEqual(
+    stages.flatMap((m) => m.packs.map((p: Record<string, unknown>) => Object.keys(p).sort().join(","))),
+    Array(6).fill("id,source"),
+  );
+  const last = sent.filter((m) => m.type === "home_3d/backup/import" && m.homes?.[0]?.id === "flat");
+  for (const m of last) assert.ok(!("packs" in m) && typeof m.staged === "string");
+});
+
+test("a small backup sends its packs inline, with their source only (#375)", async () => {
+  const { imports } = await importing({ ...twoHomes, packs: [bigPack("a.one", 2)] });
+  const withPacks = imports.filter((m) => "packs" in m);
+  assert.equal(withPacks.length, 2);
+  for (const m of withPacks) assert.deepEqual(Object.keys(m.packs[0]).sort(), ["id", "source"]);
+});
+
+test("a pack too large for any message is refused with a clear message before anything is sent (#375)", async () => {
+  const { sent, told } = await importing({ ...twoHomes, packs: [bigPack("a.huge", 4500)] });
+  assert.equal(sent.filter((m) => m.type === "home_3d/backup/import" && !m.check_only).length, 0);
+  assert.equal(told.length, 1);
+  assert.match(told[0], /4 MB/);
+  assert.match(told[0], /a\.huge/);
 });

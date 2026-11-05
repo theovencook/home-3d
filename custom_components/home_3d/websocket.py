@@ -17,6 +17,7 @@ import voluptuous as vol
 from voluptuous.humanize import humanize_error
 
 from . import frontend_build
+from .backup_restore import StagedPacks
 from .const import (
     DATA_ASK,
     DATA_EDITORS,
@@ -95,6 +96,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_items_save,
         ws_items_remove,
         ws_backup_export,
+        ws_backup_stage,
         ws_backup_import,
         ws_timetravel_history,
         ws_voice_subscribe,
@@ -810,6 +812,8 @@ async def ws_items_remove(hass: HomeAssistant, connection: websocket_api.ActiveC
 # ---------------------------------------------------------------------------- backup
 
 BACKUP_FORMAT = "home3d-backup"
+# the packs of backups sent in parts (#375)
+_STAGED = "home_3d_backup_staged"
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/backup/export"})
@@ -837,6 +841,28 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "home_3d/backup/stage",
+        # a part of a backup's packs, sent ahead because they don't fit in one message with the rest (#375)
+        vol.Required("packs"): [dict],
+        # the token the first part got: the next parts go with it
+        vol.Optional("token"): vol.All(str, vol.Length(max=64)),
+    }
+)
+@websocket_api.require_admin
+@require_editor
+@callback
+def ws_backup_stage(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Keep a part of a backup's packs for the `backup/import` that names its token (#375); nothing is checked or
+    written yet."""
+    staged: StagedPacks = hass.data.setdefault(_STAGED, StagedPacks())
+    if (token := staged.add(msg.get("token"), msg["packs"])) is None:
+        connection.send_error(msg["id"], "staged_expired", "The packs sent ahead are gone or too many: send them again")
+        return
+    connection.send_result(msg["id"], {"token": token})
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "home_3d/backup/import",
         vol.Optional("building"): dict,
         # the packs: restored onto the installed pack with the same id, or added; packs not in the backup stay, so an
@@ -856,6 +882,8 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         **_HOME,
         # only check the backup (#153): the answer says what a restore would skip; nothing changes
         vol.Optional("check_only", default=False): bool,
+        # the packs sent ahead with backup/stage (#375), restored with `packs`
+        vol.Optional("staged"): vol.All(str, vol.Length(max=64)),
     }
 )
 @websocket_api.require_admin
@@ -872,6 +900,14 @@ async def ws_backup_import(
     step fails the steps done so far are undone and the answer is the error "restore_failed"."""
     if (data := _data(hass, connection, msg)) is None:
         return
+    if "staged" in msg:
+        staged: StagedPacks = hass.data.setdefault(_STAGED, StagedPacks())
+        if (ahead := staged.take(msg["staged"])) is None:
+            connection.send_error(
+                msg["id"], "staged_expired", "The packs sent ahead are gone: restore the backup again"
+            )
+            return
+        msg = {**msg, "packs": [*ahead, *msg.get("packs", [])]}
     try:
         # every plan, pack and item of a backup is checked in the executor (#176): megabytes of work
         homes, building, checked, items, skipped = await hass.async_add_executor_job(_checked_backup, msg)

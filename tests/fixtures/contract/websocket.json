@@ -15,7 +15,16 @@
         "home_id",
         "homes",
         "items",
+        "packs",
+        "staged"
+      ]
+    },
+    "home_3d/backup/stage": {
+      "required": [
         "packs"
+      ],
+      "optional": [
+        "token"
       ]
     },
     "home_3d/building/get": {

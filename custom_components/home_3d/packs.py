@@ -392,6 +392,12 @@ PACK_FILE = "pack.json"
 MAX_ITEMS = 1000
 MAX_FILE_SIZE = 50_000
 MAX_FOLDER_SIZE = 3_000_000
+# Home Assistant takes a websocket message of at most 4 MiB (aiohttp's default); a larger one drops the connection
+MAX_MESSAGE_BYTES = 4 * 1024 * 1024
+# the data files as a folder import sends them (#375): their JSON in UTF-8 bytes, with room left in the message for
+# the rest of it. A folder within this fits in one message however it was installed (files or GitHub), so it also
+# round-trips: an installed pack can always be imported again as a folder.
+MAX_FOLDER_BYTES = 3_800_000
 # an item file: lower-case names, at most three folders deep ("seating/chairs/stool.json")
 _ITEM_PATH = re.compile(r"^(?:[a-z0-9][a-z0-9_-]{0,39}/){0,3}[a-z0-9][a-z0-9_.-]{0,39}\.json$")
 # a readme and the licence text may come along; they are not read
@@ -631,7 +637,15 @@ def _data_files(files: dict[str, str]) -> dict[str, str]:
     total = sum(len(text) for text in kept.values())
     if total > MAX_FOLDER_SIZE:
         raise PackError("too_large", f"the pack: {total} characters, at most {MAX_FOLDER_SIZE}")
+    if (sent := folder_bytes(kept)) > MAX_FOLDER_BYTES:
+        raise PackError("too_large", f"the pack: {sent} bytes as sent, at most {MAX_FOLDER_BYTES}")
     return kept
+
+
+def folder_bytes(files: dict[str, str]) -> int:
+    """The size of a folder's files as a folder import sends them: compact JSON, UTF-8 (frontend api.ts measures
+    the same way)."""
+    return len(json.dumps(files, ensure_ascii=False, separators=(",", ":")).encode())
 
 
 def verify_folder(files: dict[str, str]) -> dict[str, Any]:

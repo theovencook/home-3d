@@ -641,11 +641,16 @@ A pack is refused, with a message that names the file and the fault, when:
 | Any text contains a link (`http:`, `https:`, `www.` and the like) | | `not_data` |
 | Too many items | 1,000 per pack | `too_many_items` |
 | A file is too large | 50,000 characters | `too_large` |
-| The whole pack is too large | 3,000,000 characters | `too_large` |
+| The whole pack is too large | 3,000,000 characters, and 3,800,000 bytes as a folder import sends them (UTF-8 JSON) | `too_large` |
 | A file is not JSON, breaks the schema, or an item id does not match its file name or is used twice | 60 parts and 40 symbol shapes per item | `invalid_content` |
 | A value this version does not know yet (a newer shape, for example) | | `needs_update` |
 
-The size limits keep a pack within one websocket message. A larger collection is split into several packs.
+The size limits keep a pack within one websocket message (Home Assistant takes at most 4 MiB): the page measures a
+folder before sending it and says `too_large` instead of losing the connection, and a pack installed from GitHub is
+held to the same byte limit, so it can always be imported again as a folder. A larger collection is split into
+several packs. A full backup sends its packs ahead in parts when they don't fit in one message with the rest
+(`home_3d/backup/stage`, then `backup/import` with the `staged` token); a single pack or plan too large for one
+message is refused before anything is sent.
 
 ## Checking and importing
 

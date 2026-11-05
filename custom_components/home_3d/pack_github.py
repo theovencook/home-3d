@@ -28,7 +28,7 @@ from yarl import URL
 
 from .packs import (
     MAX_FILE_SIZE,
-    MAX_FOLDER_SIZE,
+    MAX_FOLDER_BYTES,
     MAX_ITEMS,
     MAX_STRINGS_SIZE,
     PACK_FILE,
@@ -44,7 +44,8 @@ ALLOWED_HOSTS = frozenset({"github.com", "api.github.com", "raw.githubuserconten
 MAX_FILE_BYTES = MAX_FILE_SIZE * 4
 # a language pack's strings.json (#196) may be larger
 MAX_STRINGS_BYTES = MAX_STRINGS_SIZE * 4
-MAX_FOLDER_BYTES = MAX_FOLDER_SIZE * 4
+# the whole folder: the same byte limit as a folder import (#375; the files' bytes are at most what is sent), so a
+# pack installed by URL also imports as a folder. The downloaded files are then checked like one (packs.py).
 # files in the pack folder (data files plus a readme and a licence text); more is refused before any download
 MAX_FILES = MAX_ITEMS + 10
 # an answer of the GitHub API (the file list of a large repository is the biggest)

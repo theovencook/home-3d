@@ -8,7 +8,7 @@ import { storedImageIds } from "../../transfer.ts";
 import { normalizeBuilding } from "../../model.ts";
 import type { Building } from "../../model.ts";
 import { errorText } from "../../failure.ts";
-import { checkBackup, fetchBackup, restoreBackup, type BackupFile, type BackupHome } from "../../api.ts";
+import { fetchBackup, type BackupFile, type BackupHome } from "../../api.ts";
 import { migratePlanTypes } from "../../packs.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
@@ -99,6 +99,8 @@ export class BackupPart {
     if (!(await this.ask(this.t("backup_full_confirm"), this.t("backup_restore")))) return;
     this._backupBusy = true;
     try {
+      // a lazy chunk of its own (#375): the parts and sizes of a large backup
+      const { checkBackup, restoreBackup } = await import("../../backup-send.ts");
       // several homes (#53): one restore per home keeps each message small (a plan can be megabytes); a file from
       // before them restores its one plan onto the home being edited
       const homes = data.homes?.length ? data.homes : null;
@@ -151,6 +153,11 @@ export class BackupPart {
       // a lost connection comes as the whole result message ({ error: { code, message } }), e.g. when the backup is
       // larger than Home Assistant takes in one message
       const e = (err ?? {}) as { code?: string | number; message?: string; error?: { code?: string | number; message?: string } };
+      // a pack or a plan larger than one message takes (#375): said before anything is sent
+      if (e.code === "backup_too_large") {
+        await this.tell(this.t("backup_part_too_large", { detail: String(e.message ?? "") }));
+        return;
+      }
       await this.tell(this.t("backup_import_error", { error: String(e.message ?? e.error?.message ?? e.code ?? e.error?.code ?? err) }));
     } finally {
       this._backupBusy = false;
