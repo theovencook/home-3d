@@ -2182,7 +2182,7 @@ export function normalizeBuilding(b: Building): Building {
       for (const p of lights) {
         const t = type[p.mount ?? "ceiling"];
         const [w, d, h] = FURNITURE_SIZE[t];
-        f.furniture.push({ id: `lamp_${p.entity_id.slice(6).replace(/[^A-Za-z0-9_\-.]/g, "_")}`.slice(0, 64), type: t, x: p.x, z: p.z, rotation: 0, w, d, h, variant: null, entity: p.entity_id, power: null });
+        f.furniture.push({ id: `lamp_${p.entity_id.slice(6).replace(/[^A-Za-z0-9_\-.]/g, "_")}`.slice(0, 64), type: t, x: p.x, z: p.z, rotation: 0, w, d, h, variant: null, entity: p.entity_id, power: null, ...(typeof p.y === "number" ? { mount_y: Math.min(Math.max(p.y, 0), 10) } : {}) });
       }
       f.placements = f.placements.filter((p) => !p.entity_id.startsWith("light.") || p.pin);
     }

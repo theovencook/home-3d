@@ -98,6 +98,10 @@ def _lamp(placement: dict[str, Any], taken: set[Any]) -> dict[str, Any]:
     for key in _LAMP_FIELDS:
         if key in placement and placement[key] is not None:
             lamp[key] = placement[key]
+    height = placement.get("y")
+    if isinstance(height, (int, float)) and not isinstance(height, bool):
+        # the placement's mount height (#381); the lamp's own range is 0-10 m, no `y` keeps the type's default
+        lamp["mount_y"] = min(max(float(height), 0.0), 10.0)
     return lamp
 
 

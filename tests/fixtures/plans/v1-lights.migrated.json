@@ -103,7 +103,8 @@
           "variant": null,
           "entity": "light.sample_wall",
           "power": null,
-          "locked": true
+          "locked": true,
+          "mount_y": 1.8
         }
       ],
       "placements": [
