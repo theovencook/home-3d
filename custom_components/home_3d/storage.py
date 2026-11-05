@@ -12,13 +12,15 @@ from collections.abc import Callable
 import copy
 import json
 import logging
+import os
+import re
 import time
 from typing import Any
 import uuid
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.storage import Store
+from homeassistant.helpers.storage import STORAGE_DIR, Store
 import voluptuous as vol
 
 from .const import (
@@ -28,6 +30,7 @@ from .const import (
     FIRST_HOME_ID,
     HISTORY_INTERVAL,
     HISTORY_MAX,
+    KEPT_MAX,
     PLAN_VERSION,
     SIGNAL_BUILDING_UPDATED,
     SIGNAL_HOMES_UPDATED,
@@ -38,6 +41,7 @@ from .const import (
     STORAGE_KEY_PACKS,
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
+    UPLOAD_GRACE_DAYS,
 )
 from .custom_items import CustomItems
 from .migrations import PlanTooNew, migrate_plan
@@ -95,8 +99,8 @@ def check_plan(building: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
         listed = ", ".join(dropped)
         return repaired, {
             "code": PLAN_REPAIRED,
-            "message": f"Parts of the stored plan were invalid and are left out ({listed}); the plan as it was is "
-            "kept as a restore point",
+            "message": f"Parts of the stored plan were invalid and are left out ({listed}); the plan as stored stays "
+            "unchanged until the next save, and is kept as a restore point",
             "dropped": dropped,
         }
     return building, _invalid(first)
@@ -184,7 +188,9 @@ def _loaded_plan(
     """A stored plan as a home loads it (no event loop needed, #176): checked and migrated (#165, check_plan), its
     moved items given their new ids (#110) and its pack items their recipe copies (#2). Also the problem with it,
     whether the plan as stored is kept as a restore point (it was repaired, or the migration changed more than its
-    version) and whether the plan is written back. One this Home 3D cannot read comes back as it was, never written."""
+    version) and whether the plan is written back. One this Home 3D cannot read comes back as it was, never written;
+    a repaired one (#379: it may hold what a newer Home 3D wrote, after a rollback) is served repaired but never
+    written back here: the plan as stored stays until an editor saves."""
     building, problem = check_plan(original)
     if problem is not None and problem["code"] in _READ_ONLY:
         return building, problem, False, False
@@ -193,7 +199,7 @@ def _loaded_plan(
     moved = migrate_building(building, moves)
     completed = with_recipes(moved, moved.get("recipes"), packs)
     write = changed or moved is not building or completed.get("recipes") != building.get("recipes")
-    return (completed if write else building), problem, keep_original, write
+    return (completed if write else building), problem, keep_original, write and problem is None
 
 
 def _started_plan(
@@ -253,6 +259,40 @@ def _home_keys(home_id: str) -> tuple[str, str, str]:
     return f"{base}.building", f"{base}.images", f"{base}.history"
 
 
+# the stores of a home other than the first (#53, _home_keys)
+_HOME_STORE = re.compile(rf"^{re.escape(DOMAIN)}\.home_([^.]+)\.(?:building|images|history)$")
+
+
+def _storage_files(storage_dir: str) -> list[str]:
+    """The files in Home Assistant's storage folder (no event loop needed); none when it cannot be listed."""
+    try:
+        return os.listdir(storage_dir)
+    except OSError:
+        return []
+
+
+def _homes_on_disk(files: list[str]) -> list[str]:
+    """The ids of the homes whose stores are on disk (#379), the first home first: the homes a lost list of homes
+    named. A copy Home Assistant kept of a damaged store (`<key>.corrupt.<time>`) is no store."""
+    first = any(name in (STORAGE_KEY_BUILDING, STORAGE_KEY_IMAGES, STORAGE_KEY_HISTORY) for name in files)
+    others = sorted({m.group(1) for name in files if (m := _HOME_STORE.match(name))} - {FIRST_HOME_ID})
+    return ([FIRST_HOME_ID] if first else []) + others
+
+
+def _corrupt_copy(files: list[str], key: str) -> str | None:
+    """The newest copy Home Assistant kept of a store it could not read (#379: it renames a damaged file to
+    `<key>.corrupt.<time>` and loads nothing), else None."""
+    return max((name for name in files if name.startswith(f"{key}.corrupt.")), default=None)
+
+
+def _rotated(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The restore points kept: the last HISTORY_MAX, and apart from them the last KEPT_MAX ones marked `kept` (#379:
+    a stored plan as it was before a repair), which the others never push out."""
+    kept = {id(p) for p in [p for p in history if p.get("kept")][-KEPT_MAX:]}
+    kept |= {id(p) for p in [p for p in history if not p.get("kept")][-HISTORY_MAX:]}
+    return [p for p in history if id(p) in kept]
+
+
 def _summary(building: dict[str, Any]) -> dict[str, int]:
     # also of a plan that does not validate (#165): what is no list counts as none
     def count(value: Any) -> int:
@@ -301,6 +341,11 @@ class Home:
         # the plan they start from and the write are one step
         self._lock = asyncio.Lock()
         self._images: dict[str, str] = {}
+        # when each picture was set (#379), so the clean-up on load keeps the ones set lately (a draft may use one
+        # whose plan save failed); a picture stored before this has none
+        self._added: dict[str, float] = {}
+        # the plan as stored while it is served repaired (#379): it stays on disk as it is until the next write
+        self._stored: Any = None
         self._history: list[dict[str, Any]] = []
         # a restore point never changes: its size in bytes is worked out once (#240)
         self._sizes: dict[str, int] = {}
@@ -322,14 +367,17 @@ class Home:
     async def async_load(self) -> None:
         """Load the stores and drop the images neither the plan nor a recent restore point uses (#154).
 
-        The plan is brought to the current version and checked (#165, check_plan). A migrated or repaired plan is
-        written back once, the plan as stored kept as a restore point first; one that cannot be read is kept as it is
-        and the home is read-only."""
+        The plan is brought to the current version and checked (#165, check_plan). A migrated plan is written back
+        once, the plan as stored kept as a restore point first; a repaired one is served repaired but stays on disk as
+        it is until the next write, and is kept as a restore point the others never push out (#379); one that cannot
+        be read (also a store Home Assistant found damaged, #379) is kept as it is and the home is read-only."""
         # under the lock like every other change of the plan (#149), the check and the migration in the executor (#176)
         async with self._lock:
             history = await self._history_store.async_load()
             self._history = list((history or {}).get("snapshots", []))
             stored = await self._building_store.async_load()
+            # a store Home Assistant could not read it renamed and loaded as nothing (#379): looked up only then
+            files = await self._async_storage_files() if stored is None or history is None else []
             if stored:
                 original = stored.get("building") or empty_building()
                 self.revision = int(stored.get("revision", 0))
@@ -339,28 +387,60 @@ class Home:
                 )
                 if self.problem is not None:
                     _LOGGER.warning("Home %s: %s", self.id, self.problem["message"])
-                if keep_original:
+                repaired = self.problem is not None and not self.read_only
+                if keep_original and not (repaired and self._has_kept(original)):
                     # nothing the migration or the repair leaves out is lost: the plan as stored stays a restore point
-                    await self._async_snapshot(original)
+                    await self._async_snapshot(original, kept=repaired)
                 self.building = building
+                self._stored = original if repaired else None
                 if write:
                     await self._save_building()
+            elif (damaged := _corrupt_copy(files, self._building_store.key)) is not None:
+                # a damaged plan is no empty one (#379): the home is read-only until a restore point or a backup
+                self.problem = {
+                    "code": PLAN_INVALID,
+                    "message": f"The stored plan could not be read; Home Assistant kept the damaged file as {damaged}",
+                }
+                _LOGGER.warning("Home %s: %s", self.id, self.problem["message"])
+            # pictures go only while the plan and the restore points are known (#379): never against no plan, an
+            # empty one or lost restore points
+            known = bool(stored) and bool(self.building.get("floors"))
+            known = known and _corrupt_copy(files, self._history_store.key) is None
         images = await self._image_store.async_load()
         # the clean-up is one step with picture changes (#364): under the lock, so a picture set meanwhile is kept
         async with self._lock:
             self._images = dict((images or {}).get("images", {}))
-            used = self._images_in_use()
-            unused = set(self._images) - used if used is not None else set()
+            added = (images or {}).get("added") or {}
+            self._added = {k: float(v) for k, v in added.items() if k in self._images and isinstance(v, (int, float))}
+            used = self._images_in_use() if known else None
+            # a picture set lately stays (#379: a draft may use it, its plan save failed), for at most the days the
+            # pictures of restore points are kept
+            since = time.time() - min(UPLOAD_GRACE_DAYS, self._picture_days()) * 86400
+            unused = (
+                {i for i in set(self._images) - used if self._added.get(i, 0) < since} if used is not None else set()
+            )
             if unused:
                 _LOGGER.debug("Removing %d unused background images", len(unused))
                 for image_id in unused:
                     self._images.pop(image_id)
+                    self._added.pop(image_id, None)
                 await self._save_images()
+
+    async def _async_storage_files(self) -> list[str]:
+        return await self.hass.async_add_executor_job(_storage_files, self.hass.config.path(STORAGE_DIR))
+
+    def _has_kept(self, original: Any) -> bool:
+        """Whether the plan as stored is a kept restore point already (#379): a repaired plan is not written back, so
+        it is repaired again at every start."""
+        return any(
+            p.get("kept") and p["revision"] == self.revision and p["building"] == original for p in self._history
+        )
 
     async def async_start(self, building: dict[str, Any] | None, images: dict[str, str] | None) -> None:
         """Fill a new home: its first plan (revision 1) and pictures, or an empty plan at revision 0."""
         if images:
             self._images = dict(images)
+            self._added = dict.fromkeys(self._images, time.time())
             await self._save_images()
         if building is not None:
             # a plan given here is checked already (a backup, the sample, a copy of a home); one of an older version
@@ -406,8 +486,9 @@ class Home:
         current plan once no other save runs and returns the new one (None: nothing to change), so a save that
         landed meanwhile is never overwritten. The revision after it."""
         async with self._lock:
-            # a plan this Home 3D cannot read is never written over (#165), nor a deleted home's (#167)
-            if self.read_only or self.deleted:
+            # a plan this Home 3D cannot read is never written over (#165), nor a deleted home's (#167), nor one
+            # served repaired (#379): the plan as stored stays until an editor saves
+            if self.read_only or self.deleted or self._stored is not None:
                 return self.revision
             building = change(self.building)
             if building is None:
@@ -447,8 +528,9 @@ class Home:
         self.revision = revision
         if content:
             self._content_revision = revision
-        # a plan replaced by a valid one has no problem any more (#165)
+        # a plan replaced by a valid one has no problem any more (#165), and it is the plan as stored (#379)
         self.problem = None
+        self._stored = None
         async_dispatcher_send(self.hass, SIGNAL_BUILDING_UPDATED, self.id, revision)
         return revision
 
@@ -484,6 +566,28 @@ class Home:
             await self._async_snapshot()
             return await self._async_store(building)
 
+    def state(self) -> tuple[dict[str, Any], dict[str, Any] | None, Any]:
+        """The plan as served, the problem with it and the plan as stored (#379), for async_put_back."""
+        return self.building, self.problem, self.building if self._stored is None else self._stored
+
+    async def async_put_back(self, state: tuple[dict[str, Any], dict[str, Any] | None, Any]) -> int:
+        """Put back a state from `state()` (#379: undoing a failed backup restore). A home without a problem gets its
+        plan back as from a restore point; one with a problem (read-only, or served repaired) gets its plan as stored
+        back unchanged and keeps the problem: a read-only home stays read-only."""
+        building, problem, stored = state
+        if problem is None:
+            return await self.async_restore(building)
+        async with self._lock:
+            self._check_not_deleted()
+            await self._async_snapshot()
+            revision = self.revision + 1
+            await self._building_store.async_save({"revision": revision, "building": stored})
+            self.building, self.revision, self._content_revision = building, revision, revision
+            self.problem = problem
+            self._stored = None if stored is building else stored
+            async_dispatcher_send(self.hass, SIGNAL_BUILDING_UPDATED, self.id, revision)
+            return revision
+
     async def async_snapshot(self) -> None:
         """Keep the current building as a restore point."""
         async with self._lock:
@@ -494,32 +598,33 @@ class Home:
         if self.deleted:
             raise HomesError("home_not_found", f"The home {self.id} was deleted")
 
-    async def _async_snapshot(self, building: dict[str, Any] | None = None) -> None:
+    async def _async_snapshot(self, building: dict[str, Any] | None = None, *, kept: bool = False) -> None:
         """Keep the current building (or `building`, the plan as stored before a migration, #165) as a restore
-        point."""
+        point; `kept` (#379: the plan as stored before a repair): one the other restore points never push out."""
         self._history.append(
             {
                 "id": uuid.uuid4().hex[:12],
                 "revision": self.revision,
                 "saved_at": time.time(),
                 "building": self.building if building is None else building,
+                **({"kept": True} if kept else {}),
             }
         )
-        self._history = self._history[-HISTORY_MAX:]
+        self._history = _rotated(self._history)
         # copies: the JSON is written in the executor while the loop may change the originals
         await self._history_store.async_save({"snapshots": list(self._history)})
 
     def _images_in_use(self) -> set[str] | None:
-        """The images the plan uses and those of the restore points made in the last `picture_days` days (#154); a
-        picture only an older restore point names is removed. None (remove nothing) when the plan (#165) or a restore
-        point cannot be read."""
+        """The images the plan uses and those of the restore points made in the last `picture_days` days (#154) or
+        kept apart (#379); a picture only an older restore point names is removed. None (remove nothing) when the plan
+        (#165) or a restore point cannot be read."""
         if self.read_only:
             return None
         since = time.time() - self._picture_days() * 86400
         try:
             used = image_ids(self.building)
             for point in self._history:
-                if point["saved_at"] >= since:
+                if point["saved_at"] >= since or point.get("kept"):
                     used |= image_ids(point["building"])
         except (KeyError, TypeError, AttributeError) as err:
             _LOGGER.warning("A restore point of home %s cannot be read (%s); keeping every picture", self.id, err)
@@ -545,6 +650,7 @@ class Home:
                 **_summary(h["building"]),
                 "size": self._size(h),
                 "missing_pictures": len(self.missing_images(h["building"])),
+                **({"kept": True} if h.get("kept") else {}),
             }
             for h in reversed(self._history)
         ]
@@ -583,6 +689,7 @@ class Home:
             if grown > 0 and total + grown > MAX_IMAGES_CHARS:
                 raise HomesError("images_full", "The pictures of this home are too big together; remove some first")
             self._images[image_id] = data
+            self._added[image_id] = time.time()
             await self._save_images()
 
     async def async_delete_image(self, image_id: str) -> None:
@@ -590,6 +697,7 @@ class Home:
         async with self._lock:
             self._check_not_deleted()
             if self._images.pop(image_id, None) is not None:
+                self._added.pop(image_id, None)
                 await self._save_images()
 
     async def async_remove(self) -> None:
@@ -608,7 +716,7 @@ class Home:
         await self._building_store.async_save({"revision": self.revision, "building": self.building})
 
     async def _save_images(self) -> None:
-        await self._image_store.async_save({"images": dict(self._images)})
+        await self._image_store.async_save({"images": dict(self._images), "added": dict(self._added)})
 
 
 class FloorplanData:
@@ -639,7 +747,8 @@ class FloorplanData:
 
     async def async_load(self) -> None:
         """Load the shared stores, then every home. An install from before #53 has no list of homes: its plan
-        becomes the first home, read from the stores it always had (nothing is copied)."""
+        becomes the first home, read from the stores it always had (nothing is copied). A list of homes that is lost
+        or damaged is made again from the homes' stores on disk (#379)."""
         packs = await self._pack_store.async_load()
         self.packs = list((packs or {}).get("packs", []))
         # the bundled furniture packs, then the bundled language packs (#196)
@@ -648,7 +757,18 @@ class FloorplanData:
         self.moves = await self.hass.async_add_executor_job(load_moves)
         await self.custom.async_load()
         stored = await self._homes_store.async_load()
-        listed = list((stored or {}).get("homes") or [{"id": FIRST_HOME_ID, "name": DEFAULT_HOME_NAME}])
+        listed = list((stored or {}).get("homes") or [])
+        if not listed:
+            # a lost (or damaged) list of homes (#379): the homes are those whose stores are on disk, by placeholder
+            # names; none (a new install, one from before #53): the first home
+            files = await self.hass.async_add_executor_job(_storage_files, self.hass.config.path(STORAGE_DIR))
+            found = _homes_on_disk(files) or [FIRST_HOME_ID]
+            listed = [
+                {"id": home_id, "name": DEFAULT_HOME_NAME if n == 1 else f"{DEFAULT_HOME_NAME} {n}"}
+                for n, home_id in enumerate(found, 1)
+            ]
+            if found != [FIRST_HOME_ID]:
+                _LOGGER.warning("The list of homes was lost; the %d homes found on disk are listed again", len(found))
         self.homes = {}
         for entry in listed:
             home = self._new_home(entry["id"], entry.get("name") or DEFAULT_HOME_NAME)
@@ -656,7 +776,7 @@ class FloorplanData:
             self.homes[home.id] = home
         active = (stored or {}).get("active")
         self.active_id = active if active in self.homes else next(iter(self.homes))
-        if stored is None:
+        if not (stored or {}).get("homes"):
             await self._save_homes()
 
     def _new_home(self, home_id: str, name: str) -> Home:
