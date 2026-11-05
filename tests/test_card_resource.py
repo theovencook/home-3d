@@ -93,3 +93,12 @@ def test_loader_file() -> None:
     assert "customElements.get(tag)" in text
     assert "let loaded = await load(0);" in text
     assert "!loaded && !customElements.get(tag)" in text
+
+
+def test_loader_retries_a_new_copy_of_the_start_file() -> None:
+    """#360: each retry imports the start file under a URL of its own (`?retry=<n>`), a new module the browser has not
+    failed on; that copy then imports the app under a new URL too (boot-core.ts loadApp)."""
+    text = loader_source(URL)
+    assert "retry=${n}" in text
+    assert "load(n)" in text
+    assert "n <= 180" in text

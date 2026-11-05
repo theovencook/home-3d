@@ -576,9 +576,20 @@ async def test_only_the_app_under_the_current_build_is_kept(hass: HomeAssistant,
         for start in ("home-3d.js", f"home-3d.js?v={BUILD}", "home-3d-loader.js", f"home-3d-loader.js?v={BUILD}"):
             assert (await client.get(f"/api/home_3d/static/{start}")).headers["Cache-Control"] == "no-cache", start
         assert (await client.get(f"/home_3d_static/home-3d-app.js?v={BUILD}")).status == 200
+        # #360: a failed import is tried again with `retry=<n>`: kept like the URL without it (the file is that build),
+        # and checked on each load without a build id or with an old one; the start file's retry is never kept
+        res = await client.get(f"/api/home_3d/static/home-3d-app.js?v={BUILD}&retry=1")
+        assert res.status == 200
+        assert res.headers["Cache-Control"] == immutable
+        for other in ("home-3d-app.js?retry=1", "home-3d-app.js?v=ffffffffffff&retry=2", "home-3d.js?retry=3"):
+            res = await client.get(f"/api/home_3d/static/{other}")
+            assert res.status == 200
+            assert res.headers["Cache-Control"] == "no-cache", other
         # a deploy that wrote build.json before the app: the old app is not kept under the new build's URL
         (folder / "home-3d-app.js").write_text('const FRONTEND_BUILD = "ffffffffffff";', encoding="utf-8")
         res = await client.get(f"/api/home_3d/static/home-3d-app.js?v={BUILD}")
+        assert res.headers["Cache-Control"] == "no-cache"
+        res = await client.get(f"/api/home_3d/static/home-3d-app.js?v={BUILD}&retry=1")
         assert res.headers["Cache-Control"] == "no-cache"
 
 
