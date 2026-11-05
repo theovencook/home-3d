@@ -59,6 +59,9 @@ const BOOT = Symbol.for("home-3d.boot");
 const AGAIN_MS = [1000, 3000];
 
 interface Boot {
+  /** The app URL the first copy chose (#361): every copy imports this one, so a copy whose build.json was late and one
+   * that got the build never import two instances (`home-3d-app.js` and `home-3d-app.js?v=<build>`). */
+  url?: Promise<string>;
   /** The import under way or done: a loaded app is never imported again. */
   load?: Promise<unknown>;
   /** Failed imports so far (#360). The browser keeps a failed module import under its URL for the page's life, so the
@@ -84,13 +87,15 @@ export function retryUrl(url: string, n: number): string {
 }
 
 /**
- * Imports the app once per page: every copy waits for the same import, and a failed one is tried again under a new
- * URL (#360), by this copy after a short wait and by any later copy (the card loader's retries). Rejects when this copy's tries all failed.
+ * Imports the app once per page: the first copy chooses the URL (#361), every copy waits for the same import, and a
+ * failed one is tried again under a new URL (#360), by this copy after a short wait and by any later copy (the card
+ * loader's retries). Rejects when this copy's tries all failed.
  */
 export async function loadApp(base: string, importer: (url: string) => Promise<unknown>, env: BootEnv = {}): Promise<void> {
   const page = (env.page ?? globalThis) as Record<symbol, Boot | undefined>;
   const s = (page[BOOT] ??= { failed: 0 });
-  const url = appUrl(base, await (env.build ?? (() => currentBuild(base)))().catch(() => null));
+  s.url ??= (env.build ?? (() => currentBuild(base)))().catch(() => null).then((build) => appUrl(base, build));
+  const url = await s.url;
   const again = env.again ?? AGAIN_MS;
   const wait = env.wait ?? ((ms) => new Promise<void>((done) => setTimeout(done, ms)));
   for (let tries = 0; ; tries++) {

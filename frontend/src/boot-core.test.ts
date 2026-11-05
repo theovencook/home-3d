@@ -100,3 +100,24 @@ test("#360: the retry marker is added to the app URL", () => {
   assert.equal(retryUrl(`${BASE}home-3d-app.js?v=abc`, 4), `${BASE}home-3d-app.js?v=abc&retry=4`);
   assert.equal(retryUrl(`${BASE}home-3d-app.js`, 1), `${BASE}home-3d-app.js?retry=1`);
 });
+
+test("#361: every start-file copy on a page imports the app URL the first one chose", async () => {
+  const page = {};
+  const app = importer(() => false);
+  let late!: (build: string | null) => void;
+  // the extra module's build.json does not answer in time (plain URL); the panel's copy gets the build
+  const first = loadApp(BASE, app.load, { page, build: () => new Promise((done) => (late = done)), ...noWait });
+  const second = loadApp(BASE, app.load, { page, build: async () => "abc", ...noWait });
+  late(null);
+  await Promise.all([first, second]);
+  await loadApp(BASE, app.load, { page, build: async () => "abc", ...noWait });
+  assert.deepEqual(app.asked, [`${BASE}home-3d-app.js`]);
+});
+
+test("#361: a retry keeps the page's chosen URL, so a late build id cannot start a second instance", async () => {
+  const page = {};
+  const app = importer((_url, n) => n <= 3);
+  await assert.rejects(loadApp(BASE, app.load, { page, build: async () => null, ...noWait }));
+  await loadApp(BASE, app.load, { page, build: async () => "abc", ...noWait });
+  assert.deepEqual(app.asked, [0, 1, 2, 3].map((n) => `${BASE}home-3d-app.js${n ? `?retry=${n}` : ""}`));
+});

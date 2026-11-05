@@ -6,6 +6,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 ## Unreleased
 
 - A failed load of the app (a network blip, Home Assistant still starting) is tried again under a new URL, by the start file and by the card loader, instead of failing until a manual reload; a loaded app is never loaded twice (#360).
+- A slow build.json no longer loads a second copy of the app: every copy of the start file on a page loads the app URL the first one chose (#361).
 
 ## Home 3D 1.0.0 (4 November 2026)
 
