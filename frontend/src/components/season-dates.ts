@@ -5,7 +5,7 @@
 
 import { html, nothing, type TemplateResult } from "lit";
 import type { Building } from "../model.ts";
-import { SEASON_IDS } from "../season-ids.ts";
+import { SEASON_EFFECT_MODES, SEASON_IDS } from "../season-ids.ts";
 import { formatTime } from "../time-text.ts";
 import { parseMonthDay, ruleWindow, seasonRules, type SeasonDates, type SeasonDatesMap, type SeasonId, type SeasonRule, type SeasonRulesMap } from "../seasons.ts";
 
@@ -320,6 +320,22 @@ export function seasonsCard(h: SeasonsCardHost): TemplateResult {
             ${h.t("season_undo")}
           </button>
         </div>`
+      : nothing}
+    ${h.editor
+      ? html`<div class="fp3d-ext-season" data-setting="season_effect">
+            <span>${h.t("st_season_effect")}</span>
+            <select
+              aria-label=${h.t("st_season_effect")}
+              ?disabled=${!eggs}
+              @change=${(e: Event) => {
+                const v = (e.target as HTMLSelectElement).value;
+                h.edit((b) => (b.settings.season_effect = v === "brief" ? null : (v as typeof b.settings.season_effect)));
+              }}
+            >
+              ${SEASON_EFFECT_MODES.map((m) => html`<option value=${m} ?selected=${(settings?.season_effect ?? "brief") === m}>${h.t(`season_fx_${m}`)}</option>`)}
+            </select>
+          </div>
+          <span class="fp3d-sub">${h.t("st_season_effect_hint")}</span>`
       : nothing}
     ${h.editor
       ? SEASON_IDS.map((id) => {
