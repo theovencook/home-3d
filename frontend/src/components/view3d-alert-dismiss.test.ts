@@ -25,25 +25,31 @@ type View = {
 
 function view(state: string, canEdit: boolean, replay: unknown = null) {
   const saved: Building[] = [];
+  const b = emptyBuilding();
+  b.settings.alert_snoozed = [{ kind: "contact_unavailable", entity: ENTITY, at: 1000 }];
   const hass = {
     language: "en",
     user: { is_admin: true },
     states: { [ENTITY]: { entity_id: ENTITY, state, attributes: {} } },
-    callWS: async (msg: { building: Building }) => {
+    // the view's own save goes through the controller (#363): it loads the plan, then saves from its revision
+    callWS: async (msg: { type: string; building: Building }) => {
+      if (msg.type === "home_3d/building/get") return { building: structuredClone(b), revision: 1, can_edit: true };
+      if (msg.type === "home_3d/history/snapshot") return null;
       saved.push(msg.building);
       return { revision: 2 };
     },
   } as unknown as HomeAssistant;
-  const b = emptyBuilding();
-  b.settings.alert_snoozed = [{ kind: "contact_unavailable", entity: ENTITY, at: 1000 }];
   const el = new Fp3dView3d() as unknown as View;
   Object.assign(el, { hass, building: b, canEdit, replay });
   return { el, hass, b, saved };
 }
 
-test("an editor's view takes a cleared warning's snooze out of the plan", () => {
+const settle = () => new Promise((r) => setTimeout(r, 20));
+
+test("an editor's view takes a cleared warning's snooze out of the plan", async () => {
   const { el, b, saved } = view("off", true);
   el.tidySnoozes(b, [], false);
+  await settle();
   assert.equal(saved.length, 1);
   assert.deepEqual(saved[0].settings.alert_snoozed, []);
   assert.deepEqual(el.building.settings.alert_snoozed, []);
@@ -74,10 +80,11 @@ test("a module's warning is kept snoozed while the modules do not report", () =>
   assert.equal(saved.length, 0);
 });
 
-test("dismissing from the banner saves the choice; a viewer without edit rights cannot", () => {
+test("dismissing from the banner saves the choice; a viewer without edit rights cannot", async () => {
   const { el, saved } = view("unavailable", true);
   el.building.settings.alert_snoozed = [];
   el.dismiss(contact, true);
+  await settle();
   assert.deepEqual(saved.at(-1)?.settings.alert_ignored, [{ kind: "contact_unavailable", entity: ENTITY }]);
   const ro = view("unavailable", false);
   ro.el.dismiss(contact, false);

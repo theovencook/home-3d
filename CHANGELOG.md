@@ -9,6 +9,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - A failed load of the app (a network blip, Home Assistant still starting) is tried again under a new URL, by the start file and by the card loader, instead of failing until a manual reload; a loaded app is never loaded twice (#360).
 - A slow build.json no longer loads a second copy of the app: every copy of the start file on a page loads the app URL the first one chose (#361).
 - Now-playing cards group only players of one TV: on the same TV item, or close together and all TV players (or the same name); a speaker or PC on the same bench or desk keeps its own card (#362).
+- The 3D view's own plan save (no panel or card around it) now sends the revision it started from and, when someone else saved first, makes the change again on their newer plan (#363).
 
 ## Home 3D 1.0.0 (4 November 2026)
 

@@ -133,14 +133,15 @@ import type { RackDraw, RackElevation } from "../rack-elevation.ts";
 
 /** A rack's front view as the sheet shows it: the drawing and the rack's name (#115). */
 type RackView = RackElevation & { name: string };
-import { fetchImage, saveBuilding } from "../api.ts";
+import { fetchImage } from "../api.ts";
+import { FallbackPlanSaver } from "../plan-fallback.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { timeStyleOf } from "../time-text.ts";
 import { holdTarget } from "../hold.ts";
 import { popupKind, popupPosition } from "../device-popup-model.ts";
 import { loadDevicePopup, loadFind, loadQuickMenu, loadViewNav, loadWeatherTile } from "../load-parts.ts";
 import { need } from "../lazy-part.ts";
-import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packsVersion, recipeHashes } from "../packs.ts";
+import { energyRole, getPacks, getPlanRecipes, isPackCooktop, isPackHeater, isPackType, isRobotVacuum, isThermostatItem, mountBase, packAmbilight, packItem, packRobotCentre, packItemName, packMotion, packsVersion } from "../packs.ts";
 import { parkedVehicle, PRESENT_STATES, parkedVehicles, vehicleFurniture } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
@@ -6007,7 +6008,7 @@ export class Fp3dView3d extends LitElement {
 
   /** Change the plan and save it (editors only). The host (panel, card) takes the change as `plan-change` (#149): it
    * saves it from the revision it shows and makes it again on a newer plan when someone else saved meanwhile. Without
-   * a host that takes it, it is saved here directly. */
+   * a host that takes it, it is saved here the same way (#363). */
   private changePlan(change: (b: Building) => void): void {
     const cur = this.building;
     if (!cur || !this.hass || !this.mayEdit) return;
@@ -6015,8 +6016,14 @@ export class Fp3dView3d extends LitElement {
     const next = structuredClone(cur);
     change(next);
     this.building = next;
-    saveBuilding(this.hass, next, recipeHashes(next.recipes), this.home).catch((err) => this.serviceFailed("home_3d/building/save", err));
+    // no host: the same controller the hosts use sends the base revision and makes the change again after a conflict (#363)
+    this.planSaver ??= new FallbackPlanSaver(
+      (plan) => (this.building = plan),
+      (err) => this.serviceFailed("home_3d/building/save", err),
+    );
+    this.planSaver.change(this.hass, this.home, change).catch((err) => this.serviceFailed("home_3d/building/save", err));
   }
+  private planSaver?: FallbackPlanSaver;
 
   /**
    * Another tab of the panel (#248: Settings for the central menu's link, Extensions for a module sheet's): the panel
