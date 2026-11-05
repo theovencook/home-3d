@@ -31,7 +31,7 @@ from .const import (
     SIGNAL_PETS_UPDATED,
 )
 from .custom_items import not_reserved
-from .editors import Editors, EditorsError, can_edit, performed_actions
+from .editors import Editors, EditorsError, action_owner, can_edit, performed_actions
 from .locate.recorder import ws_locate_rec
 from .locate.ws import COMMANDS as LOCATE_COMMANDS
 from .pack_github import checked_origin, fetch_pack
@@ -154,6 +154,10 @@ def require_editor(func: Callable[..., Any]) -> Callable[..., Any]:
 class _NeedsAdmin(Exception):
     """A save that adds or changes an item's perform action, from someone who is no admin (#51)."""
 
+    def __init__(self, owner: str = "") -> None:
+        super().__init__(owner)
+        self.owner = owner
+
 
 def _data(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> FloorplanData | None:
     data: FloorplanData | None = hass.data.get(DOMAIN)
@@ -262,7 +266,7 @@ async def ws_save_building(
         added = performed_actions(building) - performed_actions(current)
         changed_actions[:] = [bool(added or performed_actions(current) - performed_actions(building))]
         if not connection.user.is_admin and added:
-            raise _NeedsAdmin
+            raise _NeedsAdmin(action_owner(building, min(added)))
 
     try:
         revision = await home.async_save_building(
@@ -272,9 +276,13 @@ async def ws_save_building(
             base_revision=msg.get("base_revision"),
             guard=guard,
         )
-    except _NeedsAdmin:
+    except _NeedsAdmin as err:
+        # names the first such item (#383), so the editor can find and fix it
         connection.send_error(
-            msg["id"], "unauthorized", "Only an admin adds or changes a perform action or a service/event button"
+            msg["id"],
+            "unauthorized",
+            "Only an admin adds or changes a perform action or a service/event button"
+            + (f": {err.owner}" if err.owner else ""),
         )
         return
     except RevisionConflict as err:

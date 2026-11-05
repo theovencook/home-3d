@@ -278,10 +278,12 @@ export class SelectionPart {
     const floor = this.floor;
     if (!clipboard || !floor || !this.isEditor) return false;
     const copies = pasteItems(clipboard, floor.id, uid);
+    const dropped = this.dropCopiedAdminActions(copies);
     this.change((_, f) => f.furniture.push(...copies));
     this.setMulti(copies.map((c) => c.id));
     const first = this.furnitureItem;
     if (first) this._roomId = this.roomAt([first.x, first.z]) ?? this._roomId;
+    this.noteDroppedActions(dropped);
     return true;
   }
 

@@ -103,3 +103,17 @@ def performed_actions(building: dict[str, Any]) -> set[tuple[str, str, str, str]
             what = [button.get("target"), button.get("data") or {}]
             found.add(("button", str(button.get("id")), str(button["action"]), json.dumps(what, sort_keys=True)))
     return found
+
+
+def action_owner(building: dict[str, Any], key: tuple[str, str, str, str]) -> str:
+    """The item or button behind one `performed_actions` entry, as 'name (id)' or just the id (#383)."""
+    kind, owner_id = key[0], key[1]
+    if kind == "button":
+        pool = (building.get("settings") or {}).get("buttons") or []
+        id_key, name_key = "id", "label"
+    else:
+        part = "furniture" if kind == "furniture" else "placements"
+        pool = [i for f in building.get("floors", []) for i in f.get(part, [])]
+        id_key, name_key = ("id" if kind == "furniture" else "entity_id"), "name"
+    name = next((str(i[name_key]) for i in pool if str(i.get(id_key)) == owner_id and i.get(name_key)), None)
+    return f"{name} ({owner_id})" if name else owner_id

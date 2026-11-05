@@ -2219,4 +2219,5 @@ export const lateEnglish = {
   vac_add: "Add a map",
   vac_tap_map: "Tap a spot on the map",
   vac_tap_plan: "Now the same spot on the plan",
+  copy_actions_dropped: "Only an admin can copy a perform action, so {n} on the copy went back to the default.",
 };

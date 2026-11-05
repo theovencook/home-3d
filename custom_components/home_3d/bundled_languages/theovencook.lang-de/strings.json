@@ -3324,5 +3324,6 @@
  "vac_align_reset": "Neu beginnen",
  "vac_add": "Karte hinzufügen",
  "vac_tap_map": "Tippe auf eine Stelle der Karte",
- "vac_tap_plan": "Jetzt dieselbe Stelle im Plan"
+ "vac_tap_plan": "Jetzt dieselbe Stelle im Plan",
+ "copy_actions_dropped": "Nur ein Admin darf „Aktion ausführen“ kopieren: {n} an der Kopie wurden auf Standard zurückgesetzt."
 }

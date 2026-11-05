@@ -14,6 +14,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - Time travel answers the car trackers of every home, or of the home a request names (optional `home_id`), not only the active one (#371).
 - The lights-to-lamps migration keeps a light's mount height as the lamp's `mount_y`, on the server and in the browser (#381).
 - A drag in the editor that is still held when someone else's plan arrives (a reload, or a refused save loading their plan) ends there instead of writing the older plan back over theirs on the next move, Esc, second finger or release (#382).
+- Pasting or duplicating an item as a non-admin editor drops its perform actions from the copy (with a notice), so the copy no longer locks every later save; a save refused for that reason names the item (#383).
 
 ## Home 3D 1.0.0 (4 November 2026)
 
