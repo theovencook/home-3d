@@ -1235,8 +1235,9 @@ SETTINGS_SCHEMA = vol.Schema(
             None,
             vol.Schema({vol.Optional(str): vol.All([SEASON_RULE_SCHEMA], vol.Length(max=24))}, extra=vol.ALLOW_EXTRA),
         ),
-        # how long the holiday effect plays when the view opens (#385); None = "brief"
-        vol.Optional("season_effect"): vol.Any(None, vol.In(["none", "brief", "long", "always"])),
+        # how long the holiday effect plays when the view opens (#385): "none", "brief" (None), "long", "always". Kept
+        # open (any short text, an unknown one plays as "brief") so a new choice needs no plan version (#379)
+        vol.Optional("season_effect"): vol.Any(None, vol.All(str, vol.Length(max=16))),
         # the ground around the house: its height and the earth around cellars
         vol.Optional("terrain", default=None): vol.Any(
             None,
