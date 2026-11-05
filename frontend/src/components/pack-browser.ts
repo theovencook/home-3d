@@ -330,7 +330,8 @@ export class PackBrowser extends LitElement {
     this._busy = true;
     this._msg = null;
     try {
-      this._preview = await previewPackFromUrl(this.hass, entry.url);
+      // the pack at the URL must be the one the list names (#372)
+      this._preview = await previewPackFromUrl(this.hass, entry.url, entry.id);
     } catch (err) {
       this._msg = { ok: false, text: this.packError(err) };
     } finally {
@@ -346,7 +347,7 @@ export class PackBrowser extends LitElement {
     const hass = this.hass;
     this._busy = true;
     try {
-      const res = await askingFirst((confirm) => installPackFromUrl(hass, entry.url, confirm, commit), this.askFirst);
+      const res = await askingFirst((confirm) => installPackFromUrl(hass, entry.url, confirm, commit, entry.id), this.askFirst);
       if (!res) return;
       this._preview = null;
       this._msg = { ok: true, text: this.t("pb_done", { name: res.name, release }) };

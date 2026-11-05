@@ -49,7 +49,17 @@ from .off_loop import OFF_LOOP
 from .pack_github import checked_origin, fetch_pack, latest_release
 from .pack_index import PackIndex, checked_setting, index_url
 from .pack_preview import pack_preview
-from .packs import CUSTOM_PACK_ID, ITEM_SCHEMA, PackError, checked_folder, recipe_hash, with_bundled
+from .packs import (
+    CUSTOM_PACK_ID,
+    ITEM_SCHEMA,
+    PackError,
+    checked_folder,
+    is_reserved,
+    kind_of,
+    official_only,
+    recipe_hash,
+    with_bundled,
+)
 from .recipes import installed_copies, placed_types, recipe_copy
 
 if TYPE_CHECKING:
@@ -122,6 +132,12 @@ def pending_items(building: dict[str, Any], packs: list[dict[str, Any]]) -> list
             }
         )
     return found
+
+
+def _origin_url(pack: dict[str, Any]) -> str | None:
+    """The GitHub URL a pack was installed from, None for one imported from files (or bundled)."""
+    origin = (pack.get("source") or {}).get("origin")
+    return origin.get("url") if isinstance(origin, dict) else None
 
 
 def last_due(settings: dict[str, Any], now: datetime) -> datetime | None:
@@ -333,7 +349,8 @@ class PackUpdates:
         unless `confirm`. (An older copy of a bundled pack changes nothing: the bundled release stays offered.)"""
         # never in the middle of a check, which could put its release over this one (#47)
         async with self._lock:
-            if not confirm and (asked := self._asks_first(payload)) is not None:
+            self._refuse_other_kind(payload)
+            if not confirm and (asked := self._asks_first(payload, source.get("origin"))) is not None:
                 raise asked
             await self._async_add(payload, source)
             # an install of the release a check found (or a later one) answers its "update available"
@@ -343,27 +360,56 @@ class PackUpdates:
                 await self._async_save()
         await self.async_auto_update()
 
-    def _asks_first(self, payload: dict[str, Any]) -> PackError | None:
-        """The question an install of this pack must be confirmed against, or None."""
+    def _refuse_other_kind(self, payload: dict[str, Any]) -> None:
+        """Raises PackError("other_kind") when the library offers a pack of another kind under the payload's id: no
+        confirmation lets a furniture pack replace a language pack, or the other way round (#372)."""
+        current = self._installed(payload["id"])
+        if current is not None and kind_of(current) != kind_of(payload):
+            raise PackError(
+                "other_kind",
+                f'{payload["id"]} is installed as a {kind_of(current)} pack ("{current.get("name")}"), this is a '
+                f"{kind_of(payload)} pack",
+            )
+
+    def _questions(self, payload: dict[str, Any], origin: dict[str, Any] | None) -> list[tuple[str, str]]:
+        """What an install of this pack from `origin` (None: files) must be confirmed against, as (code, detail)."""
         current = self._installed(payload["id"])
         if current is None:
-            return None
-        installed, new = current.get("release", 1), self._offered_after(payload).get("release", 1)
+            return []
+        asked: list[tuple[str, str]] = []
+        installed = current.get("release", 1)
+        after = self._offered_after(payload)
+        new = after.get("release", 1)
         if new < installed:
-            return PackError(
-                "older_release",
-                f"release {payload.get('release', 1)} is older than the installed release {installed}",
+            asked.append(
+                (
+                    "older_release",
+                    f"release {payload.get('release', 1)} is older than the installed release {installed}",
+                )
             )
         if payload["id"] in self.pinned and new != installed:
-            return PackError("pinned", f"{payload['id']} is pinned to release {installed}")
-        return None
+            asked.append(("pinned", f"{payload['id']} is pinned to release {installed}"))
+        # it takes the place of one of Home 3D's own packs (#372): the question names the pack it replaces
+        what = f'"{current.get("name")}" ({current["id"]} release {installed} by {current.get("publisher")})'
+        if after is payload and current.get("bundled"):
+            asked.append(("replaces_bundled", f"it replaces {what}, which comes with Home 3D"))
+        elif after is payload and is_reserved(current) and _origin_url(current) != (origin or {}).get("url"):
+            asked.append(("replaces_official", f"it replaces {what}, installed from {_origin_url(current) or 'files'}"))
+        return asked
+
+    def _asks_first(self, payload: dict[str, Any], origin: dict[str, Any] | None = None) -> PackError | None:
+        """The question an install of this pack must be confirmed against (its detail names every reason), or None."""
+        asked = self._questions(payload, origin)
+        if not asked:
+            return None
+        return PackError(asked[0][0], "; ".join(detail for _code, detail in asked))
 
     def preview(self, payload: dict[str, Any], origin: dict[str, Any]) -> dict[str, Any]:
-        """What installing this checked pack from GitHub would change (#189); nothing is written."""
+        """What installing this checked pack from GitHub would change (#189); nothing is written. Raises PackError for
+        a pack no confirmation installs (#372)."""
+        self._refuse_other_kind(payload)
         current = self._installed(payload["id"])
-        warnings = []
-        if (asked := self._asks_first(payload)) is not None:
-            warnings.append(asked.code)
+        warnings = [code for code, _detail in self._questions(payload, origin)]
         if current is not None and current.get("bundled") and current.get("publisher") != payload["publisher"]:
             # the id of a pack that ships with Home 3D, from another publisher
             warnings.append("bundled_publisher")
@@ -495,9 +541,10 @@ class PackUpdates:
         files, new_origin = await fetch_pack(self.hass, origin["url"])
         # a large pack takes a while to check: not in the event loop (#176)
         payload, source = await self.hass.async_add_executor_job(checked_folder, files)
-        not_reserved(payload)
+        official_only(not_reserved(payload), new_origin)
         if payload["id"] != pack["id"] or payload["release"] <= release:
             return False
+        self._refuse_other_kind(payload)
         source = {**source, "origin": {**new_origin, "release": payload["release"]}}
         await self._async_add(payload, source)
         result["latest_release"] = payload["release"]

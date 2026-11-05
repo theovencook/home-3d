@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- Packs: no pack replaces one of another kind; only Home 3D's own GitHub account may use the `theovencook.` ids and publisher, replacing a bundled or official pack asks first naming it, an index entry installs only the pack it names, and only the default index marks packs official (#372).
+
 ## Home 3D 1.0.0 (4 November 2026)
 
 - A TV reached through several integrations (several media players on one item or within half a metre) shows one now-playing card: the playing player, else a paused one with a title, else the first (#356).

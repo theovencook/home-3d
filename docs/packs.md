@@ -750,10 +750,19 @@ imported pack; a bundled pack that does not check is logged and left out.
 
 - A bundled pack shows under **Extensions** with "Comes with Home 3D" and cannot be removed. It is not part of a
   backup: the next version of Home 3D brings it again.
-- An imported pack with the same id and at least the same `release` takes the bundled one's place, whether it was
-  imported from files or installed from a GitHub URL (for example a newer `theovencook.living` from
-  `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.living`). An older copy is kept but the bundled
-  one is shown. Removing the copy brings the bundled one back.
+- An installed pack with the same id and at least the same `release` takes the bundled one's place (for example a
+  newer `theovencook.living` from `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.living`). That
+  asks first, naming the pack it replaces (`replaces_bundled`; the page sends it again with `confirm: true`). An older
+  copy is kept but the bundled one is shown. Removing the copy brings the bundled one back.
+- The id prefix `theovencook.` and the publisher `theovencook` belong to Home 3D's own packs: only the bundled packs
+  and packs installed from `github.com/theovencook` may use them. A folder or file import, another GitHub account or a
+  backup without such an origin is refused with `reserved_id`. Replacing an installed `theovencook.*` pack with one
+  from another URL asks first (`replaces_official`).
+- No pack replaces a pack of another kind under the same id (a furniture pack can't take a language pack's place):
+  `other_kind`, whatever is confirmed.
+- The Library's Browse tab marks a pack official only when the default index lists it with a URL on
+  `github.com/theovencook`; an index at another URL lists every pack as community. Installing an index entry sends
+  the entry's id (`pack_id`), and a URL that holds another pack is refused with `id_mismatch`.
 
 ### Adding an item to a bundled pack
 

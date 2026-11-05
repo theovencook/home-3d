@@ -44,6 +44,7 @@ from .packs import (
     checked_folder,
     is_bundled,
     is_language_pack,
+    official_only,
     verify_item,
     verify_source,
 )
@@ -514,7 +515,8 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
             payload, source = await hass.async_add_executor_job(checked_file, msg["pack"])
         else:
             raise PackError("not_a_pack", "send a pack file or a pack folder")
-        not_reserved(payload)
+        # files are no official source: Home 3D's own ids and publisher come only from its GitHub account (#372)
+        official_only(not_reserved(payload), None)
         await updates.async_install(payload, source, confirm=msg["confirm"])
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
@@ -537,6 +539,8 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
         vol.Optional("confirm", default=False): bool,
         # the commit a preview showed (#189): installed only if the ref still points there
         vol.Optional("commit"): vol.All(str, vol.Match(r"^[0-9a-f]{40}$")),
+        # the pack id the index lists for this URL (#372): installed only if the URL holds that pack
+        vol.Optional("pack_id"): vol.All(str, vol.Length(max=64)),
     }
 )
 @require_editor
@@ -554,7 +558,7 @@ async def ws_packs_install_url(
             raise PackError("changed_since_preview", "the pack changed since the preview; look at the changes again")
         # checked in the executor (#176)
         payload, source = await hass.async_add_executor_job(checked_folder, files)
-        not_reserved(payload)
+        _listed_as(official_only(not_reserved(payload), origin), msg.get("pack_id"))
         source = {**source, "origin": {**origin, "release": payload["release"]}}
         await updates.async_install(payload, source, confirm=msg["confirm"])
     except PackError as err:
@@ -576,6 +580,7 @@ async def ws_packs_install_url(
     {
         vol.Required("type"): "home_3d/packs/preview_url",
         vol.Required("url"): vol.All(str, vol.Length(min=1, max=500)),
+        vol.Optional("pack_id"): vol.All(str, vol.Length(max=64)),
     }
 )
 @require_editor
@@ -591,11 +596,18 @@ async def ws_packs_preview_url(
     try:
         files, origin = await fetch_pack(hass, msg["url"])
         payload, _source = await hass.async_add_executor_job(checked_folder, files)
-        not_reserved(payload)
+        _listed_as(official_only(not_reserved(payload), origin), msg.get("pack_id"))
+        preview = updates.preview(payload, origin)
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
         return
-    connection.send_result(msg["id"], updates.preview(payload, origin))
+    connection.send_result(msg["id"], preview)
+
+
+def _listed_as(payload: dict[str, Any], pack_id: str | None) -> None:
+    """Raises PackError("id_mismatch") when the pack at an index entry's URL is not the pack the entry names (#372)."""
+    if pack_id is not None and payload["id"] != pack_id:
+        raise PackError("id_mismatch", f"the list names {pack_id}, the URL holds {payload['id']}")
 
 
 @websocket_api.websocket_command(
@@ -916,15 +928,16 @@ def _checked_backup(
         if not isinstance(source, dict):
             skipped.append({"id": name, "reason": "no_source"})
             continue
+        # where a pack came from (#25): kept only when it names GitHub as this version writes it
+        origin = checked_origin(source["origin"]) if "origin" in source else None
         try:
-            clean = not_reserved(verify_source(source))
+            clean = official_only(not_reserved(verify_source(source)), origin)
         except PackError as err:
             skipped.append({"id": name, "reason": err.code})
             continue
         if "origin" in source:
-            # where a pack came from (#25): kept only when it names GitHub as this version writes it
             source = {k: v for k, v in source.items() if k != "origin"}
-            if (origin := checked_origin(entry["source"]["origin"])) is not None:
+            if origin is not None:
                 source["origin"] = origin
         checked.append({**clean, "source": source, "imported_at": time.time()})
     items: list[dict[str, Any]] = []

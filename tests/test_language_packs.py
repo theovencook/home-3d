@@ -198,7 +198,11 @@ async def test_a_newer_copy_of_the_bundled_german_replaces_it(hass: HomeAssistan
     client = await _client(hass, hass_ws_client)
     newer = {**PACK_JSON, "language": "de", "id": "theovencook.lang-de", "release": 2}
     files = _folder(pack=newer, strings={"view": "Neu"})
-    assert (await _call(client, type="home_3d/packs/import", files=files))["success"]
+    # from files it is refused: only the packs repository may carry our ids (#372)
+    refused = await _call(client, type="home_3d/packs/import", files=files, confirm=True)
+    assert refused["error"]["code"] == "reserved_id"
+    payload, source = packs.checked_folder(files)
+    await hass.data[DOMAIN].async_add_pack(payload, {**source, "origin": {"type": "github", "owner": "theovencook"}})
     got = (await _call(client, type="home_3d/languages/get", language="de"))["result"]
     assert got["packs"] == ["theovencook.lang-de"] and got["strings"] == {"view": "Neu"}
     # removing the copy brings the bundled one back

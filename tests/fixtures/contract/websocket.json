@@ -1,5 +1,5 @@
 {
-  "protocol": 4,
+  "protocol": 5,
   "plan_version": 3,
   "commands": {
     "home_3d/backup/export": {
@@ -238,7 +238,8 @@
       ],
       "optional": [
         "commit",
-        "confirm"
+        "confirm",
+        "pack_id"
       ]
     },
     "home_3d/packs/items": {
@@ -264,7 +265,9 @@
       "required": [
         "url"
       ],
-      "optional": []
+      "optional": [
+        "pack_id"
+      ]
     },
     "home_3d/packs/remove": {
       "required": [

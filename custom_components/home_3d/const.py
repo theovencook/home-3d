@@ -13,7 +13,7 @@ PLAN_VERSION = 3
 # frontend can tell what the backend it talks to understands (building/get and version send it). The commands are
 # listed in tests/fixtures/contract/websocket.json, which tests/test_contract.py keeps in step and the frontend
 # checks its calls against
-PROTOCOL = 4
+PROTOCOL = 5
 STORAGE_KEY_BUILDING = f"{DOMAIN}.building"
 STORAGE_KEY_IMAGES = f"{DOMAIN}.images"
 STORAGE_KEY_HISTORY = f"{DOMAIN}.history"

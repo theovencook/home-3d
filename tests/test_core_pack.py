@@ -132,13 +132,18 @@ async def test_the_bundled_pack_cannot_be_removed(hass: HomeAssistant, hass_ws_c
     assert "theovencook.living" in [p["id"] for p in await _listed(client)]
 
 
+async def _add_copy(hass: HomeAssistant, files: dict[str, str]) -> None:
+    """An imported copy of the core pack as the packs repository installs it (files can't carry our id, #372)."""
+    payload, source = packs.checked_folder(files)
+    await hass.data[DOMAIN].async_add_pack(payload, {**source, "origin": {"type": "github", "owner": "theovencook"}})
+
+
 async def test_a_newer_imported_copy_replaces_the_bundled_one_until_removed(
     hass: HomeAssistant, hass_ws_client
 ) -> None:
     """A newer release installed from the packs repository wins; removing it brings the bundled one back."""
     client = await _client(hass, hass_ws_client)
-    await client.send_json_auto_id({"type": "home_3d/packs/import", "files": _core_files(99)})
-    assert (await client.receive_json())["success"]
+    await _add_copy(hass, _core_files(99))
     cores = [p for p in await _listed(client) if p["id"] == "theovencook.living"]
     assert [(p["name"], p.get("bundled", False)) for p in cores] == [("Core release 99", False)]
 
@@ -153,8 +158,7 @@ async def test_an_older_imported_copy_does_not_hide_the_bundled_one(hass: HomeAs
     bundled_release = json.loads((CORE / "pack.json").read_text(encoding="utf-8"))["release"]
     data = hass.data[DOMAIN]
     data.bundled = [{**p, "release": bundled_release + 1} for p in data.bundled]
-    await client.send_json_auto_id({"type": "home_3d/packs/import", "files": _core_files(bundled_release)})
-    assert (await client.receive_json())["success"]
+    await _add_copy(hass, _core_files(bundled_release))
     cores = [p for p in await _listed(client) if p["id"] == "theovencook.living"]
     assert [p.get("bundled", False) for p in cores] == [True]
 

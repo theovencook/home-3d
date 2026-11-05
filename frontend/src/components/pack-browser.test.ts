@@ -104,7 +104,7 @@ test("a pack's page shows pictures of its items, drawn from the index's copies",
   assert.match(out, /Install/);
 });
 
-test("Install previews the pack from GitHub, then installs exactly the previewed commit", async () => {
+test("Install previews the pack from GitHub, then installs exactly the previewed commit of the listed pack (#372)", async () => {
   const { el, calls } = await browser(index(listed("acme.chairs")));
   const events: string[] = [];
   el.dispatchEvent = (e: Event) => (events.push(e.type), true);
@@ -112,8 +112,10 @@ test("Install previews the pack from GitHub, then installs exactly the previewed
   await el.previewInstall(listed("acme.chairs"));
   assert.match(flat(el.render()), /Install “Pack acme\.chairs” v2\?/);
   await el.install(listed("acme.chairs"), COMMIT, 2);
+  const url = "https://github.com/someone/packs/tree/main/acme.chairs";
+  assert.deepEqual(calls.find((c) => c.type === "home_3d/packs/preview_url"), { type: "home_3d/packs/preview_url", url, pack_id: "acme.chairs" });
   const sent = calls.find((c) => c.type === "home_3d/packs/install_url");
-  assert.deepEqual(sent, { type: "home_3d/packs/install_url", url: "https://github.com/someone/packs/tree/main/acme.chairs", commit: COMMIT });
+  assert.deepEqual(sent, { type: "home_3d/packs/install_url", url, commit: COMMIT, pack_id: "acme.chairs" });
   assert.deepEqual(events, ["packs-changed"]);
   assert.match(flat(el.render()), /v2 is installed/);
 });
