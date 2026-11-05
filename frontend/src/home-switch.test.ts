@@ -136,7 +136,7 @@ test("a draft for one home is not offered on another, and Restore never saves it
   await ticks();
   assert.equal(c.homeId, "flat");
   assert.equal(c.draft, null);
-  c.restoreDraft();
+  await c.restoreDraft();
   await c.flush();
   assert.deepEqual(state.saves, []);
   assert.equal(homes.flat.building.floors[0].name, "Flat");
@@ -145,8 +145,10 @@ test("a draft for one home is not offered on another, and Restore never saves it
   await ticks();
   assert.equal(c.homeId, "home");
   assert.equal((c.draft as Draft | null)?.home, "home");
-  c.restoreDraft();
+  // the draft names no revision (kept before #378): the plan shown becomes a restore point first
+  await c.restoreDraft();
   await c.flush();
+  assert.deepEqual(state.snapshots, ["home"]);
   assert.deepEqual(state.saves, [{ home: "home", name: "Own unsaved" }]);
   done(c);
 });
@@ -228,7 +230,7 @@ test("a failed save keeps the draft for the home it was made on (#150)", async (
   c.edit(plan("Own unsaved"));
   c.setHome("flat");
   await ticks();
-  const kept = JSON.parse(store.get("home3d.unsaved") ?? "null") as Draft | null;
+  const kept = JSON.parse(store.get("home3d.unsaved.home") ?? "null") as Draft | null;
   assert.equal(kept?.home, "home");
   assert.equal(c.draft, null);
   done(c);
@@ -312,7 +314,7 @@ function otherSaves(homes: Record<string, { building: Building; revision: number
   homes[home] = { building: plan(name), revision: homes[home].revision + 1 };
 }
 
-const storedDraft = () => JSON.parse(store.get("home3d.unsaved") ?? "null") as Draft | null;
+const storedDraft = (home = "home") => JSON.parse(store.get(`home3d.unsaved.${home}`) ?? "null") as Draft | null;
 
 test("a refused save at a home switch is made again on its own home's newer plan and saved there (#149, #150)", async () => {
   const { hass, state, homes } = backend();

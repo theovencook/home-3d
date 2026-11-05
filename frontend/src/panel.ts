@@ -1206,11 +1206,14 @@ export class Floorplan3dPanel extends LitElement {
     }
     if (d.draft && this.canEdit && !this._tablet) {
       const at = formatDateTime(d.draft.savedAt, timeStyleOf(this.hass));
+      // edits that would replace a newer plan (#378) say so, and restoring keeps the plan shown as a restore point
+      const newer = d.draftNewer;
+      const found = !d.draft.home ? "draft_found_old" : newer ? "draft_found_newer" : "draft_found";
       notices.push({
         key: `draft:${d.draft.savedAt}`,
         body: html`<div class="fp3d-notice">
-          <span>${d.conflict ? this.t("save_conflict") : this.t(d.draft.home ? "draft_found" : "draft_found_old", { time: at })}</span>
-          <button class="fp3d-btn fp3d-primary" @click=${() => void d.restoreDraft()}>${this.t(d.conflict ? "draft_restore_conflict" : "draft_restore")}</button>
+          <span>${d.conflict ? this.t("save_conflict") : this.t(found, { time: at })}</span>
+          <button class="fp3d-btn fp3d-primary" @click=${() => void d.restoreDraft()}>${this.t(d.conflict ? "draft_restore_conflict" : newer ? "draft_restore_newer" : "draft_restore")}</button>
           <button class="fp3d-btn" @click=${() => d.discardDraft()}>${this.t("draft_discard")}</button>
         </div>`,
       });

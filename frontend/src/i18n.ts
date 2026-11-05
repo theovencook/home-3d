@@ -35,6 +35,8 @@ const en = {
   plan_repaired: "Some parts of this plan were invalid and were left out ({parts}). The plan as it was is kept as a restore point.",
   save_conflict: "Someone else changed this home while you were editing. It now shows their version; your changes are kept here.",
   draft_restore_conflict: "Use mine (theirs stays as a restore point)",
+  draft_found_newer: "Unsaved changes from {time} found. This home may have been changed since they were made: using them replaces the plan shown.",
+  draft_restore_newer: "Use them (the plan shown stays as a restore point)",
   walls_auto: "Tall walls",
   walls_cut: "Cut",
   plan_view: "2D or 3D",
