@@ -12,6 +12,7 @@ or "offline" when it has none. Entries this version cannot read are left out, no
 
 from __future__ import annotations
 
+from functools import partial
 import json
 import time
 from typing import Any
@@ -163,7 +164,8 @@ class PackIndex:
             return self._answer()
         try:
             body = await _get(async_get_clientsession(self.hass), url, MAX_INDEX_BYTES, "the pack index")
-            packs = read_index(body, official=url == DEFAULT_INDEX_URL)
+            # checking every entry and its previews takes seconds for a large index: not in the event loop (#374)
+            packs = await self.hass.async_add_executor_job(partial(read_index, body, official=url == DEFAULT_INDEX_URL))
         except PackError as err:
             if kept:
                 return {**self._answer(), "stale": True, "error": err.code}

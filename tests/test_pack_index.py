@@ -6,6 +6,8 @@ GitHub is mocked (aioclient_mock): no test reaches the network.
 from __future__ import annotations
 
 import json
+import threading
+from unittest.mock import patch
 
 import aiohttp
 from homeassistant.core import HomeAssistant
@@ -166,6 +168,24 @@ async def test_the_index_is_fetched_once_and_kept(
     hass.data[DATA_PACK_UPDATES].index._fetched_at -= pack_index.CACHE_SECONDS + 1
     await _send(client, type="home_3d/packs/index")
     assert aioclient_mock.call_count == 3
+
+
+async def test_the_index_is_read_outside_the_event_loop(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """#374: a large index takes seconds to check, so it is read in the executor."""
+    aioclient_mock.get(DEFAULT_INDEX_URL, json=_index(ENTRY))
+    client = await _client(hass, hass_ws_client)
+    threads: list[bool] = []
+    real = pack_index.read_index
+
+    def read(body: bytes, **kwargs) -> list:
+        threads.append(threading.current_thread() is threading.main_thread())
+        return real(body, **kwargs)
+
+    with patch.object(pack_index, "read_index", read):
+        answer = await _send(client, type="home_3d/packs/index")
+    assert answer["success"] and threads == [False]
 
 
 async def test_without_internet_the_index_fails_quietly(

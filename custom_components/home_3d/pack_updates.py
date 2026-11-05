@@ -117,7 +117,10 @@ def pending_items(building: dict[str, Any], packs: list[dict[str, Any]]) -> list
             continue
         pack, item = installed[type_]
         new = recipe_copy(pack, item)
-        if new["hash"] in (copy_.get("hash"), _current_hash(copy_)) or new["release"] < copy_.get("release", 1):
+        # the stored hash first: the copy is read with today's item rules (ITEM_SCHEMA) only when it differs (#374)
+        if new["hash"] == copy_.get("hash") or new["release"] < copy_.get("release", 1):
+            continue
+        if new["hash"] == _current_hash(copy_):
             continue
         found.append(
             {

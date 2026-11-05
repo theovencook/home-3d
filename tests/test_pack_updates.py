@@ -929,6 +929,23 @@ def test_a_copy_kept_before_a_field_with_a_default_existed_is_not_an_update() ->
     assert pack_updates.pending_items(plan, [pack]) == []
 
 
+def test_a_copy_with_the_installed_hash_is_not_checked_again() -> None:
+    """#374: the stored hash is compared first; the item rules run only for a copy whose hash differs."""
+    pack = _installed_pack()
+    calls: list[str] = []
+    real = pack_updates._current_hash
+
+    def counted(copy_: dict) -> str | None:
+        calls.append(copy_["item"])
+        return real(copy_)
+
+    with patch.object(pack_updates, "_current_hash", counted):
+        assert pack_updates.pending_items(_plan_with_copy_of(pack), [pack]) == []
+        assert calls == []
+        assert pack_updates.pending_items(_plan_with_copy_of(pack, strip_defaults=True), [pack]) == []
+        assert calls == ["cube_chair"]
+
+
 def test_changed_content_in_the_same_release_is_still_listed() -> None:
     pack = _installed_pack()
     plan = _plan_with_copy_of(pack)
