@@ -12,6 +12,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - The 3D view's own plan save (no panel or card around it) now sends the revision it started from and, when someone else saved first, makes the change again on their newer plan (#363).
 - A home keeps at most 300 pictures (96 MB together); beyond that the editor says so, and setting or removing a picture now waits its turn with the other changes of the home (#364).
 - Time travel answers the car trackers of every home, or of the home a request names (optional `home_id`), not only the active one (#371).
+- The lights-to-lamps migration keeps a light's mount height as the lamp's `mount_y`, on the server and in the browser (#381).
 
 ## Home 3D 1.0.0 (4 November 2026)
 

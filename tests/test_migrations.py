@@ -82,6 +82,21 @@ def test_lights_placed_as_devices_become_lamps_golden_file() -> None:
     assert BUILDING_SCHEMA(old) == BUILDING_SCHEMA(_plan("v1-lights.migrated.json"))
 
 
+def test_a_lights_mount_height_becomes_the_lamps_mount_y() -> None:
+    """#381: the placement's `y` is the lamp's `mount_y`; no height keeps the type's default (no key), a bad one is
+    kept within the lamp's range."""
+    plan = _plan("v1-lights.json")
+    lamps = {i["entity"]: i for f in migrate_plan(plan)["floors"] for i in f["furniture"] if i.get("entity")}
+    assert lamps["light.sample_wall"]["mount_y"] == 1.8
+    assert "mount_y" not in lamps["light.sample_ceiling"]
+    for placement in plan["floors"][0]["placements"]:
+        if placement["entity_id"] == "light.sample_wall":
+            placement["y"] = 25
+    high = {i["entity"]: i for f in migrate_plan(plan)["floors"] for i in f["furniture"] if i.get("entity")}
+    assert high["light.sample_wall"]["mount_y"] == 10.0
+    assert BUILDING_SCHEMA(migrate_plan(_plan("v1-lights.json")))
+
+
 def test_migrations_are_idempotent() -> None:
     once = migrate_plan(_plan("v1-lights.json"))
     assert migrate_plan(once) is once, "a plan of the current version is passed on as it is"

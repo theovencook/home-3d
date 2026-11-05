@@ -81,6 +81,19 @@ test("lights placed as devices become lamps of their mount type", () => {
   assert.equal(normalizeBuilding(b).floors[0].furniture.length, 2);
 });
 
+test("a light's mount height becomes the lamp's mount_y (#381)", () => {
+  const b = emptyBuilding();
+  const floor = newFloor("eg", "EG", 0);
+  floor.placements = [
+    { entity_id: "light.wand", x: 0, z: 1, y: 2.2, mount: "wall" },
+    { entity_id: "light.decke", x: 1, z: 2, y: null, mount: null },
+  ];
+  b.floors = [floor];
+  const out = normalizeBuilding(b).floors[0];
+  assert.equal(out.furniture.find((f) => f.entity === "light.wand")?.mount_y, 2.2);
+  assert.equal(out.furniture.find((f) => f.entity === "light.decke")?.mount_y, undefined);
+});
+
 test("a light turned back into a device pin stays a pin", () => {
   const b = emptyBuilding();
   const floor = newFloor("eg", "EG", 0);
