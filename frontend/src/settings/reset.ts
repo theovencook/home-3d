@@ -8,7 +8,7 @@ import type { DevicePrefs } from "./registry.ts";
  * and the remembered home. Every other `home3d.*` key (the rows' own, and the toggles several parts of the view and
  * editor write straight to the browser) and every `fp3d-tt-*` time-travel choice goes.
  */
-export const KEEP_ON_RESET: readonly string[] = ["home3d.lab", "home3d.projection", "home3d.unsaved", "home3d.home."];
+export const KEEP_ON_RESET: readonly string[] = ["home3d.lab", "home3d.projection", "home3d.unsaved", "home3d.unsaved.", "home3d.home."];
 
 /** Whether the browser key is a device preference that a reset removes. */
 export function isDevicePrefKey(key: string): boolean {

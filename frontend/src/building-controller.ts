@@ -11,7 +11,8 @@ import type { HomeAssistant } from "./types.ts";
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
 const SAVE_DELAY = 700;
-/** Edits that could not be saved are kept here, so a reload does not lose them. */
+/** Edits that could not be saved are kept in the browser under this key and the home's id (#378: `draftKey`), so a
+ * reload does not lose them. */
 const DRAFT_KEY = "home3d.unsaved";
 
 /** Version of this frontend, set by the build (see build.mjs). */
@@ -35,30 +36,91 @@ export interface Draft {
   home?: string;
   /** Kept from a save refused because someone else changed the plan meanwhile (#149). */
   conflict?: boolean;
+  /** The revision of the plan the edits were made on (#378); unknown in a draft kept before. Restoring onto another
+   * one replaces newer work, so the notice says so and the plan shown becomes a restore point first. */
+  base?: number;
+  /** Tells this draft from a later one of the same home (#378), so removing one never removes another. */
+  id?: string;
 }
 
 /** Unsaved edits of the earlier name (the browser may still hold them). */
 const LEGACY_DRAFT_KEY = "floorplan-3d.unsaved";
 
-function readDraft(): Draft | null {
+/** Where a home's draft is kept (#378: one per home, so a failed save on one home never replaces another's); a draft
+ * without a home (a backend before #53) keeps the old key. */
+export function draftKey(home: string | undefined): string {
+  return home ? `${DRAFT_KEY}.${home}` : DRAFT_KEY;
+}
+
+function parseDraft(raw: string | null): Draft | null {
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(DRAFT_KEY) ?? localStorage.getItem(LEGACY_DRAFT_KEY);
-    return raw ? (JSON.parse(raw) as Draft) : null;
+    const d = JSON.parse(raw) as Draft | null;
+    return d && typeof d === "object" && d.building ? d : null;
   } catch {
     return null;
   }
 }
 
-function writeDraft(draft: Draft | null): void {
+/** What tells a draft from another one: its id, or for one kept before ids (#378) the moment it was kept. */
+function draftIdentity(draft: Draft): string {
+  return draft.id ?? `t${draft.savedAt}`;
+}
+
+/** Before #378 every home shared one key: a draft found there that names its home moves to that home's own key (the
+ * newer one wins when both hold one), and then one of the earliest name the same way (without a home: to the old key). */
+function migrateDrafts(): void {
   try {
-    if (draft) localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    else {
-      localStorage.removeItem(DRAFT_KEY);
-      localStorage.removeItem(LEGACY_DRAFT_KEY);
+    for (const key of [DRAFT_KEY, LEGACY_DRAFT_KEY]) {
+      const raw = localStorage.getItem(key);
+      const draft = parseDraft(raw);
+      if (!draft) {
+        if (raw && key === LEGACY_DRAFT_KEY) localStorage.removeItem(key);
+        continue;
+      }
+      const to = draftKey(draft.home);
+      if (to === key) continue;
+      const there = parseDraft(localStorage.getItem(to));
+      if (!there || there.savedAt < draft.savedAt) localStorage.setItem(to, raw!);
+      localStorage.removeItem(key);
     }
+  } catch {
+    // storage unavailable: nothing kept to move
+  }
+}
+
+/** The draft kept under `key` (old ones moved to their own key first). */
+function readDraft(key: string): Draft | null {
+  migrateDrafts();
+  try {
+    return parseDraft(localStorage.getItem(key));
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(draft: Draft): void {
+  try {
+    localStorage.setItem(draftKey(draft.home), JSON.stringify(draft));
   } catch {
     // storage full or unavailable: the edit stays until the page is closed
   }
+}
+
+/** Remove the draft under `key` when it is still the one named (#378): a later one of the same home stays. */
+function removeDraft(key: string, identity: string): void {
+  try {
+    const kept = readDraft(key);
+    if (kept && draftIdentity(kept) === identity) localStorage.removeItem(key);
+  } catch {
+    // storage unavailable
+  }
+}
+
+let draftCount = 0;
+/** A fresh draft id: the time, a counter and a little chance, unique across tabs of one browser. */
+function newDraftId(): string {
+  return `${Date.now().toString(36)}-${(draftCount++).toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 export class BuildingController implements ReactiveController {
@@ -125,6 +187,20 @@ export class BuildingController implements ReactiveController {
   private connected = false;
   /** The websocket whose reconnects this view follows (#60). */
   private watched: HomeAssistant["connection"] | null = null;
+  /** The drafts this view kept of edits the plan on screen still holds (#378), by `draftKey`: a later save of that home
+   * from here saves them too, so it removes them. Any other stored draft (another tab's, an earlier session's, a
+   * refused save's) stays until it is restored or discarded. A plan loaded over the screen ends this. */
+  private ownDrafts = new Map<string, string>();
+  /** The save under way, so a page going away keeps it as a draft too (#378). */
+  private sending: { building: Building; home: string | undefined } | null = null;
+  /** The last save failed (#378, not refused): the edit, still on screen, is made again when the connection is back,
+   * from the revision it was made on (a refusal then takes the conflict path, #149); `retried`: that try failed too. */
+  private failed: { building: Building; home: string | undefined; changes: PlanChange[] | null; retried: boolean } | null = null;
+  private retrying = false;
+  /** The base revision the last save sent (#378): a draft of it keeps it. */
+  private sentBase: number | undefined = undefined;
+  /** The automatic one-off save (#203) waits while a stored draft is on offer (#378): it would replace the draft's plan. */
+  private oneOffWaiting = false;
 
   constructor(host: ReactiveControllerHost) {
     this.host = host;
@@ -181,11 +257,15 @@ export class BuildingController implements ReactiveController {
 
   hostConnected(): void {
     this.connected = true;
+    globalThis.addEventListener?.("pagehide", this.onHide);
+    globalThis.document?.addEventListener?.("visibilitychange", this.onHide);
     if (this.hass) void this.start();
   }
 
   hostDisconnected(): void {
     this.connected = false;
+    globalThis.removeEventListener?.("pagehide", this.onHide);
+    globalThis.document?.removeEventListener?.("visibilitychange", this.onHide);
     void this.flush();
     const unsubscribe = this.unsubscribe;
     this.unsubscribe = null;
@@ -198,7 +278,69 @@ export class BuildingController implements ReactiveController {
    * The websocket is back (#60): Home Assistant restarted, often after an update, so the versions are asked for again.
    * This is the only re-check: no polling, a wall tablet that stays open learns of an update when HA comes back.
    */
-  private readonly onReconnect = () => void this.checkVersion();
+  private readonly onReconnect = () => {
+    void this.checkVersion();
+    void this.caughtUp();
+  };
+
+  /**
+   * Back after the connection was lost (#378): a save that failed meanwhile is made again from the revision its edit
+   * was made on (refused when the plan changed: the conflict path, #149); otherwise the plan is loaded when its revision
+   * moved, as the changes made meanwhile were not heard of (also a plan put back from a backup, at a lower revision).
+   */
+  private async caughtUp(): Promise<void> {
+    if (this.saving) await this.saving;
+    if (this.failed) return this.retry();
+    if (!this.pending && !this.saving) await this.reload(true);
+  }
+
+  /** Make the save that failed again (#378); one that belongs to a home no longer shown stays its home's draft. */
+  private async retry(): Promise<void> {
+    const failed = this.failed;
+    this.failed = null;
+    if (!failed || this.pending || failed.home !== this.shown) return;
+    this.pending = failed.building;
+    this.pendingHome = failed.home;
+    this.changes = failed.changes;
+    this.retrying = true;
+    try {
+      await this.flush();
+    } finally {
+      this.retrying = false;
+    }
+  }
+
+  /** The page is going away or out of sight (#378: pagehide, visibilitychange to hidden): an edit still waiting for its
+   * pause, or on its way, may never reach the backend, so it is kept as a draft first (removed once it is saved), then
+   * saved at once. */
+  private readonly onHide = (e: Event) => {
+    if (e.type === "visibilitychange" && globalThis.document?.visibilityState !== "hidden") return;
+    this.keepUnsent();
+  };
+
+  /** Keep the edit waiting or on its way as a draft of its home and save it now (#378). */
+  keepUnsent(): void {
+    const building = this.pending ?? this.sending?.building;
+    if (!building) return;
+    const home = this.pending ? this.pendingHome : this.sending?.home;
+    this.keepDraft({ building, savedAt: Date.now(), ...(home ? { home } : {}), ...this.baseOf(home) }, home === this.shown);
+    void this.flush();
+  }
+
+  /** The revision an edit of `home` was made on, as a draft keeps it (#378): known only while that home is loaded. */
+  private baseOf(home: string | undefined): { base?: number } {
+    return home === this.shown && this.revision >= 0 ? { base: this.revision } : {};
+  }
+
+  /** Store a draft (#378: under its home's key); `own`: its edits are the plan on screen, so a later save from here
+   * holds them and removes it. */
+  private keepDraft(draft: Draft, own: boolean): void {
+    const kept: Draft = { ...draft, id: newDraftId() };
+    writeDraft(kept);
+    const key = draftKey(draft.home);
+    if (own) this.ownDrafts.set(key, draftIdentity(kept));
+    else this.ownDrafts.delete(key);
+  }
 
   /** Ask the backend which version and frontend build it has now. */
   async checkVersion(): Promise<void> {
@@ -224,6 +366,8 @@ export class BuildingController implements ReactiveController {
     this.pendingHome = this.shown;
     this.edits++;
     this.changes = null;
+    // an edit that failed to save (#378) is part of this one, saved with it
+    this.failed = null;
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => void this.flush(), SAVE_DELAY);
     this.host.requestUpdate();
@@ -233,7 +377,8 @@ export class BuildingController implements ReactiveController {
    * plan meanwhile, it is made again on their plan, so neither change is lost. */
   update(change: PlanChange): void {
     if (!this.building) return;
-    const before = this.pending ? this.changes : [];
+    // the plan shown holds the edits still waiting, or one that failed to save (#378): they are made again with it
+    const before = this.pending ? this.changes : this.failed ? this.failed.changes : [];
     const next = structuredClone(this.building);
     change(next);
     this.edit(next);
@@ -304,23 +449,33 @@ export class BuildingController implements ReactiveController {
 
   /**
    * Take over the unsaved edits of an earlier session (they are saved right away), only onto their own home (#150).
-   * After a refused save (#149) the plan someone else saved is kept as a restore point first, as these edits replace
-   * it.
+   * When they would replace a newer plan (#378, `draftNewer`: kept from a refused save, #149, made on another revision
+   * than the one shown, or from before drafts kept theirs) the plan shown is kept as a restore point first; when that
+   * fails nothing is replaced and the draft stays on offer.
    */
   async restoreDraft(): Promise<void> {
     const draft = this.draft;
     const conflict = this.conflict;
+    const newer = this.draftNewer;
     this.draft = null;
     this.conflict = false;
     if (!draft || !this.draftFits(draft)) {
       this.host.requestUpdate();
       return;
     }
-    if (conflict && this.hass) {
+    if (newer && this.hass) {
       try {
         await takeSnapshot(this.hass, this.shown);
-      } catch {
-        // an older backend or a lost connection: the edits are still saved, as the button says
+      } catch (err) {
+        // the button promises the plan shown stays as a restore point: without one it is not replaced
+        if (this.draft === null && this.draftFits(draft)) {
+          this.draft = draft;
+          this.conflict = conflict;
+        }
+        this.saveState = "error";
+        this.saveError = errorText(err);
+        this.host.requestUpdate();
+        return;
       }
       // another home was loaded meanwhile: the draft stays stored for its own home, where it is offered again
       if (!this.draftFits(draft)) {
@@ -328,7 +483,25 @@ export class BuildingController implements ReactiveController {
         return;
       }
     }
+    // the stored draft goes once these edits are saved from here (#378); one kept without its home (#53) moves to the
+    // key of the home it is restored on first
+    const key = draftKey(draft.home);
+    if (draft.home === this.shown) this.ownDrafts.set(key, draftIdentity(draft));
+    else {
+      this.keepDraft({ building: draft.building, savedAt: draft.savedAt, ...(this.shown ? { home: this.shown } : {}), ...(draft.base !== undefined ? { base: draft.base } : {}) }, true);
+      removeDraft(key, draftIdentity(draft));
+    }
+    this.oneOffWaiting = false;
     this.edit(normalizeBuilding(draft.building));
+  }
+
+  /** The draft on offer would replace a newer plan than the one it was made on (#378): kept from a refused save
+   * (#149), made on another revision than the one shown, or kept before drafts noted their revision. The notice says
+   * so, and restoring keeps the plan shown as a restore point first. */
+  get draftNewer(): boolean {
+    const draft = this.draft;
+    if (!draft) return false;
+    return this.conflict || draft.base === undefined || draft.base !== this.revision;
   }
 
   /**
@@ -340,10 +513,15 @@ export class BuildingController implements ReactiveController {
     return draft.home ? draft.home === this.homeId : this.home === undefined;
   }
 
+  /** Throw away the draft on offer (#378: only that one; a later draft of the same home stays). */
   discardDraft(): void {
+    const draft = this.draft;
     this.draft = null;
     this.conflict = false;
-    writeDraft(null);
+    if (draft) removeDraft(draftKey(draft.home), draftIdentity(draft));
+    // the automatic one-off waited for this draft (#378)
+    if (this.oneOffWaiting && this.building && !this.pending) this.edit(this.building);
+    this.oneOffWaiting = false;
     this.host.requestUpdate();
   }
 
@@ -361,22 +539,28 @@ export class BuildingController implements ReactiveController {
     for (const f of building.floors) for (const m of f.furniture) if (m.mount_y != null && m.mount_y > 10) m.mount_y = 10;
     this.saveState = "saving";
     this.host.requestUpdate();
+    this.sending = { building, home };
+    const retried = this.retrying;
     this.saving = (async () => {
       try {
         await this.save(building, changes, home);
       } catch (err) {
         this.saveState = "error";
         this.saveError = errorText(err);
-        // keep the edit: after a restart it can be restored and saved
-        writeDraft({ building, savedAt: Date.now(), ...(home ? { home } : {}) });
+        // keep the edit: after a restart it can be restored and saved; while its home is shown it stays on screen and
+        // is saved again when the connection is back (#378)
+        const here = home === this.shown;
+        this.keepDraft({ building, savedAt: Date.now(), ...(home ? { home } : {}), ...(this.sentBase !== undefined ? { base: this.sentBase } : {}) }, here);
+        if (here && !this.pending) this.failed = { building, home, changes, retried };
       }
       this.host.requestUpdate();
     })();
     await this.saving;
     this.saving = null;
+    this.sending = null;
     // another save landed while this one was on its way: shown now, unless more edits follow (they meet it as a
-    // refused save, #149)
-    if (!this.pending && this.remoteRevision > this.revision) void this.reload();
+    // refused save, #149) or this one failed (#378: made again first, so it is not hidden under theirs)
+    if (!this.pending && !this.failed && this.remoteRevision > this.revision) void this.reload();
   }
 
   /**
@@ -394,6 +578,7 @@ export class BuildingController implements ReactiveController {
       let refused: unknown;
       try {
         const base = here && this.revision >= 0 ? this.revision : undefined;
+        this.sentBase = base;
         const { revision, recipes } = await saveBuilding(this.hass!, building, bases, home, base);
         // the copies the backend made for items placed now: the plan keeps them, also when their pack goes (#2);
         // and the ones it changed meanwhile (an update, a rollback, #45) replace the copies this plan started from
@@ -405,12 +590,15 @@ export class BuildingController implements ReactiveController {
             if (this.building) setPlanRecipes(this.building.recipes);
             this.recipeBases = recipeHashes(recipes);
           }
+          // the own revisions long past are let go of; the rest go when their event comes (#378)
+          for (const r of this.ownRevisions) if (r < this.revision - 20) this.ownRevisions.delete(r);
           this.ownRevisions.add(revision);
           this.revision = revision;
         }
         this.saveState = this.pending ? "saving" : "saved";
         this.saveError = null;
-        this.forgetDraft(home);
+        // a draft kept of edits still waiting (#378, a page going away) is needed until they are saved too
+        if (!(this.pending && this.pendingHome === home)) this.forgetDraft(home);
         return;
       } catch (err) {
         if (!isConflict(err)) throw err;
@@ -419,7 +607,7 @@ export class BuildingController implements ReactiveController {
       // another home is loaded now (#150): their plan of `home` is not on screen to merge into, nor are edits made
       // since (they belong to the home shown), so the refused edit is kept for its own home, offered there again
       if (home !== this.shown) {
-        writeDraft({ building, savedAt: Date.now(), ...(home ? { home } : {}), conflict: true });
+        this.keepDraft({ building, savedAt: Date.now(), ...(home ? { home } : {}), ...(this.sentBase !== undefined ? { base: this.sentBase } : {}), conflict: true }, false);
         this.saveState = "error";
         this.saveError = errorText(refused);
         return;
@@ -434,11 +622,13 @@ export class BuildingController implements ReactiveController {
       // the newer plan is what was to be saved (an editor showing a restored backup again): nothing to keep
       if (loaded && this.building && samePlan(local, this.building)) {
         this.saveState = "saved";
+        this.forgetDraft(home);
         return;
       }
       if (!loaded || !all || attempt >= REPLAYS || !this.building) {
-        const draft: Draft = { building: local, savedAt: Date.now(), ...(home ? { home } : {}), conflict: true };
-        writeDraft(draft);
+        const draft: Draft = { building: local, savedAt: Date.now(), ...(home ? { home } : {}), ...(this.sentBase !== undefined ? { base: this.sentBase } : {}), conflict: true };
+        // not this view's own (#378): the plan shows theirs, so the draft stays until it is restored or discarded
+        this.keepDraft(draft, false);
         if (this.draftFits(draft)) {
           this.conflict = true;
           this.draft = draft;
@@ -475,13 +665,14 @@ export class BuildingController implements ReactiveController {
     return true;
   }
 
-  /** Forget the kept edits once `home` saved (#150: not another home's), unless they are on offer after a refused
-   * save (#149). */
+  /** `home` saved from here: the draft this view kept of edits that save holds goes (#378). Not another home's (#150),
+   * nor one of another tab or an earlier session, nor a refused save's (#149): those stay until restored or discarded. */
   private forgetDraft(home: string | undefined): void {
-    if (this.conflict) return;
-    const kept = readDraft();
-    if (kept?.home && kept.home !== home) return;
-    writeDraft(null);
+    const key = draftKey(home);
+    const own = this.ownDrafts.get(key);
+    if (own === undefined) return;
+    this.ownDrafts.delete(key);
+    removeDraft(key, own);
   }
 
   private async start(): Promise<void> {
@@ -512,11 +703,24 @@ export class BuildingController implements ReactiveController {
             void this.flush().then(() => this.reload());
             return;
           }
-          if (this.ownRevisions.has(revision) || revision === this.revision) return;
+          // the event of a save made here (it may come after the save's answer)
+          if (this.ownRevisions.delete(revision) || revision === this.revision) return;
+          // the revision went back (#378: a backup put back, a home made again with the same id): the revisions this
+          // view saved say nothing any more, the numbers come again for others' saves
+          if (revision < this.revision) {
+            this.ownRevisions.clear();
+            this.remoteRevision = -1;
+          }
           this.remoteRevision = Math.max(this.remoteRevision, revision);
           // shown once the edits on their way are saved; a save from the older plan is refused by the backend
           // and handled there (#149)
           if (this.pending || this.saving) return;
+          // a save that failed (#378): the connection works again, so it is made again first (refused when their plan
+          // is newer: the conflict path); when that try failed too, their plan shows and the edit stays a draft
+          if (this.failed && !this.failed.retried) {
+            void this.retry();
+            return;
+          }
           void this.reload();
         },
         asked,
@@ -550,8 +754,9 @@ export class BuildingController implements ReactiveController {
     this.host.requestUpdate();
   }
 
-  /** Load the shown home's plan; whether it came (false also when another home was asked for meanwhile). */
-  private async reload(): Promise<boolean> {
+  /** Load the shown home's plan; whether it came (false also when another home was asked for meanwhile). `unlessSame`
+   * (#378, a reconnect): the plan on screen stays when the home and its revision are the same. */
+  private async reload(unlessSame = false): Promise<boolean> {
     if (!this.hass) return false;
     const asked = this.home;
     const edits = this.edits;
@@ -567,19 +772,33 @@ export class BuildingController implements ReactiveController {
         if (asked !== this.home) return false;
         this.ownRevisions.clear();
         this.remoteRevision = -1;
+        this.failed = null;
         // a draft on offer belongs to the home it was found for (#150), a refused save's too (#149)
         this.draft = null;
         this.conflict = false;
       }
       // an edit made while this load was on its way (or still being saved) wins over the plan it brings (#150): put
       // back, the edit would vanish from the screen and the next one would be built without it
-      this.show(res, moved || (!this.pending && !this.saving && this.edits === edits));
+      const same = unlessSame && !moved && res.revision === this.revision && !!this.building;
+      const plan = !same && (moved || (!this.pending && !this.saving && this.edits === edits));
+      // the revision went back (#378: a backup put back, the home made again): the revisions saved here say nothing
+      if (!moved && res.revision < this.revision) {
+        this.ownRevisions.clear();
+        this.remoteRevision = -1;
+      }
+      this.show(res, plan);
+      if (plan) {
+        // the plan on screen no longer holds what this view kept as a draft, nor an edit that failed to save (#378):
+        // that draft is offered now like any other
+        this.ownDrafts.delete(draftKey(this.shown));
+        this.failed = null;
+      }
       if (this.draft === null && !this.pending) {
-        const draft = readDraft();
-        this.draft = draft && this.draftFits(draft) ? draft : null;
+        this.draft = this.storedDraft();
         // edits kept from a refused save (#149) are offered as such, also after a page reload or a home switch
         this.conflict = !!this.draft?.conflict;
       }
+      if (plan) this.oneOff();
       this.error = null;
     } catch (err) {
       if (asked !== this.home) return false;
@@ -614,12 +833,32 @@ export class BuildingController implements ReactiveController {
     setPlanRecipes(this.building.recipes);
     this.recipeBases = recipeHashes(this.building.recipes);
     this.revision = res.revision;
-    // one-off (#203): door and window sensors are not matched automatically any more, so the pairs this plan showed
-    // are saved as links; a viewer who cannot edit sees them for this session only, the next editor to load saves them
-    if (this.hass && !this.building.opening_links_saved) {
-      saveAutomaticOpeningLinks(this.hass, this.building);
-      if (this.building.opening_links_saved && this.canEdit) this.edit(this.building);
+  }
+
+  /** The stored draft to offer for the home loaded (#378: its own key, then, while following the active home, one
+   * kept without a home, #53); not one this view kept of the plan on screen. */
+  private storedDraft(): Draft | null {
+    const keys = [...(this.homeId ? [draftKey(this.homeId)] : []), ...(this.home === undefined ? [draftKey(undefined)] : [])];
+    for (const key of keys) {
+      const draft = readDraft(key);
+      if (draft && this.draftFits(draft) && this.ownDrafts.get(key) !== draftIdentity(draft)) return draft;
     }
+    return null;
+  }
+
+  /**
+   * One-off (#203) on a plan loaded: door and window sensors are not matched automatically any more, so the pairs this
+   * plan showed are saved as links; a viewer who cannot edit sees them for this session only, the next editor to load
+   * saves them. Not while a stored draft is on offer (#378): the save would come first and the draft would then
+   * replace it; it waits until the draft is discarded (restoring it saves the draft's plan instead).
+   */
+  private oneOff(): void {
+    this.oneOffWaiting = false;
+    if (!this.hass || !this.building || this.building.opening_links_saved) return;
+    saveAutomaticOpeningLinks(this.hass, this.building);
+    if (!this.building.opening_links_saved || !this.canEdit || this.pending) return;
+    if (this.draft) this.oneOffWaiting = true;
+    else this.edit(this.building);
   }
 }
 

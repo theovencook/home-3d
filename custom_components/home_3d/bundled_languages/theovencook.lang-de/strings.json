@@ -28,6 +28,8 @@
  "plan_repaired": "Einige Teile dieses Plans waren ungültig und wurden weggelassen ({parts}). Der Plan, wie er war, ist als Wiederherstellungspunkt aufbewahrt.",
  "save_conflict": "Jemand anderes hat dieses Zuhause geändert, während du bearbeitet hast. Es zeigt jetzt deren Stand; deine Änderungen sind hier aufbewahrt.",
  "draft_restore_conflict": "Meine übernehmen (deren Stand bleibt als Wiederherstellungspunkt)",
+ "draft_found_newer": "Nicht gespeicherte Änderungen vom {time} gefunden. Dieses Zuhause wurde seitdem vielleicht geändert: Übernimmst du sie, ersetzen sie den angezeigten Stand.",
+ "draft_restore_newer": "Übernehmen (der angezeigte Stand bleibt als Wiederherstellungspunkt)",
  "walls_auto": "Wände hoch",
  "walls_cut": "Schnitt",
  "plan_view": "2D oder 3D",

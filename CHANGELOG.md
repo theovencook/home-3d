@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- Editor drafts are kept per home and stay until restored or discarded, so a failed save on one home or a save in another tab no longer erases another draft; a draft notes the revision it was made on, and restoring it onto a newer plan says so and keeps the plan shown as a restore point first; a stored draft is offered before the automatic door/window link save; closing the page within the save pause keeps the last edit as a draft; a failed save is made again when the connection is back; revisions going backwards (a backup put back) no longer hide others' saves (#378).
+
 ## Home 3D 1.0.0 (4 November 2026)
 
 - A TV reached through several integrations (several media players on one item or within half a metre) shows one now-playing card: the playing player, else a paused one with a title, else the first (#356).

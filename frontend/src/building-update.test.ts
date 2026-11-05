@@ -68,7 +68,9 @@ test("a reconnect asks the backend for its versions again, without polling in be
   // Home Assistant was updated and restarted: the websocket comes back
   backend.build = "bbb";
   await reconnect();
-  assert.deepEqual(asked, ["home_3d/building/get", "home_3d/version"]);
+  await tick();
+  // and the plan, whose changes made meanwhile were not heard of (#378)
+  assert.deepEqual(asked, ["home_3d/building/get", "home_3d/version", "home_3d/building/get"]);
   assert.equal(c.versionGap, "frontend");
   c.hostDisconnected();
 });

@@ -262,10 +262,10 @@ test("the device reset removes the toggles written straight to the browser and t
   const store = fakeStore([
     "home3d.flows", "home3d.holos", "home3d.solarDim", "home3d.sidePinned", "home3d.sideWidth", "home3d.sideMin", "home3d.thumbs_compact",
     "home3d.editorSplit", "home3d.lib.open", "home3d.card_walls", "home3d.wallRecent", "fp3d-tt-follow", "fp3d-tt-stop", "fp3d-tt-closed",
-    "home3d.lab", "home3d.projection", "home3d.unsaved", "home3d.home.u1", "unrelated", "floorplan-3d.unsaved",
+    "home3d.lab", "home3d.projection", "home3d.unsaved", "home3d.unsaved.h1", "home3d.home.u1", "unrelated", "floorplan-3d.unsaved",
   ]);
   resetDevicePrefs(store);
-  assert.deepEqual([...store.m.keys()].sort(), ["floorplan-3d.unsaved", "home3d.home.u1", "home3d.lab", "home3d.projection", "home3d.unsaved", "unrelated"]);
+  assert.deepEqual([...store.m.keys()].sort(), ["floorplan-3d.unsaved", "home3d.home.u1", "home3d.lab", "home3d.projection", "home3d.unsaved", "home3d.unsaved.h1", "unrelated"]);
 });
 
 test("every home3d.* or fp3d-tt-* key the code writes is removed by the reset unless it is on the keep list (#198)", () => {
