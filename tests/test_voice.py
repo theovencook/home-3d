@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import intent
 
 from custom_components.home_3d.const import DOMAIN
@@ -13,13 +17,164 @@ from custom_components.home_3d.voice import remove_sentences, sentences_yaml, wr
 
 from .test_init import _setup
 
+_OMIT = object()
 
-async def _view(hass_ws_client, hass: HomeAssistant):
-    """An open Home 3D view: subscribed to the sentences."""
-    client = await hass_ws_client(hass)
-    await client.send_json({"id": 1, "type": "home_3d/voice/subscribe"})
+
+async def _view(hass_ws_client, hass: HomeAssistant, screen: Any = _OMIT, token: str | None = None):
+    """An open Home 3D view: subscribed to the sentences (`screen`: its screen name; left out as an older
+    frontend does)."""
+    client = await hass_ws_client(hass, token) if token else await hass_ws_client(hass)
+    msg: dict[str, Any] = {"id": 1, "type": "home_3d/voice/subscribe"}
+    if screen is not _OMIT:
+        msg["screen"] = screen
+    await client.send_json(msg)
     assert (await client.receive_json())["success"]
     return client
+
+
+async def _reply(client, ask: dict, text: str, answered: bool, msg_id: int = 2) -> dict:
+    await client.send_json(
+        {"id": msg_id, "type": "home_3d/voice/answer", "ask_id": ask["ask_id"], "text": text, "answered": answered}
+    )
+    return (await client.receive_json())["result"]
+
+
+def _ask_service(hass: HomeAssistant, text: str, **extra: Any) -> asyncio.Task:
+    return hass.async_create_task(
+        hass.services.async_call(DOMAIN, "ask", {"text": text, **extra}, blocking=True, return_response=True)
+    )
+
+
+async def test_a_view_that_understands_wins_over_one_that_did_not_reply_first(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """Two homes on two screens: the one that cannot answer replies first, the one that can still wins (#366)."""
+    await _setup(hass)
+    first = await _view(hass_ws_client, hass, "")
+    second = await _view(hass_ws_client, hass, "")
+    with patch("custom_components.home_3d.voice.ANSWER_TIMEOUT", 30):
+        task = _ask_service(hass, "Show the kitchen")
+        ask = (await first.receive_json())["event"]
+        await second.receive_json()
+        assert await _reply(first, ask, "", False) == {"taken": True}
+        assert not task.done()
+        assert await _reply(second, ask, "Showing the kitchen.", True) == {"taken": True}
+        result = await asyncio.wait_for(task, 5)
+    assert result == {"answered": True, "answer": "Showing the kitchen.", "screen_open": True}
+
+
+async def test_not_understood_once_every_view_said_so_or_the_time_is_up(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    first = await _view(hass_ws_client, hass, "")
+    second = await _view(hass_ws_client, hass)
+    # every view asked said it did not understand: answered at once, not after the timeout
+    with patch("custom_components.home_3d.voice.ANSWER_TIMEOUT", 30):
+        task = _ask_service(hass, "Blubb")
+        ask = (await first.receive_json())["event"]
+        assert (await second.receive_json())["event"]["ask_id"] == ask["ask_id"]
+        await _reply(first, ask, "", False)
+        await _reply(second, ask, "", False)
+        assert (await asyncio.wait_for(task, 5))["answered"] is False
+    # one said so, the other never answers: not understood when the time is up (not "no screen")
+    with patch("custom_components.home_3d.voice.ANSWER_TIMEOUT", 0.2):
+        task = _ask_service(hass, "Blubb")
+        ask = (await first.receive_json())["event"]
+        await second.receive_json()
+        await _reply(first, ask, "", False, 3)
+        assert await task == {"answered": False, "answer": "", "screen_open": True}
+
+
+async def test_without_a_view_the_answer_comes_at_once(hass: HomeAssistant) -> None:
+    """No Home 3D screen open: nobody to wait for (#366)."""
+    await _setup(hass)
+    with patch("custom_components.home_3d.voice.ANSWER_TIMEOUT", 30):
+        result = await asyncio.wait_for(_ask_service(hass, "Show the kitchen"), 5)
+        assert result == {"answered": False, "answer": "", "screen_open": False}
+        response = await asyncio.wait_for(
+            intent.async_handle(hass, "test", "Home3DAsk", {"text": {"value": "kitchen"}}, language="en"), 5
+        )
+    assert response.speech["plain"]["speech"] == "No Home 3D screen is open right now."
+
+
+async def test_a_sentence_for_one_screen_reaches_only_that_screen(hass: HomeAssistant, hass_ws_client) -> None:
+    """The service's `screen`: the views of that name get it (and a view of an older frontend, which picks for
+    itself); a view of another name never sees it."""
+    await _setup(hass)
+    hall = await _view(hass_ws_client, hass, "Hall ")
+    kitchen = await _view(hass_ws_client, hass, "Kitchen")
+    older = await _view(hass_ws_client, hass)
+    with patch("custom_components.home_3d.voice.ANSWER_TIMEOUT", 30):
+        task = _ask_service(hass, "Show the kitchen", screen="hall")
+        ask = (await hall.receive_json())["event"]
+        assert ask["screen"] == "hall"
+        assert (await older.receive_json())["event"]["ask_id"] == ask["ask_id"]
+        await _reply(hall, ask, "Showing the kitchen.", True)
+        assert (await asyncio.wait_for(task, 5))["answered"] is True
+        # the older view is the only one asked for a screen nobody else has: its "not understood" ends it at once
+        task = _ask_service(hass, "Show the kitchen", screen="Landing")
+        ask = (await older.receive_json())["event"]
+        await _reply(older, ask, "", False)
+        assert (await asyncio.wait_for(task, 5))["answered"] is False
+    # the kitchen view got neither sentence: its next message is the answer to its own ping
+    await kitchen.send_json({"id": 9, "type": "ping"})
+    assert (await kitchen.receive_json())["type"] == "pong"
+
+
+async def test_a_satellite_asks_the_screen_next_to_it(hass: HomeAssistant, hass_ws_client) -> None:
+    """Said to a satellite whose device or area has the name of an open screen: only that screen is asked (#366).
+    No screen of that name open, or no device given: every view, as before."""
+    entry = await _setup(hass)
+    kitchen_area = ar.async_get(hass).async_create("Sample Kitchen")
+    devices = dr.async_get(hass)
+    satellite = devices.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={("test", "sat_kitchen")}, name="Sample satellite"
+    )
+    devices.async_update_device(satellite.id, area_id=kitchen_area.id)
+    lonely = devices.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={("test", "sat_garage")}, name="Garage satellite"
+    )
+    kitchen = await _view(hass_ws_client, hass, "sample kitchen")
+    hall = await _view(hass_ws_client, hass, "Hall")
+
+    async def ask(device_id: str | None) -> tuple[dict, intent.IntentResponse]:
+        task = hass.async_create_task(
+            intent.async_handle(
+                hass,
+                "test",
+                "Home3DAsk",
+                {"text": {"value": "kitchen"}},
+                text_input="show the kitchen",
+                language="en",
+                device_id=device_id,
+            )
+        )
+        got = (await kitchen.receive_json())["event"]
+        await _reply(kitchen, got, "Showing the kitchen.", True, next(ids))
+        return got, await task
+
+    ids = iter(range(10, 100))
+    got, response = await ask(satellite.id)
+    assert got["screen"] == "Sample Kitchen"
+    assert response.speech["plain"]["speech"] == "Showing the kitchen."
+    # the hall view was not asked
+    await hall.send_json({"id": 5, "type": "ping"})
+    assert (await hall.receive_json())["type"] == "pong"
+    # a satellite by no open screen, and no satellite: every view
+    for device_id in (lonely.id, None):
+        got, _ = await ask(device_id)
+        assert got["screen"] is None
+        assert (await hall.receive_json())["event"]["ask_id"] == got["ask_id"]
+
+
+async def test_the_views_still_listen_after_a_reload(hass: HomeAssistant, hass_ws_client) -> None:
+    entry = await _setup(hass)
+    view = await _view(hass_ws_client, hass, "")
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    task = _ask_service(hass, "Show the kitchen")
+    ask = (await view.receive_json())["event"]
+    await _reply(view, ask, "Showing the kitchen.", True)
+    assert (await task)["answered"] is True
 
 
 async def test_service_hands_the_sentence_to_the_views_and_returns_the_first_answer(

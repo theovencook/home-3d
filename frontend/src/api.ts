@@ -15,7 +15,7 @@ const at = (home?: string | null): { home_id?: string } => (home ? { home_id: ho
  * (BuildingController.speaks) instead of trying it and falling back. contract.test.ts checks every command and field
  * used here against tests/fixtures/contract/websocket.json.
  */
-export const PROTOCOL = 4;
+export const PROTOCOL = 5;
 
 /** `can_edit`: the user is on the editors list (missing from backends before #7). `home_id`: the home loaded (#53;
  * missing from older backends), the one to save back to. */
@@ -85,11 +85,12 @@ export interface Ask {
   admins_only?: boolean;
 }
 
-export function subscribeAsk(hass: HomeAssistant, callback: (ask: Ask) => void): Promise<() => Promise<void>> {
-  return hass.connection.subscribeMessage<Ask>(callback, { type: "home_3d/voice/subscribe" });
+/** `screen`: the view's screen name ("" none): a sentence for one screen reaches only the views of that name (#366). */
+export function subscribeAsk(hass: HomeAssistant, screen: string, callback: (ask: Ask) => void): Promise<() => Promise<void>> {
+  return hass.connection.subscribeMessage<Ask>(callback, { type: "home_3d/voice/subscribe", screen });
 }
 
-/** The view's answer; `taken` is false when another view was first. */
+/** The view's answer; `taken` is false when another view understood first (or the asker waits no longer). */
 export async function answerAsk(hass: HomeAssistant, askId: string, text: string, answered: boolean): Promise<boolean> {
   const res = await hass.callWS<{ taken: boolean }>({ type: "home_3d/voice/answer", ask_id: askId, text, answered });
   return res.taken;

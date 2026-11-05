@@ -13,7 +13,7 @@ PLAN_VERSION = 3
 # frontend can tell what the backend it talks to understands (building/get and version send it). The commands are
 # listed in tests/fixtures/contract/websocket.json, which tests/test_contract.py keeps in step and the frontend
 # checks its calls against
-PROTOCOL = 4
+PROTOCOL = 5
 STORAGE_KEY_BUILDING = f"{DOMAIN}.building"
 STORAGE_KEY_IMAGES = f"{DOMAIN}.images"
 STORAGE_KEY_HISTORY = f"{DOMAIN}.history"
@@ -62,8 +62,7 @@ SIGNAL_HOMES_UPDATED = f"{DOMAIN}_homes_updated"
 # hass.data key of the routines
 SIGNAL_PETS_UPDATED = f"{DOMAIN}_pets_updated"
 DATA_PETS = f"{DOMAIN}_pets"
-# a sentence for the open views (see voice.py) and the hass.data key of its broker
-SIGNAL_ASK = f"{DOMAIN}_ask"
+# the hass.data key of the broker that hands sentences to the open views (see voice.py)
 DATA_ASK = f"{DOMAIN}_ask"
 # the voice settings (which sentences Assist hands to Home 3D), kept in .storage
 DATA_VOICE = f"{DOMAIN}_voice"

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from dataclasses import dataclass
 import hashlib
 import json
 import logging
@@ -19,14 +20,17 @@ from typing import Any, ClassVar
 import uuid
 
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import intent
-from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.storage import Store
 from homeassistant.util.yaml import parse_yaml
 import voluptuous as vol
 
-from .const import DATA_ASK, DATA_VOICE, DOMAIN, SIGNAL_ASK, STORAGE_KEY_VOICE
+from .const import DATA_ASK, DATA_VOICE, DOMAIN, STORAGE_KEY_VOICE
 from .locate.answers import Located, async_locate
 from .locate.service import DATA_LOCATE, SIGNAL_LOCATE_DEVICES
 
@@ -37,6 +41,8 @@ INTENT_ASK = "Home3DAsk"
 # a view answers within a moment; a voice satellite waits for Assist, so the wait stays short
 ANSWER_TIMEOUT = 6.0
 SENTENCES_FILE = "home_3d.yaml"
+# hass.data key of the open views listening for sentences (voice/subscribe)
+DATA_VIEWS = f"{DOMAIN}_voice_views"
 
 ASK_SCHEMA = vol.Schema(
     {
@@ -409,35 +415,130 @@ async def async_remove_sentences(hass: HomeAssistant) -> None:
     await settings._store.async_remove()
 
 
+@dataclass(eq=False)
+class _View:
+    """An open view listening for sentences (voice/subscribe): how to reach it and its screen name in lower case
+    ("": a view without a name; None: a view of an older frontend that did not say and picks its sentences itself)."""
+
+    send: Callable[[dict[str, Any]], None]
+    screen: str | None
+
+
+@dataclass(eq=False)
+class _Question:
+    """A sentence handed to `asked` views, waiting for the first that understands it."""
+
+    future: asyncio.Future[dict[str, Any]]
+    asked: int
+    declined: int = 0
+    not_understood: dict[str, Any] | None = None
+
+
+def _screen_key(screen: str | None) -> str:
+    return (screen or "").strip().lower()
+
+
+def _views(hass: HomeAssistant) -> list[_View]:
+    """The open views: kept over a reload of the integration, as their subscriptions stay open."""
+    views: list[_View] = hass.data.setdefault(DATA_VIEWS, [])
+    return views
+
+
+@callback
+def subscribe_view(
+    hass: HomeAssistant, send: Callable[[dict[str, Any]], None], screen: str | None
+) -> Callable[[], None]:
+    """An open view listens for sentences (voice/subscribe); returns how it stops."""
+    view = _View(send, None if screen is None else _screen_key(screen))
+    views = _views(hass)
+    views.append(view)
+
+    @callback
+    def unsubscribe() -> None:
+        if view in views:
+            views.remove(view)
+
+    return unsubscribe
+
+
 class AskBroker:
-    """Hands a sentence to the views and waits for the first answer."""
+    """Hands a sentence to the open views and waits for the first that understands it (#366)."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
-        self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._pending: dict[str, _Question] = {}
+
+    def screens(self) -> set[str]:
+        """The screen names of the open views (lower case)."""
+        return {view.screen for view in _views(self.hass) if view.screen}
+
+    def _views_for(self, screen: str | None) -> list[_View]:
+        """The views a sentence is for: all of them, or for one screen the views of that name (and those of an
+        older frontend, which pick for themselves)."""
+        key = _screen_key(screen)
+        return [view for view in _views(self.hass) if not key or view.screen is None or view.screen == key]
+
+    @callback
+    def show(self, message: dict[str, Any], screen: str | None) -> None:
+        """Something for the views to show that nobody waits for (the rooms of a locating answer)."""
+        for view in self._views_for(screen):
+            view.send(message)
 
     async def ask(self, text: str, screen: str | None, speak: bool) -> dict[str, Any] | None:
-        """The answer of the first view ({"text", "answered"}), None when no view is open or none answered in time."""
+        """The answer of the first view that understands ({"text", "answered": True}). A view that did not
+        understand counts only when no view does: once every view asked said so, or when the time is up after one
+        did ({"text", "answered": False}). None when no view is open (at once) or none answered in time."""
+        views = self._views_for(screen)
+        if not views:
+            return None
         ask_id = uuid.uuid4().hex
-        future: asyncio.Future[dict[str, Any]] = self.hass.loop.create_future()
-        self._pending[ask_id] = future
+        question = _Question(self.hass.loop.create_future(), len(views))
+        self._pending[ask_id] = question
         try:
             ask = {"ask_id": ask_id, "text": text, "screen": screen, "speak": speak}
-            async_dispatcher_send(self.hass, SIGNAL_ASK, ask)
+            for view in views:
+                view.send(ask)
             async with asyncio.timeout(ANSWER_TIMEOUT):
-                return await future
+                return await question.future
         except TimeoutError:
-            return None
+            return question.not_understood
         finally:
             self._pending.pop(ask_id, None)
 
     def answer(self, ask_id: str, text: str, answered: bool) -> bool:
-        """A view's answer; only the first one counts. False when the question is unknown (or answered already)."""
-        future = self._pending.get(ask_id)
-        if future is None or future.done():
+        """A view's answer: the first that understood is taken, one that did not is counted. False when the
+        question is unknown or answered already."""
+        question = self._pending.get(ask_id)
+        if question is None or question.future.done():
             return False
-        future.set_result({"text": text, "answered": answered})
+        if answered:
+            question.future.set_result({"text": text, "answered": True})
+            return True
+        question.declined += 1
+        if question.not_understood is None:
+            question.not_understood = {"text": text, "answered": False}
+        if question.declined >= question.asked:
+            question.future.set_result(question.not_understood)
         return True
+
+
+def satellite_screen(
+    hass: HomeAssistant, device_id: str | None, satellite_id: str | None, screens: set[str]
+) -> str | None:
+    """The screen next to the voice satellite that heard a sentence (#366): an open view whose screen name is the
+    satellite's device name or the name of its area (a wall tablet named "Kitchen" by the kitchen's satellite).
+    None when Home Assistant names no device or no open view has such a name: then every view is asked."""
+    if not screens or not (device_id or satellite_id):
+        return None
+    entity = er.async_get(hass).async_get(satellite_id) if satellite_id else None
+    device_id = device_id or (entity.device_id if entity else None)
+    device = dr.async_get(hass).async_get(device_id) if device_id else None
+    names: list[str | None] = [device.name_by_user, device.name] if device else []
+    areas = ar.async_get(hass)
+    for area_id in (entity.area_id if entity else None, device.area_id if device else None):
+        if area_id and (area := areas.async_get_area(area_id)) is not None:
+            names.append(area.name)
+    return next((name.strip() for name in names if name and _screen_key(name) in screens), None)
 
 
 def show_located(hass: HomeAssistant, located: Located, screen: str | None = None) -> None:
@@ -445,11 +546,10 @@ def show_located(hass: HomeAssistant, located: Located, screen: str | None = Non
     Nobody waits for them. Not when switched off in the locating settings; while people are shown to admins only,
     a view of someone else does not fly to people (a wall tablet would show everyone where they are)."""
     service = hass.data.get(DATA_LOCATE)
-    if not located.rooms or service is None or not service.fly:
+    broker: AskBroker | None = hass.data.get(DATA_ASK)
+    if not located.rooms or service is None or not service.fly or broker is None:
         return
-    async_dispatcher_send(
-        hass,
-        SIGNAL_ASK,
+    broker.show(
         {
             "ask_id": "",
             "text": "",
@@ -458,6 +558,7 @@ def show_located(hass: HomeAssistant, located: Located, screen: str | None = Non
             "show_rooms": located.rooms,
             "admins_only": located.persons and service.admins_only,
         },
+        screen,
     )
 
 
@@ -477,17 +578,20 @@ class AskIntentHandler(intent.IntentHandler):
         text = (intent_obj.text_input or str(slots.get("text", {}).get("value") or "")).strip()
         if not text:
             raise intent.InvalidSlotInfo("no sentence")
-        language = (intent_obj.language or intent_obj.hass.config.language or "en").split("-")[0]
+        hass = intent_obj.hass
+        language = (intent_obj.language or hass.config.language or "en").split("-")[0]
         response = intent_obj.create_response()
-        # where people and things are: answered here, no screen needed
-        located = await async_locate(
-            intent_obj.hass, intent_obj.hass.data.get(DATA_LOCATE), text, language, intent_obj.context.user_id
+        # said to a satellite by a screen: that screen shows it, not every open view (#366)
+        screen = satellite_screen(
+            hass, intent_obj.device_id, getattr(intent_obj, "satellite_id", None), self.broker.screens()
         )
+        # where people and things are: answered here, no screen needed
+        located = await async_locate(hass, hass.data.get(DATA_LOCATE), text, language, intent_obj.context.user_id)
         if located is not None:
-            show_located(intent_obj.hass, located)
+            show_located(hass, located, screen)
             response.async_set_speech(located.text)
             return response
-        answer = await self.broker.ask(text, None, False)
+        answer = await self.broker.ask(text, screen, False)
         if answer is None:
             response.async_set_speech(_NO_SCREEN.get(language, _NO_SCREEN["en"]))
         elif not answer["answered"]:

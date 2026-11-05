@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- Voice: a view that did not understand a sentence no longer beats one that does (its reply counts only when no view understands); with no Home 3D screen open Assist answers at once instead of after 6 seconds; a sentence said to a voice satellite goes only to the open screen named like the satellite's device or its area (other screens stay where they are), and a sentence for a screen reaches only the views of that name (#366).
+
 ## Home 3D 1.0.0 (4 November 2026)
 
 - A TV reached through several integrations (several media players on one item or within half a metre) shows one now-playing card: the playing player, else a paused one with a title, else the first (#356).
