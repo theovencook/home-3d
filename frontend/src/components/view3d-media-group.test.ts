@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Furniture } from "../model.ts";
+import { isTvItemType } from "../devices.ts";
 import { GROUP_RADIUS, hostAt, losers } from "../media-groups.ts";
 
 for (const k of ["VIEWER", "EDITOR", "LOCATE", "ITEMS", "LANG", "PLAN2D", "FUN", "VOICE", "TIMETRAVEL", "CARD_EDITOR"]) (globalThis as Record<string, unknown>)[`__FP3D_${k}_HASH__`] = "test";
@@ -14,13 +15,14 @@ const { Fp3dView3d } = (await import("./view3d.ts")) as unknown as { Fp3dView3d:
 
 const IDS = ["media_player.sample_lounge_tv", "media_player.sample_lounge_tv_cast", "media_player.sample_lounge_tv_android", "media_player.sample_lounge_tv_native"];
 const state = (entity_id: string, state: string, attributes: Record<string, unknown> = {}) => ({ entity_id, state, attributes: { device_class: "tv", ...attributes }, last_changed: new Date().toISOString() });
+const bare = (a: Record<string, unknown>) => ({ device_class: null, ...a });
 
 /** A lounge with a TV on a unit and the given players placed 20 cm apart on it; returns the media cards. */
-function cards(states: Record<string, [string, Record<string, unknown>?]>, opts: { onItem?: boolean; spread?: number } = {}): { id: string; title: string }[] {
+function cards(states: Record<string, [string, Record<string, unknown>?]>, opts: { onItem?: boolean; spread?: number; hostType?: string } = {}): { id: string; title: string }[] {
   const el = new Fp3dView3d();
   const b = emptyBuilding();
   const floor = newFloor("g", "Ground", 0);
-  if (opts.onItem !== false) floor.furniture = [{ id: "tv_unit", type: "tv", name: "TV", x: 2, z: 2, rotation: 0, w: 1.4, d: 0.4, h: 0.6, variant: null } as Furniture];
+  if (opts.onItem !== false) floor.furniture = [{ id: "tv_unit", type: opts.hostType ?? "tv", name: "TV", x: 2, z: 2, rotation: 0, w: 1.4, d: 0.4, h: 0.6, variant: null } as Furniture];
   const ids = Object.keys(states);
   floor.placements = ids.map((entity_id, i) => ({ entity_id, x: 1.7 + i * (opts.spread ?? 0.2), z: 2, y: 1, marker: "never" }) as never);
   b.floors = [floor];
@@ -95,7 +97,7 @@ test("the lounge layout: a chain of players on a bench beside the TV item, one m
 });
 
 test("players in a chain, each within half a metre of the next, are one group (#356)", () => {
-  const c = (id: string, z: number) => ({ id, floorId: "g", x: 0, z, rank: 1 });
+  const c = (id: string, z: number) => ({ id, floorId: "g", x: 0, z, rank: 1, tv: true });
   assert.deepEqual([...losers([c("a", 0), c("b", 0.4), c("c", 0.8), c("d", 1.2)])], ["b", "c", "d"]);
   assert.deepEqual([...losers([c("d", 1.2), c("a", 0), c("b", 0.4), c("c", 0.8)])], ["a", "b", "c"]);
 });
@@ -105,12 +107,37 @@ test("a single player behaves as before (#356)", () => {
   assert.deepEqual(cards({ [IDS[0]]: ["playing", { media_title: "Sample" }] }).map((c) => c.id), [IDS[0]]);
 });
 
+test("a speaker and a TV on one bench, both playing: two cards (#362)", () => {
+  const sp = "media_player.sample_speaker";
+  const states = { [IDS[0]]: ["playing", { media_title: "Sample Film" }], [sp]: ["playing", bare({ media_title: "Sample Song" })] } as Record<string, [string, Record<string, unknown>?]>;
+  assert.deepEqual(cards(states, { hostType: "sideboard" }).map((c) => c.id).sort(), [IDS[0], sp].sort());
+  // players of the same TV item still share one card
+  assert.equal(cards({ [IDS[0]]: ["off"], [IDS[1]]: ["off"] }, { hostType: "tv" }).length, 1);
+});
+
+test("two PCs on one desk: two cards (#362)", () => {
+  const states = { "media_player.sample_pc_a": ["playing", bare({})], "media_player.sample_pc_b": ["playing", bare({})] } as Record<string, [string, Record<string, unknown>?]>;
+  assert.equal(cards(states, { hostType: "desk" }).length, 2);
+});
+
+test("TV item detection: built-in and pack TVs, not monitors or projector screens (#362)", () => {
+  assert.equal(isTvItemType("tv_board"), true);
+  assert.equal(isTvItemType("desk"), false);
+  assert.equal(isTvItemType("sideboard"), false);
+});
+
+test("same friendly name within the radius is one group even without the tv class (#362)", () => {
+  const c = (id: string, x: number, name: string) => ({ id, floorId: "g", x, z: 0, rank: 1, name });
+  assert.deepEqual([...losers([c("a", 0, "lounge"), c("b", 0.2, "lounge")])], ["b"]);
+  assert.equal(losers([c("a", 0, "lounge"), c("b", 0.2, "kitchen")]).size, 0);
+});
+
 test("grouping rule: same item or within half a metre on one floor; the best rank keeps the card (#356)", () => {
   assert.equal(GROUP_RADIUS, 0.5);
-  const c = (id: string, x: number, rank: number, extra: object = {}) => ({ id, floorId: "g", x, z: 0, rank, ...extra });
+  const c = (id: string, x: number, rank: number, extra: object = {}) => ({ id, floorId: "g", x, z: 0, rank, tv: true, ...extra });
   assert.deepEqual([...losers([c("a", 0, 1), c("b", 0.4, 5), c("c", 3, 1)])], ["a"]);
   assert.deepEqual([...losers([c("a", 0, 1), c("b", 0.4, 1)])], ["b"]);
-  assert.deepEqual([...losers([c("a", 0, 1, { hostId: "f" }), c("b", 5, 4, { hostId: "f" })])], ["a"]);
+  assert.deepEqual([...losers([c("a", 0, 1, { hostId: "f", hostTv: true }), c("b", 5, 4, { hostId: "f", hostTv: true })])], ["a"]);
   assert.equal(losers([c("a", 0, 1), { ...c("b", 0.1, 5), floorId: "u" }]).size, 0);
   assert.equal(hostAt([{ id: "f", x: 2, z: 2, w: 1.4, d: 0.4 }], 2.6, 2.1), "f");
   assert.equal(hostAt([{ id: "f", x: 2, z: 2, w: 1.4, d: 0.4 }], 2.6, 2.4), undefined);

@@ -19,7 +19,7 @@ import { carState, type CarState, heatSensorOn, roomClimateValue,
   openingState,
   TOGGLE_KINDS,
   type FurnitureLinks,
-  type OpeningEntities, awningStates, confirmEntities, fridgeDoors, hasScreen, isMediaFurniture, pictureRuleMatches,
+  type OpeningEntities, awningStates, confirmEntities, fridgeDoors, hasScreen, isMediaFurniture, isTvItemType, pictureRuleMatches,
   fromCelsius,
   tempUnit,
   robotRoom,
@@ -1794,9 +1794,12 @@ export class Fp3dView3d extends LitElement {
         if (collect) {
           if (collect.some((c) => c.id === id)) return;
           const tvCard = tvItem || st.attributes.device_class === "tv";
+          const host = hostId ?? hostAt(floor.furniture, x, z);
+          const hostType = host ? floor.furniture.find((f) => f.id === host)?.type : undefined;
+          const fn = st.attributes.friendly_name;
           const live = !isUnavailable(st);
           const rank = st.state === "playing" && live ? 5 : this.mediaCardUp(hass, id) || (live && st.state === "on" && !!st.attributes.source) ? 4 : !this.ro && (this.mediaGrace.get(id)?.until ?? 0) > Date.now() ? 2 : tvCard && live ? 1 : 0;
-          collect.push({ id, floorId: floor.id, x, z, hostId: hostId ?? hostAt(floor.furniture, x, z), rank });
+          collect.push({ id, floorId: floor.id, x, z, hostId: host, hostTv: !!hostType && isTvItemType(hostType), tv: st.attributes.device_class === "tv", name: typeof fn === "string" ? fn.trim().toLowerCase() : undefined, rank });
           return;
         }
         if (yields.has(id)) return;
