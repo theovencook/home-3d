@@ -752,7 +752,13 @@ editor can also press **Check now**.
 - The household's own items (`household.custom`) are never listed: placed copies follow every edit at once. Bundled
   packs update with Home 3D itself; their placed items follow the auto-update setting like any other pack's.
 
-The settings, pins, previous releases and last check results are kept in `.storage/home_3d.pack_updates`.
+A check asks GitHub without holding up anything else: an import, a removal or a roll back made meanwhile goes ahead,
+and the check applies nothing over it. When GitHub refuses (403 or 429, a rate limit), the round stops there and no
+check asks GitHub again before the time GitHub names (or an hour; at most six hours); the Extensions page shows that
+time. A pack whose check fails in an unexpected way is logged and shows the error; the other packs' results are kept.
+
+The settings, pins, previous releases, last check results and a rate-limit wait are kept in
+`.storage/home_3d.pack_updates`.
 
 ## Packs that ship with Home 3D
 

@@ -1140,6 +1140,7 @@
  "upd_checking": "Prüft …",
  "upd_last_check": "Zuletzt geprüft: {time}",
  "upd_next_check": "Nächste Prüfung: {time}",
+ "upd_backoff": "GitHub begrenzt die Anfragen: keine Prüfung vor {time}",
  "upd_checked": "Geprüft – neue Releases: {n}",
  "upd_none": "Alle platzierten Möbel sind aktuell.",
  "upd_item": "Release {from} → {to} · {n}× platziert",

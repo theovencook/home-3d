@@ -698,6 +698,7 @@ export const lateEnglish = {
   upd_checking: "Checking …",
   upd_last_check: "Last checked: {time}",
   upd_next_check: "Next check: {time}",
+  upd_backoff: "GitHub is limiting requests: no check before {time}",
   upd_checked: "Checked – new releases: {n}",
   upd_none: "All placed items are up to date.",
   upd_item: "Release {from} → {to} · placed {n}×",

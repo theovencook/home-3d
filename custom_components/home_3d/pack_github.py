@@ -62,6 +62,34 @@ _REF = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$")
 _FOLDER_PART = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$")
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 
+# how long update checks wait after GitHub refused without saying for how long (#377), and the bounds of a wait
+DEFAULT_BACKOFF = 3600
+BACKOFF_RANGE = (60, 6 * 3600)
+
+
+class RateLimited(PackError):
+    """GitHub refused (403 / 429, a rate limit): code "fetch_failed", and `retry_at`, when to ask again (#377)."""
+
+    def __init__(self, detail: str, headers: Any) -> None:
+        super().__init__("fetch_failed", detail)
+        self.retry_at = _retry_at(headers, time.time())
+
+
+def _retry_at(headers: Any, now: float) -> float:
+    """When GitHub may be asked again: its Retry-After, else the reset time of a used-up rate limit, else in an
+    hour; at least a minute and at most six hours from now."""
+    try:
+        if (after := headers.get("Retry-After")) is not None:
+            at = now + float(after)
+        elif headers.get("X-RateLimit-Remaining") == "0" and (reset := headers.get("X-RateLimit-Reset")) is not None:
+            at = float(reset)
+        else:
+            at = now + DEFAULT_BACKOFF
+    except (TypeError, ValueError):
+        at = now + DEFAULT_BACKOFF
+    return min(max(at, now + BACKOFF_RANGE[0]), now + BACKOFF_RANGE[1])
+
+
 URL_HINT = "paste https://github.com/<owner>/<repo> or https://github.com/<owner>/<repo>/tree/<branch>/<folder>"
 
 
@@ -146,7 +174,7 @@ async def _get(session: aiohttp.ClientSession, url: str, limit: int, what: str) 
                 if response.status == 404:
                     raise PackError("not_found", f"{what}: not found on GitHub (or the repository is private)")
                 if response.status in (403, 429):
-                    raise PackError("fetch_failed", f"{what}: GitHub refused (rate limit?); try again later")
+                    raise RateLimited(f"{what}: GitHub refused (rate limit?); try again later", response.headers)
                 if response.status != 200:
                     raise PackError("fetch_failed", f"{what}: GitHub answered {response.status}")
                 return await _read(response, limit, what)

@@ -272,6 +272,7 @@ export class Extensions extends LitElement {
       </div>
       <p class="fp3d-sub">
         ${this.t("upd_last_check", { time: this.time(status.last_check) })}${next ? html` · ${this.t("upd_next_check", { time: this.time(next) })}` : nothing}
+        ${status.backoff_until ? html` · ${this.t("upd_backoff", { time: this.time(status.backoff_until) })}` : nothing}
       </p>
       ${this._updatesMsg ? html`<p class="fp3d-sub ${this._updatesMsg.ok ? "fp3d-notice" : "fp3d-pack-error"}">${this._updatesMsg.text}</p>` : nothing}
     </section>`;

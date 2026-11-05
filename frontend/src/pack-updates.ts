@@ -59,6 +59,8 @@ export interface PlacedUpdate {
 export interface PackUpdateStatus {
   settings: PackUpdateSettings;
   last_check: number | null;
+  /** GitHub limited the requests: no check asks it before this time (#377); null or missing: no wait. */
+  backoff_until?: number | null;
   packs: PackUpdateState[];
   items: PlacedUpdate[];
 }
