@@ -82,7 +82,6 @@ TIME_PATTERN = r"^([01][0-9]|2[0-3]):[0-5][0-9]$"
 # pet event triggers (#359): an event type every Home Assistant event or very many events a second would match makes a
 # pet's trigger fire (and every view redraw) all the time, so these are refused. `*` is MATCH_ALL; the rest are the
 # core events fired for every state change, service call, entity or service registration, and so on.
-PET_EVENT_MAX_TRIGGERS = 20
 PET_EVENT_REFUSED = frozenset(
     {
         "*",

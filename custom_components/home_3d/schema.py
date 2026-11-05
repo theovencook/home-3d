@@ -16,7 +16,7 @@ from typing import Any
 
 import voluptuous as vol
 
-from .const import PET_EVENT_MAX_TRIGGERS, PET_EVENT_REFUSED, PLAN_VERSION, TIME_PATTERN
+from .const import PET_EVENT_REFUSED, PLAN_VERSION, TIME_PATTERN
 from .migrations import migrate_plan
 from .packs import COLOUR_ROLES
 from .racks import RACK_CONTENTS_SCHEMA
@@ -315,13 +315,6 @@ def _pet_trigger_ok(trigger: dict[str, Any]) -> dict[str, Any]:
     if trigger.get("kind") == "event" and str(trigger.get("event") or "").strip() in PET_EVENT_REFUSED:
         raise vol.Invalid(f"event type {trigger['event']!r} is too frequent for a pet trigger")
     return trigger
-
-
-def _pet_triggers_capped(triggers: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """At most PET_EVENT_MAX_TRIGGERS per pet; the error names the first one over, so check_plan leaves it out."""
-    if len(triggers) > PET_EVENT_MAX_TRIGGERS:
-        raise vol.Invalid("too many triggers for a pet", path=[PET_EVENT_MAX_TRIGGERS])
-    return triggers
 
 
 _PET_TRIGGER = vol.All(
@@ -1298,9 +1291,7 @@ SETTINGS_SCHEMA = vol.Schema(
                                     vol.Optional("spots", default=None): vol.Any(
                                         None, vol.All([_PET_SPOT], vol.Length(max=48))
                                     ),
-                                    vol.Optional("triggers", default=None): vol.Any(
-                                        None, vol.All([_PET_TRIGGER], _pet_triggers_capped)
-                                    ),
+                                    vol.Optional("triggers", default=None): vol.Any(None, [_PET_TRIGGER]),
                                 },
                                 extra=vol.ALLOW_EXTRA,
                             )

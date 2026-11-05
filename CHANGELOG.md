@@ -5,7 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
-- A pet's event trigger can no longer name `*` or a very frequent core event (state_changed, call_service and the like), and a pet has at most 20 triggers; a stored plan with such a trigger loads with it left out, and the editor says why (#359).
+- A pet's event trigger can no longer name `*` or a very frequent core event (state_changed, call_service and the like); a stored plan with such a trigger loads with it left out, and the editor says why (#359).
 
 ## Home 3D 1.0.0 (4 November 2026)
 

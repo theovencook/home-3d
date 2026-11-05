@@ -27,7 +27,6 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    PET_EVENT_MAX_TRIGGERS,
     PET_EVENT_REFUSED,
     SIGNAL_BUILDING_UPDATED,
     SIGNAL_HOMES_UPDATED,
@@ -202,7 +201,7 @@ class PetRoutines:
             if pets.get("roam") is False:
                 continue
             for pet in pet_list:
-                for trigger in (pet.get("triggers") or [])[:PET_EVENT_MAX_TRIGGERS]:
+                for trigger in pet.get("triggers") or []:
                     if not isinstance(trigger, dict) or not isinstance(trigger.get("id"), str):
                         continue
                     fired: Fired = (home_id, pet["id"], trigger)

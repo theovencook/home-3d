@@ -153,11 +153,11 @@ def test_old_static_pets_get_their_spot_as_the_routines_first() -> None:
 
 def test_the_schema_keeps_spots_and_any_number_of_triggers() -> None:
     base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
-    triggers = [{"id": f"t{i}", "kind": "time", "at": "07:30", "x": 1, "z": 1, "minutes": 2} for i in range(20)]
+    triggers = [{"id": f"t{i}", "kind": "time", "at": "07:30", "x": 1, "z": 1, "minutes": 2} for i in range(60)]
     pet = {"id": "p1", "kind": "cat", "spots": [spot("s", **{"from": "22:00", "to": "07:00", "days": [5, 6]})]}
     got = SETTINGS_SCHEMA({**base, "pets": {"roam": False, "list": [{**pet, "triggers": triggers}]}})["pets"]
     assert got["roam"] is False
-    assert len(got["list"][0]["triggers"]) == 20
+    assert len(got["list"][0]["triggers"]) == 60
     assert got["list"][0]["triggers"][0]["entity"] is None
     assert got["list"][0]["spots"][0]["days"] == [5, 6]
     for pose in ("stand", "groom"):
@@ -307,20 +307,6 @@ def test_a_stored_plan_with_a_refused_trigger_loads_without_that_trigger() -> No
     assert problem is not None and problem["code"] == "plan_repaired"
     assert problem["dropped"] == ["settings.pets.list.0.triggers.1"]
     assert [t["id"] for t in checked["settings"]["pets"]["list"][0]["triggers"]] == ["e1", "e2"]
-
-
-def test_triggers_per_pet_are_capped_and_a_stored_plan_over_the_cap_keeps_the_first() -> None:
-    from custom_components.home_3d.const import PET_EVENT_MAX_TRIGGERS
-    from custom_components.home_3d.storage import check_plan
-
-    many = [_event_trigger(f"e{i}", "sample_feed") for i in range(PET_EVENT_MAX_TRIGGERS)]
-    assert len(BUILDING_SCHEMA(_plan_with_pet(triggers=many))["settings"]["pets"]["list"][0]["triggers"]) == 20
-    over = _plan_with_pet(triggers=[*many, _event_trigger("x1", "sample_feed"), _event_trigger("x2", "sample_feed")])
-    with pytest.raises(vol.Invalid):
-        BUILDING_SCHEMA(over)
-    checked, problem = check_plan(over)
-    assert problem is not None and problem["code"] == "plan_repaired"
-    assert [t["id"] for t in checked["settings"]["pets"]["list"][0]["triggers"]] == [t["id"] for t in many]
 
 
 async def test_pets_ignores_a_refused_event_type_even_when_it_is_stored(hass: HomeAssistant) -> None:

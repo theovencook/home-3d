@@ -811,8 +811,6 @@ export const PET_EVENT_REFUSED: readonly string[] = [
   "logbook_entry", "panels_updated", "lovelace_updated", "user_added", "user_removed", "automation_reloaded",
   "scene_reloaded", "event_template_reloaded",
 ];
-/** The most triggers a pet may have (#359). */
-export const PET_MAX_TRIGGERS = 20;
 export type PetPose = (typeof PET_POSES)[number];
 
 export const PET_FURS = ["orange", "tabby", "black", "white", "grey", "brown", "calico", "golden", "cream", "dilute_calico", "blue_grey"] as const;
