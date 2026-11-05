@@ -36,6 +36,8 @@ CALIBRATE_SECONDS = 90
 SAMPLE_EVERY = 2.0
 NEARBY_KEEP = 30.0
 MAX_SAMPLES_PER_ROOM = 120
+# seconds: a device that is heard has its last_seen sent on at least this often, though its room stays (#365)
+LAST_SEEN_REFRESH = 60.0
 PRESENCE_CLASSES = {"motion", "occupancy", "presence"}
 # worn on the body: it tells where its person is (a phone may lie somewhere)
 WORN = re.compile(r"watch|uhr|band|ring|fit|garmin|wear", re.IGNORECASE)
@@ -81,6 +83,7 @@ class LocateService:
         # again against every sample (a quiet device repeats its window second after second)
         self._pool_serial = 0
         self._evidence: dict[str, tuple[tuple[Any, ...], dict[str, float]]] = {}
+        self._announced_seen: dict[str, float] = {}  # last_seen per device when SIGNAL_LOCATE was last sent
         self.rooms: list[dict[str, Any]] = []  # {id, name, floor, area_id}
         self.doors: list[tuple[str, str]] = []
         self.fingerprints: dict[str, Fingerprints] = {}
@@ -514,8 +517,11 @@ class LocateService:
             old = self.state.get(dev)
             if old is None or old["room"] != new["room"] or abs(old["probability"] - new["probability"]) > 0.1:
                 changed = True
+            elif (est.last_seen or 0.0) - self._announced_seen.get(dev, 0.0) >= LAST_SEEN_REFRESH:
+                changed = True  # heard on in the same room: the sensors refresh last_seen now and then (#365)
             self.state[dev] = new
         if changed:
+            self._announced_seen = {dev: st.get("last_seen") or 0.0 for dev, st in self.state.items()}
             async_dispatcher_send(self.hass, SIGNAL_LOCATE)
 
     # ------------------------------------------------------------------ calibration

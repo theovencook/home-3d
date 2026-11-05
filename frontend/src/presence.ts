@@ -103,6 +103,10 @@ export function personsInRooms(hass: HomeAssistant, building: Building): PersonM
   return out;
 }
 
+// a room sensor sends last_seen on at most once a minute while its room stays (LAST_SEEN_REFRESH in
+// locate/service.py, #365): "heard lately" allows for that
+const SEEN_LAG = 60_000;
+
 /**
  * People and things Home 3D's own locating puts in a room: its sensors (attribute home3d_locate) name a room of
  * the plan. A device of a person who is away is left out; several in one room stand on a small circle.
@@ -181,9 +185,9 @@ export function locatedPersons(hass: HomeAssistant, building: Building, skip: Re
     // fools the watch) – a phone that stayed put while the watch walked on was left lying, a watch that lay still for
     // ten minutes while the phone walked on was taken off; else the freshest device
     const freshest = (l: Found[]) => l.reduce((a, b) => (b.seen > a.seen ? b : a));
-    const worn = list.filter((f) => f.worn && now - f.seen < 120_000);
+    const worn = list.filter((f) => f.worn && now - f.seen < 120_000 + SEEN_LAG);
     let main = freshest(worn.length ? worn : list);
-    const together = (f: Found) => now - f.seen < 30_000 && now - main.seen < 30_000 && f.since >= main.since - 120_000;
+    const together = (f: Found) => now - f.seen < 30_000 + SEEN_LAG && now - main.seen < 30_000 + SEEN_LAG && f.since >= main.since - 120_000;
     let off: Found | null = null;
     if (main.worn) {
       const others = list.filter((f) => !f.worn && f.room.id !== main.room.id && together(f));
@@ -208,7 +212,7 @@ export function locatedPersons(hass: HomeAssistant, building: Building, skip: Re
     // about the room (heard together with the chosen one) and a worn one heard lately are with the person
     for (const f of list) {
       if (f === main || f.room.id === main.room.id) continue;
-      if (f !== off && ((f.worn && now - f.seen < 120_000) || together(f))) continue;
+      if (f !== off && ((f.worn && now - f.seen < 120_000 + SEEN_LAG) || together(f))) continue;
       thing(f, personColor(personId));
     }
   }

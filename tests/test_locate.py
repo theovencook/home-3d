@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from homeassistant.core import Context, HomeAssistant
+from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -577,3 +577,69 @@ async def test_pooled_samples_follow_calibration_at_the_cap(hass: HomeAssistant)
     assert service.pooled() is not first
     assert service.pooled().samples["kitchen"] == [{"s1": -50.0}]
     assert service.pooled() is service.pooled()
+
+
+async def test_a_room_sensor_writes_only_its_own_changes(hass: HomeAssistant) -> None:
+    """#365: another device's change, a new probability or a fresher last_seen write nothing (and are not
+    recorded); a new room does, and last_seen is sent on once a LAST_SEEN_REFRESH."""
+    from custom_components.home_3d.locate.service import LAST_SEEN_REFRESH
+
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    second = {**WATCH, "id": "irk_second", "name": "Second", "key": "ffeeddccbbaa99887766554433221100"}
+    await service.async_configure({"devices": [WATCH, second], "rooms": ROOMS})
+    await hass.async_block_till_done()
+    entity_id = er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_locate_irk_watch")
+    writes: list[str] = []
+
+    @callback
+    def written(event) -> None:
+        if event.data["entity_id"] == entity_id:
+            writes.append(event.data["new_state"].state)
+
+    hass.bus.async_listen("state_changed", written)
+    now = time.time()
+    kitchen = {"room": "kitchen", "room_name": "Kitchen", "floor": "Ground", "area_id": "kitchen"}
+
+    def where(dev: str, room: dict, probability: float, seen: float) -> None:
+        service.state[dev] = {**room, "probability": probability, "since": now, "last_seen": seen}
+        async_dispatcher_send(hass, SIGNAL_LOCATE)
+
+    where("irk_watch", kitchen, 0.9, now)
+    await hass.async_block_till_done()
+    assert writes == ["Kitchen"]
+    where("irk_second", kitchen, 0.5, now)  # another device
+    where("irk_watch", kitchen, 0.6, now + 5)  # only probability and last_seen
+    await hass.async_block_till_done()
+    assert writes == ["Kitchen"]
+    state = hass.states.get(entity_id)
+    assert state.attributes["probability"] == 0.9 and state.attributes["last_seen"]
+    assert {"probability", "since", "last_seen"} <= state.state_info["unrecorded_attributes"]
+    assert "room_id" not in state.state_info["unrecorded_attributes"]
+    where("irk_watch", kitchen, 0.6, now + LAST_SEEN_REFRESH)  # heard on: last_seen is sent on
+    await hass.async_block_till_done()
+    assert writes == ["Kitchen", "Kitchen"]
+    assert hass.states.get(entity_id).attributes["probability"] == 0.6
+    where("irk_watch", {**kitchen, "room": "hall", "room_name": "Hall"}, 0.8, now + LAST_SEEN_REFRESH + 1)
+    await hass.async_block_till_done()
+    assert writes == ["Kitchen", "Kitchen", "Hall"]
+
+
+async def test_last_seen_is_sent_on_while_the_room_stays(hass: HomeAssistant) -> None:
+    """The service signals a device heard on in the same room once a LAST_SEEN_REFRESH (#365)."""
+    from custom_components.home_3d.locate.service import LAST_SEEN_REFRESH
+
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    await service.async_configure({"devices": [WATCH], "rooms": ROOMS})
+    signals = []
+    from homeassistant.helpers.dispatcher import async_dispatcher_connect
+
+    async_dispatcher_connect(hass, SIGNAL_LOCATE, lambda: signals.append(1))
+    tracker = service._trackers["irk_watch"]
+    now = time.time()
+    for second in range(int(LAST_SEEN_REFRESH) + 2):
+        tracker.add(now + second, "s1", -60.0)
+        service._estimate(now + second)
+    # the first estimate, then once more a minute later: not every second
+    assert len(signals) == 2

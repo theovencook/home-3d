@@ -100,6 +100,9 @@ test("located people: a worn device places the person, a phone left elsewhere st
   );
   assert.equal(people[1].entity, "sensor.mia_watch_raum");
   assert.equal(people[1].color, personColor("person.mia"));
+  // a sensor sends last_seen on once a minute while the room stays (#365): a watch written 150 s ago is still worn
+  hass.states["sensor.mia_watch_raum"].attributes.last_seen = iso(150);
+  assert.equal(locatedPersons(hass, building, new Set(), now).find((p) => p.id === "person.mia")?.roomId, "r1");
   // the watch silent for minutes: the freshest device places her
   hass.states["sensor.mia_watch_raum"].attributes.last_seen = iso(600);
   assert.equal(locatedPersons(hass, building, new Set(), now).find((p) => p.id === "person.mia")?.roomId, "r2");
