@@ -660,6 +660,8 @@ export class Fp3dView3d extends LitElement {
   private declare _voice: { phase: "wait" | "listen" | "done" | "error"; text: string } | null;
   /** The subscription to the sentences Assist hands over (every open view listens, with or without a microphone). */
   private unsubAsk: Promise<() => Promise<void>> | null = null;
+  /** The screen name the sentences are listened for under (#366): a new name listens again. */
+  private askScreen = "";
   private voiceTimer: ReturnType<typeof setTimeout> | undefined;
   private declare _alerts: Alert[];
   /** The banner warning whose dismiss choices are open (its key), #138. */
@@ -983,7 +985,8 @@ export class Fp3dView3d extends LitElement {
   private watchAsk(): void {
     const hass = this.hass;
     if (this.unsubAsk || !hass?.connection || !this.isConnected) return;
-    this.unsubAsk = subscribeAsk(hass, (ask) => void this.onAsk(ask)).catch(() => {
+    this.askScreen = (this.screen ?? "").trim();
+    this.unsubAsk = subscribeAsk(hass, this.askScreen, (ask) => void this.onAsk(ask)).catch(() => {
       // a replay or an older backend: nothing to listen to
       this.unsubAsk = null;
       return async () => {};
@@ -1313,7 +1316,8 @@ export class Fp3dView3d extends LitElement {
     }
     if (changed.has("plan2d") && changed.get("plan2d") !== undefined) this.switchViewer();
     if (changed.has("hass") && this.live?.el) this.live.el.hass = this.rawHass;
-    if (changed.has("hass")) this.watchAsk();
+    if (changed.has("screen") && this.unsubAsk && (this.screen ?? "").trim() !== this.askScreen) this.unwatchAsk();
+    if (changed.has("hass") || changed.has("screen")) this.watchAsk();
     // the star menu closes when a room or another floor is chosen (#220)
     if (this._central && ((changed.has("roomId") && changed.get("roomId") !== undefined) || (changed.has("floorId") && changed.get("floorId") !== undefined))) this._central = false;
     const v = this.viewer;

@@ -1,5 +1,5 @@
 {
-  "protocol": 4,
+  "protocol": 5,
   "plan_version": 3,
   "commands": {
     "home_3d/backup/export": {
@@ -340,7 +340,9 @@
     },
     "home_3d/voice/subscribe": {
       "required": [],
-      "optional": []
+      "optional": [
+        "screen"
+      ]
     }
   }
 }

@@ -25,7 +25,6 @@ from .const import (
     DATA_VOICE,
     DOMAIN,
     PROTOCOL,
-    SIGNAL_ASK,
     SIGNAL_BUILDING_UPDATED,
     SIGNAL_HOMES_UPDATED,
     SIGNAL_PETS_UPDATED,
@@ -52,7 +51,7 @@ from .sample import SAMPLE_NAME, load_sample
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
 from .storage import FloorplanData, Home, HomesError, PlanReadOnly, RevisionConflict, check_plan
 from .timetravel import ws_timetravel_history
-from .voice import SENTENCE_MODES, AskBroker, VoiceSettings
+from .voice import SENTENCE_MODES, AskBroker, VoiceSettings, subscribe_view
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1023,16 +1022,30 @@ async def _async_restore_backup(
         await updates.async_forget_uninstalled()
 
 
-@websocket_api.websocket_command({vol.Required("type"): "home_3d/voice/subscribe"})
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "home_3d/voice/subscribe",
+        # the view's screen name ("": none): a sentence for one screen goes only to the views of that name (#366)
+        vol.Optional("screen"): vol.All(str, vol.Length(max=60)),
+    }
+)
 @callback
 def ws_voice_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Every sentence Assist (or the service `home_3d.ask`) hands to the views; each open view listens."""
+    """The sentences Assist (or the service `home_3d.ask`) hands to the views; each open view listens.
+
+    What a view gets (#367): the sentences for every screen and for its own screen name, with their text (the view
+    needs it to answer, and answering is what a wall tablet of a user who is no admin is for; the text is what was
+    said to the house, never an answer); never a sentence for another screen. Where people are (a locating answer's
+    rooms) only while the view's user is an admin, when people are shown to admins only; the server filters, the
+    screen is not trusted to hide it."""
 
     @callback
     def forward(ask: dict[str, Any]) -> None:
         connection.send_message(websocket_api.event_message(msg["id"], ask))
 
-    connection.subscriptions[msg["id"]] = async_dispatcher_connect(hass, SIGNAL_ASK, forward)
+    connection.subscriptions[msg["id"]] = subscribe_view(
+        hass, forward, msg.get("screen"), bool(connection.user and connection.user.is_admin)
+    )
     connection.send_result(msg["id"])
 
 
@@ -1046,7 +1059,8 @@ def ws_voice_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConn
 )
 @callback
 def ws_voice_answer(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """A view's answer to a sentence: the first one is taken, later ones are told so (`taken: false`)."""
+    """A view's answer to a sentence: the first that understood is taken, one that did not is counted (it
+    counts when no view understands); answers to a question answered already are told so (`taken: false`)."""
     broker: AskBroker | None = hass.data.get(DATA_ASK)
     taken = broker.answer(msg["ask_id"], msg["text"], msg["answered"]) if broker else False
     connection.send_result(msg["id"], {"taken": taken})

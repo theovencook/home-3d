@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from dataclasses import dataclass
 import hashlib
 import json
 import logging
@@ -19,14 +20,16 @@ from typing import Any, ClassVar
 import uuid
 
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import intent
-from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.storage import Store
-from homeassistant.util.yaml import parse_yaml
 import voluptuous as vol
 
-from .const import DATA_ASK, DATA_VOICE, DOMAIN, SIGNAL_ASK, STORAGE_KEY_VOICE
+from .const import DATA_ASK, DATA_VOICE, DOMAIN, STORAGE_KEY_VOICE
 from .locate.answers import Located, async_locate
 from .locate.service import DATA_LOCATE, SIGNAL_LOCATE_DEVICES
 
@@ -37,6 +40,8 @@ INTENT_ASK = "Home3DAsk"
 # a view answers within a moment; a voice satellite waits for Assist, so the wait stays short
 ANSWER_TIMEOUT = 6.0
 SENTENCES_FILE = "home_3d.yaml"
+# hass.data key of the open views listening for sentences (voice/subscribe)
+DATA_VIEWS = f"{DOMAIN}_voice_views"
 
 ASK_SCHEMA = vol.Schema(
     {
@@ -209,38 +214,13 @@ def _path(config_dir: Path, language: str) -> Path:
     return config_dir / "custom_sentences" / language / SENTENCES_FILE
 
 
-def _ours(text: str) -> bool:
-    """A file Home 3D wrote (in any mode, by any version): the user has not changed it."""
-    return (
-        any(text == sentences_yaml(language, mode) for language in _DISTINCT for mode in ("distinct", "all"))
-        or (text.startswith("# Written by Home 3D") and text in _old_files())
-        or _only_our_sentences(text)
-    )
-
-
-def _only_our_sentences(text: str) -> bool:
-    """Home 3D's header and nothing but sentences Home 3D writes: an older version's file (it had fewer
-    sentences, the names of other people), never one the user added a sentence or an intent to."""
-    if not text.startswith("# Written by Home 3D"):
-        return False
-    try:
-        data = parse_yaml(text)
-    except Exception:  # anything unreadable is not ours to overwrite
-        return False
-    if not isinstance(data, dict) or set(data) != {"language", "intents", "lists"}:
-        return False
-    language = data.get("language")
-    intents = data.get("intents")
-    lists = data.get("lists")
-    if language not in _DISTINCT or not isinstance(intents, dict) or set(intents) != {INTENT_ASK}:
-        return False
-    blocks = (intents[INTENT_ASK] or {}).get("data")
-    if not isinstance(blocks, list) or len(blocks) != 1 or set(blocks[0]) != {"sentences"}:
-        return False
-    known = set(_DISTINCT[language]) | set(_QUESTIONS[language]) | set(_WHO_SENTENCES[language])
-    if not set(blocks[0]["sentences"] or []) <= known:
-        return False
-    return isinstance(lists, dict) and lists.get("text") == {"wildcard": True} and set(lists) <= {"text", WHO_LIST}
+def _ours(text: str, language: str, names: list[str] | tuple[str, ...] = ()) -> bool:
+    """Exactly a file Home 3D writes for the language (in any mode, with the names locating knows now or none) or
+    an older version wrote: the user has not changed it. Anything else is the user's, also a file of Home 3D's with
+    a sentence taken out (#369); a file Home 3D wrote with other names is known by its hash."""
+    return any(
+        text == sentences_yaml(language, mode, known) for mode in ("distinct", "all") for known in ((), names)
+    ) or (text.startswith("# Written by Home 3D") and text in _old_files())
 
 
 # the file as 1.22.0 - 1.23 wrote it (the header without the line about changed files): still ours
@@ -288,7 +268,7 @@ def write_sentences(
             current: str | None = path.read_text(encoding="utf-8")
         except OSError:
             current = None
-        if current is not None and _sha(current) != written.get(language) and not _ours(current):
+        if current is not None and _sha(current) != written.get(language) and not _ours(current, language, names):
             # the user wrote or changed this file: it stays as it is
             kept.append(language)
             continue
@@ -315,7 +295,7 @@ def remove_sentences(config_dir: Path, written: dict[str, str]) -> None:
             current = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        if _sha(current) == written.get(language) or _ours(current):
+        if _sha(current) == written.get(language) or _ours(current, language):
             path.unlink()
 
 
@@ -330,6 +310,9 @@ class VoiceSettings:
         self.sentences = DEFAULT_SENTENCE_MODE
         self.written: dict[str, str] = {}
         self.unsub: Callable[[], None] | None = None
+        # one write of the sentence files at a time: a refresh never writes back what an admin just switched off
+        self._lock = asyncio.Lock()
+        self._tasks: set[asyncio.Task[None]] = set()
 
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
@@ -341,40 +324,60 @@ class VoiceSettings:
             self.written = {str(k): str(v) for k, v in written.items()}
         elif mode in SENTENCE_MODES and mode != "off":
             # stored by 1.22.1 - 1.23 (no hashes yet), or nothing recognised then: the files there are ours as
-            # long as they hold nothing but Home 3D's sentences
-            self.written = await self.hass.async_add_executor_job(self._adopt)
+            # long as they are exactly what Home 3D writes (#369)
+            self.written = await self.hass.async_add_executor_job(self._adopt, located_names(self.hass))
 
-    def _adopt(self) -> dict[str, str]:
+    def _adopt(self, names: list[str]) -> dict[str, str]:
         out: dict[str, str] = {}
         for language in _DISTINCT:
             try:
                 text = _path(Path(self.hass.config.config_dir), language).read_text(encoding="utf-8")
             except OSError:
                 continue
-            if _ours(text):
+            if _ours(text, language, names):
                 out[language] = _sha(text)
         return out
+
+    @callback
+    def schedule_refresh(self) -> None:
+        """A device added or renamed, locating switched on or off: the files learn the names, after any write
+        under way (#369)."""
+        task = self.hass.async_create_task(self.async_refresh())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    @callback
+    def async_stop(self) -> None:
+        """The integration unloads: no more refreshes, and one waiting or under way is cancelled."""
+        if self.unsub is not None:
+            self.unsub()
+            self.unsub = None
+        for task in self._tasks:
+            task.cancel()
+        self._tasks.clear()
 
     async def async_refresh(self) -> None:
         """After an update: the sentence files an admin picked get the sentences of this version (a file the user
         changed stays as it is). Nothing happens while the sentences are off."""
-        if self.sentences == "off" or not self.written:
-            return
-        try:
-            hashes, _kept, changed = await self.hass.async_add_executor_job(
-                write_sentences,
-                Path(self.hass.config.config_dir),
-                self.sentences,
-                self.written,
-                located_names(self.hass),
-            )
-        except OSError:
-            _LOGGER.warning("Could not refresh the Assist sentences", exc_info=True)
-            return
-        if not changed:
-            return
-        self.written = hashes
-        await self._store.async_save({"sentences": self.sentences, "written": hashes})
+        async with self._lock:
+            # read under the lock: an admin's choice made meanwhile is the one that counts
+            if self.sentences == "off" or not self.written:
+                return
+            try:
+                hashes, _kept, changed = await self.hass.async_add_executor_job(
+                    write_sentences,
+                    Path(self.hass.config.config_dir),
+                    self.sentences,
+                    self.written,
+                    located_names(self.hass),
+                )
+            except OSError:
+                _LOGGER.warning("Could not refresh the Assist sentences", exc_info=True)
+                return
+            if not changed:
+                return
+            self.written = hashes
+            await self._store.async_save({"sentences": self.sentences, "written": hashes})
         if self.hass.services.has_service("conversation", "reload"):
             await self.hass.services.async_call("conversation", "reload", {}, blocking=False)
 
@@ -383,16 +386,17 @@ class VoiceSettings:
         languages whose file was left alone because the user changed it."""
         if mode not in SENTENCE_MODES:
             raise ValueError(mode)
-        try:
-            hashes, kept, changed = await self.hass.async_add_executor_job(
-                write_sentences, Path(self.hass.config.config_dir), mode, self.written, located_names(self.hass)
-            )
-        except OSError:
-            _LOGGER.warning("Could not write the Assist sentences", exc_info=True)
-            raise
-        self.sentences = mode
-        self.written = hashes
-        await self._store.async_save({"sentences": mode, "written": hashes})
+        async with self._lock:
+            try:
+                hashes, kept, changed = await self.hass.async_add_executor_job(
+                    write_sentences, Path(self.hass.config.config_dir), mode, self.written, located_names(self.hass)
+                )
+            except OSError:
+                _LOGGER.warning("Could not write the Assist sentences", exc_info=True)
+                raise
+            self.sentences = mode
+            self.written = hashes
+            await self._store.async_save({"sentences": mode, "written": hashes})
         # Assist reads custom sentences at its start: a changed file is loaded now
         if changed and self.hass.services.has_service("conversation", "reload"):
             await self.hass.services.async_call("conversation", "reload", {}, blocking=False)
@@ -409,55 +413,159 @@ async def async_remove_sentences(hass: HomeAssistant) -> None:
     await settings._store.async_remove()
 
 
+@dataclass(eq=False)
+class _View:
+    """An open view listening for sentences (voice/subscribe): how to reach it, its screen name in lower case
+    ("": a view without a name; None: a view of an older frontend that did not say and picks its sentences itself)
+    and whether its user is an admin (#367)."""
+
+    send: Callable[[dict[str, Any]], None]
+    screen: str | None
+    admin: bool = False
+
+
+@dataclass(eq=False)
+class _Question:
+    """A sentence handed to `asked` views, waiting for the first that understands it."""
+
+    future: asyncio.Future[dict[str, Any]]
+    asked: int
+    declined: int = 0
+    not_understood: dict[str, Any] | None = None
+
+
+def _screen_key(screen: str | None) -> str:
+    return (screen or "").strip().lower()
+
+
+def _views(hass: HomeAssistant) -> list[_View]:
+    """The open views: kept over a reload of the integration, as their subscriptions stay open."""
+    views: list[_View] = hass.data.setdefault(DATA_VIEWS, [])
+    return views
+
+
+@callback
+def subscribe_view(
+    hass: HomeAssistant, send: Callable[[dict[str, Any]], None], screen: str | None, admin: bool = False
+) -> Callable[[], None]:
+    """An open view listens for sentences (voice/subscribe); returns how it stops. `admin`: the view's user is an
+    admin, so it may be shown where people are while people are shown to admins only."""
+    view = _View(send, None if screen is None else _screen_key(screen), admin)
+    views = _views(hass)
+    views.append(view)
+
+    @callback
+    def unsubscribe() -> None:
+        if view in views:
+            views.remove(view)
+
+    return unsubscribe
+
+
 class AskBroker:
-    """Hands a sentence to the views and waits for the first answer."""
+    """Hands a sentence to the open views and waits for the first that understands it (#366)."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
-        self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._pending: dict[str, _Question] = {}
+
+    def screens(self) -> set[str]:
+        """The screen names of the open views (lower case)."""
+        return {view.screen for view in _views(self.hass) if view.screen}
+
+    def _views_for(self, screen: str | None) -> list[_View]:
+        """The views a sentence is for: all of them, or for one screen the views of that name (and those of an
+        older frontend, which pick for themselves)."""
+        key = _screen_key(screen)
+        return [view for view in _views(self.hass) if not key or view.screen is None or view.screen == key]
+
+    @callback
+    def show(self, message: dict[str, Any], screen: str | None, admins_only: bool = False) -> None:
+        """Something for the views to show that nobody waits for (the rooms of a locating answer). `admins_only`:
+        only the views of admins get it at all; the server filters, the screen is not trusted to hide it (#367)."""
+        for view in self._views_for(screen):
+            if view.admin or not admins_only:
+                view.send(message)
 
     async def ask(self, text: str, screen: str | None, speak: bool) -> dict[str, Any] | None:
-        """The answer of the first view ({"text", "answered"}), None when no view is open or none answered in time."""
+        """The answer of the first view that understands ({"text", "answered": True}). A view that did not
+        understand counts only when no view does: once every view asked said so, or when the time is up after one
+        did ({"text", "answered": False}). None when no view is open (at once) or none answered in time."""
+        views = self._views_for(screen)
+        if not views:
+            return None
         ask_id = uuid.uuid4().hex
-        future: asyncio.Future[dict[str, Any]] = self.hass.loop.create_future()
-        self._pending[ask_id] = future
+        question = _Question(self.hass.loop.create_future(), len(views))
+        self._pending[ask_id] = question
         try:
             ask = {"ask_id": ask_id, "text": text, "screen": screen, "speak": speak}
-            async_dispatcher_send(self.hass, SIGNAL_ASK, ask)
+            for view in views:
+                view.send(ask)
             async with asyncio.timeout(ANSWER_TIMEOUT):
-                return await future
+                return await question.future
         except TimeoutError:
-            return None
+            return question.not_understood
         finally:
             self._pending.pop(ask_id, None)
 
     def answer(self, ask_id: str, text: str, answered: bool) -> bool:
-        """A view's answer; only the first one counts. False when the question is unknown (or answered already)."""
-        future = self._pending.get(ask_id)
-        if future is None or future.done():
+        """A view's answer: the first that understood is taken, one that did not is counted. False when the
+        question is unknown or answered already."""
+        question = self._pending.get(ask_id)
+        if question is None or question.future.done():
             return False
-        future.set_result({"text": text, "answered": answered})
+        if answered:
+            question.future.set_result({"text": text, "answered": True})
+            return True
+        question.declined += 1
+        if question.not_understood is None:
+            question.not_understood = {"text": text, "answered": False}
+        if question.declined >= question.asked:
+            question.future.set_result(question.not_understood)
         return True
+
+
+def satellite_screen(
+    hass: HomeAssistant, device_id: str | None, satellite_id: str | None, screens: set[str]
+) -> str | None:
+    """The screen next to the voice satellite that heard a sentence (#366): an open view whose screen name is the
+    satellite's device name or the name of its area (a wall tablet named "Kitchen" by the kitchen's satellite).
+    None when Home Assistant names no device or no open view has such a name: then every view is asked."""
+    if not screens or not (device_id or satellite_id):
+        return None
+    entity = er.async_get(hass).async_get(satellite_id) if satellite_id else None
+    device_id = device_id or (entity.device_id if entity else None)
+    device = dr.async_get(hass).async_get(device_id) if device_id else None
+    names: list[str | None] = [device.name_by_user, device.name] if device else []
+    areas = ar.async_get(hass)
+    for area_id in (entity.area_id if entity else None, device.area_id if device else None):
+        if area_id and (area := areas.async_get_area(area_id)) is not None:
+            names.append(area.name)
+    return next((name.strip() for name in names if name and _screen_key(name) in screens), None)
 
 
 def show_located(hass: HomeAssistant, located: Located, screen: str | None = None) -> None:
     """The open views fly into the room of the answer ("Where is Torsten?"), or tour the rooms of everyone at home.
     Nobody waits for them. Not when switched off in the locating settings; while people are shown to admins only,
-    a view of someone else does not fly to people (a wall tablet would show everyone where they are)."""
+    only the views of admins fly to people (a wall tablet would show everyone where they are): the rooms are not
+    sent to any other view at all (#367)."""
     service = hass.data.get(DATA_LOCATE)
-    if not located.rooms or service is None or not service.fly:
+    broker: AskBroker | None = hass.data.get(DATA_ASK)
+    if not located.rooms or service is None or not service.fly or broker is None:
         return
-    async_dispatcher_send(
-        hass,
-        SIGNAL_ASK,
+    admins_only = bool(located.persons and service.admins_only)
+    broker.show(
         {
             "ask_id": "",
             "text": "",
             "screen": screen,
             "speak": False,
             "show_rooms": located.rooms,
-            "admins_only": located.persons and service.admins_only,
+            # kept for the views of older frontends, which hide such rooms themselves
+            "admins_only": admins_only,
         },
+        screen,
+        admins_only,
     )
 
 
@@ -477,17 +585,20 @@ class AskIntentHandler(intent.IntentHandler):
         text = (intent_obj.text_input or str(slots.get("text", {}).get("value") or "")).strip()
         if not text:
             raise intent.InvalidSlotInfo("no sentence")
-        language = (intent_obj.language or intent_obj.hass.config.language or "en").split("-")[0]
+        hass = intent_obj.hass
+        language = (intent_obj.language or hass.config.language or "en").split("-")[0]
         response = intent_obj.create_response()
-        # where people and things are: answered here, no screen needed
-        located = await async_locate(
-            intent_obj.hass, intent_obj.hass.data.get(DATA_LOCATE), text, language, intent_obj.context.user_id
+        # said to a satellite by a screen: that screen shows it, not every open view (#366)
+        screen = satellite_screen(
+            hass, intent_obj.device_id, getattr(intent_obj, "satellite_id", None), self.broker.screens()
         )
+        # where people and things are: answered here, no screen needed
+        located = await async_locate(hass, hass.data.get(DATA_LOCATE), text, language, intent_obj.context.user_id)
         if located is not None:
-            show_located(intent_obj.hass, located)
+            show_located(hass, located, screen)
             response.async_set_speech(located.text)
             return response
-        answer = await self.broker.ask(text, None, False)
+        answer = await self.broker.ask(text, screen, False)
         if answer is None:
             response.async_set_speech(_NO_SCREEN.get(language, _NO_SCREEN["en"]))
         elif not answer["answered"]:
@@ -526,11 +637,7 @@ async def async_setup_voice(hass: HomeAssistant) -> None:
     await settings.async_refresh()
 
     # a device added or renamed, locating switched on or off: "Wo ist …?" learns the names
-    @callback
-    def names_changed() -> None:
-        hass.async_create_task(settings.async_refresh())
-
-    settings.unsub = async_dispatcher_connect(hass, SIGNAL_LOCATE_DEVICES, names_changed)
+    settings.unsub = async_dispatcher_connect(hass, SIGNAL_LOCATE_DEVICES, settings.schedule_refresh)
 
 
 def async_unload_voice(hass: HomeAssistant) -> None:
@@ -539,6 +646,5 @@ def async_unload_voice(hass: HomeAssistant) -> None:
     intent.async_remove(hass, INTENT_ASK)
     hass.data.pop(DATA_ASK, None)
     settings: VoiceSettings | None = hass.data.pop(DATA_VOICE, None)
-    if settings is not None and settings.unsub is not None:
-        settings.unsub()
-        settings.unsub = None
+    if settings is not None:
+        settings.async_stop()
