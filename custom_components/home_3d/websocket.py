@@ -932,7 +932,8 @@ async def ws_backup_import(
         connection.send_error(msg["id"], "invalid_format", str(err))
         return
     target = None
-    if not homes and (target := _home(hass, connection, msg)) is None:
+    # a backup of homes whose plans were all unreadable restores none of them (#380): no home to restore onto
+    if not homes and not msg.get("homes") and (target := _home(hass, connection, msg)) is None:
         return
     # the checks an import makes (#376): packs an import would ask about are skipped and listed
     replaced: dict[str, dict[str, Any]] = {}
@@ -941,7 +942,7 @@ async def ws_backup_import(
         checked, replaced, held = await hass.async_add_executor_job(updates.restore_plan, checked)
         skipped += held
     # custom items whose id is taken here by another look come in renamed, and the restored plans follow (#376)
-    restoring = {h["id"] for h in homes} if homes else {target.id if target else ""}
+    restoring = {h["id"] for h in homes} if homes or msg.get("homes") else {target.id if target else ""}
     local = [h.building.get("recipes") or {} for h in data.homes.values() if h.id not in restoring]
     homes, building, items, renamed, more = await hass.async_add_executor_job(
         resolve_backup_items, homes, building, items, list(data.custom.items), local, MAX_ITEMS
@@ -980,18 +981,25 @@ def _checked_backup(
     list[dict[str, Any]], dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]], list[dict[str, str]]
 ]:
     """Check a backup without the event loop (#176): its homes, its single building (a backup from before #53), the
-    packs whose content validates, the custom items that do, and what was skipped. Raises vol.Invalid for plans that
-    do not validate."""
-    # an older plan is brought to the current version first (#165, BUILDING_SCHEMA migrates)
-    homes = [{**h, "building": BUILDING_SCHEMA(h["building"])} for h in msg.get("homes", [])]
-    if not homes and "building" not in msg:
-        raise vol.Invalid("a backup has a building or homes")
-    if len({h["id"] for h in homes}) != len(homes):
-        raise vol.Invalid("a backup names each home once")
-    # with homes the building at the top is the active home's again (for older versions): not needed
-    building = BUILDING_SCHEMA(msg["building"]) if not homes else None
-    by_id: dict[str, dict[str, Any]] = {}
+    packs whose content validates, the custom items that do, and what was skipped. A home whose plan is unreadable (of
+    a newer Home 3D, or invalid) is skipped and listed with the reason "home_unreadable" (#380), so the other homes
+    still restore; it is not restored read-only, as nothing in a backup could make its plan safe to keep. Raises
+    vol.Invalid for a single plan that does not validate."""
     skipped: list[dict[str, str]] = []
+    if not msg.get("homes") and "building" not in msg:
+        raise vol.Invalid("a backup has a building or homes")
+    if len({h["id"] for h in msg.get("homes", [])}) != len(msg.get("homes", [])):
+        raise vol.Invalid("a backup names each home once")
+    homes = []
+    for h in msg.get("homes", []):
+        try:
+            # an older plan is brought to the current version first (#165, BUILDING_SCHEMA migrates)
+            homes.append({**h, "building": BUILDING_SCHEMA(h["building"])})
+        except vol.Invalid:
+            skipped.append({"id": h["id"], "reason": "home_unreadable"})
+    # with homes the building at the top is the active home's again (for older versions): not needed
+    building = BUILDING_SCHEMA(msg["building"]) if not msg.get("homes") else None
+    by_id: dict[str, dict[str, Any]] = {}
     for entry in msg.get("packs", []):
         source = entry.get("source")
         name = str(entry.get("id") or "?")
