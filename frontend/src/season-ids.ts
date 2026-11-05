@@ -20,3 +20,7 @@ export const SEASON_IDS = [
   "halloween",
 ] as const;
 export type SeasonId = (typeof SEASON_IDS)[number];
+
+/** How long the holiday effect plays when the view opens (#385): not at all, briefly (the default), a minute, or all the time. */
+export type SeasonEffectMode = "none" | "brief" | "long" | "always";
+export const SEASON_EFFECT_MODES: readonly SeasonEffectMode[] = ["none", "brief", "long", "always"];

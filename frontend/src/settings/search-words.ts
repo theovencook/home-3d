@@ -33,6 +33,7 @@ export const SEARCH_WORDS: Readonly<Record<string, readonly string[]>> = {
   hologram: ["projection", "floating", "float", "field", "plant", "panel"],
   // fun
   easter_eggs: ["hidden", "secret", "extras", "treats", "novelty", "surprises"],
+  season_effect: ["snow", "animation", "glow", "calm", "distracting", "motion"],
   "halloween.ghost": ["spirit", "phantom", "spook", "floating", "boo", "spectre"],
   "seasons.nye": ["party", "midnight", "celebration", "fireworks", "countdown", "eve"],
   "seasons.new_year": ["party", "fireworks", "resolutions", "celebration", "january", "midnight"],

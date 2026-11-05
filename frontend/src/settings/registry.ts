@@ -16,7 +16,7 @@ import { fetchPackUpdates, getVoiceSettings, setPackUpdateSettings, setVoiceSent
 import type { PackUpdateSettings, PackUpdateStatus } from "../pack-updates.ts";
 import { SHOW_PRESENCE } from "../flags.ts";
 import { released } from "../features.ts";
-import { SEASON_IDS } from "../season-ids.ts";
+import { SEASON_EFFECT_MODES, SEASON_IDS, type SeasonEffectMode } from "../season-ids.ts";
 import { EFFECT_DEFAULTS } from "../room-effects.ts";
 import { formatImperial, lengthUnit, parseLength, unitLabel, type LengthUnit } from "../units.ts";
 // this device's look and screen rows live with the View panel's list (#247), which the panel loads without this file
@@ -785,6 +785,21 @@ const FUN: Setting[] = [
     read: (env) => env.building?.settings.halloween?.ghost !== false,
     write: (env, v) => withPart(env.building!, "halloween", { ghost: v }),
   } as Setting<boolean>,
+  {
+    id: "season_effect",
+    section: "fun",
+    card: "seasons",
+    scope: "house",
+    permission: "editor",
+    label: "st_season_effect",
+    hint: "st_season_effect_hint",
+    keywords: ["holiday", "season", "snow", "effect", "glow", "animation", "calm"],
+    control: { kind: "select", options: () => SEASON_EFFECT_MODES.map((m) => ({ value: m, label: `season_fx_${m}` as TextKey })) },
+    default: "brief",
+    visible: (env) => released("fun_seasons") && easterEggsOn(env.building?.settings),
+    read: (env) => env.building?.settings.season_effect ?? "brief",
+    write: (env, v) => withSettings(env.building!, { season_effect: v === "brief" ? null : (v as SeasonEffectMode) }),
+  } as Setting<string>,
   ...(SEASON_SETTINGS as Setting[]),
   {
     id: "pets.on",

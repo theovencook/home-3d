@@ -1,9 +1,10 @@
 // Fun pack "Seasonal themes" (#239): on a UK holiday the view gets a soft colour glow, a short greeting and a light
 // effect drawn on one transparent canvas over the picture (snow, hearts, fireworks …). It needs no three.js, so it
-// works over the 3D house and the flat plan alike, and it stops by itself when the view is hidden. Off with
-// "reduce motion": the glow and the greeting stay, nothing moves.
+// works over the 3D house and the flat plan alike, and it stops by itself when the view is hidden. Kept gentle (#385):
+// it plays for a short time when the view opens (the house's "season_effect" setting), then the glow and the pieces
+// fade out and nothing moves. With "reduce motion" nothing moves; the glow shows for the same time.
 
-import type { Season, SeasonEffect } from "../seasons.ts";
+import { seasonEffectMs, type Season, type SeasonEffect, type SeasonEffectMode } from "../seasons.ts";
 
 export interface SeasonContext {
   /** The element the layers are put into (the view's stage). */
@@ -14,6 +15,8 @@ export interface SeasonContext {
   text: (key: string, vars: Record<string, number>) => string;
   /** The tablet level: the effect is drawn about 5 times a second. */
   low: () => boolean;
+  /** How long the effect plays (#385); missing = "brief". */
+  effect?: () => SeasonEffectMode | null | undefined;
 }
 
 export interface SeasonController {
@@ -53,19 +56,19 @@ interface Look {
   speed: [number, number];
 }
 const LOOKS: Partial<Record<SeasonEffect, Look>> = {
-  snow: { glyphs: ["❄"], n: 36, move: "fall", size: [10, 22], speed: [22, 46] },
-  snow_light: { glyphs: ["❄"], n: 16, move: "fall", size: [10, 18], speed: [18, 34] },
-  snow_sleigh: { glyphs: ["❄"], n: 36, move: "fall", size: [10, 22], speed: [22, 46] },
-  confetti: { glyphs: ["#ffc94d", "#ff4f8b", "#4fc3f7", "#8bd450", "#b388ff"], n: 60, move: "fall", size: [6, 10], speed: [50, 110] },
-  sparkles: { glyphs: ["✨"], n: 22, move: "twinkle", size: [14, 26], speed: [0, 0] },
-  poppies: { glyphs: ["poppy"], n: 20, move: "fall", size: [14, 22], speed: [14, 30] },
-  hearts: { glyphs: ["❤️", "💖", "💗"], n: 22, move: "rise", size: [14, 26], speed: [22, 50] },
-  pancakes: { glyphs: ["🥞"], n: 14, move: "fall", size: [20, 30], speed: [24, 48] },
-  flowers: { glyphs: ["🌸", "🌷", "🌼"], n: 22, move: "fall", size: [16, 26], speed: [20, 40] },
-  easter: { glyphs: ["🥚", "🐣", "🐰", "🌷"], n: 18, move: "fall", size: [18, 28], speed: [22, 44] },
-  stars: { glyphs: ["⭐", "✨"], n: 22, move: "twinkle", size: [14, 26], speed: [0, 0] },
-  halloween: { glyphs: ["🎃", "🦇", "🕸️"], n: 18, move: "fall", size: [18, 30], speed: [20, 40] },
-  lanterns: { glyphs: ["🏮", "🧧", "🎆"], n: 18, move: "rise", size: [18, 28], speed: [18, 40] },
+  snow: { glyphs: ["❄"], n: 18, move: "fall", size: [10, 22], speed: [22, 46] },
+  snow_light: { glyphs: ["❄"], n: 8, move: "fall", size: [10, 18], speed: [18, 34] },
+  snow_sleigh: { glyphs: ["❄"], n: 18, move: "fall", size: [10, 22], speed: [22, 46] },
+  confetti: { glyphs: ["#ffc94d", "#ff4f8b", "#4fc3f7", "#8bd450", "#b388ff"], n: 30, move: "fall", size: [6, 10], speed: [50, 110] },
+  sparkles: { glyphs: ["✨"], n: 11, move: "twinkle", size: [14, 26], speed: [0, 0] },
+  poppies: { glyphs: ["poppy"], n: 10, move: "fall", size: [14, 22], speed: [14, 30] },
+  hearts: { glyphs: ["❤️", "💖", "💗"], n: 11, move: "rise", size: [14, 26], speed: [22, 50] },
+  pancakes: { glyphs: ["🥞"], n: 7, move: "fall", size: [20, 30], speed: [24, 48] },
+  flowers: { glyphs: ["🌸", "🌷", "🌼"], n: 11, move: "fall", size: [16, 26], speed: [20, 40] },
+  easter: { glyphs: ["🥚", "🐣", "🐰", "🌷"], n: 9, move: "fall", size: [18, 28], speed: [22, 44] },
+  stars: { glyphs: ["⭐", "✨"], n: 11, move: "twinkle", size: [14, 26], speed: [0, 0] },
+  halloween: { glyphs: ["🎃", "🦇", "🕸️"], n: 9, move: "fall", size: [18, 30], speed: [20, 40] },
+  lanterns: { glyphs: ["🏮", "🧧", "🎆"], n: 9, move: "rise", size: [18, 28], speed: [18, 40] },
 };
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -106,9 +109,9 @@ export function startSeason(ctx: SeasonContext): SeasonController {
   root.setAttribute("aria-hidden", "true");
   root.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:3;overflow:hidden";
   const glow = document.createElement("div");
-  glow.style.cssText = "position:absolute;inset:0;transition:opacity 1.5s;opacity:0";
+  glow.style.cssText = "position:absolute;inset:0;transition:opacity 2s;opacity:0";
   const canvas = document.createElement("canvas");
-  canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
+  canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;transition:opacity 2s";
   const pill = document.createElement("div");
   pill.style.cssText =
     "position:absolute;top:12px;left:50%;transform:translateX(-50%);max-width:90%;padding:6px 16px;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;font:600 15px/1.3 system-ui,sans-serif;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:opacity 1s";
@@ -137,6 +140,10 @@ export function startSeason(ctx: SeasonContext): SeasonController {
   let pillTimer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
   let shownText = "";
+  /** When the effect stops (performance.now()); the mode it was worked out for. */
+  let until = 0;
+  let mode: SeasonEffectMode | null = null;
+  const live = () => !!season && performance.now() < until;
   const sprites = new Map<string, Sprite>();
   const spriteOf = (k: string) => {
     let s = sprites.get(k);
@@ -180,8 +187,10 @@ export function startSeason(ctx: SeasonContext): SeasonController {
 
   /** A new holiday (or none): the glow, the greeting and the pieces of the effect. */
   const apply = (next: Season | null) => {
-    const changed = next?.id !== season?.id || next?.effect !== season?.effect;
+    const nextMode = ctx.effect?.() ?? "brief";
+    const changed = next?.id !== season?.id || next?.effect !== season?.effect || nextMode !== mode;
     season = next;
+    mode = nextMode;
     if (!next) {
       glow.style.opacity = "0";
       pill.style.opacity = "0";
@@ -192,8 +201,8 @@ export function startSeason(ctx: SeasonContext): SeasonController {
       g?.clearRect(0, 0, w, h);
       return;
     }
-    glow.style.background = `radial-gradient(ellipse at 50% 50%, transparent 45%, ${next.tint} 100%)`;
-    glow.style.opacity = "1";
+    // a light glow at the very edges only, and only while the effect plays
+    glow.style.background = `radial-gradient(ellipse at 50% 50%, transparent 62%, ${next.tint} 100%)`;
     const text = ctx.text(next.key, next.vars);
     if (text !== shownText) {
       shownText = text;
@@ -201,6 +210,7 @@ export function startSeason(ctx: SeasonContext): SeasonController {
       showPill(next.id === "nye" ? 10000 : 12000);
     }
     if (changed) {
+      until = performance.now() + seasonEffectMs(nextMode);
       const look = LOOKS[next.effect];
       bits = look && !reduce ? Array.from({ length: look.n }, () => spawn(look, true)) : [];
       sparks = [];
@@ -208,6 +218,10 @@ export function startSeason(ctx: SeasonContext): SeasonController {
       nextSleigh = performance.now() + 3000;
       nextBang = performance.now() + 600;
     }
+    const on = live();
+    glow.style.opacity = on ? "0.6" : "0";
+    canvas.style.opacity = on ? "1" : "0";
+    if (!on) setTimeout(() => !live() && g?.clearRect(0, 0, w, h), 2100);
   };
 
   const draw = (now: number) => {
@@ -222,11 +236,11 @@ export function startSeason(ctx: SeasonContext): SeasonController {
         b.phase += dt;
         b.rot += b.vr * dt;
         if (look.move === "twinkle") {
-          g.globalAlpha = 0.5 + 0.5 * Math.sin(b.phase * 1.8);
+          g.globalAlpha = 0.3 + 0.3 * Math.sin(b.phase * 1.8);
         } else {
           b.x += (b.vx + Math.sin(b.phase * 1.3) * 14) * dt;
           b.y += b.vy * dt;
-          g.globalAlpha = 0.9;
+          g.globalAlpha = 0.55;
           if (b.y > h + 30 || b.y < -40 || b.x < -30 || b.x > w + 30) bits[i] = spawn(look, false);
         }
         g.save();
@@ -245,12 +259,12 @@ export function startSeason(ctx: SeasonContext): SeasonController {
     g.globalAlpha = 1;
     if (season.effect === "fireworks") {
       if (now >= nextBang) {
-        nextBang = now + rand(700, 1500);
+        nextBang = now + rand(1400, 2600);
         const x = rand(w * 0.15, w * 0.85);
         const y = rand(h * 0.12, h * 0.5);
         const hue = Math.floor(rand(0, 360));
-        for (let i = 0; i < 26; i++) {
-          const a = (i / 26) * Math.PI * 2;
+        for (let i = 0; i < 18; i++) {
+          const a = (i / 18) * Math.PI * 2;
           const v = rand(50, 120);
           sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, age: 0, hue });
         }
@@ -261,7 +275,7 @@ export function startSeason(ctx: SeasonContext): SeasonController {
         s.vy += 70 * dt;
         s.x += s.vx * dt;
         s.y += s.vy * dt;
-        g.globalAlpha = Math.max(0, 1 - s.age / 1.5);
+        g.globalAlpha = 0.7 * Math.max(0, 1 - s.age / 1.5);
         g.fillStyle = `hsl(${s.hue}, 100%, 65%)`;
         g.beginPath();
         g.arc(s.x, s.y, 2.2, 0, Math.PI * 2);
@@ -288,13 +302,18 @@ export function startSeason(ctx: SeasonContext): SeasonController {
   const frame = (now: number) => {
     raf = 0;
     if (disposed) return;
+    if (!live()) {
+      // the time is up: everything fades out and the drawing stops
+      apply(season);
+      return;
+    }
     if (!document.hidden && season && !reduce) draw(now);
     if (!season || reduce) return;
     if (ctx.low()) timer = setTimeout(() => (raf = requestAnimationFrame(frame)), 180);
     else raf = requestAnimationFrame(frame);
   };
   const run = () => {
-    if (!raf && !disposed && season && !reduce) {
+    if (!raf && !disposed && live() && !reduce) {
       last = 0;
       raf = requestAnimationFrame(frame);
     }
@@ -303,6 +322,11 @@ export function startSeason(ctx: SeasonContext): SeasonController {
   const check = () => {
     apply(ctx.now());
     run();
+    // with reduce motion nothing is drawn, so a timer takes the glow away
+    if (reduce && live()) {
+      clearTimeout(timer);
+      timer = setTimeout(() => apply(season), until - performance.now() + 50);
+    }
   };
   check();
   const poll = setInterval(check, 30000);

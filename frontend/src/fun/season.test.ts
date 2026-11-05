@@ -43,7 +43,7 @@ test("the holiday overlay shows the greeting, then goes when the day ends and wh
   const [glow, , pill] = root.children;
   assert.equal(pill.textContent, 'season_christmas:{}');
   assert.equal(pill.style.opacity, "1");
-  assert.equal(glow.style.opacity, "1");
+  assert.equal(glow.style.opacity, "0.6");
   assert.equal(root.attrs["aria-hidden"], "true");
   assert.match(root.style.cssText, /pointer-events:none/);
   today = null;
@@ -73,5 +73,64 @@ test("every effect draws frames without failing, and stops its loop when dispose
     for (let t = 0; t < 60000; t += 100) (frame as unknown as (t: number) => void)?.(t) ?? undefined;
     c.dispose();
     assert.equal(frame, null, `${effect} stops`);
+  }
+});
+
+test("the effect plays briefly by default, then fades out and the loop stops; the setting changes how long (#385)", async () => {
+  const g = globalThis as unknown as Record<string, unknown>;
+  let frame: ((t: number) => void) | null = null;
+  let clock = 1000;
+  const realNow = performance.now.bind(performance);
+  performance.now = () => clock;
+  try {
+    g.document = { createElement: () => new El(), hidden: false };
+    g.window = { devicePixelRatio: 1, matchMedia: () => ({ matches: false }) };
+    g.requestAnimationFrame = (f: (t: number) => void) => {
+      frame = f;
+      return 1;
+    };
+    g.cancelAnimationFrame = () => {
+      frame = null;
+    };
+    const { startSeason } = await import("./season.ts");
+    let mode: "none" | "brief" | "long" | "always" | undefined;
+    const host = new El();
+    const c = startSeason({ host: host as never, now: () => christmas, text: () => "x", low: () => false, effect: () => mode });
+    const [glow, canvas, pill] = host.children[0].children;
+    assert.equal(glow.style.opacity, "0.6");
+    assert.equal(canvas.style.opacity, "1");
+    const step = () => {
+      const f = frame;
+      frame = null;
+      f?.(clock);
+    };
+    clock += 14000;
+    step();
+    assert.ok(frame, "still playing at 14 s");
+    clock += 2000;
+    step();
+    assert.equal(frame, null, "stopped after 15 s");
+    assert.equal(glow.style.opacity, "0");
+    assert.equal(canvas.style.opacity, "0");
+    assert.equal(pill.textContent, "x", "the greeting stays");
+    // the poll every half minute does not start it again
+    c.refresh();
+    assert.equal(frame, null);
+    // the house picks "always": it plays again and keeps going
+    mode = "always";
+    c.refresh();
+    assert.ok(frame);
+    clock += 3_600_000;
+    step();
+    assert.ok(frame, "always keeps going");
+    // "none": nothing moves and there is no glow
+    mode = "none";
+    c.refresh();
+    step();
+    assert.equal(frame, null);
+    assert.equal(glow.style.opacity, "0");
+    c.dispose();
+  } finally {
+    performance.now = realNow;
   }
 });

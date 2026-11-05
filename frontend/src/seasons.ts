@@ -3,9 +3,9 @@
 // Moving dates are worked out from rules (#339): a fixed day, days from Easter (the computus), the n-th weekday of a month,
 // a one-off window; a holiday has one or more, each with a length and optional start and end times.
 
-import { SEASON_IDS, type SeasonId } from "./season-ids.ts";
+import { SEASON_EFFECT_MODES, SEASON_IDS, type SeasonEffectMode, type SeasonId } from "./season-ids.ts";
 
-export { SEASON_IDS, type SeasonId };
+export { SEASON_EFFECT_MODES, SEASON_IDS, type SeasonEffectMode, type SeasonId };
 
 /** The effects the overlay can draw. */
 export type SeasonEffect = "halloween" | "lanterns" | "fireworks" | "sparkles" | "confetti" | "snow" | "snow_light" | "snow_sleigh" | "poppies" | "hearts" | "pancakes" | "flowers" | "easter" | "stars";
@@ -18,6 +18,13 @@ export interface Season {
   /** The greeting: its text key and variables (the Advent count, the New Year's Eve countdown, the year). */
   key: string;
   vars: Record<string, number>;
+}
+
+/** How long the holiday effect plays when the view opens (#385): not at all, briefly (the default), a minute, or all the time. */
+/** The seconds each mode plays for (the glow and the moving pieces). */
+export const SEASON_EFFECT_SECONDS: Readonly<Record<SeasonEffectMode, number>> = { none: 0, brief: 15, long: 60, always: Infinity };
+export function seasonEffectMs(mode: SeasonEffectMode | null | undefined): number {
+  return (SEASON_EFFECT_SECONDS[mode ?? "brief"] ?? SEASON_EFFECT_SECONDS.brief) * 1000;
 }
 
 /** 0xAARRGGBB to a CSS colour. */

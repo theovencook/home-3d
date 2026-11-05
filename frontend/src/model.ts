@@ -954,6 +954,8 @@ export interface BuildingSettings {
   season_dates?: Record<string, { from: string; to?: string }> | null;
   /** Date rules of a holiday (#339): fixed day, days from Easter, n-th weekday of a month, one-off window; wins over season_dates for that holiday (see seasons.ts SeasonRule). */
   season_rules?: Record<string, SeasonRule[]> | null;
+  /** How long the holiday effect plays when the view opens (#385): "none", "brief" (missing = this), "long", "always". */
+  season_effect?: "none" | "brief" | "long" | "always" | null;
   /** Easter eggs (#139): one house-wide switch for every surprise (the Halloween ghost and later ones), on unless false. */
   easter_eggs?: boolean;
   /** Plan lock: rooms, walls, doors, windows and outdoor areas cannot be moved by accident. */

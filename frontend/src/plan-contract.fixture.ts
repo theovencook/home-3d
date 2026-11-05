@@ -819,6 +819,7 @@ export const PLAN_CONTRACT = {
       "hold": 157.5
     },
     "easter_eggs": true,
+    "season_effect": "long",
     "halloween": {
       "ghost": true
     },

@@ -1874,6 +1874,8 @@ export const lateEnglish = {
   st_card_people: "People",
   st_easter_eggs: "Easter eggs",
   st_easter_eggs_hint: "One switch for every surprise, including the Halloween ghost. Off hides them on every screen, including cards and wall tablets.",
+  st_season_effect: "Holiday effect",
+  st_season_effect_hint: "How long the falling or floating pieces and the coloured edge glow show when the view opens. After that nothing moves. The greeting always shows.",
   st_ghost_hint: "Floats through the house now and then.",
   st_pets_edit: "Edit pets ({n})",
   st_pets_edit_hint: "Names, kinds and fur are set in Extensions.",

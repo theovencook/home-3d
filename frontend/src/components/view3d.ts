@@ -5073,6 +5073,7 @@ export class Fp3dView3d extends LitElement {
         now: () => (this.building?.settings.easter_eggs === false || this.ghostOn === false ? null : seasonNow(this.building?.settings.seasons, undefined, this.building?.settings.season_dates, this.building?.settings.season_rules)),
         text: (key, vars) => translate(this.hass, key as I18nKey, vars),
         low: () => this._low,
+        effect: () => this.building?.settings.season_effect,
       });
     } catch (err) {
       console.error("Home 3D: the seasonal theme failed to load", err);
