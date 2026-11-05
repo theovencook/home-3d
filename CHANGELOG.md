@@ -10,6 +10,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - A slow build.json no longer loads a second copy of the app: every copy of the start file on a page loads the app URL the first one chose (#361).
 - Now-playing cards group only players of one TV: on the same TV item, or close together and all TV players (or the same name); a speaker or PC on the same bench or desk keeps its own card (#362).
 - The 3D view's own plan save (no panel or card around it) now sends the revision it started from and, when someone else saved first, makes the change again on their newer plan (#363).
+- A home keeps at most 300 pictures (96 MB together); beyond that the editor says so, and setting or removing a picture now waits its turn with the other changes of the home (#364).
 
 ## Home 3D 1.0.0 (4 November 2026)
 

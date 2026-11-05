@@ -13,6 +13,11 @@ export function setFailureSink(sink: ((text: string) => void) | null): void {
   g.__fp3dFailureSink = sink;
 }
 
+/** Whether a picture was refused because the home holds as many as it may (#364). */
+export function isImagesFull(err: unknown): boolean {
+  return ((err ?? {}) as { code?: string }).code === "images_full";
+}
+
 /** What went wrong in a few words: the error's own message, else its code, else the text of whatever was thrown. */
 export function errorText(err: unknown): string {
   const e = (err ?? {}) as { message?: string; code?: string | number; error?: { message?: string } };

@@ -30,6 +30,10 @@ MAX_POINTS = 200
 MAX_HIDDEN = 2000
 MAX_ITEMS = 1000
 MAX_IMAGE_CHARS = 8 * 1024 * 1024
+# the pictures of one home (#364): every change rewrites them all as one file. A real plan (a background plan of up to
+# 2048 px per floor, a few hundred item pictures of up to 512 px) stays far below both; they only stop a runaway client
+MAX_IMAGES = 300
+MAX_IMAGES_CHARS = 96 * 1024 * 1024
 
 _ID = vol.All(str, vol.Length(min=1, max=64), vol.Match(r"^[A-Za-z0-9_\-.]+$"))
 _NAME = vol.All(str, vol.Length(max=100))

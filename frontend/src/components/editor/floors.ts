@@ -3,7 +3,7 @@
 
 import { html, nothing, svg } from "lit";
 import { fetchImage, storeImage } from "../../api.ts";
-import { errorText } from "../../failure.ts";
+import { errorText, isImagesFull } from "../../failure.ts";
 import { unitLabel } from "../../units.ts";
 import { closeGaps, straightenEdges, suggestedThickness } from "../../geometry/gaps.ts";
 import { activeSections, headroomLines, sectionAbove, sectionCutsBelow } from "../../roof-sections.ts";
@@ -166,7 +166,7 @@ export class FloorsPart {
     try {
       await this.storeBackground(file);
     } catch (err) {
-      await this.tell(this.t("picture_failed", { error: errorText(err) }));
+      await this.tell(isImagesFull(err) ? this.t("images_full") : this.t("picture_failed", { error: errorText(err) }));
     }
   }
 

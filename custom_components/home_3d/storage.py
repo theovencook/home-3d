@@ -46,7 +46,7 @@ from .off_loop import OFF_LOOP as _OFF_LOOP
 from .packs import BUNDLED_LANGUAGES_DIR, language_of, library_pack, load_bundled, strings_hash, with_bundled
 from .racks import RackError, new_rack_problems
 from .recipes import with_recipes
-from .schema import BUILDING_SCHEMA, empty_building, image_ids
+from .schema import BUILDING_SCHEMA, MAX_IMAGES, MAX_IMAGES_CHARS, empty_building, image_ids
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -346,14 +346,16 @@ class Home:
                 if write:
                     await self._save_building()
         images = await self._image_store.async_load()
-        self._images = dict((images or {}).get("images", {}))
-        used = self._images_in_use()
-        unused = set(self._images) - used if used is not None else set()
-        if unused:
-            _LOGGER.debug("Removing %d unused background images", len(unused))
-            for image_id in unused:
-                self._images.pop(image_id)
-            await self._save_images()
+        # the clean-up is one step with picture changes (#364): under the lock, so a picture set meanwhile is kept
+        async with self._lock:
+            self._images = dict((images or {}).get("images", {}))
+            used = self._images_in_use()
+            unused = set(self._images) - used if used is not None else set()
+            if unused:
+                _LOGGER.debug("Removing %d unused background images", len(unused))
+                for image_id in unused:
+                    self._images.pop(image_id)
+                await self._save_images()
 
     async def async_start(self, building: dict[str, Any] | None, images: dict[str, str] | None) -> None:
         """Fill a new home: its first plan (revision 1) and pictures, or an empty plan at revision 0."""
@@ -567,14 +569,28 @@ class Home:
         return self._images.get(image_id)
 
     async def async_set_image(self, image_id: str, data: str) -> None:
-        """Store an image."""
-        self._images[image_id] = data
-        await self._save_images()
+        """Store an image (#364), under the home's lock like every other change. Refused with "images_full" when it
+        would be a new picture beyond MAX_IMAGES or would take the pictures past MAX_IMAGES_CHARS; replacing a picture
+        is never a new one, and a home that holds more than the limits from before them (an old install) keeps what it
+        has and may still replace pictures with ones no bigger."""
+        async with self._lock:
+            self._check_not_deleted()
+            old = self._images.get(image_id)
+            if old is None and len(self._images) >= MAX_IMAGES:
+                raise HomesError("images_full", f"A home keeps at most {MAX_IMAGES} pictures; remove some first")
+            total = sum(len(v) for v in self._images.values())
+            grown = len(data) - (len(old) if old is not None else 0)
+            if grown > 0 and total + grown > MAX_IMAGES_CHARS:
+                raise HomesError("images_full", "The pictures of this home are too big together; remove some first")
+            self._images[image_id] = data
+            await self._save_images()
 
     async def async_delete_image(self, image_id: str) -> None:
-        """Remove an image."""
-        if self._images.pop(image_id, None) is not None:
-            await self._save_images()
+        """Remove an image (#364, under the lock)."""
+        async with self._lock:
+            self._check_not_deleted()
+            if self._images.pop(image_id, None) is not None:
+                await self._save_images()
 
     async def async_remove(self) -> None:
         """Delete the home's stores."""
