@@ -351,13 +351,18 @@ class LocateService:
 
     def pooled(self) -> Fingerprints:
         """Every device's samples together: a device that was never walked with uses what the others learned
-        (two watches see the rooms alike). Cached until a sample changes."""
+        (two watches see the rooms alike). At most MAX_SAMPLES_PER_ROOM a room, as many as one device learns: the
+        newest of each device in turn (#370; devices x 120 a room made every estimate of such a device that many
+        times dearer). Cached until a sample changes."""
         key = tuple((dev, id(fp), fp.stamp()) for dev, fp in self.fingerprints.items())
         if self._pooled is None or self._pooled[0] != key:
             merged = Fingerprints()
+            per_room: dict[str, list[list[dict[str, float]]]] = {}
             for fp in self.fingerprints.values():
                 for room, vectors in fp.samples.items():
-                    merged.samples.setdefault(room, []).extend(vectors)
+                    per_room.setdefault(room, []).append(vectors)
+            for room, lists in per_room.items():
+                merged.samples[room] = _even_share(lists, MAX_SAMPLES_PER_ROOM)
             self._pool_serial += 1
             merged.version = self._pool_serial  # a new set is never mistaken for the one it replaced
             self._pooled = (key, merged)
@@ -548,10 +553,10 @@ class LocateService:
     def _estimate(self, now: float) -> None:
         changed = False
         names = {r["id"]: r for r in self.rooms}
+        pooled = self.pooled()  # once per estimate, not per device (#370)
         for dev, tracker in self._trackers.items():
             window = tracker.adaptive_window(now)
             own = self.fingerprints.get(dev)
-            pooled = self.pooled()
             # its own learning alone only when it covers most rooms (an iPhone in a pocket may have learned few)
             full = own is not None and len(own.rooms()) >= max(2, OWN_SHARE * len(pooled.rooms()))
             learned = own if full else pooled
@@ -626,6 +631,21 @@ class LocateService:
             ],
             "calibration": self.calibration_status(),
         }
+
+
+def _even_share(lists: list[list[dict[str, float]]], cap: int) -> list[dict[str, float]]:
+    """All samples of the lists when they are no more than `cap`; else the newest of each list in turn up to `cap`
+    (oldest first, like a device's own samples)."""
+    if sum(len(vectors) for vectors in lists) <= cap:
+        return [v for vectors in lists for v in vectors]
+    picked: list[dict[str, float]] = []
+    depth = 0
+    while len(picked) < cap:
+        for vectors in lists:
+            if depth < len(vectors) and len(picked) < cap:
+                picked.append(vectors[-1 - depth])
+        depth += 1
+    return picked[::-1]
 
 
 def quality(samples: dict[str, dict[str, list[dict[str, float]]]]) -> dict[str, Any]:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import random
 import time
 
 from homeassistant.core import Context, HomeAssistant, callback
@@ -730,7 +732,9 @@ async def test_the_lab_recorder_forgets_old_addresses(hass: HomeAssistant, monke
     assert len(recorder._resolved) <= rec_module.MAX_RESOLVED
     assert "AA:BB:CC:DD:EE:FF" in recorder._resolved and "addr0" not in recorder._resolved
 
-    monkeypatch.setitem(sys.modules, "homeassistant.components.bluetooth", SimpleNamespace(async_current_scanners=lambda _hass: []))
+    monkeypatch.setitem(
+        sys.modules, "homeassistant.components.bluetooth", SimpleNamespace(async_current_scanners=lambda _hass: [])
+    )
     mono = time.monotonic()
     recorder.started = time.time()
     recorder._seen = {("s1", "old"): mono - rec_module.SEEN_KEEP - 1, ("s1", "new"): mono - 1}
@@ -783,3 +787,108 @@ async def test_locating_starts_once_bluetooth_has_loaded(hass: HomeAssistant) ->
     hass.bus.async_fire("component_loaded", {"component": "bluetooth"})
     await hass.async_block_till_done()
     assert not service.running
+
+
+def _busy_house(service: LocateService) -> tuple[list[str], dict[str, tuple[float, float]], random.Random]:
+    """The example of #370: 12 rooms with a scanner each, 4 devices that learned every room (120 samples a room)
+    and 5 never walked with. Returns the device ids, the scanner spots and the random source."""
+    rng = random.Random(370)
+    rooms = [f"room{n}" for n in range(12)]
+    spots = {f"s{n}": (4.0 * (n % 4) + 2, 4.0 * (n // 4) + 2) for n in range(12)}
+
+    def heard(x: float, y: float) -> dict[str, float]:
+        out = {}
+        for scanner, (sx, sy) in spots.items():
+            rssi = -45 - 25 * math.log10(max(1.0, math.hypot(x - sx, y - sy))) + rng.gauss(0, 4)
+            if rssi > -92 and rng.random() > 0.15:
+                out[scanner] = round(rssi, 1)
+        return out
+
+    devices = [
+        {"id": f"mac_{n}", "name": f"Tag {n}", "kind": "mac", "key": f"C0:00:00:00:00:{n:02X}"} for n in range(9)
+    ]
+    service.devices = devices
+    service.rooms = [{"id": r, "name": r, "floor": None, "area_id": None} for r in rooms]
+    service.scanner_rooms = {s: rooms[n] for n, s in enumerate(spots)}
+    service._rebuild()
+    for d in devices[:4]:
+        service.fingerprints[d["id"]] = Fingerprints(
+            {
+                room: [heard(*(c + rng.uniform(-1.5, 1.5) for c in spots[f"s{n}"])) for _ in range(120)]
+                for n, room in enumerate(rooms)
+            }
+        )
+    return [d["id"] for d in devices], spots, rng
+
+
+def _hear_everyone(service: LocateService, ids: list[str], spots: dict, rng: random.Random, now: float) -> None:
+    """A second of readings: every device somewhere in the house, heard by the scanners near it (new windows)."""
+    for dev in ids:
+        x, y = rng.uniform(0, 16), rng.uniform(0, 12)
+        for scanner, (sx, sy) in spots.items():
+            rssi = -45 - 25 * math.log10(max(1.0, math.hypot(x - sx, y - sy))) + rng.gauss(0, 4)
+            if rssi > -92 and rng.random() > 0.15:
+                service._trackers[dev].add(now, scanner, round(rssi))
+
+
+async def test_the_room_estimate_of_a_busy_house_is_timed(hass: HomeAssistant, capsys) -> None:
+    """#370: 4 learned devices x 12 rooms x 120 samples and 5 devices that use the pooled samples, every window new.
+    Prints the time per estimate; fails only far above it (the test harness is slow and shared)."""
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    ids, spots, rng = _busy_house(service)
+    now = time.time()
+    took = []
+    for tick in range(21):
+        _hear_everyone(service, ids, spots, rng, now + tick)
+        start = time.perf_counter()
+        service._estimate(now + tick)
+        took.append(time.perf_counter() - start)
+    # the first estimate also builds the pool and the room middles (again only when the learning changes)
+    first, took = took[0], sorted(took[1:])
+    with capsys.disabled():
+        print(
+            f"\nroom estimate, 9 devices (4 learned x 12 rooms x 120 samples, 5 on the pool): first {first * 1000:.1f}"
+            f" ms, then median {took[10] * 1000:.1f} ms, slowest {took[-1] * 1000:.1f} ms per tick"
+        )
+    assert all(service.state[d]["room"] for d in ids)
+    # 93 ms a tick before #370 on the machine it was written on; generous for a slow, shared test runner
+    assert took[10] < 0.05
+
+
+async def test_the_pool_is_built_once_per_estimate_and_capped(hass: HomeAssistant, monkeypatch) -> None:
+    """#370: the devices that use the pooled samples share one build per estimate; a room keeps at most
+    MAX_SAMPLES_PER_ROOM of them, the newest of each device in turn."""
+    from custom_components.home_3d.locate.service import MAX_SAMPLES_PER_ROOM
+
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    ids, _spots, _rng = _busy_house(service)
+    pooled = service.pooled()
+    assert all(len(v) == MAX_SAMPLES_PER_ROOM for v in pooled.samples.values())
+    newest = [service.fingerprints[d].samples["room0"][-1] for d in ids[:4]]
+    assert all(any(v is n for v in pooled.samples["room0"]) for n in newest)
+    oldest = [service.fingerprints[d].samples["room0"][0] for d in ids[:4]]
+    assert not any(any(v is o for v in pooled.samples["room0"]) for o in oldest)
+    # a small pool is all the samples, in order
+    service.fingerprints = {
+        "a": Fingerprints({"kitchen": [{"s1": -60.0}]}),
+        "b": Fingerprints({"kitchen": [{"s1": -61.0}]}),
+    }
+    assert service.pooled().samples["kitchen"] == [{"s1": -60.0}, {"s1": -61.0}]
+
+    service.fingerprints = {}
+    ids, spots, rng = _busy_house(service)
+    builds = 0
+    real = LocateService.pooled
+
+    def counting(self):
+        nonlocal builds
+        builds += 1
+        return real(self)
+
+    monkeypatch.setattr(LocateService, "pooled", counting)
+    now = time.time()
+    _hear_everyone(service, ids, spots, rng, now)
+    service._estimate(now)
+    assert builds == 1
