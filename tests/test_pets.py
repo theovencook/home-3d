@@ -7,6 +7,7 @@ import asyncio
 import copy
 from datetime import datetime, timedelta
 from typing import Any
+from unittest.mock import patch
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant, State
@@ -152,11 +153,11 @@ def test_old_static_pets_get_their_spot_as_the_routines_first() -> None:
 
 def test_the_schema_keeps_spots_and_any_number_of_triggers() -> None:
     base = {"wall_exterior": 0.3, "wall_interior": 0.12, "grid": 0.05}
-    triggers = [{"id": f"t{i}", "kind": "time", "at": "07:30", "x": 1, "z": 1, "minutes": 2} for i in range(60)]
+    triggers = [{"id": f"t{i}", "kind": "time", "at": "07:30", "x": 1, "z": 1, "minutes": 2} for i in range(20)]
     pet = {"id": "p1", "kind": "cat", "spots": [spot("s", **{"from": "22:00", "to": "07:00", "days": [5, 6]})]}
     got = SETTINGS_SCHEMA({**base, "pets": {"roam": False, "list": [{**pet, "triggers": triggers}]}})["pets"]
     assert got["roam"] is False
-    assert len(got["list"][0]["triggers"]) == 60
+    assert len(got["list"][0]["triggers"]) == 20
     assert got["list"][0]["triggers"][0]["entity"] is None
     assert got["list"][0]["spots"][0]["days"] == [5, 6]
     for pose in ("stand", "groom"):
@@ -277,3 +278,70 @@ async def test_the_subscription_refuses_an_unknown_home(hass: HomeAssistant, has
     await client.send_json_auto_id({"type": "home_3d/pets/subscribe", "home_id": "nowhere"})
     result = await client.receive_json()
     assert not result["success"] and result["error"]["code"] == "home_not_found"
+
+
+# ---------------------------------------------------------------------------- refused event triggers (#359)
+
+
+def _event_trigger(tid: str, event: str) -> dict[str, Any]:
+    return {"id": tid, "kind": "event", "event": event, "floor_id": "f1", "x": 1.0, "z": 1.0, "pose": "sit"}
+
+
+@pytest.mark.parametrize("event", ["*", "state_changed", "call_service", "component_loaded", " state_changed "])
+def test_the_schema_refuses_match_all_and_frequent_core_events(event: str) -> None:
+    plan = _plan_with_pet(triggers=[_event_trigger("e1", event)])
+    with pytest.raises(vol.Invalid):
+        BUILDING_SCHEMA(plan)
+    # a state or time trigger never has the event type checked, and a quiet event is fine
+    ok = _plan_with_pet(triggers=[_event_trigger("e1", "sample_feed"), {**_event_trigger("t1", event), "kind": "time"}])
+    assert len(BUILDING_SCHEMA(ok)["settings"]["pets"]["list"][0]["triggers"]) == 2
+
+
+def test_a_stored_plan_with_a_refused_trigger_loads_without_that_trigger() -> None:
+    from custom_components.home_3d.storage import check_plan
+
+    plan = _plan_with_pet(
+        triggers=[_event_trigger("e1", "sample_feed"), _event_trigger("bad", "*"), _event_trigger("e2", "sample_ring")]
+    )
+    checked, problem = check_plan(plan)
+    assert problem is not None and problem["code"] == "plan_repaired"
+    assert problem["dropped"] == ["settings.pets.list.0.triggers.1"]
+    assert [t["id"] for t in checked["settings"]["pets"]["list"][0]["triggers"]] == ["e1", "e2"]
+
+
+def test_triggers_per_pet_are_capped_and_a_stored_plan_over_the_cap_keeps_the_first() -> None:
+    from custom_components.home_3d.const import PET_EVENT_MAX_TRIGGERS
+    from custom_components.home_3d.storage import check_plan
+
+    many = [_event_trigger(f"e{i}", "sample_feed") for i in range(PET_EVENT_MAX_TRIGGERS)]
+    assert len(BUILDING_SCHEMA(_plan_with_pet(triggers=many))["settings"]["pets"]["list"][0]["triggers"]) == 20
+    over = _plan_with_pet(triggers=[*many, _event_trigger("x1", "sample_feed"), _event_trigger("x2", "sample_feed")])
+    with pytest.raises(vol.Invalid):
+        BUILDING_SCHEMA(over)
+    checked, problem = check_plan(over)
+    assert problem is not None and problem["code"] == "plan_repaired"
+    assert [t["id"] for t in checked["settings"]["pets"]["list"][0]["triggers"]] == [t["id"] for t in many]
+
+
+async def test_pets_ignores_a_refused_event_type_even_when_it_is_stored(hass: HomeAssistant) -> None:
+    await _setup(hass)
+    manager = hass.data[DATA_PETS]
+    bad = _plan_with_pet(
+        spots=[spot("sofa")],
+        triggers=[
+            _event_trigger("e1", "*"),
+            _event_trigger("e2", "state_changed"),
+            _event_trigger("e3", "sample_feed"),
+        ],
+    )
+    heard: list[str] = []
+    real = type(hass.bus).async_listen
+
+    def spy(self, event_type, *args, **kwargs):
+        heard.append(event_type)
+        return real(self, event_type, *args, **kwargs)
+
+    manager._buildings = lambda: {"home": bad}
+    with patch.object(type(hass.bus), "async_listen", spy):
+        manager.plans_changed()
+    assert heard == ["sample_feed"]

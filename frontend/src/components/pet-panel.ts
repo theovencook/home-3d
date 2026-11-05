@@ -7,7 +7,7 @@
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
 import { defineElement } from "../define.ts";
 import { entityOptionList, type EntityOption } from "../entity-options.ts";
-import { PET_POSES, uid, type Pet, type PetPlace, type PetSpot, type PetTrigger } from "../model.ts";
+import { PET_EVENT_REFUSED, PET_MAX_TRIGGERS, PET_POSES, uid, type Pet, type PetPlace, type PetSpot, type PetTrigger } from "../model.ts";
 import { petSpots, subscribePets, type PetLive } from "../pet-place.ts";
 import type { HomeAssistant } from "../types.ts";
 
@@ -70,6 +70,7 @@ export class PetPanel extends LitElement {
     picking: { attribute: false },
     t: { attribute: false },
     _live: { state: true },
+    _refusedEvent: { state: true },
   };
 
   declare pet: Pet;
@@ -83,6 +84,7 @@ export class PetPanel extends LitElement {
   declare t: Translate;
   /** Where the server puts the pet now (null: nowhere, it wanders; undefined: no answer yet, or an older Home 3D). */
   private declare _live: PetLive | null | undefined;
+  private declare _refusedEvent: string | null | undefined;
   private entityCache: { count: number; registry: unknown; list: EntityOption[] } | null = null;
   private unsub: Promise<() => Promise<void>> | null = null;
 
@@ -245,7 +247,15 @@ export class PetPanel extends LitElement {
       ${kind === "time"
         ? this.time(this.t("pet_trigger_at"), x.at, (v) => this.setTrigger(x.id, { at: v }))
         : kind === "event"
-          ? html`${text(this.t("pet_trigger_event_type"), x.event, (v) => this.setTrigger(x.id, { event: v }))}
+          ? html`${text(this.t("pet_trigger_event_type"), x.event, (v) => {
+              if (v && PET_EVENT_REFUSED.includes(v)) {
+                this._refusedEvent = x.id;
+                return;
+              }
+              this._refusedEvent = null;
+              this.setTrigger(x.id, { event: v });
+            })}
+            ${this._refusedEvent === x.id ? html`<p class="fp3d-sub fp3d-pet-wide" role="alert">${this.t("pet_trigger_event_refused")}</p>` : nothing}
             ${this.entity(this.t("pet_trigger_event_entity"), x.entity, (v) => this.setTrigger(x.id, { entity: v }))}`
           : html`${this.entity(this.t("pet_trigger_entity"), x.entity, (v) => this.setTrigger(x.id, { entity: v }))}
             ${text(this.t("pet_trigger_to"), x.to, (v) => this.setTrigger(x.id, { to: v }))}`}
@@ -281,7 +291,7 @@ export class PetPanel extends LitElement {
         <h3>${this.t("pet_triggers")}</h3>
         <p class="fp3d-sub">${this.t("pet_triggers_hint")}</p>
         ${triggers.map((x, i) => this.triggerRow(x, i))}
-        ${this.readonly ? nothing : html`<button class="fp3d-btn" @click=${() => this.emit({ ...pet, triggers: [...triggers, { id: uid("trigger"), kind: "state", entity: null, to: null, event: null, at: null, floor_id: null, x: null, z: null, pose: "sit", rotation: null, minutes: 10 }] })}>+ ${this.t("pet_trigger_add")}</button>`}
+        ${this.readonly || triggers.length >= PET_MAX_TRIGGERS ? nothing : html`<button class="fp3d-btn" @click=${() => this.emit({ ...pet, triggers: [...triggers, { id: uid("trigger"), kind: "state", entity: null, to: null, event: null, at: null, floor_id: null, x: null, z: null, pose: "sit", rotation: null, minutes: 10 }] })}>+ ${this.t("pet_trigger_add")}</button>`}
       </section>`;
   }
 }

@@ -802,6 +802,17 @@ export interface PetTrigger extends PetPlace {
 
 /** Sleeping is "curl", loafing "lie" (#337 adds standing and grooming). */
 export const PET_POSES = ["sit", "lie", "curl", "stand", "groom"] as const;
+/** Event types a pet trigger may not use (#359): `*` and the core events fired all the time. Keep in step with
+ * PET_EVENT_REFUSED in custom_components/home_3d/const.py. */
+export const PET_EVENT_REFUSED: readonly string[] = [
+  "*", "state_changed", "state_reported", "call_service", "service_registered", "service_removed", "component_loaded",
+  "themes_updated", "entity_registry_updated", "device_registry_updated", "area_registry_updated", "core_config_updated",
+  "homeassistant_start", "homeassistant_started", "homeassistant_stop", "homeassistant_final_write", "homeassistant_close",
+  "logbook_entry", "panels_updated", "lovelace_updated", "user_added", "user_removed", "automation_reloaded",
+  "scene_reloaded", "event_template_reloaded",
+];
+/** The most triggers a pet may have (#359). */
+export const PET_MAX_TRIGGERS = 20;
 export type PetPose = (typeof PET_POSES)[number];
 
 export const PET_FURS = ["orange", "tabby", "black", "white", "grey", "brown", "calico", "golden", "cream", "dilute_calico", "blue_grey"] as const;

@@ -2201,6 +2201,7 @@ export const lateEnglish = {
   pet_trigger_to: "To state (empty: any)",
   pet_trigger_event_type: "Event type",
   pet_trigger_event_entity: "Of entity (empty: any)",
+  pet_trigger_event_refused: "That event fires too often for a trigger (or matches every event). Name a specific event.",
   pet_trigger_at: "At",
   pet_trigger_minutes: "Minutes",
   pet_active: "now",
