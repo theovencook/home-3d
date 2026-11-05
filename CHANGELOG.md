@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- The 3D view's own plan save (no panel or card around it) now sends the revision it started from and, when someone else saved first, makes the change again on their newer plan (#363).
+
 ## Home 3D 1.0.0 (4 November 2026)
 
 - A TV reached through several integrations (several media players on one item or within half a metre) shows one now-playing card: the playing player, else a paused one with a title, else the first (#356).
