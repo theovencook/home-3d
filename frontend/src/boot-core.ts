@@ -51,3 +51,60 @@ export async function currentBuild(base: string, fetcher: Fetch = (url, init) =>
 export function appUrl(base: string, build: string | null): string {
   return new URL(build ? `${APP_FILE}?v=${encodeURIComponent(build)}` : APP_FILE, base).href;
 }
+
+/** The app's import on this page, shared by every copy of the start file (the extra module, the panel, the loader's
+ * retries `home-3d.js?retry=n`: each a module of its own). */
+const BOOT = Symbol.for("home-3d.boot");
+/** How long the start file waits before it tries a failed import again (twice); the card loader tries for longer. */
+const AGAIN_MS = [1000, 3000];
+
+interface Boot {
+  /** The import under way or done: a loaded app is never imported again. */
+  load?: Promise<unknown>;
+  /** Failed imports so far (#360). The browser keeps a failed module import under its URL for the page's life, so the
+   * next try adds `retry=<n>`: a URL it has not failed on. */
+  failed: number;
+}
+
+export interface BootEnv {
+  /** where the shared import is kept (the page; an object of its own in tests) */
+  page?: object;
+  /** the build served now (currentBuild) */
+  build?: () => Promise<string | null>;
+  wait?: (ms: number) => Promise<void>;
+  again?: readonly number[];
+}
+
+/** The app URL for the n-th try: the chosen one, then with `retry=<n>`. */
+export function retryUrl(url: string, n: number): string {
+  if (!n) return url;
+  const u = new URL(url);
+  u.searchParams.set("retry", String(n));
+  return u.href;
+}
+
+/**
+ * Imports the app once per page: every copy waits for the same import, and a failed one is tried again under a new
+ * URL (#360), by this copy after a short wait and by any later copy (the card loader's retries). Rejects when this copy's tries all failed.
+ */
+export async function loadApp(base: string, importer: (url: string) => Promise<unknown>, env: BootEnv = {}): Promise<void> {
+  const page = (env.page ?? globalThis) as Record<symbol, Boot | undefined>;
+  const s = (page[BOOT] ??= { failed: 0 });
+  const url = appUrl(base, await (env.build ?? (() => currentBuild(base)))().catch(() => null));
+  const again = env.again ?? AGAIN_MS;
+  const wait = env.wait ?? ((ms) => new Promise<void>((done) => setTimeout(done, ms)));
+  for (let tries = 0; ; tries++) {
+    s.load ??= importer(retryUrl(url, s.failed)).catch((err: unknown) => {
+      s.failed++;
+      s.load = undefined;
+      throw err;
+    });
+    try {
+      await s.load;
+      return;
+    } catch (err) {
+      if (tries >= again.length) throw err;
+      await wait(again[tries]);
+    }
+  }
+}

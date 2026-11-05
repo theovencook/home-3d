@@ -32,7 +32,9 @@ LOADER_URL = f"{URL_BASE}/{LOADER_FILE}"
 
 # tries every 5 s for 15 minutes; the first try is awaited, so a dashboard normally waits for the card as before. Only
 # a failed import is tried again: a bundle that loaded is never imported a second time under another URL, even when the
-# page's element registry does not know the card (#218: a second copy of the bundle broke the panel)
+# page's element registry does not know the card (#218: a second copy of the bundle broke the panel). Each retry imports
+# the start file as `?retry=<n>`, a module the browser has not failed on, which imports the app under a new URL too and
+# shares the page's one import with every other copy (#360, boot-core.ts loadApp)
 _LOADER = """// Home 3D: loads the dashboard card. Served from the integration's own path, never written to disk.
 // While Home Assistant is still starting, the card's script is not served yet: then it tries again (#461).
 const url = "{url}";
