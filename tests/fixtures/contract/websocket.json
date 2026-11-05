@@ -324,6 +324,7 @@
       "optional": [
         "car_trackers",
         "entity_ids",
+        "home_id",
         "statistic_ids"
       ]
     },
