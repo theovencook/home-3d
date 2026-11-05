@@ -193,6 +193,7 @@ def collect(
         vol.Optional("entity_ids", default=[]): _IDS,
         vol.Optional("statistic_ids", default=[]): _IDS,
         vol.Optional("car_trackers", default=[]): _IDS,
+        vol.Optional("home_id"): cv.string,
     }
 )
 @websocket_api.async_response
@@ -216,7 +217,17 @@ async def ws_timetravel_history(
     instance = get_instance(hass)
     # only the trackers of the plan's cars (Auto Pro), never a person's own, even when linked as a car's
     private = private_trackers(hass)
-    configured = car_trackers(hass, data.building)
+    # the cars of every home, or of the one home the request names (#371)
+    if (home_id := msg.get("home_id")) is None:
+        homes = list(data.homes.values())
+    elif (home := data.home(home_id)) is None:
+        connection.send_error(msg["id"], "home_not_found", f"There is no home {home_id}")
+        return
+    else:
+        homes = [home]
+    configured: set[str] = set()
+    for home in homes:
+        configured |= car_trackers(hass, home.building)
     cars = [e for e in msg["car_trackers"] if e in configured and e not in private]
     # places and the devices people carry stay out, whatever the frontend asks for
     hidden = private_entities(hass, [*msg["entity_ids"], *msg["statistic_ids"]])

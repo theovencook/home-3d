@@ -461,3 +461,59 @@ async def test_history_answers_only_for_entities_on_the_plan(hass: HomeAssistant
     assert asked["stats"] == ["sensor.temp"]
     assert "lock.front_door" not in str(asked)
     assert "sensor.secret_power" not in str(asked)
+
+
+async def _second_home_car(hass: HomeAssistant) -> Any:
+    """A second, inactive home whose plan has a car's tracker; the active home has none."""
+    await _setup(hass)
+    data = hass.data[DOMAIN]
+    data.packs = [{"id": "test.pro", "features": ["time_travel", "auto_pro"], "items": []}]
+    building = {
+        **data.building,
+        "floors": [{"furniture": [{"type": "parking", "entity": "device_tracker.second_car"}]}],
+    }
+    other = await data.async_create_home("Second", building)
+    assert data.active_id != other.id
+    hass.config.components.add("recorder")
+    return other
+
+
+async def _ask_second_car(hass: HomeAssistant, hass_ws_client, **over: Any) -> tuple[dict[str, Any], list[list[str]]]:
+    asked: list[list[str]] = []
+
+    def fake_states(_hass, start, end, entity_ids, with_attributes):
+        asked.append(list(entity_ids))
+        return {"device_tracker.second_car": [{"s": "home", "lu": START}]} if entity_ids else {}
+
+    with (
+        patch("homeassistant.components.recorder.get_instance", return_value=_Instance()),
+        patch.object(timetravel, "_states", fake_states),
+    ):
+        client = await hass_ws_client(hass)
+        await client.send_json_auto_id(
+            _msg(entity_ids=[], statistic_ids=[], car_trackers=["device_tracker.second_car"], **over)
+        )
+        return await client.receive_json(), asked
+
+
+async def test_history_answers_the_cars_of_every_home(hass: HomeAssistant, hass_ws_client) -> None:
+    """Without a home_id a car on another home's plan is answered, as that home's entities are (#371)."""
+    await _second_home_car(hass)
+    result, asked = await _ask_second_car(hass, hass_ws_client)
+    assert result["success"], result
+    assert "device_tracker.second_car" in result["result"]["entities"]
+    assert ["device_tracker.second_car"] in asked
+
+
+async def test_history_car_of_the_named_home_only(hass: HomeAssistant, hass_ws_client) -> None:
+    """With a home_id only that home's cars are allowed; an unknown home is an error."""
+    other = await _second_home_car(hass)
+    result, _ = await _ask_second_car(hass, hass_ws_client, home_id=other.id)
+    assert result["success"], result
+    assert "device_tracker.second_car" in result["result"]["entities"]
+    result, asked = await _ask_second_car(hass, hass_ws_client, home_id=hass.data[DOMAIN].active_id)
+    assert result["success"], result
+    assert "device_tracker.second_car" not in str(asked)
+    result, _ = await _ask_second_car(hass, hass_ws_client, home_id="nope")
+    assert not result["success"]
+    assert result["error"]["code"] == "home_not_found"
