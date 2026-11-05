@@ -12,6 +12,7 @@ or "offline" when it has none. Entries this version cannot read are left out, no
 
 from __future__ import annotations
 
+from functools import partial
 import json
 import time
 from typing import Any
@@ -22,7 +23,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 
 from .pack_github import _get, parse_url
-from .packs import PackError, verify_item
+from .packs import OFFICIAL_OWNER, PackError, verify_item
 
 DEFAULT_INDEX_URL = "https://raw.githubusercontent.com/theovencook/home-3d-packs/main/index.json"
 INDEX_FORMAT = "home3d-pack-index"
@@ -96,7 +97,7 @@ def checked_setting(value: Any) -> str:
     return value.strip()
 
 
-def _entry(raw: Any) -> dict[str, Any] | None:
+def _entry(raw: Any, official: bool) -> dict[str, Any] | None:
     """One listed pack as the Browse tab gets it, or None when this version cannot read it."""
     try:
         entry = ENTRY_SCHEMA(raw)
@@ -105,6 +106,9 @@ def _entry(raw: Any) -> dict[str, Any] | None:
         return None
     # the install path only takes GitHub URLs; keep the plain form it installs (and an update check compares)
     entry["url"] = url.url
+    # "official" is not the entry's to say (#372): only the default index, for a pack on Home 3D's own account
+    if not official or url.owner.casefold() != OFFICIAL_OWNER:
+        entry["source"] = "community"
     previews = []
     for item in entry["previews"][:MAX_PREVIEWS]:
         try:
@@ -119,8 +123,9 @@ def _entry(raw: Any) -> dict[str, Any] | None:
     return entry
 
 
-def read_index(body: bytes) -> list[dict[str, Any]]:
-    """The packs an index file lists (unreadable entries and repeated ids left out); raises PackError."""
+def read_index(body: bytes, *, official: bool = False) -> list[dict[str, Any]]:
+    """The packs an index file lists (unreadable entries and repeated ids left out); raises PackError. Only the
+    default index (`official`) may mark an entry official."""
     try:
         data = json.loads(body)
     except (ValueError, RecursionError) as err:
@@ -133,7 +138,7 @@ def read_index(body: bytes) -> list[dict[str, Any]]:
     packs: list[dict[str, Any]] = []
     seen: set[str] = set()
     for raw in data["packs"][:MAX_PACKS]:
-        entry = _entry(raw)
+        entry = _entry(raw, official)
         if entry is None or entry["id"] in seen:
             continue
         seen.add(entry["id"])
@@ -159,7 +164,8 @@ class PackIndex:
             return self._answer()
         try:
             body = await _get(async_get_clientsession(self.hass), url, MAX_INDEX_BYTES, "the pack index")
-            packs = read_index(body)
+            # checking every entry and its previews takes seconds for a large index: not in the event loop (#374)
+            packs = await self.hass.async_add_executor_job(partial(read_index, body, official=url == DEFAULT_INDEX_URL))
         except PackError as err:
             if kept:
                 return {**self._answer(), "stale": True, "error": err.code}

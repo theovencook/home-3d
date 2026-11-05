@@ -17,6 +17,7 @@ import voluptuous as vol
 from voluptuous.humanize import humanize_error
 
 from . import frontend_build
+from .backup_restore import StagedPacks, resolve_backup_items
 from .const import (
     DATA_ASK,
     DATA_EDITORS,
@@ -41,10 +42,11 @@ from .packs import (
     PackError,
     checked_file,
     checked_folder,
+    checked_source,
     is_bundled,
     is_language_pack,
+    official_only,
     verify_item,
-    verify_source,
 )
 from .racks import RackError
 from .sample import SAMPLE_NAME, load_sample
@@ -93,6 +95,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_items_save,
         ws_items_remove,
         ws_backup_export,
+        ws_backup_stage,
         ws_backup_import,
         ws_timetravel_history,
         ws_voice_subscribe,
@@ -531,7 +534,8 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
             payload, source = await hass.async_add_executor_job(checked_file, msg["pack"])
         else:
             raise PackError("not_a_pack", "send a pack file or a pack folder")
-        not_reserved(payload)
+        # files are no official source: Home 3D's own ids and publisher come only from its GitHub account (#372)
+        official_only(not_reserved(payload), None)
         await updates.async_install(payload, source, confirm=msg["confirm"])
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
@@ -554,6 +558,8 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
         vol.Optional("confirm", default=False): bool,
         # the commit a preview showed (#189): installed only if the ref still points there
         vol.Optional("commit"): vol.All(str, vol.Match(r"^[0-9a-f]{40}$")),
+        # the pack id the index lists for this URL (#372): installed only if the URL holds that pack
+        vol.Optional("pack_id"): vol.All(str, vol.Length(max=64)),
     }
 )
 @require_editor
@@ -571,7 +577,7 @@ async def ws_packs_install_url(
             raise PackError("changed_since_preview", "the pack changed since the preview; look at the changes again")
         # checked in the executor (#176)
         payload, source = await hass.async_add_executor_job(checked_folder, files)
-        not_reserved(payload)
+        _listed_as(official_only(not_reserved(payload), origin), msg.get("pack_id"))
         source = {**source, "origin": {**origin, "release": payload["release"]}}
         await updates.async_install(payload, source, confirm=msg["confirm"])
     except PackError as err:
@@ -593,6 +599,7 @@ async def ws_packs_install_url(
     {
         vol.Required("type"): "home_3d/packs/preview_url",
         vol.Required("url"): vol.All(str, vol.Length(min=1, max=500)),
+        vol.Optional("pack_id"): vol.All(str, vol.Length(max=64)),
     }
 )
 @require_editor
@@ -608,11 +615,18 @@ async def ws_packs_preview_url(
     try:
         files, origin = await fetch_pack(hass, msg["url"])
         payload, _source = await hass.async_add_executor_job(checked_folder, files)
-        not_reserved(payload)
+        _listed_as(official_only(not_reserved(payload), origin), msg.get("pack_id"))
+        preview = updates.preview(payload, origin)
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
         return
-    connection.send_result(msg["id"], updates.preview(payload, origin))
+    connection.send_result(msg["id"], preview)
+
+
+def _listed_as(payload: dict[str, Any], pack_id: str | None) -> None:
+    """Raises PackError("id_mismatch") when the pack at an index entry's URL is not the pack the entry names (#372)."""
+    if pack_id is not None and payload["id"] != pack_id:
+        raise PackError("id_mismatch", f"the list names {pack_id}, the URL holds {payload['id']}")
 
 
 @websocket_api.websocket_command(
@@ -815,6 +829,8 @@ async def ws_items_remove(hass: HomeAssistant, connection: websocket_api.ActiveC
 # ---------------------------------------------------------------------------- backup
 
 BACKUP_FORMAT = "home3d-backup"
+# the packs of backups sent in parts (#375)
+_STAGED = "home_3d_backup_staged"
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/backup/export"})
@@ -842,6 +858,28 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "home_3d/backup/stage",
+        # a part of a backup's packs, sent ahead because they don't fit in one message with the rest (#375)
+        vol.Required("packs"): [dict],
+        # the token the first part got: the next parts go with it
+        vol.Optional("token"): vol.All(str, vol.Length(max=64)),
+    }
+)
+@websocket_api.require_admin
+@require_editor
+@callback
+def ws_backup_stage(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Keep a part of a backup's packs for the `backup/import` that names its token (#375); nothing is checked or
+    written yet."""
+    staged: StagedPacks = hass.data.setdefault(_STAGED, StagedPacks())
+    if (token := staged.add(msg.get("token"), msg["packs"])) is None:
+        connection.send_error(msg["id"], "staged_expired", "The packs sent ahead are gone or too many: send them again")
+        return
+    connection.send_result(msg["id"], {"token": token})
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "home_3d/backup/import",
         vol.Optional("building"): dict,
         # the packs: restored onto the installed pack with the same id, or added; packs not in the backup stay, so an
@@ -861,6 +899,8 @@ def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         **_HOME,
         # only check the backup (#153): the answer says what a restore would skip; nothing changes
         vol.Optional("check_only", default=False): bool,
+        # the packs sent ahead with backup/stage (#375), restored with `packs`
+        vol.Optional("staged"): vol.All(str, vol.Length(max=64)),
     }
 )
 @websocket_api.require_admin
@@ -877,6 +917,14 @@ async def ws_backup_import(
     step fails the steps done so far are undone and the answer is the error "restore_failed"."""
     if (data := _data(hass, connection, msg)) is None:
         return
+    if "staged" in msg:
+        staged: StagedPacks = hass.data.setdefault(_STAGED, StagedPacks())
+        if (ahead := staged.take(msg["staged"])) is None:
+            connection.send_error(
+                msg["id"], "staged_expired", "The packs sent ahead are gone: restore the backup again"
+            )
+            return
+        msg = {**msg, "packs": [*ahead, *msg.get("packs", [])]}
     try:
         # every plan, pack and item of a backup is checked in the executor (#176): megabytes of work
         homes, building, checked, items, skipped = await hass.async_add_executor_job(_checked_backup, msg)
@@ -886,11 +934,26 @@ async def ws_backup_import(
     target = None
     if not homes and (target := _home(hass, connection, msg)) is None:
         return
+    # the checks an import makes (#376): packs an import would ask about are skipped and listed
+    replaced: dict[str, dict[str, Any]] = {}
+    if (updates := hass.data.get(DATA_PACK_UPDATES)) is not None:
+        # the packs' fingerprints take a while for large packs: not in the event loop (it only reads)
+        checked, replaced, held = await hass.async_add_executor_job(updates.restore_plan, checked)
+        skipped += held
+    # custom items whose id is taken here by another look come in renamed, and the restored plans follow (#376)
+    restoring = {h["id"] for h in homes} if homes else {target.id if target else ""}
+    local = [h.building.get("recipes") or {} for h in data.homes.values() if h.id not in restoring]
+    homes, building, items, renamed, more = await hass.async_add_executor_job(
+        resolve_backup_items, homes, building, items, list(data.custom.items), local, MAX_ITEMS
+    )
+    skipped += more
     if msg["check_only"]:
-        connection.send_result(msg["id"], {"checked": True, "skipped": skipped})
+        connection.send_result(
+            msg["id"], {"checked": True, "skipped": skipped, **({"renamed": renamed} if renamed else {})}
+        )
         return
     try:
-        await _async_restore_backup(hass, data, target, building, homes, msg.get("active"), checked, items)
+        await _async_restore_backup(hass, data, target, building, homes, msg.get("active"), checked, items, replaced)
     except _RestoreFailed as err:
         connection.send_error(msg["id"], "restore_failed", str(err))
         return
@@ -903,6 +966,8 @@ async def ws_backup_import(
         "active": data.active_id,
         "packs": len(checked),
         "skipped": skipped,
+        # custom items that came in under a new id (#376)
+        **({"renamed": renamed} if renamed else {}),
     }
     if "items" in msg:
         result["items"] = len(items)
@@ -925,7 +990,7 @@ def _checked_backup(
         raise vol.Invalid("a backup names each home once")
     # with homes the building at the top is the active home's again (for older versions): not needed
     building = BUILDING_SCHEMA(msg["building"]) if not homes else None
-    checked: list[dict[str, Any]] = []
+    by_id: dict[str, dict[str, Any]] = {}
     skipped: list[dict[str, str]] = []
     for entry in msg.get("packs", []):
         source = entry.get("source")
@@ -933,17 +998,22 @@ def _checked_backup(
         if not isinstance(source, dict):
             skipped.append({"id": name, "reason": "no_source"})
             continue
+        # where a pack came from (#25): kept only when it names GitHub as this version writes it
+        origin = checked_origin(source["origin"]) if "origin" in source else None
         try:
-            clean = not_reserved(verify_source(source))
+            # kept as an import keeps it (#376): checked sizes, no readme or licence text
+            clean, kept = checked_source(source)
+            official_only(not_reserved(clean), origin)
         except PackError as err:
             skipped.append({"id": name, "reason": err.code})
             continue
-        if "origin" in source:
-            # where a pack came from (#25): kept only when it names GitHub as this version writes it
-            source = {k: v for k, v in source.items() if k != "origin"}
-            if (origin := checked_origin(entry["source"]["origin"])) is not None:
-                source["origin"] = origin
-        checked.append({**clean, "source": source, "imported_at": time.time()})
+        if origin is not None:
+            kept["origin"] = origin
+        # one entry per pack id (#376): the last one in the backup wins
+        if clean["id"] in by_id:
+            skipped.append({"id": clean["id"], "reason": "duplicate"})
+        by_id[clean["id"]] = {**clean, "source": kept, "imported_at": time.time()}
+    checked = list(by_id.values())
     items: list[dict[str, Any]] = []
     for item in msg.get("items", []):
         try:
@@ -966,6 +1036,7 @@ async def _async_restore_backup(
     active: str | None,
     packs: list[dict[str, Any]],
     items: list[dict[str, Any]],
+    replaced: dict[str, dict[str, Any]] | None = None,
 ) -> None:
     """Write a checked backup (#153): the plans first (each keeps its state before as a restore point), then which
     home is active, then the packs and the custom items, each onto the one with the same id (the others stay). When a
@@ -996,13 +1067,14 @@ async def _async_restore_backup(
             ids = {p["id"] for p in packs}
             undo.append(partial(data.async_set_packs, data.packs))
             await data.async_set_packs([p for p in data.packs if p["id"] not in ids] + packs)
-            # the restored plans take recipe copies of their items from the packs now installed (a plan saved
-            # before #2 has none of its own); a copy a plan has stays
-            for home in restored:
-                await home.async_follow_custom_items()
         if items:
             undo.append(partial(data.custom.async_replace, data.custom.items))
             await data.custom.async_replace([*data.custom.items, *items])
+        if packs or items:
+            # the restored plans take recipe copies of their items from the packs now installed (a plan saved
+            # before #2 has none of its own), and of the custom items restored (#376); a copy a plan has stays
+            for home in restored:
+                await home.async_follow_custom_items()
     except Exception as err:
         _LOGGER.exception("Restoring a backup failed; undoing the steps done so far")
         put_back = True
@@ -1020,6 +1092,8 @@ async def _async_restore_backup(
         raise _RestoreFailed(f"Restoring the backup failed ({err}); {state}") from err
     if packs and (updates := hass.data.get(DATA_PACK_UPDATES)) is not None:
         await updates.async_forget_uninstalled()
+        # the releases the restored packs replaced can be rolled back to (#376)
+        await updates.async_restored(replaced or {})
 
 
 @websocket_api.websocket_command(

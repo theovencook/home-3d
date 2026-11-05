@@ -272,6 +272,7 @@ export class Extensions extends LitElement {
       </div>
       <p class="fp3d-sub">
         ${this.t("upd_last_check", { time: this.time(status.last_check) })}${next ? html` · ${this.t("upd_next_check", { time: this.time(next) })}` : nothing}
+        ${status.backoff_until ? html` · ${this.t("upd_backoff", { time: this.time(status.backoff_until) })}` : nothing}
       </p>
       ${this._updatesMsg ? html`<p class="fp3d-sub ${this._updatesMsg.ok ? "fp3d-notice" : "fp3d-pack-error"}">${this._updatesMsg.text}</p>` : nothing}
     </section>`;
@@ -287,6 +288,7 @@ export class Extensions extends LitElement {
         : state.available
           ? html`<span class="fp3d-sub fp3d-pack-available">${this.t("pack_available", { release: state.available.release, commit: shortCommit(state.available.commit) })}</span>
               ${state.available.note ? html`<span class="fp3d-sub fp3d-upd-note">${state.available.note}</span>` : nothing}
+              ${state.held ? html`<span class="fp3d-sub fp3d-pack-error">${this.t(`upd_held_${state.held.reason}`, { to: state.held.to ?? "", items: (state.held.items ?? []).join(", ") })}</span>` : nothing}
               ${this.isEditor && pack.source?.origin
                 ? html`<button class="fp3d-btn" ?disabled=${this._installing} @click=${() => void this.review(pack.source!.origin!.url)}>${this.t("pack_review_update")}</button>`
                 : nothing}`

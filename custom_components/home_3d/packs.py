@@ -392,6 +392,12 @@ PACK_FILE = "pack.json"
 MAX_ITEMS = 1000
 MAX_FILE_SIZE = 50_000
 MAX_FOLDER_SIZE = 3_000_000
+# Home Assistant takes a websocket message of at most 4 MiB (aiohttp's default); a larger one drops the connection
+MAX_MESSAGE_BYTES = 4 * 1024 * 1024
+# the data files as a folder import sends them (#375): their JSON in UTF-8 bytes, with room left in the message for
+# the rest of it. A folder within this fits in one message however it was installed (files or GitHub), so it also
+# round-trips: an installed pack can always be imported again as a folder.
+MAX_FOLDER_BYTES = 3_800_000
 # an item file: lower-case names, at most three folders deep ("seating/chairs/stool.json")
 _ITEM_PATH = re.compile(r"^(?:[a-z0-9][a-z0-9_-]{0,39}/){0,3}[a-z0-9][a-z0-9_.-]{0,39}\.json$")
 # a readme and the licence text may come along; they are not read
@@ -631,7 +637,15 @@ def _data_files(files: dict[str, str]) -> dict[str, str]:
     total = sum(len(text) for text in kept.values())
     if total > MAX_FOLDER_SIZE:
         raise PackError("too_large", f"the pack: {total} characters, at most {MAX_FOLDER_SIZE}")
+    if (sent := folder_bytes(kept)) > MAX_FOLDER_BYTES:
+        raise PackError("too_large", f"the pack: {sent} bytes as sent, at most {MAX_FOLDER_BYTES}")
     return kept
+
+
+def folder_bytes(files: dict[str, str]) -> int:
+    """The size of a folder's files as a folder import sends them: compact JSON, UTF-8 (frontend api.ts measures
+    the same way)."""
+    return len(json.dumps(files, ensure_ascii=False, separators=(",", ":")).encode())
 
 
 def verify_folder(files: dict[str, str]) -> dict[str, Any]:
@@ -690,10 +704,18 @@ def load_bundled(root: Path = BUNDLED_DIR) -> list[dict[str, Any]]:
     return found
 
 
+def kind_of(pack: dict[str, Any]) -> str:
+    """What a pack holds: "furniture" (the default) or "language" (#196)."""
+    return str(pack.get("kind") or "furniture")
+
+
 def with_bundled(bundled: list[dict[str, Any]], imported: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """All packs to offer: the bundled ones, then the imported ones, one per pack id. When a pack is both bundled
     and imported (a copy imported from files or installed from a GitHub URL), the higher release wins; on a tie the
-    imported one."""
+    imported one. An imported pack of another kind never takes a bundled pack's place (#372: a furniture pack named
+    like the German texts kept from before 1.0.1 must not leave the page in English)."""
+    kinds = {p["id"]: kind_of(p) for p in bundled}
+    imported = [p for p in imported if kinds.get(p["id"], kind_of(p)) == kind_of(p)]
     release = {p["id"]: p.get("release", 1) for p in imported}
     kept = [p for p in bundled if release.get(p["id"], 0) < p.get("release", 1)]
     shadowed = {p["id"] for p in kept}
@@ -703,6 +725,48 @@ def with_bundled(bundled: list[dict[str, Any]], imported: list[dict[str, Any]]) 
 def is_bundled(bundled: list[dict[str, Any]], pack_id: str) -> bool:
     """Whether a pack id is one of the bundled packs."""
     return any(p["id"] == pack_id for p in bundled)
+
+
+# ---------------------------------------------------------------------------- our own packs (#372)
+
+# Home 3D's own packs use this id prefix and publisher. Only an official source may: the bundled packs, and packs
+# installed from the GitHub account that publishes them (the default pack index lists them from there). A file, a
+# backup without such an origin or another account can never pass for one of ours.
+RESERVED_PREFIX = "theovencook."
+RESERVED_PUBLISHER = "theovencook"
+OFFICIAL_OWNER = "theovencook"
+
+
+def _folded(text: Any) -> str:
+    """A name without case, spaces, dots, dashes and underscores ("The Oven-Cook" -> "theovencook")."""
+    return re.sub(r"[\s._-]+", "", str(text or "")).casefold()
+
+
+def is_reserved(pack: dict[str, Any]) -> bool:
+    """Whether a pack uses the id prefix or the publisher of Home 3D's own packs."""
+    return str(pack.get("id", "")).startswith(RESERVED_PREFIX) or _folded(pack.get("publisher")) == RESERVED_PUBLISHER
+
+
+def is_official(origin: Any) -> bool:
+    """Whether a pack's origin is an official source: installed from GitHub from Home 3D's own account."""
+    return (
+        isinstance(origin, dict)
+        and origin.get("type") == "github"
+        and str(origin.get("owner", "")).casefold() == OFFICIAL_OWNER
+    )
+
+
+def official_only(pack: dict[str, Any], origin: Any) -> dict[str, Any]:
+    """A pack being imported, installed or restored from `origin` (None: files), unless it uses the id prefix or the
+    publisher of Home 3D's own packs without coming from an official source; raises PackError("reserved_id")."""
+    if is_reserved(pack) and not is_official(origin):
+        raise PackError(
+            "reserved_id",
+            f'{pack["id"]} by {pack.get("publisher")}: the id prefix "{RESERVED_PREFIX}" and the publisher '
+            f'"{RESERVED_PUBLISHER}" belong to Home 3D\'s own packs, which install only from '
+            f"github.com/{OFFICIAL_OWNER}",
+        )
+    return pack
 
 
 # ---------------------------------------------------------------------------- old single-file packs (v1)
@@ -819,6 +883,17 @@ def checked_folder(files: dict[str, str]) -> tuple[dict[str, Any], dict[str, Any
 def checked_file(text: str) -> tuple[dict[str, Any], dict[str, Any]]:
     """An old single-file pack's checked payload and the source kept with it; raises PackError (see checked_folder)."""
     return verify_pack(text), parts_of(text)
+
+
+def checked_source(source: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The kept source of an imported pack checked again (a backup being restored), as an import keeps it: the
+    payload, and the source with only what a pack is read from (#376: no readme or licence text, no fields this
+    version does not read). Raises PackError. The caller adds a checked origin."""
+    payload = verify_source(source)
+    if isinstance(source.get("files"), dict):
+        return payload, source_of_folder(source["files"])
+    fields = {str(k) for k in PAYLOAD_SCHEMA.schema}
+    return payload, {key: value for key, value in source.items() if key in fields}
 
 
 def verify_source(source: Any) -> dict[str, Any]:

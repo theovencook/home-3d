@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 from datetime import timedelta
 import json
+import time
 from unittest.mock import patch
 
 from freezegun.api import FrozenDateTimeFactory
@@ -596,7 +597,8 @@ class _HeldCheck:
 async def test_an_install_waits_for_a_running_check(
     hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """A check that is under way finishes before an import lands, so it can't put its older release over it (#47)."""
+    """An import lands while a check waits for GitHub (#377: it does not wait for the network), and the check can't
+    put its older release over it (#47)."""
     client = await _client(hass, hass_ws_client)
     await _installed_from_github(client, aioclient_mock)
     updates = hass.data[DATA_PACK_UPDATES]
@@ -612,9 +614,11 @@ async def test_an_install_waits_for_a_running_check(
     assert hass.data[DOMAIN].packs[0]["release"] == 3
 
 
-async def test_a_rollback_waits_for_a_running_check(
+async def test_a_rollback_during_a_check_is_not_undone_by_it(
     hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
 ) -> None:
+    """#377: the rollback no longer waits for GitHub; the check then finds the pack changed (and pinned) and leaves
+    it as the rollback put it."""
     client = await _client(hass, hass_ws_client)
     await _installed_from_github(client, aioclient_mock)
     await _call(client, type="home_3d/packs/updates/settings", auto_update=True)
@@ -626,12 +630,12 @@ async def test_a_rollback_waits_for_a_running_check(
     with patch.object(pack_updates, "latest_release", held.latest_release):
         check = hass.async_create_task(updates.async_check())
         await asyncio.sleep(0.05)
-        rollback = hass.async_create_task(updates.async_rollback("test.starter"))
-        await asyncio.sleep(0.05)
+        await asyncio.wait_for(updates.async_rollback("test.starter"), 1)
         held.gate.set()
-        await asyncio.gather(check, rollback)
-    # the check brought release 3, the rollback then went back to 2 and pinned it
-    assert hass.data[DOMAIN].packs[0]["release"] == 2
+        result = await check
+    # the rollback went back to release 1 and pinned it; the check's release 3 is not put over it
+    assert result["installed"] == []
+    assert hass.data[DOMAIN].packs[0]["release"] == 1
     assert "test.starter" in updates.pinned
 
 
@@ -929,6 +933,23 @@ def test_a_copy_kept_before_a_field_with_a_default_existed_is_not_an_update() ->
     assert pack_updates.pending_items(plan, [pack]) == []
 
 
+def test_a_copy_with_the_installed_hash_is_not_checked_again() -> None:
+    """#374: the stored hash is compared first; the item rules run only for a copy whose hash differs."""
+    pack = _installed_pack()
+    calls: list[str] = []
+    real = pack_updates._current_hash
+
+    def counted(copy_: dict) -> str | None:
+        calls.append(copy_["item"])
+        return real(copy_)
+
+    with patch.object(pack_updates, "_current_hash", counted):
+        assert pack_updates.pending_items(_plan_with_copy_of(pack), [pack]) == []
+        assert calls == []
+        assert pack_updates.pending_items(_plan_with_copy_of(pack, strip_defaults=True), [pack]) == []
+        assert calls == ["cube_chair"]
+
+
 def test_changed_content_in_the_same_release_is_still_listed() -> None:
     pack = _installed_pack()
     plan = _plan_with_copy_of(pack)
@@ -964,3 +985,173 @@ def test_a_release_note_is_one_short_line() -> None:
     for bad in ("two\nlines", "x" * 201):
         with pytest.raises((PackError, vol.Invalid)):
             _installed_pack(2, bad)
+
+
+# ---------------------------------------------------------------------------- the same release, held updates (#373)
+
+
+async def test_the_same_release_with_other_content_asks_first_and_can_be_rolled_back(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _placed_chair_and_stool(client)
+    # the very same files again: nothing to ask
+    await _call(client, type="home_3d/packs/import", files=_files())
+    other = _files(chair_size=[1.5, 0.9, 0.8])
+    asked = await _send(client, type="home_3d/packs/import", files=other)
+    assert asked["error"]["code"] == "same_release" and "other content" in asked["error"]["message"]
+    assert hass.data[DOMAIN].packs[0]["items"][0]["size"] == [0.8, 0.8, 0.75]
+
+    await _call(client, type="home_3d/packs/import", files=other, confirm=True)
+    starter = next(p for p in (await _call(client, type="home_3d/packs/updates"))["packs"] if p["id"] == "test.starter")
+    assert starter["previous_release"] == 1
+    await _call(client, type="home_3d/packs/rollback", pack_id="test.starter")
+    assert hass.data[DOMAIN].packs[0]["items"][0]["size"] == [0.8, 0.8, 0.75]
+
+
+async def test_a_pinned_pack_is_never_replaced_silently_by_the_same_release(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Pinned release 1 from GitHub; release 1 with other items from files asks, as pinned."""
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    await _call(client, type="home_3d/packs/pin", pack_id="test.starter", pinned=True)
+    for files in (_files(stool_size=[0.6, 0.6, 0.6]), _files()):
+        asked = await _send(client, type="home_3d/packs/import", files=files)
+        assert asked["error"]["code"] == "pinned", asked
+    assert hass.data[DOMAIN].packs[0]["source"]["origin"]["url"] == FOLDER_URL
+
+    await _call(client, type="home_3d/packs/import", files=_files(), confirm=True)
+    updates = (await _call(client, type="home_3d/packs/updates"))["packs"]
+    assert next(p for p in updates if p["id"] == "test.starter")["previous_release"] == 1
+    assert "origin" not in hass.data[DOMAIN].packs[0]["source"]
+
+
+async def _held_check(client, aioclient_mock: AiohttpClientMocker, files: dict[str, str]) -> dict:
+    await _call(client, type="home_3d/packs/updates/settings", auto_update=True)
+    _github(aioclient_mock, 2, files)
+    status = await _call(client, type="home_3d/packs/check")
+    assert status["installed"] == [] and status["updated"] == []
+    return next(p for p in status["packs"] if p["id"] == "test.starter")
+
+
+async def test_auto_update_holds_a_release_that_removes_placed_items(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    newer = _files(2)
+    del newer["stool.json"]
+
+    starter = await _held_check(client, aioclient_mock, newer)
+
+    assert starter["available"] == {"release": 2, "commit": _sha(2)}
+    assert starter["held"] == {"reason": "removes_placed", "items": ["stool"]}
+    assert hass.data[DOMAIN].packs[0]["release"] == 1
+    # an editor installs it after looking: that answers the held update
+    _github(aioclient_mock, 2, newer)
+    await _call(client, type="home_3d/packs/install_url", url=FOLDER_URL)
+    starter = next(p for p in (await _call(client, type="home_3d/packs/updates"))["packs"] if p["id"] == "test.starter")
+    assert "available" not in starter and "held" not in starter
+
+
+async def test_auto_update_holds_a_release_from_another_publisher_or_of_another_kind(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    other = _files(2)
+    other["pack.json"] = json.dumps({**PACK_JSON, "release": 2, "publisher": "Someone else"})
+    starter = await _held_check(client, aioclient_mock, other)
+    assert starter["held"] == {"reason": "publisher", "from": "Test", "to": "Someone else"}
+
+    texts = {
+        "pack.json": json.dumps({**PACK_JSON, "release": 3, "kind": "language", "language": "uk"}),
+        "strings.json": json.dumps({"view": "Вигляд"}),
+    }
+    _github(aioclient_mock, 3, texts)
+    status = await _call(client, type="home_3d/packs/check")
+    starter = next(p for p in status["packs"] if p["id"] == "test.starter")
+    assert starter["held"] == {"reason": "kind", "from": "furniture", "to": "language"}
+    assert hass.data[DOMAIN].packs[0]["release"] == 1
+
+
+# ---------------------------------------------------------------------------- checks outside the lock (#377)
+
+
+async def test_an_import_never_waits_for_the_network_of_a_check(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    updates = hass.data[DATA_PACK_UPDATES]
+    _github(aioclient_mock, 2, _files(2))
+    held = _HeldCheck()
+    with patch.object(pack_updates, "latest_release", held.latest_release):
+        check = hass.async_create_task(updates.async_check())
+        await asyncio.sleep(0.05)
+        other = {**_files(), "pack.json": json.dumps({**OTHER, "release": 1})}
+        await asyncio.wait_for(updates.async_install(verify_folder(other), source_of_folder(other)), 1)
+        await asyncio.wait_for(updates.async_remove("test.other"), 1)
+        held.gate.set()
+        await check
+    assert hass.data[DOMAIN].packs[0]["id"] == "test.starter"
+
+
+async def test_a_rate_limit_ends_the_round_and_backs_off(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    _github(aioclient_mock, 1, _files())
+    await _call(client, type="home_3d/packs/install_url", url=FOLDER_URL.replace("test.starter", "test.other"))
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(f"{API}/commits/main", status=429, headers={"Retry-After": "600"})
+
+    status = await _call(client, type="home_3d/packs/check")
+
+    # one request: the second pack is not asked once GitHub refused
+    assert len(_fetched(aioclient_mock)) == 1
+    checks = {p["id"]: p for p in status["packs"]}
+    assert "fetch_failed" in checks["test.starter"]["error"] and "error" not in checks["test.other"]
+    assert 500 < status["backoff_until"] - time.time() <= 600
+    # until then a check asks GitHub nothing
+    again = await _call(client, type="home_3d/packs/check")
+    assert len(_fetched(aioclient_mock)) == 1 and again["backoff_until"] == status["backoff_until"]
+    stored = hass.data[DATA_PACK_UPDATES]
+    assert stored.backoff_until == status["backoff_until"]
+
+
+def test_the_wait_github_names_is_kept_within_bounds() -> None:
+    from custom_components.home_3d.pack_github import _retry_at
+
+    assert _retry_at({"Retry-After": "120"}, 1000) == 1120
+    assert _retry_at({"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "4000"}, 1000) == 4000
+    assert _retry_at({}, 1000) == 1000 + 3600
+    assert _retry_at({"Retry-After": "1"}, 1000) == 1060
+    assert _retry_at({"Retry-After": "999999"}, 1000) == 1000 + 6 * 3600
+    assert _retry_at({"Retry-After": "soon"}, 1000) == 1000 + 3600
+
+
+async def test_an_unexpected_error_is_reported_per_pack_and_the_round_saved(
+    hass: HomeAssistant, hass_ws_client, hass_storage, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    _github(aioclient_mock, 1, _files())
+    await _call(client, type="home_3d/packs/install_url", url=FOLDER_URL.replace("test.starter", "test.other"))
+    real = pack_updates.latest_release
+
+    async def broken(hass, origin):
+        if origin["folder"] == "test.starter":
+            raise RuntimeError("boom")
+        return await real(hass, origin)
+
+    _github(aioclient_mock, 1, _files())
+    with patch.object(pack_updates, "latest_release", broken):
+        status = await _call(client, type="home_3d/packs/check")
+    checks = {p["id"]: p for p in status["packs"]}
+    assert checks["test.starter"]["error"] == "unexpected: RuntimeError"
+    assert checks["test.other"]["latest_release"] == 1 and "error" not in checks["test.other"]
+    stored = hass_storage[STORAGE_KEY_PACK_UPDATES]["data"]
+    assert set(stored["checks"]) == {"test.starter", "test.other"} and stored["last_check"] is not None

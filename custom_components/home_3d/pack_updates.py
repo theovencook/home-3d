@@ -46,11 +46,22 @@ from .const import STORAGE_KEY_PACK_UPDATES, STORAGE_VERSION, TIME_PATTERN
 from .custom_items import not_reserved
 from .moves import migrate_pins, moved_copy, moved_out_of, retired_packs
 from .off_loop import OFF_LOOP
-from .pack_github import checked_origin, fetch_pack, latest_release
+from .pack_github import RateLimited, checked_origin, fetch_pack, latest_release
 from .pack_index import PackIndex, checked_setting, index_url
 from .pack_preview import pack_preview
-from .packs import CUSTOM_PACK_ID, ITEM_SCHEMA, PackError, checked_folder, recipe_hash, with_bundled
-from .recipes import installed_copies, placed_types, recipe_copy
+from .packs import (
+    CUSTOM_PACK_ID,
+    ITEM_SCHEMA,
+    PackError,
+    checked_folder,
+    is_reserved,
+    kind_of,
+    official_only,
+    pack_hash,
+    recipe_hash,
+    with_bundled,
+)
+from .recipes import PACK_TYPE_PREFIX, installed_copies, placed_types, recipe_copy
 
 if TYPE_CHECKING:
     from .storage import FloorplanData, Home
@@ -106,7 +117,10 @@ def pending_items(building: dict[str, Any], packs: list[dict[str, Any]]) -> list
             continue
         pack, item = installed[type_]
         new = recipe_copy(pack, item)
-        if new["hash"] in (copy_.get("hash"), _current_hash(copy_)) or new["release"] < copy_.get("release", 1):
+        # the stored hash first: the copy is read with today's item rules (ITEM_SCHEMA) only when it differs (#374)
+        if new["hash"] == copy_.get("hash") or new["release"] < copy_.get("release", 1):
+            continue
+        if new["hash"] == _current_hash(copy_):
             continue
         found.append(
             {
@@ -122,6 +136,27 @@ def pending_items(building: dict[str, Any], packs: list[dict[str, Any]]) -> list
             }
         )
     return found
+
+
+# one pack's result in a check round: the pack as it was asked about, its check, the release to install
+_Found = tuple[dict[str, Any], dict[str, Any], tuple[dict[str, Any], dict[str, Any]] | None]
+
+
+def _origin_url(pack: dict[str, Any]) -> str | None:
+    """The GitHub URL a pack was installed from, None for one imported from files (or bundled)."""
+    origin = (pack.get("source") or {}).get("origin")
+    return origin.get("url") if isinstance(origin, dict) else None
+
+
+def _differs(current: dict[str, Any], payload: dict[str, Any], origin: dict[str, Any] | None) -> str | None:
+    """How a pack differs from the installed one beyond its release (#373): other items or texts, or another place
+    it comes from (a GitHub URL, or files); None when it is the same."""
+    if pack_hash(current) != pack_hash(payload):
+        return "this one has other content"
+    if not current.get("bundled") and _origin_url(current) != (origin or {}).get("url"):
+        here = (origin or {}).get("url") or "files"
+        return f"this one comes from {here}, the installed one from {_origin_url(current) or 'files'}"
+    return None
 
 
 def last_due(settings: dict[str, Any], now: datetime) -> datetime | None:
@@ -173,6 +208,10 @@ class PackUpdates:
         self._unsub: Callable[[], None] | None = None
         self._unsub_started: Callable[[], None] | None = None
         self._lock = asyncio.Lock()
+        # one check round at a time; it holds `_lock` only to apply its results (#377)
+        self._round = asyncio.Lock()
+        # no check asks GitHub before this time (a rate limit, #377); None: no wait
+        self.backoff_until: float | None = None
         # the pack index the Browse tab shows (#336), kept in memory for a while
         self.index = PackIndex(hass)
 
@@ -186,6 +225,8 @@ class PackUpdates:
         self.previous = dict(stored.get("previous") or {})
         self.checks = dict(stored.get("checks") or {})
         self.last_check = stored.get("last_check")
+        backoff = stored.get("backoff_until")
+        self.backoff_until = float(backoff) if isinstance(backoff, (int, float)) else None
         if self._follow_moves():
             await self._async_save()
 
@@ -227,6 +268,7 @@ class PackUpdates:
                 "previous": dict(self.previous),
                 "checks": dict(self.checks),
                 "last_check": self.last_check,
+                "backoff_until": self.backoff_until,
             }
         )
 
@@ -256,7 +298,15 @@ class PackUpdates:
                 }
             )
         items = [{**item, "pinned": item["pack"] in self.pinned} for item in self._pending_everywhere()]
-        return {"settings": dict(self.settings), "last_check": self.last_check, "packs": packs, "items": items}
+        backoff = self.backoff_until if (self.backoff_until or 0) > time.time() else None
+        return {
+            "settings": dict(self.settings),
+            "last_check": self.last_check,
+            # a rate limit: no check asks GitHub before then (#377)
+            "backoff_until": backoff,
+            "packs": packs,
+            "items": items,
+        }
 
     def _pending_everywhere(self) -> list[dict[str, Any]]:
         """The placed items with an update in any home (#164: the packs are shared, so an update is too): one entry
@@ -333,37 +383,75 @@ class PackUpdates:
         unless `confirm`. (An older copy of a bundled pack changes nothing: the bundled release stays offered.)"""
         # never in the middle of a check, which could put its release over this one (#47)
         async with self._lock:
-            if not confirm and (asked := self._asks_first(payload)) is not None:
+            self._refuse_other_kind(payload)
+            if not confirm and (asked := self._asks_first(payload, source.get("origin"))) is not None:
                 raise asked
             await self._async_add(payload, source)
             # an install of the release a check found (or a later one) answers its "update available"
             check = self.checks.get(payload["id"])
             if check and check.get("available", {}).get("release", 0) <= payload.get("release", 1):
                 del check["available"]
+                check.pop("held", None)
                 await self._async_save()
         await self.async_auto_update()
 
-    def _asks_first(self, payload: dict[str, Any]) -> PackError | None:
-        """The question an install of this pack must be confirmed against, or None."""
+    def _refuse_other_kind(self, payload: dict[str, Any]) -> None:
+        """Raises PackError("other_kind") when the library offers a pack of another kind under the payload's id: no
+        confirmation lets a furniture pack replace a language pack, or the other way round (#372)."""
+        current = self._installed(payload["id"])
+        if current is not None and kind_of(current) != kind_of(payload):
+            raise PackError(
+                "other_kind",
+                f'{payload["id"]} is installed as a {kind_of(current)} pack ("{current.get("name")}"), this is a '
+                f"{kind_of(payload)} pack",
+            )
+
+    def _questions(self, payload: dict[str, Any], origin: dict[str, Any] | None) -> list[tuple[str, str]]:
+        """What an install of this pack from `origin` (None: files) must be confirmed against, as (code, detail)."""
         current = self._installed(payload["id"])
         if current is None:
-            return None
-        installed, new = current.get("release", 1), self._offered_after(payload).get("release", 1)
+            return []
+        asked: list[tuple[str, str]] = []
+        installed = current.get("release", 1)
+        after = self._offered_after(payload)
+        new = after.get("release", 1)
         if new < installed:
-            return PackError(
-                "older_release",
-                f"release {payload.get('release', 1)} is older than the installed release {installed}",
+            asked.append(
+                (
+                    "older_release",
+                    f"release {payload.get('release', 1)} is older than the installed release {installed}",
+                )
             )
-        if payload["id"] in self.pinned and new != installed:
-            return PackError("pinned", f"{payload['id']} is pinned to release {installed}")
-        return None
+        # the same release with other content, or from another place (#373): never in silently
+        other = _differs(current, payload, origin) if after is payload and new == installed else None
+        if payload["id"] in self.pinned and (new != installed or other):
+            asked.append(
+                ("pinned", f"{payload['id']} is pinned to release {installed}" + (f" ({other})" if other else ""))
+            )
+        # it takes the place of one of Home 3D's own packs (#372): the question names the pack it replaces
+        what = f'"{current.get("name")}" ({current["id"]} release {installed} by {current.get("publisher")})'
+        elsewhere = _origin_url(current) != (origin or {}).get("url")
+        if after is payload and current.get("bundled"):
+            asked.append(("replaces_bundled", f"it replaces {what}, which comes with Home 3D"))
+        elif after is payload and is_reserved(current) and elsewhere:
+            asked.append(("replaces_official", f"it replaces {what}, installed from {_origin_url(current) or 'files'}"))
+        elif other and payload["id"] not in self.pinned:
+            asked.append(("same_release", f"release {installed} of {payload['id']} is installed; {other}"))
+        return asked
+
+    def _asks_first(self, payload: dict[str, Any], origin: dict[str, Any] | None = None) -> PackError | None:
+        """The question an install of this pack must be confirmed against (its detail names every reason), or None."""
+        asked = self._questions(payload, origin)
+        if not asked:
+            return None
+        return PackError(asked[0][0], "; ".join(detail for _code, detail in asked))
 
     def preview(self, payload: dict[str, Any], origin: dict[str, Any]) -> dict[str, Any]:
-        """What installing this checked pack from GitHub would change (#189); nothing is written."""
+        """What installing this checked pack from GitHub would change (#189); nothing is written. Raises PackError for
+        a pack no confirmation installs (#372)."""
+        self._refuse_other_kind(payload)
         current = self._installed(payload["id"])
-        warnings = []
-        if (asked := self._asks_first(payload)) is not None:
-            warnings.append(asked.code)
+        warnings = [code for code, _detail in self._questions(payload, origin)]
         if current is not None and current.get("bundled") and current.get("publisher") != payload["publisher"]:
             # the id of a pack that ships with Home 3D, from another publisher
             warnings.append("bundled_publisher")
@@ -372,7 +460,16 @@ class PackUpdates:
     async def _async_add(self, payload: dict[str, Any], source: dict[str, Any]) -> None:
         """Install a pack, keeping the release the library offered so far for a roll back."""
         current = self._installed(payload["id"])
-        if current is not None and current.get("release", 1) != self._offered_after(payload).get("release", 1):
+        after = self._offered_after(payload)
+        # another release, or the same one with other content or from another place (#373), can be rolled back
+        if (
+            current is not None
+            and after is payload
+            and (
+                current.get("release", 1) != payload.get("release", 1)
+                or _differs(current, payload, source.get("origin"))
+            )
+        ):
             if current.get("bundled"):
                 self.previous[payload["id"]] = {
                     "id": current["id"],
@@ -383,6 +480,50 @@ class PackUpdates:
                 self.previous[payload["id"]] = current
             await self._async_save()
         await self.data.async_add_pack(payload, source)
+
+    # ------------------------------------------------------------------------ restoring a backup (#376)
+
+    def restore_plan(
+        self, packs: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], list[dict[str, str]]]:
+        """The checks an import makes, for a backup's checked packs (one per id): the packs to restore, the entries
+        their restore replaces (kept for a roll back) and the packs skipped. A restore asks nothing, so what an
+        import would ask about is skipped and listed instead: an older release than the library offers, or another
+        release (or other content) of a pinned pack; so is a pack of another kind under the id. Nothing is written."""
+        kept: list[dict[str, Any]] = []
+        replaced: dict[str, dict[str, Any]] = {}
+        skipped: list[dict[str, str]] = []
+        for pack in packs:
+            current = self._installed(pack["id"])
+            if current is None:
+                kept.append(pack)
+                continue
+            installed, after = current.get("release", 1), self._offered_after(pack)
+            new = after.get("release", 1)
+            origin = (pack.get("source") or {}).get("origin")
+            differs = after is pack and (new != installed or _differs(current, pack, origin) is not None)
+            if kind_of(current) != kind_of(pack):
+                skipped.append({"id": pack["id"], "reason": "other_kind"})
+            elif new < installed:
+                skipped.append({"id": pack["id"], "reason": "older_release"})
+            elif pack["id"] in self.pinned and differs:
+                skipped.append({"id": pack["id"], "reason": "pinned"})
+            else:
+                kept.append(pack)
+                if differs:
+                    bundled = {"id": current["id"], "release": installed, "bundled": True}
+                    replaced[pack["id"]] = bundled if current.get("bundled") else current
+        return kept, replaced, skipped
+
+    async def async_restored(self, replaced: dict[str, dict[str, Any]]) -> None:
+        """After a backup's packs were restored (#376): the entries they replaced are kept for a roll back, and the
+        last check of a replaced pack goes (it was about the release before)."""
+        if not replaced:
+            return
+        for pack_id, entry in replaced.items():
+            self.previous[pack_id] = entry
+            self.checks.pop(pack_id, None)
+        await self._async_save()
 
     def _offered_after(self, payload: dict[str, Any]) -> dict[str, Any]:
         """The pack the library would offer under the payload's id once it is installed."""
@@ -452,31 +593,78 @@ class PackUpdates:
     async def async_check(self) -> dict[str, Any]:
         """Check every pack installed from GitHub that is not pinned: a higher release of the pack at its ref is
         installed into the library (placed items follow only with auto-update on). The answer names the packs that
-        were installed and the placed items auto-update updated."""
-        installed: list[str] = []
-        async with self._lock:
-            for pack in list(self.data.packs):
-                origin = checked_origin((pack.get("source") or {}).get("origin"))
-                if origin is None or pack["id"] in self.pinned:
-                    continue
+        were installed and the placed items auto-update updated.
+
+        GitHub is asked without the lock (#377): an import, a removal or a roll back never waits for the network. The
+        lock is taken only to apply the results, and a pack that changed meanwhile (an import, a roll back, a pin)
+        keeps what it got. A rate limit (403 / 429) ends the round: the rest are not asked, and no check runs until
+        the time GitHub names (or an hour). A pack whose check fails unexpectedly is logged and reported; the
+        round's results are saved either way."""
+        async with self._round:
+            if self.backoff_until is not None and time.time() < self.backoff_until:
+                _LOGGER.info("Pack update check skipped: GitHub asked to wait until %s", self.backoff_until)
+                return {"installed": [], "updated": [], "backoff_until": self.backoff_until}
+            todo = [
+                (pack, origin)
+                for pack in list(self.data.packs)
+                if (origin := checked_origin((pack.get("source") or {}).get("origin"))) is not None
+                and pack["id"] not in self.pinned
+            ]
+            found: list[_Found] = []
+            for pack, origin in todo:
                 result: dict[str, Any] = {"checked_at": time.time()}
+                new: tuple[dict[str, Any], dict[str, Any]] | None = None
                 try:
-                    if await self._async_check_pack(pack, origin, result):
-                        installed.append(pack["id"])
+                    new = await self._async_check_pack(pack, origin, result)
+                except RateLimited as err:
+                    _LOGGER.warning("GitHub rate limit: pack update checks wait until %s", err.retry_at)
+                    result["error"] = f"{err.code}: {err.detail}"
+                    self.backoff_until = err.retry_at
+                    found.append((pack, result, None))
+                    break
                 except PackError as err:
                     _LOGGER.info("Update check of pack %s failed: %s", pack["id"], err)
                     result["error"] = f"{err.code}: {err.detail}" if err.detail else err.code
-                self.checks[pack["id"]] = result
-            # the checks of packs removed since are dropped (#47)
-            self.checks = {k: v for k, v in self.checks.items() if any(p["id"] == k for p in self.data.packs)}
-            self.last_check = time.time()
-            await self._async_save()
+                except Exception as err:
+                    _LOGGER.exception("Update check of pack %s failed unexpectedly", pack["id"])
+                    result["error"] = f"unexpected: {type(err).__name__}"
+                found.append((pack, result, new))
+            installed = await self._async_apply_round(found)
         updated = await self.async_auto_update()
         return {"installed": installed, "updated": updated}
 
-    async def _async_check_pack(self, pack: dict[str, Any], origin: dict[str, Any], result: dict[str, Any]) -> bool:
-        """Check one pack; whether a newer release was installed (with auto-update off it is only recorded as
-        available). Raises PackError."""
+    async def _async_apply_round(self, found: list[_Found]) -> list[str]:
+        """Apply a round's results under the lock (#377): record each check, install the releases found unless the
+        pack changed meanwhile, and save; the ids installed."""
+        installed: list[str] = []
+        async with self._lock:
+            try:
+                for pack, result, new in found:
+                    current = next((p for p in self.data.packs if p["id"] == pack["id"]), None)
+                    if current is None:
+                        # removed meanwhile: its check goes with it
+                        continue
+                    # an import, a roll back or a pin that came first stays: nothing found is applied over it
+                    if new is not None and current is pack and pack["id"] not in self.pinned:
+                        try:
+                            await self._async_add(*new)
+                            installed.append(pack["id"])
+                        except Exception as err:
+                            _LOGGER.exception("Installing release %s of pack %s failed", new[0]["release"], pack["id"])
+                            result["error"] = f"unexpected: {type(err).__name__}"
+                    self.checks[pack["id"]] = result
+            finally:
+                # the checks of packs removed since are dropped (#47); what the round found is kept either way
+                self.checks = {k: v for k, v in self.checks.items() if any(p["id"] == k for p in self.data.packs)}
+                self.last_check = time.time()
+                await self._async_save()
+        return installed
+
+    async def _async_check_pack(
+        self, pack: dict[str, Any], origin: dict[str, Any], result: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        """Check one pack (network only, nothing is written): the newer release to install with its source, or None
+        (with auto-update off it is only recorded as available). Raises PackError."""
         release = pack.get("release", 1)
         commit, pack_json = await latest_release(self.hass, origin)
         if pack_json is not None and pack_json["id"] != pack["id"]:
@@ -485,23 +673,44 @@ class PackUpdates:
         result["latest_release"] = latest
         if latest <= release:
             # nothing newer for this pack (a check never installs an older release)
-            return False
+            return None
         if not self.settings["auto_update"]:
             # updates are opt-in (#189): the check only records that one is waiting; an editor looks at what it
             # changes and installs it (nothing is downloaded here, only the pack.json was read)
             note = pack_json.get("release_note") if pack_json is not None else None
             result["available"] = {"release": latest, "commit": commit, **({"note": note} if note else {})}
-            return False
+            return None
         files, new_origin = await fetch_pack(self.hass, origin["url"])
         # a large pack takes a while to check: not in the event loop (#176)
         payload, source = await self.hass.async_add_executor_job(checked_folder, files)
-        not_reserved(payload)
+        official_only(not_reserved(payload), new_origin)
         if payload["id"] != pack["id"] or payload["release"] <= release:
-            return False
-        source = {**source, "origin": {**new_origin, "release": payload["release"]}}
-        await self._async_add(payload, source)
+            return None
+        if (held := self._held(pack, payload)) is not None:
+            # a release that changes what the pack is, or takes away placed items, waits for an editor (#373)
+            note = payload.get("release_note")
+            result["available"] = {"release": payload["release"], "commit": new_origin["commit"]}
+            result["available"].update({"note": note} if note else {})
+            result["held"] = held
+            _LOGGER.info("Release %s of pack %s waits for an editor: %s", payload["release"], pack["id"], held)
+            return None
         result["latest_release"] = payload["release"]
-        return True
+        return payload, {**source, "origin": {**new_origin, "release": payload["release"]}}
+
+    def _held(self, pack: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Why auto-update leaves a new release of an installed pack to an editor, or None (#373): it changes the
+        pack's kind or publisher, or removes items that are placed in a home."""
+        if kind_of(payload) != kind_of(pack):
+            return {"reason": "kind", "from": kind_of(pack), "to": kind_of(payload)}
+        if payload.get("publisher") != pack.get("publisher"):
+            return {"reason": "publisher", "from": pack.get("publisher"), "to": payload.get("publisher")}
+        kept = {item["id"] for item in payload.get("items", [])}
+        prefix = f"{PACK_TYPE_PREFIX}{pack['id']}:"
+        placed = {type_ for home in self.data.homes.values() for type_ in placed_types(home.building)}
+        removed = sorted(
+            item["id"] for item in pack.get("items", []) if item["id"] not in kept and prefix + item["id"] in placed
+        )
+        return {"reason": "removes_placed", "items": removed} if removed else None
 
     async def async_pin(self, pack_id: str, pinned: bool) -> None:
         """Pin a pack to its installed release, or unpin it (auto-update then catches up); raises PackError."""

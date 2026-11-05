@@ -131,7 +131,8 @@ async def test_the_bundled_library_lists_light(hass: HomeAssistant, hass_ws_clie
     client = await _client(hass, hass_ws_client)
     core = packs.read_folder(packs.BUNDLED_DIR / "theovencook.living")
     meta = json.loads(core["pack.json"])
-    core["pack.json"] = json.dumps({**meta, "release": meta.get("release", 1) + 1})
+    # a copy under an id of its own: files can't carry the id of one of our packs (#372)
+    core["pack.json"] = json.dumps({**meta, "id": "test.living", "publisher": "Test"})
     assert (await _call(client, type="home_3d/packs/import", files=core))["success"]
 
     await client.send_json_auto_id({"type": "home_3d/packs/list"})

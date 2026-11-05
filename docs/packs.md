@@ -641,11 +641,16 @@ A pack is refused, with a message that names the file and the fault, when:
 | Any text contains a link (`http:`, `https:`, `www.` and the like) | | `not_data` |
 | Too many items | 1,000 per pack | `too_many_items` |
 | A file is too large | 50,000 characters | `too_large` |
-| The whole pack is too large | 3,000,000 characters | `too_large` |
+| The whole pack is too large | 3,000,000 characters, and 3,800,000 bytes as a folder import sends them (UTF-8 JSON) | `too_large` |
 | A file is not JSON, breaks the schema, or an item id does not match its file name or is used twice | 60 parts and 40 symbol shapes per item | `invalid_content` |
 | A value this version does not know yet (a newer shape, for example) | | `needs_update` |
 
-The size limits keep a pack within one websocket message. A larger collection is split into several packs.
+The size limits keep a pack within one websocket message (Home Assistant takes at most 4 MiB): the page measures a
+folder before sending it and says `too_large` instead of losing the connection, and a pack installed from GitHub is
+held to the same byte limit, so it can always be imported again as a folder. A larger collection is split into
+several packs. A full backup sends its packs ahead in parts when they don't fit in one message with the rest
+(`home_3d/backup/stage`, then `backup/import` with the `staged` token); a single pack or plan too large for one
+message is refused before anything is sent.
 
 ## Checking and importing
 
@@ -707,6 +712,9 @@ The installed pack keeps where it came from in `source.origin`, so an update che
 `ref` is the branch, tag or commit the URL named, or the default branch's name when it named none
 (`default_branch: true`); `folder` is `""` for a pack at the repository root; `release` is the pack's release number
 when it was fetched. A backup carries the origin; on restore it is kept only when it still names GitHub.
+Restoring a backup checks each pack as an import does: one entry per id (the last wins), the same sizes, only the
+files a pack is read from are kept, and the reserved ids and kinds as below. What an import would ask about is
+skipped and listed instead (`older_release`, `pinned`, `other_kind`); a pack the restore replaces can be rolled back.
 A pack installed this way whose id is one of the packs that ship with Home 3D follows the same rule as an imported
 copy (see below).
 
@@ -731,15 +739,26 @@ editor can also press **Check now**.
   a newer bundled pack.
 - A check never installs an older release. Importing or installing an older release than the one the library offers
   asks first (the backend refuses with `older_release`; the page asks and sends it again with `confirm: true`).
+  So does the installed release with other content or from another place (`same_release`); either way the release it
+  replaces is kept for **Roll back**.
+- Auto-update leaves a new release to an editor when it changes the pack's kind or publisher, or removes items that
+  are placed in a home: the check records it as available with the reason (`held`), and the Extensions page says why.
 - **Pin release** keeps a pack where it is: checks skip it, auto-update leaves its placed items alone (they can still
-  be updated one by one), and importing another release of it asks first (`pinned`).
+  be updated one by one), and importing another release of it, or the same release with other content or from
+  another place, asks first (`pinned`).
 - **Roll back to v…** puts back the release the pack had before its last update, together with the placed items that
   had taken that update, and pins the pack so the next check does not bring the update back. Unpin it to take
   updates again. One step back is kept per pack.
 - The household's own items (`household.custom`) are never listed: placed copies follow every edit at once. Bundled
   packs update with Home 3D itself; their placed items follow the auto-update setting like any other pack's.
 
-The settings, pins, previous releases and last check results are kept in `.storage/home_3d.pack_updates`.
+A check asks GitHub without holding up anything else: an import, a removal or a roll back made meanwhile goes ahead,
+and the check applies nothing over it. When GitHub refuses (403 or 429, a rate limit), the round stops there and no
+check asks GitHub again before the time GitHub names (or an hour; at most six hours); the Extensions page shows that
+time. A pack whose check fails in an unexpected way is logged and shows the error; the other packs' results are kept.
+
+The settings, pins, previous releases, last check results and a rate-limit wait are kept in
+`.storage/home_3d.pack_updates`.
 
 ## Packs that ship with Home 3D
 
@@ -750,10 +769,19 @@ imported pack; a bundled pack that does not check is logged and left out.
 
 - A bundled pack shows under **Extensions** with "Comes with Home 3D" and cannot be removed. It is not part of a
   backup: the next version of Home 3D brings it again.
-- An imported pack with the same id and at least the same `release` takes the bundled one's place, whether it was
-  imported from files or installed from a GitHub URL (for example a newer `theovencook.living` from
-  `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.living`). An older copy is kept but the bundled
-  one is shown. Removing the copy brings the bundled one back.
+- An installed pack with the same id and at least the same `release` takes the bundled one's place (for example a
+  newer `theovencook.living` from `https://github.com/theovencook/home-3d-packs/tree/main/theovencook.living`). That
+  asks first, naming the pack it replaces (`replaces_bundled`; the page sends it again with `confirm: true`). An older
+  copy is kept but the bundled one is shown. Removing the copy brings the bundled one back.
+- The id prefix `theovencook.` and the publisher `theovencook` belong to Home 3D's own packs: only the bundled packs
+  and packs installed from `github.com/theovencook` may use them. A folder or file import, another GitHub account or a
+  backup without such an origin is refused with `reserved_id`. Replacing an installed `theovencook.*` pack with one
+  from another URL asks first (`replaces_official`).
+- No pack replaces a pack of another kind under the same id (a furniture pack can't take a language pack's place):
+  `other_kind`, whatever is confirmed.
+- The Library's Browse tab marks a pack official only when the default index lists it with a URL on
+  `github.com/theovencook`; an index at another URL lists every pack as community. Installing an index entry sends
+  the entry's id (`pack_id`), and a URL that holds another pack is refused with `id_mismatch`.
 
 ### Adding an item to a bundled pack
 
@@ -938,7 +966,10 @@ a name, a library section (`group`), rooms, search words (`tags`) and an optiona
   Gemini, say what item you want, and paste the answer under **Paste an item**. The brief is written from the same
   lists and limits the backend checks (`frontend/src/item-format.ts`, held equal to `packs.py` by a test), so it
   follows this page as the format changes.
-- Home 3D's own backup file carries the custom items as well.
+- Home 3D's own backup file carries the custom items as well. A custom item whose id is taken here by an item that
+  looks different (a backup from another install with its own "shelf") comes in under a free id (`shelf_2`, named
+  "Shelf (2)"), and the restored plans place it under that id, so no placed item changes. The restore lists the
+  renamed items, and the items past the limit of 1,000 that it skipped.
 
 ## Old single-file packs (v1)
 

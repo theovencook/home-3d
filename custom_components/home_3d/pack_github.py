@@ -28,7 +28,7 @@ from yarl import URL
 
 from .packs import (
     MAX_FILE_SIZE,
-    MAX_FOLDER_SIZE,
+    MAX_FOLDER_BYTES,
     MAX_ITEMS,
     MAX_STRINGS_SIZE,
     PACK_FILE,
@@ -44,7 +44,8 @@ ALLOWED_HOSTS = frozenset({"github.com", "api.github.com", "raw.githubuserconten
 MAX_FILE_BYTES = MAX_FILE_SIZE * 4
 # a language pack's strings.json (#196) may be larger
 MAX_STRINGS_BYTES = MAX_STRINGS_SIZE * 4
-MAX_FOLDER_BYTES = MAX_FOLDER_SIZE * 4
+# the whole folder: the same byte limit as a folder import (#375; the files' bytes are at most what is sent), so a
+# pack installed by URL also imports as a folder. The downloaded files are then checked like one (packs.py).
 # files in the pack folder (data files plus a readme and a licence text); more is refused before any download
 MAX_FILES = MAX_ITEMS + 10
 # an answer of the GitHub API (the file list of a large repository is the biggest)
@@ -60,6 +61,34 @@ _REPO = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 _REF = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$")
 _FOLDER_PART = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$")
 _SHA = re.compile(r"^[0-9a-f]{40}$")
+
+# how long update checks wait after GitHub refused without saying for how long (#377), and the bounds of a wait
+DEFAULT_BACKOFF = 3600
+BACKOFF_RANGE = (60, 6 * 3600)
+
+
+class RateLimited(PackError):
+    """GitHub refused (403 / 429, a rate limit): code "fetch_failed", and `retry_at`, when to ask again (#377)."""
+
+    def __init__(self, detail: str, headers: Any) -> None:
+        super().__init__("fetch_failed", detail)
+        self.retry_at = _retry_at(headers, time.time())
+
+
+def _retry_at(headers: Any, now: float) -> float:
+    """When GitHub may be asked again: its Retry-After, else the reset time of a used-up rate limit, else in an
+    hour; at least a minute and at most six hours from now."""
+    try:
+        if (after := headers.get("Retry-After")) is not None:
+            at = now + float(after)
+        elif headers.get("X-RateLimit-Remaining") == "0" and (reset := headers.get("X-RateLimit-Reset")) is not None:
+            at = float(reset)
+        else:
+            at = now + DEFAULT_BACKOFF
+    except (TypeError, ValueError):
+        at = now + DEFAULT_BACKOFF
+    return min(max(at, now + BACKOFF_RANGE[0]), now + BACKOFF_RANGE[1])
+
 
 URL_HINT = "paste https://github.com/<owner>/<repo> or https://github.com/<owner>/<repo>/tree/<branch>/<folder>"
 
@@ -145,7 +174,7 @@ async def _get(session: aiohttp.ClientSession, url: str, limit: int, what: str) 
                 if response.status == 404:
                     raise PackError("not_found", f"{what}: not found on GitHub (or the repository is private)")
                 if response.status in (403, 429):
-                    raise PackError("fetch_failed", f"{what}: GitHub refused (rate limit?); try again later")
+                    raise RateLimited(f"{what}: GitHub refused (rate limit?); try again later", response.headers)
                 if response.status != 200:
                     raise PackError("fetch_failed", f"{what}: GitHub answered {response.status}")
                 return await _read(response, limit, what)

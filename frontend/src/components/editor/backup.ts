@@ -8,7 +8,7 @@ import { storedImageIds } from "../../transfer.ts";
 import { normalizeBuilding } from "../../model.ts";
 import type { Building } from "../../model.ts";
 import { errorText, isImagesFull } from "../../failure.ts";
-import { checkBackup, fetchBackup, restoreBackup, type BackupFile, type BackupHome } from "../../api.ts";
+import { fetchBackup, type BackupFile, type BackupHome } from "../../api.ts";
 import { migratePlanTypes } from "../../packs.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
@@ -99,6 +99,8 @@ export class BackupPart {
     if (!(await this.ask(this.t("backup_full_confirm"), this.t("backup_restore")))) return;
     this._backupBusy = true;
     try {
+      // a lazy chunk of its own (#375): the parts and sizes of a large backup
+      const { checkBackup, restoreBackup } = await import("../../backup-send.ts");
       // several homes (#53): one restore per home keeps each message small (a plan can be megabytes); a file from
       // before them restores its one plan onto the home being edited
       const homes = data.homes?.length ? data.homes : null;
@@ -117,6 +119,8 @@ export class BackupPart {
       let pictures = 0;
       let full = false;
       const done: string[] = [];
+      // custom items whose id was taken here by another item came in under a new id (#376)
+      const renamed = new Set<string>();
       for (const [i, part] of parts.entries()) {
         try {
           res = await restoreBackup(this.hass, ...message(part, i));
@@ -128,6 +132,7 @@ export class BackupPart {
           return;
         }
         if (part.home) done.push(part.home.name);
+        for (const r of res.renamed ?? []) renamed.add(`${r.id} → ${r.as}`);
         for (const [id, picture] of Object.entries(part.images)) {
           try {
             await storeImage(this.hass, id, picture, part.home?.id ?? res.home_id ?? this.home);
@@ -149,11 +154,17 @@ export class BackupPart {
       }
       this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
       const skipped = res.skipped.length ? ` ${this.t("backup_full_skipped", { packs: res.skipped.map((s) => s.id).join(", ") })}` : "";
-      this._notice = this.t("backup_full_restored", { packs: res.packs, pictures }) + skipped;
+      const moved = renamed.size ? ` ${this.t("backup_items_renamed", { items: [...renamed].join(", ") })}` : "";
+      this._notice = this.t("backup_full_restored", { packs: res.packs, pictures }) + skipped + moved;
     } catch (err) {
       // a lost connection comes as the whole result message ({ error: { code, message } }), e.g. when the backup is
       // larger than Home Assistant takes in one message
       const e = (err ?? {}) as { code?: string | number; message?: string; error?: { code?: string | number; message?: string } };
+      // a pack or a plan larger than one message takes (#375): said before anything is sent
+      if (e.code === "backup_too_large") {
+        await this.tell(this.t("backup_part_too_large", { detail: String(e.message ?? "") }));
+        return;
+      }
       await this.tell(this.t("backup_import_error", { error: String(e.message ?? e.error?.message ?? e.code ?? e.error?.code ?? err) }));
     } finally {
       this._backupBusy = false;

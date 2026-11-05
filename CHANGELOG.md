@@ -24,6 +24,12 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - The locating room sensors write a state only when their own room or settings change, and once a minute while the device is heard; probability, since and last_seen stay in the state but are no longer recorded (#365).
 - Locating after a reload of Home 3D: open views follow the new service at once, a change made just before is kept, the lab recorder stops with the entry (and its recordings are deleted when Home 3D is removed), a presence sensor moved to another area confirms its new room, and locating switched on before Bluetooth has loaded starts once it has (#368).
 - Locating does far less work each second in a big house: a faster distance, the pooled samples built once per estimate and capped at 120 a room, and a window measured only against the samples of the four rooms whose middle is nearest; 4 learned devices x 12 rooms plus 5 devices on the pool went from 93 ms to about 5 ms an estimate (#370).
+- Packs: no pack replaces one of another kind; only Home 3D's own GitHub account may use the `theovencook.` ids and publisher, replacing a bundled or official pack asks first naming it, an index entry installs only the pack it names, and only the default index marks packs official (#372).
+- Packs: the installed release with other content or from another place asks first (also for a pinned pack) and can be rolled back; auto-update holds a release that changes the kind or publisher or removes placed items, and says why (#373).
+- Packs: the pack index is read and checked outside the event loop, and the list of placed items with an update compares stored hashes before checking any copy again (#374).
+- Packs: a folder import is measured before it is sent (too large instead of a dropped connection), GitHub installs keep to the same byte limit, and a full backup sends large packs ahead in parts (#375).
+- Backup restore: packs go through the checks of an import (sizes, kept files, one entry per id, pins, older releases, kind, rollback), and a custom item whose id is taken by a different local item comes in renamed with the restored plans following; renamed and skipped items are listed (#376).
+- Pack update checks ask GitHub outside the lock (imports, removals and roll backs no longer wait for the network), stop and back off on a rate limit, and save the round with per-pack errors when something unexpected fails (#377).
 
 ## Home 3D 1.0.0 (4 November 2026)
 

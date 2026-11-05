@@ -5,6 +5,7 @@ import type { Building } from "./model.ts";
 import type { PackPreview, PackUpdateSettings, PackUpdateStatus } from "./pack-updates.ts";
 import type { FurniturePack, PackItem, PackOrigin, PlanRecipe } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
+import { checkFits } from "./ws-size.ts";
 
 /** A home (#53) a call is about: left out, the active one (a backend from before #53 has only that). */
 const at = (home?: string | null): { home_id?: string } => (home ? { home_id: home } : {});
@@ -221,41 +222,50 @@ export interface ImportedPack {
   texts?: number;
 }
 
+
 /**
  * Import an old single-file pack; the backend checks its content (errors carry a code, e.g. "invalid_content"). An
  * older release than the installed one, or another release of a pinned pack, is refused ("older_release", "pinned")
  * unless `confirm` (#26; see askingFirst in pack-updates.ts).
  */
 export async function importPack(hass: HomeAssistant, text: string, confirm = false): Promise<ImportedPack> {
-  return hass.callWS<ImportedPack>({ type: "home_3d/packs/import", pack: text, ...(confirm ? { confirm } : {}) });
+  const msg = { type: "home_3d/packs/import", pack: text, ...(confirm ? { confirm } : {}) };
+  // a message Home Assistant can't take would drop the connection: refused here as too large (#375)
+  checkFits(msg);
+  return hass.callWS<ImportedPack>(msg);
 }
 
 /** Import a v2 pack folder (path inside the folder -> file text); the backend checks every file. */
 export async function importPackFolder(hass: HomeAssistant, files: Record<string, string>, confirm = false): Promise<ImportedPack> {
-  return hass.callWS<ImportedPack>({ type: "home_3d/packs/import", files, ...(confirm ? { confirm } : {}) });
+  const msg = { type: "home_3d/packs/import", files, ...(confirm ? { confirm } : {}) };
+  checkFits(msg);
+  return hass.callWS<ImportedPack>(msg);
 }
 
 /**
  * Install a pack from a GitHub URL (a repo, or a pack folder in one); Home Assistant fetches and checks it (#25).
- * With `commit` (from a preview, #189) it is refused unless the ref still points at that commit.
+ * With `commit` (from a preview, #189) it is refused unless the ref still points at that commit; with `packId` (an
+ * index entry's, #372) unless the URL holds that pack ("id_mismatch").
  */
 export async function installPackFromUrl(
   hass: HomeAssistant,
   url: string,
   confirm = false,
   commit?: string,
+  packId?: string,
 ): Promise<ImportedPack & { origin: PackOrigin }> {
   return hass.callWS<ImportedPack & { origin: PackOrigin }>({
     type: "home_3d/packs/install_url",
     url,
     ...(confirm ? { confirm } : {}),
     ...(commit ? { commit } : {}),
+    ...(packId ? { pack_id: packId } : {}),
   });
 }
 
 /** What installing the pack at a GitHub URL (or updating to it) would change; nothing is installed (#189). */
-export function previewPackFromUrl(hass: HomeAssistant, url: string): Promise<PackPreview> {
-  return hass.callWS<PackPreview>({ type: "home_3d/packs/preview_url", url });
+export function previewPackFromUrl(hass: HomeAssistant, url: string, packId?: string): Promise<PackPreview> {
+  return hass.callWS<PackPreview>({ type: "home_3d/packs/preview_url", url, ...(packId ? { pack_id: packId } : {}) });
 }
 
 /** Pack updates (#26): the settings, the installed packs and the placed items with an update. */
@@ -320,34 +330,6 @@ export function fetchBackup(hass: HomeAssistant): Promise<Pick<BackupFile, "form
   return hass.callWS({ type: "home_3d/backup/export" });
 }
 
-/** Replace plan and packs (and the custom items, when the backup has them) from a backup (pictures follow one by
- * one); packs and items that fail their check are skipped. With `homes` (#53) every home in the backup is restored
- * (onto the home with its id, or added) and `building` may be null; without, `building` replaces the plan of `home`
- * (default: the active one). */
-/** Restore (a part of) a backup. Packs and custom items left out stay as they are; the ones given are restored onto
- * the installed ones with the same id (#153). A failure undoes the part and is the error "restore_failed". */
-export function restoreBackup(
-  hass: HomeAssistant,
-  building: Building | null,
-  packs?: FurniturePack[],
-  items?: PackItem[],
-  homes?: { homes: Omit<BackupHome, "images">[]; active?: string },
-  home?: string | null,
-): Promise<{ revision: number; building: Building; home_id?: string; packs: number; items?: number; skipped: { id: string; reason: string }[] }> {
-  return hass.callWS({ type: "home_3d/backup/import", ...at(home), ...(building ? { building } : {}), ...(packs ? { packs } : {}), ...(items ? { items } : {}), ...(homes ?? {}) });
-}
-
-/** Check (a part of) a backup without restoring anything (#153); throws "invalid_format" for one that would fail. */
-export function checkBackup(
-  hass: HomeAssistant,
-  building: Building | null,
-  packs?: FurniturePack[],
-  items?: PackItem[],
-  homes?: { homes: Omit<BackupHome, "images">[] },
-  home?: string | null,
-): Promise<{ checked: boolean; skipped: { id: string; reason: string }[] }> {
-  return hass.callWS({ type: "home_3d/backup/import", check_only: true, ...at(home), ...(building ? { building } : {}), ...(packs ? { packs } : {}), ...(items ? { items } : {}), ...(homes ?? {}) });
-}
 
 export type SentenceMode = "distinct" | "all" | "off";
 

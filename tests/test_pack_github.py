@@ -83,8 +83,8 @@ async def _client(hass: HomeAssistant, hass_ws_client, token: str | None = None)
     return await hass_ws_client(hass, token) if token else await hass_ws_client(hass)
 
 
-async def _install(client, url: str) -> dict:
-    await client.send_json_auto_id({"type": "home_3d/packs/install_url", "url": url})
+async def _install(client, url: str, **extra) -> dict:
+    await client.send_json_auto_id({"type": "home_3d/packs/install_url", "url": url, **extra})
     return await client.receive_json()
 
 
@@ -398,7 +398,11 @@ async def test_a_url_install_of_a_bundled_pack_follows_the_import_rule(
     assert [p["id"] for p in listed].count("theovencook.living") == 1
 
     repo_at(bundled_release)
-    assert (await _install(client, url))["success"]
+    # it takes the bundled one's place: that asks first, naming it (#372)
+    asked = await _install(client, url)
+    assert asked["error"]["code"] == "replaces_bundled" and "theovencook.living" in asked["error"]["message"]
+    repo_at(bundled_release)
+    assert (await _install(client, url, confirm=True))["success"]
     cores = [p for p in await _all_listed(client) if p["id"] == "theovencook.living"]
     assert [(p["name"], p.get("bundled", False)) for p in cores] == [(f"Core release {bundled_release}", False)]
     assert cores[0]["source"]["origin"]["folder"] == "theovencook.living"
