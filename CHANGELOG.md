@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- Time travel answers the car trackers of every home, or of the home a request names (optional `home_id`), not only the active one (#371).
+
 ## Home 3D 1.0.0 (4 November 2026)
 
 - A TV reached through several integrations (several media players on one item or within half a metre) shows one now-playing card: the playing player, else a paused one with a title, else the first (#356).
