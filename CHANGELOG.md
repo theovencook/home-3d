@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- Holiday effects are gentler and no longer run all the time: fewer, fainter pieces and a lighter edge glow, shown for 15 seconds when the view opens, then they fade out. A new house setting, Holidays > Holiday effect (off / brief / 1 minute / always), changes how long (#385).
+
 ## Home 3D 1.0.1 (5 November 2026)
 
 - Every bundled language now has all the texts: about 1,300 texts that were missing in the 16 languages other than English and German (and some Home Assistant service and options texts) are translated, so they no longer show in English.
