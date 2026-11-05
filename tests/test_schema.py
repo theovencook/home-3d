@@ -1,5 +1,6 @@
 """Start views of the house, a floor and a room (#206, #282)."""
 
+import copy
 import json
 from pathlib import Path
 import re
@@ -22,6 +23,8 @@ from custom_components.home_3d.schema import (
     START_VIEW_SCHEMA,
     empty_building,
 )
+from custom_components.home_3d.storage import check_plan
+from tests.test_init import BUILDING
 
 ROOM = {"id": "r1", "name": "Bad", "area_id": None, "points": [[0, 0], [2, 0], [2, 2]], "floor_material": "tiles"}
 
@@ -629,7 +632,16 @@ def test_url_actions_are_web_addresses_only() -> None:
     for ok in ("https://example.com/a?b=1", "http://192.168.1.10:8123/", "/lovelace/0", "/local/x.pdf"):
         tap = PLACEMENT_SCHEMA({**dev, "actions": {"tap": {"action": "url", "target": ok}}})["actions"]["tap"]
         assert tap["target"] == ok
-    for bad in ("javascript:alert(1)", " JavaScript:alert(1)", "data:text/html,x", "//evil.example", "ftp://x", "x"):
+    backslashed = ("/\\evil.example", "/\\/evil.example", "/\\")  # #384
+    for bad in (
+        "javascript:alert(1)",
+        " JavaScript:alert(1)",
+        "data:text/html,x",
+        "//evil.example",
+        *backslashed,
+        "ftp://x",
+        "x",
+    ):
         with pytest.raises(vol.Invalid):
             PLACEMENT_SCHEMA({**dev, "actions": {"tap": {"action": "url", "target": bad}}})
 
@@ -830,3 +842,18 @@ def test_price_from_one_sensor_or_peak_and_cheap() -> None:
     for bad in ({"price_mode": "three"}, {"price_peak": ""}, {"price_cheap": 5000}, {"price_peak": ["x"]}):
         with pytest.raises(vol.Invalid):
             ENERGY_SCHEMA(bad)
+
+
+def test_a_stored_link_to_a_backslash_path_loads_with_the_target_left_out() -> None:
+    """A plan stored with a backslash path as a url target (it passed before #384) still loads: the bad target is
+    dropped by the repair of check_plan and the plan is marked as repaired; the rest of the item stays."""
+    plan = copy.deepcopy(BUILDING)
+    tap = {"action": "url", "target": "/\\evil.example"}
+    placement = {"entity_id": "switch.gate", "x": 0, "z": 0, "y": None, "actions": {"tap": tap}}
+    plan["floors"][0]["placements"] = [placement]
+    fixed, problem = check_plan(plan)
+    assert problem is not None and problem["code"] == "plan_repaired"
+    assert problem["dropped"] == ["floors.0.placements.0.actions.tap.target"]
+    kept = fixed["floors"][0]["placements"][0]
+    assert kept["entity_id"] == "switch.gate"
+    assert kept["actions"]["tap"].get("target") is None

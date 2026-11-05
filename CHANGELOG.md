@@ -15,6 +15,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - The lights-to-lamps migration keeps a light's mount height as the lamp's `mount_y`, on the server and in the browser (#381).
 - A drag in the editor that is still held when someone else's plan arrives (a reload, or a refused save loading their plan) ends there instead of writing the older plan back over theirs on the next move, Esc, second finger or release (#382).
 - Pasting or duplicating an item as a non-admin editor drops its perform actions from the copy (with a notice), so the copy no longer locks every later save; a save refused for that reason names the item (#383).
+- The 3D view's quick changes (settings, hiding a room) now count as undo steps, so opening the editor afterwards keeps the history. A picture on a screen that failed to load is tried again after a minute, and the picture cache is emptied when the home changes and kept small. A closed editor or 3D view no longer stays in memory through the back button's bookkeeping. A link on an item to another website always asks first and names the site; paths like `//host` and `/\host` are no longer accepted as paths (a stored plan with one loads with that link target left out). The media cover in the quick menu no longer breaks on addresses with spaces or brackets (#384).
 
 ## Home 3D 1.0.0 (4 November 2026)
 

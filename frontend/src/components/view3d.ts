@@ -135,6 +135,7 @@ import type { RackDraw, RackElevation } from "../rack-elevation.ts";
 type RackView = RackElevation & { name: string };
 import { fetchImage } from "../api.ts";
 import { FallbackPlanSaver } from "../plan-fallback.ts";
+import { PictureCache } from "../picture-cache.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { timeStyleOf } from "../time-text.ts";
 import { holdTarget } from "../hold.ts";
@@ -829,7 +830,7 @@ export class Fp3dView3d extends LitElement {
   /** Entities whose state changes redraw markers, cables, people and floor labels. */
   private watched: string[] = [];
   /** Stored images used as screen pictures, as data URLs (fetched once); null while loading or missing. */
-  private pictureUrls = new Map<string, string | null>();
+  private pictureUrls = new PictureCache();
   /** Screens showing a camera: their snapshots are refreshed every few seconds (a changing query parameter). */
   private cameraTick = 0;
   private cameraTimer: ReturnType<typeof setInterval> | undefined;
@@ -1275,6 +1276,7 @@ export class Fp3dView3d extends LitElement {
     // without a new hass runs only part of that work, so it adds to what the last one read
     this.hassWatch.begin(!changed.has("hass"));
     // this bundle's own copy of the ground: lamps and markers on a sloped lawn sit on it
+    if (changed.has("home")) this.pictureUrls.clear();
     if (changed.has("building")) {
       setTerrain(this.building ?? null);
       setCameraSensors(this.building);
@@ -4320,10 +4322,14 @@ export class Fp3dView3d extends LitElement {
       this.cameraScreens++;
       return picture.startsWith("data:") ? picture : `${picture}${picture.includes("?") ? "&" : "?"}fp3d=${this.cameraTick}`;
     }
-    if (this.pictureUrls.has(image)) return this.pictureUrls.get(image) ?? null;
+    const cached = this.pictureUrls.get(image);
+    if (!cached.fetch) return cached.url;
     this.pictureUrls.set(image, null);
-    fetchImage(this.hass, image, this.home).then(
+    const home = this.home;
+    fetchImage(this.hass, image, home).then(
       (url) => {
+        // the home changed meanwhile: this picture is not of the home shown any more
+        if (home !== this.home) return;
         this.pictureUrls.set(image, url);
         this.syncDevices(true);
       },
@@ -6560,6 +6566,8 @@ export class Fp3dView3d extends LitElement {
         window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
       },
       openUrl: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
+      ownHost: location.host,
+      externalText: (host) => translate(hass, "action_external_ask", { host }),
       confirm: (text) => this.ask(text ?? translate(hass, "action_confirm_default", { name: owner.entity ? entityName(hass, owner.entity) : translate(hass, "action_this_item") })),
     }).catch((err: unknown) => this.showNote(translate(hass, "action_failed", { error: err instanceof Error ? err.message : String(err) })));
   }

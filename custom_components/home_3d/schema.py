@@ -439,7 +439,8 @@ SHOW_WHEN_SCHEMA = vol.Schema(
 )
 
 # a url action opens a web page or a path on this Home Assistant, never javascript: or another scheme (#51)
-_WEB_ADDRESS = re.compile(r"^(https?://[^\s]+|/(?!/)\S*)$", re.IGNORECASE)
+# "//host" and "/\host" are other hosts, not paths (#384): a browser reads the backslash as a slash
+_WEB_ADDRESS = re.compile(r"^(https?://[^\s]+|/(?![/\\])\S*)$", re.IGNORECASE)
 
 
 def _web_address_only(action: dict) -> dict:

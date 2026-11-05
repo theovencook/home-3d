@@ -424,6 +424,7 @@
  "action_confirm_ok": "Ausführen",
  "action_confirm_default": "{name}: wirklich ausführen?",
  "action_this_item": "Dieses Teil",
+ "action_external_ask": "Das öffnet {host}, eine Seite außerhalb von Home Assistant. Öffnen?",
  "action_failed": "Die Aktion ist fehlgeschlagen: {error}",
  "device_confirm": "Vor dem Schalten nachfragen",
  "device_confirm_hint": "Beim Antippen in 3D, im Schnellmenü und im Raumfenster erscheint erst eine Rückfrage. Doppeltipp auf den Raum lässt dieses Gerät aus.",

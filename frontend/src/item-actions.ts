@@ -63,6 +63,10 @@ export interface ActionEnv {
   openUrl(url: string): void;
   /** Ask in the app's own dialog; the text is the editor's (null: the default question). */
   confirm(text: string | null): Promise<boolean>;
+  /** The host Home Assistant is served from; a link to any other host asks first (#384). */
+  ownHost: string;
+  /** The question for a link to another host, naming `host`. */
+  externalText(host: string): string;
 }
 
 /** Run an action of an item whose own entity is `itemEntity`; false when nothing ran (nothing to do, or cancelled). */
@@ -70,8 +74,22 @@ export async function runItemAction(action: ItemAction, itemEntity: string | nul
   const run = plan(action, itemEntity, env);
   if (!run) return false;
   if (action.confirm && !(await env.confirm(action.confirm_text?.trim() || null))) return false;
+  // a link to another host always asks, whatever the item says: an editor must not send a wall tablet to a site unasked (#384)
+  const host = action.action === "url" ? otherHost(action.target?.trim() ?? "", env.ownHost) : null;
+  if (host && !(await env.confirm(env.externalText(host)))) return false;
   await run();
   return true;
+}
+
+/** The host of an http(s) address when it is not `own`; null for a path on this Home Assistant or the own host. */
+export function otherHost(target: string, own: string): string | null {
+  if (!/^https?:\/\//i.test(target)) return null;
+  try {
+    const host = new URL(target).host;
+    return host && host.toLowerCase() !== own.toLowerCase() ? host : null;
+  } catch {
+    return null;
+  }
 }
 
 /** What an action does, or null when it cannot run (no target, not a service). */
@@ -85,8 +103,9 @@ function plan(action: ItemAction, itemEntity: string | null, env: ActionEnv): ((
     case "navigate":
       return target ? () => env.navigate(target) : null;
     case "url":
-      // http(s) or a path on this Home Assistant only, never javascript: or another scheme (#51)
-      return /^(https?:\/\/\S+|\/(?!\/)\S*)$/i.test(target) ? () => env.openUrl(target) : null;
+      // http(s) or a path on this Home Assistant only, never javascript: or another scheme (#51); "//host" and "/\host"
+      // are other hosts, not paths (#384). A link to another host asks first (runItemAction).
+      return /^(https?:\/\/\S+|\/(?![/\\])\S*)$/i.test(target) && (target[0] === "/" || URL.canParse(target)) ? () => env.openUrl(target) : null;
     case "toggle":
     case "more_info":
     case "camera": {
