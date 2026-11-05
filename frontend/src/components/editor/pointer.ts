@@ -75,6 +75,29 @@ export class PointerPart {
     this.fixedPan = true;
   }
 
+  /**
+   * Another plan was swapped in during a gesture (#382: a reload, someone else's save, the #149 conflict path). Every
+   * gesture that edits the plan holds the plan from before it as its base and writes base + its change on each move,
+   * on a cancel (second finger, pointercancel, a fixed item) and into the history on release, which would save the old
+   * plan over the new one. Such gestures end here without writing anything; the new plan stays as it came. Panning,
+   * pinching, framing and drawing hold no plan and go on (a drawn room is added to the new plan when let go).
+   */
+  dropPlanGestures(this: Fp3dEditor): void {
+    if (this.drag && "base" in this.drag) {
+      this.drag = null;
+      this._guides = {};
+      // a long press on the item dropped opens no menu on it
+      clearTimeout(this.pressTimer);
+      this.pressStart = null;
+    }
+    this.runDrag = null;
+    this.fitDrag = null;
+    this.jointDrag = null;
+    this.lift = null;
+    this.wallDrag = null;
+    this.wallResize = null;
+  }
+
   pointerDown(this: Fp3dEditor, e: PointerEvent): void {
     const svgEl = e.currentTarget as SVGSVGElement;
     svgEl.setPointerCapture(e.pointerId);

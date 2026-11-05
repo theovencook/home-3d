@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- A drag in the editor that is still held when someone else's plan arrives (a reload, or a refused save loading their plan) ends there instead of writing the older plan back over theirs on the next move, Esc, second finger or release (#382).
+
 ## Home 3D 1.0.0 (4 November 2026)
 
 - A TV reached through several integrations (several media players on one item or within half a metre) shows one now-playing card: the playing player, else a paused one with a title, else the first (#356).
