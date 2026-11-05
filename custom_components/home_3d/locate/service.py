@@ -10,13 +10,14 @@ import re
 import time
 from typing import Any
 
-from homeassistant.const import EVENT_STATE_CHANGED
+from homeassistant.const import EVENT_COMPONENT_LOADED, EVENT_STATE_CHANGED
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
+from homeassistant.setup import EventComponentLoaded
 
 from ..const import SIGNAL_BUILDING_UPDATED, SIGNAL_HOMES_UPDATED
 from .engine import AWAY_AFTER, OWN_SHARE, STEP, THING_AWAY_AFTER, Fingerprints, RoomTracker, evidence
@@ -36,9 +37,16 @@ CALIBRATE_SECONDS = 90
 SAMPLE_EVERY = 2.0
 NEARBY_KEEP = 30.0
 MAX_SAMPLES_PER_ROOM = 120
+# seconds: a device that is heard has its last_seen sent on at least this often, though its room stays (#365)
+LAST_SEEN_REFRESH = 60.0
 PRESENCE_CLASSES = {"motion", "occupancy", "presence"}
 # worn on the body: it tells where its person is (a phone may lie somewhere)
 WORN = re.compile(r"watch|uhr|band|ring|fit|garmin|wear", re.IGNORECASE)
+
+
+@callback
+def _is_bluetooth(data: EventComponentLoaded) -> bool:
+    return data["component"] == "bluetooth"
 
 
 def worn_by_name(device: dict[str, Any]) -> bool:
@@ -81,6 +89,7 @@ class LocateService:
         # again against every sample (a quiet device repeats its window second after second)
         self._pool_serial = 0
         self._evidence: dict[str, tuple[tuple[Any, ...], dict[str, float]]] = {}
+        self._announced_seen: dict[str, float] = {}  # last_seen per device when SIGNAL_LOCATE was last sent
         self.rooms: list[dict[str, Any]] = []  # {id, name, floor, area_id}
         self.doors: list[tuple[str, str]] = []
         self.fingerprints: dict[str, Fingerprints] = {}
@@ -93,7 +102,9 @@ class LocateService:
         # the rooms and doors the trackers were made for: they are kept while these stay (#169)
         self._tracker_plan: tuple[tuple[str, ...], tuple[tuple[str, str], ...]] | None = None
         self._unsub: Callable[[], None] | None = None
-        self._unsub_sensors: Callable[[], None] | None = None
+        self._listeners: list[Callable[[], None]] = []  # presence sensors and registry changes, while running
+        self._unsub_wait: Callable[[], None] | None = None  # waiting for Bluetooth to load (#368)
+        self._save_pending = False
         self._sensor_rooms: dict[str, str | None] = {}
         self._last_step = 0.0
         self._last_sample = 0.0
@@ -142,7 +153,20 @@ class LocateService:
 
     @callback
     def _save(self) -> None:
-        self._store.async_delay_save(self._data, 5)
+        self._save_pending = True
+        self._store.async_delay_save(self._written, 5)
+
+    def _written(self) -> dict[str, Any]:
+        """The data the delayed save writes now (it is no longer pending)."""
+        self._save_pending = False
+        return self._data()
+
+    async def async_unload(self) -> None:
+        """Stop, and write a save still waiting for its delay (#368): the entry loaded again right after a change
+        reads it, and the old delayed save cannot land on top of the new service's."""
+        self.stop()
+        if self._save_pending:
+            await self._store.async_save(self._written())
 
     def _rebuild(self) -> None:
         """Trackers for the devices, rooms and doors. A device keeps its tracker (and so its current room) while the
@@ -327,13 +351,18 @@ class LocateService:
 
     def pooled(self) -> Fingerprints:
         """Every device's samples together: a device that was never walked with uses what the others learned
-        (two watches see the rooms alike). Cached until a sample changes."""
+        (two watches see the rooms alike). At most MAX_SAMPLES_PER_ROOM a room, as many as one device learns: the
+        newest of each device in turn (#370; devices x 120 a room made every estimate of such a device that many
+        times dearer). Cached until a sample changes."""
         key = tuple((dev, id(fp), fp.stamp()) for dev, fp in self.fingerprints.items())
         if self._pooled is None or self._pooled[0] != key:
             merged = Fingerprints()
+            per_room: dict[str, list[list[dict[str, float]]]] = {}
             for fp in self.fingerprints.values():
                 for room, vectors in fp.samples.items():
-                    merged.samples.setdefault(room, []).extend(vectors)
+                    per_room.setdefault(room, []).append(vectors)
+            for room, lists in per_room.items():
+                merged.samples[room] = _even_share(lists, MAX_SAMPLES_PER_ROOM)
             self._pool_serial += 1
             merged.version = self._pool_serial  # a new set is never mistaken for the one it replaced
             self._pooled = (key, merged)
@@ -346,9 +375,39 @@ class LocateService:
 
     @callback
     def start(self) -> None:
-        if self._unsub is None and self._bluetooth():
-            self._unsub = async_track_time_interval(self.hass, self._tick, POLL)
-            self._unsub_sensors = self.hass.bus.async_listen(EVENT_STATE_CHANGED, self._presence_changed)
+        if self._unsub is not None:
+            return
+        if not self._bluetooth():
+            # Bluetooth may set up after Home 3D (at a start, or added later): start once it has loaded (#368)
+            if self._unsub_wait is None:
+                self._unsub_wait = self.hass.bus.async_listen(
+                    EVENT_COMPONENT_LOADED, self._bluetooth_loaded, event_filter=_is_bluetooth
+                )
+            return
+        self._unsub = async_track_time_interval(self.hass, self._tick, POLL)
+        self._sensor_rooms = {}  # the areas may have changed while it was off
+        self._listeners = [
+            self.hass.bus.async_listen(EVENT_STATE_CHANGED, self._presence_changed),
+            # a presence sensor (or its device) moved to another area confirms that area's room from now on (#368)
+            self.hass.bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, self._registry_changed),
+            self.hass.bus.async_listen(dr.EVENT_DEVICE_REGISTRY_UPDATED, self._registry_changed),
+        ]
+
+    @callback
+    def _bluetooth_loaded(self, _event: Event[EventComponentLoaded]) -> None:
+        self._stop_waiting()
+        # the next tick stops it again when nothing asks for it any more
+        self.start()
+
+    @callback
+    def _stop_waiting(self) -> None:
+        if self._unsub_wait is not None:
+            self._unsub_wait()
+            self._unsub_wait = None
+
+    @callback
+    def _registry_changed(self, _event: Event[Any]) -> None:
+        self._sensor_rooms = {}  # looked up again on the next presence change (cheap, one registry read each)
 
     def _sensor_room(self, entity_id: str) -> str | None:
         """The plan room of a presence sensor: its area (or its device's) linked to a room of the plan."""
@@ -391,12 +450,13 @@ class LocateService:
 
     @callback
     def stop(self) -> None:
+        self._stop_waiting()
         if self._unsub is not None:
             self._unsub()
             self._unsub = None
-        if self._unsub_sensors is not None:
-            self._unsub_sensors()
-            self._unsub_sensors = None
+        for unsub in self._listeners:
+            unsub()
+        self._listeners = []
         self.state = {}
         self.calibration = None
         async_dispatcher_send(self.hass, SIGNAL_LOCATE)
@@ -493,10 +553,10 @@ class LocateService:
     def _estimate(self, now: float) -> None:
         changed = False
         names = {r["id"]: r for r in self.rooms}
+        pooled = self.pooled()  # once per estimate, not per device (#370)
         for dev, tracker in self._trackers.items():
             window = tracker.adaptive_window(now)
             own = self.fingerprints.get(dev)
-            pooled = self.pooled()
             # its own learning alone only when it covers most rooms (an iPhone in a pocket may have learned few)
             full = own is not None and len(own.rooms()) >= max(2, OWN_SHARE * len(pooled.rooms()))
             learned = own if full else pooled
@@ -514,8 +574,11 @@ class LocateService:
             old = self.state.get(dev)
             if old is None or old["room"] != new["room"] or abs(old["probability"] - new["probability"]) > 0.1:
                 changed = True
+            elif (est.last_seen or 0.0) - self._announced_seen.get(dev, 0.0) >= LAST_SEEN_REFRESH:
+                changed = True  # heard on in the same room: the sensors refresh last_seen now and then (#365)
             self.state[dev] = new
         if changed:
+            self._announced_seen = {dev: st.get("last_seen") or 0.0 for dev, st in self.state.items()}
             async_dispatcher_send(self.hass, SIGNAL_LOCATE)
 
     # ------------------------------------------------------------------ calibration
@@ -568,6 +631,21 @@ class LocateService:
             ],
             "calibration": self.calibration_status(),
         }
+
+
+def _even_share(lists: list[list[dict[str, float]]], cap: int) -> list[dict[str, float]]:
+    """All samples of the lists when they are no more than `cap`; else the newest of each list in turn up to `cap`
+    (oldest first, like a device's own samples)."""
+    if sum(len(vectors) for vectors in lists) <= cap:
+        return [v for vectors in lists for v in vectors]
+    picked: list[dict[str, float]] = []
+    depth = 0
+    while len(picked) < cap:
+        for vectors in lists:
+            if depth < len(vectors) and len(picked) < cap:
+                picked.append(vectors[-1 - depth])
+        depth += 1
+    return picked[::-1]
 
 
 def quality(samples: dict[str, dict[str, list[dict[str, float]]]]) -> dict[str, Any]:

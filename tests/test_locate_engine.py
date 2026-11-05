@@ -1,6 +1,7 @@
 """The locating engine: pure logic, loaded straight from its file (no Home Assistant needed)."""
 
 import importlib.util
+import math
 from pathlib import Path
 import random
 import sys
@@ -240,3 +241,67 @@ def test_learning_and_dropping_change_the_stamp() -> None:
     before = fp.stamp()
     fp.drop("kitchen")
     assert fp.stamp() != before and fp.rooms() == []
+
+
+def _big_house(rng: random.Random) -> tuple["engine.Fingerprints", dict[str, tuple[float, float]]]:
+    """12 rooms in a 4 x 3 grid with a scanner in each, 120 samples a room (#370)."""
+    spots = {f"s{n}": (4.0 * (n % 4) + 2, 4.0 * (n // 4) + 2) for n in range(12)}
+
+    def heard(x: float, y: float) -> dict[str, float]:
+        out = {}
+        for s, (sx, sy) in spots.items():
+            rssi = -45 - 25 * math.log10(max(1.0, math.hypot(x - sx, y - sy))) + rng.gauss(0, 4)
+            if rssi > -92 and rng.random() > 0.15:
+                out[s] = round(rssi, 1)
+        return out
+
+    fp = engine.Fingerprints(
+        {
+            f"room{n}": [heard(sx + rng.uniform(-1.5, 1.5), sy + rng.uniform(-1.5, 1.5)) for _ in range(120)]
+            for n, (sx, sy) in enumerate(spots.values())
+        }
+    )
+    return fp, spots
+
+
+def test_a_big_house_is_measured_against_the_near_rooms_only(monkeypatch) -> None:
+    """#370: a window is measured against the samples of the CANDIDATE_ROOMS rooms whose middle is nearest; the
+    room it votes for is the one all samples vote for."""
+    rng = random.Random(370)
+    fp, spots = _big_house(rng)
+    agree = 0
+    windows = 200
+    for _ in range(windows):
+        x, y = rng.uniform(0, 16), rng.uniform(0, 12)
+        window = {
+            s: -45 - 25 * math.log10(max(1.0, math.hypot(x - sx, y - sy))) + rng.gauss(0, 3)
+            for s, (sx, sy) in spots.items()
+        }
+        window = {s: v for s, v in window.items() if v > -92 and rng.random() > 0.15}
+        every = engine.scores_from(fp.distances(window))
+        near = engine.evidence(fp, window, {})
+        agree += max(every, key=every.__getitem__) == max(near, key=near.__getitem__)
+    assert agree >= 0.98 * windows
+
+    calls = 0
+    real = engine.distance
+
+    def counting(a, b, miss=engine.MISS):
+        nonlocal calls
+        calls += 1
+        return real(a, b, miss)
+
+    monkeypatch.setattr(engine, "distance", counting)
+    engine.evidence(fp, {"s0": -50.0, "s1": -60.0, "s4": -62.0}, {})
+    # 12 room middles, then the 4 nearest rooms' samples: a third of the 1440
+    assert calls == 12 + engine.CANDIDATE_ROOMS * 120
+    # a small house is measured against everything (no middles needed)
+    assert calibrated(random.Random(1)).candidate_rooms({"s_kitchen": -60.0}) is None
+
+
+def test_the_room_middles_follow_the_samples() -> None:
+    fp = engine.Fingerprints({"kitchen": [{"a": -60.0, "b": -80.0}, {"a": -62.0}], "hall": [{"a": -80.0}]})
+    assert fp.middles() == {"kitchen": {"a": -61.0, "b": -80.0}, "hall": {"a": -80.0}}
+    assert fp.middles() is fp.middles()
+    fp.add("kitchen", {"a": -64.0})  # b now heard in only one of three samples: left out
+    assert fp.middles()["kitchen"] == {"a": -62.0}

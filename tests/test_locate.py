@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import math
+import random
 import time
 
-from homeassistant.core import Context, HomeAssistant
+from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -579,3 +581,316 @@ async def test_pooled_samples_follow_calibration_at_the_cap(hass: HomeAssistant)
     assert service.pooled() is not first
     assert service.pooled().samples["kitchen"] == [{"s1": -50.0}]
     assert service.pooled() is service.pooled()
+
+
+async def test_a_room_sensor_writes_only_its_own_changes(hass: HomeAssistant) -> None:
+    """#365: another device's change, a new probability or a fresher last_seen write nothing (and are not
+    recorded); a new room does, and last_seen is sent on once a LAST_SEEN_REFRESH."""
+    from custom_components.home_3d.locate.service import LAST_SEEN_REFRESH
+
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    second = {**WATCH, "id": "irk_second", "name": "Second", "key": "ffeeddccbbaa99887766554433221100"}
+    await service.async_configure({"devices": [WATCH, second], "rooms": ROOMS})
+    await hass.async_block_till_done()
+    entity_id = er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_locate_irk_watch")
+    writes: list[str] = []
+
+    @callback
+    def written(event) -> None:
+        if event.data["entity_id"] == entity_id:
+            writes.append(event.data["new_state"].state)
+
+    hass.bus.async_listen("state_changed", written)
+    now = time.time()
+    kitchen = {"room": "kitchen", "room_name": "Kitchen", "floor": "Ground", "area_id": "kitchen"}
+
+    def where(dev: str, room: dict, probability: float, seen: float) -> None:
+        service.state[dev] = {**room, "probability": probability, "since": now, "last_seen": seen}
+        async_dispatcher_send(hass, SIGNAL_LOCATE)
+
+    where("irk_watch", kitchen, 0.9, now)
+    await hass.async_block_till_done()
+    assert writes == ["Kitchen"]
+    where("irk_second", kitchen, 0.5, now)  # another device
+    where("irk_watch", kitchen, 0.6, now + 5)  # only probability and last_seen
+    await hass.async_block_till_done()
+    assert writes == ["Kitchen"]
+    state = hass.states.get(entity_id)
+    assert state.attributes["probability"] == 0.9 and state.attributes["last_seen"]
+    assert {"probability", "since", "last_seen"} <= state.state_info["unrecorded_attributes"]
+    assert "room_id" not in state.state_info["unrecorded_attributes"]
+    where("irk_watch", kitchen, 0.6, now + LAST_SEEN_REFRESH)  # heard on: last_seen is sent on
+    await hass.async_block_till_done()
+    assert writes == ["Kitchen", "Kitchen"]
+    assert hass.states.get(entity_id).attributes["probability"] == 0.6
+    where("irk_watch", {**kitchen, "room": "hall", "room_name": "Hall"}, 0.8, now + LAST_SEEN_REFRESH + 1)
+    await hass.async_block_till_done()
+    assert writes == ["Kitchen", "Kitchen", "Hall"]
+
+
+async def test_last_seen_is_sent_on_while_the_room_stays(hass: HomeAssistant) -> None:
+    """The service signals a device heard on in the same room once a LAST_SEEN_REFRESH (#365)."""
+    from custom_components.home_3d.locate.service import LAST_SEEN_REFRESH
+
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    await service.async_configure({"devices": [WATCH], "rooms": ROOMS})
+    signals = []
+    from homeassistant.helpers.dispatcher import async_dispatcher_connect
+
+    async_dispatcher_connect(hass, SIGNAL_LOCATE, lambda: signals.append(1))
+    tracker = service._trackers["irk_watch"]
+    now = time.time()
+    for second in range(int(LAST_SEEN_REFRESH) + 2):
+        tracker.add(now + second, "s1", -60.0)
+        service._estimate(now + second)
+    # the first estimate, then once more a minute later: not every second
+    assert len(signals) == 2
+
+
+async def test_a_subscription_follows_the_service_after_a_reload(hass: HomeAssistant, hass_ws_client) -> None:
+    """#368: an open view gets the new service's devices after a reload, and a change made just before the reload
+    (its save still waiting for the delay) is what the new service loads."""
+    entry = await _setup(hass)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "home_3d/locate/subscribe"})
+    assert (await client.receive_json())["success"]
+    assert (await client.receive_json())["event"]["devices"] == []
+    old: LocateService = hass.data[DATA_LOCATE]
+    await old.async_configure({"devices": [WATCH], "rooms": ROOMS})
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    new: LocateService = hass.data[DATA_LOCATE]
+    assert new is not old
+    assert [d["id"] for d in new.devices] == ["irk_watch"]
+    events = []
+    while True:
+        msg = await client.receive_json()
+        events.append(msg["event"])
+        if msg["event"]["devices"]:
+            break
+    assert [d["id"] for d in events[-1]["devices"]] == ["irk_watch"]
+    # from now on the new service answers
+    new.state["irk_watch"] = {"room": "kitchen", "room_name": "Kitchen", "probability": 0.9}
+    async_dispatcher_send(hass, SIGNAL_LOCATE)
+    for _ in range(5):  # after the events of the reload still on their way
+        devices = (await client.receive_json())["event"]["devices"]
+        if devices and "room" in devices[0]:
+            break
+    assert devices[0]["room"] == "kitchen"
+
+
+async def test_the_lab_recorder_stops_with_the_entry_and_goes_on_removal(
+    hass: HomeAssistant, hass_ws_client, tmp_path
+) -> None:
+    """#368: a recording running at unload stops (timer and listener) and writes its last lines; the recorder is
+    dropped; no new recording starts while Home 3D is unloaded; removing Home 3D deletes the recordings."""
+    import gzip
+    from pathlib import Path
+
+    from custom_components.home_3d.locate.recorder import DATA_RECORDER, FOLDER, get_recorder
+
+    hass.config.config_dir = str(tmp_path)
+    entry = await _setup(hass)
+    recorder = get_recorder(hass)
+    stopped = []
+    recorder.path = Path(hass.config.path(FOLDER, "rec-test.jsonl.gz"))
+    recorder.started = time.time()
+    recorder._unsubs = [lambda: stopped.append("timer"), lambda: stopped.append("listener")]
+    recorder.set_mark("kitchen", "Kitchen")
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert stopped == ["timer", "listener"]
+    assert DATA_RECORDER not in hass.data and not recorder.running
+    with gzip.open(tmp_path / FOLDER / "rec-test.jsonl.gz", "rt", encoding="utf-8") as f:
+        assert [line.split(",")[0] for line in f.read().split()] == ['{"type":"mark"', '{"type":"stop"']
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "home_3d/locate/rec", "action": "status"})
+    res = await client.receive_json()
+    assert res["error"]["code"] == "not_loaded"
+    assert DATA_RECORDER not in hass.data
+
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert not (tmp_path / FOLDER).exists()
+
+
+async def test_the_lab_recorder_forgets_old_addresses(hass: HomeAssistant, monkeypatch) -> None:
+    """#368: rotating Bluetooth addresses do not grow the recorder's memory for six hours."""
+    import sys
+    from types import SimpleNamespace
+
+    from custom_components.home_3d.locate import recorder as rec_module
+
+    await _setup(hass)
+    recorder = rec_module.get_recorder(hass)
+    for n in range(rec_module.MAX_RESOLVED):
+        recorder._resolved[f"addr{n}"] = None
+    recorder._who("AA:BB:CC:DD:EE:FF")
+    assert len(recorder._resolved) <= rec_module.MAX_RESOLVED
+    assert "AA:BB:CC:DD:EE:FF" in recorder._resolved and "addr0" not in recorder._resolved
+
+    monkeypatch.setitem(
+        sys.modules, "homeassistant.components.bluetooth", SimpleNamespace(async_current_scanners=lambda _hass: [])
+    )
+    mono = time.monotonic()
+    recorder.started = time.time()
+    recorder._seen = {("s1", "old"): mono - rec_module.SEEN_KEEP - 1, ("s1", "new"): mono - 1}
+    recorder._polls = rec_module.PRUNE_EVERY - 1
+    recorder._poll(None)
+    assert list(recorder._seen) == [("s1", "new")]
+
+
+async def test_a_moved_presence_sensor_confirms_its_new_room(hass: HomeAssistant) -> None:
+    """#368: the room of a presence sensor follows its area (the registry), not the one it had at the first look."""
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    areas = ar.async_get(hass)
+    hall, kitchen = areas.async_create("Hall"), areas.async_create("Kitchen")
+    rooms = [{**ROOMS[0], "area_id": kitchen.id}, {**ROOMS[1], "area_id": hall.id}, ROOMS[2]]
+    await service.async_configure({"devices": [WATCH], "rooms": rooms})
+    registry = er.async_get(hass)
+    entry = registry.async_get_or_create("binary_sensor", "test", "motion_1")
+    registry.async_update_entity(entry.entity_id, area_id=hall.id)
+    hass.config.components.add("bluetooth")  # running (the timer is not reached in this test)
+    service.start()
+    try:
+        assert service._sensor_room(entry.entity_id) == "hall"
+        registry.async_update_entity(entry.entity_id, area_id=kitchen.id)
+        await hass.async_block_till_done()
+        assert service._sensor_room(entry.entity_id) == "kitchen"
+    finally:
+        service.stop()
+
+
+async def test_locating_starts_once_bluetooth_has_loaded(hass: HomeAssistant) -> None:
+    """#368: switched on before Bluetooth is set up, it waits for it instead of giving up silently."""
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    assert "bluetooth" not in hass.config.components
+    await service.async_configure({"devices": [WATCH], "rooms": ROOMS, "enabled": True})
+    assert not service.running
+    hass.config.components.add("bluetooth")
+    hass.bus.async_fire("component_loaded", {"component": "bluetooth"})
+    await hass.async_block_till_done()
+    try:
+        assert service.running
+    finally:
+        service.stop()
+    # switched off while waiting: Bluetooth loading later starts nothing
+    hass.config.components.remove("bluetooth")
+    service.start()
+    service.stop()
+    hass.config.components.add("bluetooth")
+    hass.bus.async_fire("component_loaded", {"component": "bluetooth"})
+    await hass.async_block_till_done()
+    assert not service.running
+
+
+def _busy_house(service: LocateService) -> tuple[list[str], dict[str, tuple[float, float]], random.Random]:
+    """The example of #370: 12 rooms with a scanner each, 4 devices that learned every room (120 samples a room)
+    and 5 never walked with. Returns the device ids, the scanner spots and the random source."""
+    rng = random.Random(370)
+    rooms = [f"room{n}" for n in range(12)]
+    spots = {f"s{n}": (4.0 * (n % 4) + 2, 4.0 * (n // 4) + 2) for n in range(12)}
+
+    def heard(x: float, y: float) -> dict[str, float]:
+        out = {}
+        for scanner, (sx, sy) in spots.items():
+            rssi = -45 - 25 * math.log10(max(1.0, math.hypot(x - sx, y - sy))) + rng.gauss(0, 4)
+            if rssi > -92 and rng.random() > 0.15:
+                out[scanner] = round(rssi, 1)
+        return out
+
+    devices = [
+        {"id": f"mac_{n}", "name": f"Tag {n}", "kind": "mac", "key": f"C0:00:00:00:00:{n:02X}"} for n in range(9)
+    ]
+    service.devices = devices
+    service.rooms = [{"id": r, "name": r, "floor": None, "area_id": None} for r in rooms]
+    service.scanner_rooms = {s: rooms[n] for n, s in enumerate(spots)}
+    service._rebuild()
+    for d in devices[:4]:
+        service.fingerprints[d["id"]] = Fingerprints(
+            {
+                room: [heard(*(c + rng.uniform(-1.5, 1.5) for c in spots[f"s{n}"])) for _ in range(120)]
+                for n, room in enumerate(rooms)
+            }
+        )
+    return [d["id"] for d in devices], spots, rng
+
+
+def _hear_everyone(service: LocateService, ids: list[str], spots: dict, rng: random.Random, now: float) -> None:
+    """A second of readings: every device somewhere in the house, heard by the scanners near it (new windows)."""
+    for dev in ids:
+        x, y = rng.uniform(0, 16), rng.uniform(0, 12)
+        for scanner, (sx, sy) in spots.items():
+            rssi = -45 - 25 * math.log10(max(1.0, math.hypot(x - sx, y - sy))) + rng.gauss(0, 4)
+            if rssi > -92 and rng.random() > 0.15:
+                service._trackers[dev].add(now, scanner, round(rssi))
+
+
+async def test_the_room_estimate_of_a_busy_house_is_timed(hass: HomeAssistant, capsys) -> None:
+    """#370: 4 learned devices x 12 rooms x 120 samples and 5 devices that use the pooled samples, every window new.
+    Prints the time per estimate; fails only far above it (the test harness is slow and shared)."""
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    ids, spots, rng = _busy_house(service)
+    now = time.time()
+    took = []
+    for tick in range(21):
+        _hear_everyone(service, ids, spots, rng, now + tick)
+        start = time.perf_counter()
+        service._estimate(now + tick)
+        took.append(time.perf_counter() - start)
+    # the first estimate also builds the pool and the room middles (again only when the learning changes)
+    first, took = took[0], sorted(took[1:])
+    with capsys.disabled():
+        print(
+            f"\nroom estimate, 9 devices (4 learned x 12 rooms x 120 samples, 5 on the pool): first {first * 1000:.1f}"
+            f" ms, then median {took[10] * 1000:.1f} ms, slowest {took[-1] * 1000:.1f} ms per tick"
+        )
+    assert all(service.state[d]["room"] for d in ids)
+    # 93 ms a tick before #370 on the machine it was written on; generous for a slow, shared test runner
+    assert took[10] < 0.05
+
+
+async def test_the_pool_is_built_once_per_estimate_and_capped(hass: HomeAssistant, monkeypatch) -> None:
+    """#370: the devices that use the pooled samples share one build per estimate; a room keeps at most
+    MAX_SAMPLES_PER_ROOM of them, the newest of each device in turn."""
+    from custom_components.home_3d.locate.service import MAX_SAMPLES_PER_ROOM
+
+    await _setup(hass)
+    service: LocateService = hass.data[DATA_LOCATE]
+    ids, _spots, _rng = _busy_house(service)
+    pooled = service.pooled()
+    assert all(len(v) == MAX_SAMPLES_PER_ROOM for v in pooled.samples.values())
+    newest = [service.fingerprints[d].samples["room0"][-1] for d in ids[:4]]
+    assert all(any(v is n for v in pooled.samples["room0"]) for n in newest)
+    oldest = [service.fingerprints[d].samples["room0"][0] for d in ids[:4]]
+    assert not any(any(v is o for v in pooled.samples["room0"]) for o in oldest)
+    # a small pool is all the samples, in order
+    service.fingerprints = {
+        "a": Fingerprints({"kitchen": [{"s1": -60.0}]}),
+        "b": Fingerprints({"kitchen": [{"s1": -61.0}]}),
+    }
+    assert service.pooled().samples["kitchen"] == [{"s1": -60.0}, {"s1": -61.0}]
+
+    service.fingerprints = {}
+    ids, spots, rng = _busy_house(service)
+    builds = 0
+    real = LocateService.pooled
+
+    def counting(self):
+        nonlocal builds
+        builds += 1
+        return real(self)
+
+    monkeypatch.setattr(LocateService, "pooled", counting)
+    now = time.time()
+    _hear_everyone(service, ids, spots, rng, now)
+    service._estimate(now)
+    assert builds == 1

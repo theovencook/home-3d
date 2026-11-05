@@ -35,23 +35,31 @@ THING_AWAY_AFTER = 6 * 3600.0  # a thing (keys, a phone lying somewhere) keeps i
 UNLEARNED_DISTANCE = 9.5  # dB: farther than this from every learned sample, the device is in a room not learned yet
 CONFIRM_PLAUSIBLE = 0.1  # belief a room needs for a presence sensor to move the device there
 KEEP = 30.0  # seconds of readings kept per scanner (the longest window any estimate reads is QUIET_WINDOW)
+# a window is measured against the samples of the CANDIDATE_ROOMS rooms whose middle is nearest only (#370): the k
+# nearest samples lie there, and a house of 12 rooms costs a third
+CANDIDATE_ROOMS = 4
 
 
 Vector = dict[str, float]
 
 
 def distance(a: Vector, b: Vector, miss: float = MISS) -> float:
-    """RMS difference over the scanners either side heard; heard on one side only costs `miss` dB."""
-    keys = set(a) | set(b)
-    if not keys:
-        return math.inf
+    """RMS difference over the scanners either side heard; heard on one side only costs `miss` dB.
+
+    The hot loop of every estimate (#370): one pass over `b`, no key sets built."""
+    get = a.get
     total = 0.0
-    for k in keys:
-        if k in a and k in b:
-            total += (a[k] - b[k]) ** 2
-        else:
-            total += miss**2
-    return math.sqrt(total / len(keys))
+    common = 0
+    for k, v in b.items():
+        x = get(k)
+        if x is not None:
+            d = x - v
+            total += d * d
+            common += 1
+    union = len(a) + len(b) - common
+    if not union:
+        return math.inf
+    return math.sqrt((total + miss * miss * (union - common)) / union)
 
 
 @dataclass
@@ -63,6 +71,9 @@ class Fingerprints:
 
     samples: dict[str, list[Vector]] = field(default_factory=dict)
     version: int = field(default=0, compare=False)
+    _middles: tuple[tuple[int, int], dict[str, Vector]] | None = field(
+        default=None, init=False, compare=False, repr=False
+    )
 
     def add(self, room: str, vector: Vector, keep: int | None = None) -> None:
         """Learn one window for a room; with `keep` only the newest `keep` samples of the room stay."""
@@ -88,9 +99,36 @@ class Fingerprints:
     def rooms(self) -> list[str]:
         return [r for r, s in self.samples.items() if s]
 
-    def distances(self, vector: Vector) -> list[tuple[float, str]]:
-        """(distance, room) of every learned sample - computed once per estimate and shared by nearest and scores."""
-        return [(distance(vector, v), room) for room, vectors in self.samples.items() for v in vectors]
+    def distances(self, vector: Vector, rooms: list[str] | None = None) -> list[tuple[float, str]]:
+        """(distance, room) of every learned sample (of `rooms` only, when given) - computed once per estimate and
+        shared by nearest and scores."""
+        samples = self.samples if rooms is None else {r: self.samples[r] for r in rooms if r in self.samples}
+        return [(distance(vector, v), room) for room, vectors in samples.items() for v in vectors]
+
+    def middles(self) -> dict[str, Vector]:
+        """Room -> the mean of its samples, over the scanners heard in at least half of them (kept until a sample
+        changes)."""
+        stamp = self.stamp()
+        if self._middles is None or self._middles[0] != stamp:
+            out: dict[str, Vector] = {}
+            for room, vectors in self.samples.items():
+                sums: dict[str, float] = {}
+                counts: dict[str, int] = {}
+                for v in vectors:
+                    for k, x in v.items():
+                        sums[k] = sums.get(k, 0.0) + x
+                        counts[k] = counts.get(k, 0) + 1
+                if vectors:
+                    out[room] = {k: sums[k] / counts[k] for k in sums if counts[k] * 2 >= len(vectors)}
+            self._middles = (stamp, out)
+        return self._middles[1]
+
+    def candidate_rooms(self, vector: Vector, n: int = CANDIDATE_ROOMS) -> list[str] | None:
+        """The n rooms whose middle is nearest the window, None (all) when there are no more than n (#370)."""
+        middles = self.middles()
+        if len(middles) <= n:
+            return None
+        return heapq.nsmallest(n, middles, key=lambda r: distance(vector, middles[r]))
 
     def nearest(self, vector: Vector) -> float:
         """Distance to the closest learned sample (inf without samples)."""
@@ -127,7 +165,9 @@ def evidence(fp: Fingerprints | None, vector: Vector, scanner_rooms: dict[str, s
     upstairs say), the placed scanners of the rooms not learned; without any learning the nearest scanner."""
     if fp is None or len(fp.rooms()) < 2:
         return nearest_scores(vector, scanner_rooms)
-    dists = fp.distances(vector)  # one pass over the samples serves both the nearest check and the votes
+    # one pass over the samples serves both the nearest check and the votes; in a big house only over the samples
+    # of the rooms the window is near (#370)
+    dists = fp.distances(vector, fp.candidate_rooms(vector))
     if min((d for d, _room in dists), default=math.inf) <= UNLEARNED_DISTANCE:
         return scores_from(dists)
     learned = set(fp.rooms())

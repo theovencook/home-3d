@@ -2,17 +2,21 @@
 
 Writes what every Bluetooth scanner heard (address, RSSI, scanner, time) plus room marks from a calibration walk and
 motion/presence changes to a gzip'd JSON-lines file in the Home Assistant config folder. Nothing leaves the house.
-Only reachable from the lab page; stops by itself after MAX_DURATION.
+Only reachable from the lab page; stops by itself after MAX_DURATION, and when Home 3D is unloaded or reloaded
+(#368). Removing the integration deletes the recordings (async_remove_recordings): they hold the Bluetooth addresses
+heard in the house and are of no use without the lab page.
 """
 
 from __future__ import annotations
 
+import asyncio
 import binascii
 from datetime import timedelta
 import gzip
 import json
 import logging
 from pathlib import Path
+import shutil
 import threading
 import time
 from typing import Any
@@ -23,6 +27,8 @@ from homeassistant.core import Event, EventStateChangedData, HomeAssistant, call
 from homeassistant.helpers.event import async_track_time_interval
 import voluptuous as vol
 
+from .service import DATA_LOCATE
+
 _LOGGER = logging.getLogger(__name__)
 
 DATA_RECORDER = "home_3d_locate_recorder"
@@ -31,6 +37,10 @@ POLL = timedelta(seconds=1)
 FLUSH_EVERY = 5  # polls
 MAX_DURATION = 6 * 3600  # seconds
 SENSOR_CLASSES = {"motion", "occupancy", "presence"}
+# rotating Bluetooth addresses: what is remembered per address is capped (#368)
+MAX_RESOLVED = 4096  # addresses whose Private BLE Device is known (the oldest half goes at the cap)
+SEEN_KEEP = 600.0  # seconds a (scanner, address) last-heard time is kept; scanners forget a device after ~3 min
+PRUNE_EVERY = 60  # polls
 
 
 def _irk_ciphers(hass: HomeAssistant) -> list[tuple[str, str, Any]]:
@@ -63,6 +73,11 @@ def _append(path: Path, lines: list[str]) -> None:
         f.write("\n".join(lines) + "\n")
 
 
+def _remove(folder: Path) -> None:
+    with _WRITE_LOCK:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 class LocateRecorder:
     """One recording at a time."""
 
@@ -79,6 +94,7 @@ class LocateRecorder:
         self._recent: dict[str, dict[str, Any]] = {}
         self._polls = 0
         self._unsubs: list[Any] = []
+        self._writes: set[asyncio.Future[None]] = set()
 
     @property
     def running(self) -> bool:
@@ -103,6 +119,9 @@ class LocateRecorder:
                         break
                 except ValueError:
                     break
+        if len(self._resolved) >= MAX_RESOLVED:
+            for old in list(self._resolved)[: MAX_RESOLVED // 2]:
+                del self._resolved[old]
         self._resolved[address] = who
         return who
 
@@ -222,12 +241,35 @@ class LocateRecorder:
         self._polls += 1
         if self._polls % FLUSH_EVERY == 0:
             self._flush()
+        if self._polls % PRUNE_EVERY == 0:
+            self._seen = {k: t for k, t in self._seen.items() if mono - t < SEEN_KEEP}
 
     def _flush(self) -> None:
         if not self._buffer or self.path is None:
             return
         lines, self._buffer = self._buffer, []
-        self.hass.async_add_executor_job(_write, self.path, lines)
+        write = self.hass.async_add_executor_job(_write, self.path, lines)
+        self._writes.add(write)
+        write.add_done_callback(self._writes.discard)
+
+    async def async_written(self) -> None:
+        """Wait for the writes on their way to the file."""
+        if self._writes:
+            await asyncio.wait(list(self._writes))
+
+
+async def async_unload_recorder(hass: HomeAssistant) -> None:
+    """Stop a recording and drop the recorder with the entry (#368): its timer and listener must not outlive an
+    unload or reload, and the last lines are written before the entry counts as unloaded."""
+    recorder: LocateRecorder | None = hass.data.pop(DATA_RECORDER, None)
+    if recorder is not None:
+        recorder.stop()
+        await recorder.async_written()
+
+
+async def async_remove_recordings(hass: HomeAssistant) -> None:
+    """Delete the recordings folder (on removal of the integration, see the module docstring)."""
+    await hass.async_add_executor_job(_remove, Path(hass.config.path(FOLDER)))
 
 
 def get_recorder(hass: HomeAssistant) -> LocateRecorder:
@@ -250,6 +292,9 @@ def get_recorder(hass: HomeAssistant) -> LocateRecorder:
 @callback
 def ws_locate_rec(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Lab only: start/stop the locating recorder, set the walker's room mark, or read its status."""
+    if DATA_LOCATE not in hass.data:  # Home 3D unloaded: a recorder started now would never be stopped
+        connection.send_error(msg["id"], "not_loaded", "Home 3D is not set up")
+        return
     recorder = get_recorder(hass)
     action = msg["action"]
     try:

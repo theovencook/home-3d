@@ -13,7 +13,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .locate.service import DATA_LOCATE, SIGNAL_LOCATE, SIGNAL_LOCATE_DEVICES, LocateService
+from .locate.service import DATA_LOCATE, LAST_SEEN_REFRESH, SIGNAL_LOCATE, SIGNAL_LOCATE_DEVICES, LocateService
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
@@ -57,11 +57,15 @@ class LocateSensor(SensorEntity):
     _attr_has_entity_name = False
     _attr_should_poll = False
     _attr_icon = "mdi:map-marker-radius"
+    # these change with nearly every estimate: kept in the state, left out of the recorder (#365)
+    _unrecorded_attributes = frozenset({"probability", "since", "last_seen"})
 
     def __init__(self, service: LocateService, device_id: str) -> None:
         self.service = service
         self.device_id = device_id
         self._attr_unique_id = f"{DOMAIN}_locate_{device_id}"
+        self._written: tuple[Any, ...] | None = None
+        self._written_seen = 0.0
 
     def _device(self) -> dict[str, Any] | None:
         return next((d for d in self.service.devices if d["id"] == self.device_id), None)
@@ -103,10 +107,39 @@ class LocateSensor(SensorEntity):
             "home3d_locate": True,
         }
 
+    def _stable(self) -> tuple[Any, ...]:
+        """What a write is for: the room and the device's own settings, not the probability or the times."""
+        state = self.service.state.get(self.device_id) or {}
+        device = self._device() or {}
+        return (
+            self.available,
+            self.name,
+            state.get("room_name"),
+            state.get("room"),
+            state.get("floor"),
+            state.get("area_id"),
+            device.get("person"),
+            device.get("name"),
+            bool(device.get("wearable")),
+            device.get("icon"),
+        )
+
+    def _seen(self) -> float:
+        return float((self.service.state.get(self.device_id) or {}).get("last_seen") or 0.0)
+
     async def async_added_to_hass(self) -> None:
+        # Home Assistant writes the first state right after this
+        self._written, self._written_seen = self._stable(), self._seen()
         self.async_on_remove(async_dispatcher_connect(self.hass, SIGNAL_LOCATE, self._changed))
         self.async_on_remove(async_dispatcher_connect(self.hass, SIGNAL_LOCATE_DEVICES, self._changed))
 
     @callback
     def _changed(self) -> None:
+        """Written only when this device's room or settings changed (any device's change sends the signal), and
+        once a LAST_SEEN_REFRESH while it is heard: the views read last_seen to tell a worn watch from a phone left
+        lying (presence.ts locatedPersons). Before #365 every sensor wrote a row on every change of any device."""
+        stable, seen = self._stable(), self._seen()
+        if stable == self._written and seen - self._written_seen < LAST_SEEN_REFRESH:
+            return
+        self._written, self._written_seen = stable, seen
         self.async_write_ha_state()
