@@ -78,3 +78,36 @@ DATA_PACK_UPDATES = f"{DOMAIN}_pack_updates"
 STORAGE_KEY_PACK_UPDATES = f"{DOMAIN}.pack_updates"
 # a time of day as the plan and the update settings store it: "HH:MM", 00:00 to 23:59 (frontend show-when.ts HHMM)
 TIME_PATTERN = r"^([01][0-9]|2[0-3]):[0-5][0-9]$"
+
+# pet event triggers (#359): an event type every Home Assistant event or very many events a second would match makes a
+# pet's trigger fire (and every view redraw) all the time, so these are refused. `*` is MATCH_ALL; the rest are the
+# core events fired for every state change, service call, entity or service registration, and so on.
+PET_EVENT_REFUSED = frozenset(
+    {
+        "*",
+        "state_changed",
+        "state_reported",
+        "call_service",
+        "service_registered",
+        "service_removed",
+        "component_loaded",
+        "themes_updated",
+        "entity_registry_updated",
+        "device_registry_updated",
+        "area_registry_updated",
+        "core_config_updated",
+        "homeassistant_start",
+        "homeassistant_started",
+        "homeassistant_stop",
+        "homeassistant_final_write",
+        "homeassistant_close",
+        "logbook_entry",
+        "panels_updated",
+        "lovelace_updated",
+        "user_added",
+        "user_removed",
+        "automation_reloaded",
+        "scene_reloaded",
+        "event_template_reloaded",
+    }
+)

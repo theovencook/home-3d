@@ -26,7 +26,12 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import SIGNAL_BUILDING_UPDATED, SIGNAL_HOMES_UPDATED, SIGNAL_PETS_UPDATED
+from .const import (
+    PET_EVENT_REFUSED,
+    SIGNAL_BUILDING_UPDATED,
+    SIGNAL_HOMES_UPDATED,
+    SIGNAL_PETS_UPDATED,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -206,6 +211,8 @@ class PetRoutines:
                     if kind == "state" and isinstance(trigger.get("entity"), str) and trigger["entity"]:
                         by_entity.setdefault(trigger["entity"], []).append(fired)
                     elif kind == "event" and isinstance(trigger.get("event"), str) and trigger["event"]:
+                        if trigger["event"].strip() in PET_EVENT_REFUSED:
+                            continue  # never listen to `*` or a very frequent core event (#359)
                         by_event.setdefault(trigger["event"], []).append(fired)
                     elif kind == "time" and (at := _minutes(trigger.get("at"))) is not None:
                         by_time.setdefault(divmod(at, 60), []).append(fired)

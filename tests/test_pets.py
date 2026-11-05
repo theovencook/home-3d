@@ -7,6 +7,7 @@ import asyncio
 import copy
 from datetime import datetime, timedelta
 from typing import Any
+from unittest.mock import patch
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant, State
@@ -277,3 +278,56 @@ async def test_the_subscription_refuses_an_unknown_home(hass: HomeAssistant, has
     await client.send_json_auto_id({"type": "home_3d/pets/subscribe", "home_id": "nowhere"})
     result = await client.receive_json()
     assert not result["success"] and result["error"]["code"] == "home_not_found"
+
+
+# ---------------------------------------------------------------------------- refused event triggers (#359)
+
+
+def _event_trigger(tid: str, event: str) -> dict[str, Any]:
+    return {"id": tid, "kind": "event", "event": event, "floor_id": "f1", "x": 1.0, "z": 1.0, "pose": "sit"}
+
+
+@pytest.mark.parametrize("event", ["*", "state_changed", "call_service", "component_loaded", " state_changed "])
+def test_the_schema_refuses_match_all_and_frequent_core_events(event: str) -> None:
+    plan = _plan_with_pet(triggers=[_event_trigger("e1", event)])
+    with pytest.raises(vol.Invalid):
+        BUILDING_SCHEMA(plan)
+    # a state or time trigger never has the event type checked, and a quiet event is fine
+    ok = _plan_with_pet(triggers=[_event_trigger("e1", "sample_feed"), {**_event_trigger("t1", event), "kind": "time"}])
+    assert len(BUILDING_SCHEMA(ok)["settings"]["pets"]["list"][0]["triggers"]) == 2
+
+
+def test_a_stored_plan_with_a_refused_trigger_loads_without_that_trigger() -> None:
+    from custom_components.home_3d.storage import check_plan
+
+    plan = _plan_with_pet(
+        triggers=[_event_trigger("e1", "sample_feed"), _event_trigger("bad", "*"), _event_trigger("e2", "sample_ring")]
+    )
+    checked, problem = check_plan(plan)
+    assert problem is not None and problem["code"] == "plan_repaired"
+    assert problem["dropped"] == ["settings.pets.list.0.triggers.1"]
+    assert [t["id"] for t in checked["settings"]["pets"]["list"][0]["triggers"]] == ["e1", "e2"]
+
+
+async def test_pets_ignores_a_refused_event_type_even_when_it_is_stored(hass: HomeAssistant) -> None:
+    await _setup(hass)
+    manager = hass.data[DATA_PETS]
+    bad = _plan_with_pet(
+        spots=[spot("sofa")],
+        triggers=[
+            _event_trigger("e1", "*"),
+            _event_trigger("e2", "state_changed"),
+            _event_trigger("e3", "sample_feed"),
+        ],
+    )
+    heard: list[str] = []
+    real = type(hass.bus).async_listen
+
+    def spy(self, event_type, *args, **kwargs):
+        heard.append(event_type)
+        return real(self, event_type, *args, **kwargs)
+
+    manager._buildings = lambda: {"home": bad}
+    with patch.object(type(hass.bus), "async_listen", spy):
+        manager.plans_changed()
+    assert heard == ["sample_feed"]

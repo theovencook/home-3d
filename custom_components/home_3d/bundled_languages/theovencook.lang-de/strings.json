@@ -1319,6 +1319,7 @@
  "pet_trigger_to": "Auf Zustand (leer: jeder)",
  "pet_trigger_event_type": "Ereignistyp",
  "pet_trigger_event_entity": "Von Entität (leer: jede)",
+ "pet_trigger_event_refused": "Dieses Ereignis tritt zu oft auf (oder passt auf jedes Ereignis) und taugt nicht als Auslöser. Nenne ein bestimmtes Ereignis.",
  "pet_trigger_at": "Um",
  "pet_trigger_minutes": "Minuten",
  "pet_active": "jetzt",

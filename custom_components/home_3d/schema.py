@@ -16,7 +16,7 @@ from typing import Any
 
 import voluptuous as vol
 
-from .const import PLAN_VERSION, TIME_PATTERN
+from .const import PET_EVENT_REFUSED, PLAN_VERSION, TIME_PATTERN
 from .migrations import migrate_plan
 from .packs import COLOUR_ROLES
 from .racks import RACK_CONTENTS_SCHEMA
@@ -307,18 +307,31 @@ _PET_SPOT = vol.Schema(
     },
     extra=vol.ALLOW_EXTRA,
 )
-_PET_TRIGGER = vol.Schema(
-    {
-        vol.Required("id"): vol.All(str, vol.Length(min=1, max=64)),
-        vol.Optional("kind", default="state"): vol.In(["state", "event", "time"]),
-        vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
-        vol.Optional("to", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
-        vol.Optional("event", default=None): vol.Any(None, vol.All(str, vol.Length(max=64))),
-        vol.Optional("at", default=None): _TIME,
-        **_PET_PLACE,
-        vol.Optional("minutes", default=10): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=1440)),
-    },
-    extra=vol.ALLOW_EXTRA,
+
+
+def _pet_trigger_ok(trigger: dict[str, Any]) -> dict[str, Any]:
+    """An event trigger must not name `*` or a very frequent core event (#359): the whole trigger is invalid, so a
+    stored plan with one loads with that trigger left out (storage.check_plan)."""
+    if trigger.get("kind") == "event" and str(trigger.get("event") or "").strip() in PET_EVENT_REFUSED:
+        raise vol.Invalid(f"event type {trigger['event']!r} is too frequent for a pet trigger")
+    return trigger
+
+
+_PET_TRIGGER = vol.All(
+    vol.Schema(
+        {
+            vol.Required("id"): vol.All(str, vol.Length(min=1, max=64)),
+            vol.Optional("kind", default="state"): vol.In(["state", "event", "time"]),
+            vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+            vol.Optional("to", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+            vol.Optional("event", default=None): vol.Any(None, vol.All(str, vol.Length(max=64))),
+            vol.Optional("at", default=None): _TIME,
+            **_PET_PLACE,
+            vol.Optional("minutes", default=10): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=1440)),
+        },
+        extra=vol.ALLOW_EXTRA,
+    ),
+    _pet_trigger_ok,
 )
 
 # robot vacuum maps (#350): a map camera's picture on a floor; up to three pairs of the same point on the robot's map
