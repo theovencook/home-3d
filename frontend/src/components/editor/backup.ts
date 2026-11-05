@@ -121,6 +121,7 @@ export class BackupPart {
       const done: string[] = [];
       // custom items whose id was taken here by another item came in under a new id (#376)
       const renamed = new Set<string>();
+      const unreadableHomes: string[] = [];
       for (const [i, part] of parts.entries()) {
         try {
           res = await restoreBackup(this.hass, ...message(part, i));
@@ -130,6 +131,12 @@ export class BackupPart {
           const e = (err ?? {}) as { message?: string };
           await this.tell(this.t("backup_import_partial", { home: part.home?.name ?? "", done: done.join(", "), error: String(e.message ?? err) }));
           return;
+        }
+        // a home whose plan is unreadable (newer Home 3D, or invalid) is skipped by the backend and listed (#380)
+        const unreadable = part.home && res.skipped.some((s) => s.reason === "home_unreadable" && s.id === part.home?.id);
+        if (unreadable && part.home) {
+          unreadableHomes.push(part.home.name);
+          continue;
         }
         if (part.home) done.push(part.home.name);
         for (const r of res.renamed ?? []) renamed.add(`${r.id} → ${r.as}`);
@@ -153,9 +160,11 @@ export class BackupPart {
         this.fit();
       }
       this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
-      const skipped = res.skipped.length ? ` ${this.t("backup_full_skipped", { packs: res.skipped.map((s) => s.id).join(", ") })}` : "";
+      const packsSkipped = res.skipped.filter((s) => s.reason !== "home_unreadable");
+      const skipped = packsSkipped.length ? ` ${this.t("backup_full_skipped", { packs: packsSkipped.map((s) => s.id).join(", ") })}` : "";
+      const homesSkipped = unreadableHomes.length ? ` ${this.t("backup_homes_skipped", { homes: unreadableHomes.join(", ") })}` : "";
       const moved = renamed.size ? ` ${this.t("backup_items_renamed", { items: [...renamed].join(", ") })}` : "";
-      this._notice = this.t("backup_full_restored", { packs: res.packs, pictures }) + skipped + moved;
+      this._notice = this.t("backup_full_restored", { packs: res.packs, pictures }) + skipped + homesSkipped + moved;
     } catch (err) {
       // a lost connection comes as the whole result message ({ error: { code, message } }), e.g. when the backup is
       // larger than Home Assistant takes in one message

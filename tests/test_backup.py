@@ -247,3 +247,32 @@ async def test_pins_of_packs_no_longer_installed_are_dropped(hass: HomeAssistant
     assert updates.pinned == {"test.backup"}
     assert updates.previous == {}
     assert list(updates.checks) == ["test.backup"]
+
+
+async def test_an_unreadable_home_is_skipped_and_the_others_restore(hass: HomeAssistant, hass_ws_client) -> None:
+    """A home of a newer Home 3D, or with an invalid plan, is listed as skipped; the other homes come back (#380)."""
+    client, _pack = await _with_a_pack(hass, hass_ws_client)
+    await _ok(client, {"type": "home_3d/building/save", "building": _named("Before")})
+    first = (await _ok(client, {"type": "home_3d/homes/list"}))["active"]
+    too_new = {**_named("New"), "version": 9999}
+    invalid = {**_named("Bad"), "floors": "not a list"}
+    homes = [
+        {"id": first, "name": "Home", "building": _named("Good")},
+        {"id": "toonew", "name": "Newer", "building": too_new},
+        {"id": "broken", "name": "Broken", "building": invalid},
+    ]
+    skipped = [{"id": "toonew", "reason": "home_unreadable"}, {"id": "broken", "reason": "home_unreadable"}]
+    checked = await _ok(client, {"type": "home_3d/backup/import", "homes": homes, "check_only": True})
+    assert checked["skipped"] == skipped
+    assert _room_of(hass, first) == "Before"
+    result = await _ok(client, {"type": "home_3d/backup/import", "homes": homes})
+    assert result["skipped"] == skipped
+    assert _room_of(hass, first) == "Good"
+    assert sorted(hass.data[DOMAIN].homes) == [first]
+    # a part with only the unreadable home restores no plan (the frontend sends one home per part); packs still do
+    only = await _ok(client, {"type": "home_3d/backup/import", "homes": homes[1:2], "packs": []})
+    assert only["skipped"] == skipped[:1]
+    assert _room_of(hass, first) == "Good"
+    # a single plan (a backup from before several homes) that is unreadable still refuses the file
+    refused = await _call(client, {"type": "home_3d/backup/import", "building": too_new})
+    assert refused["error"]["code"] == "invalid_format"
