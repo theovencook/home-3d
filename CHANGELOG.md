@@ -6,6 +6,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 ## Unreleased
 
 - A home keeps at most 300 pictures (96 MB together); beyond that the editor says so, and setting or removing a picture now waits its turn with the other changes of the home (#364).
+- Loading a plan loses nothing: a plan with parts this version cannot read (say after going back to an older release) is shown repaired but stays on disk unchanged until an editor saves, and is kept as a restore point newer ones never push out; the clean-up at start keeps pictures set in the last 7 days and never runs against a missing or empty plan; a lost list of homes is rebuilt from the homes' stores; a damaged plan store makes its home read-only instead of empty; undoing a failed backup restore keeps a read-only home read-only (#379).
 
 ## Home 3D 1.0.0 (4 November 2026)
 

@@ -967,7 +967,8 @@ async def _async_restore_backup(
     restored: list[Home] = []
     try:
         if target is not None and building is not None:
-            undo.append(partial(target.async_restore, target.building))
+            # put back as it was, a read-only home's problem too (#379)
+            undo.append(partial(target.async_put_back, target.state()))
             await target.async_restore(building)
             restored.append(target)
         for entry in homes:
@@ -975,7 +976,7 @@ async def _async_restore_backup(
                 if home.name != entry["name"]:
                     undo.append(partial(data.async_rename_home, home.id, home.name))
                     await data.async_rename_home(home.id, entry["name"])
-                undo.append(partial(home.async_restore, home.building))
+                undo.append(partial(home.async_put_back, home.state()))
                 await home.async_restore(entry["building"])
             else:
                 home = await data.async_create_home(entry["name"], entry["building"], home_id=entry["id"])

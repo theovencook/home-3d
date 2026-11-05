@@ -4,7 +4,9 @@ the next.
 Every plan the backend takes in goes through `migrate_plan` before it is checked (BUILDING_SCHEMA runs it first): a
 stored plan when a home loads, a save from an older client, an imported file, a backup, a restore point. So the plan
 the editor, voice, time travel and the sensors see is always of the current version, and a later format change has
-one place to go: a new step at the end of MIGRATIONS and PLAN_VERSION one up.
+one place to go: a new step at the end of MIGRATIONS and PLAN_VERSION one up. PLAN_VERSION also goes one up (with a
+step that changes nothing) whenever the stored plan can hold a value an older Home 3D would not read, a new choice of a
+field too (#379, docs/plan-format.md): that one then shows the plan read-only instead of repairing it.
 
 Rules for a step:
 - it gets the plan as stored (not yet checked: fields may be missing or of the wrong kind) and returns a new plan,

@@ -7,7 +7,9 @@ DOMAIN = "home_3d"
 STORAGE_VERSION = 1
 # minor versions of the building store; each step has a migration in storage.py
 STORAGE_MINOR_VERSION = 2
-# the format of a plan (#165): its `version`; an older plan is brought up to this one by the steps in migrations.py
+# the format of a plan (#165): its `version`; an older plan is brought up to this one by the steps in migrations.py.
+# One up (with a step) whenever the stored plan can hold a value an older Home 3D would not read, a new choice of a
+# field too (#379): tests/fixtures/plan-choices.json keeps the choices of each version
 PLAN_VERSION = 3
 # the websocket protocol (#166): one up whenever a command or a field of one is added, changed or removed, so the
 # frontend can tell what the backend it talks to understands (building/get and version send it). The commands are
@@ -27,6 +29,11 @@ DEFAULT_HOME_NAME = "Home"
 # restore points: at most this many, and a new one only after this pause since the last one
 HISTORY_MAX = 20
 HISTORY_INTERVAL = 600
+# a stored plan as it was before a repair (#379) is kept as a restore point the others never push out: at most this many
+KEPT_MAX = 5
+# the clean-up on load keeps a picture set in the last this many days though no plan uses it (#379: a draft may), at
+# most the restore pictures' days
+UPLOAD_GRACE_DAYS = 7
 
 # The frontend files are served under /api/ (#218): Home Assistant's service worker takes /api/ paths from the network
 # only, while it answers any other path, and Home Assistant's own page, from its cache first. The extra module, the

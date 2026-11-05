@@ -57,6 +57,15 @@ Built-in furniture kinds: `sofa`, `sofa_l`, `sofa_u`, `armchair`, `stool`, `coff
 - The import page shows a preview and tells you what it had to leave out (a door that lies on no room edge, a room with too few corners).
 - A complete Home 3D plan (an export from the editor, or one an AI wrote in that format) can be checked and repaired on the import page too.
 
+## The stored plan's version (for contributors)
+
+A plan Home 3D stores carries a `version` (`PLAN_VERSION` in `custom_components/home_3d/const.py`). When Home Assistant starts, each plan is brought up to the current version by the steps in `custom_components/home_3d/migrations.py`, then checked against the schema in `schema.py`:
+
+- A plan of a **newer** version is shown read-only and never written over, so rolling back to an older release loses nothing.
+- A plan of the **same** version with a value the schema does not know (a new choice for a field, a new key in an object that allows no other keys) is repaired: that part is left out. The repaired plan is shown, the plan as stored stays on disk unchanged until an editor saves, and it is kept as a restore point that newer restore points never push out.
+
+So **bump `PLAN_VERSION` whenever the stored plan can hold a value an older release would not read**, even when nothing needs migrating. Add a step to `MIGRATIONS` (it can return the plan unchanged), and add an entry for the new version to `tests/fixtures/plan-choices.json` (`tests/test_plan_choices.py` fails until you do). Never change an entry for a version that was released. New optional keys in objects that allow other keys (most of them) need no bump: an older release keeps them as they are.
+
 ---
 
 # Home-3D-Importformat
