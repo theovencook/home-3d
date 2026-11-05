@@ -257,11 +257,11 @@ async def test_a_backup_carries_every_home(hass: HomeAssistant, hass_ws_client) 
     # a home that was there keeps its history: the state before the restore is a restore point
     assert (await _ok(client, {"type": "home_3d/history/list", "home_id": second}))["snapshots"]
 
-    # one broken home refuses the whole backup before anything changes
+    # one broken home is skipped and listed; the other homes still restore (#380)
     broken = [*backup["homes"], {"id": "bad", "name": "Bad", "building": {"version": 99}}]
-    result = await _call(client, {**restore, "homes": broken})
-    assert result["error"]["code"] == "invalid_format"
-    assert len((await _ok(client, {"type": "home_3d/homes/list"}))["homes"]) == 2
+    result = await _ok(client, {**restore, "homes": broken})
+    assert result["skipped"] == [{"id": "bad", "reason": "home_unreadable"}]
+    assert {h["id"] for h in (await _ok(client, {"type": "home_3d/homes/list"}))["homes"]} == {first, second}
 
     # one home at a time and without the plan at the top: how the panel keeps each message small
     await _ok(client, {"type": "home_3d/building/save", "home_id": second, "building": _named("Changed")})
