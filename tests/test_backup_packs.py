@@ -124,3 +124,151 @@ async def test_only_admins_send_packs_ahead(hass: HomeAssistant, hass_ws_client,
     viewer = await hass_ws_client(hass, hass_read_only_access_token)
     refused = await _send(viewer, type="home_3d/backup/stage", packs=[{"id": "a"}])
     assert not refused["success"]
+
+
+# ---------------------------------------------------------------------------- the checks of an import (#376)
+
+SHELF = {"id": "shelf", "name": {"en": "Shelf"}, "size": [1.0, 0.3, 1.8], "parts": [PART]}
+SHELF_TYPE = "pack:household.custom:shelf"
+
+
+def _plan(*types: str, name: str = "Ground floor") -> dict:
+    plan = json.loads(json.dumps(BUILDING))
+    plan["floors"][0]["name"] = name
+    plan["floors"][0]["background"] = None
+    plan["floors"][0]["furniture"] = [
+        {"id": f"f{n}", "type": t, "x": 1, "z": 1, "rotation": 0, "w": 1, "d": 0.3, "h": 1.8, "variant": None}
+        for n, t in enumerate(types)
+    ]
+    return plan
+
+
+async def _restore(client, **msg) -> dict:
+    result = await _send(client, type="home_3d/backup/import", **msg)
+    assert result["success"], result
+    return result["result"]
+
+
+async def test_a_restored_pack_is_kept_as_an_import_keeps_it(hass: HomeAssistant, hass_ws_client) -> None:
+    """No readme or licence text in .storage, one entry per id (the last wins), sizes checked."""
+    client = await _client(hass, hass_ws_client)
+    files = {**_folder(), "README.md": "x" * 500_000}
+    packs_ = [
+        {"id": "test.starter", "source": {"files": files}},
+        {"id": "test.starter", "source": {"files": {**_folder(release=2), "LICENSE": "y" * 500_000}}},
+    ]
+    result = await _restore(client, building=BUILDING, packs=packs_)
+    assert result["packs"] == 1
+    assert result["skipped"] == [{"id": "test.starter", "reason": "duplicate"}]
+    [stored] = hass.data[DOMAIN].packs
+    assert stored["release"] == 2 and sorted(stored["source"]["files"]) == ["cube_chair.json", "pack.json"]
+    # one too large for a folder import is too large to restore
+    # quotes take two bytes as sent, also from this test's client (which escapes any non-ASCII text)
+    big = {"pack.json": _pack_json("test.big"), **{f"f{n}.json": '"' * 40_000 for n in range(48)}}
+    result = await _restore(client, building=BUILDING, packs=[{"id": "test.big", "source": {"files": big}}])
+    assert result["skipped"] == [{"id": "test.big", "reason": "too_large"}]
+
+
+async def test_a_restore_skips_what_an_import_would_ask_about_and_keeps_the_previous_release(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    for pack_id, release in (("test.pinned", 2), ("test.newer", 3), ("test.changed", 1)):
+        files = _folder(pack_id, release=release)
+        assert (await _send(client, type="home_3d/packs/import", files=files))["success"]
+    assert (await _send(client, type="home_3d/packs/pin", pack_id="test.pinned", pinned=True))["success"]
+    bigger = json.dumps({**CHAIR, "size": [1.2, 1.0, 0.9]})
+    backup = [
+        {"id": "test.pinned", "source": {"files": _folder("test.pinned", release=3)}},
+        {"id": "test.newer", "source": {"files": _folder("test.newer", release=1)}},
+        {"id": "test.changed", "source": {"files": {**_folder("test.changed"), "cube_chair.json": bigger}}},
+        {"id": "acme.living", "source": {"files": _folder("theovencook.living", publisher="theovencook")}},
+    ]
+    result = await _restore(client, building=BUILDING, packs=backup)
+    assert sorted((s["id"], s["reason"]) for s in result["skipped"]) == [
+        ("acme.living", "reserved_id"),
+        ("test.newer", "older_release"),
+        ("test.pinned", "pinned"),
+    ]
+    stored = {p["id"]: p for p in hass.data[DOMAIN].packs}
+    assert stored["test.pinned"]["release"] == 2 and stored["test.newer"]["release"] == 3
+    assert stored["test.changed"]["items"][0]["size"] == [1.2, 1.0, 0.9]
+    # the release the restore replaced can be rolled back to
+    rolled = await _send(client, type="home_3d/packs/rollback", pack_id="test.changed")
+    assert rolled["success"], rolled
+    assert {p["id"]: p for p in hass.data[DOMAIN].packs}["test.changed"]["items"][0]["size"] == [0.8, 0.8, 0.75]
+
+
+async def test_a_pack_of_another_kind_is_not_restored_over_a_bundled_one(hass: HomeAssistant, hass_ws_client) -> None:
+    client = await _client(hass, hass_ws_client)
+    origin = {
+        "type": "github",
+        "url": "https://github.com/theovencook/home-3d-packs/tree/main/theovencook.lang-de",
+        "owner": "theovencook",
+        "repo": "home-3d-packs",
+        "ref": "main",
+        "default_branch": False,
+        "folder": "theovencook.lang-de",
+        "commit": "a" * 40,
+    }
+    furniture = _folder("theovencook.lang-de", publisher="theovencook", release=5)
+    entry = {"id": "x", "source": {"files": furniture, "origin": origin}}
+    result = await _restore(client, building=BUILDING, packs=[entry])
+    assert result["skipped"] == [{"id": "theovencook.lang-de", "reason": "other_kind"}]
+    assert hass.data[DOMAIN].packs == []
+
+
+async def test_a_custom_item_taken_here_comes_in_under_a_new_id(hass: HomeAssistant, hass_ws_client) -> None:
+    """The local 'shelf' and the backup's 'shelf' differ: the local homes keep theirs, the restored home its own."""
+    client = await _client(hass, hass_ws_client)
+    assert (await _send(client, type="home_3d/items/save", item=SHELF))["success"]
+    assert (await _send(client, type="home_3d/building/save", building=_plan(SHELF_TYPE)))["success"]
+    data = hass.data[DOMAIN]
+    local_home = data.active_id
+    theirs = {**SHELF, "size": [2.0, 0.4, 2.0]}
+    flat = {"id": "flat", "name": "Flat", "building": _plan(SHELF_TYPE, name="Flat floor")}
+
+    check = await _restore(client, homes=[flat], items=[theirs], check_only=True)
+    assert check["renamed"] == [{"id": "shelf", "as": "shelf_2"}]
+    result = await _restore(client, homes=[flat], items=[theirs])
+
+    assert result["renamed"] == [{"id": "shelf", "as": "shelf_2"}]
+    items = {i["id"]: i for i in data.custom.items}
+    assert items["shelf"]["size"] == [1.0, 0.3, 1.8]
+    assert items["shelf_2"]["size"] == [2.0, 0.4, 2.0] and items["shelf_2"]["name"] == {"en": "Shelf (2)"}
+    restored = data.homes["flat"].building
+    assert restored["floors"][0]["furniture"][0]["type"] == "pack:household.custom:shelf_2"
+    assert restored["recipes"]["pack:household.custom:shelf_2"]["recipe"]["size"] == [2.0, 0.4, 2.0]
+    kept = data.homes[local_home].building
+    assert kept["recipes"][SHELF_TYPE]["recipe"]["size"] == [1.0, 0.3, 1.8]
+
+    # the same backup again: shelf_2 is the backup's shelf now, nothing new comes in
+    again = await _restore(client, homes=[flat], items=[theirs])
+    assert again["renamed"] == [{"id": "shelf", "as": "shelf_2"}]
+    assert sorted(i["id"] for i in data.custom.items) == ["shelf", "shelf_2"]
+
+
+async def test_restoring_only_items_updates_the_restored_plan(hass: HomeAssistant, hass_ws_client) -> None:
+    """A plan whose copy of a custom item differs from the backup's item follows it (no pack in the backup)."""
+    client = await _client(hass, hass_ws_client)
+    stale = _plan(SHELF_TYPE)
+    item = {**SHELF, "size": [1.5, 0.3, 1.8]}
+    stale["recipes"] = {
+        SHELF_TYPE: {"pack": "household.custom", "item": "shelf", "recipe": {**SHELF, "size": [1.0, 0.3, 1.8]}}
+    }
+    result = await _restore(client, building=stale, items=[item])
+    assert "renamed" not in result and result["items"] == 1
+    recipes = hass.data[DOMAIN].active.building["recipes"]
+    assert recipes[SHELF_TYPE]["recipe"]["size"] == [1.5, 0.3, 1.8]
+
+
+def test_items_past_the_limit_are_listed_not_cut_silently() -> None:
+    local = [{**SHELF, "id": "a"}]
+    items = [{**SHELF, "id": i} for i in ("a", "b", "c")]
+    kept, renames, skipped = backup_restore.resolve_items(items, [], local, [], 2)
+    assert [i["id"] for i in kept] == ["a", "b"] and renames == {}
+    assert skipped == [{"id": "c", "reason": "too_many_items"}]
+    # a placed copy in a home the backup leaves alone counts like a local item
+    copy_ = {"pack": "household.custom", "item": "b", "recipe": {**SHELF, "id": "b", "size": [3.0, 1.0, 1.0]}}
+    kept, renames, _ = backup_restore.resolve_items(items, [], local, [{"pack:household.custom:b": copy_}], 10)
+    assert renames == {"b": "b_2"} and [i["id"] for i in kept] == ["a", "b_2", "c"]

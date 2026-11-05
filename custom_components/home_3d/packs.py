@@ -885,6 +885,17 @@ def checked_file(text: str) -> tuple[dict[str, Any], dict[str, Any]]:
     return verify_pack(text), parts_of(text)
 
 
+def checked_source(source: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The kept source of an imported pack checked again (a backup being restored), as an import keeps it: the
+    payload, and the source with only what a pack is read from (#376: no readme or licence text, no fields this
+    version does not read). Raises PackError. The caller adds a checked origin."""
+    payload = verify_source(source)
+    if isinstance(source.get("files"), dict):
+        return payload, source_of_folder(source["files"])
+    fields = {str(k) for k in PAYLOAD_SCHEMA.schema}
+    return payload, {key: value for key, value in source.items() if key in fields}
+
+
 def verify_source(source: Any) -> dict[str, Any]:
     """Check the kept source of an imported pack again (a backup being restored); raises PackError."""
     if isinstance(source, dict) and isinstance(source.get("files"), dict):

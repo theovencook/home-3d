@@ -17,7 +17,7 @@ import voluptuous as vol
 from voluptuous.humanize import humanize_error
 
 from . import frontend_build
-from .backup_restore import StagedPacks
+from .backup_restore import StagedPacks, resolve_backup_items
 from .const import (
     DATA_ASK,
     DATA_EDITORS,
@@ -43,11 +43,11 @@ from .packs import (
     PackError,
     checked_file,
     checked_folder,
+    checked_source,
     is_bundled,
     is_language_pack,
     official_only,
     verify_item,
-    verify_source,
 )
 from .racks import RackError
 from .sample import SAMPLE_NAME, load_sample
@@ -917,11 +917,26 @@ async def ws_backup_import(
     target = None
     if not homes and (target := _home(hass, connection, msg)) is None:
         return
+    # the checks an import makes (#376): packs an import would ask about are skipped and listed
+    replaced: dict[str, dict[str, Any]] = {}
+    if (updates := hass.data.get(DATA_PACK_UPDATES)) is not None:
+        # the packs' fingerprints take a while for large packs: not in the event loop (it only reads)
+        checked, replaced, held = await hass.async_add_executor_job(updates.restore_plan, checked)
+        skipped += held
+    # custom items whose id is taken here by another look come in renamed, and the restored plans follow (#376)
+    restoring = {h["id"] for h in homes} if homes else {target.id if target else ""}
+    local = [h.building.get("recipes") or {} for h in data.homes.values() if h.id not in restoring]
+    homes, building, items, renamed, more = await hass.async_add_executor_job(
+        resolve_backup_items, homes, building, items, list(data.custom.items), local, MAX_ITEMS
+    )
+    skipped += more
     if msg["check_only"]:
-        connection.send_result(msg["id"], {"checked": True, "skipped": skipped})
+        connection.send_result(
+            msg["id"], {"checked": True, "skipped": skipped, **({"renamed": renamed} if renamed else {})}
+        )
         return
     try:
-        await _async_restore_backup(hass, data, target, building, homes, msg.get("active"), checked, items)
+        await _async_restore_backup(hass, data, target, building, homes, msg.get("active"), checked, items, replaced)
     except _RestoreFailed as err:
         connection.send_error(msg["id"], "restore_failed", str(err))
         return
@@ -934,6 +949,8 @@ async def ws_backup_import(
         "active": data.active_id,
         "packs": len(checked),
         "skipped": skipped,
+        # custom items that came in under a new id (#376)
+        **({"renamed": renamed} if renamed else {}),
     }
     if "items" in msg:
         result["items"] = len(items)
@@ -956,7 +973,7 @@ def _checked_backup(
         raise vol.Invalid("a backup names each home once")
     # with homes the building at the top is the active home's again (for older versions): not needed
     building = BUILDING_SCHEMA(msg["building"]) if not homes else None
-    checked: list[dict[str, Any]] = []
+    by_id: dict[str, dict[str, Any]] = {}
     skipped: list[dict[str, str]] = []
     for entry in msg.get("packs", []):
         source = entry.get("source")
@@ -967,15 +984,19 @@ def _checked_backup(
         # where a pack came from (#25): kept only when it names GitHub as this version writes it
         origin = checked_origin(source["origin"]) if "origin" in source else None
         try:
-            clean = official_only(not_reserved(verify_source(source)), origin)
+            # kept as an import keeps it (#376): checked sizes, no readme or licence text
+            clean, kept = checked_source(source)
+            official_only(not_reserved(clean), origin)
         except PackError as err:
             skipped.append({"id": name, "reason": err.code})
             continue
-        if "origin" in source:
-            source = {k: v for k, v in source.items() if k != "origin"}
-            if origin is not None:
-                source["origin"] = origin
-        checked.append({**clean, "source": source, "imported_at": time.time()})
+        if origin is not None:
+            kept["origin"] = origin
+        # one entry per pack id (#376): the last one in the backup wins
+        if clean["id"] in by_id:
+            skipped.append({"id": clean["id"], "reason": "duplicate"})
+        by_id[clean["id"]] = {**clean, "source": kept, "imported_at": time.time()}
+    checked = list(by_id.values())
     items: list[dict[str, Any]] = []
     for item in msg.get("items", []):
         try:
@@ -998,6 +1019,7 @@ async def _async_restore_backup(
     active: str | None,
     packs: list[dict[str, Any]],
     items: list[dict[str, Any]],
+    replaced: dict[str, dict[str, Any]] | None = None,
 ) -> None:
     """Write a checked backup (#153): the plans first (each keeps its state before as a restore point), then which
     home is active, then the packs and the custom items, each onto the one with the same id (the others stay). When a
@@ -1027,13 +1049,14 @@ async def _async_restore_backup(
             ids = {p["id"] for p in packs}
             undo.append(partial(data.async_set_packs, data.packs))
             await data.async_set_packs([p for p in data.packs if p["id"] not in ids] + packs)
-            # the restored plans take recipe copies of their items from the packs now installed (a plan saved
-            # before #2 has none of its own); a copy a plan has stays
-            for home in restored:
-                await home.async_follow_custom_items()
         if items:
             undo.append(partial(data.custom.async_replace, data.custom.items))
             await data.custom.async_replace([*data.custom.items, *items])
+        if packs or items:
+            # the restored plans take recipe copies of their items from the packs now installed (a plan saved
+            # before #2 has none of its own), and of the custom items restored (#376); a copy a plan has stays
+            for home in restored:
+                await home.async_follow_custom_items()
     except Exception as err:
         _LOGGER.exception("Restoring a backup failed; undoing the steps done so far")
         put_back = True
@@ -1051,6 +1074,8 @@ async def _async_restore_backup(
         raise _RestoreFailed(f"Restoring the backup failed ({err}); {state}") from err
     if packs and (updates := hass.data.get(DATA_PACK_UPDATES)) is not None:
         await updates.async_forget_uninstalled()
+        # the releases the restored packs replaced can be rolled back to (#376)
+        await updates.async_restored(replaced or {})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "home_3d/voice/subscribe"})

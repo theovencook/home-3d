@@ -712,6 +712,9 @@ The installed pack keeps where it came from in `source.origin`, so an update che
 `ref` is the branch, tag or commit the URL named, or the default branch's name when it named none
 (`default_branch: true`); `folder` is `""` for a pack at the repository root; `release` is the pack's release number
 when it was fetched. A backup carries the origin; on restore it is kept only when it still names GitHub.
+Restoring a backup checks each pack as an import does: one entry per id (the last wins), the same sizes, only the
+files a pack is read from are kept, and the reserved ids and kinds as below. What an import would ask about is
+skipped and listed instead (`older_release`, `pinned`, `other_kind`); a pack the restore replaces can be rolled back.
 A pack installed this way whose id is one of the packs that ship with Home 3D follows the same rule as an imported
 copy (see below).
 
@@ -957,7 +960,10 @@ a name, a library section (`group`), rooms, search words (`tags`) and an optiona
   Gemini, say what item you want, and paste the answer under **Paste an item**. The brief is written from the same
   lists and limits the backend checks (`frontend/src/item-format.ts`, held equal to `packs.py` by a test), so it
   follows this page as the format changes.
-- Home 3D's own backup file carries the custom items as well.
+- Home 3D's own backup file carries the custom items as well. A custom item whose id is taken here by an item that
+  looks different (a backup from another install with its own "shelf") comes in under a free id (`shelf_2`, named
+  "Shelf (2)"), and the restored plans place it under that id, so no placed item changes. The restore lists the
+  renamed items, and the items past the limit of 1,000 that it skipped.
 
 ## Old single-file packs (v1)
 

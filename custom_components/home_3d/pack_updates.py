@@ -462,6 +462,50 @@ class PackUpdates:
             await self._async_save()
         await self.data.async_add_pack(payload, source)
 
+    # ------------------------------------------------------------------------ restoring a backup (#376)
+
+    def restore_plan(
+        self, packs: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], list[dict[str, str]]]:
+        """The checks an import makes, for a backup's checked packs (one per id): the packs to restore, the entries
+        their restore replaces (kept for a roll back) and the packs skipped. A restore asks nothing, so what an
+        import would ask about is skipped and listed instead: an older release than the library offers, or another
+        release (or other content) of a pinned pack; so is a pack of another kind under the id. Nothing is written."""
+        kept: list[dict[str, Any]] = []
+        replaced: dict[str, dict[str, Any]] = {}
+        skipped: list[dict[str, str]] = []
+        for pack in packs:
+            current = self._installed(pack["id"])
+            if current is None:
+                kept.append(pack)
+                continue
+            installed, after = current.get("release", 1), self._offered_after(pack)
+            new = after.get("release", 1)
+            origin = (pack.get("source") or {}).get("origin")
+            differs = after is pack and (new != installed or _differs(current, pack, origin) is not None)
+            if kind_of(current) != kind_of(pack):
+                skipped.append({"id": pack["id"], "reason": "other_kind"})
+            elif new < installed:
+                skipped.append({"id": pack["id"], "reason": "older_release"})
+            elif pack["id"] in self.pinned and differs:
+                skipped.append({"id": pack["id"], "reason": "pinned"})
+            else:
+                kept.append(pack)
+                if differs:
+                    bundled = {"id": current["id"], "release": installed, "bundled": True}
+                    replaced[pack["id"]] = bundled if current.get("bundled") else current
+        return kept, replaced, skipped
+
+    async def async_restored(self, replaced: dict[str, dict[str, Any]]) -> None:
+        """After a backup's packs were restored (#376): the entries they replaced are kept for a roll back, and the
+        last check of a replaced pack goes (it was about the release before)."""
+        if not replaced:
+            return
+        for pack_id, entry in replaced.items():
+            self.previous[pack_id] = entry
+            self.checks.pop(pack_id, None)
+        await self._async_save()
+
     def _offered_after(self, payload: dict[str, Any]) -> dict[str, Any]:
         """The pack the library would offer under the payload's id once it is installed."""
         imported = [p for p in self.data.packs if p["id"] != payload["id"]] + [payload]

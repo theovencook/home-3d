@@ -9,6 +9,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - Packs: the installed release with other content or from another place asks first (also for a pinned pack) and can be rolled back; auto-update holds a release that changes the kind or publisher or removes placed items, and says why (#373).
 - Packs: the pack index is read and checked outside the event loop, and the list of placed items with an update compares stored hashes before checking any copy again (#374).
 - Packs: a folder import is measured before it is sent (too large instead of a dropped connection), GitHub installs keep to the same byte limit, and a full backup sends large packs ahead in parts (#375).
+- Backup restore: packs go through the checks of an import (sizes, kept files, one entry per id, pins, older releases, kind, rollback), and a custom item whose id is taken by a different local item comes in renamed with the restored plans following; renamed and skipped items are listed (#376).
 
 ## Home 3D 1.0.0 (4 November 2026)
 

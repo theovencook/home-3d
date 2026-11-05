@@ -396,6 +396,7 @@
  "backup_import_partial": "Wiederherstellen bei „{home}“ abgebrochen: {error}. Davor wiederhergestellt: {done} (jedes behält seinen vorigen Stand als Wiederherstellungspunkt). Packs und eigene Möbel sind unverändert.",
  "backup_full_skipped": "Übersprungen (nicht prüfbar oder für eine andere Installation): {packs}.",
  "backup_part_too_large": "Diese Sicherung lässt sich nicht wiederherstellen: Ein Teil ist größer, als Home Assistant in einer Nachricht annimmt (4 MB): {detail}",
+ "backup_items_renamed": "Eigene Möbel, die sich von den hiesigen unterscheiden, kamen unter neuem Namen: {items}.",
  "export_name_full": "komplett",
  "item_actions": "Eigene Aktionen",
  "item_actions_hint": "Was Tippen, Halten und Doppeltippen in 3D tun. „Standard“ lässt es beim Üblichen für diese Art Gerät. Alles läuft über Home Assistant; jeder, der die Ansicht sieht, kann sie auslösen.",

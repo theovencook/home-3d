@@ -118,6 +118,8 @@ export class BackupPart {
       let res: Awaited<ReturnType<typeof restoreBackup>> | null = null;
       let pictures = 0;
       const done: string[] = [];
+      // custom items whose id was taken here by another item came in under a new id (#376)
+      const renamed = new Set<string>();
       for (const [i, part] of parts.entries()) {
         try {
           res = await restoreBackup(this.hass, ...message(part, i));
@@ -129,6 +131,7 @@ export class BackupPart {
           return;
         }
         if (part.home) done.push(part.home.name);
+        for (const r of res.renamed ?? []) renamed.add(`${r.id} → ${r.as}`);
         for (const [id, picture] of Object.entries(part.images)) {
           try {
             await storeImage(this.hass, id, picture, part.home?.id ?? res.home_id ?? this.home);
@@ -148,7 +151,8 @@ export class BackupPart {
       }
       this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
       const skipped = res.skipped.length ? ` ${this.t("backup_full_skipped", { packs: res.skipped.map((s) => s.id).join(", ") })}` : "";
-      this._notice = this.t("backup_full_restored", { packs: res.packs, pictures }) + skipped;
+      const moved = renamed.size ? ` ${this.t("backup_items_renamed", { items: [...renamed].join(", ") })}` : "";
+      this._notice = this.t("backup_full_restored", { packs: res.packs, pictures }) + skipped + moved;
     } catch (err) {
       // a lost connection comes as the whole result message ({ error: { code, message } }), e.g. when the backup is
       // larger than Home Assistant takes in one message

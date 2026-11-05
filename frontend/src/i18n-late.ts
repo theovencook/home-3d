@@ -315,6 +315,7 @@ export const lateEnglish = {
   backup_import_partial: "Restoring stopped at “{home}”: {error}. Restored before it: {done} (each keeps its state before as a restore point). Packs and your own items are unchanged.",
   backup_full_skipped: "Skipped (not verifiable or bound to another installation): {packs}.",
   backup_part_too_large: "This backup can't be restored: one part is larger than Home Assistant takes in one message (4 MB): {detail}",
+  backup_items_renamed: "Own items that differ from the ones here came in under a new name: {items}.",
   export_name_full: "full",
   item_actions: "Own actions",
   item_actions_hint: "What a tap, a hold and a double tap do in 3D. \"Default\" keeps the usual behaviour for this kind of device. Everything runs through Home Assistant; anyone who can see the view can use them.",
