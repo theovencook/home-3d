@@ -57,10 +57,11 @@ from .packs import (
     is_reserved,
     kind_of,
     official_only,
+    pack_hash,
     recipe_hash,
     with_bundled,
 )
-from .recipes import installed_copies, placed_types, recipe_copy
+from .recipes import PACK_TYPE_PREFIX, installed_copies, placed_types, recipe_copy
 
 if TYPE_CHECKING:
     from .storage import FloorplanData, Home
@@ -138,6 +139,17 @@ def _origin_url(pack: dict[str, Any]) -> str | None:
     """The GitHub URL a pack was installed from, None for one imported from files (or bundled)."""
     origin = (pack.get("source") or {}).get("origin")
     return origin.get("url") if isinstance(origin, dict) else None
+
+
+def _differs(current: dict[str, Any], payload: dict[str, Any], origin: dict[str, Any] | None) -> str | None:
+    """How a pack differs from the installed one beyond its release (#373): other items or texts, or another place
+    it comes from (a GitHub URL, or files); None when it is the same."""
+    if pack_hash(current) != pack_hash(payload):
+        return "this one has other content"
+    if not current.get("bundled") and _origin_url(current) != (origin or {}).get("url"):
+        here = (origin or {}).get("url") or "files"
+        return f"this one comes from {here}, the installed one from {_origin_url(current) or 'files'}"
+    return None
 
 
 def last_due(settings: dict[str, Any], now: datetime) -> datetime | None:
@@ -357,6 +369,7 @@ class PackUpdates:
             check = self.checks.get(payload["id"])
             if check and check.get("available", {}).get("release", 0) <= payload.get("release", 1):
                 del check["available"]
+                check.pop("held", None)
                 await self._async_save()
         await self.async_auto_update()
 
@@ -387,14 +400,21 @@ class PackUpdates:
                     f"release {payload.get('release', 1)} is older than the installed release {installed}",
                 )
             )
-        if payload["id"] in self.pinned and new != installed:
-            asked.append(("pinned", f"{payload['id']} is pinned to release {installed}"))
+        # the same release with other content, or from another place (#373): never in silently
+        other = _differs(current, payload, origin) if after is payload and new == installed else None
+        if payload["id"] in self.pinned and (new != installed or other):
+            asked.append(
+                ("pinned", f"{payload['id']} is pinned to release {installed}" + (f" ({other})" if other else ""))
+            )
         # it takes the place of one of Home 3D's own packs (#372): the question names the pack it replaces
         what = f'"{current.get("name")}" ({current["id"]} release {installed} by {current.get("publisher")})'
+        elsewhere = _origin_url(current) != (origin or {}).get("url")
         if after is payload and current.get("bundled"):
             asked.append(("replaces_bundled", f"it replaces {what}, which comes with Home 3D"))
-        elif after is payload and is_reserved(current) and _origin_url(current) != (origin or {}).get("url"):
+        elif after is payload and is_reserved(current) and elsewhere:
             asked.append(("replaces_official", f"it replaces {what}, installed from {_origin_url(current) or 'files'}"))
+        elif other and payload["id"] not in self.pinned:
+            asked.append(("same_release", f"release {installed} of {payload['id']} is installed; {other}"))
         return asked
 
     def _asks_first(self, payload: dict[str, Any], origin: dict[str, Any] | None = None) -> PackError | None:
@@ -418,7 +438,16 @@ class PackUpdates:
     async def _async_add(self, payload: dict[str, Any], source: dict[str, Any]) -> None:
         """Install a pack, keeping the release the library offered so far for a roll back."""
         current = self._installed(payload["id"])
-        if current is not None and current.get("release", 1) != self._offered_after(payload).get("release", 1):
+        after = self._offered_after(payload)
+        # another release, or the same one with other content or from another place (#373), can be rolled back
+        if (
+            current is not None
+            and after is payload
+            and (
+                current.get("release", 1) != payload.get("release", 1)
+                or _differs(current, payload, source.get("origin"))
+            )
+        ):
             if current.get("bundled"):
                 self.previous[payload["id"]] = {
                     "id": current["id"],
@@ -544,11 +573,33 @@ class PackUpdates:
         official_only(not_reserved(payload), new_origin)
         if payload["id"] != pack["id"] or payload["release"] <= release:
             return False
-        self._refuse_other_kind(payload)
+        if (held := self._held(pack, payload)) is not None:
+            # a release that changes what the pack is, or takes away placed items, waits for an editor (#373)
+            note = payload.get("release_note")
+            result["available"] = {"release": payload["release"], "commit": new_origin["commit"]}
+            result["available"].update({"note": note} if note else {})
+            result["held"] = held
+            _LOGGER.info("Release %s of pack %s waits for an editor: %s", payload["release"], pack["id"], held)
+            return False
         source = {**source, "origin": {**new_origin, "release": payload["release"]}}
         await self._async_add(payload, source)
         result["latest_release"] = payload["release"]
         return True
+
+    def _held(self, pack: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Why auto-update leaves a new release of an installed pack to an editor, or None (#373): it changes the
+        pack's kind or publisher, or removes items that are placed in a home."""
+        if kind_of(payload) != kind_of(pack):
+            return {"reason": "kind", "from": kind_of(pack), "to": kind_of(payload)}
+        if payload.get("publisher") != pack.get("publisher"):
+            return {"reason": "publisher", "from": pack.get("publisher"), "to": payload.get("publisher")}
+        kept = {item["id"] for item in payload.get("items", [])}
+        prefix = f"{PACK_TYPE_PREFIX}{pack['id']}:"
+        placed = {type_ for home in self.data.homes.values() for type_ in placed_types(home.building)}
+        removed = sorted(
+            item["id"] for item in pack.get("items", []) if item["id"] not in kept and prefix + item["id"] in placed
+        )
+        return {"reason": "removes_placed", "items": removed} if removed else None
 
     async def async_pin(self, pack_id: str, pinned: bool) -> None:
         """Pin a pack to its installed release, or unpin it (auto-update then catches up); raises PackError."""

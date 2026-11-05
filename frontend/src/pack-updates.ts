@@ -33,6 +33,9 @@ export interface PackUpdateState {
   latest_release?: number;
   /** A newer release a check found but did not install (#189): auto-update is off, an editor reviews and installs it. */
   available?: { release: number; commit: string; note?: string };
+  /** Why auto-update left the available release to an editor (#373): it changes the pack's kind or publisher, or
+   * removes placed items. */
+  held?: { reason: "kind" | "publisher" | "removes_placed"; from?: string; to?: string; items?: string[] };
   error?: string;
 }
 
@@ -61,8 +64,9 @@ export interface PackUpdateStatus {
 }
 
 /** The refusals that are questions: an older release than the installed one, another release of a pinned pack, a
- * pack that takes the place of one that comes with Home 3D or of one of its own packs from elsewhere (#372). */
-export const CONFIRM_CODES = ["older_release", "pinned", "replaces_bundled", "replaces_official"] as const;
+ * pack that takes the place of one that comes with Home 3D or of one of its own packs from elsewhere (#372), the
+ * installed release with other content or from another place (#373). */
+export const CONFIRM_CODES = ["older_release", "pinned", "replaces_bundled", "replaces_official", "same_release"] as const;
 export type ConfirmCode = (typeof CONFIRM_CODES)[number];
 
 /**

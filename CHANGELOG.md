@@ -6,6 +6,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 ## Unreleased
 
 - Packs: no pack replaces one of another kind; only Home 3D's own GitHub account may use the `theovencook.` ids and publisher, replacing a bundled or official pack asks first naming it, an index entry installs only the pack it names, and only the default index marks packs official (#372).
+- Packs: the installed release with other content or from another place asks first (also for a pinned pack) and can be rolled back; auto-update holds a release that changes the kind or publisher or removes placed items, and says why (#373).
 
 ## Home 3D 1.0.0 (4 November 2026)
 

@@ -964,3 +964,92 @@ def test_a_release_note_is_one_short_line() -> None:
     for bad in ("two\nlines", "x" * 201):
         with pytest.raises((PackError, vol.Invalid)):
             _installed_pack(2, bad)
+
+
+# ---------------------------------------------------------------------------- the same release, held updates (#373)
+
+
+async def test_the_same_release_with_other_content_asks_first_and_can_be_rolled_back(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _placed_chair_and_stool(client)
+    # the very same files again: nothing to ask
+    await _call(client, type="home_3d/packs/import", files=_files())
+    other = _files(chair_size=[1.5, 0.9, 0.8])
+    asked = await _send(client, type="home_3d/packs/import", files=other)
+    assert asked["error"]["code"] == "same_release" and "other content" in asked["error"]["message"]
+    assert hass.data[DOMAIN].packs[0]["items"][0]["size"] == [0.8, 0.8, 0.75]
+
+    await _call(client, type="home_3d/packs/import", files=other, confirm=True)
+    starter = next(p for p in (await _call(client, type="home_3d/packs/updates"))["packs"] if p["id"] == "test.starter")
+    assert starter["previous_release"] == 1
+    await _call(client, type="home_3d/packs/rollback", pack_id="test.starter")
+    assert hass.data[DOMAIN].packs[0]["items"][0]["size"] == [0.8, 0.8, 0.75]
+
+
+async def test_a_pinned_pack_is_never_replaced_silently_by_the_same_release(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Pinned release 1 from GitHub; release 1 with other items from files asks, as pinned."""
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    await _call(client, type="home_3d/packs/pin", pack_id="test.starter", pinned=True)
+    for files in (_files(stool_size=[0.6, 0.6, 0.6]), _files()):
+        asked = await _send(client, type="home_3d/packs/import", files=files)
+        assert asked["error"]["code"] == "pinned", asked
+    assert hass.data[DOMAIN].packs[0]["source"]["origin"]["url"] == FOLDER_URL
+
+    await _call(client, type="home_3d/packs/import", files=_files(), confirm=True)
+    updates = (await _call(client, type="home_3d/packs/updates"))["packs"]
+    assert next(p for p in updates if p["id"] == "test.starter")["previous_release"] == 1
+    assert "origin" not in hass.data[DOMAIN].packs[0]["source"]
+
+
+async def _held_check(client, aioclient_mock: AiohttpClientMocker, files: dict[str, str]) -> dict:
+    await _call(client, type="home_3d/packs/updates/settings", auto_update=True)
+    _github(aioclient_mock, 2, files)
+    status = await _call(client, type="home_3d/packs/check")
+    assert status["installed"] == [] and status["updated"] == []
+    return next(p for p in status["packs"] if p["id"] == "test.starter")
+
+
+async def test_auto_update_holds_a_release_that_removes_placed_items(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    newer = _files(2)
+    del newer["stool.json"]
+
+    starter = await _held_check(client, aioclient_mock, newer)
+
+    assert starter["available"] == {"release": 2, "commit": _sha(2)}
+    assert starter["held"] == {"reason": "removes_placed", "items": ["stool"]}
+    assert hass.data[DOMAIN].packs[0]["release"] == 1
+    # an editor installs it after looking: that answers the held update
+    _github(aioclient_mock, 2, newer)
+    await _call(client, type="home_3d/packs/install_url", url=FOLDER_URL)
+    starter = next(p for p in (await _call(client, type="home_3d/packs/updates"))["packs"] if p["id"] == "test.starter")
+    assert "available" not in starter and "held" not in starter
+
+
+async def test_auto_update_holds_a_release_from_another_publisher_or_of_another_kind(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    client = await _client(hass, hass_ws_client)
+    await _installed_from_github(client, aioclient_mock)
+    other = _files(2)
+    other["pack.json"] = json.dumps({**PACK_JSON, "release": 2, "publisher": "Someone else"})
+    starter = await _held_check(client, aioclient_mock, other)
+    assert starter["held"] == {"reason": "publisher", "from": "Test", "to": "Someone else"}
+
+    texts = {
+        "pack.json": json.dumps({**PACK_JSON, "release": 3, "kind": "language", "language": "uk"}),
+        "strings.json": json.dumps({"view": "Вигляд"}),
+    }
+    _github(aioclient_mock, 3, texts)
+    status = await _call(client, type="home_3d/packs/check")
+    starter = next(p for p in status["packs"] if p["id"] == "test.starter")
+    assert starter["held"] == {"reason": "kind", "from": "furniture", "to": "language"}
+    assert hass.data[DOMAIN].packs[0]["release"] == 1

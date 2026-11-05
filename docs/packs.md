@@ -731,8 +731,13 @@ editor can also press **Check now**.
   a newer bundled pack.
 - A check never installs an older release. Importing or installing an older release than the one the library offers
   asks first (the backend refuses with `older_release`; the page asks and sends it again with `confirm: true`).
+  So does the installed release with other content or from another place (`same_release`); either way the release it
+  replaces is kept for **Roll back**.
+- Auto-update leaves a new release to an editor when it changes the pack's kind or publisher, or removes items that
+  are placed in a home: the check records it as available with the reason (`held`), and the Extensions page says why.
 - **Pin release** keeps a pack where it is: checks skip it, auto-update leaves its placed items alone (they can still
-  be updated one by one), and importing another release of it asks first (`pinned`).
+  be updated one by one), and importing another release of it, or the same release with other content or from
+  another place, asks first (`pinned`).
 - **Roll back to v…** puts back the release the pack had before its last update, together with the placed items that
   had taken that update, and pins the pack so the next check does not bring the update back. Unpin it to take
   updates again. One step back is kept per pack.

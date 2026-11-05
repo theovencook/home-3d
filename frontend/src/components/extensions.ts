@@ -287,6 +287,7 @@ export class Extensions extends LitElement {
         : state.available
           ? html`<span class="fp3d-sub fp3d-pack-available">${this.t("pack_available", { release: state.available.release, commit: shortCommit(state.available.commit) })}</span>
               ${state.available.note ? html`<span class="fp3d-sub fp3d-upd-note">${state.available.note}</span>` : nothing}
+              ${state.held ? html`<span class="fp3d-sub fp3d-pack-error">${this.t(`upd_held_${state.held.reason}`, { to: state.held.to ?? "", items: (state.held.items ?? []).join(", ") })}</span>` : nothing}
               ${this.isEditor && pack.source?.origin
                 ? html`<button class="fp3d-btn" ?disabled=${this._installing} @click=${() => void this.review(pack.source!.origin!.url)}>${this.t("pack_review_update")}</button>`
                 : nothing}`

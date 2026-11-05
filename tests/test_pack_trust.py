@@ -251,3 +251,18 @@ async def test_the_default_index_alone_lists_official_packs(
     assert (await _send(client, type="home_3d/packs/updates/settings", index_url=fork))["success"]
     answer = await _send(client, type="home_3d/packs/index")
     assert answer["result"]["packs"][0]["source"] == "community"
+
+
+async def test_an_official_pack_at_the_same_release_with_other_content_asks_first(
+    hass: HomeAssistant, hass_ws_client, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """#373 for our own packs too: the same URL and release, but other items (the publisher forgot the release)."""
+    client = await _client(hass, hass_ws_client)
+    garden = _furniture(_pack("theovencook.garden", publisher="theovencook"))
+    url = _github(aioclient_mock, "theovencook", "theovencook.garden", garden)
+    assert (await _send(client, type="home_3d/packs/install_url", url=url))["success"]
+    aioclient_mock.clear_requests()
+    changed = {**garden, "cube_chair.json": json.dumps({**CHAIR, "size": [1.0, 1.0, 1.0]})}
+    url = _github(aioclient_mock, "theovencook", "theovencook.garden", changed, commit=2)
+    asked = await _send(client, type="home_3d/packs/install_url", url=url)
+    assert asked["error"]["code"] == "same_release"
