@@ -374,6 +374,7 @@
  "backup_restored_missing": "Wiederhergestellt, ohne {n} Bilder, die nicht mehr gespeichert sind.",
  "service_failed": "Das hat nicht geklappt: {error}",
  "picture_failed": "Das Bild konnte nicht gespeichert werden: {error}",
+ "images_full": "Dieses Zuhause speichert so viele Bilder, wie es kann. Entferne zuerst einige Bilder und versuche es dann erneut.",
  "restore_failed": "Der Wiederherstellungspunkt konnte nicht wiederhergestellt werden: {error}",
  "pack_remove_failed": "Das Pack konnte nicht entfernt werden: {error}",
  "backup_file": "Datei",

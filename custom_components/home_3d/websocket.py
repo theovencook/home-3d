@@ -374,7 +374,12 @@ async def ws_set_image(hass: HomeAssistant, connection: websocket_api.ActiveConn
     """Store a background image."""
     if (home := _home(hass, connection, msg)) is None:
         return
-    await home.async_set_image(msg["image_id"], msg["data"])
+    try:
+        await home.async_set_image(msg["image_id"], msg["data"])
+    except HomesError as err:
+        # the home was deleted meanwhile, or it holds as many pictures as it may (#364)
+        connection.send_error(msg["id"], err.code, err.detail)
+        return
     connection.send_result(msg["id"])
 
 
@@ -387,7 +392,12 @@ async def ws_delete_image(hass: HomeAssistant, connection: websocket_api.ActiveC
     """Remove a background image."""
     if (home := _home(hass, connection, msg)) is None:
         return
-    await home.async_delete_image(msg["image_id"])
+    try:
+        await home.async_delete_image(msg["image_id"])
+    except HomesError as err:
+        # the home was deleted meanwhile, or it holds as many pictures as it may (#364)
+        connection.send_error(msg["id"], err.code, err.detail)
+        return
     connection.send_result(msg["id"])
 
 

@@ -92,6 +92,7 @@ const en = {
   multi_none: "No match",
   service_failed: "That did not work: {error}",
   restore_failed: "The restore point could not be restored: {error}",
+  images_full: "This home keeps as many pictures as it can. Remove some pictures first, then try again.",
   action_confirm_ok: "Do it",
   action_confirm_default: "{name}: are you sure?",
   action_this_item: "This item",

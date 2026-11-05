@@ -7,7 +7,7 @@ import { download, exportFile, parseExport } from "../../transfer.ts";
 import { storedImageIds } from "../../transfer.ts";
 import { normalizeBuilding } from "../../model.ts";
 import type { Building } from "../../model.ts";
-import { errorText } from "../../failure.ts";
+import { errorText, isImagesFull } from "../../failure.ts";
 import { checkBackup, fetchBackup, restoreBackup, type BackupFile, type BackupHome } from "../../api.ts";
 import { migratePlanTypes } from "../../packs.ts";
 import type { Fp3dEditor } from "../editor.ts";
@@ -115,6 +115,7 @@ export class BackupPart {
       for (const [i, part] of parts.entries()) await checkBackup(this.hass, ...message(part, i));
       let res: Awaited<ReturnType<typeof restoreBackup>> | null = null;
       let pictures = 0;
+      let full = false;
       const done: string[] = [];
       for (const [i, part] of parts.entries()) {
         try {
@@ -131,12 +132,14 @@ export class BackupPart {
           try {
             await storeImage(this.hass, id, picture, part.home?.id ?? res.home_id ?? this.home);
             pictures++;
-          } catch {
-            /* an unreadable picture is skipped */
+          } catch (err) {
+            /* an unreadable picture is skipped; a home that holds as many as it may (#364) says so once below */
+            if (isImagesFull(err)) full = true;
           }
         }
       }
       if (!res) return;
+      if (full) await this.tell(this.t("images_full"));
       // the editor shows its own home again; another one made active by the backup comes with the panel's reload
       if (!res.home_id || !this.home || res.home_id === this.home) {
         this.setDoc(normalizeBuilding(res.building));

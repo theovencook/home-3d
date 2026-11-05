@@ -3,7 +3,7 @@
 
 import { html, nothing } from "lit";
 import { storeImage } from "../../api.ts";
-import { errorText } from "../../failure.ts";
+import { errorText, isImagesFull } from "../../failure.ts";
 import { carEntities, type CarEntities, furnitureEntities, hasScreen, isMediaFurniture, pictureRuleMatches } from "../../devices.ts";
 import { clipConvex } from "../../geometry/area.ts";
 import { holeInRoom } from "../../geometry/holes.ts";
@@ -1179,7 +1179,7 @@ export class ItemFormPart {
     try {
       await this.storePicture(file, f, index);
     } catch (err) {
-      await this.tell(this.t("picture_failed", { error: errorText(err) }));
+      await this.tell(isImagesFull(err) ? this.t("images_full") : this.t("picture_failed", { error: errorText(err) }));
     }
   }
 
