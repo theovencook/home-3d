@@ -377,6 +377,7 @@ const check = {
     const lamps = fake.linked.filter((id) => id.startsWith("light."));
     const lf0 = longFrames.length;
     const t0 = performance.now();
+    const before = snapshot();
     for (let i = 1; i <= seconds * rate; i++) {
       const id = powerTicks ? (i % 4 === 0 && lamps.length ? lamps[(i * 7) % lamps.length] : power[(i * 31) % power.length]) : watchedEvery && i % watchedEvery === 0 ? shown[(i * 31) % shown.length] : undefined;
       panel.hass = fake.tick(id);
@@ -385,7 +386,9 @@ const check = {
     await nextFrame();
     const secs = (performance.now() - t0) / 1000;
     const lf = longFrames.slice(lf0);
-    const background = { longFramesPerS: +(lf.length / secs).toFixed(2), longFrameMsPerS: +(lf.reduce((s, f) => s + f.ms, 0) / secs).toFixed(1), worst: +Math.max(0, ...lf.map((f) => f.ms)).toFixed(0) };
+    const now = snapshot();
+    const per = Object.fromEntries(Object.entries(now).map(([tag, c]) => [tag, { updatesPerS: +((c.updates - (before[tag]?.updates ?? 0)) / secs).toFixed(1), msPerS: +((c.ms - (before[tag]?.ms ?? 0)) / secs).toFixed(1) }]));
+    const background = { ...per, longFramesPerS: +(lf.length / secs).toFixed(2), longFrameMsPerS: +(lf.reduce((s, f) => s + f.ms, 0) / secs).toFixed(1), worst: +Math.max(0, ...lf.map((f) => f.ms)).toFixed(0) };
     const after = [];
     for (let i = 0; i < nudges; i++) {
       const at = performance.now();

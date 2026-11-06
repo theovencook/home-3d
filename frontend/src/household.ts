@@ -26,9 +26,18 @@ export function sameHousehold(a: readonly HouseholdItem[], b: readonly Household
 }
 
 /** A pack item that is a plant: most of its parts are leaves or a pot. */
+const plants = new WeakMap<object, boolean>();
+
+/** (Kept per pack item object, #393: asked for every item on every 3D sync; new packs bring new objects.) */
 export function isPackPlant(type: string): boolean {
   const item = packItem(type);
   if (!item) return false;
+  let plant = plants.get(item);
+  if (plant === undefined) plants.set(item, (plant = packPlant(item)));
+  return plant;
+}
+
+function packPlant(item: NonNullable<ReturnType<typeof packItem>>): boolean {
   // named or tagged as a plant (the Deco pack's plants have leaf colours of their own, #712)
   if (PLANT_WORDS.test([item.id, ...(item.tags ?? []), ...Object.values(item.name ?? {})].join(" "))) return !item.light || /plant|pflanz/i.test(item.id);
   if (item.light) return false;

@@ -167,13 +167,13 @@ import { detectionKind, scaleGlow, buildMarkers, cameraMotionSensors, cameraRedU
 import { RACK_STATUS_COLOURS, rackLedStates, slotEntities, slotStatus } from "../rack-links.ts";
 import { fetchRackSpark, RACK_HOTTEST, RACK_ONLINE, rackCardValues, rackSpark, type RackCardValue } from "../rack-card.ts";
 import { activeSections, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
-import { centroid, furnitureFootprint, gangEntities, gangsOf, GANG_TYPES, TECH_TYPES, isLamp, setTerrain, poolFloorY, LAMP_MODEL, LIFT_SPOTS, outdoorGround, pointInPolygon, poolWaterY, spotDepth, surfaceHeight, zonesOf, type Building, type Floor, type Furniture, type Pet, type StartView, type Vec2 } from "../model.ts";
+import { centroid, furnitureFootprint, gangEntities, gangsOf, GANG_TYPES, TECH_TYPES, isLamp, setTerrain, poolFloorY, LAMP_MODEL, LIFT_SPOTS, outdoorGround, pointInPolygon, poolWaterY, roomHolding, spotDepth, surfaceHeight, zonesOf, type Building, type Floor, type Furniture, type Pet, type StartView, type Vec2 } from "../model.ts";
 
 import { pathLength, pipePath, pointAlong, type P3 } from "../geometry/runs.ts";
 import { pipePieces, poolAreas, poolNodeAt, poolWallNormal, underBasin, PIPE_IDLE, type PipePiece } from "../pool-runs.ts";
 import type { PipeTube } from "../viewer/viewer3d.ts";
 import type { PoolPiece } from "../viewer/pool-water.ts";
-import { pacedSyncDelay, sensorSyncDelay } from "../viewer/pace.ts";
+import { EDITOR_SENSOR_SYNC_MS, pacedSyncDelay, sensorSyncDelay } from "../viewer/pace.ts";
 import { nextTask } from "../viewer/slices.ts";
 import { flowWidth } from "../viewer/flow-style.ts";
 import { roomSentence, sceneSummary, type FloorSummary } from "../room-summary.ts";
@@ -225,7 +225,7 @@ export type MarkerMode = "none" | "important" | "all" | "room";
  */
 /** The room a point of a floor lies in (for device cards shown in their room). */
 function roomAt(floor: { rooms: readonly { id: string; points: [number, number][] }[] }, x: number, z: number): string | null {
-  return floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([x, z], r.points))?.id ?? null;
+  return roomHolding(floor, x, z)?.id ?? null;
 }
 
 function ownButtonOn(hass: HomeAssistant, btn: CustomButton): boolean {
@@ -1556,7 +1556,8 @@ export class Fp3dView3d extends LitElement {
     // beside the editor's plan the states are context only: one sync at most every `syncPace` ms, so the input never
     // waits behind a run of them (#389)
     if (!force && !timed && this.syncPace > 0 && !this.replay) {
-      const wait = pacedSyncDelay(performance.now() - this.lastSync, this.syncPace);
+      // measured values alone (power, energy …) at most every EDITOR_SENSOR_SYNC_MS there (#393), as on the tablet level
+      const wait = pacedSyncDelay(performance.now() - this.lastSync, sensorsOnly ? Math.max(this.syncPace, EDITOR_SENSOR_SYNC_MS) : this.syncPace);
       if (wait > 0) {
         this.sensorTimer ??= setTimeout(() => {
           this.sensorTimer = undefined;
@@ -3894,7 +3895,7 @@ export class Fp3dView3d extends LitElement {
         if (placed.has(id)) continue;
         taken.add(id);
         const kind = link.entity ? kindOf(link.entity) : null;
-        const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
+        const room = roomHolding(floor, f.x, f.z);
         // a pack's heat pump indoor unit (or boiler, buffer tank) with a water_heater entity: its mode and water temperature (#645)
         const boiler = !!st && isPackHeater(f.type) && st.entity_id.startsWith("water_heater.") ? waterHeaterText(hass, st) : null;
         markers.push({
@@ -4531,7 +4532,7 @@ export class Fp3dView3d extends LitElement {
     const model = LAMP_MODEL[f.type] ?? item?.light ?? "floor";
     // a height above the floor set by hand wins (a table lamp on a shelf, a floor lamp on a platform);
     // an LED strip outside the house counts from the ground there (a path light flush with the lawn)
-    const inRoom = floor.rooms.some((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
+    const inRoom = !!roomHolding(floor, f.x, f.z);
     const base0 = model === "strip" && !inRoom
       ? outdoorGround(floor, f.x, f.z) + (f.mount_y ?? 0)
       : f.mount_y != null && !item

@@ -67,6 +67,13 @@ export function sensorSyncDelay(sinceLast: number, low: boolean): number {
  */
 export const EDITOR_SYNC_MS = 1000;
 
+/**
+ * Beside the editor's plan, a change of measured values alone (power, energy, temperature) reaches the 3D view at most
+ * this often (#393): a circuit monitor ticks many times a second, and on a weak device each sync of a large plan costs
+ * more than a frame. A switch, lamp or door still shows within EDITOR_SYNC_MS.
+ */
+export const EDITOR_SENSOR_SYNC_MS = 2000;
+
 /** How long a paced state change waits, given the time since the last sync and the pace (0: show it now). */
 export function pacedSyncDelay(sinceLast: number, pace: number): number {
   return pace > 0 ? Math.max(0, pace - sinceLast) : 0;

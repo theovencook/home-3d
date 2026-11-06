@@ -487,7 +487,18 @@ const ENERGY_FAMILIES: Record<string, EnergyRole> = {
  * by their family: a consumer unit or CT clamp box (`energy_monitor`) is the meter, a portable power station a battery,
  * an EV charger a wallbox and a solar panel a source of its own. A pack's gas or water meter is no power meter.
  */
+const roles = new Map<string, { v: number; role: EnergyRole | null }>();
+
+/** (Kept per type while the packs stay, #393: asked for every item on every 3D sync.) */
 export function energyRole(type: string): EnergyRole | null {
+  const had = roles.get(type);
+  if (had && had.v === version) return had.role;
+  const role = energyRoleNow(type);
+  roles.set(type, { v: version, role });
+  return role;
+}
+
+function energyRoleNow(type: string): EnergyRole | null {
   if (type === "meter" || type === "inverter" || type === "home_battery" || type === "wallbox") return type;
   const item = packInfo(type);
   const role = item?.family ? (ENERGY_FAMILIES[item.family] ?? (/^ev_charger_/.test(item.family) ? "wallbox" : null)) : null;
@@ -586,7 +597,28 @@ export function packName(pack: { id: string; name: string }, _language: string):
 }
 
 /** Height of the bottom of a pack item, a wall light or an LED strip above the floor (0 for other built-in furniture). */
-export function mountBase(floor: Floor, f: Pick<Furniture, "type" | "x" | "z" | "h"> & { mount_y?: number | null; variant?: string | null }): number {
+type MountItem = Pick<Furniture, "type" | "x" | "z" | "h"> & { mount_y?: number | null; variant?: string | null };
+
+/**
+ * Kept per floor and item object (#393): a 3D sync asked for every item's base several times (markers, lamps, the
+ * walk), and an item on a surface looks at the whole floor. A plan change brings new floor and item objects (the
+ * editor and the panel copy the plan for every change); new packs count as a change too.
+ */
+const bases = new WeakMap<Floor, WeakMap<object, { v: number; sig: string; y: number }>>();
+
+export function mountBase(floor: Floor, f: MountItem): number {
+  let perItem = bases.get(floor);
+  if (!perItem) bases.set(floor, (perItem = new WeakMap()));
+  // the item's own fields count as well: one changed in place (a lift in the wall view) is worked out again
+  const sig = `${f.type}|${f.x}|${f.z}|${f.h}|${f.mount_y ?? ""}|${f.variant ?? ""}|${floor.height}`;
+  const had = perItem.get(f);
+  if (had && had.v === version && had.sig === sig) return had.y;
+  const y = mountBaseNow(floor, f);
+  perItem.set(f, { v: version, sig, y });
+  return y;
+}
+
+function mountBaseNow(floor: Floor, f: MountItem): number {
   const item = packInfo(f.type);
   if (f.mount_y != null) return f.mount_y;
   // an access point under the ceiling, a slim water heater on the wall (drawn from 0 and lifted by this)

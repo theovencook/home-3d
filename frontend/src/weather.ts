@@ -4,6 +4,7 @@
  */
 import { DEFAULT_WEATHER_EFFECTS, type WeatherEffect } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
+import { idsWhere } from "./state-index.ts";
 
 export interface WeatherState {
   entity: string;
@@ -38,11 +39,8 @@ const CONDITIONS: Record<string, Partial<Omit<WeatherState, "entity" | "conditio
 /** The weather entity to show: the preferred one when it exists, otherwise the first `weather.*`. */
 export function weatherEntity(hass: HomeAssistant, preferred?: string | null): string | null {
   if (preferred && hass.states[preferred]) return preferred;
-  return (
-    Object.keys(hass.states)
-      .filter((id) => id.startsWith("weather."))
-      .sort()[0] ?? null
-  );
+  // the weather entities, found once while the set of entities stays (#393)
+  return [...idsWhere(hass, "weather", (id) => id.startsWith("weather."))].sort()[0] ?? null;
 }
 
 /**

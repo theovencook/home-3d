@@ -292,6 +292,7 @@ else {
   const b3 = results.big3d;
   if (b3) {
     row(`Editor, 3D beside, ${b3.items} items, 8 power/lamp updates/s: long frames`, `${b3.background.longFramesPerS}/s, ${b3.background.longFrameMsPerS} ms/s (worst ${b3.background.worst} ms)`);
+    for (const tag of ["fp3d-editor", "fp3d-view3d"]) if (b3.background[tag]) row(`Editor, 3D beside, large floor, 8 updates/s: ${tag}`, `${b3.background[tag].updatesPerS} updates/s, ${b3.background[tag].msPerS} ms/s`);
     row("Editor, 3D beside, large floor: longest frame after a nudge (median / worst)", `${b3.nudge.median} / ${b3.nudge.worst} ms`);
   }
   if (results.select) row("Editor selection, linked / plain (median / worst)", `${results.select.linked.median} / ${results.select.linked.worst} ms, ${results.select.plain.median} / ${results.select.plain.worst} ms`);

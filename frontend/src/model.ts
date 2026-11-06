@@ -2290,6 +2290,20 @@ export function furnitureFootprint(f: Furniture): Vec2[] {
   ].map(([x, z]) => [f.x + x * c - z * s, f.z + x * s + z * c] as Vec2);
 }
 
+/**
+ * The room of a floor a plan point lies in (the first that holds it), kept per floor object and point (#393: a 3D sync
+ * looked it up for every item; a plan change brings new floor objects). Undefined outside every room.
+ */
+const roomsAt = new WeakMap<object, { rooms: unknown; at: Map<string, number> }>();
+export function roomHolding<R extends { points: readonly Vec2[] }>(floor: { rooms: readonly R[] }, x: number, z: number): R | undefined {
+  let m = roomsAt.get(floor);
+  if (!m || m.rooms !== floor.rooms) roomsAt.set(floor, (m = { rooms: floor.rooms, at: new Map() }));
+  const key = `${x},${z}`;
+  let i = m.at.get(key);
+  if (i === undefined) m.at.set(key, (i = floor.rooms.findIndex((r) => r.points.length >= 3 && pointInPolygon([x, z], r.points))));
+  return i < 0 ? undefined : floor.rooms[i];
+}
+
 export function pointInPolygon(p: Vec2, points: readonly Vec2[]): boolean {
   let inside = false;
   for (let i = 0, j = points.length - 1; i < points.length; j = i++) {

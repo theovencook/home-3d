@@ -6,6 +6,7 @@ import { translate } from "./i18n.ts";
 import type { Building, Room } from "./model.ts";
 import { centroid, pointInPolygon } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
+import { idsWhere } from "./state-index.ts";
 
 export interface PersonMarker {
   id: string;
@@ -124,7 +125,13 @@ export function locatedPersons(hass: HomeAssistant, building: Building, skip: Re
     worn: boolean;
   }
   const found: Found[] = [];
-  for (const [entityId, st] of Object.entries(hass.states)) {
+  // the locating sensors, found once while the set of entities stays (#393); their states are read as they are now. One
+  // unavailable or unknown when they were found may carry the mark later (an unavailable entity has no attributes)
+  const candidate = (id: string, s: { state: string; attributes?: Record<string, unknown> } | undefined) =>
+    id.startsWith("sensor.") && (s?.attributes?.home3d_locate === true || s?.state === "unavailable" || s?.state === "unknown");
+  for (const entityId of idsWhere(hass, "locate", candidate)) {
+    const st = hass.states[entityId];
+    if (!st) continue;
     const a = st.attributes;
     if (!entityId.startsWith("sensor.") || a.home3d_locate !== true || typeof a.room_id !== "string") continue;
     let hit: { floorId: string; room: Room } | null = null;
