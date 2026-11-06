@@ -79,6 +79,7 @@ import { WallKitPart } from "./editor/wall-kit.ts";
 import { PipesPart } from "./editor/pipes.ts";
 import { PoolPart } from "./editor/pool.ts";
 import { AreaSelectPart } from "./editor/area-select.ts";
+import { ToolPanelPart } from "./editor/tool-panels.ts";
 import { FieldsPart } from "./editor/fields.ts";
 import { SettingsPart } from "./editor/settings.ts";
 import { preloadParts } from "./editor/lazy.ts";
@@ -196,6 +197,7 @@ export class Fp3dEditor extends LitElement {
     _viewMenu: { state: true },
     _draft: { state: true },
     _outdoorFree: { state: true },
+    _areaFree: { state: true },
     _outdoorType: { state: true },
     _poolShape: { state: true },
     _pipeMode: { state: true },
@@ -503,6 +505,8 @@ export class Fp3dEditor extends LitElement {
   declare _draft: Vec2[];
   /** Outdoor tool: corner by corner like a free-form room instead of a dragged rectangle (#97). */
   declare _outdoorFree: boolean;
+  /** The Outside panel's shape choice for areas (#402): by their corners rather than as a dragged rectangle. */
+  declare _areaFree: boolean;
   /** What the outdoor tool draws next (lawn, terrace, pool …), chosen before drawing. */
   declare _outdoorType: OutdoorType;
   /** Pools: the shape drawn next (rectangle, round, oval or free). */
@@ -712,6 +716,7 @@ export class Fp3dEditor extends LitElement {
     this._viewMenu = false;
     this._draft = [];
     this._outdoorFree = false;
+    this._areaFree = false;
     this._outdoorType = "lawn";
     this._poolShape = "rect";
     this._pipeMode = false;
@@ -1329,8 +1334,8 @@ export class Fp3dEditor extends LitElement {
 }
 
 /** The area modules' methods (#202): one class per editor area under editor/, all on this element. */
-export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, ItemFoldsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart, AreaSelectPart {}
-mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, ItemFoldsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart, AreaSelectPart]);
+export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, ItemFoldsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart, AreaSelectPart, ToolPanelPart {}
+mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, ItemFoldsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart, AreaSelectPart, ToolPanelPart]);
 
 defineElement("fp3d-editor", Fp3dEditor);
 

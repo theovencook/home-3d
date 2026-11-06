@@ -22,6 +22,7 @@ const { Fp3dEditor } = (await import("./components/editor.ts")) as unknown as { 
 const { editorSource } = await import("./components/editor-source.ts");
 const { settingById } = await import("./settings/registry.ts");
 const { englishTable } = await import("./i18n.ts");
+const { cardsOf } = await import("./tool-cards.ts");
 
 const en = englishTable() as Record<string, string>;
 const src = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
@@ -265,18 +266,16 @@ test("one toolbar row: floor, the tools with icons, Wall view, Undo/Redo, then 3
   for (const w of ["Ground", "Upper", en.add_floor, en.floor_settings]) assert.ok(floors.includes(w), w);
 });
 
-test("Build and Outside keep every drawing tool and choice", () => {
+test("Build and Outside keep every drawing tool and choice: each panel has a card for it (#402)", () => {
   const el = editor();
-  el._toolMenu = "build";
-  let bar = flat(el.renderToolBar(el.floor));
-  for (const k of ["tool_room", "tool_wall", "tool_opening", "tool_hole", "tool_roof"]) assert.ok(bar.includes(en[k]!), k);
-  el._toolOpen = "rect";
-  bar = flat(el.renderToolBar(el.floor));
-  for (const k of ["tool_rect", "tool_polygon", "tool_measure"]) assert.ok(bar.includes(en[k]!), k);
-  el._toolMenu = "outside";
-  el._toolOpen = null;
-  bar = flat(el.renderToolBar(el.floor));
-  for (const k of ["tool_outdoor", "tool_pool"]) assert.ok(bar.includes(en[k]!), k);
+  for (const [menu, tools] of [
+    ["build", ["rect", "polygon", "measure", "wall", "opening", "hole", "roof"]],
+    ["outside", ["outdoor", "pool"]],
+  ] as const) {
+    el._toolMenu = menu;
+    assert.match(flat(el.renderToolBar(el.floor)), /<fp3d-tool-panel/);
+    for (const t of tools) assert.ok(cardsOf(menu, true).some((c) => c.tool === t), t);
+  }
 });
 
 test("More: Fit with garden (something stands outside), 3D beside, Help and shortcuts, Settings for this home", () => {

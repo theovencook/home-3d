@@ -5,12 +5,15 @@ import { live } from "lit/directives/live.js";
 import { modalFocus } from "../../dialog-focus.ts";
 import { released } from "../../features.ts";
 import type { I18nKey } from "../../i18n.ts";
-import { OUTDOOR_TYPES, type Floor } from "../../model.ts";
+import type { Floor } from "../../model.ts";
+import { activeCard, TOOL_CARDS, type ToolGroup } from "../../tool-cards.ts";
 import { LEGEND, SHORTCUTS } from "../../help.ts";
 import { hintKey, touchOnly, touchWording, type Tool } from "../../editor-hint.ts";
 import { uiIcon, type UiIcon } from "../../ui-icons.ts";
 import { startChecklist, type StartStep } from "../../start-checklist.ts";
 import { furnitureName } from "../../furniture-names.ts";
+import type { ToolPanel } from "../tool-panel.ts";
+import { loadToolPanel, need } from "./lazy.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** Select several: two items in a dashed frame, drawn like the toolbar's icons (ui-icons.ts). */
@@ -92,66 +95,16 @@ export class ToolbarPart {
   renderToolBar(this: Fp3dEditor, floor: Floor | undefined, warn: unknown = nothing) {
     const admin = this.isEditor;
     const off = !floor || !admin;
-    type Choice = { label: string; on: boolean; pick: () => void };
-    type Entry = { tool: Tool; label: string; choices?: () => Choice[] };
-    const outdoorTypes = OUTDOOR_TYPES.filter((t) => t !== "pool");
-    const room: Entry = {
-      tool: "rect",
-      label: this.t("tool_room"),
-      choices: () => [
-        { label: this.t("tool_rect"), on: this._tool === "rect", pick: () => this.setTool("rect") },
-        { label: this.t("tool_polygon"), on: this._tool === "polygon", pick: () => this.setTool("polygon") },
-        { label: this.t("tool_measure"), on: this._tool === "measure", pick: () => this.setTool("measure") },
-      ],
-    };
-    const outdoor: Entry = {
-      tool: "outdoor",
-      label: this.t("tool_outdoor"),
-      choices: () => [
-        ...outdoorTypes.map((t) => ({
-          label: this.t(`out_${t}` as I18nKey),
-          on: this._tool === "outdoor" && (this._outdoorType ?? "lawn") === t,
-          pick: () => {
-            this.setTool("outdoor");
-            this._outdoorType = t;
-          },
-        })),
-        { label: this.t("outdoor_shape_rect"), on: this._tool === "outdoor" && !this._outdoorFree, pick: () => (this.setTool("outdoor"), (this._outdoorFree = false)) },
-        { label: this.t("outdoor_shape_free"), on: this._tool === "outdoor" && this._outdoorFree, pick: () => (this.setTool("outdoor"), (this._outdoorFree = true)) },
-      ],
-    };
-    const pool: Entry = {
-      tool: "pool",
-      label: this.t("tool_pool"),
-      choices: () => [
-        ...(["rect", "round", "oval", "free"] as const).map((k) => ({
-          label: this.t(`pool_shape_${k}` as I18nKey),
-          on: this._tool === "pool" && !this._pipeMode && (this._poolShape ?? "rect") === k,
-          pick: () => {
-            this.setTool("pool");
-            this._poolShape = k;
-            this._outdoorFree = k === "free";
-          },
-        })),
-        ...(this.pipeRules ? [{ label: this.t("pool_pipe_draw"), on: this._tool === "pool" && !!this._pipeMode, pick: () => (this.setTool("pool"), (this._pipeMode = true)) }] : []),
-      ],
-    };
-    const groups: { id: string; label: string; entries: Entry[] }[] = [
-      {
-        id: "build",
-        label: this.t("tool_group_build"),
-        entries: [room, { tool: "wall", label: this.t("tool_wall") }, { tool: "opening", label: this.t("tool_opening") }, { tool: "hole", label: this.t("tool_hole") }, { tool: "roof", label: this.t("tool_roof") }],
-      },
-      { id: "outside", label: this.t("tool_group_outside"), entries: [outdoor, pool] },
+    // Build and Outside open a panel of cards like the furniture library (#402): what is drawn, with a picture
+    const groups: { id: ToolGroup; label: string; icon: UiIcon }[] = [
+      { id: "build", label: this.t("tool_group_build"), icon: "wall" },
+      { id: "outside", label: this.t("tool_group_outside"), icon: "tree" },
     ];
-    const inEntry = (e: Entry) => e.tool === this._tool || (e === room && (this._tool === "polygon" || this._tool === "measure"));
-    // what a group's button says while one of its tools is in use: the tool, and its shape or kind
-    const detail = (e: Entry) =>
-      e === pool ? (this._pipeMode ? this.t("pool_pipe_draw") : this.t(`pool_shape_${this._poolShape ?? "rect"}` as I18nKey)) : e === outdoor ? this.t(`out_${this._outdoorType ?? "lawn"}` as I18nKey) : e === room ? this.t(`tool_${this._tool}` as I18nKey) : "";
+    const active = activeCard({ tool: this._tool, outdoorType: this._outdoorType ?? "lawn", poolShape: this._poolShape ?? "rect", pipeMode: !!this._pipeMode });
+    const activeOf = (g: ToolGroup) => TOOL_CARDS.find((c) => c.id === active && c.group === g);
     const close = () => ((this._toolMenu = null), (this._toolOpen = null));
     const plain = (tool: Tool, label: string, icon: UiIcon) =>
       html`<button aria-pressed=${this._tool === tool} ?disabled=${off} @click=${() => (close(), this.setTool(tool))}>${uiIcon(icon)} ${label}</button>`;
-    const groupIcon: Record<string, UiIcon> = { build: "wall", outside: "tree" };
     // no Fit in the row (#321): the plan has its own beside the zoom buttons; fitting the garden too is in More, when something stands outside
     return html`<span class="fp3d-tb-sep"></span>
       <div class="fp3d-seg fp3d-seg-menu fp3d-seg-tools" role="group" aria-label=${this.t("tools")}>
@@ -161,53 +114,15 @@ export class ToolbarPart {
           ${MULTI_ICON}<span class="fp3d-tool-word"> ${this.t("tool_multi")}</span>
         </button>
         ${groups.map((g) => {
-          const active = g.entries.find(inEntry);
+          const card = activeOf(g.id);
           const open = this._toolMenu === g.id;
-          const text = active ? `${active.label}${detail(active) ? `: ${detail(active)}` : ""}` : g.label;
+          // the group's button names the tool in use
+          const text = card ? `${g.label}: ${this.t(card.name)}` : g.label;
           return html`<div class="fp3d-menu-wrap">
-            <button aria-pressed=${!!active} aria-haspopup="menu" aria-expanded=${open} ?disabled=${off} @click=${() => this.openToolMenu(open ? null : g.id)}>
-              ${uiIcon(groupIcon[g.id] ?? "wall")} ${text} <span class="fp3d-caret">▾</span>
+            <button data-group=${g.id} aria-pressed=${!!card} aria-haspopup="dialog" aria-expanded=${open} ?disabled=${off} @pointerenter=${() => need(loadToolPanel)} @click=${() => this.openToolMenu(open ? null : g.id)}>
+              ${uiIcon(g.icon)} ${text} <span class="fp3d-caret">▾</span>
             </button>
-            ${open
-              ? html`<div class="fp3d-menu-veil" @click=${close}></div>
-                  <div class="fp3d-menu" role="menu" @keydown=${(e: KeyboardEvent) => this.menuKeys(e)}>
-                    ${g.entries.map((x) => {
-                      const choices = x.choices?.() ?? [];
-                      const unfolded = this._toolOpen === x.tool;
-                      return html`<button
-                          role="menuitem"
-                          class="fp3d-menu-item ${inEntry(x) ? "fp3d-menu-on" : ""}"
-                          aria-expanded=${choices.length ? unfolded : nothing}
-                          @click=${() => {
-                            if (choices.length) this._toolOpen = unfolded ? null : x.tool;
-                            else {
-                              this.setTool(x.tool);
-                              close();
-                            }
-                          }}
-                        >
-                          ${x.label}${choices.length ? html`<span class="fp3d-menu-more">${unfolded ? "▾" : "▸"}</span>` : nothing}
-                        </button>
-                        ${unfolded
-                          ? html`<div class="fp3d-menu-sub">
-                              ${choices.map(
-                                (c) =>
-                                  html`<button
-                                    class="fp3d-chip ${c.on ? "fp3d-menu-on" : ""}"
-                                    @click=${() => {
-                                      c.pick();
-                                      this._draft = [];
-                                      close();
-                                    }}
-                                  >
-                                    ${c.label}
-                                  </button>`,
-                              )}
-                            </div>`
-                          : nothing}`;
-                    })}
-                  </div>`
-              : nothing}
+            ${open ? html`<div class="fp3d-menu-veil" @click=${close}></div>${this.renderToolPanel(g.id, active)}` : nothing}
           </div>`;
         })}
         ${plain("furniture", this.t("tool_furniture"), "sofa")} ${plain("energy", this.t("tool_energy"), "bolt")}
@@ -236,7 +151,14 @@ export class ToolbarPart {
     this._toolOpen = null;
     this._floorMenu = false;
     this._viewMenu = false;
-    if (id) void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>(".fp3d-toolbar .fp3d-menu [role^='menuitem']")?.focus());
+    // a tool panel (#402) takes the focus itself: the search, or on a touch screen the card in use
+    if (id === "build" || id === "outside")
+      void Promise.all([this.updateComplete, customElements.whenDefined("fp3d-tool-panel")]).then(async () => {
+        const panel = this.renderRoot.querySelector<ToolPanel>("fp3d-tool-panel");
+        await panel?.updateComplete;
+        panel?.focusStart();
+      });
+    else if (id) void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>(".fp3d-toolbar .fp3d-menu [role^='menuitem']")?.focus());
   }
 
   /** The keys of an open toolbar menu: arrows, Home and End move through its lines; Escape closes it, back on its button. */
