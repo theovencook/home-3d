@@ -1,4 +1,4 @@
-import{a as o,b as n,c as d,f as s}from"./home-3d-editor-chunk-GGWVF3HT.js";function g(e,t){return(e??"").trim().toLowerCase()===(t??"").trim().toLowerCase()}function x(e,t){return!!e&&!g(e,t)}function S(e){return x(e.value,e.fallback)?d`<button
+import{a as o,b as n,c as s,f as d}from"./home-3d-editor-chunk-GGWVF3HT.js";function g(e,t){return(e??"").trim().toLowerCase()===(t??"").trim().toLowerCase()}function h(e,t){return!!e&&!g(e,t)}function S(e){return h(e.value,e.fallback)?s`<button
     type="button"
     class="fp3d-colour-reset"
     title=${e.label}
@@ -7,7 +7,7 @@ import{a as o,b as n,c as d,f as s}from"./home-3d-editor-chunk-GGWVF3HT.js";func
     @click=${t=>{t.preventDefault(),t.stopPropagation(),e.onReset()}}
   >
     ↺
-  </button>`:s}var f=n`
+  </button>`:d}var f=n`
   .fp3d-colour-reset {
     flex: none;
     border: none;
@@ -28,12 +28,12 @@ import{a as o,b as n,c as d,f as s}from"./home-3d-editor-chunk-GGWVF3HT.js";func
     opacity: 0.4;
     cursor: default;
   }
-`;var h={1:4,2:8,3:12,4:16,5:20,6:24,8:32},m={control:6,card:8,pill:999},w={section:18,card:15,body:14,hint:12,label:12},y=44;function c(){let e=[];for(let[t,r]of Object.entries(h))e.push(`--fp3d-space-${t}: ${r}px;`);for(let[t,r]of Object.entries(m))e.push(`--fp3d-radius-${t}: ${r}px;`);for(let[t,r]of Object.entries(w))e.push(`--fp3d-type-${t}: ${r}px;`);return e.push(`--fp3d-touch: ${y}px;`),e.join(`
-`)}var p={bg:"#070b14",bg2:"#0d1424",chrome:"rgba(15, 23, 42, 0.88)",chromeSolid:"#0f172a",line:"rgba(148, 163, 184, 0.2)",text:"#e2e8f0",muted:"#94a3b8",accent:"#48cdeb",accentText:"#041018",panel:"#1e293b",primary:"#1e6ebc",primaryText:"#ffffff",link:"#5d97cf",soft:"#5b7cff",warm:"#ffb547",danger:"#ff6b8b",warning:"#fbbf24",success:"#4ade80",shadow:"0 8px 30px rgba(0, 0, 0, 0.5)",colorScheme:"dark"},l={bg:"#eef2f8",bg2:"#e3e9f2",chrome:"rgba(255, 255, 255, 0.9)",chromeSolid:"#ffffff",line:"rgba(15, 23, 42, 0.16)",text:"#1a1a1a",muted:"#58667a",accent:"#1c67b1",accentText:"#ffffff",panel:"#e2e8f0",primary:"#1e6ebc",primaryText:"#ffffff",link:"#1c67b1",soft:"#3d5bd9",warm:"#a35f00",danger:"#c4224a",warning:"#92400e",success:"#166534",shadow:"0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 28px -10px rgba(14, 37, 66, 0.14)",colorScheme:"light"},u={bg:"#000000",bg2:"#050a14",chrome:"rgba(0, 0, 0, 0.94)",chromeSolid:"#000000",line:"rgba(255, 255, 255, 0.7)",text:"#ffffff",muted:"#dbe4f5",accent:"#ffe14d",accentText:"#000000",panel:"#111111",primary:"#ffe14d",primaryText:"#000000",link:"#9db4ff",soft:"#9db4ff",warm:"#ffc247",danger:"#ff8fa8",warning:"#ffc247",success:"#7ee8a6",shadow:"0 0 0 1px rgba(255, 255, 255, 0.5)",colorScheme:"dark"};function a(e){let t=r=>r.replace(/[A-Z]/g,i=>`-${i.toLowerCase()}`);return Object.entries(e).map(([r,i])=>`--fp3d-s-${t(r)}: ${i};`).join(`
-`)}var b=e=>e.replace(/[A-Z]/g,t=>`-${t.toLowerCase()}`),v=Object.keys(p).filter(e=>e!=="colorScheme").map(e=>`--fp3d-${b(e)}: var(--fp3d-s-${b(e)}, ${p[e]});`).join(`
+`;var x={1:4,2:8,3:12,4:16,5:20,6:24,8:32},m={control:6,card:8,pill:999},w={section:18,card:15,body:14,hint:12,label:12},v=44;function c(){let e=[];for(let[t,r]of Object.entries(x))e.push(`--fp3d-space-${t}: ${r}px;`);for(let[t,r]of Object.entries(m))e.push(`--fp3d-radius-${t}: ${r}px;`);for(let[t,r]of Object.entries(w))e.push(`--fp3d-type-${t}: ${r}px;`);return e.push(`--fp3d-touch: ${v}px;`),e.join(`
+`)}var a={bg:"#070b14",bg2:"#0d1424",chrome:"rgba(15, 23, 42, 0.88)",chromeSolid:"#0f172a",line:"rgba(148, 163, 184, 0.2)",text:"#e2e8f0",muted:"#94a3b8",accent:"#48cdeb",accentText:"#041018",panel:"#1e293b",primary:"#1e6ebc",primaryText:"#ffffff",link:"#5d97cf",soft:"#5b7cff",warm:"#ffb547",danger:"#ff6b8b",warning:"#fbbf24",success:"#4ade80",shadow:"0 8px 30px rgba(0, 0, 0, 0.5)",colorScheme:"dark"},l={bg:"#eef2f8",bg2:"#e3e9f2",chrome:"rgba(255, 255, 255, 0.9)",chromeSolid:"#ffffff",line:"rgba(15, 23, 42, 0.16)",text:"#1a1a1a",muted:"#58667a",accent:"#1c67b1",accentText:"#ffffff",panel:"#e2e8f0",primary:"#1e6ebc",primaryText:"#ffffff",link:"#1c67b1",soft:"#3d5bd9",warm:"#a35f00",danger:"#c4224a",warning:"#92400e",success:"#166534",shadow:"0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 28px -10px rgba(14, 37, 66, 0.14)",colorScheme:"light"},u={bg:"#000000",bg2:"#050a14",chrome:"rgba(0, 0, 0, 0.94)",chromeSolid:"#000000",line:"rgba(255, 255, 255, 0.7)",text:"#ffffff",muted:"#dbe4f5",accent:"#ffe14d",accentText:"#000000",panel:"#111111",primary:"#ffe14d",primaryText:"#000000",link:"#9db4ff",soft:"#9db4ff",warm:"#ffc247",danger:"#ff8fa8",warning:"#ffc247",success:"#7ee8a6",shadow:"0 0 0 1px rgba(255, 255, 255, 0.5)",colorScheme:"dark"};function p(e){let t=r=>r.replace(/[A-Z]/g,i=>`-${i.toLowerCase()}`);return Object.entries(e).map(([r,i])=>`--fp3d-s-${t(r)}: ${i};`).join(`
+`)}var b=e=>e.replace(/[A-Z]/g,t=>`-${t.toLowerCase()}`),y=Object.keys(a).filter(e=>e!=="colorScheme").map(e=>`--fp3d-${b(e)}: var(--fp3d-s-${b(e)}, ${a[e]});`).join(`
 `),k=c(),L=n`
   :host {
-    ${o(v)}
+    ${o(y)}
     ${o(k)}
     --fp3d-font: "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --fp3d-title-font: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
@@ -42,10 +42,10 @@ import{a as o,b as n,c as d,f as s}from"./home-3d-editor-chunk-GGWVF3HT.js";func
     color: var(--fp3d-text);
   }
   :host([light]) {
-    ${o(a(l))}
+    ${o(p(l))}
   }
   :host([contrast]) {
-    ${o(a(u))}
+    ${o(p(u))}
   }
 `,z=n`
   .fp3d-seg {
@@ -159,13 +159,6 @@ import{a as o,b as n,c as d,f as s}from"./home-3d-editor-chunk-GGWVF3HT.js";func
   input[type="radio"] {
     accent-color: var(--fp3d-primary);
   }
-  /* a colour picker shows its colour as a full swatch, not a line inside the text field's padding */
-  .fp3d-field input[type="color"] {
-    padding: 3px;
-    height: 36px;
-    width: 100%;
-    cursor: pointer;
-  }
   /* colour per role (#12): a swatch beside the presets; a role following the look shows a faded swatch */
   .fp3d-paint {
     display: flex;
@@ -185,17 +178,19 @@ import{a as o,b as n,c as d,f as s}from"./home-3d-editor-chunk-GGWVF3HT.js";func
     border-color: var(--fp3d-accent, #37e0ff);
     box-shadow: 0 0 0 2px var(--fp3d-accent, #37e0ff);
   }
-  .fp3d-paint-hex {
-    width: 5.5em;
-  }
+  /* the colour field (#403) with its reset, then the presets and the material, each on a line of its own: the field
+     takes the width of a two-column row */
   .fp3d-colour-pick {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 6px;
   }
+  /* the shared colour field (#403) and its reset */
   .fp3d-colour-swatch {
+    flex: none;
     display: grid;
-    grid-template-columns: 44px auto;
+    grid-template-columns: auto auto;
+    justify-content: start;
     align-items: center;
   }
   /* a picker with its reset (#230) on a line of its own: the swatch takes the width */
@@ -204,15 +199,9 @@ import{a as o,b as n,c as d,f as s}from"./home-3d-editor-chunk-GGWVF3HT.js";func
     align-items: center;
     gap: 4px;
   }
-  .fp3d-colour-row input[type="color"] {
-    flex: 1;
-  }
   /* its material (#40) on a line of its own under the colour */
   .fp3d-colour-pick .fp3d-material {
     grid-column: 1 / -1;
-  }
-  .fp3d-field input[type="color"].fp3d-colour-unset {
-    opacity: 0.35;
   }
   .fp3d-field select option,
   select option {

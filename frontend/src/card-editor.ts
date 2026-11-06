@@ -5,6 +5,8 @@ import { defineElement } from "./define.ts";
 import { css, html, LitElement, nothing } from "lit";
 import { fetchBuilding, listHomes, type HomeInfo } from "./api.ts";
 import { ACCENT_DEFAULT, colourReset, colourResetCss } from "./colour-reset.ts";
+// the shared colour field (#403): its element loads with this bundle (card.ts getConfigElement)
+import { colourField } from "./colour-field-tag.ts";
 import { labOn, UNRELEASED } from "./features.ts";
 import { CARD_CONTROLS, type CardConfig, type CardControl } from "./card-config.ts";
 import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
@@ -364,7 +366,7 @@ export class Floorplan3dCardEditor extends LitElement {
         <label class="field"
           >${this.t("accent")}
           <span class="accent-pick"
-            ><input type="color" .value=${this._config.accent ?? ACCENT_DEFAULT} @input=${(e: Event) => this.set("accent", (e.target as HTMLInputElement).value)} />
+            >${colourField({ value: this._config.accent ?? null, base: ACCENT_DEFAULT, label: this.t("accent"), t: (k, v) => this.t(k, v), live: true, onChange: (hex) => hex && this.set("accent", hex) })}
             ${colourReset({ value: this._config.accent, fallback: ACCENT_DEFAULT, label: this.t("accent_reset"), onReset: () => this.set("accent", undefined) })}</span
           >
         </label>

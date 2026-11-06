@@ -34,6 +34,8 @@ import type { PackPart } from "../packs.ts";
 import { askConfirm, showText } from "../ask.ts";
 import "../components/ask-dialog.ts";
 import { colourReset } from "../colour-reset.ts";
+// the shared colour field (#403): its element is defined by the editor bundle, which opens this one
+import { colourField } from "../colour-field-tag.ts";
 import { controls, tokens } from "../styles.ts";
 
 /** The colour of a part set to "own colour" starts at this grey. */
@@ -600,7 +602,7 @@ export class ItemEditor extends LitElement {
           ${this.options.roles.map((r) => html`<option value=${r} ?selected=${p.color === r}>${this.t(`colour_role_${r}`)}</option>`)}
           <option value="own" ?selected=${own}>${this.t("ie_colour_own")}</option>
         </select>
-        ${own ? html`<input type="color" aria-label=${this.t("ie_colour_own")} .value=${p.color} @change=${(e: Event) => change({ color: (e.target as HTMLInputElement).value })} />${colourReset({ value: p.color, fallback: OWN_COLOUR_DEFAULT, label: this.t("colour_reset"), onReset: () => change({ color: OWN_COLOUR_DEFAULT }) })}` : nothing}
+        ${own ? html`${colourField({ value: p.color, label: this.t("ie_colour_own"), t: (k, v) => this.t(k, v), onChange: (hex) => hex && change({ color: hex }) })}${colourReset({ value: p.color, fallback: OWN_COLOUR_DEFAULT, label: this.t("colour_reset"), onReset: () => change({ color: OWN_COLOUR_DEFAULT }) })}` : nothing}
         <button class="fp3d-btn" ?disabled=${draft.parts.length >= MAX_PARTS} @click=${() => this.edit(duplicatePart(draft, i))}>${this.t("ie_duplicate")}</button>
         <button class="fp3d-btn fp3d-danger" title=${this.t("ie_remove_part")} aria-label=${this.t("ie_remove_part")} ?disabled=${draft.parts.length <= 1} @click=${() => this.edit(removePart(draft, i))}>✕</button>
       </div>
@@ -854,11 +856,6 @@ export class ItemEditor extends LitElement {
         font-family: ui-monospace, monospace;
         font-size: 12px;
         resize: vertical;
-      }
-      input[type="color"] {
-        padding: 2px;
-        width: 44px;
-        height: 34px;
       }
       input[type="checkbox"] {
         width: auto;

@@ -89,6 +89,8 @@ export interface PackItem {
   surface?: boolean;
   /** A vehicle: offered for parking spots. */
   vehicle?: boolean;
+  /** Its own colour per role (#404, role → "#rrggbb"): what the role shows while the placed item has none of its own. */
+  colors?: Partial<Record<string, string>>;
   /** Stairs: cuts a stairwell opening into the floor above when it reaches it. */
   hole?: boolean;
   /** A lamp: how its light spreads. */

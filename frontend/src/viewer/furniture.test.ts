@@ -674,3 +674,36 @@ test("pack parts take their roles' materials, a part's top its own role's; movin
     setPacks([]);
   }
 });
+
+test("a pack item's own paint colour (#404) paints its body until the placed item has a colour of its own", () => {
+  const painted: FurniturePack = {
+    id: "t.paint",
+    name: "Paint",
+    publisher: "t",
+    items: [
+      {
+        id: "car",
+        name: { en: "Car" },
+        size: [2, 4, 1],
+        colors: { paint: "#a51c2c" },
+        parts: [
+          { shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0.2, h: 0.5, color: "paint" },
+          { shape: "box", x: 0, z: 0, w: 0.5, d: 0.5, y: 0.7, h: 0.3, color: "#1d1e21" },
+        ],
+      },
+    ],
+  };
+  setPacks([painted]);
+  try {
+    const car: Furniture = { id: "c", type: "pack:t.paint:car", x: 0, z: 0, rotation: 0, w: 2, d: 4, h: 1, variant: null, entity: null, power: null };
+    const own = vertexColours(car);
+    // the same as a placed item painted that colour by hand, and different from another colour
+    assert.deepEqual(own, vertexColours({ ...car, colors: { paint: "#a51c2c" } }));
+    assert.notDeepEqual(own, vertexColours({ ...car, colors: { paint: "#2f63b5" } }));
+    assert.ok(hasFixedColors(car.type) && hasOwnColours(car), "drawn anew on a look change");
+    setPacks([{ ...painted, items: [{ ...painted.items[0], colors: undefined }] }]);
+    assert.notDeepEqual(vertexColours(car), own, "without its own colour the paint follows the look");
+  } finally {
+    setPacks([]);
+  }
+});

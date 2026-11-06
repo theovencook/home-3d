@@ -23,3 +23,5 @@ export const loadQuickMenu = once(() => import("./components/quick-menu.ts"));
 export const loadWeatherTile = once(() => import("./components/weather-tile.ts"));
 /** Today's forecast under the weather tile (<fp3d-weather-forecast>, #333): loaded the first time the tile is tapped. */
 export const loadWeatherForecast = once(() => import("./components/weather-forecast.ts"));
+/** The shared colour field (<fp3d-colour-field>, #403): the View panel's accent and the card editor's; loaded with either. */
+export const loadColourField = once(() => import("./components/colour-field.ts"));

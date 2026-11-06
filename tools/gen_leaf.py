@@ -10,7 +10,9 @@ lights. The body, glasshouse and roof are curved shells (#252) traced from photo
 turned lofts lying on the curved corners (#345); the rest are simple shapes. Modelled by us; no logos, no maker
 images, no 3D files. The other cars come from tools/gen_vehicles.py.
 
-Windows are in the palette role "glass" and the lamps in the colours the viewer lights for a linked car (headlights
+The body, the body-coloured roof and the mirrors are in the colour role "paint" (#404) with the colourway's colour as
+the item's own colour for it (`"colors": {"paint": …}`), so the item panel's car colours repaint every Leaf; a two-tone
+roof keeps its own fixed colour. Windows are in the palette role "glass" and the lamps in the colours the viewer lights for a linked car (headlights
 #e8f4ff, tail lights #ff3b4f): the car feature's lights and cabin glow show on it. Every part above the waist sits inside the
 glasshouse or just proud of it, so nothing stands out of the body.
 """
@@ -32,7 +34,7 @@ TAIL = "#ff3b4f"
 CHROME = "#c9ced6"
 GRILLE = "#1f3d63"
 
-# id, variant name, body colour, roof colour (None: the body's), mirror colour (None: the body's)
+# id, variant name, body colour (the item's own "paint" colour), roof and mirror colour (None: the paint's)
 COLOURWAYS = [
     ("nissan_leaf", "Pearl white", "#e9ebee", None),
     ("nissan_leaf_black", "Black", "#1d1e21", None),
@@ -187,7 +189,8 @@ def symbol() -> list[dict]:
 def main() -> None:
     for ident, variant, body, roof in COLOURWAYS:
         v = V(W, L, H)
-        v.parts = leaf(body, roof or body, roof or body)
+        # the body is painted (#404); a two-tone roof and its mirrors keep their own colour
+        v.parts = leaf("paint", roof or "paint", roof or "paint")
         item = {
             "id": ident,
             "name": {"en": "Nissan Leaf"},
@@ -209,6 +212,7 @@ def main() -> None:
             "variant": {"en": variant},
             "electric": True,
             "vehicle": True,
+            "colors": {"paint": body},
             "parts": v.parts,
         }
         assert len(item["parts"]) <= 60, len(item["parts"])

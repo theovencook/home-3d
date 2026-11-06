@@ -14,7 +14,7 @@ import { furnitureFootprint } from "../../model.ts";
 import { formatNumber, type I18nKey } from "../../i18n.ts";
 import { type FurnitureField } from "../../item-panel.ts";
 import { gangPlateWidth, gangsOf, splitAliases, MAX_GANGS, TECH_SIZE, type Gang, isLamp, pointInPolygon, polygonArea, uid, type Furniture, type ShowInterval, type ShowWhen, type ScreenPicture, clearFirstState } from "../../model.ts";
-import { COLOUR_PRESETS, PAINT_COLOURS, itemColourRoles, parseHex, roleColour, setRoleColour, type ColourRole } from "../../colour-roles.ts";
+import { COLOUR_PRESETS, PAINT_COLOURS, itemColourRoles, itemRoleColour, parseHex, roleColour, setRoleColour, type ColourRole } from "../../colour-roles.ts";
 import { MATERIALS, ownMaterial, setRoleMaterial, usualMaterial, type Material } from "../../role-materials.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { itemTempSource, shadeKind } from "../../room-effects.ts";
@@ -23,6 +23,11 @@ import { isThermostatItem, linkField, linkFilter } from "../../furniture-links.t
 import { itemShown, setIntervalPart } from "../../show-when.ts";
 import { MAX_MOUNT_Y, round, isEnergyDevice, volumeMeter, numberish, binaryish } from "./helpers.ts";
 import { colourReset } from "../../colour-reset.ts";
+import { colourField } from "../../colour-field-tag.ts";
+import { roleInLook } from "../../look-surface.ts";
+import { lookOf, type Theme } from "../../themes.ts";
+import { shownLook } from "../../ha-theme.ts";
+import "../colour-field.ts";
 import { loadItemPicker, need } from "./lazy.ts";
 import { itemProfile, type ItemProfile } from "../../item-profile.ts";
 import { panelUi } from "./item-sections.ts";
@@ -32,6 +37,17 @@ import type { Fp3dEditor } from "../editor.ts";
 const ONLY_COLOUR_DEFAULT = "#ffd400";
 
 /** ItemFormPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
+/** The look this device shows the 3D view in (the View tab's, #403): a part's default colour is its role's colour there. */
+function deviceLook(hass: Fp3dEditor["hass"]): Theme {
+  let look: string | null = null;
+  try {
+    look = localStorage.getItem("home3d.theme");
+  } catch {
+    // no storage (a private window): the look follows Home Assistant's theme
+  }
+  return shownLook(lookOf(look), hass);
+}
+
 export class ItemFormPart {
   /** How strongly a lamp glows in 3D, in percent (#181): many bright LED strips need not outshine the room. */
   glowScaleField(this: Fp3dEditor, value: number | null | undefined, set: (v: number | null) => void) {
@@ -344,11 +360,14 @@ export class ItemFormPart {
     const admin = this.isEditor;
     // its glow colour while its entity is active (#289): playing, on, triggered; "From the appearance" = the usual glow
     const activeOwn = roleColour({ accent: f.active_color ?? undefined }, "accent");
+    // one shared colour field (#403): swatch, hex value, copy
+    const t = (k: I18nKey, v?: Record<string, string>) => this.t(k, v);
+    // a part on its default shows the colour the 3D view gives its role in this device's look
+    const look = deviceLook(this.hass);
     const activeRow = html`<div class="fp3d-field fp3d-colour-role">
       <span>${this.t("colour_active")}</span>
       <span class="fp3d-colour-pick"><span class="fp3d-colour-swatch">
-        <input type="color" class=${activeOwn ? "" : "fp3d-colour-unset"} aria-label=${this.t("colour_active")} .value=${activeOwn ?? "#ff3b30"} ?disabled=${!admin}
-          @change=${(e: Event) => this.updateFurniture({ active_color: (e.target as HTMLInputElement).value })} />
+        ${colourField({ value: activeOwn, label: this.t("colour_active"), t, disabled: !admin, clearable: true, onChange: (hex) => this.updateFurniture({ active_color: hex }) })}
         ${colourReset({ value: activeOwn, fallback: null, label: this.t("colour_theme"), disabled: !admin, onReset: () => this.updateFurniture({ active_color: null }) })}
       </span></span>
     </div>`;
@@ -358,6 +377,8 @@ export class ItemFormPart {
     const materialName = (m: Material) => this.t(`material_${m}` as I18nKey);
     const ui = panelUi(this, f.id);
     const roleName = (role: ColourRole) => this.t(`colour_role_${role}` as I18nKey);
+    const roleField = (role: ColourRole, own: string | null) =>
+      colourField({ value: own, base: roleInLook(role, look), label: roleName(role), t, disabled: !admin, clearable: true, onChange: (hex) => set(role, hex) });
     const toggle = html`<button type="button" class="fp3d-link fp3d-wide fp3d-finishes" aria-expanded=${ui.finishes ? "true" : "false"} @click=${() => {
       ui.finishes = !ui.finishes;
       this.requestUpdate();
@@ -372,8 +393,7 @@ export class ItemFormPart {
           const preset = own ? COLOUR_PRESETS.find((p) => p.hex === own) : undefined;
           return html`<div class="fp3d-field fp3d-colour-role fp3d-colour-slim fp3d-wide">
             <span class="fp3d-colour-swatch">
-              <input type="color" class=${own ? "" : "fp3d-colour-unset"} aria-label=${roleName(role)} .value=${own ?? "#808080"} ?disabled=${!admin}
-                @change=${(e: Event) => set(role, (e.target as HTMLInputElement).value)} />
+              ${roleField(role, own)}
               ${colourReset({ value: own, fallback: null, label: this.t("colour_theme"), disabled: !admin, onReset: () => set(role, null) })}
             </span>
             <span>${roleName(role)}</span>
@@ -394,8 +414,7 @@ export class ItemFormPart {
           <span>${roleName(role)}</span>
           <span class="fp3d-colour-pick">
             <span class="fp3d-colour-swatch">
-              <input type="color" class=${own ? "" : "fp3d-colour-unset"} aria-label=${roleName(role)} .value=${own ?? "#808080"} ?disabled=${!admin}
-                @change=${(e: Event) => set(role, (e.target as HTMLInputElement).value)} />
+              ${roleField(role, own)}
               ${colourReset({ value: own, fallback: null, label: this.t("colour_theme"), disabled: !admin, onReset: () => set(role, null) })}
             </span>
             <select aria-label=${this.t("colour_preset_of", { role: roleName(role) })} ?disabled=${!admin} @change=${(e: Event) => set(role, (e.target as HTMLSelectElement).value || null)}>
@@ -420,19 +439,19 @@ export class ItemFormPart {
   renderPaint(this: Fp3dEditor, f: Furniture, own: string | null) {
     const admin = this.isEditor;
     const name = this.t("colour_role_paint");
+    // a colourway's own paint (#404) shows until one is picked, and the reset goes back to it
+    const base = itemRoleColour(f.type, "paint");
+    const shown = own ?? base;
     return html`<div class="fp3d-field fp3d-colour-role fp3d-wide">
       <span>${name}</span>
       <span class="fp3d-paint">
         ${PAINT_COLOURS.map((c) => {
           const label = this.t(`paint_${c.id}` as I18nKey);
-          return html`<button type="button" class="fp3d-swatch" style=${`background:${c.hex}`} title=${label} aria-label=${label} aria-pressed=${own === c.hex ? "true" : "false"}
+          return html`<button type="button" class="fp3d-swatch" style=${`background:${c.hex}`} title=${label} aria-label=${label} aria-pressed=${shown === c.hex ? "true" : "false"}
             ?disabled=${!admin} @click=${() => this.setPaint(f, c.hex)}></button>`;
         })}
-        <input type="text" class="fp3d-paint-hex" maxlength="7" placeholder="#rrggbb" aria-label=${this.t("paint_hex")} .value=${own ?? ""} ?disabled=${!admin}
-          @change=${(e: Event) => this.setPaint(f, (e.target as HTMLInputElement).value)} />
-        <input type="color" class=${own ? "" : "fp3d-colour-unset"} aria-label=${this.t("paint_hex")} .value=${own ?? "#808080"} ?disabled=${!admin}
-          @change=${(e: Event) => this.setPaint(f, (e.target as HTMLInputElement).value)} />
-        ${colourReset({ value: own, fallback: null, label: this.t("colour_theme"), disabled: !admin, onReset: () => this.setPaint(f, "") })}
+        ${colourField({ value: own, base: base ?? roleInLook("paint", deviceLook(this.hass)), label: name, t: (k, v) => this.t(k, v), disabled: !admin, clearable: true, onChange: (hex) => this.setPaint(f, hex ?? "") })}
+        ${colourReset({ value: shown, fallback: base, label: this.t(base ? "colour_reset" : "colour_theme"), disabled: !admin, onReset: () => this.setPaint(f, "") })}
       </span>
     </div>`;
   }
@@ -498,13 +517,13 @@ export class ItemFormPart {
         <label class="fp3d-field"
           >${this.t("bin_color")}
           <span class="fp3d-colour-row"
-            ><input type="color" .value=${body} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ bin_color: (e.target as HTMLInputElement).value })} />
+            >${colourField({ value: f.bin_color ?? null, base: binColors({ ...f, bin_color: null })[0], label: this.t("bin_color"), t: (k, v) => this.t(k, v), disabled: !admin, onChange: (hex) => hex && this.updateFurniture({ bin_color: hex }) })}
             ${colourReset({ value: body, fallback: binColors({ ...f, bin_color: null })[0], label: this.t("colour_reset"), disabled: !admin, onReset: () => this.updateFurniture({ bin_color: null }) })}</span
           ></label>
         <label class="fp3d-field"
           >${this.t("bin_lid")}
           <span class="fp3d-colour-row"
-            ><input type="color" .value=${lid} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ bin_lid: (e.target as HTMLInputElement).value })} />
+            >${colourField({ value: f.bin_lid ?? null, base: binColors({ ...f, bin_lid: null })[1], label: this.t("bin_lid"), t: (k, v) => this.t(k, v), disabled: !admin, onChange: (hex) => hex && this.updateFurniture({ bin_lid: hex }) })}
             ${colourReset({ value: lid, fallback: binColors({ ...f, bin_lid: null })[1], label: this.t("colour_reset"), disabled: !admin, onReset: () => this.updateFurniture({ bin_lid: null }) })}</span
           ></label>
         ${html`${this.entitySelect(this.t("bin_source"), f.bin_source ?? null, undefined, sources, (v) => this.updateFurniture({ bin_source: v === "none" ? null : v }))}
@@ -784,7 +803,7 @@ export class ItemFormPart {
                 ? html`<label class="fp3d-field"
                     >${this.t("furn_only_color_pick")}
                     <span class="fp3d-colour-row"
-                      ><input type="color" .value=${f.only_color} ?disabled=${!this.isEditor} @change=${(ev: Event) => this.updateFurniture({ only_color: (ev.target as HTMLInputElement).value })} />
+                      >${colourField({ value: f.only_color, label: this.t("furn_only_color_pick"), t: (k, v) => this.t(k, v), disabled: !this.isEditor, onChange: (hex) => hex && this.updateFurniture({ only_color: hex }) })}
                       ${colourReset({ value: f.only_color, fallback: ONLY_COLOUR_DEFAULT, label: this.t("colour_reset"), disabled: !this.isEditor, onReset: () => this.updateFurniture({ only_color: ONLY_COLOUR_DEFAULT }) })}</span
                     ></label>`
                 : nothing}`

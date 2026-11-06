@@ -40,12 +40,13 @@ async function editor() {
 }
 const colours = (ed: Awaited<ReturnType<typeof editor>>) => ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "car").colors;
 
-test("the paint role of a car offers ten swatches and a hex field in the item panel (#129)", async () => {
+test("the paint role of a car offers ten swatches and the colour field in the item panel (#129, #403)", async () => {
   const ed = await editor();
   const html = flat(ed.renderColourRoles(ed.furnitureItem));
   for (const name of ["White", "Black", "Silver", "Grey", "Blue", "Red", "Green", "Yellow/orange", "Brown/bronze", "Dark blue"]) assert.ok(html.includes(`aria-label=${name} `) || html.includes(`title=${name} `), name);
   assert.equal((html.match(/class="fp3d-swatch"/g) ?? []).length, 10);
-  assert.match(html, /Hex colour/);
+  // the shared colour field (#403): swatch, hex value and copy
+  assert.equal((flat(ed.renderPaint(ed.furnitureItem, null)).match(/<fp3d-colour-field/g) ?? []).length, 1);
 });
 
 test("picking a swatch saves the colour in the paint role of the placed item (#129)", async () => {
@@ -72,4 +73,22 @@ test("a copy of a painted car keeps its paint (#129)", async () => {
   assert.deepEqual(b.colors, a.colors);
   assert.equal(b.colors.paint, "#e08a1e");
   assert.notEqual(a.id, b.id);
+});
+
+test("a colourway's own paint (#404) shows in the paint row until one is picked; the reset goes back to it", async () => {
+  const red: FurniturePack = { ...PACK, items: [{ ...PACK.items[0], colors: { paint: "#a51c2c" } }] };
+  setPacks([red]);
+  const ed = await makeEditor([square("r1", 0, 0, 6, 6)], [car()]);
+  ed.packs = [red];
+  ed.selectItem("furniture", "car");
+  const row = () => flat(ed.renderColourRoles(ed.furnitureItem));
+  assert.match(row(), /#a51c2c/, "the colourway's paint is shown");
+  assert.doesNotMatch(row(), /fp3d-colour-reset/, "nothing to reset yet");
+  ed.setPaint(ed.furnitureItem, "#2f63b5");
+  assert.deepEqual(colours(ed), { paint: "#2f63b5" });
+  assert.match(row(), /fp3d-colour-reset/);
+  assert.match(row(), /Back to the default colour/);
+  ed.setPaint(ed.furnitureItem, "");
+  assert.equal(colours(ed) ?? null, null, "back to the colourway's own paint");
+  setPacks([]);
 });

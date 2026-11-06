@@ -341,7 +341,11 @@ shapes needs a Home 3D version that knows them (shells: Home 3D after 0.2.1).
   worktop), `wall` (bottom at `wall_y` metres, 0 to 3, default 1; such as a wallbox) or `ceiling` (hangs from the
   ceiling, such as a cooker hood or pendant lights).
 - `surface`: its top carries other items (a table, a kitchen island, a workbench).
-- `vehicle`: a vehicle; offered for parking spots.
+- `vehicle`: a vehicle; offered for parking spots. Put its body in the `paint` role so the item panel's car colours
+  repaint it.
+- `colors`: the item's own colour for a role, as `{"paint": "#a51c2c"}`: its parts in that role show this colour
+  until the placed item is given one of its own, and the item panel's reset goes back to it. A car's colourways use it
+  for their paint, so each looks as it should and can still be repainted. Roles left out follow the look.
 - `hole`: stairs. When they reach the floor above, they cut the stairwell opening into that floor, like the built-in
   stairs; the steps rise from the front edge (+z) to the back.
 - `rack_frame`: the item is an empty rack (19 or 10 inch, its height in U); see [Racks](#racks).
