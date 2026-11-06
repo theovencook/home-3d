@@ -5,6 +5,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
 ## Unreleased
 
+- Time travel: items with a "When it shows" rule follow the past. A car that only shows while its tracker is home is hidden at a moment it was away, and an item with days or times shows by the replayed moment, not the clock now. The people and trackers a rule follows are replayed as home or away only (no zone, coordinates or other attributes); every other person and tracker stays out (#394).
 - Editor with 3D beside on: a lamp or sensor that changes no longer relights the whole floor and re-syncs the 3D view several times a second. Only the rooms whose lights changed are relit (their wall shadows are kept), the 3D beside takes state changes at most once a second, and a sync that changes nothing no longer updates the view a second time. The speed check measures this on a ~330-item floor (#389).
 - Editor with 3D beside on: a power or energy reading no longer rebuilds the 3D scene (the editor's plan was handed to the 3D view again on every sync), every new Home Assistant state reaches the 3D beside at most once a second whichever way it comes, and camera motion sensors are no longer searched for in the whole entity registry on every sync. The speed check now ticks a circuit monitor's readings at 8 a second (#389).
 - Editor with 3D beside on: after a nudge, rotate, drop, undo or redo the changed floor is modelled in short slices before the 3D beside shows it, and its light surface and lighting are kept, so the edit no longer causes a long frame (#390).

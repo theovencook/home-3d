@@ -35,6 +35,17 @@ export function locationLike(hass: HomeAssistant, id: string): boolean {
   return LOCATION_NAME.test(`${id} ${String(attrs.friendly_name ?? "")} ${key}`);
 }
 
+/** The people and trackers an item's "When it shows" rule follows (#394): replayed as home or away only. */
+export function ruleTrackers(building: Building): string[] {
+  const out = new Set<string>();
+  for (const fl of building.floors)
+    for (const f of fl.furniture) {
+      const e = f.show_when?.entity;
+      if (e && (e.startsWith("person.") || e.startsWith("device_tracker."))) out.add(e);
+    }
+  return [...out];
+}
+
 /** The trackers of people (their phones, watches): private, also as a car's. */
 export function personTrackers(hass: HomeAssistant): Set<string> {
   const out = new Set<string>();
@@ -69,7 +80,9 @@ export function historyRequest(
   const trackers = personTrackers(hass);
   for (const id of trackers) privateIds.add(id);
   const carried = personalDevices(hass, trackers);
-  const cars = new Set((spec.cars ?? []).filter((id) => id.startsWith("device_tracker.") && !privateIds.has(id) && !!hass.states[id]));
+  // the trackers and people a show/hide rule follows are the owner's own choice: home or away only, also private ones (#394)
+  const followed = new Set(ruleTrackers(building));
+  const cars = new Set([...(spec.cars ?? []), ...followed].filter((id) => (followed.has(id) || (id.startsWith("device_tracker.") && !privateIds.has(id))) && !!hass.states[id]));
   const areas = new Set(building.floors.flatMap((f) => f.rooms.map((r) => r.area_id)).filter((x): x is string => !!x));
   const fromAreas: string[] = [];
   for (const [id, entry] of Object.entries(hass.entities ?? {})) {
@@ -86,8 +99,9 @@ export function historyRequest(
   const wanted = [...new Set([...cars, ...spec.entities, ...cameraSensors, "sun.sun", ...(building.settings.weather_entity ? [building.settings.weather_entity] : []), ...(building.settings.outage_entity ? [building.settings.outage_entity] : []), ...weather.slice(0, 1), ...fromAreas])];
   const hidden: string[] = [];
   const all = wanted.filter((id) => {
-    if (!id.includes(".") || (!cars.has(id) && EXCLUDED.has(domainOf(id))) || privateIds.has(id) || !hass.states[id]) return false;
+    if (!id.includes(".") || !hass.states[id]) return false;
     if (cars.has(id)) return true;
+    if (EXCLUDED.has(domainOf(id)) || privateIds.has(id)) return false;
     const dev = hass.entities?.[id]?.device_id;
     if ((dev && carried.has(dev)) || locationLike(hass, id)) {
       hidden.push(id);
