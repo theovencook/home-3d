@@ -35,6 +35,9 @@ export interface ItemAct {
 let clipboard: ItemClip | null = null;
 
 /** SelectionPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
+/** The actions the floating toolbar shows as its own buttons (#398); its "⋯" lists only the others. */
+const ON_BAR: ReadonlySet<string> = new Set(["rotate", "duplicate", "lock", "delete"]);
+
 export class SelectionPart {
   /** The item of a fixable kind on a floor. */
   fixItem(this: Fp3dEditor, floor: Floor | undefined, kind: FixKind, id: string): object | undefined {
@@ -210,7 +213,8 @@ export class SelectionPart {
     const acts: ItemAct[] = [];
     if (kind === "furniture" || kind === "device")
       // a constant name with its state as "pressed" for the toolbar (#398); the menu keeps its words
-      acts.push({ key: "lock", icon: fixed ? "🔓" : "🔒", label: this.t("bar_lock"), text: this.t(fixed ? "unfix" : "fix"), title: withKeys(this.t("fix_hint"), ["L"]), pressed: fixed, run: () => this.toggleFixed(kind, id) });
+      // one constant name everywhere, the state as "pressed" (#396, #398)
+      acts.push({ key: "lock", icon: fixed ? "🔒" : "🔓", label: this.t("bar_lock"), text: this.t("lock_position"), title: withKeys(this.t("fix_hint"), ["L"]), pressed: fixed, run: () => this.toggleFixed(kind, id) });
     else acts.push({ key: "lock_plan", icon: this._doc.settings.lock_plan ? "🔓" : "🔒", label: this.t(this._doc.settings.lock_plan ? "plan_unlock" : "plan_lock"), title: this.t("lock_plan_hint"), run: () => this.toggleLockPlan() });
     if (kind === "room") acts.push({ key: "duplicate", icon: "⧉", label: this.t("duplicate"), run: () => this.duplicateRoom() });
     if (kind === "room" && clipboard) acts.push({ key: "paste", icon: "⎘", label: this.t("paste_items_n", { n: clipboard.items.length }), title: withKeys(this.t("paste_items"), ["Ctrl+V"]), run: () => this.pasteClipboard() });
@@ -253,7 +257,10 @@ export class SelectionPart {
     // a point's menu (#395): remove it, never below three points
     const acts: ItemAct[] = pt
       ? [{ key: "remove_point", icon: "✕", label: this.t("remove_point"), title: withKeys(this.t("remove_point"), ["Del"]), disabled: !canRemovePoint(this, pt), danger: true, run: () => void removePoint(this, pt) }]
-      : this.itemActions(c.kind, c.id).filter((a) => a.menu !== false || (c.bar && (this.narrow || this._phone)));
+      : this.itemActions(c.kind, c.id).filter((a) =>
+          // from the toolbar's "⋯": only what the toolbar does not show itself (turn left drops in there when narrow)
+          c.bar ? (this.narrow || this._phone ? !ON_BAR.has(a.key) : !ON_BAR.has(a.key) && a.key !== "rotate_left") : a.menu !== false,
+        );
     const keys = (e: KeyboardEvent) => {
       const items = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
       const at = items.indexOf((this.renderRoot as ShadowRoot).activeElement as HTMLButtonElement);

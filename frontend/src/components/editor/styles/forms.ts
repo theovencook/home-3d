@@ -72,7 +72,9 @@ export const formStyles = css`
       .fp3d-menu-wrap {
         position: relative;
       }
-      .fp3d-item-menu {
+      /* opens to the left of the "⋯" at the panel's right edge; beats .fp3d-ctx's plan position */
+      .fp3d-ctx.fp3d-item-menu {
+        left: auto;
         right: 0;
         top: calc(100% + 4px);
         z-index: 6;
