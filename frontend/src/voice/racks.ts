@@ -34,24 +34,24 @@ export interface RackAnswer {
 
 type Say = (key: string, vars?: Record<string, string | number>) => string;
 
-const RACK = /\b(rack|racks|serverschrank|serverrack|netzwerkschrank|patchschrank|server cabinet|network cabinet|cabinet|armoire reseau|baie|armario de red|armadio rete|netwerkkast|szafa)\b/;
+const RACK = /\b(rack|racks|serverrack|server cabinet|network cabinet|cabinet|armoire reseau|baie|armario de red|armadio rete|netwerkkast|szafa)\b/;
 /** Gear that stands for a rack on its own ("the UPS battery"). */
-const UPS = /\b(ups|usv)\b/;
-const COMMAND = /\b(turn|switch|schalte|schalt|mach|make|set|stelle|start|stop|starte|stoppe|reboot|restart|boot|ausschalten|einschalten|anschalten)\b/;
-const STATUS = /\b(status|state|zustand|how|wie|doing|laeuft|ok|okay|ca va|como|come)\b/;
+const UPS = /\b(ups)\b/;
+const COMMAND = /\b(turn|switch|make|set|start|stop|reboot|restart|boot)\b/;
+const STATUS = /\b(status|state|how|doing|ok|okay|ca va|como|come)\b/;
 
 /** What a sentence asks for, in the order that settles clashes ("battery runtime" is a runtime). */
 const KINDS: [string, RegExp][] = [
-  ["status", /\b(online|offline|erreichbar|reachable|alive|ausgefallen|en ligne|en linea|raggiungibil)\b/],
-  ["temperature", /\b(temperatur\w*|temperature|temp|heiss|warm|warme|hot|heat\w*|hitze|chaud|temperatura|caliente|caldo|heet|warmte|cool|kuhl\w*)\b/],
-  ["runtime", /\b(laufzeit|restlaufzeit|runtime|autonomie|autonomia|autonomy|how long|wie lange|backup time|reichweite)\b/],
-  ["battery", /\b(batterie|akku|accu|battery|bateria|batteria|ladestand|charge level)\b/],
-  ["load", /\b(last|auslastung|load|belastung|carga|carico)\b/],
-  ["power", /\b(watt|watts|leistung|verbrauch|power|consumption|strom|poe|puissance|potenza|potencia)\b/],
-  ["cpu", /\b(cpu|prozessor|processor)\b/],
-  ["memory", /\b(ram|memory|arbeitsspeicher|memoire)\b/],
-  ["disk", /\b(festplatte|disk|volume|speicherplatz|storage|space|platz|raid|laufwerk)\b/],
-  ["throughput", /\b(durchsatz|throughput|bandbreite|bandwidth|geschwindigkeit|speed|internet|wan|download|upload|traffic)\b/],
+  ["status", /\b(online|offline|reachable|alive|en ligne|en linea|raggiungibil)\b/],
+  ["temperature", /\b(temperatur\w*|temperature|temp|warm|warme|hot|heat\w*|chaud|temperatura|caliente|caldo|heet|warmte|cool)\b/],
+  ["runtime", /\b(runtime|autonomie|autonomia|autonomy|how long|backup time)\b/],
+  ["battery", /\b(batterie|akku|accu|battery|bateria|batteria|charge level)\b/],
+  ["load", /\b(load|carga|carico)\b/],
+  ["power", /\b(watt|watts|power|consumption|strom|poe|puissance|potenza|potencia)\b/],
+  ["cpu", /\b(cpu|processor)\b/],
+  ["memory", /\b(ram|memory|memoire)\b/],
+  ["disk", /\b(disk|volume|storage|space|raid)\b/],
+  ["throughput", /\b(throughput|bandwidth|speed|internet|wan|download|upload|traffic)\b/],
 ];
 
 const words = (s: string): string[] => normalize(s).split(" ").filter((w) => w.length > 1);

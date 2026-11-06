@@ -1,5 +1,5 @@
 // Warnings shown in 3D: smoke, gas, carbon monoxide and water sensors of a room, a triggered alarm,
-// a window open while it rains, a power outage and (Haushalt Pro) a fridge door standing open too long; modules
+// a window open while it rains, a power outage and (household feature) a fridge door standing open too long; modules
 // add their own (a pool's pH far off). The rooms concerned pulse in the warning's colour.
 
 import { areaEntities, entityName, openingState, type OpeningEntities } from "./devices.ts";
@@ -59,7 +59,7 @@ export interface AlertSources {
   outage: string | null;
   /** A weather station's rain sensor or rain rate, used instead of the weather entity (D407). */
   rain?: string | null;
-  /** Haushalt Pro: the fridges with door sensors (their doors may not stand open too long). */
+  /** Household: the fridges with door sensors (their doors may not stand open too long). */
   fridges?: { floorId: string; roomId: string | null; furnitureId: string; ids: string[] }[];
 }
 
@@ -153,7 +153,7 @@ export function findAlerts(hass: HomeAssistant, building: Building, sources: Ale
       }
     }
   }
-  // Haushalt Pro: a fridge door open longer than its limit
+  // Household: a fridge door open longer than its limit
   for (const fr of sources.fridges ?? []) {
     const f = building.floors.find((x) => x.id === fr.floorId)?.furniture.find((m) => m.id === fr.furnitureId);
     const door = f ? fridgeOpenTooLong(f, hass) : null;
@@ -193,7 +193,7 @@ export function alertTint(a: Pick<Alert, "kind" | "color">): [number, number, nu
   return a.kind === "water" && !a.color ? LEAK_COLOR : alertColor(a);
 }
 
-/** Short text for the banner: "Küche · Rauch: Rauchmelder". */
+/** Short text for the banner: "Kitchen · Smoke: Smoke alarm". */
 export function alertText(hass: HomeAssistant | undefined, building: Building, a: Alert): string {
   const room = a.roomId ? building.floors.flatMap((f) => f.rooms).find((r) => r.id === a.roomId) : null;
   // a module's warning brings its text
@@ -201,7 +201,7 @@ export function alertText(hass: HomeAssistant | undefined, building: Building, a
   const name = hass ? entityName(hass, a.entity) : a.entity;
   const text = translate(hass, `alert_${a.kind}` as Parameters<typeof translate>[1], { name });
   if (!room) return text;
-  // without the device name: "Gäste-WC · Fenster offen bei Regen" (the room already says where, #374)
+  // without the device name: "Guest WC · Window open in the rain" (the room already says where, #374)
   if (building.settings.alert_names === false) return `${room.name} · ${translate(hass, `alert_short_${a.kind}` as Parameters<typeof translate>[1])}`;
   return `${room.name} · ${text}`;
 }

@@ -131,7 +131,7 @@ def collect(
 ) -> dict[str, Any]:
     """The compact answer for one window (runs in the recorder's executor).
 
-    `car_trackers` are the cars' own trackers (Auto Pro): answered as home or away only.
+    `car_trackers` are the cars' own trackers (car feature): answered as home or away only.
     """
     from homeassistant.components.recorder import statistics  # the recorder is an after_dependency
 
@@ -216,7 +216,7 @@ async def ws_timetravel_history(
     from homeassistant.components.recorder import get_instance  # the recorder is an after_dependency
 
     instance = get_instance(hass)
-    # only the trackers of the plan's cars (Auto Pro), never a person's own, even when linked as a car's
+    # only the trackers of the plan's cars (car feature), never a person's own, even when linked as a car's
     private = private_trackers(hass)
     # the cars of every home, or of the one home the request names (#371)
     if (home_id := msg.get("home_id")) is None:

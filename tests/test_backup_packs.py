@@ -48,7 +48,7 @@ async def _send(client, **msg) -> dict:
 
 def test_a_folder_must_fit_in_one_message_as_sent() -> None:
     """Within the character limit, but more bytes as sent than one message takes (non-ASCII text)."""
-    files = {"pack.json": _pack_json(), **{f"f{n}.json": "ü" * 40_000 for n in range(50)}}
+    files = {"pack.json": _pack_json(), **{f"f{n}.json": "é" * 40_000 for n in range(50)}}
     assert sum(len(t) for t in files.values()) <= packs.MAX_FOLDER_SIZE
     with pytest.raises(packs.PackError) as err:
         packs.verify_folder(files)

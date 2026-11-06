@@ -28,7 +28,7 @@ test("wall frame: the normal points into the room, s runs to the right seen from
 });
 
 test("wall items: furniture at the wall with its height, doors and windows of both rooms, the neighbour's sofa not", () => {
-  const f = newFloor("eg", "EG", 0);
+  const f = newFloor("ground", "Ground", 0);
   const a = room("a", 0, 0, 4, 3);
   const b = room("b", 0, -3, 4, 0);
   f.rooms = [a, b];

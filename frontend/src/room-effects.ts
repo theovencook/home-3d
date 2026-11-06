@@ -118,7 +118,7 @@ const isTemperature = (hass: HomeAssistant, id: string | null | undefined): id i
   !!id && id !== "none" && id.startsWith("sensor.") && hass.states[id]?.attributes.device_class === "temperature";
 
 /** Names of a tank's own temperature among a heat pump's many. */
-const TANK_NAME = /(tank|cylinder|dhw|hot.?water|speicher|boiler)/i;
+const TANK_NAME = /(tank|cylinder|dhw|hot.?water|boiler)/i;
 
 /** A temperature sensor of the device the item's entity belongs to: the only one, or (a tank) the one named for it. */
 function deviceTemperature(hass: HomeAssistant, entity: string | null | undefined, kind: "radiator" | "tank"): string | null {

@@ -6,7 +6,7 @@ import { bestFace, clampField, proposeWindow, roofWindowsOver, faceAt, faceCompa
 /** A 10 × 8 m house of one floor (walls 2.5 m high) with the given roof. */
 function house(roof: Building["settings"]["roof"]): Building {
   const b = emptyBuilding();
-  b.floors = [{ ...newFloor("eg", "EG", 0), height: 2.5, rooms: [{ id: "r", name: "R", area_id: null, points: [[0, 0], [10, 0], [10, 8], [0, 8]], floor_material: "wood" }] }];
+  b.floors = [{ ...newFloor("ground", "Ground floor", 0), height: 2.5, rooms: [{ id: "r", name: "R", area_id: null, points: [[0, 0], [10, 0], [10, 8], [0, 8]], floor_material: "wood" }] }];
   b.settings = { ...b.settings, wall_exterior: 0.24, roof };
   return b;
 }
@@ -156,7 +156,7 @@ test("house walls carry upright fields; close in front of a wall the wall wins o
   const walls = wallFaces(b);
   assert.equal(walls.length, 4);
   const south = walls.find((w) => faceCompass(w, 0) === "s")!;
-  const f = proposeWallField(b, "w", "eg")!;
+  const f = proposeWallField(b, "w", "ground")!;
   assert.equal(f.face, south.key);
   const mods = fieldModules(south, f);
   assert.ok(mods.length >= 4);
@@ -173,7 +173,7 @@ test("house walls carry upright fields; close in front of a wall the wall wins o
 
 test("a wall field in portrait fits after moving back, and tilts away from the wall", () => {
   const b = house({ type: "gable", pitch: 35, overhang: 0.4 });
-  const f = proposeWallField(b, "w", "eg")!;
+  const f = proposeWallField(b, "w", "ground")!;
   const face = fieldFace(b, f)!;
   // portrait modules are 1.72 m high: at the old height they leave the wall, kept on it they fit
   const portrait = { ...f, portrait: true };
@@ -208,12 +208,12 @@ test("a hip roof offers its two hip ends for modules too (D158)", () => {
 test("garden fields stand on the ground floor, not in the cellar below it (#192)", () => {
   const b = house({ type: "flat", pitch: 0, overhang: 0 });
   const room = b.floors[0].rooms[0];
-  b.floors.push({ ...newFloor("kg", "KG", -2.5), height: 2.3, rooms: [{ ...room, id: "k" }] });
-  assert.equal(groundFloor(b)?.id, "eg");
+  b.floors.push({ ...newFloor("cellar", "Cellar", -2.5), height: 2.3, rooms: [{ ...room, id: "k" }] });
+  assert.equal(groundFloor(b)?.id, "ground");
   near(groundFace(b, { u: 2, v: 2 }).o[1], -0.2);
   // a house of cellars only keeps the lowest floor
-  b.floors = b.floors.filter((f) => f.id === "kg");
-  assert.equal(groundFloor(b)?.id, "kg");
+  b.floors = b.floors.filter((f) => f.id === "cellar");
+  assert.equal(groundFloor(b)?.id, "cellar");
 });
 
 test("a field moved to another face keeps its modules (#258)", () => {
@@ -237,7 +237,7 @@ test("a field moved to a short wall keeps what fits and stays visible, walls nam
   const faces = wallFaces(b);
   const south = faces.find((w) => !w.wall?.free && faceCompass(w, 0) === "s")!;
   assert.deepEqual([south.wall?.room, south.wall?.edge], ["r", 2]);
-  const f: SolarField = { ...proposeWallField(b, "w", "eg")!, cols: 4, portrait: false };
+  const f: SolarField = { ...proposeWallField(b, "w", "ground")!, cols: 4, portrait: false };
   // 0.92 m: no room for a module lying down (1.72 m), one upright module (1.13 m) overhangs a little, centred
   const short = faces.find((w) => w.wall?.free && Math.abs(w.lu - 0.92) < 1e-6)!;
   const onShort = moveField(short, f);

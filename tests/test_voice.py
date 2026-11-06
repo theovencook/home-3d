@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -13,7 +14,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import intent
 
 from custom_components.home_3d.const import DOMAIN
-from custom_components.home_3d.voice import remove_sentences, sentences_yaml, write_sentences
+from custom_components.home_3d.voice import remove_sentences, sentences_of, sentences_yaml, write_sentences
 
 from .test_init import _setup
 
@@ -265,31 +266,31 @@ async def test_service_hands_the_sentence_to_the_views_and_returns_the_first_ans
 
     task = hass.async_create_task(
         hass.services.async_call(
-            DOMAIN, "ask", {"text": "Zeig das Wohnzimmer", "speak": True}, blocking=True, return_response=True
+            DOMAIN, "ask", {"text": "Show the living room", "speak": True}, blocking=True, return_response=True
         )
     )
     ask = (await view.receive_json())["event"]
-    assert ask["text"] == "Zeig das Wohnzimmer"
+    assert ask["text"] == "Show the living room"
     assert ask["speak"] is True
     assert ask["screen"] is None
     assert (await other.receive_json())["event"]["ask_id"] == ask["ask_id"]
 
     await view.send_json(
-        {"id": 2, "type": "home_3d/voice/answer", "ask_id": ask["ask_id"], "text": "Ich zeige das Wohnzimmer."}
+        {"id": 2, "type": "home_3d/voice/answer", "ask_id": ask["ask_id"], "text": "Showing the living room."}
     )
     assert (await view.receive_json())["result"] == {"taken": True}
     # the second view is late
-    await other.send_json({"id": 2, "type": "home_3d/voice/answer", "ask_id": ask["ask_id"], "text": "Wohnzimmer"})
+    await other.send_json({"id": 2, "type": "home_3d/voice/answer", "ask_id": ask["ask_id"], "text": "Living room"})
     assert (await other.receive_json())["result"] == {"taken": False}
 
-    assert await task == {"answered": True, "answer": "Ich zeige das Wohnzimmer.", "screen_open": True}
+    assert await task == {"answered": True, "answer": "Showing the living room.", "screen_open": True}
 
 
 async def test_service_without_an_open_view_says_so(hass: HomeAssistant) -> None:
     await _setup(hass)
     with patch("custom_components.home_3d.voice.ANSWER_TIMEOUT", 0.05):
         result = await hass.services.async_call(
-            DOMAIN, "ask", {"text": "Zeig die Küche", "screen": "Flur"}, blocking=True, return_response=True
+            DOMAIN, "ask", {"text": "Show the kitchen", "screen": "Hall"}, blocking=True, return_response=True
         )
     assert result == {"answered": False, "answer": "", "screen_open": False}
 
@@ -302,7 +303,7 @@ async def test_intent_speaks_the_answer_or_that_nothing_was_understood(hass: Hom
 
     async def answer(text: str, answered: bool) -> intent.IntentResponse:
         task = hass.async_create_task(
-            intent.async_handle(hass, "test", "Home3DAsk", {"text": {"value": text}}, text_input=text, language="de")
+            intent.async_handle(hass, "test", "Home3DAsk", {"text": {"value": text}}, text_input=text, language="en")
         )
         ask = (await view.receive_json())["event"]
         assert ask["text"] == text
@@ -311,15 +312,15 @@ async def test_intent_speaks_the_answer_or_that_nothing_was_understood(hass: Hom
                 "id": next(ids),
                 "type": "home_3d/voice/answer",
                 "ask_id": ask["ask_id"],
-                "text": "Drei Fenster sind offen.",
+                "text": "Three windows are open.",
                 "answered": answered,
             }
         )
         await view.receive_json()
         return await task
 
-    assert (await answer("Was ist offen", True)).speech["plain"]["speech"] == "Drei Fenster sind offen."
-    assert (await answer("Blubb", False)).speech["plain"]["speech"] == "Das hat Home 3D nicht verstanden."
+    assert (await answer("What is open", True)).speech["plain"]["speech"] == "Three windows are open."
+    assert (await answer("Blah", False)).speech["plain"]["speech"] == "Home 3D did not understand that."
 
 
 async def test_intent_without_a_view(hass: HomeAssistant) -> None:
@@ -332,42 +333,79 @@ async def test_intent_without_a_view(hass: HomeAssistant) -> None:
 
 
 def test_sentences_are_written_only_on_request_and_never_over_a_changed_file(tmp_path: Path) -> None:
-    de = tmp_path / "custom_sentences" / "de" / "home_3d.yaml"
     en = tmp_path / "custom_sentences" / "en" / "home_3d.yaml"
     hashes, kept, changed = write_sentences(tmp_path, "distinct", {})
     assert changed and kept == []
-    text = de.read_text(encoding="utf-8")
-    assert text == sentences_yaml("de", "distinct")
-    assert "zeig[e] [mir] [mal] [bitte] {text}" in text
+    text = en.read_text(encoding="utf-8")
+    assert text == sentences_yaml("en", "distinct")
+    assert "show [me] {text}" in text
     # only the distinct sentences: a question Home Assistant answers itself is not taken (#641)
-    assert "welche (fenster|türen) sind [noch] offen" not in text
-    assert en.is_file()
+    assert "which (windows|doors) are [still] open" not in text
+    # English is the only language with sentences: no file for any other
+    assert sorted(p.name for p in (tmp_path / "custom_sentences").iterdir()) == ["en"]
     # unchanged: nothing written
     hashes, kept, changed = write_sentences(tmp_path, "distinct", hashes)
     assert not changed
     # "all" adds the questions
     hashes, kept, changed = write_sentences(tmp_path, "all", hashes)
-    assert changed and "welche (fenster|türen) sind [noch] offen" in de.read_text(encoding="utf-8")
+    assert changed and "which (windows|doors) are [still] open" in en.read_text(encoding="utf-8")
     # a file the user changed is never overwritten, nor removed
-    de.write_text("my own sentences", encoding="utf-8")
+    en.write_text("my own sentences", encoding="utf-8")
     hashes, kept, changed = write_sentences(tmp_path, "distinct", hashes)
-    assert kept == ["de"]
-    assert de.read_text(encoding="utf-8") == "my own sentences"
+    assert kept == ["en"]
+    assert en.read_text(encoding="utf-8") == "my own sentences"
     hashes, kept, _ = write_sentences(tmp_path, "off", hashes)
-    assert kept == ["de"] and de.exists() and not en.exists()
-    # removing the integration takes only Home 3D's own files
+    assert kept == ["en"] and en.exists()
+    remove_sentences(tmp_path, hashes)
+    assert en.read_text(encoding="utf-8") == "my own sentences"
+    # removing the integration takes Home 3D's own files
+    en.unlink()
     hashes, _, _ = write_sentences(tmp_path, "distinct", hashes)
+    assert en.exists()
     remove_sentences(tmp_path, hashes)
     assert not en.exists()
-    assert de.read_text(encoding="utf-8") == "my own sentences"
+
+
+def test_a_language_without_sentences_has_no_file_and_an_old_one_goes(tmp_path: Path) -> None:
+    """Older versions also wrote a file for a language Home 3D has no sentences for now: the file Home 3D wrote
+    (known by its stored hash) goes in any mode and with the integration; one the user changed stays."""
+    assert sentences_of("xx", "all") == []
+    assert '          - "' not in sentences_yaml("xx", "all", ["Sample Phone"])
+    old = tmp_path / "custom_sentences" / "xx" / "home_3d.yaml"
+    old.parent.mkdir(parents=True)
+    ours = "# Written by Home 3D\nold sentences\n"
+    old.write_text(ours, encoding="utf-8")
+    written = {"xx": hashlib.sha256(ours.encode("utf-8")).hexdigest()}
+    hashes, kept, changed = write_sentences(tmp_path, "distinct", written)
+    assert changed and kept == [] and not old.exists() and "xx" not in hashes
+    # with the sentences switched off
+    old.write_text(ours, encoding="utf-8")
+    hashes, kept, changed = write_sentences(tmp_path, "off", written)
+    assert changed and kept == [] and not old.exists() and hashes == {}
+    # with the integration
+    old.write_text(ours, encoding="utf-8")
+    remove_sentences(tmp_path, written)
+    assert not old.exists()
+    # changed by the user: left alone
+    old.write_text("my own sentences", encoding="utf-8")
+    hashes, kept, _ = write_sentences(tmp_path, "distinct", written)
+    assert kept == ["xx"] and old.exists()
+    remove_sentences(tmp_path, written)
+    assert old.read_text(encoding="utf-8") == "my own sentences"
+    # a stored key that is no language code never names a path
+    outside = tmp_path / "home_3d.yaml"
+    outside.write_text(ours, encoding="utf-8")
+    write_sentences(tmp_path, "off", {"..": written["xx"]})
+    remove_sentences(tmp_path, {"..": written["xx"]})
+    assert outside.exists()
 
 
 def test_a_file_an_older_version_wrote_is_still_ours(tmp_path: Path) -> None:
     """Files from 1.22.0 - 1.24.0 (older header lines) are replaced, not kept as the user's own."""
-    de = tmp_path / "custom_sentences" / "de" / "home_3d.yaml"
-    de.parent.mkdir(parents=True)
-    de.write_text(
-        sentences_yaml("de", "distinct").replace(
+    en = tmp_path / "custom_sentences" / "en" / "home_3d.yaml"
+    en.parent.mkdir(parents=True)
+    en.write_text(
+        sentences_yaml("en", "distinct").replace(
             "# understands answers). Put your own sentences for Home3DAsk into another file.\n",
             "# understands answers). Rewritten on every start: "
             "put your own sentences for Home3DAsk into another file.\n",
@@ -376,7 +414,7 @@ def test_a_file_an_older_version_wrote_is_still_ours(tmp_path: Path) -> None:
     )
     _, kept, changed = write_sentences(tmp_path, "distinct", {})
     assert kept == [] and changed
-    assert de.read_text(encoding="utf-8") == sentences_yaml("de", "distinct")
+    assert en.read_text(encoding="utf-8") == sentences_yaml("en", "distinct")
 
 
 async def test_setup_writes_no_sentence_file(hass: HomeAssistant) -> None:
@@ -393,17 +431,17 @@ async def test_unload_removes_service_and_intent(hass: HomeAssistant) -> None:
     assert not hass.services.has_service(DOMAIN, "ask")
 
 
-# a file an early version wrote with its own, shorter set of sentences (seen on a real installation)
+# a file an early version wrote with its own, shorter set of sentences
 _EARLY_FILE = """# Written by Home 3D: the sentences Assist hands to the open Home 3D views (the first one that
 # understands answers). Rewritten on every start: put your own sentences for Home3DAsk into another file.
-language: "de"
+language: "en"
 intents:
   Home3DAsk:
     data:
       - sentences:
-          - "zeig[e] [mir] [mal] [bitte] {text}"
-          - "wo (ist|sind|steht|stehen) {text}"
-          - "gute nacht"
+          - "show [me] {text}"
+          - "where (is|are) [the] {text}"
+          - "good night"
 lists:
   text:
     wildcard: true
@@ -413,32 +451,32 @@ lists:
 def test_a_file_with_only_some_of_our_sentences_is_the_users(tmp_path: Path) -> None:
     """Home 3D's header over a subset of its sentences is no file Home 3D wrote (no Home 3D release wrote
     home_3d.yaml with fewer sentences): it stays, also with a sentence of the user's own in it (#369)."""
-    de = tmp_path / "custom_sentences" / "de" / "home_3d.yaml"
-    de.parent.mkdir(parents=True)
-    de.write_text(_EARLY_FILE, encoding="utf-8")
+    en = tmp_path / "custom_sentences" / "en" / "home_3d.yaml"
+    en.parent.mkdir(parents=True)
+    en.write_text(_EARLY_FILE, encoding="utf-8")
     _, kept, _ = write_sentences(tmp_path, "distinct", {})
-    assert kept == ["de"]
-    assert de.read_text(encoding="utf-8") == _EARLY_FILE
-    de.write_text(
-        _EARLY_FILE.replace('          - "gute nacht"\n', '          - "mach das licht aus"\n'), encoding="utf-8"
+    assert kept == ["en"]
+    assert en.read_text(encoding="utf-8") == _EARLY_FILE
+    en.write_text(
+        _EARLY_FILE.replace('          - "good night"\n', '          - "turn off the light"\n'), encoding="utf-8"
     )
     _, kept, _ = write_sentences(tmp_path, "distinct", {})
-    assert kept == ["de"]
+    assert kept == ["en"]
 
 
 def test_the_names_locating_knows_are_a_list_not_a_wildcard(tmp_path: Path) -> None:
-    """ "Wo ist Frauke?" matches a list of names exactly, so Assist handles it locally and an AI agent behind it
+    """ "Where is Sam?" matches a list of names exactly, so Assist handles it locally and an AI agent behind it
     never gets the question."""
-    de = tmp_path / "custom_sentences" / "de" / "home_3d.yaml"
-    hashes, _, _ = write_sentences(tmp_path, "distinct", {}, ["Torsten Apple Watch", "Torsten", 'Frau "K"'])
-    text = de.read_text(encoding="utf-8")
-    assert "wo (ist|steckt|sind) [der|die|das|mein|meine] {home3d_who}" in text
-    assert '      - "Torsten Apple Watch"' in text and '      - "Frau \\"K\\""' in text
+    en = tmp_path / "custom_sentences" / "en" / "home_3d.yaml"
+    hashes, _, _ = write_sentences(tmp_path, "distinct", {}, ["Alex Apple Watch", "Alex", 'Sam "K"'])
+    text = en.read_text(encoding="utf-8")
+    assert "where (is|are) [the|my] {home3d_who}" in text
+    assert '      - "Alex Apple Watch"' in text and '      - "Sam \\"K\\""' in text
     # the names change: the file follows; no names: the list goes
-    hashes, _, changed = write_sentences(tmp_path, "distinct", hashes, ["Torsten"])
-    assert changed and "Apple Watch" not in de.read_text(encoding="utf-8")
+    hashes, _, changed = write_sentences(tmp_path, "distinct", hashes, ["Alex"])
+    assert changed and "Apple Watch" not in en.read_text(encoding="utf-8")
     write_sentences(tmp_path, "distinct", hashes, [])
-    assert "home3d_who" not in de.read_text(encoding="utf-8")
+    assert "home3d_who" not in en.read_text(encoding="utf-8")
 
 
 def test_a_file_the_user_trimmed_is_left_alone(tmp_path: Path) -> None:
@@ -469,15 +507,15 @@ def test_a_file_we_wrote_is_ours_without_its_hash(tmp_path: Path) -> None:
     # written with names that are gone now, and the hash lost: nothing tells it from a file the user wrote
     write_sentences(tmp_path, "distinct", hashes, ["Sample Watch"])
     _, kept, _ = write_sentences(tmp_path, "distinct", {}, ["Sample Phone"])
-    assert sorted(kept) == ["de", "en"]
+    assert kept == ["en"]
 
 
 def test_the_names_locating_knows_are_sentences(tmp_path: Path) -> None:
-    """ "Wo ist Frauke?" as a list of names (no wildcard): Assist matches it locally even with an AI agent."""
-    de = tmp_path / "custom_sentences" / "de" / "home_3d.yaml"
-    hashes, _, _ = write_sentences(tmp_path, "distinct", {}, ["Frauke", "Torstens iPhone"])
-    text = de.read_text(encoding="utf-8")
-    assert "{home3d_who}" in text and '      - "Torstens iPhone"' in text
+    """ "Where is Sam?" as a list of names (no wildcard): Assist matches it locally even with an AI agent."""
+    en = tmp_path / "custom_sentences" / "en" / "home_3d.yaml"
+    hashes, _, _ = write_sentences(tmp_path, "distinct", {}, ["Sam", "Alexs iPhone"])
+    text = en.read_text(encoding="utf-8")
+    assert "{home3d_who}" in text and '      - "Alexs iPhone"' in text
     # names changed: the file is ours, so it is rewritten
-    _, kept, changed = write_sentences(tmp_path, "distinct", hashes, ["Frauke"])
-    assert kept == [] and changed and "Torstens iPhone" not in de.read_text(encoding="utf-8")
+    _, kept, changed = write_sentences(tmp_path, "distinct", hashes, ["Sam"])
+    assert kept == [] and changed and "Alexs iPhone" not in en.read_text(encoding="utf-8")

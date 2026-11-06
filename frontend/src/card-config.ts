@@ -106,7 +106,7 @@ export interface CardConfig {
   weather?: boolean;
   /** The weather entity to use (default: the first one). */
   weather_entity?: string;
-  /** Haushalt Pro: the glass card "Today in the household" (bins, post, appliances, plants …; default on). */
+  /** Household: the glass card "Today in the household" (bins, post, appliances, plants …; default on). */
   household_card?: boolean;
   /** Racks: a glass card over every rack with linked gear, its chosen live values (#120; default on). */
   rack_cards?: boolean;

@@ -125,11 +125,11 @@ export function buildMarkers(hass: HomeAssistant, building: Building, now = Date
 export type DetectionKind = "person" | "car" | "pet" | "motion";
 
 export function detectionKind(hass: HomeAssistant, sensorId: string): DetectionKind {
-  // ids join their words with underscores: "einfahrt_car_occupancy"
+  // ids join their words with underscores: "driveway_car_occupancy"
   const text = `${sensorId} ${String(hass.states[sensorId]?.attributes.friendly_name ?? "")}`.toLowerCase().replace(/[_.-]/g, " ");
   if (/person|people|human|pedestrian/.test(text)) return "person";
-  if (/\bcar\b|vehicle|truck|bus|motorcycle|bicycle|fahrzeug|auto\b/.test(text)) return "car";
-  if (/\bdog\b|\bcat\b|\bpet\b|animal|bird|hund|katze|tier/.test(text)) return "pet";
+  if (/\bcar\b|vehicle|truck|bus|motorcycle|bicycle|auto\b/.test(text)) return "car";
+  if (/\bdog\b|\bcat\b|\bpet\b|animal|bird/.test(text)) return "pet";
   return "motion";
 }
 

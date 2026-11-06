@@ -160,7 +160,6 @@ export interface MeshOptions {
   unit?: number | null;
   /** Floor levels in metres above the lowest one (null: found from the large flat areas). */
   levels?: number[] | null;
-  lang?: string;
 }
 
 export interface MeshInfo {
@@ -348,7 +347,6 @@ export function readMesh(t: Tris, opt: MeshOptions = {}): { plan: RawPlan; info:
   if (t.length < 9) throw new Error("nothing_found");
   const { pts, up, unit, size } = normalise(t, opt);
   const levels = opt.levels?.length ? [...opt.levels].sort((a, b) => a - b) : findLevels(pts);
-  const de = (opt.lang ?? "de").startsWith("de");
   const floors: RawFloor[] = levels.map((y, i) => {
     const height = i + 1 < levels.length ? levels[i + 1] - y : Math.min(3, Math.max(2.3, size[1] - y - 0.2));
     // just under the door heads (doors are gaps there), above most furniture; and at window height
@@ -366,7 +364,7 @@ export function readMesh(t: Tris, opt: MeshOptions = {}): { plan: RawPlan; info:
       ...bridgeGaps(dropSmallParts(slice(pts, y + Math.min(1.35, height * 0.55))).map((w) => ({ a: w.a, b: w.b })), 0.4, 3.2),
     ].filter((g, i, all) => !doors.some((d) => near(mid(d), mid(g))) && all.findIndex((x) => near(mid(x), mid(g))) === i);
     return {
-      name: levels.length === 1 ? (de ? "Erdgeschoss" : "Ground floor") : de ? `Etage ${i + 1}` : `Floor ${i + 1}`,
+      name: levels.length === 1 ? "Ground floor" : `Floor ${i + 1}`,
       elevation: Math.round(y * 100) / 100,
       height: Math.round(height * 100) / 100,
       rooms: [],
@@ -381,6 +379,6 @@ export function readMesh(t: Tris, opt: MeshOptions = {}): { plan: RawPlan; info:
   // a level with no walls cut (a flat roof's top) is no storey
   const used = floors.filter((f) => f.walls.length >= 4);
   if (!used.length) throw new Error("nothing_found");
-  used.forEach((f, i) => (f.name = used.length === 1 ? (de ? "Erdgeschoss" : "Ground floor") : de ? `Etage ${i + 1}` : `Floor ${i + 1}`));
+  used.forEach((f, i) => (f.name = used.length === 1 ? "Ground floor" : `Floor ${i + 1}`));
   return { plan: { source: "3D", floors: used, roomsAtInnerFaces: true, wallFaces: true, align: true }, info: { up, unit, levels: used.map((f) => f.elevation), size } };
 }

@@ -41,7 +41,7 @@ def _furniture(pack: dict) -> dict[str, str]:
 
 
 def _language(pack: dict) -> dict[str, str]:
-    return {"pack.json": json.dumps({**pack, "kind": "language"}), "strings.json": json.dumps({"view": "Ansicht"})}
+    return {"pack.json": json.dumps({**pack, "kind": "language"}), "strings.json": json.dumps({"view": "Vue"})}
 
 
 def _sha(n: int) -> str:

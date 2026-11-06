@@ -29,14 +29,14 @@ interface Entity {
   text?: string;
 }
 
-/** A role guessed from a layer's name (German, English, French, Spanish, Italian and AIA names). */
+/** A role guessed from a layer's name (English, French, Spanish, Italian and AIA names). */
 export function guessRole(name: string): LayerRole {
   const n = name.toLowerCase();
-  if (/dim|bema|text|hatch|schraff|möbel|moebel|furn|mobil|achs|axis|grid|raster|electr|elektr|sanit|plumb|rahmen|title|stempel|defpoints|vport/.test(n)) return "ignore";
-  if (/window|fenster|fen[eê]tre|ventana|finestr|a-glaz/.test(n)) return "window";
-  if (/door|t[üu]r|tuer|porte|puerta|porta|a-door/.test(n)) return "door";
-  if (/room|raum|räume|space|area|fläche|flaeche|zone|pi[eè]ce|habitaci|stanz|a-area/.test(n)) return "room";
-  if (/wall|wand|w[äa]nde|mauer|mur|muro|pared|a-wall|beton|concrete|mauerwerk/.test(n)) return "wall";
+  if (/dim|text|hatch|furn|mobil|axis|grid|raster|electr|elektr|sanit|plumb|title|defpoints|vport/.test(n)) return "ignore";
+  if (/window|fen[eê]tre|ventana|finestr|a-glaz/.test(n)) return "window";
+  if (/door|porte|puerta|porta|a-door/.test(n)) return "door";
+  if (/room|space|area|zone|pi[eè]ce|habitaci|stanz|a-area/.test(n)) return "room";
+  if (/wall|mur|muro|pared|a-wall|beton|concrete/.test(n)) return "wall";
   return "ignore";
 }
 
@@ -130,7 +130,7 @@ export function decodeDxf(bytes: Uint8Array): string {
   }
 }
 
-export function readDxf(text: string, roles: Record<string, LayerRole> = {}, unit: number | null = null, lang = "de"): DxfRead {
+export function readDxf(text: string, roles: Record<string, LayerRole> = {}, unit: number | null = null): DxfRead {
   const p = pairs(text);
   // header: the drawing's units
   let insUnits = 0;
@@ -189,7 +189,7 @@ export function readDxf(text: string, roles: Record<string, LayerRole> = {}, uni
   for (const e of flat) counts.set(e.layer, (counts.get(e.layer) ?? 0) + 1);
   const layers: DxfLayer[] = [...counts.entries()].map(([name, count]) => ({ name, count, role: roles[name] ?? guessRole(name) })).sort((a, b) => b.count - a.count);
   // no wall layer recognised: every line not marked otherwise counts as wall
-  if (!layers.some((l) => l.role === "wall")) for (const l of layers) if (l.role === "ignore" && !roles[l.name] && !/dim|bema|text|hatch|schraff/i.test(l.name)) l.role = "wall";
+  if (!layers.some((l) => l.role === "wall")) for (const l of layers) if (l.role === "ignore" && !roles[l.name] && !/dim|text|hatch/i.test(l.name)) l.role = "wall";
   const roleOf = new Map(layers.map((l) => [l.name, l.role]));
 
   // units: the header, else guessed from the size of the drawing (a house spans 5–40 m)
@@ -224,7 +224,7 @@ export function readDxf(text: string, roles: Record<string, LayerRole> = {}, uni
   }
   if (!walls.length && !rooms.length) throw new Error("nothing_found");
   const floor = {
-    name: lang.startsWith("de") ? "Erdgeschoss" : "Ground floor",
+    name: "Ground floor",
     elevation: 0,
     rooms,
     walls,

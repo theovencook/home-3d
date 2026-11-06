@@ -10,16 +10,16 @@ function rect(id: string, name: string, x0: number): Room {
 
 test("rooms carry their floor and area; a door joins the two rooms of its wall", () => {
   const b = emptyBuilding();
-  const floor = { ...newFloor("eg", "EG", 0), rooms: [rect("a", "Küche", 0), rect("b", "Flur", 4), rect("c", "Bad", 8)] };
+  const floor = { ...newFloor("ground", "Ground", 0), rooms: [rect("a", "Kitchen", 0), rect("b", "Hall", 4), rect("c", "Bathroom", 8)] };
   // the shared wall of a and b is a's right edge (edge 1: from [4,0] to [4,3])
   floor.openings = [{ id: "d1", room_id: "a", edge: 1, offset: 1.5, width: 0.9, height: 2.0, type: "door", sill: 0 } as never];
   b.floors = [floor];
   assert.deepEqual(
     locateRooms(b).map((r) => [r.id, r.floor, r.area_id]),
-    [["a", "EG", "a_area"], ["b", "EG", "b_area"], ["c", "EG", "c_area"]],
+    [["a", "Ground", "a_area"], ["b", "Ground", "b_area"], ["c", "Ground", "c_area"]],
   );
   const pairs = doorPairs(b).map((p) => [...p].sort().join("-"));
   assert.deepEqual(pairs, ["a-b"]);
-  assert.equal(roomAt(b, "eg", 9, 1), "c");
-  assert.equal(roomAt(b, "eg", 20, 1), null);
+  assert.equal(roomAt(b, "ground", 9, 1), "c");
+  assert.equal(roomAt(b, "ground", 20, 1), null);
 });

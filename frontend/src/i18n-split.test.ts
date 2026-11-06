@@ -48,7 +48,7 @@ test("German comes from its language pack in Home Assistant, not from a bundle o
   assert.equal(languageReady("de"), false);
   // before its texts are there, German reads English rather than a key
   assert.equal(translate(DE, "rack_edit"), "Edit rack");
-  assert.ok(!/"Rack bearbeiten"|"Ein Plan|Noch kein Plan/.test(src), "no German text left in i18n.ts");
+  for (const k of ["rack_edit", "no_building", "open_editor"] as const) assert.ok(!src.includes(JSON.stringify(de[k])), `the pack text of ${k} is not in i18n.ts`);
 
   const fetched: string[] = [];
   const realFetch = globalThis.fetch;

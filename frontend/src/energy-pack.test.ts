@@ -40,9 +40,9 @@ const furn = (id: string, itemId: string, x: number, z: number, extra: Partial<F
 
 function plan(...furniture: Furniture[]): Building {
   const b = emptyBuilding();
-  const eg = { ...newFloor("eg", "Ground", 0), rooms: [{ id: "a", name: "a", area_id: null, points: [[0, 0], [8, 0], [8, 4], [0, 4]] as [number, number][], floor_material: "wood" as const }] };
-  eg.furniture = furniture;
-  b.floors = [eg];
+  const groundFloor = { ...newFloor("ground", "Ground", 0), rooms: [{ id: "a", name: "a", area_id: null, points: [[0, 0], [8, 0], [8, 4], [0, 4]] as [number, number][], floor_material: "wood" as const }] };
+  groundFloor.furniture = furniture;
+  b.floors = [groundFloor];
   return b;
 }
 
@@ -63,13 +63,13 @@ test("pack energy devices bring their sensors like the built-in ones: consumer u
     batteries: [{ power: "sensor.bat", charge: null }, { power: "sensor.station", charge: "sensor.station_in" }],
     soc: ["sensor.soc", "sensor.station_soc"],
   });
-  assert.deepEqual(meterPosition(b), { floor_id: "eg", x: 1, z: 0.2 });
+  assert.deepEqual(meterPosition(b), { floor_id: "ground", x: 1, z: 0.2 });
 });
 
 test("a CT clamp box stands for the meter when there is no consumer unit", () => {
   const b = plan(furn("ct", "ct_clamp_box", 6, 0.2, { power: "sensor.grid" }));
   assert.equal(deviceSensors(b).grid, "sensor.grid");
-  assert.deepEqual(meterPosition(b), { floor_id: "eg", x: 6, z: 0.2 });
+  assert.deepEqual(meterPosition(b), { floor_id: "ground", x: 6, z: 0.2 });
 });
 
 const power = (entity_id: string, w: string): HassEntity => ({ entity_id, state: w, attributes: { device_class: "power", unit_of_measurement: "W" } });
@@ -83,7 +83,7 @@ test("pack cables: solar panel → inverter → consumer unit, inverter → batt
     furn("pv", "solar_panel", 7.5, 3.5, { power: "sensor.panel" }),
   );
   const hass = hassWith([power("sensor.grid", "-300"), power("sensor.pv", "1200"), power("sensor.bat", "-250"), power("sensor.panel", "1200"), power("sensor.ev", "400")]);
-  const consumers = [{ id: "ev", powerEntity: "sensor.ev", floorId: "eg", x: 5, z: 3.5, power: 400, wallbox: true }];
+  const consumers = [{ id: "ev", powerEntity: "sensor.ev", floorId: "ground", x: 5, z: 3.5, power: 400, wallbox: true }];
   const summary = energySummary(hass, b, consumers);
   const devicePower = new Map([["inv", 1200 - 250], ["bat", -250], ["pv", 1200]]);
   const segs = flowSegments({ building: b, consumers, summary, devicePower });

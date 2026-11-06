@@ -1397,7 +1397,7 @@ export function mayChange(s: Pick<Setting, "permission">, who: Viewer): boolean 
   return who.editor;
 }
 
-/** Folds case and accents ("Hinzufügen" finds "hinzufugen"). */
+/** Folds case and accents ("Café" finds "cafe"). */
 export function fold(text: string): string {
   return text
     .toLowerCase()

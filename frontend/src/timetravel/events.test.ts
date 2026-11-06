@@ -20,21 +20,21 @@ function timeline(entities: Record<string, WireEntity>, stats = {}) {
 
 test("events: the front door, the alarm, water, the lock, the garage and the robot – each change once", () => {
   const tl = timeline({
-    "binary_sensor.haustuer": rows([0, "off"], [7 * H, "on"], [7 * H + 30, "off"], [7 * H + 60, "on"], [9 * H, "off"], [12 * H, "on"]),
-    "alarm_control_panel.haus": rows([0, "armed_away"], [3 * H, "triggered"], [3 * H + 100, "disarmed"]),
-    "binary_sensor.wasser": rows([0, "off"], [10 * H, "on"]),
-    "lock.tuer": rows([0, "locked"], [8 * H, "unlocked"]),
+    "binary_sensor.front_door": rows([0, "off"], [7 * H, "on"], [7 * H + 30, "off"], [7 * H + 60, "on"], [9 * H, "off"], [12 * H, "on"]),
+    "alarm_control_panel.home": rows([0, "armed_away"], [3 * H, "triggered"], [3 * H + 100, "disarmed"]),
+    "binary_sensor.water_leak": rows([0, "off"], [10 * H, "on"]),
+    "lock.front_door": rows([0, "locked"], [8 * H, "unlocked"]),
     "cover.garage": rows([0, "closed"], [6 * H, "opening"], [6 * H + 20, "open"]),
-    "vacuum.saugi": rows([0, "docked"], [10 * H, "cleaning"], [11 * H, "returning"], [11 * H + 300, "docked"]),
-    "binary_sensor.fenster": rows([0, "on"]),
+    "vacuum.robot": rows([0, "docked"], [10 * H, "cleaning"], [11 * H, "returning"], [11 * H + 300, "docked"]),
+    "binary_sensor.window": rows([0, "on"]),
   });
   const roles = new Map<string, Role>([
-    ["binary_sensor.haustuer", "door"],
-    ["alarm_control_panel.haus", "alarm"],
-    ["binary_sensor.wasser", "water"],
-    ["lock.tuer", "lock"],
+    ["binary_sensor.front_door", "door"],
+    ["alarm_control_panel.home", "alarm"],
+    ["binary_sensor.water_leak", "water"],
+    ["lock.front_door", "lock"],
     ["cover.garage", "garage"],
-    ["vacuum.saugi", "robot"],
+    ["vacuum.robot", "robot"],
   ]);
   const events = findEvents({ timeline: tl, roles, weather: null });
   const at = (s: number) => (DAY + s) * 1000;
@@ -59,20 +59,20 @@ test("events: a window open while it rains, motion only at night, the washing ma
   const tl = timeline(
     {
       "weather.home": rows([0, "sunny"], [15 * H, "rainy"], [15 * H + 2400, "cloudy"]),
-      "binary_sensor.bad_fenster": rows([0, "off"], [14 * H, "on"], [16 * H, "off"]),
-      "binary_sensor.kueche_fenster": rows([0, "off"], [17 * H, "on"]),
-      "binary_sensor.flur": rows([0, "off"], [2 * H, "on"], [2 * H + 60, "off"], [2 * H + 600, "on"], [2 * H + 660, "off"], [12 * H, "on"], [12 * H + 60, "off"]),
+      "binary_sensor.bathroom_window": rows([0, "off"], [14 * H, "on"], [16 * H, "off"]),
+      "binary_sensor.kitchen_window": rows([0, "off"], [17 * H, "on"]),
+      "binary_sensor.hall_motion": rows([0, "off"], [2 * H, "on"], [2 * H + 60, "off"], [2 * H + 600, "on"], [2 * H + 660, "off"], [12 * H, "on"], [12 * H + 60, "off"]),
     },
     {
       // 5-minute means: idle, 100 minutes at 400–2000 W, then idle again
-      "sensor.waschmaschine": { start: DAY + 11 * H, step: 300, mean: [1, ...Array.from({ length: 20 }, (_, i) => (i < 3 ? 2000 : 400)), 2, 1] },
+      "sensor.washer_power": { start: DAY + 11 * H, step: 300, mean: [1, ...Array.from({ length: 20 }, (_, i) => (i < 3 ? 2000 : 400)), 2, 1] },
     },
   );
   const roles = new Map<string, Role>([
-    ["binary_sensor.bad_fenster", "window"],
-    ["binary_sensor.kueche_fenster", "window"],
-    ["binary_sensor.flur", "motion"],
-    ["sensor.waschmaschine", "washer"],
+    ["binary_sensor.bathroom_window", "window"],
+    ["binary_sensor.kitchen_window", "window"],
+    ["binary_sensor.hall_motion", "motion"],
+    ["sensor.washer_power", "washer"],
   ]);
   const night = (t: number) => (t / 1000 - DAY) / H < 5;
   const events = findEvents({ timeline: tl, roles, weather: "weather.home", night });
@@ -167,11 +167,11 @@ test("a window opened is an event for the sheet only; the sheet groups by hour, 
 
 test("events: a power outage when the outage entity starts to report one (a grid sensor going off, a UPS on battery)", () => {
   const tl = timeline({
-    "binary_sensor.netz": rows([0, "on"], [5 * H, "off"], [5 * H + 600, "on"], [20 * H, "off"]),
+    "binary_sensor.grid": rows([0, "on"], [5 * H, "off"], [5 * H + 600, "on"], [20 * H, "off"]),
     "sensor.usv": rows([0, "OL"], [9 * H, "OB DISCHRG"], [9 * H + 300, "OL"]),
   });
   const at = (s: number) => (DAY + s) * 1000;
-  const grid = findEvents({ timeline: tl, roles: new Map(), weather: null, outage: { id: "binary_sensor.netz", attributes: { device_class: "power" } } });
+  const grid = findEvents({ timeline: tl, roles: new Map(), weather: null, outage: { id: "binary_sensor.grid", attributes: { device_class: "power" } } });
   assert.deepEqual(
     grid.map((e) => [e.kind, e.t]),
     [
@@ -189,11 +189,11 @@ test("events: a power outage when the outage entity starts to report one (a grid
 test("a camera's detections count day and night, the same camera again after five minutes (Alex, beta)", () => {
   const tl = timeline({
     "binary_sensor.cam_person": rows([0, "off"], [12 * H, "on"], [12 * H + 60, "off"], [12 * H + 120, "on"], [12 * H + 180, "off"], [12 * H + 600, "on"], [12 * H + 660, "off"]),
-    "binary_sensor.flur_bewegung": rows([0, "off"], [12 * H, "on"], [12 * H + 60, "off"]),
+    "binary_sensor.hall_motion_2": rows([0, "off"], [12 * H, "on"], [12 * H + 60, "off"]),
   });
   const roles = new Map<string, Role>([
     ["binary_sensor.cam_person", "camera"],
-    ["binary_sensor.flur_bewegung", "motion"],
+    ["binary_sensor.hall_motion_2", "motion"],
   ]);
   const ev = findEvents({ timeline: tl, roles, weather: null });
   // noon: the camera counts, the motion sensor does not; the camera's second detection within 2 minutes not, the third after 10 minutes again
@@ -203,14 +203,14 @@ test("a camera's detections count day and night, the same camera again after fiv
 
 test("a sensor coming back from unavailable or unknown straight into 'on' is no event; a real off to on still is (#199)", () => {
   const tl = timeline({
-    "binary_sensor.haustuer": rows([0, "off"], [2 * H, "unavailable"], [2 * H + 60, "on"], [4 * H, "off"], [5 * H, "unknown"], [5 * H + 60, "on"]),
-    "binary_sensor.rauch": rows([0, "unavailable"], [3 * H, "on"], [3 * H + 600, "off"], [6 * H, "unavailable"], [6 * H + 60, "on"], [7 * H, "off"], [8 * H, "on"]),
-    "binary_sensor.kamera": rows([0, "unavailable"], [3 * H, "on"], [3 * H + 600, "off"], [9 * H, "on"]),
+    "binary_sensor.front_door": rows([0, "off"], [2 * H, "unavailable"], [2 * H + 60, "on"], [4 * H, "off"], [5 * H, "unknown"], [5 * H + 60, "on"]),
+    "binary_sensor.smoke": rows([0, "unavailable"], [3 * H, "on"], [3 * H + 600, "off"], [6 * H, "unavailable"], [6 * H + 60, "on"], [7 * H, "off"], [8 * H, "on"]),
+    "binary_sensor.camera_motion": rows([0, "unavailable"], [3 * H, "on"], [3 * H + 600, "off"], [9 * H, "on"]),
   });
   const roles = new Map<string, Role>([
-    ["binary_sensor.haustuer", "door"],
-    ["binary_sensor.rauch", "smoke"],
-    ["binary_sensor.kamera", "camera"],
+    ["binary_sensor.front_door", "door"],
+    ["binary_sensor.smoke", "smoke"],
+    ["binary_sensor.camera_motion", "camera"],
   ]);
   const events = findEvents({ timeline: tl, roles, weather: null });
   const at = (s: number) => (DAY + s) * 1000;

@@ -11,11 +11,11 @@ const simple = {
   units: "cm",
   floors: [
     {
-      name: "Erdgeschoss",
+      name: "Ground floor",
       rooms: [
-        { name: "Wohnen", points: [[0, 0], [600, 0], [600, 450], [0, 450]] },
-        { name: "Küche", points: [[600, 0], [1000, 0], [1000, 450], [600, 450]] },
-        { name: "kaputt", points: [[0, 0], [1, 1]] },
+        { name: "Living room", points: [[0, 0], [600, 0], [600, 450], [0, 450]] },
+        { name: "Kitchen", points: [[600, 0], [1000, 0], [1000, 450], [600, 450]] },
+        { name: "broken", points: [[0, 0], [1, 1]] },
       ],
       doors: [{ at: [600, 225], width: 90 }],
       windows: [
@@ -26,10 +26,10 @@ const simple = {
       ],
       furniture: [
         { type: "sofa", at: [300, 300], rotation: 180 },
-        { name: "Esstisch", at: [800, 200], width: 160, depth: 90, height: 75 },
+        { name: "Dining table", at: [800, 200], width: 160, depth: 90, height: 75 },
       ],
     },
-    { name: "Obergeschoss", elevation: 280, rooms: [{ name: "Schlafen", points: [[0, 0], [1000, 0], [1000, 450], [0, 450]] }] },
+    { name: "First floor", elevation: 280, rooms: [{ name: "Bedroom", points: [[0, 0], [1000, 0], [1000, 450], [0, 450]] }] },
   ],
 };
 
@@ -50,7 +50,7 @@ test("the simple format: units, doors and windows on their edges, furniture by k
 
 test("a Home 3D plan written by an AI with mistakes is repaired", () => {
   const b = emptyBuilding();
-  const f = newFloor("eg", "EG", 0);
+  const f = newFloor("ground", "Ground floor", 0);
   f.rooms = [
     { id: "r1", name: "A", area_id: null, floor_material: "wood", points: [[0, 0], [4, 0], [4, 0], [4, 3], [0, 3]] },
     { id: "r1", name: "B", area_id: null, floor_material: "wood", points: [[4, 0], [8, 0], [8, 3], [4, 3]] },
@@ -89,7 +89,7 @@ test("files are told apart by name and content", async () => {
 test("a plan lying at an angle is squared to the axes, furniture turned with it", () => {
   const a = (20 * Math.PI) / 180;
   const rot = ([x, z]: number[]) => [x * Math.cos(a) - z * Math.sin(a), x * Math.sin(a) + z * Math.cos(a)];
-  const plan = readSimple({ format: "home3d-import", floors: [{ name: "EG", rooms: [{ name: "A", points: [[0, 0], [5, 0], [5, 3], [0, 3]].map(rot) }], furniture: [{ type: "bed", at: rot([2, 1.5]), rotation: 20 }] }] });
+  const plan = readSimple({ format: "home3d-import", floors: [{ name: "Ground floor", rooms: [{ name: "A", points: [[0, 0], [5, 0], [5, 3], [0, 3]].map(rot) }], furniture: [{ type: "bed", at: rot([2, 1.5]), rotation: 20 }] }] });
   const { building: b } = buildPlan(plan, { align: true });
   const pts = b.floors[0].rooms[0].points;
   for (let i = 0; i < pts.length; i++) {
@@ -102,8 +102,8 @@ test("a plan lying at an angle is squared to the axes, furniture turned with it"
   assert.ok(r < 0.5 || r > 89.5, String(b.floors[0].furniture[0].rotation));
 });
 
-test("the upstream format id is still read", () => {
-  const legacy = { format: "neonplan-import", floors: [{ name: "EG", rooms: [{ name: "A", points: [[0, 0], [4, 0], [4, 3], [0, 3]] }] }] };
+test("a file with an older or foreign format id but the simple shape is still read", () => {
+  const legacy = { format: "older-import", floors: [{ name: "Ground floor", rooms: [{ name: "A", points: [[0, 0], [4, 0], [4, 3], [0, 3]] }] }] };
   assert.ok(isSimple(legacy));
   assert.equal(readSimple(legacy).floors[0].rooms.length, 1);
 });

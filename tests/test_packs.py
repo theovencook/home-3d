@@ -26,7 +26,7 @@ PAYLOAD = {
     "items": [
         {
             "id": "cube_chair",
-            "name": {"de": "Würfelsessel", "en": "Cube chair"},
+            "name": {"fr": "Fauteuil cube", "en": "Cube chair"},
             "size": [0.8, 0.8, 0.75],
             "parts": [
                 {"shape": "box", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 0.55, "color": "fabric"},
@@ -240,7 +240,7 @@ async def test_import_list_and_remove(hass: HomeAssistant, hass_ws_client) -> No
     await client.send_json_auto_id({"type": "home_3d/packs/list"})
     listed = _imported((await client.receive_json())["result"]["packs"])
     assert [p["id"] for p in listed] == ["test.starter"]
-    assert listed[0]["items"][0]["name"]["de"] == "Würfelsessel"
+    assert listed[0]["items"][0]["name"]["fr"] == "Fauteuil cube"
 
     await client.send_json_auto_id({"type": "home_3d/packs/remove", "pack_id": "test.starter"})
     assert (await client.receive_json())["success"]
@@ -264,11 +264,11 @@ def test_turned_parts_and_stairs_holes_are_accepted() -> None:
 def test_library_fields_are_accepted_and_checked() -> None:
     """A pack may say what an item is, which rooms it is for and which variants belong together (1.23)."""
     library = {"group": "seating", "room": ["living", "kids"], "tags": ["cube", "kids"], "family": "cube_chair"}
-    item = {**PAYLOAD["items"][0], **library, "variant": {"de": "80", "en": "80"}}
+    item = {**PAYLOAD["items"][0], **library, "variant": {"fr": "80", "en": "80"}}
     clean = packs.validate_payload({**PAYLOAD, "items": [item]})
     assert clean["items"][0]["group"] == "seating"
     assert clean["items"][0]["room"] == ["living", "kids"]
-    assert clean["items"][0]["variant"] == {"de": "80", "en": "80"}
+    assert clean["items"][0]["variant"] == {"fr": "80", "en": "80"}
     with pytest.raises(packs.PackError):
         packs.validate_payload({**PAYLOAD, "items": [{**item, "room": "living"}]})
     with pytest.raises(packs.PackError):

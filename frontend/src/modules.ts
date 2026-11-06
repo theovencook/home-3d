@@ -40,13 +40,13 @@ export interface SpokenDevice {
   /** Its power sensor, when it has one. */
   power: string | null;
   type: string;
-  /** Haushalt Pro: minutes left of its program (a washer, dryer, dishwasher with a time sensor), null without. */
+  /** Household: minutes left of its program (a washer, dryer, dishwasher with a time sensor), null without. */
   remaining?: number | null;
   /** A plant with a moisture sensor: whether it is thirsty (null: not a plant, or no sensor). */
   thirsty?: boolean | null;
 }
 
-/** Haushalt Pro: a line of "Today in the household" ("Restmüll: morgen", "Waschmaschine: 23 min"). */
+/** Household: a line of "Today in the household" ("General waste: tomorrow", "Washing machine: 23 min"). */
 export interface SpokenHousehold {
   text: string;
   entity: string | null;
@@ -67,7 +67,7 @@ export interface SpokenAlert {
   roomId: string | null;
 }
 
-/** Auto Pro: a car in its parking spot. */
+/** Cars: a car in its parking spot. */
 export interface SpokenCar {
   name: string;
   /** The parking spot (furniture id) and its floor. */
@@ -104,7 +104,7 @@ export interface SpokenOpening {
   id: string;
   entity: string;
   kind: "door" | "window" | "garage" | "roof_window";
-  /** The kind's word in the user's language ("Fenster"), or the roof window's own name. */
+  /** The kind's word in the user's language ("Window"), or the roof window's own name. */
   name: string;
   room: string;
   floorId: string;
@@ -123,7 +123,7 @@ export interface ModuleHost {
   language(): string;
   /** The devices and furniture of the plan, each with its room. */
   devices(): SpokenDevice[];
-  /** The one a sentence names ("die Waschmaschine", "der Fernseher im Wohnzimmer"), by the host's own matching. */
+  /** The one a sentence names ("the washing machine", "the TV in the living room"), by the host's own matching. */
   findDevice(sentence: string): SpokenDevice | null;
   /** The doors and windows of the plan with their rooms, one entry per linked entity (the plan names them better than Home Assistant's contact sensors do). */
   openings(): SpokenOpening[];
@@ -131,13 +131,13 @@ export interface ModuleHost {
   energy(): { consumption: number | null; solar: number | null; grid: number | null; battery: number | null; soc: number | null } | null;
   /** Consumers drawing power right now (from the plan's sensors), highest first. */
   consumers(): { id: string; entity: string | null; name: string; watts: number }[];
-  /** Haushalt Pro: today's household lines (empty without the Pro, or when nothing is due). */
+  /** Household: today's household lines (empty when nothing is due). */
   household?(): SpokenHousehold[];
   /** The warnings shown right now. */
   alerts?(): SpokenAlert[];
-  /** Auto Pro: the cars of the plan (empty without the Pro). */
+  /** Cars: the cars of the plan (empty when there are none). */
   cars?(): SpokenCar[];
-  /** Pool Pro: the pools with links (empty without the Pro). */
+  /** Pool Pro: the pools with links (empty when there are none). */
   pools?(): SpokenPool[];
   /** The weather entity the plan uses (null without one). */
   weather?(): string | null;
@@ -164,7 +164,7 @@ export interface ModuleHost {
   // --- talking to the people in the house (the 3D view's host has them) ---
   /** Listens once with the host's microphone and Assist's speech-to-text; the words, or null (no microphone, nothing said). */
   listen?(onListening?: () => void): Promise<string | null>;
-  /** A short note at the bottom of the view ("Durchsage an Kinderzimmer gesendet"). */
+  /** A short note at the bottom of the view ("Announcement sent to the nursery"). */
   notify?(text: string): void;
   /** The rooms someone is in right now: located people, and presence or motion sensors of the room's area. */
   occupied?(): { floorId: string; roomId: string }[];
@@ -261,7 +261,7 @@ export type ScenePiece =
       path?: string;
       /** An emoji as the symbol instead of a line icon (📢). */
       emoji?: string;
-      /** The short state under the symbol ("heizt", "3,8 kW"). */
+      /** The short state under the symbol ("heating", "3.8 kW"). */
       text?: string;
       name: string;
       /** The colour (0..1) of its glow while active. */
@@ -343,7 +343,7 @@ export interface ModuleCard {
   anchor: { floorId: string; areaId?: string; furnitureId?: string };
   icon: string;
   title: string;
-  /** What is live now ("heizt", "Pumpe läuft"); shown in the head. */
+  /** What is live now ("heating", "pump running"); shown in the head. */
   live?: string;
   /** The live text's colour (a state in plain words: heating orange, a fault red). */
   liveColor?: string;

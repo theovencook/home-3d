@@ -11,7 +11,7 @@ turned lofts lying on the curved corners (#345); the rest are simple shapes. Mod
 images, no 3D files. The other cars come from tools/gen_vehicles.py.
 
 Windows are in the palette role "glass" and the lamps in the colours the viewer lights for a linked car (headlights
-#e8f4ff, tail lights #ff3b4f): Auto Pro's lights and cabin glow show on it. Every part above the waist sits inside the
+#e8f4ff, tail lights #ff3b4f): the car feature's lights and cabin glow show on it. Every part above the waist sits inside the
 glasshouse or just proud of it, so nothing stands out of the body.
 """
 

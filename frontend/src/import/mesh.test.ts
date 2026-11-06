@@ -60,20 +60,20 @@ function house(): number[] {
 }
 
 test("a 3D model of a house: storeys found, rooms between the walls, doors and the window from the gaps", () => {
-  const { plan, info } = readMesh(house(), { lang: "de" });
+  const { plan, info } = readMesh(house());
   assert.equal(info.up, "y");
   assert.equal(info.unit, 1);
   assert.equal(plan.floors.length, 2, JSON.stringify(info.levels));
   const { building: b, stats } = buildPlan(plan);
-  const [eg, og] = b.floors;
-  assert.equal(eg.rooms.length, 2, JSON.stringify(eg.rooms.map((r) => r.points)));
-  const areas = eg.rooms.map((r) => Math.round(polygonArea(r.points) * 10) / 10).sort((a, c) => a - c);
+  const [ground, upper] = b.floors;
+  assert.equal(ground.rooms.length, 2, JSON.stringify(ground.rooms.map((r) => r.points)));
+  const areas = ground.rooms.map((r) => Math.round(polygonArea(r.points) * 10) / 10).sort((a, c) => a - c);
   // inner faces 0.3…9.7 × 0.3…7.7, joined on the inner wall at x = 6
   assert.deepEqual(areas, [Math.round(3.7 * 7.4 * 10) / 10, Math.round(5.7 * 7.4 * 10) / 10]);
-  assert.equal(eg.openings.filter((o) => o.type === "door").length, 2);
-  assert.equal(eg.openings.filter((o) => o.type === "window").length, 1);
-  assert.equal(og.rooms.length, 1);
-  assert.ok(Math.abs(og.elevation - 2.8) < 0.06, String(og.elevation));
+  assert.equal(ground.openings.filter((o) => o.type === "door").length, 2);
+  assert.equal(ground.openings.filter((o) => o.type === "window").length, 1);
+  assert.equal(upper.rooms.length, 1);
+  assert.ok(Math.abs(upper.elevation - 2.8) < 0.06, String(upper.elevation));
   assert.equal(stats.floors, 2);
 });
 

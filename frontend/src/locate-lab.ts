@@ -52,7 +52,7 @@ export function mountLocateLab(source: Source): () => void {
     const b = source().building;
     const s = status;
     const mark = s?.mark?.room ?? null;
-    const head = `<h4 data-a="toggle"><span>📡 Ortung · Aufnahme (Labor)</span><span>${open ? "▾" : "▸"}</span></h4>`;
+    const head = `<h4 data-a="toggle"><span>📡 Locating · recording (lab)</span><span>${open ? "▾" : "▸"}</span></h4>`;
     if (!open) {
       box.innerHTML = head;
       return;
@@ -60,7 +60,7 @@ export function mountLocateLab(source: Source): () => void {
     const devices = (s?.devices ?? [])
       .map((d) => {
         const age = d.t ? Math.round(Date.now() / 1000 - d.t) : null;
-        return `<div>⌚ ${esc(d.title)}: ${age === null ? "<small>noch nicht gehört</small>" : `${d.rssi} dBm · ${esc(d.scanner ?? "")} <small>vor ${age} s</small>`}</div>`;
+        return `<div>⌚ ${esc(d.title)}: ${age === null ? "<small>not heard yet</small>" : `${d.rssi} dBm · ${esc(d.scanner ?? "")} <small>${age} s ago</small>`}</div>`;
       })
       .join("");
     const rooms = (b?.floors ?? [])
@@ -71,17 +71,17 @@ export function mountLocateLab(source: Source): () => void {
       )
       .join("");
     box.innerHTML = `${head}
-      <div><button data-a="setup">⚙ Ortung einrichten</button></div>
+      <div><button data-a="setup">⚙ Set up locating</button></div>
       <div>${
         s?.running
-          ? `<button class="rec" data-a="stop">■ Stopp</button> <small>${Math.floor(s.seconds / 60)}:${String(s.seconds % 60).padStart(2, "0")} · ${s.lines} Zeilen</small>`
-          : `<button data-a="start">● Aufnahme starten</button>`
+          ? `<button class="rec" data-a="stop">■ Stop</button> <small>${Math.floor(s.seconds / 60)}:${String(s.seconds % 60).padStart(2, "0")} · ${s.lines} lines</small>`
+          : `<button data-a="start">● Start recording</button>`
       }</div>
       ${error ? `<div style="color:#ff8fa3">${esc(error)}</div>` : ""}
-      ${devices || (s ? "<div><small>Keine iPhone/Watch-Schlüssel (Private BLE Device) in HA – alles wird trotzdem aufgezeichnet.</small></div>" : "")}
-      ${s?.mark ? `<div style="margin-top:6px">⏱ seit <b>${clock(Date.now() / 1000 - (s.mark as { t?: number }).t!)}</b> in <b>${esc(s.mark.name)}</b> ${Date.now() / 1000 - (s.mark as { t?: number }).t! >= 120 ? "✓ 2 Min. geschafft" : ""}</div>` : ""}
-      <div class="fl">Ich bin jetzt in …</div>
-      <button data-room="" class="${mark ? "" : "on"}">🚶 unterwegs / nirgends</button>
+      ${devices || (s ? "<div><small>No iPhone/Watch keys (Private BLE Device) in HA – everything is recorded anyway.</small></div>" : "")}
+      ${s?.mark ? `<div style="margin-top:6px">⏱ for <b>${clock(Date.now() / 1000 - (s.mark as { t?: number }).t!)}</b> in <b>${esc(s.mark.name)}</b> ${Date.now() / 1000 - (s.mark as { t?: number }).t! >= 120 ? "✓ 2 min done" : ""}</div>` : ""}
+      <div class="fl">I am now in …</div>
+      <button data-room="" class="${mark ? "" : "on"}">🚶 on the way / nowhere</button>
       ${rooms}`;
   };
 

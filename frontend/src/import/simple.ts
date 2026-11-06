@@ -10,8 +10,6 @@ import { cleanPolygon } from "./geom.ts";
 import { furnitureType } from "./furniture-map.ts";
 
 export const SIMPLE_FORMAT = "home3d-import";
-/** The format id of the upstream project (NeonPlan 3D): still accepted on input, so its example files keep working. */
-export const LEGACY_SIMPLE_FORMAT = "neonplan-import";
 
 const KNOWN = new Set<string>(FURNITURE_TYPES);
 const n = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && Number.isFinite(parseFloat(v)) ? parseFloat(v) : d);
@@ -19,7 +17,7 @@ const pt = (v: unknown): Vec2 | null => (Array.isArray(v) && v.length >= 2 && Nu
 
 export function isSimple(data: unknown): boolean {
   const d = data as { format?: string; floors?: { rooms?: unknown }[] };
-  return d?.format === SIMPLE_FORMAT || d?.format === LEGACY_SIMPLE_FORMAT || (Array.isArray(d?.floors) && d.floors.some((f) => Array.isArray(f?.rooms) && (f.rooms as { points?: unknown }[]).some((r) => Array.isArray(r?.points))) && !(d as { version?: unknown }).version);
+  return d?.format === SIMPLE_FORMAT || (Array.isArray(d?.floors) && d.floors.some((f) => Array.isArray(f?.rooms) && (f.rooms as { points?: unknown }[]).some((r) => Array.isArray(r?.points))) && !(d as { version?: unknown }).version);
 }
 
 interface SimpleFloor {
@@ -50,7 +48,7 @@ export function readSimple(data: unknown): RawPlan {
     });
     if (skipped) warnings.push({ code: "rooms_skipped", n: skipped });
     const floor: RawFloor = {
-      name: String(f.name ?? `Etage ${i + 1}`),
+      name: String(f.name ?? `Floor ${i + 1}`),
       elevation: f.elevation !== undefined ? n(f.elevation, 0) * unit : i * 2.8,
       height: f.height !== undefined ? n(f.height, 2.5 / unit) * unit : null,
       rooms,
@@ -102,7 +100,7 @@ export function repairPlan(input: Building): { building: Building; warnings: War
   b.floors = (Array.isArray(b.floors) ? b.floors : []).map((f, i) => {
     const floor = { ...f };
     floor.id = fresh(f.id, "floor");
-    floor.name = String(f.name ?? `Etage ${i + 1}`);
+    floor.name = String(f.name ?? `Floor ${i + 1}`);
     floor.elevation = n(f.elevation, 0);
     floor.height = Math.min(8, Math.max(1.8, n(f.height, 2.5)));
     floor.cut_height = n(f.cut_height, 1.15);

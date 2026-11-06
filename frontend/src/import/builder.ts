@@ -88,8 +88,6 @@ export interface BuildOptions {
   turn?: 0 | 90 | 180 | 270;
   /** Turn the plan so most walls run along x and z (default: for scans, models and robot maps). */
   align?: boolean;
-  /** Language of made-up names ("Raum 3" / "Room 3"). */
-  lang?: string;
 }
 
 export interface Warning {
@@ -131,7 +129,6 @@ const centroidOf = (pts: readonly Vec2[]): Vec2 => [pts.reduce((s, p) => s + p[0
 export function buildPlan(raw: RawPlan, options: BuildOptions = {}): BuildResult {
   const warnings: Warning[] = [...(raw.warnings ?? [])];
   const opt = { join: raw.roomsAtInnerFaces ?? false, roomsFromWalls: true, square: true, furniture: true, mirror: false, turn: 0, ...options };
-  const de = (opt.lang ?? "de").startsWith("de");
   let ids = 0;
   const id = (p: string) => `${p}_${(++ids).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
@@ -198,7 +195,7 @@ export function buildPlan(raw: RawPlan, options: BuildOptions = {}): BuildResult
   const floors: Floor[] = [];
   const stats = { floors: 0, rooms: 0, doors: 0, windows: 0, walls: 0, furniture: 0 };
   sortedFloors.forEach((src, fi) => {
-    const floor = newFloor(`floor_${fi + 1}`, src.name.trim() || (sortedFloors.length === 1 ? (de ? "Erdgeschoss" : "Ground floor") : `${de ? "Etage" : "Floor"} ${fi + 1}`), r3(sortedFloors.length === 1 ? 0 : src.elevation));
+    const floor = newFloor(`floor_${fi + 1}`, src.name.trim() || (sortedFloors.length === 1 ? "Ground floor" : `Floor ${fi + 1}`), r3(sortedFloors.length === 1 ? 0 : src.elevation));
     const wallHeights = src.walls.map((w) => w.height ?? NaN).filter((h) => h > 1.5 && h < 8);
     floor.height = r3(clamp(src.height ?? median(wallHeights) ?? 2.5, 1.8, 8));
     const walls = src.walls.map((w) => ({ ...w, a: shift(w.a), b: shift(w.b) })).filter((w) => Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) > 0.02);
@@ -272,7 +269,7 @@ export function buildPlan(raw: RawPlan, options: BuildOptions = {}): BuildResult
       const r = rooms.find((x) => !x.name && pointInPolygon(at, x.points));
       if (r) r.name = l.text;
     }
-    rooms.forEach((r, i) => (r.name = r.name || `${de ? "Raum" : "Room"} ${i + 1}`));
+    rooms.forEach((r, i) => (r.name = r.name || `Room ${i + 1}`));
     floor.rooms = rooms;
 
     // walls not along any room edge stand on their own (a partition, a half-height wall)

@@ -495,7 +495,7 @@ interface FloorMaterials {
   patch: MeshBasicMaterial;
   /** A module's surfaces that add light (a heated floor glowing warm). */
   patchGlow: MeshBasicMaterial;
-  /** Energie Pro: the living overlay of the solar fields on this floor (garden, walls). */
+  /** Energy: the living overlay of the solar fields on this floor (garden, walls). */
   solarLive: MeshBasicMaterial;
   lamps: MeshBasicMaterial;
   halos: PointsMaterial;
@@ -814,7 +814,7 @@ export class FloorplanViewer {
   private anchors: { p: [number, number, number]; n: [number, number, number]; floorId: string; size: number; roof: boolean; views: "house" | "all" | "floor"; room?: string | null; near?: number; plan?: boolean }[] = [];
   /** Told where the anchor lies on screen after every frame, how large the hologram should be and whether its front faces the camera. */
   private anchorCb: ((index: number, x: number, y: number, visible: boolean, scale: number, facing: boolean) => void) | null = null;
-  /** Energie Pro: production level (0..1) per solar field; the overlays animate while any is above zero. */
+  /** Energy: production level (0..1) per solar field; the overlays animate while any is above zero. */
   private solarLevels = new Map<string, number>();
   private solarActive = false;
   private roofO = 0;
@@ -1444,7 +1444,7 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
-  /** Energie Pro: how much every solar field produces (0..1 of its peak); the modules glow and sweep with it. */
+  /** Energy: how much every solar field produces (0..1 of its peak); the modules glow and sweep with it. */
   setSolarLevels(levels: Map<string, number>): void {
     this.solarLevels = levels;
     let alive = false;
@@ -4320,7 +4320,7 @@ export class FloorplanViewer {
 
   /** Lit screens of a floor: a bright panel in the app colour and a faint glow around it. */
   private buildScreens(fv: FloorView): void {
-    // the vehicles in the parking spots count as furniture here too (Auto Pro lights a band on them)
+    // the vehicles in the parking spots count as furniture here too (the car feature lights a band on them)
     const items = withVehicles(this.placeBins(fv.floor), this.parked).furniture.filter((f) => this.screens.has(f.id));
     // (with the accent colour: a light switch's rocker glows in it)
     const accent = accentOnUniform.value ? accentUniform.value.toArray().map((v) => Math.round(v * 255)).join(",") : "";
@@ -6261,7 +6261,7 @@ export class FloorplanViewer {
       if (!pin) continue;
       const fv = this.floorMap.get(d.floorId);
       // device markers belong to the floor and room views; the house view only shows floor labels –
-      // except what a camera detects right now and (Haushalt Pro) a bin that goes out or post in the box: those
+      // except what a camera detects right now and (household feature) a bin that goes out or post in the box: those
       // are worth a pin on the whole house too
       const alert = d.id.startsWith("detect:") || (d.id.startsWith("hh:") && d.active);
       if (!fv || (house && !alert) || fv.to < 0.99 || fv.o < 0.9 || d.pin === false || this.otherFloor(fv)) {

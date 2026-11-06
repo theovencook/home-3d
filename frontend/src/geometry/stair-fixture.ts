@@ -8,8 +8,8 @@ export const flight = (id: string, x: number, z: number, rotation: number, w: nu
 
 /** A building of two floors (2.75 m apart) with the given flights on the lower one. */
 export function twoFloors(...flights: Furniture[]) {
-  const lower = { ...newFloor("eg", "EG", 2.75), rooms: [rect("a", 4, 7, 11, 15)], furniture: flights };
-  const upper = { ...newFloor("og", "OG", 5.5), rooms: [rect("b", 4, 7, 11, 15)] };
+  const lower = { ...newFloor("ground", "Ground", 2.75), rooms: [rect("a", 4, 7, 11, 15)], furniture: flights };
+  const upper = { ...newFloor("upper", "Upper", 5.5), rooms: [rect("b", 4, 7, 11, 15)] };
   return { ...emptyBuilding(), floors: [lower, upper] };
 }
 

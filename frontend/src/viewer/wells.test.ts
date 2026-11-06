@@ -10,7 +10,7 @@ const rect = (id: string, x0: number, x1: number, z1: number): Room => ({ id, na
 function house(terrain?: Building["settings"]["terrain"], cellarElevation = -2.6): Building {
   const b = emptyBuilding();
   // two cellar rooms side by side: edge 1 of room "k" is the wall between them
-  b.floors = [{ ...newFloor("ug", "UG", cellarElevation), height: 2.4, rooms: [rect("k", 0, 5, 8), rect("l", 5, 10, 8)] }, { ...newFloor("eg", "EG", 0), rooms: [rect("a", 0, 10, 8)] }];
+  b.floors = [{ ...newFloor("cellar", "Cellar", cellarElevation), height: 2.4, rooms: [rect("k", 0, 5, 8), rect("l", 5, 10, 8)] }, { ...newFloor("ground", "Ground", 0), rooms: [rect("a", 0, 10, 8)] }];
   b.settings = { ...b.settings, wall_exterior: 0.3, wall_interior: 0.12, terrain };
   setTerrain(b);
   return b;

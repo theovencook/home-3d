@@ -46,9 +46,9 @@ function wallPieces(w: XmlNode, wallHeight: number): RawWall[] {
 
 function openingKind(n: XmlNode): RawOpening["kind"] {
   const text = `${n.attrs.catalogId ?? ""} ${n.attrs.name ?? ""}`.toLowerCase();
-  if (/garage|tor\b/.test(text)) return "garage";
-  if (/window|fenster|fen[eê]tre|ventana|finestra|raam|velux|dachfenster/.test(text)) return "window";
-  if (/door|t[üu]r|porte|puerta|porta|deur/.test(text)) return "door";
+  if (/garage/.test(text)) return "garage";
+  if (/window|fen[eê]tre|ventana|finestra|raam|velux/.test(text)) return "window";
+  if (/door|porte|puerta|porta|deur/.test(text)) return "door";
   return null;
 }
 

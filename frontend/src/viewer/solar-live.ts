@@ -1,4 +1,4 @@
-// Energie Pro: the solar modules come alive. A thin overlay on every module shows its cells and a band of
+// Energy: the solar modules come alive. A thin overlay on every module shows its cells and a band of
 // light sweeping down towards the eave, brighter and faster the more the field produces.
 
 import { AdditiveBlending, BufferGeometry, DoubleSide, Float32BufferAttribute, MeshBasicMaterial } from "three";

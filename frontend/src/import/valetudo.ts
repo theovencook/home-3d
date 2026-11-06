@@ -90,13 +90,12 @@ function close(cells: Set<string>, r: number): Set<string> {
   return out;
 }
 
-export function readValetudo(data: unknown, lang = "de"): RawPlan {
+export function readValetudo(data: unknown): RawPlan {
   const d = data as { pixelSize?: number; layers?: Layer[] };
   const px = (d.pixelSize ?? 5) / 100;
-  const de = lang.startsWith("de");
   let layers = (d.layers ?? []).filter((l) => l.type === "segment");
   // a map without rooms (no segmentation yet): the whole floor area as one room
-  if (!layers.length) layers = (d.layers ?? []).filter((l) => l.type === "floor").map((l) => ({ ...l, metaData: { name: de ? "Wohnung" : "Home" } }));
+  if (!layers.length) layers = (d.layers ?? []).filter((l) => l.type === "floor").map((l) => ({ ...l, metaData: { name: "Home" } }));
   if (!layers.length) throw new Error("nothing_found");
   // notches up to about 40 cm (a sofa's legs, a cupboard the robot drove round) are filled
   const r = Math.max(1, Math.round(0.2 / px));
@@ -108,8 +107,8 @@ export function readValetudo(data: unknown, lang = "de"): RawPlan {
     // the staircase of pixel edges smoothed into straight walls, nearly square corners made square
     const pts = cleanPolygon(squareUp(simplify(outline, 2.5).map(([x, y]) => [x * px, y * px] as Vec2), 8));
     if (pts.length < 3) return;
-    rooms.push({ name: l.metaData?.name?.trim() || `${de ? "Raum" : "Room"} ${i + 1}`, points: pts });
+    rooms.push({ name: l.metaData?.name?.trim() || `Room ${i + 1}`, points: pts });
   });
   if (!rooms.length) throw new Error("nothing_found");
-  return { source: "Valetudo", floors: [{ name: de ? "Erdgeschoss" : "Ground floor", elevation: 0, rooms, walls: [], openings: [], furniture: [] }], roomsAtInnerFaces: true, align: true, warnings: [{ code: "robot_map" }] };
+  return { source: "Valetudo", floors: [{ name: "Ground floor", elevation: 0, rooms, walls: [], openings: [], furniture: [] }], roomsAtInnerFaces: true, align: true, warnings: [{ code: "robot_map" }] };
 }

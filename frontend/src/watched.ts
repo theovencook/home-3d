@@ -47,7 +47,7 @@ export function watchedEntities(hass: HomeAssistant, b: Building, w: WatchLinks)
   const heat = w.heat ? b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => id.startsWith("sensor.")))) : [];
   const parking = [...parkingEntities(b.floors), ...carWatched(hass, b.floors)];
   const motion = trailSources(hass, b).map((s) => s.entity);
-  // Haushalt Pro: the bins' calendars and sensors, the mailboxes' flaps and doors
+  // Household: the bins' calendars and sensors, the mailboxes' flaps and doors
   const household = [...b.floors.flatMap((f) => f.furniture.flatMap(householdEntities)), b.settings.household?.notes ?? null].filter((id): id is string => !!id && id !== "none");
   const weather = weatherEntity(hass, w.weatherEntityId ?? b.settings.weather_entity);
   // 3D printers (#11): progress, chamber light and camera on the linked entity's device

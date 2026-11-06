@@ -94,7 +94,7 @@ export class SettingsPart {
           /></label>
           <label class="fp3d-field fp3d-wide" title=${this.t("preset_content_hint")}
             >${this.t("preset_content")}
-            <input type="text" .value=${p.content} placeholder="https://… · spotify:playlist:… · Rock Antenne" @change=${(e: Event) => upd(i, { content: (e.target as HTMLInputElement).value.trim() })}
+            <input type="text" .value=${p.content} placeholder="https://… · spotify:playlist:… · Classic FM" @change=${(e: Event) => upd(i, { content: (e.target as HTMLInputElement).value.trim() })}
           /></label>
           <div class="fp3d-actions fp3d-wide">
             <button class="fp3d-btn fp3d-danger" @click=${() => set(list.filter((_, j) => j !== i))}>${this.t("delete")}</button>
@@ -113,7 +113,7 @@ export class SettingsPart {
     const list = this._doc.settings.buttons ?? [];
     const set = (next: CustomButton[]) => this.change((d) => (d.settings.buttons = next.length ? next : undefined));
     const upd = (i: number, patch: Partial<CustomButton>) => set(list.map((b, j) => (j === i ? { ...b, ...patch } : b)));
-    const placeholder: Record<ButtonAction, string> = { navigate: "/lovelace/rollos", more_info: "cover.wohnzimmer", service: "script.turn_on", fire_dom_event: "" };
+    const placeholder: Record<ButtonAction, string> = { navigate: "/lovelace/blinds", more_info: "cover.living_room", service: "script.turn_on", fire_dom_event: "" };
     // service and event buttons run in the session of whoever taps: only an admin adds or changes one (#151)
     const privileged = (a: ButtonAction) => a === "service" || a === "fire_dom_event";
     const lockedBtn = (b: CustomButton) => !this.isHaAdmin && privileged(b.action);
@@ -148,7 +148,7 @@ export class SettingsPart {
                   rows="4"
                   spellcheck="false"
                   ?disabled=${lockedBtn(b)}
-                  placeholder=${b.action === "fire_dom_event" ? '{"browser_mod": {"service": "browser_mod.popup", "data": {"title": "Rollos", "content": {"type": "custom:my-cover-card"}}}}' : '{"entity_id": "script.party"}'}
+                  placeholder=${b.action === "fire_dom_event" ? '{"browser_mod": {"service": "browser_mod.popup", "data": {"title": "Blinds", "content": {"type": "custom:my-cover-card"}}}}' : '{"entity_id": "script.party"}'}
                   .value=${b.data ? JSON.stringify(b.data, null, 1) : ""}
                   @change=${(e: Event) => {
                     (e.target as HTMLTextAreaElement).setCustomValidity("");
@@ -318,7 +318,7 @@ export class SettingsPart {
       // likely room sensors of this person first (ESPresense / Bermuda name them after the device)
       const slug = person.slice("person.".length);
       const all = this.entityOptions((id) => numberish(id));
-      const likely = (id: string) => id.includes(slug) && /(area|room|raum|bermuda|espresense)/.test(id);
+      const likely = (id: string) => id.includes(slug) && /(area|room|bermuda|espresense)/.test(id);
       return [...all.filter((o) => likely(o.id)), ...all.filter((o) => !likely(o.id))];
     };
     const set = (person: string, sensor: string | null) => {

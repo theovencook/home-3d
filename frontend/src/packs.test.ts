@@ -7,7 +7,7 @@ const pack: FurniturePack = {
   id: "demo.pack",
   name: "Demo",
   publisher: "Demo",
-  items: [{ id: "tv", name: { de: "Fernseher groß", en: "Big TV" }, size: [2, 0.3, 1.2], electric: true, parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "dark" }] }],
+  items: [{ id: "tv", name: { fr: "Grand téléviseur", en: "Big TV" }, size: [2, 0.3, 1.2], electric: true, parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "dark" }] }],
 };
 
 test("pack furniture resolves by type, with size, name and power link", () => {
@@ -16,8 +16,8 @@ test("pack furniture resolves by type, with size, name and power link", () => {
   assert.equal(type, "pack:demo.pack:tv");
   assert.deepEqual(furnitureSize(type), [2, 0.3, 1.2]);
   assert.equal(isElectric(type), true);
-  assert.equal(packItemName(packItem(type)!, "de-DE"), "Fernseher groß");
-  assert.equal(packItemName(packItem(type)!, "fr"), "Big TV");
+  assert.equal(packItemName(packItem(type)!, "fr-FR"), "Grand téléviseur");
+  assert.equal(packItemName(packItem(type)!, "nl"), "Big TV");
   // built-in types keep their sizes; a removed pack leaves a plain default box
   assert.equal(furnitureSize("sofa").length, 3);
   setPacks([]);
@@ -56,7 +56,7 @@ test("pack items stand on the floor, on furniture, on a wall or hang from the ce
 
 test("a pack shows the name its file gives", () => {
   assert.equal(packName({ id: "home3d.office", name: "Office & Gaming" }, "en"), "Office & Gaming");
-  assert.equal(packName({ id: "someone.else", name: "Möbel" }, "en"), "Möbel");
+  assert.equal(packName({ id: "someone.else", name: "Meubles" }, "en"), "Meubles");
 });
 
 test("a status light is no display: printers ask for a device, TVs for a media player", () => {
@@ -108,7 +108,7 @@ test("a pack cooktop is found by its zones: thin discs on its top (they glow whi
     format: "fp3dpack",
     version: 1,
     id: "test.kitchen",
-    name: "Küche",
+    name: "Kitchen",
     publisher: "t",
     items: [
       { id: "hob_80", name: "Kochfeld", size: [0.8, 0.62, 0.92], electric: true, parts: [{ shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 0.95, color: "white" }, zone, { ...zone, x: 0.2 }] },
@@ -125,7 +125,7 @@ test("a pack cooktop is found by its zones: thin discs on its top (they glow whi
 });
 
 test("items outside the rooms stand on the ground beneath them, also when it lies lower than the floor (#708)", () => {
-  const floor = { ...newFloor("eg", "EG", 0), rooms: [{ id: "r", name: "R", area_id: null, points: [[0, 0], [4, 0], [4, 3], [0, 3]], floor_material: "wood" }] } as Building["floors"][number];
+  const floor = { ...newFloor("ground", "Ground", 0), rooms: [{ id: "r", name: "R", area_id: null, points: [[0, 0], [4, 0], [4, 3], [0, 3]], floor_material: "wood" }] } as Building["floors"][number];
   const item = (type: string, x: number) => ({ id: type, type, x, z: 1, w: 0.6, d: 0.6, h: 1, rotation: 0, variant: null }) as Furniture;
   setTerrain({ settings: { terrain: { level: -0.55 } } } as unknown as Building);
   try {

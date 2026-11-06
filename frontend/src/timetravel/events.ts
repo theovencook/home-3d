@@ -165,7 +165,7 @@ export interface EventInput {
   weather: string | null;
   /** When motion is worth an event (default: late evening to early morning). */
   night?: (t: number) => boolean;
-  /** Energie Pro: the solar power and battery charge sensors (a full battery, the day's solar peak). */
+  /** Energy: the solar power and battery charge sensors (a full battery, the day's solar peak). */
   energy?: EnergyInput | null;
   /** The entity that reports a power outage (settings) with its device class and unit, which decide what counts. */
   outage?: { id: string; attributes: Record<string, unknown> } | null;

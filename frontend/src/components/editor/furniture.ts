@@ -43,7 +43,7 @@ export class FurniturePart {
    */
   typeChoices(this: Fp3dEditor, current: string): string[] {
     const shown = new Set<string>(Object.values(FURNITURE_GROUPS).flat());
-    // the smart fridge: its own pack, or Haushalt Pro
+    // the smart fridge: its own pack, or the household feature
     shown.add("fridge_smart");
     return FURNITURE_TYPES.filter((t) => shown.has(t) || t === current);
   }
@@ -67,7 +67,7 @@ export class FurniturePart {
     return all.filter((x) => fits(x.type)).sort((a, b) => a.label.localeCompare(b.label));
   }
 
-  /** A vehicle placed as plain furniture becomes a parking spot with this vehicle (presence and Auto Pro live there). */
+  /** A vehicle placed as plain furniture becomes a parking spot with this vehicle (presence and the car's data live there). */
   vehicleToSpot(this: Fp3dEditor, f: Furniture): void {
     if (!this.isEditor) return;
     const [w, d, h] = furnitureSize("parking");
@@ -469,7 +469,7 @@ export class FurniturePart {
 
   /** The library's index, built once per language and pack state. */
   libraryEntries(this: Fp3dEditor, lang: string): LibraryEntry[] {
-    // the smart fridge is exclusive: an installed pack with the feature "fridge_smart", or Haushalt Pro, offers it
+    // the smart fridge is exclusive: an installed pack with the feature "fridge_smart", or the household feature, offers it
     const extra = ["fridge_smart"];
     const key = `${lang}|${libPacksVersion()}|${this.packs?.length ?? 0}|${extra.length}`;
     if (this.libIndex?.key === key) return this.libIndex.entries;

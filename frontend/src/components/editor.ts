@@ -357,7 +357,7 @@ export class Fp3dEditor extends LitElement {
   declare _wallSel: string | null;
   /** Wall view: several pieces chosen together (shift-click, a frame); empty = the usual single choice. */
   declare _wallMulti: string[];
-  /** Wall view: one part of a block moved on its own ("Nur dieses Teil"). */
+  /** Wall view: one part of a block moved on its own ("Only this part"). */
   declare _wallSingle: boolean;
   /** Wall view: the free stretch of wall tapped (from s0 to s1 along the wall; low = standing pieces, else hanging). */
   declare _wallGap: { s0: number; s1: number; low: boolean } | null;
@@ -1251,7 +1251,7 @@ export class Fp3dEditor extends LitElement {
 
   /**
    * A module's fields, made only when the item, the plan or Home Assistant's devices change – not on every state
-   * change: Wärme Pro searches every entity for its form, and made anew several times a second it kept the CPU busy
+   * change: a heating module searches every entity for its form, and made anew several times a second it kept the CPU busy
    * and closed an open selection list at once (#815).
    */
   _moduleFieldMemo: { item: object; doc: unknown; entities: unknown; lang: string; fields: ModuleField[] } | null = null;

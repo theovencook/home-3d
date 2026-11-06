@@ -15,7 +15,7 @@ const PACK: Omit<FurniturePack, "items"> & { items: PackItem[] } = {
   items: [
     {
       id: "wedge",
-      name: { de: "Keil", en: "Wedge" },
+      name: { fr: "Cale", en: "Wedge" },
       size: [2, 4, 1],
       parts: [
         // a hood: the top rectangle is shorter and sits further back
@@ -70,7 +70,7 @@ test("a built-in item lifted by its mount height (a dryer on the washer) leaves 
 
 test("the mount height is absolute: a wall cabinet hangs at 1.45 m and can go lower", () => {
   const cab = { id: "c", type: "kitchen_wall", x: 0, z: 0, w: 0.8, d: 0.35, h: 0.7, rotation: 0, variant: null } as Furniture;
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   const minY = (f: Furniture) => {
     const buf = new GeoBuffer();
     pushFurniture(buf, new LineBuffer(), new GeoBuffer(), f, mountBase(floor, f));
@@ -82,7 +82,7 @@ test("the mount height is absolute: a wall cabinet hangs at 1.45 m and can go lo
 });
 
 test("every mailbox shape is drawn where its box is: a wall mailbox at 1 m, a bank at 0.75 m, the others on the floor", () => {
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   for (const [variant, bottom] of [[null, 1], ["bank", 0.75], ["pole", 0], ["pillar", 0], ["parcel", 0]] as const) {
     const f = { id: "m", type: "mailbox", x: 0, z: 0, w: 0.38, d: 0.14, h: 0.34, rotation: 0, variant } as Furniture;
     const buf = new GeoBuffer();
@@ -223,7 +223,7 @@ test("pack parts in a colour of their own keep it down to the ground in the ligh
     items: [
       {
         id: "pumpkin",
-        name: { de: "Kürbis", en: "Pumpkin" },
+        name: { fr: "Citrouille", en: "Pumpkin" },
         size: [0.4, 0.4, 0.4],
         parts: [
           { shape: "loft", x: 0, z: 0, w: 0.6, d: 0.6, y: 0, h: 0.5, color: "#c4500a", tx: 0, tz: 0, tw: 1, td: 1 },
@@ -263,7 +263,7 @@ test("a pack wall lamp's light sits in its glowing parts, turned and mirrored wi
   // a wall lantern 0.2 wide, 0.24 deep, 0.4 tall: a back plate at the wall (-z), the glass box out front, a small LED
   const lantern = {
     id: "lantern",
-    name: { de: "Laterne", en: "Lantern" },
+    name: { fr: "Lanterne", en: "Lantern" },
     size: [0.2, 0.24, 0.4],
     parts: [
       { shape: "box", x: 0, z: -0.45, w: 1, d: 0.1, y: 0, h: 1, color: "body" },

@@ -16,7 +16,7 @@ export const ON_OFF_RATE = /^(binary_sensor|schedule|input_boolean|switch)\./;
 
 /** Whether a tariff state (a select option, a sensor's state) reads like the cheap rate: off-peak, night, economy 7 … */
 export function looksCheap(state: string): boolean {
-  return /off[\s_-]?peak|night|cheap|low|economy|e7|nacht|niedrig/i.test(state);
+  return /off[\s_-]?peak|night|cheap|low|economy|e7/i.test(state);
 }
 
 /** The states a tariff entity can take: a select's or enum sensor's options, else its current state. */

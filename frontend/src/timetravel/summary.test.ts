@@ -107,10 +107,10 @@ const st = (entity_id: string, state: string, attributes: Record<string, unknown
 
 function house() {
   const b = emptyBuilding();
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   floor.rooms = [
-    { id: "k", name: "Küche", area_id: "kitchen", points: [[0, 0], [4, 0], [4, 3], [0, 3]], floor_material: "tiles" },
-    { id: "w", name: "Wohnen", area_id: null, points: [[4, 0], [9, 0], [9, 5], [4, 5]], floor_material: "wood" },
+    { id: "k", name: "Kitchen", area_id: "kitchen", points: [[0, 0], [4, 0], [4, 3], [0, 3]], floor_material: "tiles" },
+    { id: "w", name: "Living room", area_id: null, points: [[4, 0], [9, 0], [9, 5], [4, 5]], floor_material: "wood" },
   ] as never;
   floor.openings = [{ id: "o1", room_id: "w", edge: 0, offset: 1, width: 1, type: "window", sill: 0.9, height: 1.2, hinge: "left", leaves: 1, swing: "in" } as Opening];
   floor.placements = [{ entity_id: "light.w", x: 6, z: 2, y: null } as never];
@@ -141,7 +141,7 @@ test("rooms: lights, windows and temperature sensors by area, by the device's ar
       ["w", ["light.w"], [["binary_sensor.win"]], []],
     ],
   );
-  assert.equal(roomOf(rooms).get("binary_sensor.win")?.name, "Wohnen");
+  assert.equal(roomOf(rooms).get("binary_sensor.win")?.name, "Living room");
 });
 
 test("day summary: light, window and heating hours per room, the lowest and highest temperature", () => {

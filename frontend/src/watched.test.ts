@@ -8,43 +8,43 @@ import { watchedEntities } from "./watched.ts";
 function setup() {
   const st = (entity_id: string, state: string, attributes: Record<string, unknown> = {}) => ({ entity_id, state, attributes });
   const hass = {
-    language: "de",
-    areas: { kueche: { area_id: "kueche", name: "Küche" } },
+    language: "en",
+    areas: { kitchen: { area_id: "kitchen", name: "Kitchen" } },
     entities: {
-      "light.kueche": { entity_id: "light.kueche", area_id: "kueche" },
-      "sensor.kueche_temp": { entity_id: "sensor.kueche_temp", area_id: "kueche" },
-      "binary_sensor.kueche_bewegung": { entity_id: "binary_sensor.kueche_bewegung", area_id: "kueche" },
+      "light.kitchen": { entity_id: "light.kitchen", area_id: "kitchen" },
+      "sensor.kitchen_temp": { entity_id: "sensor.kitchen_temp", area_id: "kitchen" },
+      "binary_sensor.kitchen_motion": { entity_id: "binary_sensor.kitchen_motion", area_id: "kitchen" },
     },
     states: {
-      "light.kueche": st("light.kueche", "on"),
+      "light.kitchen": st("light.kitchen", "on"),
       "light.placed": st("light.placed", "off"),
-      "sensor.kueche_temp": st("sensor.kueche_temp", "21.5", { device_class: "temperature" }),
-      "binary_sensor.kueche_bewegung": st("binary_sensor.kueche_bewegung", "off", { device_class: "motion" }),
-      "binary_sensor.fenster": st("binary_sensor.fenster", "off", { device_class: "window" }),
+      "sensor.kitchen_temp": st("sensor.kitchen_temp", "21.5", { device_class: "temperature" }),
+      "binary_sensor.kitchen_motion": st("binary_sensor.kitchen_motion", "off", { device_class: "motion" }),
+      "binary_sensor.window": st("binary_sensor.window", "off", { device_class: "window" }),
       "weather.b": st("weather.b", "sunny"),
       "weather.a": st("weather.a", "rainy"),
     },
   } as unknown as HomeAssistant;
   const b = emptyBuilding();
-  const floor = newFloor("eg", "EG", 0);
-  floor.rooms = [{ id: "k", name: "Küche", area_id: "kueche", points: [[0, 0], [4, 0], [4, 3], [0, 3]], floor_material: "tiles" }];
+  const floor = newFloor("ground", "Ground floor", 0);
+  floor.rooms = [{ id: "k", name: "Kitchen", area_id: "kitchen", points: [[0, 0], [4, 0], [4, 3], [0, 3]], floor_material: "tiles" }];
   floor.placements = [{ entity_id: "light.placed", x: 1, z: 1, y: null }];
   b.floors = [floor];
-  const openings = new Map<string, OpeningEntities>([["w", { cover: null, contact: "binary_sensor.fenster", tilt: null }]]);
+  const openings = new Map<string, OpeningEntities>([["w", { cover: null, contact: "binary_sensor.window", tilt: null }]]);
   const furniture = new Map<string, FurnitureLinks>();
   return { hass, b, openings, furniture };
 }
 
 test("the watched entities: placed devices, openings, lights of the rooms, motion, weather and the sun, each once", () => {
   const { hass, b, openings, furniture } = setup();
-  const ids = watchedEntities(hass, b, { openings, furniture, heat: false, warnings: ["binary_sensor.fenster"], weatherEntityId: null });
-  assert.deepEqual(ids, ["light.placed", "binary_sensor.fenster", "light.kueche", "binary_sensor.kueche_bewegung", "weather.a", "sun.sun"]);
+  const ids = watchedEntities(hass, b, { openings, furniture, heat: false, warnings: ["binary_sensor.window"], weatherEntityId: null });
+  assert.deepEqual(ids, ["light.placed", "binary_sensor.window", "light.kitchen", "binary_sensor.kitchen_motion", "weather.a", "sun.sun"]);
 });
 
 test("the room sensors are only watched for the heatmap or the room values; a chosen weather entity wins", () => {
   const { hass, b, openings, furniture } = setup();
   const ids = watchedEntities(hass, b, { openings, furniture, heat: true, warnings: [], weatherEntityId: "weather.b" });
-  assert.ok(ids.includes("sensor.kueche_temp"));
+  assert.ok(ids.includes("sensor.kitchen_temp"));
   assert.ok(ids.includes("weather.b"));
   assert.ok(!ids.includes("weather.a"));
 });

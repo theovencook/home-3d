@@ -80,7 +80,7 @@ export interface Ask {
   screen: string | null;
   /** The view speaks its answer (a satellite that asked speaks itself). */
   speak: boolean;
-  /** Plan rooms to fly into instead of a sentence ("Where is Torsten?": his room; "Who is home?": a tour). */
+  /** Plan rooms to fly into instead of a sentence ("Where is Alex?": their room; "Who is home?": a tour). */
   show_rooms?: string[];
   /** The rooms are people's while people are shown to admins only: the server sends them to admins' views only (#367). */
   admins_only?: boolean;

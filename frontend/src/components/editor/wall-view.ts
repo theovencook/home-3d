@@ -465,7 +465,7 @@ export class WallViewPart {
       }
       e.stopPropagation();
       this._runSel = null;
-      // shift (or "Mehrere auswählen" on a tablet): the piece joins the choice or leaves it
+      // shift (or "Select several" on a tablet): the piece joins the choice or leaves it
       if (e.shiftKey || this._multiMode) {
         this.wallToggle(id);
         return;
@@ -791,7 +791,7 @@ export class WallViewPart {
               .central=${false}
               @furniture-select=${(e: CustomEvent<{ id: string | null }>) => {
                 const id = e.detail.id;
-                // shift (or "Mehrere auswählen"): the piece joins the choice; a piece of the chosen set keeps the set
+                // shift (or "Select several"): the piece joins the choice; a piece of the chosen set keeps the set
                 if (id && (this.shiftHeld || this._multiMode)) this.wallToggle(id);
                 else if (!id) this.wallChoose([]);
                 else if (!this.wallSelection().includes(id) || this._wallSingle) this.wallChoose([id]);

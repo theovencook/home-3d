@@ -15,7 +15,6 @@ import { isZip, readZip } from "./zip.ts";
 export type Kind = "sh3d" | "roomplan" | "floorplanner" | "valetudo" | "dxf" | "mesh" | "simple" | "home3d";
 
 export interface ReadOptions {
-  lang?: string;
   /** DXF: roles chosen for layers, the unit (metres per unit). */
   roles?: Record<string, LayerRole>;
   dxfUnit?: number | null;
@@ -39,16 +38,15 @@ const ext = (name: string) => name.toLowerCase().split(".").pop() ?? "";
 
 /** Reads a file; its triangles are kept between calls with other options (a 3D model is read only once). */
 export async function readFile(name: string, bytes: Uint8Array, options: ReadOptions = {}, cache: { tris?: number[] } = {}): Promise<ReadResult> {
-  const lang = options.lang ?? "de";
   const e = ext(name);
   if (e === "sh3d" || (isZip(bytes) && readZip(bytes).some((x) => x.name === "Home.xml"))) return { kind: "sh3d", raw: await readSh3d(bytes), building: null, warnings: [] };
   if (e === "dxf") {
-    const r = readDxf(decodeDxf(bytes), options.roles, options.dxfUnit ?? null, lang);
+    const r = readDxf(decodeDxf(bytes), options.roles, options.dxfUnit ?? null);
     return { kind: "dxf", raw: r.plan, building: null, warnings: [], layers: r.layers, dxfUnit: r.unit };
   }
   if (["glb", "gltf", "obj", "stl"].includes(e)) {
     cache.tris ??= e === "obj" ? readObj(new TextDecoder().decode(bytes)) : e === "stl" ? readStl(bytes) : readGltf(bytes);
-    const r = readMesh(cache.tris, { ...options.mesh, lang });
+    const r = readMesh(cache.tris, options.mesh);
     return { kind: "mesh", raw: r.plan, building: null, warnings: [], mesh: r.info };
   }
   let data: unknown;
@@ -69,9 +67,9 @@ export async function readFile(name: string, bytes: Uint8Array, options: ReadOpt
     const r = repairPlan(d as unknown as Building);
     return { kind: "home3d", raw: null, building: r.building, warnings: r.warnings };
   }
-  if (isRoomPlan(data)) return { kind: "roomplan", raw: readRoomPlan(data, lang), building: null, warnings: [] };
-  if (isValetudo(data)) return { kind: "valetudo", raw: readValetudo(data, lang), building: null, warnings: [] };
-  if (isFloorplanner(data)) return { kind: "floorplanner", raw: readFloorplanner(data, lang), building: null, warnings: [] };
+  if (isRoomPlan(data)) return { kind: "roomplan", raw: readRoomPlan(data), building: null, warnings: [] };
+  if (isValetudo(data)) return { kind: "valetudo", raw: readValetudo(data), building: null, warnings: [] };
+  if (isFloorplanner(data)) return { kind: "floorplanner", raw: readFloorplanner(data), building: null, warnings: [] };
   if (isSimple(data)) return { kind: "simple", raw: readSimple(data), building: null, warnings: [] };
   throw new Error("unknown_format");
 }

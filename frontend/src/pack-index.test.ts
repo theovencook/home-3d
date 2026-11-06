@@ -41,15 +41,15 @@ test("search finds every word in the name, description, publisher or a category;
     listed("acme.chairs", { description: "Dining chairs and stools" }),
     listed("acme.lights", { categories: { lamp: 4 } }),
     listed("bob.garden", { categories: { outdoor: 9 } }),
-    listed("bob.deutsch", { kind: "language", categories: {}, texts: 900 }),
+    listed("bob.french", { kind: "language", categories: {}, texts: 900 }),
   ];
   const none = { query: "", category: null, publisher: null };
   assert.equal(browsePacks(packs, none, []).length, 4);
   assert.deepEqual(browsePacks(packs, { ...none, query: "dining STOOLS" }, []).map((p) => p.id), ["acme.chairs"]);
   assert.deepEqual(browsePacks(packs, { ...none, query: "garden furniture" }, [], (c) => (c === "outdoor" ? "Garden furniture" : c)).map((p) => p.id), ["bob.garden"]);
   assert.deepEqual(browsePacks(packs, { ...none, category: "lamp" }, []).map((p) => p.id), ["acme.chairs", "acme.lights"]);
-  assert.deepEqual(browsePacks(packs, { ...none, category: "language" }, []).map((p) => p.id), ["bob.deutsch"]);
-  assert.deepEqual(browsePacks(packs, { ...none, publisher: "bob" }, []).map((p) => p.id), ["bob.garden", "bob.deutsch"]);
+  assert.deepEqual(browsePacks(packs, { ...none, category: "language" }, []).map((p) => p.id), ["bob.french"]);
+  assert.deepEqual(browsePacks(packs, { ...none, publisher: "bob" }, []).map((p) => p.id), ["bob.garden", "bob.french"]);
   // packs with an update come first
   assert.deepEqual(browsePacks(packs, none, [installed("bob.garden", 1)]).map((p) => p.id)[0], "bob.garden");
   assert.equal(updateCount(packs, [installed("bob.garden", 1), installed("acme.chairs", 2)]), 1);

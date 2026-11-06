@@ -53,11 +53,9 @@ ASK_SCHEMA = vol.Schema(
 
 # what Assist says when no view answers, by the language of Home Assistant
 _NO_SCREEN = {
-    "de": "Kein Home 3D-Bildschirm ist gerade offen.",
     "en": "No Home 3D screen is open right now.",
 }
 _NOT_UNDERSTOOD = {
-    "de": "Das hat Home 3D nicht verstanden.",
     "en": "Home 3D did not understand that.",
 }
 
@@ -67,19 +65,6 @@ DEFAULT_SENTENCE_MODE = "off"
 
 # the distinct sentences: nobody says them to Home Assistant itself, so they never take a sentence meant for it
 _DISTINCT = {
-    "de": [
-        "zeig[e] [mir] [mal] [bitte] {text}",
-        "geh[e] [mal] (in|ins|in die|in den|auf|aufs|auf die|auf den|zu|zum|zur) {text}",
-        "(frag|frage) das haus {text}",
-        "(haus|home 3d|home three d) {text}",
-        "gute nacht",
-        "guten morgen",
-        "was kannst du [alles]",
-        "wo (ist|liegt|steckt) (mein|meine|meinen) {text}",
-        "wer ist [gerade] (zu hause|zuhause|daheim)",
-        "(lass|lasse) [mein|meine|meinen] {text} klingeln",
-        "finde [mein|meine|meinen] {text}",
-    ],
     "en": [
         "show [me] {text}",
         "go to [the] {text}",
@@ -98,23 +83,6 @@ _DISTINCT = {
 # the questions: handy, but some of them Home Assistant answers itself ("which windows are open", #641), so
 # they go to Home 3D only with the setting "all"
 _QUESTIONS = {
-    "de": [
-        "wo (ist|sind|steht|stehen) {text}",
-        "was ist [alles|gerade|denn] offen",
-        "ist [irgend]was offen",
-        "welche (fenster|türen) sind [noch] offen",
-        "ist (ein|das) fenster (im|in der|in dem|auf dem|auf der) {text} offen",
-        "wo ist es (kalt|warm|zu kalt|zu warm)",
-        "was (zieht|verbraucht|braucht) [gerade|denn] [den] strom",
-        "was macht die (solaranlage|solar|pv|pv-anlage|photovoltaik)",
-        "wie voll ist (der|die) (akku|batterie|speicher)",
-        "sind die (rollläden|rolläden|jalousien|rollos) (unten|oben|zu|offen)",
-        "ist (die|das) {text} (abgeschlossen|verschlossen|zu|offen|an|aus|ein)",
-        "läuft (die|der|das) {text}",
-        "was läuft [gerade|noch|alles]",
-        "was (steht|ist) heute an",
-        "wie (ist|wird) das wetter [heute|morgen]",
-    ],
     "en": [
         "where (is|are) [the] {text}",
         "what is open",
@@ -135,18 +103,17 @@ _QUESTIONS = {
 }
 
 
-# "Wo ist Frauke?": the names locating knows, as a list (not a wildcard), so Assist matches them even when it
+# "Where is Sam?": the names locating knows, as a list (not a wildcard), so Assist matches them even when it
 # prefers its local commands and leaves everything else to an AI agent (which would only say "is at home")
 WHO_LIST = "home3d_who"
 _WHO_SENTENCES = {
-    "de": [f"wo (ist|steckt|sind) [der|die|das|mein|meine] {{{WHO_LIST}}}"],
     "en": [f"where (is|are) [the|my] {{{WHO_LIST}}}"],
 }
 
 
 def located_names(hass: HomeAssistant) -> list[str]:
-    """The people and things locating knows, the way they are said: device names ("Frauke iPhone", also
-    "Fraukes iPhone"), the person's name and first name."""
+    """The people and things locating knows, the way they are said: device names ("Sam iPhone", also
+    "Sams iPhone"), the person's name and first name."""
     service = hass.data.get(DATA_LOCATE)
     if service is None or not service.enabled:
         return []
@@ -168,22 +135,22 @@ def located_names(hass: HomeAssistant) -> list[str]:
         add(full.split()[0] if full.split() else "")
         words = str(device.get("name") or "").split()
         if len(words) > 1:
-            # the owner's name in front ("Torsten iPhone"): the first name alone and "Torstens iPhone"
+            # the owner's name in front ("Alex iPhone"): the first name alone and "Alexs iPhone"
             add(words[0])
             add(f"{words[0]}s {' '.join(words[1:])}")
     return names[:200]
 
 
 def sentences_of(language: str, mode: str = DEFAULT_SENTENCE_MODE) -> list[str]:
-    """The sentences of a language in a mode (none for "off")."""
+    """The sentences of a language in a mode (none for "off", and none for a language Home 3D has none for)."""
     if mode == "off":
         return []
-    return _DISTINCT[language] + (_QUESTIONS[language] if mode == "all" else [])
+    return _DISTINCT.get(language, []) + (_QUESTIONS.get(language, []) if mode == "all" else [])
 
 
 def sentences_yaml(language: str, mode: str = DEFAULT_SENTENCE_MODE, names: list[str] | tuple[str, ...] = ()) -> str:
     """The custom sentences file of a language (written by hand: the file stays readable for the user); `names`
-    are the people and things locating knows ("Wo ist Frauke?")."""
+    are the people and things locating knows ("Where is Sam?")."""
     lines = [
         "# Written by Home 3D: the sentences Assist hands to the open Home 3D views (the first one that",
         "# understands answers). Put your own sentences for Home3DAsk into another file.",
@@ -197,7 +164,7 @@ def sentences_yaml(language: str, mode: str = DEFAULT_SENTENCE_MODE, names: list
     ]
     sentences = sentences_of(language, mode)
     if names and sentences:
-        sentences = sentences + _WHO_SENTENCES[language]
+        sentences = sentences + _WHO_SENTENCES.get(language, [])
     lines += [f'          - "{s}"' for s in sentences]
     lines += ["lists:", "  text:", "    wildcard: true"]
     if names and sentences:
@@ -251,6 +218,12 @@ def _old_files() -> tuple[str, ...]:
     return tuple(out)
 
 
+def _retired(written: dict[str, str]) -> list[str]:
+    """Languages an older version wrote a sentence file for that have no sentences now: known only by the hash
+    of what was written. Only plain language codes, so a stored key never points outside custom_sentences."""
+    return [lang for lang in written if lang not in _DISTINCT and lang.isascii() and lang.isalpha()]
+
+
 def write_sentences(
     config_dir: Path, mode: str, written: dict[str, str], names: list[str] | tuple[str, ...] = ()
 ) -> tuple[dict[str, str], list[str], bool]:
@@ -262,6 +235,20 @@ def write_sentences(
     hashes = dict(written)
     kept: list[str] = []
     changed = False
+    for language in _retired(written):
+        # a language Home 3D no longer has sentences for: the file an older version wrote goes, in every mode
+        path = _path(config_dir, language)
+        try:
+            old: str | None = path.read_text(encoding="utf-8")
+        except OSError:
+            old = None
+        if old is not None and _sha(old) != written.get(language):
+            kept.append(language)
+            continue
+        if old is not None:
+            path.unlink()
+            changed = True
+        hashes.pop(language, None)
     for language in _DISTINCT:
         path = _path(config_dir, language)
         try:
@@ -289,13 +276,13 @@ def write_sentences(
 
 def remove_sentences(config_dir: Path, written: dict[str, str]) -> None:
     """Removes the files Home 3D wrote (and the user did not change) when the integration is removed."""
-    for language in _DISTINCT:
+    for language in (*_DISTINCT, *_retired(written)):
         path = _path(config_dir, language)
         try:
             current = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        if _sha(current) == written.get(language) or _ours(current, language):
+        if _sha(current) == written.get(language) or (language in _DISTINCT and _ours(current, language)):
             path.unlink()
 
 
@@ -545,7 +532,7 @@ def satellite_screen(
 
 
 def show_located(hass: HomeAssistant, located: Located, screen: str | None = None) -> None:
-    """The open views fly into the room of the answer ("Where is Torsten?"), or tour the rooms of everyone at home.
+    """The open views fly into the room of the answer ("Where is Alex?"), or tour the rooms of everyone at home.
     Nobody waits for them. Not when switched off in the locating settings; while people are shown to admins only,
     only the views of admins fly to people (a wall tablet would show everyone where they are): the rooms are not
     sent to any other view at all (#367)."""
@@ -636,7 +623,7 @@ async def async_setup_voice(hass: HomeAssistant) -> None:
     hass.data[DATA_VOICE] = settings
     await settings.async_refresh()
 
-    # a device added or renamed, locating switched on or off: "Wo ist …?" learns the names
+    # a device added or renamed, locating switched on or off: "Where is …?" learns the names
     settings.unsub = async_dispatcher_connect(hass, SIGNAL_LOCATE_DEVICES, settings.schedule_refresh)
 
 

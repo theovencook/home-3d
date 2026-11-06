@@ -238,7 +238,7 @@ async function findSpeaking(hass: HomeAssistant, chosen: string | null): Promise
   }
 }
 
-/** Hand a sentence to Assist's conversation ("Licht im Flur an"); its spoken answer as text. */
+/** Hand a sentence to Assist's conversation ("turn on the hall light"); its spoken answer as text. */
 export async function converse(hass: HomeAssistant, text: string): Promise<string> {
   const res = await hass.callWS<{ response?: { speech?: { plain?: { speech?: string } } } }>({ type: "conversation/process", text, language: hass.language });
   return res.response?.speech?.plain?.speech ?? "";

@@ -657,7 +657,7 @@ interface Rug {
  */
 function obstaclesOf(floor: Floor, base: (floor: Floor, f: Furniture) => number): Obstacle[] {
   return floor.furniture
-    .filter((f) => f.h >= 0.25 && base(floor, f) < 0.3 && !/lamp|light|leuchte|rug|carpet|teppich|(^|_)mat($|_)|parking|stellplatz/.test(itemOf(f.type)))
+    .filter((f) => f.h >= 0.25 && base(floor, f) < 0.3 && !/lamp|light|rug|carpet|(^|_)mat($|_)|parking/.test(itemOf(f.type)))
     .map((f) => {
       const a = (f.rotation * Math.PI) / 180;
       return { c: [f.x, f.z] as Vec2, u: [Math.cos(a), Math.sin(a)] as Vec2, hw: f.w / 2, hd: f.d / 2 };
@@ -666,7 +666,7 @@ function obstaclesOf(floor: Floor, base: (floor: Floor, f: Furniture) => number)
 
 function rugsOf(floor: Floor): Rug[] {
   return floor.furniture
-    .filter((f) => /rug|carpet|teppich|(^|_)mat($|_)/.test(itemOf(f.type)) && f.h <= 0.06)
+    .filter((f) => /rug|carpet|(^|_)mat($|_)/.test(itemOf(f.type)) && f.h <= 0.06)
     .map((f) => ({ x: f.x, z: f.z, hw: f.w / 2, hd: f.d / 2, a: (f.rotation * Math.PI) / 180, top: f.h + 0.006 }));
 }
 

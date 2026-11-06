@@ -167,7 +167,7 @@ def test_places_stay_private() -> None:
     assert location_like("sensor.car_position", {"latitude": 52.1, "longitude": 9.3})
     assert location_like("sensor.phone_wifi_connection", {"friendly_name": "Phone Wi-Fi SSID"})
     assert location_like("sensor.router_bssid", {})
-    assert location_like("sensor.auto_adresse", {})
+    assert location_like("sensor.car_address", {})
     assert not location_like("sensor.kitchen_temperature", {"device_class": "temperature"})
     assert not location_like("light.kitchen", None)
 
@@ -401,7 +401,7 @@ async def test_history_leaves_places_and_carried_devices_out(hass: HomeAssistant
     hass.data[DOMAIN].packs = [{"id": "test.pro", "features": ["time_travel"], "items": []}]
     hass.config.components.add("recorder")
     _on_plan(
-        hass, "sensor.car_place", "sensor.wifi_ssid", "light.kitchen", "sensor.pixel_battery", "sensor.flur_temperature"
+        hass, "sensor.car_place", "sensor.wifi_ssid", "light.kitchen", "sensor.pixel_battery", "sensor.hall_temperature"
     )
     phone = MockConfigEntry(domain="mobile_app", data={})
     phone.add_to_hass(hass)
@@ -418,7 +418,7 @@ async def test_history_leaves_places_and_carried_devices_out(hass: HomeAssistant
     hass.states.async_set("person.anna", "home", {"device_trackers": ["device_tracker.pixel"]})
     hass.states.async_set("sensor.pixel_battery", "80", {"device_class": "battery"})
     hass.states.async_set("sensor.car_place", "Main St 1", {"latitude": 52.0, "longitude": 9.0})
-    hass.states.async_set("sensor.flur_temperature", "21", {"device_class": "temperature"})
+    hass.states.async_set("sensor.hall_temperature", "21", {"device_class": "temperature"})
     asked: dict[str, Any] = {"states": []}
 
     def fake_states(_hass, start, end, entity_ids, with_attributes):
@@ -438,12 +438,12 @@ async def test_history_leaves_places_and_carried_devices_out(hass: HomeAssistant
         await client.send_json_auto_id(
             _msg(
                 entity_ids=["sensor.car_place", "sensor.wifi_ssid", "light.kitchen"],
-                statistic_ids=["sensor.pixel_battery", "sensor.flur_temperature"],
+                statistic_ids=["sensor.pixel_battery", "sensor.hall_temperature"],
             )
         )
         result = await client.receive_json()
     assert result["success"], result
-    assert asked["stats"] == ["sensor.flur_temperature"]
+    assert asked["stats"] == ["sensor.hall_temperature"]
     assert "sensor.pixel_battery" not in str(asked)
     assert "sensor.car_place" not in str(asked)
     assert "sensor.wifi_ssid" not in str(asked)

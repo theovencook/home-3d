@@ -1,12 +1,14 @@
 # Home 3D import format
 
-*Deutsch weiter unten.*
+This page describes the **simple import format**: a plan that a person, a script or an AI can write easily. You
+describe rooms, doors and windows by plain coordinates and furniture by kind and size, and a converter places
+everything properly (doors and windows on their walls, rooms joined, furniture mapped to Home 3D's kinds).
 
-> **Home 3D note:** the hosted import page of the original project is not part of Home 3D. The converters for these formats are in `frontend/src/import/` but are not wired into the editor yet; this page is kept as the format reference.
-
-The **import page** turns plans from other programs into a Home 3D plan. It reads Sweet Home 3D (`.sh3d`), iPhone/iPad LiDAR scans (RoomPlan JSON), CAD drawings (`.dxf`), 3D models (`.glb`, `.gltf`, `.obj`, `.stl`), Floorplanner exports, Valetudo robot vacuum maps – and the simple format described here. Everything runs in your browser; the file is uploaded nowhere. The result is a Home 3D file you load in the editor under **Backup → Import …**.
-
-The simple format is meant for anyone who writes a plan by hand, with a script or with an AI (see [ai-import.md](ai-import.md)): you describe rooms, doors and windows by plain coordinates, and the import page places everything properly (doors and windows on their walls, rooms joined, furniture mapped).
+> **Status:** the converters for this format and for other programs' files (Sweet Home 3D `.sh3d`, iPhone/iPad
+> RoomPlan JSON, CAD `.dxf`, 3D models `.glb`/`.gltf`/`.obj`/`.stl`, Floorplanner exports, Valetudo maps) are in the
+> source, in `frontend/src/import/`, with their tests. They are **not yet in the editor**: **⚙ Settings → Backup →
+> Import …** accepts only a Home 3D plan file (an export from the editor). This page is the format reference for that
+> work. See also [ai-import.md](ai-import.md).
 
 ## The file
 
@@ -38,7 +40,7 @@ The simple format is meant for anyone who writes a plan by hand, with a script o
 
 | Field | Meaning |
 |---|---|
-| `format` | always `"home3d-import"` (the upstream id `"neonplan-import"` is still accepted) |
+| `format` | `"home3d-import"`. A file without it is still read as this format when it has the shape (floors with rooms that have `points`, and no plan `version`). |
 | `units` | `"m"` (default), `"cm"` or `"mm"` – for every length in the file |
 | `rooms_at` | `"centre"` (default): room outlines run along the **middle of the walls**, so neighbouring rooms share their edge. `"inner"`: outlines along the **inner faces** (measured inside dimensions) – rooms a wall apart are joined. |
 | `floors[]` | lowest first. `elevation` = height of the floor above the ground floor (the ground floor is 0, a cellar is negative), `height` = storey height (default 2.5 m) |
@@ -46,7 +48,7 @@ The simple format is meant for anyone who writes a plan by hand, with a script o
 | `walls[]` | optional, only walls that are **no room edge**: a partition through half a room, a half-height wall. `from`/`to`, `thickness`, `height` (optional) |
 | `doors[]` | `at` = the **middle** of the door on its wall (a point on a room edge), `width`, `height` (optional) |
 | `windows[]` | `at`, `width`, `height`, `sill` (bottom edge above the floor), optional `sill_board`: `"auto"` (default: board inside and sill outside from 0.3 m sill height, none for a window directly above another opening), `"none"`, `"inside"` or `"outside"`. Two windows above each other (a transom light) are listed as two windows with the same `at`. |
-| `furniture[]` | `at` = the middle, `type` (a built-in kind, see below) or `name` (recognised in many languages: "Sofa", "Kühlschrank", "lit double" …), `width` (along its front), `depth`, `height` (optional: the kind's usual size), `rotation` in degrees clockwise (0 = its front faces down the plan, 180 = up), `elevation` (bottom above the floor, e.g. a wall cabinet) |
+| `furniture[]` | `at` = the middle, `type` (a built-in kind, see below) or `name` (recognised by its words in several languages: "Sofa", "Fridge", "lit double" …), `width` (along its front), `depth`, `height` (optional: the kind's usual size), `rotation` in degrees clockwise (0 = its front faces down the plan, 180 = up), `elevation` (bottom above the floor, e.g. a wall cabinet) |
 
 Built-in furniture kinds: `sofa`, `sofa_l`, `sofa_u`, `armchair`, `stool`, `coffee_table`, `tv_board`, `tv_wall`, `sideboard`, `shelf`, `plant`, `rug`, `table`, `table_round`, `chair`, `bench`, `corner_bench`, `bar_stool`, `kitchen` (base cabinet), `kitchen_wall`, `kitchen_tall`, `island`, `worktop`, `sink`, `stove`, `dishwasher`, `fridge`, `bed`, `bunk_bed`, `nightstand`, `wardrobe`, `dresser`, `bathtub`, `shower`, `wc`, `washbasin`, `washer`, `dryer`, `desk`, `office_chair`, `tall_cabinet`, `coat_rack`, `stairs`, `stairs_u`, `radiator`, `ac_unit`, `robot_vacuum`, lamps `lamp_ceiling`, `lamp_downlight`, `lamp_spot`, `lamp_panel`, `lamp_pendant`, `lamp_floor`, `lamp_table`, `lamp_wall`, `led_strip`.
 
@@ -54,8 +56,10 @@ Built-in furniture kinds: `sofa`, `sofa_l`, `sofa_u`, `armchair`, `stool`, `coff
 
 - Keep the corners exact: rooms that share a wall should share the same coordinates (with `rooms_at: "centre"`).
 - A door between two rooms is listed once.
-- The import page shows a preview and tells you what it had to leave out (a door that lies on no room edge, a room with too few corners).
-- A complete Home 3D plan (an export from the editor, or one an AI wrote in that format) can be checked and repaired on the import page too.
+- The converter reports what it had to leave out (a door that lies on no room edge, a room with too few corners).
+- The source also holds a check for complete Home 3D plans written by hand or by an AI (`repairPlan` in
+  `frontend/src/import/simple.ts`): broken parts are repaired or left out, with a warning for each. Like the
+  converters, it is not yet in the editor.
 
 ## The stored plan's version (for contributors)
 
@@ -66,20 +70,3 @@ A plan Home 3D stores carries a `version` (`PLAN_VERSION` in `custom_components/
 
 So **bump `PLAN_VERSION` whenever the stored plan can hold a value an older release would not read**, even when nothing needs migrating. Add a step to `MIGRATIONS` (it can return the plan unchanged), and add an entry for the new version to `tests/fixtures/plan-choices.json` (`tests/test_plan_choices.py` fails until you do). Never change an entry for a version that was released. New optional keys in objects that allow other keys (most of them) need no bump: an older release keeps them as they are.
 
----
-
-# Home-3D-Importformat
-
-> **Hinweis zu Home 3D:** Die gehostete Import-Seite des Originalprojekts gehört nicht zu Home 3D. Die Konverter liegen in `frontend/src/import/`, sind aber noch nicht im Editor eingebunden; diese Seite bleibt als Formatbeschreibung.
-
-Die **Import-Seite** macht aus Plänen anderer Programme einen Home-3D-Plan: Sweet Home 3D (`.sh3d`), iPhone-/iPad-LiDAR-Scans (RoomPlan-JSON), CAD-Zeichnungen (`.dxf`), 3D-Modelle (`.glb`, `.gltf`, `.obj`, `.stl`), Floorplanner-Exporte, Valetudo-Saugroboterkarten – und das hier beschriebene einfache Format. Alles läuft im Browser, die Datei wird nirgendwohin hochgeladen. Das Ergebnis lädst du im Editor unter **Sicherung → Importieren …**.
-
-Das einfache Format ist für alle, die einen Plan von Hand, mit einem Skript oder mit einer KI schreiben (siehe [ai-import.md](ai-import.md)). Aufbau wie oben:
-
-- `units`: `"m"` (Standard), `"cm"` oder `"mm"`.
-- `rooms_at`: `"centre"` (Standard) = Raumumrisse auf der **Wandmitte**, Nachbarräume teilen sich die Kante; `"inner"` = an den **Innenkanten** gemessen, Räume im Wandabstand werden zusammengeführt.
-- `floors[]`: von unten nach oben; `elevation` = Höhe über dem Erdgeschoss (Keller negativ), `height` = Geschosshöhe.
-- `rooms[]`: `name` und `points` als `[x, z]`-Ecken der Reihe nach; **x** nach rechts, **z** im Plan nach unten.
-- `walls[]`: nur Wände, die **keine** Raumkante sind (halbe Trennwand).
-- `doors[]` / `windows[]`: `at` = **Mitte** der Tür bzw. des Fensters auf der Wand, `width`, `height`, bei Fenstern `sill` (Brüstung) und optional `sill_board` (Fensterbank): `"auto"` (Standard: ab 0,3 m Brüstung innen und außen, keine bei einem Fenster direkt über einer anderen Öffnung), `"none"`, `"inside"` oder `"outside"`. Zwei Fenster übereinander (Oberlicht) sind zwei Fenster mit demselben `at`.
-- `furniture[]`: `at` = Mitte, `type` (siehe Liste oben) oder `name` (wird in vielen Sprachen erkannt), `width`, `depth`, `height`, `rotation` im Uhrzeigersinn (0 = Vorderseite zeigt im Plan nach unten), `elevation` (z. B. Hängeschrank).
