@@ -1257,17 +1257,53 @@ export class Fp3dView3d extends LitElement {
     // a replay ticks with updates of its own: it is never skipped
     // robot vacuum maps (#350): their markers follow every new state, rendered or not
     if (changed.has("hass")) this.vacuums?.setHass(hass);
-    if (changed.size !== 1 || !changed.has("hass") || !old || !hass || this.replay || this.hassWatch.matters(old, hass)) return true;
+    if (changed.size !== 1 || !changed.has("hass") || !old || !hass || this.replay) return true;
+    // beside the editor's plan (#389): a new hass alone updates the view at most once every `syncPace` ms (trailing),
+    // whatever it changed – power sensors tick many times a second in a large home
+    if (this.syncPace > 0 && this.pacedHold(old)) {
+      forwardHass(this.renderRoot, HASS_CHILDREN["components/view3d.ts"], [[old, hass]]);
+      return false;
+    }
+    if (this.hassWatch.matters(old, hass)) return this.pacedPass();
     if (old.states !== hass.states) {
       // what the scene shows (syncDevices notes no reads, see there): the watched entities and the items shown only
       // while a state holds (#15)
-      if (this.watched.some((id) => old.states[id] !== hass.states[id])) return true;
+      if (this.watched.some((id) => old.states[id] !== hass.states[id])) return this.pacedPass();
       const b = this.building;
-      if (b && this.shownPlan?.from === b && planHiddenItems(b, hass.states, new Date()).join("|") !== this.shownPlan.hidden) return true;
+      if (b && !this.furnish && this.shownPlan?.from === b && planHiddenItems(b, hass.states, new Date()).join("|") !== this.shownPlan.hidden) return true;
     }
     forwardHass(this.renderRoot, HASS_CHILDREN["components/view3d.ts"], [[old, hass]]);
     if (this.live?.el) this.live.el.hass = hass;
     return false;
+  }
+
+  /** A paced hass update held back: the oldest hass it was not shown yet (the comparisons start there) and its timer. */
+  private pacedOld: HomeAssistant | undefined;
+  private pacedTimer: ReturnType<typeof setTimeout> | undefined;
+  private pacedAt = -Infinity;
+
+  /**
+   * Whether a new hass alone waits (#389): within `syncPace` ms of the last hass update that went through, it is held,
+   * and one update follows when the pace is over, with the hass of then compared with the oldest held one.
+   */
+  private pacedHold(old: HomeAssistant): boolean {
+    const wait = pacedSyncDelay(performance.now() - this.pacedAt, this.syncPace);
+    if (wait <= 0 && !this.pacedTimer) return false;
+    this.pacedOld ??= old;
+    this.pacedTimer ??= setTimeout(() => {
+      this.pacedTimer = undefined;
+      const from = this.pacedOld;
+      this.pacedOld = undefined;
+      // the held hass counts as just let through; one that changed nothing shown is still skipped by shouldUpdate
+      this.requestUpdate("hass", from);
+    }, Math.max(wait, 0));
+    return true;
+  }
+
+  /** A hass update goes through: the pace counts from now. */
+  private pacedPass(): true {
+    if (this.syncPace > 0) this.pacedAt = performance.now();
+    return true;
   }
 
   /** The update ends here (after `updated`): see willUpdate. */
@@ -6024,7 +6060,12 @@ export class Fp3dView3d extends LitElement {
   /** The plan as the 3D view shows it (#15): the same object while the same items are hidden, so the viewer does not rebuild. */
   private viewPlan(b: Building): Building {
     const now = new Date(this.replay?.t ?? Date.now());
-    if (this.furnish) return b; // the editor keeps hidden items in sight
+    // the editor keeps hidden items in sight; noted as shown, so the next sync knows it is the same plan (#389: without
+    // it every sync beside the editor handed the plan over again and rebuilt the scene, on every power reading)
+    if (this.furnish) {
+      if (this.shownPlan?.from !== b || this.shownPlan.plan !== b) this.shownPlan = { from: b, hidden: "", plan: b };
+      return b;
+    }
     const hidden = this.hass ? planHiddenItems(b, this.hass.states, now).join("|") : "";
     if (this.shownPlan?.from !== b || this.shownPlan.hidden !== hidden) this.shownPlan = { from: b, hidden, plan: hidden && this.hass ? shownBuilding(b, this.hass.states, now) : b };
     return this.shownPlan.plan;

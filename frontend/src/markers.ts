@@ -193,10 +193,27 @@ export function cameraMotionSensors(hass: HomeAssistant, cameraId: string): stri
 export function cameraOwnSensors(hass: HomeAssistant, cameraId: string): string[] {
   const device = hass.entities?.[cameraId]?.device_id;
   if (!device) return [];
-  return Object.values(hass.entities ?? {})
-    .filter((e) => e.device_id === device && e.entity_id.startsWith("binary_sensor."))
-    .map((e) => e.entity_id)
-    .filter((id) => ["motion", "occupancy", "presence"].includes(String(hass.states[id]?.attributes.device_class)));
+  return (deviceBinarySensors(hass.entities ?? {}).get(device) ?? []).filter((id) => ["motion", "occupancy", "presence"].includes(String(hass.states[id]?.attributes.device_class)));
+}
+
+/**
+ * The binary sensors of each device, found in one pass over the entity registry and kept while it stays the same object
+ * (#389: every sync looked through the whole registry once per camera; a large home has thousands of entities).
+ */
+const binaryByDevice = new WeakMap<object, Map<string, string[]>>();
+function deviceBinarySensors(entities: NonNullable<HomeAssistant["entities"]>): Map<string, string[]> {
+  let map = binaryByDevice.get(entities);
+  if (!map) {
+    map = new Map();
+    for (const e of Object.values(entities)) {
+      if (!e.device_id || !e.entity_id.startsWith("binary_sensor.")) continue;
+      let list = map.get(e.device_id);
+      if (!list) map.set(e.device_id, (list = []));
+      list.push(e.entity_id);
+    }
+    binaryByDevice.set(entities, map);
+  }
+  return map;
 }
 
 /** Entity ids placed anywhere in the building (to notice relevant state changes cheaply). */

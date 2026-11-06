@@ -220,7 +220,8 @@ try {
     try {
       await bigPage.run("start");
       await bigPage.run("editor");
-      results.big3d = await bigPage.run("editor3d", { seconds: 6, rate: 5, watchedEvery: 5, nudges: 4 });
+      // a circuit monitor's readings at 8 a second, every fourth update a lamp
+      results.big3d = await bigPage.run("editor3d", { seconds: 6, rate: 8, nudges: 4, powerTicks: true });
       if (!results.big3d.follows) problems.push("the 3D beside the plan does not show the nudged item where the plan has it (#390)");
     } catch (err) {
       problems.push(`check failed${bigPage.where}: ${err.message}`);
@@ -265,7 +266,7 @@ if (speed) {
   gate("view mode, home-3d-panel ms/s", results.idleView?.["home-3d-panel"]?.msPerS, limits.panelMsPerS);
   gate("editor selection, linked item median ms", results.select?.linked.median, limits.selectLinked);
   gate("editor selection, plain item median ms", results.select?.plain.median, limits.selectPlain);
-  gate("editor, 3D beside, large floor: long-frame ms/s at 5 updates/s", results.big3d?.background.longFrameMsPerS, limits.big3dBgMsPerS);
+  gate("editor, 3D beside, large floor: long-frame ms/s at 8 power/lamp updates/s", results.big3d?.background.longFrameMsPerS, limits.big3dBgMsPerS);
   gate("editor, 3D beside, large floor: longest frame after a nudge, median ms", results.big3d?.nudge.median, limits.big3dNudge);
 }
 
@@ -290,7 +291,7 @@ else {
   if (results.editorOpen !== undefined) row(`Editor first open (button to plan drawn${latency ? `, +${latency} ms a request` : ""})`, `${results.editorOpen} ms`);
   const b3 = results.big3d;
   if (b3) {
-    row(`Editor, 3D beside, ${b3.items} items, 5 updates/s: long frames`, `${b3.background.longFramesPerS}/s, ${b3.background.longFrameMsPerS} ms/s (worst ${b3.background.worst} ms)`);
+    row(`Editor, 3D beside, ${b3.items} items, 8 power/lamp updates/s: long frames`, `${b3.background.longFramesPerS}/s, ${b3.background.longFrameMsPerS} ms/s (worst ${b3.background.worst} ms)`);
     row("Editor, 3D beside, large floor: longest frame after a nudge (median / worst)", `${b3.nudge.median} / ${b3.nudge.worst} ms`);
   }
   if (results.select) row("Editor selection, linked / plain (median / worst)", `${results.select.linked.median} / ${results.select.linked.worst} ms, ${results.select.plain.median} / ${results.select.plain.worst} ms`);

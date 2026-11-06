@@ -79,6 +79,14 @@ function enlarge(plan, target) {
     }
     for (const d of places) floor.placements.push({ ...structuredClone(d), entity_id: `${d.entity_id}_d${n}`, x: +(d.x + rnd()).toFixed(2), z: +(d.z + rnd()).toFixed(2) });
   }
+  // a circuit monitor (#389): 60 plain items on smart plugs, each plug on one of 12 monitored circuits, and the house's
+  // grid, solar, battery and consumption sensors, as a large real home has (their values tick many times a second)
+  const plain = floor.furniture.filter((f) => !f.entity && !f.power && !f.state_entity).slice(0, 60);
+  for (const [i, f] of plain.entries()) {
+    f.power = `sensor.sample_plug_${i}_power`;
+    f.circuit = `sensor.sample_circuit_${i % 12}_power`;
+  }
+  plan.energy = { ...plan.energy, grid: plan.energy?.grid ?? "sensor.sample_grid_power", solar: plan.energy?.solar ?? "sensor.sample_solar_power", battery: plan.energy?.battery ?? "sensor.sample_battery_power", consumption: plan.energy?.consumption ?? "sensor.sample_house_power" };
   return plan;
 }
 
@@ -350,7 +358,7 @@ const check = {
    * `nudges` arrow nudges of the item, each with the longest frame in the 1.2 s after it (the 3D beside follows the
    * edit). The nudges are undone again.
    */
-  async editor3d({ seconds = 6, rate = 5, watchedEvery = 5, nudges = 4 } = {}) {
+  async editor3d({ seconds = 6, rate = 5, watchedEvery = 5, nudges = 4, powerTicks = false } = {}) {
     const ed = panel.shadowRoot.querySelector("fp3d-editor") ?? (await check.editor());
     if (!ed._split) {
       ed._split = true;
@@ -364,10 +372,13 @@ const check = {
     await ed.updateComplete;
     await sleep(1500);
     const shown = fake.linked.filter((id) => id.startsWith("sensor.") || id.startsWith("light."));
+    // powerTicks: every update a power reading of a plug, a circuit or the house (a circuit monitor), every fourth a lamp
+    const power = fake.linked.filter((id) => id.endsWith("_power"));
+    const lamps = fake.linked.filter((id) => id.startsWith("light."));
     const lf0 = longFrames.length;
     const t0 = performance.now();
     for (let i = 1; i <= seconds * rate; i++) {
-      const id = watchedEvery && i % watchedEvery === 0 ? shown[(i * 31) % shown.length] : undefined;
+      const id = powerTicks ? (i % 4 === 0 && lamps.length ? lamps[(i * 7) % lamps.length] : power[(i * 31) % power.length]) : watchedEvery && i % watchedEvery === 0 ? shown[(i * 31) % shown.length] : undefined;
       panel.hass = fake.tick(id);
       await sleep(1000 / rate);
     }
