@@ -8,6 +8,7 @@ by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 - Editor with 3D beside on: a lamp or sensor that changes no longer relights the whole floor and re-syncs the 3D view several times a second. Only the rooms whose lights changed are relit (their wall shadows are kept), the 3D beside takes state changes at most once a second, and a sync that changes nothing no longer updates the view a second time. The speed check measures this on a ~330-item floor (#389).
 - Editor with 3D beside on: after a nudge, rotate, drop, undo or redo the changed floor is modelled in short slices before the 3D beside shows it, and its light surface and lighting are kept, so the edit no longer causes a long frame (#390).
 - Editor: an edit renders the editor once, not three times: the plan the panel hands back is recognised as the editor's own, and pack updates are only asked for when a plan comes from elsewhere or the packs change, never on every drag move (#391).
+- Editor: selecting an item is quicker on a large home: the entity lists no longer count all states on every call, and the side panel is only set back to its top when it was scrolled down, without forcing a layout (#392).
 - Holiday effects are gentler and no longer run all the time: fewer, fainter pieces and a lighter edge glow, shown for 15 seconds when the view opens, then they fade out. A new house setting, Holidays > Holiday effect (off / brief / 1 minute / always), changes how long (#385).
 
 ## Home 3D 1.0.1 (5 November 2026)

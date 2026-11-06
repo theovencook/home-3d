@@ -845,7 +845,21 @@ export class Fp3dEditor extends LitElement {
     });
   }
 
+  /** Side panels scrolled away from their top (#392): noted by a passive scroll listener, not read after a render. */
+  scrolledSides = new WeakSet<Element>();
+
   protected firstUpdated(): void {
+    // scroll events do not bubble: caught on the way down to the side panel
+    this.renderRoot.addEventListener(
+      "scroll",
+      (e) => {
+        const el = e.target as Element;
+        if (!el.classList?.contains("fp3d-side")) return;
+        if (el.scrollTop > 0) this.scrolledSides.add(el);
+        else this.scrolledSides.delete(el);
+      },
+      { capture: true, passive: true },
+    );
     // the library, rack sheet, pickers and Extensions page are chunks of their own (#245): loaded once the editor is idle
     preloadParts();
     const stage = this.renderRoot.querySelector(".fp3d-canvas-wrap") as HTMLElement | null;
@@ -884,7 +898,14 @@ export class Fp3dEditor extends LitElement {
     this.afterPhoneRender(changed);
     if (this._tool === "measure" && changed.has("_draft")) this.afterMeasureDraft(changed.get("_draft") as Vec2[] | undefined);
     // another item (room, door, floor …) opens its panel at the top: the fields are where they always are (#71)
-    if (selectionMoved(changed, this) || changed.has("_tool")) for (const side of this.renderRoot.querySelectorAll<HTMLElement>(".fp3d-side")) side.scrollTop = 0;
+    // only a side panel scrolled down is set back (#392): setting scrollTop forced a layout of the panel just drawn on
+    // every selection; its scroll position is noted as it scrolls instead of read here
+    if (selectionMoved(changed, this) || changed.has("_tool"))
+      for (const side of this.renderRoot.querySelectorAll<HTMLElement>(".fp3d-side")) {
+        if (!this.scrolledSides.has(side)) continue;
+        this.scrolledSides.delete(side);
+        side.scrollTop = 0;
+      }
     // a part on the Settings page (#139) shows its section unfolded (its summary is hidden there)
     if (this.topic) for (const d of this.renderRoot.querySelectorAll<HTMLDetailsElement>(".fp3d-embed details")) if (!d.open) d.open = true;
     // the item preview is placed in window coordinates; with the 3D view beside the plan an ancestor becomes its

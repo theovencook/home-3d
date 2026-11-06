@@ -4,6 +4,7 @@
 
 import { entityName } from "./devices.ts";
 import type { HomeAssistant } from "./types.ts";
+import { stateCount } from "./hass-watch.ts";
 
 export interface EntityOption {
   id: string;
@@ -76,7 +77,8 @@ export class EntityOptionCache {
   /** Forget every list when an entity came or went or a registry changed. */
   private check(hass: HomeAssistant | undefined): void {
     const s = this.snapshot;
-    const count = Object.keys(hass?.states ?? {}).length;
+    // counted once per states object (#392): about 6 lists a render asked for all ~5,000 states each time
+    const count = stateCount(hass?.states);
     if (s && s.entities === hass?.entities && s.devices === hass?.devices && s.areas === hass?.areas && s.count === count) return;
     this.snapshot = { entities: hass?.entities, devices: hass?.devices, areas: hass?.areas, count };
     this.byKey.clear();

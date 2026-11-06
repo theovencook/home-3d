@@ -12,6 +12,7 @@ import { moduleAreaFields, moduleFurnitureFields, moduleRoomFields, type ModuleF
 import { pipePlanner } from "../../pipe-planner.ts";
 import { uid, type Furniture, type MarkerShow, MARKER_SHOWS, type OutdoorArea, type Room } from "../../model.ts";
 import type { EntityOption } from "../../entity-options.ts";
+import { stateCount } from "../../hass-watch.ts";
 import { round } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 import { callServiceSafe } from "../../failure.ts";
@@ -259,7 +260,8 @@ export class FieldsPart {
    */
   keptForPlan<T>(this: Fp3dEditor, key: string, make: () => T): T {
     const hass = this.rawHass;
-    const count = Object.keys(hass?.states ?? {}).length;
+    // counted once per states object (#392)
+    const count = stateCount(hass?.states);
     let m = this.planMemo;
     if (!m || m.doc !== this._doc || m.entities !== hass?.entities || m.devices !== hass?.devices || m.areas !== hass?.areas || m.count !== count)
       m = this.planMemo = { doc: this._doc, entities: hass?.entities, devices: hass?.devices, areas: hass?.areas, count, kept: new Map() };

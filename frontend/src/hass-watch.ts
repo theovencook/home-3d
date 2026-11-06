@@ -22,6 +22,10 @@ function unwrap<T extends object>(value: T): T {
 
 /** How many entities a states object has, counted once (the panel, the 3D view and the editor all ask per update). */
 const counts = new WeakMap<object, number>();
+/** How many entities a states object has, counted once per object (#392: the editor's lists ask on every render). */
+export function stateCount(states: object | undefined): number {
+  return countOf(states as States | undefined);
+}
 function countOf(states: States | undefined): number {
   if (!states) return 0;
   let n = counts.get(states);

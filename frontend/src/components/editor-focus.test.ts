@@ -90,8 +90,20 @@ function withSideBars(el: Record<string, any>) {
   const root = el.renderRoot as Record<string, unknown>;
   root.querySelector = () => null;
   root.querySelectorAll = (sel: string) => (sel === ".fp3d-side" ? sides : []);
+  // both were scrolled down (the editor's passive scroll listener notes it, #392)
+  for (const s of sides) el.scrolledSides.add(s);
   return sides;
 }
+
+test("a side panel at its top is not written to on a new selection: no forced layout (#392)", () => {
+  const { el } = editor();
+  const sides = withSideBars(el);
+  el.scrolledSides = new WeakSet();
+  let writes = 0;
+  for (const s of sides) Object.defineProperty(s, "scrollTop", { get: () => 0, set: () => writes++ });
+  el.updated(new Map([["_furnitureId", "sofa"]]));
+  assert.equal(writes, 0);
+});
 
 test("another item opens its panel at the top, not where the last one was scrolled to (#71)", () => {
   const { el } = editor();
