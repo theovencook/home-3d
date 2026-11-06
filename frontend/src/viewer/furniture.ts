@@ -11,6 +11,7 @@ import { fitParts } from "../pack-scale.ts";
 import { rackLayout, rackMarks, readRackFrame, type RackLayout } from "../rack-frame.ts";
 import { rackContents, rackLedSpot } from "../rack.ts";
 import { COLOUR_ROLES, drawnColours, roleColour, type RoleColours } from "../colour-roles.ts";
+import { ROLE_NEON } from "../look-surface.ts";
 import { materialId, roleMaterial, type RoleMaterials } from "../role-materials.ts";
 import { binColors, binShape, householdCountry, mailboxShape, type BinShape, type MailboxShape } from "../household.ts";
 import type { Floor } from "../model.ts";
@@ -18,26 +19,8 @@ import { ALWAYS, DEG, EDGE_TOP, GeoBuffer, LineBuffer, pushLoft, pushLyingCyl, p
 import { latheRings, roundedBoxRings, sphereRings } from "./rings.ts";
 import { shellTriangles, type ShellDetail, type V3 } from "./shell.ts";
 
-/** The theme's colour per role (and a lighter top for some); the looks map them in the shaders. */
-const THEME = {
-  body: 0x172238,
-  bodyTop: 0x1d2b47,
-  fabric: 0x1a2644,
-  fabricTop: 0x22325a,
-  cushion: 0x243661,
-  wood: 0x19233c,
-  woodTop: 0x202d4b,
-  white: 0x1d2946,
-  whiteTop: 0x26375e,
-  metal: 0x2a3a60,
-  dark: 0x0b111f,
-  glass: 0x1c3a52,
-  plant: 0x12302e,
-  plantTop: 0x1a4540,
-  pot: 0x1d2640,
-  accent: 0x2b8fb3,
-  paint: 0x2a4a78,
-};
+/** The theme's colour per role (and a lighter top for some); the looks map them in the shaders (look-surface.ts). */
+const THEME = ROLE_NEON;
 
 type Palette = Record<keyof typeof THEME, number>;
 

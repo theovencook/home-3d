@@ -2073,6 +2073,7 @@
  "colour_copy_of": "Hex-Wert von {label} kopieren",
  "colour_copied": "Kopiert",
  "colour_invalid": "Keine Farbe: #rrggbb, #rgb oder rgb(r, g, b) eingeben",
+ "colour_default": "Standardfarbe",
  "theme_neon": "Neon",
  "theme_blueprint": "Hoher Kontrast",
  "theme_day": "Tag",

@@ -211,7 +211,7 @@ export class Fp3dViewPanel extends LitElement {
     const value = s.read(this.env) as string | null;
     const fallback = s.control.kind === "colour" ? s.control.fallback : "#48cdeb";
     return html`<span class="vp-accent" title=${this.t("accent_hint")}>
-      ${colourField({ value: value ?? fallback, label: this.t("accent"), t: (k, v) => this.t(k, v), live: true, onChange: (hex) => hex && this.write(s, hex) })}
+      ${colourField({ value, base: fallback, label: this.t("accent"), t: (k, v) => this.t(k, v), live: true, onChange: (hex) => hex && this.write(s, hex) })}
       ${colourReset({ value, fallback, label: this.t("accent_reset"), onReset: () => this.write(s, null) })}
     </span>`;
   }

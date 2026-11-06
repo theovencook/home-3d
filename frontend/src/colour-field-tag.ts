@@ -6,7 +6,7 @@
 import { html, type TemplateResult } from "lit";
 
 /** The field's texts by key (in the main table and the language packs); a host hands its own `t`. */
-export type ColourTexts = (key: "colour_hex_of" | "colour_copy_of" | "colour_copied" | "colour_invalid", vars: { label: string }) => string;
+export type ColourTexts = (key: "colour_hex_of" | "colour_copy_of" | "colour_copied" | "colour_invalid" | "colour_default", vars: { label: string }) => string;
 
 export interface ColourFieldOptions {
   /** "#rrggbb", or null when it has none of its own. */
@@ -21,13 +21,13 @@ export interface ColourFieldOptions {
   disabled?: boolean;
   /** Emptying the hex field clears the colour (calls onChange with null). */
   clearable?: boolean;
-  /** What the swatch shows, faded, while there is no value. */
-  fallback?: string;
+  /** The colour it has without one of its own (a part's colour in the look, a setting's default): shown muted and copied while there is no value. */
+  base?: string | null;
 }
 
 /** The shared colour field (#403) in a host's template. */
 export function colourField(o: ColourFieldOptions): TemplateResult {
   const take = (e: Event) => o.onChange((e as CustomEvent<{ value: string | null }>).detail.value);
   // prettier-ignore
-  return html`<fp3d-colour-field .value=${o.value ?? null} .label=${o.label} .t=${o.t} .fallback=${o.fallback ?? "#808080"} ?clearable=${!!o.clearable} ?disabled=${!!o.disabled} @colour-change=${o.live ? null : take} @colour-input=${o.live ? take : null}></fp3d-colour-field>`;
+  return html`<fp3d-colour-field .value=${o.value ?? null} .label=${o.label} .t=${o.t} .base=${o.base ?? null} ?clearable=${!!o.clearable} ?disabled=${!!o.disabled} @colour-change=${o.live ? null : take} @colour-input=${o.live ? take : null}></fp3d-colour-field>`;
 }

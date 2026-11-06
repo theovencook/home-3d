@@ -366,7 +366,7 @@ export class Floorplan3dCardEditor extends LitElement {
         <label class="field"
           >${this.t("accent")}
           <span class="accent-pick"
-            >${colourField({ value: this._config.accent ?? ACCENT_DEFAULT, label: this.t("accent"), t: (k, v) => this.t(k, v), live: true, onChange: (hex) => hex && this.set("accent", hex) })}
+            >${colourField({ value: this._config.accent ?? null, base: ACCENT_DEFAULT, label: this.t("accent"), t: (k, v) => this.t(k, v), live: true, onChange: (hex) => hex && this.set("accent", hex) })}
             ${colourReset({ value: this._config.accent, fallback: ACCENT_DEFAULT, label: this.t("accent_reset"), onReset: () => this.set("accent", undefined) })}</span
           >
         </label>

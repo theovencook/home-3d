@@ -179,3 +179,61 @@ test("a change from the colour field is one undo step in the editor (#403)", asy
   assert.equal(paint(), null);
   setPacks([]);
 });
+
+test("on its default the field shows the colour it really has, muted and named so (#403)", () => {
+  const table = englishTable() as Record<string, string>;
+  const f = field(null, { base: "#293962", t: (k, v) => table[k]!.replace("{label}", v.label) }) as unknown as ColourField & { render(): unknown };
+  assert.equal(f.hex, "", "no colour of its own");
+  assert.equal(f.shown, "#293962");
+  const text = flat(f.render());
+  assert.match(text, /\.value=#293962/, "the swatch and the hex text show the default");
+  assert.match(text, /class=hex dflt/);
+  assert.match(text, /aria-label=Paint: hex value \(default colour\)/);
+  // a colour of its own shows plainly
+  const own = field("#c0392b", { base: "#293962" }) as unknown as ColourField & { render(): unknown };
+  assert.equal(own.shown, "#c0392b");
+  assert.doesNotMatch(flat(own.render()), /dflt/);
+  // no base: nothing to show
+  assert.equal(field(null).shown, "");
+});
+
+test("copying a colour on its default copies the default's hex (#403)", async () => {
+  const copied: string[] = [];
+  const nav = globalThis.navigator as unknown as { clipboard?: unknown };
+  const before = Object.getOwnPropertyDescriptor(globalThis.navigator, "clipboard");
+  Object.defineProperty(globalThis.navigator, "clipboard", { value: { writeText: async (t: string) => void copied.push(t) }, configurable: true });
+  try {
+    const f = field(null, { base: "#293962" });
+    await f.copy();
+    assert.deepEqual(copied, ["#293962"]);
+    assert.equal(f.copied, true);
+    await field("#c0392b", { base: "#293962" }).copy();
+    assert.deepEqual(copied, ["#293962", "#c0392b"]);
+  } finally {
+    if (before) Object.defineProperty(globalThis.navigator, "clipboard", before);
+    else delete nav.clipboard;
+  }
+});
+
+test("typing or pasting over a default sets a colour of its own, the default's own hex too (#403)", () => {
+  const f = field(null, { base: "#293962" });
+  f.commit("#ffffff");
+  assert.deepEqual(changes(f), ["#ffffff"]);
+  const same = field(null, { base: "#293962" });
+  same.commit("#293962");
+  assert.deepEqual(changes(same), ["#293962"], "the default typed in becomes the item's own colour");
+  const cleared = field(null, { base: "#293962", clearable: true });
+  cleared.commit("");
+  assert.deepEqual(cleared.sent, [], "emptying a default changes nothing");
+});
+
+test("an item part on its default shows its role's colour in the device's look (#403)", async () => {
+  const { roleInLook } = await import("./look-surface.ts");
+  const ed = await makeEditor([square("r1", 0, 0, 6, 6)], [{ id: "s", type: "sofa", x: 1, z: 1, rotation: 0, w: 2, d: 0.9, h: 0.8, variant: null } as Furniture]);
+  ed.selectItem("furniture", "s");
+  const text = flat(ed.renderColourRoles(ed.furnitureItem));
+  const neon = roleInLook("fabric", "neon")!;
+  assert.match(text, new RegExp(`\.base=${neon}`), "the fabric role's neon colour (the look Home Assistant's dark theme shows)");
+  assert.notEqual(roleInLook("fabric", "day"), neon, "the Day look has its own");
+  assert.equal(roleInLook("nope", "day"), null);
+});

@@ -18,7 +18,7 @@ import type { ColourTexts } from "../colour-field-tag.ts";
 export class ColourField extends LitElement {
   static properties = {
     value: { attribute: false },
-    fallback: { attribute: false },
+    base: { attribute: false },
     label: { attribute: false },
     t: { attribute: false },
     disabled: { type: Boolean, reflect: true },
@@ -28,10 +28,13 @@ export class ColourField extends LitElement {
     copied: { state: true },
   };
 
-  /** The colour, "#rrggbb"; null or "" when it has none of its own (the swatch then shows `fallback`, faded). */
+  /** The colour, "#rrggbb"; null or "" when it has none of its own (the field then shows `base`). */
   declare value: string | null;
-  /** What the swatch shows while there is no value. */
-  declare fallback: string;
+  /**
+   * The colour it has without one of its own ("#rrggbb", the look's colour of an item part, a setting's default), or
+   * null when there is none to name. While there is no value the field shows it, muted, and copies it.
+   */
+  declare base: string | null;
   /** The colour's name, for the swatch, the hex field and the copy button. */
   declare label: string;
   /** The host's translate function (its `t`): the field's texts are in the main table and the language packs. */
@@ -48,7 +51,7 @@ export class ColourField extends LitElement {
   constructor() {
     super();
     this.value = null;
-    this.fallback = "#808080";
+    this.base = null;
     this.label = "";
     this.t = null;
     this.disabled = false;
@@ -61,6 +64,11 @@ export class ColourField extends LitElement {
   /** The colour as the field shows it, "#rrggbb"; "" when there is none. */
   get hex(): string {
     return parseColour(this.value ?? "") ?? "";
+  }
+
+  /** The colour the field shows: its own, else its base; "" when there is neither. */
+  get shown(): string {
+    return this.hex || (parseColour(this.base ?? "") ?? "");
   }
 
   /** One of the field's texts in the host's language. */
@@ -110,7 +118,8 @@ export class ColourField extends LitElement {
 
   /** Puts the hex value on the clipboard (the system's, or by selecting it where that is not allowed). */
   async copy(): Promise<void> {
-    const hex = this.hex;
+    // a colour on its default copies the default: what the item, the setting shows now
+    const hex = this.shown;
     if (!hex) return;
     let done = false;
     try {
@@ -166,15 +175,19 @@ export class ColourField extends LitElement {
 
   protected render() {
     const hex = this.hex;
+    const shown = this.shown;
+    // on its default: the default's colour and hex, muted and dashed, and named so
+    const dflt = !hex && !!shown;
     const label = this.label;
     const copy = this.text("colour_copy_of");
+    const hexName = dflt ? `${this.text("colour_hex_of")} (${this.text("colour_default")})` : this.text("colour_hex_of");
     const off = this.disabled;
     // prettier-ignore
-    return html`<span class="cf" role="group" aria-label=${label}><input type="color" class=${hex ? "sw" : "sw unset"} aria-label=${label} .value=${hex || parseColour(this.fallback) || "#808080"} ?disabled=${off} @input=${(e: Event) => this.onSwatch(e, false)} @change=${(e: Event) => this.onSwatch(e, true)}><input class="hex" maxlength="24" spellcheck="false" autocomplete="off" placeholder="#rrggbb" aria-label=${this.text("colour_hex_of")} aria-invalid=${this.invalid ? "true" : "false"} aria-describedby=${this.invalid ? "err" : nothing} .value=${this.draft ?? hex} ?disabled=${off} @focus=${(e: Event) => (e.target as HTMLInputElement).select()} @input=${(e: Event) => (this.draft = (e.target as HTMLInputElement).value)} @keydown=${this.onKey} @paste=${this.onPaste} @change=${(e: Event) => this.commit((e.target as HTMLInputElement).value)}><button type="button" class="cp" title=${copy} aria-label=${copy} ?disabled=${!hex} @click=${this.copy}>${this.copied ? "✓" : "⧉"}</button><span class="sr" aria-live="polite">${this.copied ? this.text("colour_copied") : ""}</span>${this.invalid ? html`<span id="err" class="err" role="alert">${this.text("colour_invalid")}</span>` : nothing}</span>`;
+    return html`<span class="cf" role="group" aria-label=${label}><input type="color" class=${hex ? "sw" : dflt ? "sw dflt" : "sw unset"} aria-label=${label} title=${dflt ? this.text("colour_default") : nothing} .value=${shown || "#808080"} ?disabled=${off} @input=${(e: Event) => this.onSwatch(e, false)} @change=${(e: Event) => this.onSwatch(e, true)}><input class=${dflt ? "hex dflt" : "hex"} maxlength="24" spellcheck="false" autocomplete="off" placeholder="#rrggbb" aria-label=${hexName} title=${dflt ? this.text("colour_default") : nothing} aria-invalid=${this.invalid ? "true" : "false"} aria-describedby=${this.invalid ? "err" : nothing} .value=${this.draft ?? shown} ?disabled=${off} @focus=${(e: Event) => (e.target as HTMLInputElement).select()} @input=${(e: Event) => (this.draft = (e.target as HTMLInputElement).value)} @keydown=${this.onKey} @paste=${this.onPaste} @change=${(e: Event) => this.commit((e.target as HTMLInputElement).value)}><button type="button" class="cp" title=${copy} aria-label=${copy} ?disabled=${!shown} @click=${this.copy}>${this.copied ? "✓" : "⧉"}</button><span class="sr" aria-live="polite">${this.copied ? this.text("colour_copied") : ""}</span>${this.invalid ? html`<span id="err" class="err" role="alert">${this.text("colour_invalid")}</span>` : nothing}</span>`;
   }
 
   // prettier-ignore
-  static styles = css`:host{display:inline-block;min-width:0;max-width:100%}.cf{display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;max-width:100%}input,button{box-sizing:border-box;height:30px;border:1px solid var(--fp3d-line,#8888);border-radius:7px;font:inherit;color:var(--fp3d-text,inherit)}.sw{flex:none;width:30px;padding:2px;background:none;cursor:pointer}.sw::-webkit-color-swatch-wrapper{padding:0}.sw::-webkit-color-swatch{border:none;border-radius:5px}.unset{opacity:.35}.hex{flex:none;width:calc(7ch + 8px);min-width:0;padding:0 3px;font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--fp3d-bg2,transparent)}.hex::placeholder{color:var(--fp3d-muted,#888)}.hex[aria-invalid=true]{border-color:var(--fp3d-danger,#ff6b6b)}.cp{flex:none;width:20px;padding:0;border:none;background:none;color:var(--fp3d-muted,#888);font-size:14px;cursor:pointer}.cp:hover:not(:disabled){color:var(--fp3d-accent,#37e0ff)}.cp:disabled{opacity:.35;cursor:default}:focus-visible{outline:2px solid var(--fp3d-accent,#37e0ff);outline-offset:1px}:host([disabled]) input{opacity:.5;cursor:default}.err{flex-basis:100%;font-size:11px;line-height:1.3;color:var(--fp3d-danger,#ff6b6b)}.sr{position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}`;
+  static styles = css`:host{display:inline-block;min-width:0;max-width:100%}.cf{display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;max-width:100%}input,button{box-sizing:border-box;height:30px;border:1px solid var(--fp3d-line,#8888);border-radius:7px;font:inherit;color:var(--fp3d-text,inherit)}.sw{flex:none;width:30px;padding:2px;background:none;cursor:pointer}.sw::-webkit-color-swatch-wrapper{padding:0}.sw::-webkit-color-swatch{border:none;border-radius:5px}.unset{opacity:.35}.dflt{border-style:dashed}.hex.dflt{color:var(--fp3d-muted,#888);font-style:italic}.hex{flex:none;width:calc(7ch + 8px);min-width:0;padding:0 3px;font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--fp3d-bg2,transparent)}.hex::placeholder{color:var(--fp3d-muted,#888)}.hex[aria-invalid=true]{border-color:var(--fp3d-danger,#ff6b6b)}.cp{flex:none;width:20px;padding:0;border:none;background:none;color:var(--fp3d-muted,#888);font-size:14px;cursor:pointer}.cp:hover:not(:disabled){color:var(--fp3d-accent,#37e0ff)}.cp:disabled{opacity:.35;cursor:default}:focus-visible{outline:2px solid var(--fp3d-accent,#37e0ff);outline-offset:1px}:host([disabled]) input{opacity:.5;cursor:default}.err{flex-basis:100%;font-size:11px;line-height:1.3;color:var(--fp3d-danger,#ff6b6b)}.sr{position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}`;
 }
 
 defineElement("fp3d-colour-field", ColourField);

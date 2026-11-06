@@ -752,7 +752,7 @@ export class SettingsPage extends LitElement {
   /** The shared colour field (#403): swatch, hex value and copy; its code is a chunk of its own. */
   private colourField(value: string | null, fallback: string, label: string, disabled: boolean, set: (hex: string) => unknown) {
     need(loadColourField);
-    return colourField({ value: value ?? fallback, label, t: (k, v) => this.tr(k, v), disabled, live: true, onChange: (hex) => hex && set(hex) });
+    return colourField({ value, base: fallback, label, t: (k, v) => this.tr(k, v), disabled, live: true, onChange: (hex) => hex && set(hex) });
   }
 
   /** A time of day picker (#225) in the profile's 12 or 24 hours. */

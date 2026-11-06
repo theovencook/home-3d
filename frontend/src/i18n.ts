@@ -728,6 +728,7 @@ const en = {
   colour_copy_of: "Copy the hex value of {label}",
   colour_copied: "Copied",
   colour_invalid: "Not a colour: use #rrggbb, #rgb or rgb(r, g, b)",
+  colour_default: "default colour",
   theme_neon: "Neon",
   theme_blueprint: "High contrast",
   theme_day: "Day",
