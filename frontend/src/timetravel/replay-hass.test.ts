@@ -318,7 +318,47 @@ test("replay: a car's own tracker is replayed (home or away), every other tracke
   const past = r.hassAt(hass, at(4000));
   assert.equal(past.states["device_tracker.car"].state, "not_home");
   assert.equal(past.states["device_tracker.car"].attributes.latitude, undefined);
-  assert.equal(past.states["device_tracker.car"].attributes.friendly_name, "Auto");
+  // home or away and nothing else (#394)
+  assert.deepEqual(past.states["device_tracker.car"].attributes, {});
+});
+
+test("replay: a person and a tracker a show/hide rule follows are home or away only, the others stay out (#394)", () => {
+  const { hass } = live();
+  hass.states["person.mia"] = { entity_id: "person.mia", state: "home", attributes: { friendly_name: "Mia", latitude: 52.1, longitude: 13.2, device_trackers: ["device_tracker.phone"] } };
+  hass.states["device_tracker.phone"] = { entity_id: "device_tracker.phone", state: "home", attributes: { latitude: 52.1, longitude: 13.2, zone: "work", source_type: "gps" } };
+  const tl = buildTimeline([
+    {
+      day_start: DAY,
+      end: DAY + 86400,
+      oldest: null,
+      keep_days: 10,
+      entities: { "person.mia": { t: [0, 3600], v: [0, 1], tab: ["home", "not_home"] }, "device_tracker.phone": { t: [0, 3600], v: [0, 1], tab: ["home", "not_home"] } },
+      stats: {},
+      missing: [],
+    },
+  ]);
+  const r = new Replay(tl, { requested: ["person.mia", "device_tracker.phone", "person.other"], allowed: ["person.mia"] });
+  const past = r.hassAt(hass, at(4000));
+  assert.equal(past.states["person.mia"].state, "not_home");
+  assert.deepEqual(past.states["person.mia"].attributes, {});
+  assert.equal(r.hassAt(hass, at(100)).states["person.mia"].state, "home");
+  // not allowed: left out of the past altogether (not even the live state)
+  assert.equal(past.states["device_tracker.phone"], undefined);
+  assert.equal(past.states["person.other"], undefined);
+  assert.ok(!JSON.stringify(past.states).includes("52.1"));
+});
+
+test("the request: the person or tracker of a show/hide rule is fetched as a car, others stay private (#394)", () => {
+  const { hass } = live();
+  hass.states["person.mia"] = { entity_id: "person.mia", state: "home", attributes: { device_trackers: ["device_tracker.phone"] } };
+  const b = emptyBuilding();
+  b.floors.push(newFloor("eg", "EG", 0));
+  b.floors[0].furniture.push({ id: "c", type: "car", x: 0, z: 0, w: 1, d: 1, h: 1, rotation: 0, show_when: { entity: "device_tracker.phone", when: "on" } } as never);
+  b.floors[0].furniture.push({ id: "d", type: "car", x: 0, z: 0, w: 1, d: 1, h: 1, rotation: 0, show_when: { entity: "person.mia", when: "on" } } as never);
+  const req = historyRequest(hass, b, { entities: [], openings: [], furniture: [], low: false });
+  assert.deepEqual(req.cars.sort(), ["device_tracker.phone", "person.mia"]);
+  assert.ok(req.entities.includes("person.mia") && req.entities.includes("device_tracker.phone"));
+  assert.ok(!req.hidden.includes("person.mia"));
 });
 
 test("the request: a car's tracker is fetched for Auto Pro, a person's own tracker never", () => {

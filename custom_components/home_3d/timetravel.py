@@ -34,6 +34,7 @@ from .timetravel_rows import (
     location_like,
     oldest_data,
     read_row,
+    rule_trackers,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -136,7 +137,7 @@ def collect(
 
     start_dt = dt_util.utc_from_timestamp(start)
     end_dt = dt_util.utc_from_timestamp(end)
-    cars = [e for e in dict.fromkeys(car_trackers or []) if domain_of(e) == "device_tracker"]
+    cars = [e for e in dict.fromkeys(car_trackers or []) if domain_of(e) in ("device_tracker", "person")]
     entity_ids = [e for e in entity_ids if domain_of(e) not in _PRIVATE]
     statistic_ids = [e for e in statistic_ids if domain_of(e) not in _PRIVATE]
     plain = [e for e in entity_ids if domain_of(e) not in ATTR_KEEP]
@@ -226,14 +227,18 @@ async def ws_timetravel_history(
     else:
         homes = [home]
     configured: set[str] = set()
+    followed: set[str] = set()
     for home in homes:
         configured |= car_trackers(hass, home.building)
-    cars = [e for e in msg["car_trackers"] if e in configured and e not in private]
+        # an item's show/hide rule on a person or tracker: the owner chose it, the answer is home or away only (#394)
+        followed |= rule_trackers(home.building)
+    cars = [e for e in msg["car_trackers"] if (e in configured and e not in private) or e in followed]
     # places and the devices people carry stay out, whatever the frontend asks for
     hidden = private_entities(hass, [*msg["entity_ids"], *msg["statistic_ids"]])
     # only entities on a plan, and only those this user may read (as Home Assistant's own history does, #187)
     on_plan = plan_entities(data)
     user = connection.user
+    cars = [e for e in cars if user.permissions.check_entity(e, POLICY_READ)]
 
     def allowed(entity_id: str) -> bool:
         if entity_id not in on_plan or entity_id in hidden:

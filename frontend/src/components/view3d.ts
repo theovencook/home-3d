@@ -1258,6 +1258,7 @@ export class Fp3dView3d extends LitElement {
     // robot vacuum maps (#350): their markers follow every new state, rendered or not
     if (changed.has("hass")) this.vacuums?.setHass(hass);
     if (changed.size !== 1 || !changed.has("hass") || !old || !hass || this.replay) return true;
+    // (so the show/hide check below only runs live, with the clock; a replay returned above and syncs with its own moment, #394)
     // beside the editor's plan (#389): a new hass alone updates the view at most once every `syncPace` ms (trailing),
     // whatever it changed – power sensors tick many times a second in a large home
     if (this.syncPace > 0 && this.pacedHold(old)) {
@@ -2207,6 +2208,7 @@ export class Fp3dView3d extends LitElement {
     const warnings = alertEntities(alertSources(hass, b, this.weatherEntityId));
     const entities = watchedEntities(hass, b, { openings, furniture, heat: true, warnings, weatherEntityId: this.weatherEntityId });
     // Auto Pro: the cars' own trackers (home or away only); a person's tracker is never one of them
+    // (the people and trackers a show/hide rule follows are asked for in the request itself, #394)
     const cars = b.floors.flatMap((fl) =>
       fl.furniture
         .filter((f) => f.type === "parking")

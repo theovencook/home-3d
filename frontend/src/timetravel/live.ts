@@ -51,7 +51,7 @@ export function carState(state: string): string {
 /** A live state as a timeline value: the state with the kept attributes (a car tracker reduced to home/away). */
 export function liveValue(st: HassEntity): Value {
   const domain = st.entity_id.slice(0, st.entity_id.indexOf("."));
-  if (domain === "device_tracker") return { s: carState(st.state), a: null };
+  if (domain === "device_tracker" || domain === "person") return { s: carState(st.state), a: null };
   const keys = ATTR_KEEP[domain];
   if (!keys?.length) return { s: st.state, a: null };
   const a: Record<string, unknown> = {};

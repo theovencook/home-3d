@@ -30,6 +30,7 @@ from custom_components.home_3d.timetravel_rows import (
     read_row,
     reduce_attributes,
     row_value,
+    rule_trackers,
 )
 
 START = 1_800_000_000.0
@@ -190,6 +191,24 @@ def test_car_trackers_come_from_the_parking_spots() -> None:
     assert trackers == {"device_tracker.spot", "device_tracker.named"}
     assert seeds == {"binary_sensor.spot2", "sensor.ev_soc", "sensor.spot4"}
     assert car_refs({}) == (set(), set())
+
+
+def test_rule_trackers_come_from_the_show_when_rules() -> None:
+    building = {
+        "floors": [
+            {
+                "furniture": [
+                    {"type": "car", "show_when": {"entity": "device_tracker.car", "when": "on"}},
+                    {"type": "car", "show_when": {"entity": "person.anna", "when": "off"}},
+                    {"type": "lamp", "show_when": {"entity": "light.porch"}},
+                    {"type": "lamp", "show_when": None},
+                    {"type": "lamp"},
+                ]
+            }
+        ]
+    }
+    assert rule_trackers(building) == {"device_tracker.car", "person.anna"}
+    assert rule_trackers({}) == set()
 
 
 async def _setup(hass: HomeAssistant) -> None:

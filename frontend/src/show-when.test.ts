@@ -107,6 +107,7 @@ test("an entity and intervals together: both must allow it", () => {
 
 function house() {
   const b = emptyBuilding();
+  b.floors.push(newFloor("eg", "EG", 0));
   const floor = newFloor("gf", "Ground", 0);
   floor.furniture = [item({ id: "sofa" }), item({ id: "tree", show_when: { intervals: [{ from: "12-01", to: "12-31" }] } })];
   b.floors = [floor];
@@ -192,4 +193,31 @@ test("a rule without 'when' keeps the old behaviour: hidden only while unavailab
   const f = item({ show_when: { entity: car } });
   assert.equal(itemShown(f, { [car]: st(car, "off") }, noon), true);
   assert.equal(itemShown(f, { [car]: st(car, "unavailable") }, noon), false);
+});
+
+test("time travel: a car follows its tracker through the replay, the clock rules the replayed moment (#394)", async () => {
+  const { Replay } = await import("./timetravel/replay-hass.ts");
+  const { buildTimeline } = await import("./timetravel/timeline.ts");
+  const DAY = 1_800_000_000;
+  const tl = buildTimeline([
+    { day_start: DAY, end: DAY + 86400, oldest: null, keep_days: 10, entities: { "device_tracker.car": { t: [0, 3600, 7200], v: [0, 1, 0], tab: ["home", "not_home"] } }, stats: {}, missing: [] },
+  ]);
+  const car = item({ id: "car", type: "car", show_when: { entity: "device_tracker.car", when: "on" } });
+  const b = emptyBuilding();
+  b.floors.push(newFloor("eg", "EG", 0));
+  b.floors[0].furniture.push(car);
+  const liveHass = { states: { "device_tracker.car": { entity_id: "device_tracker.car", state: "home", attributes: { latitude: 1, longitude: 2, friendly_name: "Car" } } } } as never;
+  const r = new Replay(tl, { requested: ["device_tracker.car"], allowed: ["device_tracker.car"] });
+  const hiddenAt = (s: number) => stateHiddenItems(b, r.hassAt(liveHass, (DAY + s) * 1000).states);
+  assert.deepEqual(hiddenAt(100), []);
+  assert.deepEqual(hiddenAt(4000), ["car"]);
+  assert.deepEqual(hiddenAt(8000), []);
+  assert.deepEqual(r.hassAt(liveHass, (DAY + 4000) * 1000).states["device_tracker.car"].attributes, {});
+  // an interval item: out of its window at the replayed moment, whatever the clock says now
+  const lamp = item({ id: "lamp", show_when: { intervals: [{ start: "18:00", end: "23:00" }] } });
+  const c = emptyBuilding();
+  c.floors.push(newFloor("eg", "EG", 0));
+  c.floors[0].furniture.push(lamp);
+  assert.deepEqual(planHiddenItems(c, {}, at("2026-11-01T10:00")), ["lamp"]);
+  assert.deepEqual(planHiddenItems(c, {}, at("2026-11-01T19:00")), []);
 });

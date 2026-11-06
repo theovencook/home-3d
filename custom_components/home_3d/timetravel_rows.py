@@ -262,6 +262,18 @@ def _ref(value: Any) -> str | None:
     return value if isinstance(value, str) and value and value != "none" else None
 
 
+def rule_trackers(building: Mapping[str, Any]) -> set[str]:
+    """The people and trackers an item's "When it shows" rule follows: answered as home or away only (#394)."""
+    out: set[str] = set()
+    for floor in building.get("floors") or []:
+        for item in floor.get("furniture") or []:
+            rule = item.get("show_when")
+            ref = _ref(rule.get("entity")) if isinstance(rule, Mapping) else None
+            if ref and domain_of(ref) in ("person", "device_tracker"):
+                out.add(ref)
+    return out
+
+
 def car_refs(building: Mapping[str, Any]) -> tuple[set[str], set[str]]:
     """The cars of the plan's parking spots: trackers named directly, and entities whose device has the tracker.
 

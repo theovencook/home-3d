@@ -101,7 +101,7 @@ export interface ReplayOptions {
   states?: HomeAssistant["states"];
   /** Home Assistant's location, for the sun at the replayed moment. */
   location?: { lat: number; lon: number } | null;
-  /** Trackers that are replayed although trackers are private: the cars' own (home or away only). */
+  /** People and trackers replayed although they are private: a car's own, or one a show/hide rule follows (home or away only, no attributes). */
   allowed?: Iterable<string>;
 }
 
@@ -113,6 +113,7 @@ export class Replay {
   readonly timeline: Timeline;
   cursor: Cursor;
   private readonly requested: string[];
+  private readonly allowed: ReadonlySet<string>;
   private readonly trackAt = new Map<string, number>();
   private readonly location: { lat: number; lon: number } | null;
   private readonly slots = new Map<string, Slot>();
@@ -133,7 +134,8 @@ export class Replay {
     this.cursor.tracks.forEach((tr, i) => this.trackAt.set(tr.id, i));
     this.location = opts.location ?? null;
     this.frozen = opts.states ?? null;
-    const allowed = new Set([...(opts.allowed ?? [])].filter((id) => id.startsWith("device_tracker.")));
+    const allowed = new Set([...(opts.allowed ?? [])].filter((id) => id.startsWith("device_tracker.") || id.startsWith("person.")));
+    this.allowed = allowed;
     this.requested = [...new Set([...opts.requested, ...timeline.tracks.keys(), ...timeline.series.keys()])].filter((id) => allowed.has(id) || !HIDDEN.some((p) => id.startsWith(p)));
   }
 
@@ -227,7 +229,9 @@ export class Replay {
   }
 
   /** The state of one entity at t (`start`: its state when the time travel began): the previous slot when it reads the same. */
-  private slot(id: string, t: number, start: HassEntity | undefined, before: Slot | undefined): Slot {
+  private slot(id: string, t: number, live: HassEntity | undefined, before: Slot | undefined): Slot {
+    // a person or tracker is home or away and nothing else: no zone, coordinates, picture or name of its own
+    const start = this.allowed.has(id) ? undefined : live;
     const i = this.trackAt.get(id);
     const series = this.timeline.series.get(id);
     let key: string;
