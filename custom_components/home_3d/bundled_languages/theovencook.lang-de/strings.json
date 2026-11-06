@@ -2547,6 +2547,8 @@
  "bar_lock": "Position sperren",
  "bar_more": "Weitere Aktionen",
  "tool_multi": "Mehrere auswählen",
+ "remove_point": "Punkt entfernen",
+ "point_n_of": "Punkt {n} von {m}",
  "devices_placed_in": "in {room}",
  "devices_narrow": "{n} weitere – Suche eingrenzen",
  "climate": "Raumklima",

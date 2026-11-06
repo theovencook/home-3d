@@ -1606,6 +1606,8 @@ export const lateEnglish = {
   bar_lock: "Lock position",
   bar_more: "More actions",
   tool_multi: "Select several",
+  remove_point: "Remove point",
+  point_n_of: "Point {n} of {m}",
   devices_placed_in: "in {room}",
   devices_narrow: "{n} more – narrow the search",
   climate_temperature: "Temperature",

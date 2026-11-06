@@ -17,6 +17,7 @@ import { roomLiveSensors, type LiveKind } from "../../room-effects.ts";
 import { askConfirm } from "../../ask.ts";
 import { cornerLoss, removeCorner } from "../../geometry/room-corners.ts";
 import { type ResizeNote, round, patchItem, numberish } from "./helpers.ts";
+import { pointKeys } from "./points.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /**
@@ -458,7 +459,9 @@ export class RoomsPart {
     });
     const vertices = pts.map((p, i) => {
       const [x, y] = this.toScreen(p);
-      return svg`<g data-vertex=${i} class=${i === this._vertex ? "fp3d-vertex fp3d-vertex-sel" : "fp3d-vertex"}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>
+      // a point takes the keyboard (#395): Tab to it, the arrows move it, Delete removes it
+      const keys = pointKeys(this, { kind: "room", id: room.id, index: i }, n);
+      return svg`<g data-vertex=${i} class=${i === this._vertex ? "fp3d-vertex fp3d-vertex-sel" : "fp3d-vertex"} tabindex="0" role="button" aria-label=${keys.label} @focus=${keys.focus}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>
         <text class="fp3d-vertex-no" x=${x + 9} y=${y - 9}>${i + 1}</text>`;
     });
     return svg`<g>${edges}${vertices}</g>`;

@@ -6,6 +6,8 @@ import { deepActive, releaseTyping, takesTyping } from "../../focus-release.ts";
 import { escapeStep } from "../../editor-keys.ts";
 import { pointInPolygon, type Vec2 } from "../../model.ts";
 import { round } from "./helpers.ts";
+import { chosenPoint } from "./points.ts";
+import { polygonBox } from "../../roof-sections.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** KeysPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
@@ -66,7 +68,7 @@ export class KeysPart {
    * in quick succession are one undo step (#66).
    */
   nudge(this: Fp3dEditor, dx: number, dz: number): boolean {
-    const key = ["nudge", this._furnitureId ? this.selection().join(",") : "", this._deviceId, this._openingId, this._wallId, this._outdoorId, this._roomId, this._vertex].join("|");
+    const key = ["nudge", this._furnitureId ? this.selection().join(",") : "", this._deviceId, this._openingId, this._wallId, this._outdoorId, this._roomId, this._vertex, this._point?.id, this._point?.index].join("|");
     this.mergeKey = key;
     try {
       return this.nudgeBy(dx, dz);
@@ -89,6 +91,17 @@ export class KeysPart {
       const ids = new Set(set);
       this.change((_, f) => {
         for (const m of f.furniture) if (ids.has(m.id)) [m.x, m.z] = mv([m.x, m.z]);
+      });
+      return true;
+    }
+    const pt = chosenPoint(this);
+    if (pt && pt.kind !== "room") {
+      // an outdoor area's or a roof outline's chosen point moves alone (#395)
+      this.change((doc, f) => {
+        const sec = pt.kind === "roof" ? doc.settings.roof.sections?.find((s) => s.id === pt.id) : undefined;
+        const pts = pt.kind === "roof" ? sec?.points : f.outdoor.find((a) => a.id === pt.id)?.points;
+        if (pts?.[pt.index]) pts[pt.index] = mv(pts[pt.index]);
+        if (sec?.points) Object.assign(sec, polygonBox(sec.points));
       });
       return true;
     }

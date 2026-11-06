@@ -46,6 +46,7 @@ import { isPackType, packItem, setPacks, setPlanRecipes, type FurniturePack, typ
 import { UndoHistory } from "../undo-history.ts";
 import { EntityOptionCache } from "../entity-options.ts";
 import { HassWatch } from "../hass-watch.ts";
+import { chosenPoint, type PlanPoint } from "./editor/points.ts";
 import { focusItemBar, sideFreeze } from "./editor/item-bar.ts";
 import { guard } from "lit/directives/guard.js";
 import { ENTITY_DRAG, type ResizeNote, type FixKind, type Drag, type Guides, type EditorTopic, type PlaceTarget, round, type RunDraft, type RunCtx, ARROWS, echoedPlan } from "./editor/helpers.ts";
@@ -118,6 +119,7 @@ export class Fp3dEditor extends LitElement {
     _floorId: { state: true },
     _roomId: { state: true },
     _vertex: { state: true },
+    _point: { state: true },
     _openingId: { state: true },
     _furnitureId: { state: true },
     _multi: { state: true },
@@ -276,6 +278,8 @@ export class Fp3dEditor extends LitElement {
   declare _floorId: string | null;
   declare _roomId: string | null;
   declare _vertex: number | null;
+  /** The chosen point of an outdoor area or a roof outline (#395); a room's corner is `_vertex`. */
+  declare _point: PlanPoint | null;
   declare _openingId: string | null;
   declare _furnitureId: string | null;
   /** Several furniture items selected together (shift-click, a frame); empty = the usual single selection. */
@@ -435,8 +439,8 @@ export class Fp3dEditor extends LitElement {
   declare _bgOpen: boolean;
   declare _shiftZ: number;
   /** Open context menu (right-click, long press) at a plan point, for one item. */
-  /** The item menu: where, on what; `bar` when the item toolbar's "⋯" opened it (#398). */
-  declare _ctx: { x: number; y: number; kind: FixKind; id: string; bar?: boolean } | null;
+  /** The item menu: where, on what; `point` for a point's menu (#395), `bar` when the item toolbar's "⋯" opened it (#398). */
+  declare _ctx: { x: number; y: number; kind: FixKind; id: string; point?: PlanPoint; bar?: boolean } | null;
   /** A drag on a fixed item was turned into panning: the hint line says why. */
   declare _fixedHint: boolean;
   /** Doors & windows mode: why the last tap added nothing (it would overlap another opening), shown in the hint bar (#62). */
@@ -547,6 +551,7 @@ export class Fp3dEditor extends LitElement {
     this._floorId = null;
     this._roomId = null;
     this._vertex = null;
+    this._point = null;
     this._openingId = null;
     this._furnitureId = null;
     this._multi = [];
@@ -1026,7 +1031,7 @@ export class Fp3dEditor extends LitElement {
       e.preventDefault();
       if (this._furnitureId) this.duplicateFurniture();
       else this.duplicateRoom();
-    } else if (e.key === "Delete" || (e.key === "Backspace" && (this._tool === "select" || this._tool === "furniture"))) {
+    } else if (e.key === "Delete" || (e.key === "Backspace" && (this._tool === "select" || this._tool === "furniture" || chosenPoint(this)))) {
       this.deleteSelected();
     } else if (e.key.toLowerCase() === "l" && !mod && this._tool === "roof" && this.roofSection && !this._doc.settings.lock_plan) {
       this.updateRoofSection({ locked: !this.roofSection.locked });
@@ -1039,7 +1044,7 @@ export class Fp3dEditor extends LitElement {
       // arrow keys nudge the selection: one grid step, Shift 10 cm, Alt 1 cm
       const step = e.altKey ? 0.01 : e.shiftKey ? 0.1 : this._doc.settings.grid;
       const [dx, dz] = ARROWS[e.key];
-      if ((this._tool === "select" || this._tool === "furniture") && this.nudge(dx * step, dz * step)) e.preventDefault();
+      if ((this._tool === "select" || this._tool === "furniture" || chosenPoint(this)) && this.nudge(dx * step, dz * step)) e.preventDefault();
       else if (!this.selectedFix) {
         // nothing chosen: the arrows move the view instead (#234), a quarter of the plan a press with Shift
         const px = e.shiftKey ? 240 : 60;

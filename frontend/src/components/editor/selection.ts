@@ -12,6 +12,7 @@ import { askConfirm, tell } from "../../ask.ts";
 import { loadAlign } from "../../load-align.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { type FixKind, round } from "./helpers.ts";
+import { canRemovePoint, chosenPoint, choosePoint, pointOf, removePoint } from "./points.ts";
 import { refocusItemBar, renderItemBar } from "./item-bar.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
@@ -98,13 +99,13 @@ export class SelectionPart {
    * first. A press on a room corner or wall-end handle is never an item.
    */
   pickItem(this: Fp3dEditor, target: Element, world: Vec2, pointerType: string): string | null {
-    if (!this.floor || target.closest("[data-vertex], [data-mid], [data-wall-end], [data-out-box], [data-out-vertex]")) return null;
+    if (!this.floor || target.closest("[data-vertex], [data-mid], [data-wall-end], [data-out-box], [data-out-vertex], [data-out-mid], [data-roof-vertex], [data-roof-mid]")) return null;
     return this.itemHits(target, world, pointerType)[0] ?? target.closest("[data-furniture]")?.getAttribute("data-furniture") ?? null;
   }
 
   /** The shown items under a plan press, best first (#72); none on a room corner or wall-end handle. */
   itemHits(this: Fp3dEditor, target: Element, world: Vec2, pointerType: string): string[] {
-    if (!this.floor || target.closest("[data-vertex], [data-mid], [data-wall-end], [data-out-box], [data-out-vertex]")) return [];
+    if (!this.floor || target.closest("[data-vertex], [data-mid], [data-wall-end], [data-out-box], [data-out-vertex], [data-out-mid], [data-roof-vertex], [data-roof-mid]")) return [];
     const hidden = this._hiddenItems;
     return itemsAt(this.floor.furniture, world, this._view.scale, minHitPx(pointerType), hidden.length ? (f) => hidden.includes(f.id) : undefined);
   }
@@ -154,6 +155,13 @@ export class SelectionPart {
   openContext(this: Fp3dEditor, target: Element, local: [number, number], pointerType = "mouse"): void {
     if (!this.isEditor || !this.floor) return;
     const world = this.toWorld(...local);
+    // a point of the selected outline (#395): its own menu, Remove point
+    const point = pointOf(target, this._roomId);
+    if (point) {
+      choosePoint(this, point);
+      this._ctx = { x: local[0], y: local[1], kind: point.kind === "out" ? "outdoor" : "room", id: point.id, point };
+      return;
+    }
     const attr = (sel: string) => target.closest(`[${sel}]`)?.getAttribute(sel) ?? null;
     let hit: [FixKind, string] | null = null;
     const device = attr("data-device");
@@ -241,7 +249,11 @@ export class SelectionPart {
       // opened from the toolbar's "⋯": the keyboard goes back there
       if (c.bar) refocusItemBar(this);
     };
-    const acts = this.itemActions(c.kind, c.id).filter((a) => a.menu !== false || (c.bar && (this.narrow || this._phone)));
+    const pt = c.point;
+    // a point's menu (#395): remove it, never below three points
+    const acts: ItemAct[] = pt
+      ? [{ key: "remove_point", icon: "✕", label: this.t("remove_point"), title: withKeys(this.t("remove_point"), ["Del"]), disabled: !canRemovePoint(this, pt), danger: true, run: () => void removePoint(this, pt) }]
+      : this.itemActions(c.kind, c.id).filter((a) => a.menu !== false || (c.bar && (this.narrow || this._phone)));
     const keys = (e: KeyboardEvent) => {
       const items = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
       const at = items.indexOf((this.renderRoot as ShadowRoot).activeElement as HTMLButtonElement);
@@ -293,6 +305,7 @@ export class SelectionPart {
     this._edgeHi = null;
     if (kind === "outdoor" || kind === "wall") this._roomId = null;
     if (kind !== "room" || id !== this._roomId) this._vertex = null;
+    this._point = null;
     this._roomId = kind === "room" ? id : this._roomId;
     this._openingId = kind === "opening" ? id : null;
     this._furnitureId = kind === "furniture" ? id : null;
@@ -461,7 +474,10 @@ export class SelectionPart {
    * The room is the fallback in the select and furniture tools only.
    */
   deleteSelected(this: Fp3dEditor): void {
-    if (this._roofWinId && this._tool === "roof") this.deleteRoofWindow();
+    // a chosen outdoor or roof point goes alone (#395); a room's corner below, as before
+    const pt = chosenPoint(this);
+    if (pt && pt.kind !== "room") void removePoint(this, pt);
+    else if (this._roofWinId && this._tool === "roof") this.deleteRoofWindow();
     else if (this._solarId && this.houseTool) this.deleteSolar();
     else if (this._roofId && this._tool === "roof") this.deleteRoofSection();
     else if (this._deviceId) this.deleteItem("device", this._deviceId);
@@ -481,6 +497,7 @@ export class SelectionPart {
     this._outdoorId = null;
     this._wallId = null;
     this._vertex = null;
+    this._point = null;
     this._multi = [];
     this._single = false;
     this._roofId = null;
