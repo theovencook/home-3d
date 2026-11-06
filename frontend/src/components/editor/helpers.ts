@@ -270,3 +270,11 @@ export interface PlaceTarget {
   roomId: string | null;
   wall: { roomId: string; edge: number } | null;
 }
+
+/**
+ * The plan the panel hands the editor is the one the editor itself just made (#391): every edit's building-changed
+ * comes back as `building`. It carries nothing new: no render and no pack update check for it.
+ */
+export function echoedPlan(building: unknown, doc: unknown): boolean {
+  return !!building && building === doc;
+}

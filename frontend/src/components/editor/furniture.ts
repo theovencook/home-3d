@@ -11,7 +11,7 @@ import { retypePatch, typeOptionLabels } from "../../item-panel.ts";
 import { moveToFloor } from "../../item-floor.ts";
 import { bounds, centroid, FURNITURE_GROUPS, FURNITURE_TYPES, isLamp, LAMP_MODEL, uid, type Floor, type Furniture, type Placement, type Vec2, STAIR_TYPES, stairLimits, stairOptionPatch } from "../../model.ts";
 import { fetchPackUpdates, updatePlacedItems } from "../../api.ts";
-import { libraryUpdates } from "../../pack-updates.ts";
+import { libraryUpdates, sameSet } from "../../pack-updates.ts";
 import { dropAdminActions } from "../../item-actions.ts";
 import { load3d } from "../../load3d.ts";
 import { ensureRecipes } from "../../pack-recipes.ts";
@@ -487,6 +487,10 @@ export class FurniturePart {
   }
 
   /** Ask which placed items have an update (#48); a request already under way is asked again once it is back. */
+  setLibUpdates(this: Fp3dEditor, next: ReadonlySet<string>): void {
+    if (!sameSet(next, this._libUpdates)) this._libUpdates = next;
+  }
+
   refreshLibUpdates(this: Fp3dEditor): void {
     if (!this.hass) return;
     if (this.libUpdatesAsking) {
@@ -495,8 +499,9 @@ export class FurniturePart {
     }
     this.libUpdatesAsking = true;
     void fetchPackUpdates(this.hass)
-      .then((status) => (this._libUpdates = libraryUpdates(status)))
-      .catch(() => (this._libUpdates = new Set()))
+      // the same updates again are no new state: no render (#391)
+      .then((status) => this.setLibUpdates(libraryUpdates(status)))
+      .catch(() => this.setLibUpdates(new Set()))
       .finally(() => {
         this.libUpdatesAsking = false;
         if (this.libUpdatesAsked) {

@@ -46,7 +46,7 @@ import { isPackType, packItem, setPacks, setPlanRecipes, type FurniturePack, typ
 import { UndoHistory } from "../undo-history.ts";
 import { EntityOptionCache } from "../entity-options.ts";
 import { HassWatch } from "../hass-watch.ts";
-import { ENTITY_DRAG, type ResizeNote, type FixKind, type Drag, type Guides, type EditorTopic, type PlaceTarget, round, type RunDraft, type RunCtx, ARROWS } from "./editor/helpers.ts";
+import { ENTITY_DRAG, type ResizeNote, type FixKind, type Drag, type Guides, type EditorTopic, type PlaceTarget, round, type RunDraft, type RunCtx, ARROWS, echoedPlan } from "./editor/helpers.ts";
 import { startsFullWidth } from "../start-checklist.ts";
 import { mixParts } from "./editor/parts.ts";
 import { Pane3dPart } from "./editor/pane3d.ts";
@@ -753,6 +753,8 @@ export class Fp3dEditor extends LitElement {
    * render (#130): only the 3D views in the editor get it, as a render would have handed it to them.
    */
   protected shouldUpdate(changed: PropertyValues): boolean {
+    // the panel hands back the plan this editor just made (building-changed): nothing new to draw (#391)
+    if (changed.size === 1 && changed.has("building") && echoedPlan(this.building, this._doc)) return false;
     if (changed.size === 1 && changed.has("hass") && !this.hassWatch.matters(changed.get("hass") as HomeAssistant | undefined, this.rawHass)) {
       for (const view of this.renderRoot?.querySelectorAll?.("fp3d-view3d") ?? []) (view as HTMLElement & { hass?: HomeAssistant }).hass = this.rawHass;
       return false;
@@ -771,6 +773,8 @@ export class Fp3dEditor extends LitElement {
   }
 
   protected willUpdate(changed: PropertyValues): void {
+    // the editor's own plan handed back by the panel is no plan from elsewhere (#391): no pack update check for it
+    const fromElsewhere = changed.has("building") && !echoedPlan(this.building, this._doc);
     // this bundle keeps its own pack registry – and its own language table, so it fetches the language itself
     if (changed.has("packs")) setPacks(this.packs ?? []);
     if (changed.has("_doc")) setTerrain(this._doc);
@@ -815,7 +819,7 @@ export class Fp3dEditor extends LitElement {
     setPlanRecipes(this._doc?.recipes);
     if (changed.has("_doc") || changed.has("packs")) this.fetchPlacedRecipes();
     // a plan or library from the backend: which placed items have an update now (#48)
-    if ((changed.has("building") || changed.has("packs")) && this.isEditor && !this.topic) this.refreshLibUpdates();
+    if ((fromElsewhere || changed.has("packs")) && this.isEditor && !this.topic) this.refreshLibUpdates();
     // the phone's details sheet follows the selection (#250)
     this.syncSheet();
   }

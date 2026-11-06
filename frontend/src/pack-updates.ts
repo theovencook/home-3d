@@ -94,6 +94,11 @@ export function libraryUpdates(status: PackUpdateStatus | null): Set<string> {
   return new Set((status?.items ?? []).filter((i) => !i.pinned).map((i) => i.type));
 }
 
+/** Two sets with the same members (#391: the same updates again are no new state, no render). */
+export function sameSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  return a.size === b.size && [...a].every((x) => b.has(x));
+}
+
 /** The updates a library card offers: of its items (all variants of a family), to editors only. */
 export function updatesOnCard(types: readonly string[], updates: ReadonlySet<string>, editor: boolean): string[] {
   return editor ? types.filter((t) => updates.has(t)) : [];
