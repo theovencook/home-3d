@@ -221,6 +221,7 @@ try {
       await bigPage.run("start");
       await bigPage.run("editor");
       results.big3d = await bigPage.run("editor3d", { seconds: 6, rate: 5, watchedEvery: 5, nudges: 4 });
+      if (!results.big3d.follows) problems.push("the 3D beside the plan does not show the nudged item where the plan has it (#390)");
     } catch (err) {
       problems.push(`check failed${bigPage.where}: ${err.message}`);
     } finally {

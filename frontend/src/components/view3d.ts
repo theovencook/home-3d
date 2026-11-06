@@ -1336,6 +1336,8 @@ export class Fp3dView3d extends LitElement {
     // all three), it is built once (#131)
     let startChanged = false;
     let packsNew = false;
+    // beside the editor's plan an edited floor is modelled in slices (#390)
+    (v as { slicedEdits?: boolean }).slicedEdits = this.syncPace > 0;
     v.batch(() => {
       // packs arrive with the building (or after an import): the viewer rebuilds pack furniture
       if (this.shownPacks !== packsVersion()) {

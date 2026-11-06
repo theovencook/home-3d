@@ -96,6 +96,7 @@ import { accentOnUniform, accentUniform, parseAccent, lineBlending, themed, them
 
 export type { Theme } from "./theme.ts";
 import { ALWAYS, DEG, GeoBuffer, LineBuffer, pushPrism, triangulate } from "./geo.ts";
+import { floorsToSlice } from "./edit-slices.ts";
 import { buildLightSurface, lightSurfaceSteps, relight, roomIndexAt, type GlowCache, type LightKind, type LightSource, type LightSurface, zoneOf } from "./lighting.ts";
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
 import { circlePath, cleaningPath, stepRobot, type RobotInfo, type RobotMotion } from "./robot.ts";
@@ -595,8 +596,6 @@ interface FloorView {
   /** Content signatures: meshes are only rebuilt when these change. */
   flowLayout: string;
   glowSig: string;
-  /** The light surface's colours from the last relight: a lamp switched recolours only its rooms (#389). */
-  glowCache?: GlowCache | null;
   /** Lamp shapes (rebuilt when they change) and lamp colours (written into the mesh in place). */
   lampShapeSig: string;
   lampColorSig: string;
@@ -774,7 +773,14 @@ export class FloorplanViewer {
   /** The first plan arrived: the view fits it once it is built. */
   private fitBuilt = false;
   /** Per floor: its light surface as last built and what from (kept while rooms, walls and openings stay, #131). */
-  private lightSurfaces = new Map<string, { key: string; surface: LightSurface }>();
+  /**
+   * Set by the editor's 3D pane (#390): a floor an edit changed is modelled in slices before it is built, not in the
+   * task of the edit. The House view builds it at once.
+   */
+  slicedEdits = false;
+  private lightSurfaces = new Map<string, { key: string; surface: LightSurface; zonesSig?: string; zoned?: LightSurface }>();
+  /** The light surface colours of each floor from its last relight (#389), kept over a rebuild of the floor (#390). */
+  private glowCaches = new Map<string, GlowCache>();
   private decorWas = false;
   /** A frame asked for by a module's decoration (pets, ghost, fish), at the decorative pace. */
   private decorTimer: ReturnType<typeof setTimeout> | undefined;
@@ -2891,13 +2897,16 @@ export class FloorplanViewer {
     const key = this.lightSurfaceKey(f, fv.geo.holes);
     const had = this.lightSurfaces.get(f.id);
     const raw = had?.key === key ? had.surface : buildLightSurface(fv.floor, fv.geo.walls2d, fv.geo.wallBuckets, fv.geo.openings, cell, fv.geo.holes, fv.geo.roofUnder);
-    this.lightSurfaces.set(f.id, { key, surface: raw });
     // rooms joined by "no wall" form one zone: a lamp lights the open neighbour as if it stood in the same room
     const zones = lightZonesOf(fv.floor, fv.geo.openRooms);
     fv.lightZones = zones.some((z, i) => z !== i) ? zones : null;
-    // the zones are written into a copy: the kept surface stays as built
-    const surface = fv.lightZones ? { ...raw, room: raw.room.slice(), doors: raw.doors.map((d) => ({ ...d })), blockers: raw.blockers.map((w) => ({ ...w })) } : raw;
-    if (fv.lightZones) {
+    // the zones are written into a copy: the kept surface stays as built. The copy is kept as well (#390): an item moved
+    // keeps the very same surface, so the relight after it recolours only the rooms whose lamps changed
+    const zonesSig = fv.lightZones ? fv.lightZones.join(",") : "";
+    const zoned = had?.key === key && had.surface === raw && had.zonesSig === zonesSig ? had.zoned : undefined;
+    const surface = zoned ?? (fv.lightZones ? { ...raw, room: raw.room.slice(), doors: raw.doors.map((d) => ({ ...d })), blockers: raw.blockers.map((w) => ({ ...w })) } : raw);
+    this.lightSurfaces.set(f.id, { key, surface: raw, zonesSig, zoned: surface });
+    if (fv.lightZones && !zoned) {
       for (let i = 0; i < surface.room.length; i++) {
         const r = surface.room[i];
         if (r >= 0 && r < zones.length) surface.room[i] = zones[r];
@@ -3064,8 +3073,8 @@ export class FloorplanViewer {
     const outside = fv.floor.rooms.length;
     const tint = this.roomTint ? (zone: number) => (zone === outside ? 1 : 0.12) : undefined;
     // only the rooms whose lamps (or open doors) changed are recoloured (#389)
-    const lit = relight(surface, sources, 0.42, doorOpen, fv.glowCache ?? null, this.roomTint ? "tint" : "", tint);
-    fv.glowCache = lit.cache;
+    const lit = relight(surface, sources, 0.42, doorOpen, this.glowCaches.get(fv.floor.id) ?? null, this.roomTint ? "tint" : "", tint);
+    this.glowCaches.set(fv.floor.id, lit.cache);
     const colors = lit.cache.colors;
     (attr.array as Float32Array).set(colors);
     attr.needsUpdate = true;
@@ -3173,6 +3182,15 @@ export class FloorplanViewer {
     // built meanwhile is kept by the next pass
     const loading = (!!b && !shown) || this.pendingFloors.size > 0;
     const pending = new Set<string>();
+    // an edit beside the editor's plan (#390): a floor that changed is modelled in slices first, as a new home's floors
+    // are; it shows as it was until then and is built from the slices a few frames later, so no task of the edit is long
+    const stale = floorsToSlice(
+      this.floors.map((fv) => ({ id: fv.floor.id, key: fv.key })),
+      keys,
+      (id) => this.prepared.get(id)?.key,
+      { on: this.slicedEdits && !!b, incremental, loading },
+    );
+    for (const fv of this.floors) if (stale.has(fv.floor.id)) keep.set(fv.floor.id, fv);
     this.clear(keep);
     if (!b) {
       this.stopPrep();
@@ -3182,7 +3200,8 @@ export class FloorplanViewer {
     for (const floor of b.floors) {
       const kept = keep.get(floor.id);
       if (kept) {
-        kept.floor = floor;
+        // a floor still being modelled keeps the plan it was built from (its geometry is that plan's)
+        if (!stale.has(floor.id)) kept.floor = floor;
         kept.rank = ordered.indexOf(floor);
         this.floors.push(kept);
         continue;
@@ -3429,6 +3448,7 @@ export class FloorplanViewer {
     // modelled for it
     const ids = new Set(b.floors.map((f) => f.id));
     for (const id of this.lightSurfaces.keys()) if (!ids.has(id)) this.lightSurfaces.delete(id);
+    for (const id of this.glowCaches.keys()) if (!ids.has(id)) this.glowCaches.delete(id);
     keepFurnitureOf(ids);
     // a kept floor still has its lamps, lights, doors and cables (the device updates keep them current)
     const built = this.floors.filter((fv) => keep.get(fv.floor.id) !== fv);
@@ -3492,6 +3512,11 @@ export class FloorplanViewer {
           void nextTask().then(() => !this.disposed && this.pendingFloors.size && this.rebuilds.request(true));
         });
       });
+    } else if (stale.size) {
+      // the edited floor (the open one first) is modelled in slices; it is built when that is done (#390)
+      const next = buildOrder(b, this.floorId).find((id) => stale.has(id));
+      const floor = b.floors.find((f) => f.id === next);
+      if (floor) this.prepareFloor(b, floor, keys.get(floor.id) ?? "");
     } else if (pending.size) {
       // the next floor is modelled in slices; it is built when that is done
       const next = buildOrder(b, this.floorId).find((id) => pending.has(id));

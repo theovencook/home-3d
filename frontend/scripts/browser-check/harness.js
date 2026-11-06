@@ -383,10 +383,16 @@ const check = {
       await sleep(1200);
       after.push(Math.max(0, ...longFrames.filter((f) => f.at + f.ms >= at).map((f) => f.ms)));
     }
+    // the 3D beside shows the item where the plan has it, after the nudges and after undoing them (#390)
+    const shownAt = () => view.viewer.floors.find((fv) => fv.floor.id === ed.floor.id)?.floor.furniture.find((f) => f.id === item.id)?.x;
+    const planAt = () => ed.floor.furniture.find((f) => f.id === item.id)?.x;
+    const follows = [];
+    follows.push(Math.abs((shownAt() ?? NaN) - planAt()) < 1e-6);
     for (let i = 0; i < nudges; i++) window.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
     await ed.updateComplete;
-    await sleep(500);
-    return { items: items.length, background, nudge: stats(after) };
+    await sleep(1500);
+    follows.push(Math.abs((shownAt() ?? NaN) - planAt()) < 1e-6 && planAt() === item.x);
+    return { items: items.length, background, nudge: stats(after), follows: follows.every(Boolean) };
   },
 
   /** The 3D view's renderer counters after load. */
