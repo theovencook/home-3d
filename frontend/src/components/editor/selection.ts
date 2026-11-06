@@ -12,7 +12,23 @@ import { askConfirm, tell } from "../../ask.ts";
 import { loadAlign } from "../../load-align.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { type FixKind, round } from "./helpers.ts";
+import { refocusItemBar, renderItemBar } from "./item-bar.ts";
 import type { Fp3dEditor } from "../editor.ts";
+
+/** One action on an item from the plan (#398): the right-click menu shows `icon` + `text` (or `label`), the toolbar an icon named `label`. */
+export interface ItemAct {
+  key: string;
+  icon: string;
+  label: string;
+  text?: string;
+  title?: string;
+  disabled?: boolean;
+  danger?: boolean;
+  pressed?: boolean;
+  /** false: on the toolbar only (and in its "⋯" on a narrow plan) */
+  menu?: boolean;
+  run: () => void;
+}
 
 /** The editor's item clipboard (#74): in memory, shared by every editor on the page, kept while the Editor tab is closed. */
 let clipboard: ItemClip | null = null;
@@ -177,10 +193,44 @@ export class SelectionPart {
     else this.deleteOutdoor();
   }
 
+  /**
+   * What can be done to an item from the plan: the right-click menu's actions and the floating toolbar's (#398), one
+   * list so the two never differ. `icon` is the menu's glyph; `menu: false` keeps an action off the right-click menu.
+   */
+  itemActions(this: Fp3dEditor, kind: FixKind, id: string): ItemAct[] {
+    const fixed = this.isFixedItem(kind, id);
+    const acts: ItemAct[] = [];
+    if (kind === "furniture" || kind === "device")
+      // a constant name with its state as "pressed" for the toolbar (#398); the menu keeps its words
+      acts.push({ key: "lock", icon: fixed ? "🔓" : "🔒", label: this.t("bar_lock"), text: this.t(fixed ? "unfix" : "fix"), title: withKeys(this.t("fix_hint"), ["L"]), pressed: fixed, run: () => this.toggleFixed(kind, id) });
+    else acts.push({ key: "lock_plan", icon: this._doc.settings.lock_plan ? "🔓" : "🔒", label: this.t(this._doc.settings.lock_plan ? "plan_unlock" : "plan_lock"), title: this.t("lock_plan_hint"), run: () => this.toggleLockPlan() });
+    if (kind === "room") acts.push({ key: "duplicate", icon: "⧉", label: this.t("duplicate"), run: () => this.duplicateRoom() });
+    if (kind === "room" && clipboard) acts.push({ key: "paste", icon: "⎘", label: this.t("paste_items_n", { n: clipboard.items.length }), title: withKeys(this.t("paste_items"), ["Ctrl+V"]), run: () => this.pasteClipboard() });
+    if (kind === "furniture") {
+      acts.push(
+        { key: "duplicate", icon: "⧉", label: this.t("duplicate"), title: withKeys(this.t("duplicate"), ["Ctrl+D"]), run: () => this.duplicateFurniture() },
+        { key: "copy", icon: "⎘", label: this.t("copy_items"), title: withKeys(this.t("copy_items"), ["Ctrl+C"]), run: () => this.copySelection() },
+        { key: "rotate_left", icon: "↺", label: this.t("bar_turn_left"), title: withKeys(this.t("bar_turn_left"), ["Shift+R"]), disabled: fixed, menu: false, run: () => this.rotateFurniture(-90) },
+        { key: "rotate", icon: "↻", label: this.t("bar_turn_right"), text: this.t("ctx_rotate"), title: withKeys(this.t("ctx_rotate"), ["R"]), disabled: fixed, run: () => this.rotateFurniture(90) },
+        { key: "mirror", icon: "⇋", label: this.t("furn_mirror"), disabled: fixed, run: () => this.mirrorFurniture() },
+        {
+          key: "wall_view",
+          icon: "▦",
+          label: this.t("wall_view"),
+          run: () => {
+            const f = this.floor?.furniture.find((m) => m.id === id);
+            if (f) this.openWallViewFor(f);
+          },
+        },
+      );
+    }
+    acts.push({ key: "delete", icon: "✕", label: this.t("delete"), title: withKeys(this.t("delete"), ["Del"]), danger: true, run: () => void this.deleteItem(kind, id) });
+    return acts;
+  }
+
   renderContext(this: Fp3dEditor) {
     const c = this._ctx;
-    if (!c) return nothing;
-    const fixed = this.isFixedItem(c.kind, c.id);
+    if (!c) return renderItemBar(this);
     const wrap = this.renderRoot.querySelector(".fp3d-canvas-wrap") as HTMLElement | null;
     // keep the menu inside the plan
     const x = Math.max(4, Math.min(c.x, (wrap?.clientWidth ?? 800) - 190));
@@ -188,24 +238,28 @@ export class SelectionPart {
     const run = (fn: () => void) => () => {
       this._ctx = null;
       fn();
+      // opened from the toolbar's "⋯": the keyboard goes back there
+      if (c.bar) refocusItemBar(this);
     };
-    return html`<div class="fp3d-ctx" style=${`left:${x}px;top:${y}px`} @pointerdown=${(e: Event) => e.stopPropagation()} @contextmenu=${(e: Event) => e.preventDefault()}>
-      ${c.kind === "furniture" || c.kind === "device"
-        ? html`<button title=${this.t("fix_hint")} @click=${run(() => this.toggleFixed(c.kind, c.id))}>${fixed ? `🔓 ${this.t("unfix")}` : `🔒 ${this.t("fix")}`}</button>`
-        : html`<button title=${this.t("lock_plan_hint")} @click=${run(() => this.toggleLockPlan())}>${this._doc.settings.lock_plan ? `🔓 ${this.t("plan_unlock")}` : `🔒 ${this.t("plan_lock")}`}</button>`}
-      ${c.kind === "room" ? html`<button @click=${run(() => this.duplicateRoom())}>⧉ ${this.t("duplicate")}</button>` : nothing}
-      ${c.kind === "room" && clipboard ? html`<button title=${withKeys(this.t("paste_items"), ["Ctrl+V"])} @click=${run(() => this.pasteClipboard())}>⎘ ${this.t("paste_items_n", { n: clipboard.items.length })}</button>` : nothing}
-      ${c.kind === "furniture"
-        ? html`<button title=${withKeys(this.t("duplicate"), ["Ctrl+D"])} @click=${run(() => this.duplicateFurniture())}>⧉ ${this.t("duplicate")}</button>
-            <button title=${withKeys(this.t("copy_items"), ["Ctrl+C"])} @click=${run(() => this.copySelection())}>⎘ ${this.t("copy_items")}</button>
-            <button ?disabled=${fixed} title=${withKeys(this.t("ctx_rotate"), ["R"])} @click=${run(() => this.rotateFurniture(90))}>↻ ${this.t("ctx_rotate")}</button>
-            <button ?disabled=${fixed} @click=${run(() => this.mirrorFurniture())}>⇋ ${this.t("furn_mirror")}</button>
-            <button @click=${run(() => {
-              const f = this.floor?.furniture.find((m) => m.id === c.id);
-              if (f) this.openWallViewFor(f);
-            })}>▦ ${this.t("wall_view")}</button>`
-        : nothing}
-      <button class="fp3d-ctx-danger" @click=${run(() => this.deleteItem(c.kind, c.id))}>✕ ${this.t("delete")}</button>
+    const acts = this.itemActions(c.kind, c.id).filter((a) => a.menu !== false || (c.bar && (this.narrow || this._phone)));
+    const keys = (e: KeyboardEvent) => {
+      const items = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+      const at = items.indexOf((this.renderRoot as ShadowRoot).activeElement as HTMLButtonElement);
+      const to = e.key === "ArrowDown" ? (at + 1) % items.length : e.key === "ArrowUp" ? (at - 1 + items.length) % items.length : e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : -1;
+      if (to >= 0 && items.length) {
+        e.preventDefault();
+        items[to].focus();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        this._ctx = null;
+        if (c.bar) refocusItemBar(this);
+      }
+    };
+    return html`<div class="fp3d-ctx" role="menu" style=${`left:${x}px;top:${y}px`} @pointerdown=${(e: Event) => e.stopPropagation()} @contextmenu=${(e: Event) => e.preventDefault()} @keydown=${keys}>
+      ${acts.map(
+        (a) => html`<button role="menuitem" class=${a.danger ? "fp3d-ctx-danger" : ""} title=${a.title ?? nothing} ?disabled=${a.disabled} @click=${run(a.run)}>${a.icon} ${a.text ?? a.label}</button>`,
+      )}
     </div>`;
   }
 
@@ -484,7 +538,6 @@ export class SelectionPart {
         <button class="fp3d-btn fp3d-danger" title=${withKeys(this.t("delete"), ["Del"])} @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
       </div>
       ${block ? nothing : this.renderAlignTools(items.length, fixed || some)}
-      ${this.renderMultiToggle()}
     </section>`;
   }
 

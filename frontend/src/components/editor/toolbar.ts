@@ -13,6 +13,9 @@ import { startChecklist, type StartStep } from "../../start-checklist.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
+/** Select several: two items in a dashed frame, drawn like the toolbar's icons (ui-icons.ts). */
+const MULTI_ICON = svg`<svg class="fp3d-ui-icon" viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:-0.2em"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="3 3"/><rect x="7" y="7" width="4" height="4"/><rect x="13" y="13" width="4" height="4"/></svg>`;
+
 /** ToolbarPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class ToolbarPart {
   /** The hint bar under the plan (#96, #62): what the current tool does, what can be done with the selection, on a new
@@ -153,6 +156,10 @@ export class ToolbarPart {
     return html`<span class="fp3d-tb-sep"></span>
       <div class="fp3d-seg fp3d-seg-menu fp3d-seg-tools" role="group" aria-label=${this.t("tools")}>
         <button aria-pressed=${this._tool === "select"} ?disabled=${!floor} @click=${() => (close(), this.setTool("select"))}>${uiIcon("pointer")} ${this.t("tool_select")}</button>
+        <!-- Select several (#398, quick win 12): a mode of the plan, so beside Select rather than in an item's panel -->
+        <button class="fp3d-multi-btn" aria-pressed=${this._multiMode} ?disabled=${off} title=${this.t("multi_mode")} aria-label=${this.t("tool_multi")} @click=${() => (close(), this.toggleMultiMode())}>
+          ${MULTI_ICON}<span class="fp3d-tool-word"> ${this.t("tool_multi")}</span>
+        </button>
         ${groups.map((g) => {
           const active = g.entries.find(inEntry);
           const open = this._toolMenu === g.id;

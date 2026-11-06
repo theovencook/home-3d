@@ -46,6 +46,8 @@ import { isPackType, packItem, setPacks, setPlanRecipes, type FurniturePack, typ
 import { UndoHistory } from "../undo-history.ts";
 import { EntityOptionCache } from "../entity-options.ts";
 import { HassWatch } from "../hass-watch.ts";
+import { focusItemBar, sideFreeze } from "./editor/item-bar.ts";
+import { guard } from "lit/directives/guard.js";
 import { ENTITY_DRAG, type ResizeNote, type FixKind, type Drag, type Guides, type EditorTopic, type PlaceTarget, round, type RunDraft, type RunCtx, ARROWS, echoedPlan } from "./editor/helpers.ts";
 import { startsFullWidth } from "../start-checklist.ts";
 import { mixParts } from "./editor/parts.ts";
@@ -433,7 +435,8 @@ export class Fp3dEditor extends LitElement {
   declare _bgOpen: boolean;
   declare _shiftZ: number;
   /** Open context menu (right-click, long press) at a plan point, for one item. */
-  declare _ctx: { x: number; y: number; kind: FixKind; id: string } | null;
+  /** The item menu: where, on what; `bar` when the item toolbar's "⋯" opened it (#398). */
+  declare _ctx: { x: number; y: number; kind: FixKind; id: string; bar?: boolean } | null;
   /** A drag on a fixed item was turned into panning: the hint line says why. */
   declare _fixedHint: boolean;
   /** Doors & windows mode: why the last tap added nothing (it would overlap another opening), shown in the hint bar (#62). */
@@ -1046,7 +1049,12 @@ export class Fp3dEditor extends LitElement {
     } else if (e.key.toLowerCase() === "r" && !mod && this._furnitureId) {
       this.rotateFurniture(e.shiftKey ? -90 : 90);
     } else if (e.key === "Tab" && !mod && !e.altKey && this._furnitureId && (this._tool === "select" || this._tool === "furniture") && this.keysFree(path)) {
-      // Tab steps through the items of the room (#75), Shift+Tab backwards
+      // Tab goes into the selected item's toolbar first (#398), from there on to the next item; else Tab steps
+      // through the items of the room (#75), Shift+Tab backwards
+      if (!e.shiftKey && focusItemBar(this)) {
+        e.preventDefault();
+        return;
+      }
       const next = nextPick(this.tabItems(), this._furnitureId, e.shiftKey ? -1 : 1);
       if (next) {
         e.preventDefault();
@@ -1198,7 +1206,7 @@ export class Fp3dEditor extends LitElement {
           ${this._split ? this.render3d() : nothing}
           </div>
         </div>
-        ${this._sheeted ? this.renderSheet(floor) : this.renderAside(floor)} ${this._phone ? this.renderPhoneBar(floor) : nothing}
+        ${guard([sideFreeze(this)], () => (this._sheeted ? this.renderSheet(floor) : this.renderAside(floor)))} ${this._phone ? this.renderPhoneBar(floor) : nothing}
       </div>
     `;
   }

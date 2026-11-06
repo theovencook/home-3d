@@ -335,4 +335,10 @@ export const planStyles = css`
         color: var(--fp3d-text);
         border-color: var(--fp3d-accent);
       }
+      /* Select several in the main toolbar (#398): its word only where the row has room for it, else the icon (named) */
+      @media (max-width: 1439px) {
+        .fp3d-multi-btn .fp3d-tool-word {
+          display: none;
+        }
+      }
 `;

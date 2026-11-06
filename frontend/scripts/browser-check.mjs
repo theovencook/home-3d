@@ -191,6 +191,9 @@ try {
   await new Promise((r) => setTimeout(r, 500));
   await run("editor");
   results.select = await run("select", { n: speed ? 15 : 3 });
+  // #398: an item dragged on the plan, its floating toolbar following
+  results.drag = await run("drag", { n: speed ? 40 : 5 });
+  if (!results.drag.moved) problems.push("a drag on the plan did not move the item (#398)");
   // #196: the help overlay takes the focus, keeps Tab and Shift+Tab inside and gives the focus back when it closes
   results.help = await run("helpDialog", { step: "open" });
   if (results.help.modal !== "true") problems.push("the help overlay is not aria-modal (#196)");
@@ -295,6 +298,7 @@ else {
     for (const tag of ["fp3d-editor", "fp3d-view3d"]) if (b3.background[tag]) row(`Editor, 3D beside, large floor, 8 updates/s: ${tag}`, `${b3.background[tag].updatesPerS} updates/s, ${b3.background[tag].msPerS} ms/s`);
     row("Editor, 3D beside, large floor: longest frame after a nudge (median / worst)", `${b3.nudge.median} / ${b3.nudge.worst} ms`);
   }
+  if (results.drag) row("Editor drag of an item, per move (median / worst; editor update ms)", `${results.drag.median} / ${results.drag.worst} ms; ${results.drag.editorMsPerMove} ms`);
   if (results.select) row("Editor selection, linked / plain (median / worst)", `${results.select.linked.median} / ${results.select.linked.worst} ms, ${results.select.plain.median} / ${results.select.plain.worst} ms`);
   if (results.unknownCalls?.length) console.log(`\nCalls the fake backend has no answer for: ${results.unknownCalls.join(", ")}`);
   for (const p of problems) console.log(`PROBLEM ${p}`);

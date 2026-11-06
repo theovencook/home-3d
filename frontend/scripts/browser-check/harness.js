@@ -353,6 +353,47 @@ const check = {
   },
 
   /**
+   * Dragging an item on the plan (#398): a plain item pressed, `n` pointer moves (each timed to the plan painted),
+   * let go and undone. Also how many ms the editor's updates took per move (its whole render, the side panel and the
+   * floating item toolbar included).
+   */
+  async drag({ n = 40 } = {}) {
+    const ed = panel.shadowRoot.querySelector("fp3d-editor") ?? (await check.editor());
+    const svg = ed.shadowRoot.querySelector("svg.fp3d-plan");
+    const f = (ed.floor?.furniture ?? []).find((m) => !m.entity && !m.power && !m.state_entity && !m.locked && m.w > 0.4 && m.d > 0.4);
+    if (!f) throw new Error("the plan's first floor needs a plain item");
+    ed.selectItem("furniture", f.id);
+    await ed.updateComplete;
+    await nextFrame();
+    const [sx, sy] = ed.toScreen([f.x, f.z]);
+    const rect = svg.getBoundingClientRect();
+    const base = { bubbles: true, composed: true, pointerId: 7, pointerType: "mouse", isPrimary: true, button: 0, buttons: 1 };
+    const target = ed.shadowRoot.elementFromPoint(rect.left + sx, rect.top + sy) ?? svg;
+    // a made-up pointer cannot be captured: the plan's capture calls do nothing for this drag
+    svg.setPointerCapture = svg.releasePointerCapture = () => undefined;
+    target.dispatchEvent(new PointerEvent("pointerdown", { ...base, clientX: rect.left + sx, clientY: rect.top + sy }));
+    await ed.updateComplete;
+    const c0 = snapshot()["fp3d-editor"] ?? { updates: 0, ms: 0 };
+    const times = [];
+    for (let i = 1; i <= n; i++) {
+      const t0 = performance.now();
+      svg.dispatchEvent(new PointerEvent("pointermove", { ...base, clientX: rect.left + sx + i * 3, clientY: rect.top + sy + (i % 2) }));
+      await ed.updateComplete;
+      await nextFrame();
+      times.push(performance.now() - t0);
+    }
+    const c1 = snapshot()["fp3d-editor"] ?? { updates: 0, ms: 0 };
+    svg.dispatchEvent(new PointerEvent("pointerup", { ...base, buttons: 0, clientX: rect.left + sx + n * 3, clientY: rect.top + sy }));
+    await ed.updateComplete;
+    const moved = ed.floor.furniture.find((m) => m.id === f.id).x !== f.x;
+    delete svg.setPointerCapture;
+    delete svg.releasePointerCapture;
+    ed.undo();
+    await ed.updateComplete;
+    return { ...stats(times), editorMsPerMove: +((c1.ms - c0.ms) / n).toFixed(2), moved, toolbar: !!ed.shadowRoot.querySelector(".fp3d-itembar") };
+  },
+
+  /**
    * The editor with 3D beside on, on a large floor (#389, #390): an item selected, `rate` hass updates a second for
    * `seconds` (every `watchedEvery`-th a state the plan shows: lamps and sensors), long-frame ms a second meanwhile; then
    * `nudges` arrow nudges of the item, each with the longest frame in the 1.2 s after it (the 3D beside follows the
