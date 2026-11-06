@@ -668,7 +668,8 @@ def checklist() -> str:
         "Brands with fewer than ten rows (Tesla sells seven different shapes, MG eight) are listed as they are.",
         "",
         "The Nissan Leaf (second generation, 2018 on) and its colourways come from `tools/gen_leaf.py` (#242); they and the first",
-        "bicycles, mopeds and scooters are not part of this table.",
+        "bicycles, mopeds and scooters are not part of this table. Their bodies are in the `paint` role too (#404), with the",
+        "colourway's colour as the item's own paint (`\"colors\": {\"paint\": …}`); the two-tone Leaf keeps its black roof.",
         "",
     ]
     for brand_id, brand, site, models in BRANDS:

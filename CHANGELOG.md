@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- Vehicles: the car colours in the item panel now repaint the Nissan Leaf and its colourways, the bicycles, mopeds, motorbikes and scooters too (16 items had their body in fixed colours). Their bodies are in the paint role, with the colourway's colour as the item's own paint (a new optional item field, `colors`), so each looks as before until repainted, and the reset goes back to it; the two-tone Leaf keeps its black roof. Garden & outdoor pack release 7: a placed vehicle changes after "Update item", which keeps the colour picked for it. A test checks that every vehicle has its body in the paint role (#404).
+
 ## Home 3D 1.1.0 (6 November 2026)
 
 - Time travel: items with a "When it shows" rule follow the past. A car that only shows while its tracker is home is hidden at a moment it was away, and an item with days or times shows by the replayed moment, not the clock now. The people and trackers a rule follows are replayed as home or away only (no zone, coordinates or other attributes); every other person and tracker stays out (#394).

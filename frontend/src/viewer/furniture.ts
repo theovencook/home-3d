@@ -10,7 +10,7 @@ import { isRobotVacuum, mountBase, packItem, packMotion, packMovingPart, packRob
 import { fitParts } from "../pack-scale.ts";
 import { rackLayout, rackMarks, readRackFrame, type RackLayout } from "../rack-frame.ts";
 import { rackContents, rackLedSpot } from "../rack.ts";
-import { COLOUR_ROLES, roleColour, type RoleColours } from "../colour-roles.ts";
+import { COLOUR_ROLES, drawnColours, roleColour, type RoleColours } from "../colour-roles.ts";
 import { materialId, roleMaterial, type RoleMaterials } from "../role-materials.ts";
 import { binColors, binShape, householdCountry, mailboxShape, type BinShape, type MailboxShape } from "../household.ts";
 import type { Floor } from "../model.ts";
@@ -513,9 +513,10 @@ function paletteWith(colors: RoleColours | null | undefined): Palette {
  * Draws an item into `buf` with its own role colours (#12) and its materials per role (#40, each colour of a role
  * marks its triangles with the role's material for the realistic look), then goes back to the theme's palette.
  */
-function withColours<T>(buf: GeoBuffer, f: { colors?: RoleColours | null; materials?: RoleMaterials | null }, draw: () => T): T {
+function withColours<T>(buf: GeoBuffer, f: { type?: string; colors?: RoleColours | null; materials?: RoleMaterials | null }, draw: () => T, item?: PackItem): T {
   const prev = C;
-  C = paletteWith(f.colors);
+  // a pack item's own role colours (#404, a car's colourway) under the placed item's
+  C = paletteWith(item?.colors ? { ...(item.colors as RoleColours), ...f.colors } : drawnColours(f.type, f.colors));
   const was = buf.useMaterials(materialsOf(C, f.materials));
   try {
     return draw();
@@ -2192,7 +2193,8 @@ export function pushRackLeds(buf: GeoBuffer, f: Pick<Furniture, "type" | "x" | "
  * only while bright and strong enough, so these parts are drawn anew on a look change (#609).
  */
 export function hasFixedColors(type: string): boolean {
-  return !!packItem(type)?.parts.some((p) => p.color?.startsWith("#") || p.top?.startsWith("#"));
+  const item = packItem(type);
+  return !!item && (!!item.colors || item.parts.some((p) => p.color?.startsWith("#") || p.top?.startsWith("#")));
 }
 
 /**
@@ -2348,7 +2350,7 @@ export function pushPackMotion(buf: GeoBuffer, item: PackItem, kind: PackMotion,
   const s = Math.sin(a);
   const mx = f.mirror ? -1 : 1;
   const tf: Tf = (x, z) => [f.x + mx * x * c - z * s, f.z + mx * x * s + z * c];
-  withColours(buf, f, () => packModel(new Builder(buf, new LineBuffer(), tf), { ...item, parts }, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h), base, null));
+  withColours(buf, f, () => packModel(new Builder(buf, new LineBuffer(), tf), { ...item, parts }, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h), base, null), item);
 }
 
 /** The moving parts of such an item where they are at `open` (in the item's fractions of its size). */
@@ -2428,5 +2430,5 @@ export function pushPackLamp(buf: GeoBuffer, item: PackItem, f: Pick<Furniture, 
   const mx = f.mirror ? -1 : 1;
   const tf: Tf = (x, z) => [f.x + mx * x * c - z * s, f.z + mx * x * s + z * c];
   // lamps have no outlines: their edges are dropped
-  withColours(buf, f, () => packModel(new Builder(buf, new LineBuffer(), tf), item, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h), base, glow));
+  withColours(buf, f, () => packModel(new Builder(buf, new LineBuffer(), tf), item, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h), base, glow), item);
 }

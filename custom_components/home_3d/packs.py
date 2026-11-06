@@ -328,6 +328,9 @@ _ITEM_FIELDS = vol.Schema(
         vol.Optional("surface", default=False): bool,
         # a vehicle: offered for parking spots
         vol.Optional("vehicle", default=False): bool,
+        # the item's own colour for a role (#404): what its parts in that role show while the placed item has no
+        # colour of its own for it (a car's paint in this colourway)
+        vol.Optional("colors"): vol.All({vol.In(COLOUR_ROLES): vol.Match(r"^#[0-9a-fA-F]{6}$")}, vol.Length(min=1)),
         # stairs: when it reaches the floor above, it cuts a stairwell opening into that floor
         vol.Optional("hole", default=False): bool,
         # a lamp: how its light spreads (like the built-in lamp of that kind)

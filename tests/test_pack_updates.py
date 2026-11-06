@@ -137,6 +137,34 @@ async def test_placed_items_with_a_newer_release_are_listed_and_updated_one_by_o
     assert [i["type"] for i in (await _call(client, type="home_3d/packs/updates"))["items"]] == [STOOL_TYPE]
 
 
+async def test_an_update_that_paints_a_car_keeps_the_colour_its_owner_chose(
+    hass: HomeAssistant, hass_ws_client
+) -> None:
+    """#404: a car drawn in a fixed colour gets its body in the paint role in a new release, with its old colour as its
+    own paint. A placed car is listed as having an update, and updating it keeps the paint picked in the item panel."""
+    body = {"shape": "box", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0.2, "h": 0.5, "color": "#e9ebee"}
+    car = {"id": "car", "name": {"en": "Car"}, "size": [1.8, 4.4, 1.5], "vehicle": True, "parts": [body]}
+    painted = {**car, "colors": {"paint": "#e9ebee"}, "parts": [{**body, "color": "paint"}]}
+    car_type = "pack:test.starter:car"
+
+    def files(release: int, item: dict) -> dict:
+        return {"pack.json": json.dumps({**PACK_JSON, "release": release}), "car.json": json.dumps(item)}
+
+    client = await _client(hass, hass_ws_client)
+    await _call(client, type="home_3d/packs/import", files=files(1, car))
+    placed = {**_furniture("a", car_type), "colors": {"paint": "#2f63b5"}}
+    await _call(client, type="home_3d/building/save", building=_building(placed))
+    await _call(client, type="home_3d/packs/import", files=files(2, painted))
+    assert [i["type"] for i in (await _call(client, type="home_3d/packs/updates"))["items"]] == [car_type]
+
+    assert (await _call(client, type="home_3d/packs/update_items", types=[car_type]))["updated"] == [car_type]
+    building = (await _call(client, type="home_3d/building/get"))["building"]
+    assert building["recipes"][car_type]["recipe"]["colors"] == {"paint": "#e9ebee"}
+    assert building["recipes"][car_type]["recipe"]["parts"][0]["color"] == "paint"
+    assert building["floors"][0]["furniture"][0]["colors"] == {"paint": "#2f63b5"}
+    assert (await _call(client, type="home_3d/packs/updates"))["items"] == []
+
+
 async def test_only_editors_update_items_or_change_the_settings(
     hass: HomeAssistant, hass_ws_client, hass_read_only_access_token
 ) -> None:

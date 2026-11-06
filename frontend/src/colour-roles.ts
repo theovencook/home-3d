@@ -43,6 +43,20 @@ export function roleColour(colors: RoleColours | null | undefined, role: ColourR
   return typeof hex === "string" && HEX.test(hex) ? hex : null;
 }
 
+/** A pack item's own colour for a role (#404), as its recipe gives it: what the role shows while the placed item has none. */
+export function itemRoleColour(type: string, role: ColourRole): string | null {
+  return roleColour(packItem(type)?.colors as RoleColours | undefined, role);
+}
+
+/**
+ * The role colours an item is drawn in (#404): the placed item's own over its pack item's (a car's colourway), so
+ * clearing a colour goes back to the item's own one, and a role with neither follows the look.
+ */
+export function drawnColours(type: string | undefined, colors: RoleColours | null | undefined): RoleColours | null | undefined {
+  const defaults = type ? (packItem(type)?.colors as RoleColours | undefined) : undefined;
+  return defaults ? { ...defaults, ...colors } : colors;
+}
+
 /** A named colour to pick from. */
 export interface ColourPreset {
   id: string;

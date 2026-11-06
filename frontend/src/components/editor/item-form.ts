@@ -14,7 +14,7 @@ import { furnitureFootprint } from "../../model.ts";
 import { formatNumber, type I18nKey } from "../../i18n.ts";
 import { type FurnitureField } from "../../item-panel.ts";
 import { gangPlateWidth, gangsOf, splitAliases, MAX_GANGS, TECH_SIZE, type Gang, isLamp, pointInPolygon, polygonArea, uid, type Furniture, type ShowInterval, type ShowWhen, type ScreenPicture, clearFirstState } from "../../model.ts";
-import { COLOUR_PRESETS, PAINT_COLOURS, itemColourRoles, parseHex, roleColour, setRoleColour, type ColourRole } from "../../colour-roles.ts";
+import { COLOUR_PRESETS, PAINT_COLOURS, itemColourRoles, itemRoleColour, parseHex, roleColour, setRoleColour, type ColourRole } from "../../colour-roles.ts";
 import { MATERIALS, ownMaterial, setRoleMaterial, usualMaterial, type Material } from "../../role-materials.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { itemTempSource, shadeKind } from "../../room-effects.ts";
@@ -420,19 +420,22 @@ export class ItemFormPart {
   renderPaint(this: Fp3dEditor, f: Furniture, own: string | null) {
     const admin = this.isEditor;
     const name = this.t("colour_role_paint");
+    // a colourway's own paint (#404) shows until one is picked, and the reset goes back to it
+    const base = itemRoleColour(f.type, "paint");
+    const shown = own ?? base;
     return html`<div class="fp3d-field fp3d-colour-role fp3d-wide">
       <span>${name}</span>
       <span class="fp3d-paint">
         ${PAINT_COLOURS.map((c) => {
           const label = this.t(`paint_${c.id}` as I18nKey);
-          return html`<button type="button" class="fp3d-swatch" style=${`background:${c.hex}`} title=${label} aria-label=${label} aria-pressed=${own === c.hex ? "true" : "false"}
+          return html`<button type="button" class="fp3d-swatch" style=${`background:${c.hex}`} title=${label} aria-label=${label} aria-pressed=${shown === c.hex ? "true" : "false"}
             ?disabled=${!admin} @click=${() => this.setPaint(f, c.hex)}></button>`;
         })}
-        <input type="text" class="fp3d-paint-hex" maxlength="7" placeholder="#rrggbb" aria-label=${this.t("paint_hex")} .value=${own ?? ""} ?disabled=${!admin}
+        <input type="text" class="fp3d-paint-hex" maxlength="7" placeholder="#rrggbb" aria-label=${this.t("paint_hex")} .value=${shown ?? ""} ?disabled=${!admin}
           @change=${(e: Event) => this.setPaint(f, (e.target as HTMLInputElement).value)} />
-        <input type="color" class=${own ? "" : "fp3d-colour-unset"} aria-label=${this.t("paint_hex")} .value=${own ?? "#808080"} ?disabled=${!admin}
+        <input type="color" class=${shown ? "" : "fp3d-colour-unset"} aria-label=${this.t("paint_hex")} .value=${shown ?? "#808080"} ?disabled=${!admin}
           @change=${(e: Event) => this.setPaint(f, (e.target as HTMLInputElement).value)} />
-        ${colourReset({ value: own, fallback: null, label: this.t("colour_theme"), disabled: !admin, onReset: () => this.setPaint(f, "") })}
+        ${colourReset({ value: shown, fallback: base, label: this.t(base ? "colour_reset" : "colour_theme"), disabled: !admin, onReset: () => this.setPaint(f, "") })}
       </span>
     </div>`;
   }
