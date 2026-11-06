@@ -687,7 +687,7 @@ def read_folder(folder: Path) -> dict[str, str]:
 # The packs bundled with the integration: one folder per pack (theovencook.core, ...), read from the disk at setup,
 # so they are there on a fresh install without network access. They are checked like an imported pack.
 BUNDLED_DIR = Path(__file__).parent / "bundled_packs"
-# the language packs that ship with Home 3D (#196): German for now, one folder per language
+# the language packs that ship with Home 3D (#196): one folder per language
 BUNDLED_LANGUAGES_DIR = Path(__file__).parent / "bundled_languages"
 
 
@@ -713,7 +713,7 @@ def with_bundled(bundled: list[dict[str, Any]], imported: list[dict[str, Any]]) 
     """All packs to offer: the bundled ones, then the imported ones, one per pack id. When a pack is both bundled
     and imported (a copy imported from files or installed from a GitHub URL), the higher release wins; on a tie the
     imported one. An imported pack of another kind never takes a bundled pack's place (#372: a furniture pack named
-    like the German texts kept from before 1.0.1 must not leave the page in English)."""
+    like a bundled language pack, kept from before 1.0.1, must not leave the page in English)."""
     kinds = {p["id"]: kind_of(p) for p in bundled}
     imported = [p for p in imported if kinds.get(p["id"], kind_of(p)) == kind_of(p)]
     release = {p["id"]: p.get("release", 1) for p in imported}

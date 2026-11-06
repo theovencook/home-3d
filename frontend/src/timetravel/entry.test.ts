@@ -22,7 +22,7 @@ function start(opts: { states?: Record<string, unknown>; entities?: string[]; ra
     devices: {},
     floors: {},
     config: {},
-    states: { "light.a": { entity_id: "light.a", state: "on", attributes: { friendly_name: "Lampe" } }, ...opts.states },
+    states: { "light.a": { entity_id: "light.a", state: "on", attributes: { friendly_name: "Lamp" } }, ...opts.states },
     connection: { subscribeMessage: async () => async () => undefined },
     callService: async () => undefined,
     callWS: async (msg: Record<string, unknown>): Promise<WireDay> => {

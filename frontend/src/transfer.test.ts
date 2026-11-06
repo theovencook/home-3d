@@ -6,9 +6,9 @@ import { exportFile, isEntityLink, parseExport } from "./transfer.ts";
 
 function building() {
   const b = emptyBuilding();
-  const f = newFloor("eg", "EG", 0);
-  f.rooms = [{ id: "r", name: "Wohnen", area_id: "living_room", points: [[0, 0], [4, 0], [4, 3], [0, 3]], floor_material: "wood" }];
-  f.furniture = [{ id: "m", type: "lamp_ceiling", x: 2, z: 1.5, rotation: 0, w: 0.4, d: 0.4, h: 0.08, variant: null, entity: "light.decke", power: null }];
+  const f = newFloor("ground", "Ground", 0);
+  f.rooms = [{ id: "r", name: "Living room", area_id: "living_room", points: [[0, 0], [4, 0], [4, 3], [0, 3]], floor_material: "wood" }];
+  f.furniture = [{ id: "m", type: "lamp_ceiling", x: 2, z: 1.5, rotation: 0, w: 0.4, d: 0.4, h: 0.08, variant: null, entity: "light.ceiling", power: null }];
   f.placements = [{ entity_id: "sensor.temp", x: 1, z: 1, y: null }];
   f.background = { image_id: "img", x: 0, z: 0, width: 10, opacity: 0.5 };
   b.floors = [f];
@@ -34,18 +34,18 @@ test("a shareable export has no entities, areas or images", () => {
 test("import reads export files and plain buildings, and rejects anything else", () => {
   const full = exportFile(building(), false);
   const back = parseExport(JSON.stringify(full));
-  assert.equal(back.floors[0].furniture[0].entity, "light.decke");
+  assert.equal(back.floors[0].furniture[0].entity, "light.ceiling");
   assert.equal(back.floors[0].background, null, "images are not imported");
   assert.equal(parseExport(JSON.stringify(building())).floors.length, 1);
   assert.throws(() => parseExport("{}"));
-  assert.throws(() => parseExport("kein json"));
+  assert.throws(() => parseExport("not json"));
 });
 
 /** A plan with every field that can hold a link to this Home Assistant filled (#155). */
 function linked(): Building {
   const e = (n: string) => `sensor.${n}`;
   const b = emptyBuilding();
-  const f = newFloor("eg", "EG", 0);
+  const f = newFloor("ground", "Ground", 0);
   f.ha_floor = "ground";
   f.rooms = [
     {
@@ -90,7 +90,7 @@ function linked(): Building {
     favorites: ["scene.evening", "script.go"], unplaced_hidden: [e("u1")], household: { notes: "sensor.notes" },
   });
   Object.assign(b.energy, {
-    meter: { floor_id: "eg", x: 1, z: 1 }, grid: e("g"), solar: e("s"), battery: e("b"), battery_soc: e("bs"), consumption: e("co"), tariff: e("ta"),
+    meter: { floor_id: "ground", x: 1, z: 1 }, grid: e("g"), solar: e("s"), battery: e("b"), battery_soc: e("bs"), consumption: e("co"), tariff: e("ta"),
     gas: e("gas"), water: e("water"), cheap_rate: "binary_sensor.cheap",
     rate_entity: "select.tariff", cost_sensors: [e("cost"), "octopus:cost"], earning_sensors: [e("earn")],
   });
@@ -135,7 +135,7 @@ test("a shareable export keeps no entity id, area or floor link anywhere", () =>
   assert.equal(f.furniture[0].type, "lamp_ceiling");
   assert.equal(f.furniture[0].gangs?.length, 2);
   assert.equal(shared.settings.director?.doorbell, true);
-  assert.equal(shared.energy.meter?.floor_id, "eg");
+  assert.equal(shared.energy.meter?.floor_id, "ground");
   // existing rate sensors (#323): statistics of this Home Assistant go too
   assert.deepEqual([shared.energy.cost_sensors, shared.energy.earning_sensors], [[], []]);
   // the full backup keeps everything

@@ -15,7 +15,7 @@ function rect(id: string, x0: number, z0: number, x1: number, z1: number): Room 
 
 function hassWith(states: HassEntity[], entities: Record<string, { entity_id: string; device_id?: string; area_id?: string }> = {}): HomeAssistant {
   return {
-    language: "de",
+    language: "en",
     connection: {} as HomeAssistant["connection"],
     callWS: async () => undefined as never,
     callService: async () => undefined,
@@ -26,15 +26,15 @@ function hassWith(states: HassEntity[], entities: Record<string, { entity_id: st
 
 function house(): Building {
   const b = emptyBuilding();
-  const eg = { ...newFloor("eg", "EG", 0), rooms: [rect("a", 0, 0, 4, 3), rect("b", 4, 0, 8, 3)] };
-  eg.placements = [
+  const groundFloor = { ...newFloor("ground", "Ground", 0), rooms: [rect("a", 0, 0, 4, 3), rect("b", 4, 0, 8, 3)] };
+  groundFloor.placements = [
     { entity_id: "switch.tv", x: 7, z: 2, y: null },
     { entity_id: "sensor.fridge_power", x: 6, z: 0.5, y: null },
   ];
-  const og = { ...newFloor("og", "OG", 2.75), rooms: [rect("c", 0, 0, 8, 3)] };
-  og.placements = [{ entity_id: "sensor.pc_power", x: 1, z: 1, y: null }];
-  b.floors = [eg, og];
-  b.energy = { ...b.energy, meter: { floor_id: "eg", x: 0.5, z: 1.5 }, grid: "sensor.grid", solar: "sensor.solar" };
+  const upperFloor = { ...newFloor("upper", "Upper", 2.75), rooms: [rect("c", 0, 0, 8, 3)] };
+  upperFloor.placements = [{ entity_id: "sensor.pc_power", x: 1, z: 1, y: null }];
+  b.floors = [groundFloor, upperFloor];
+  b.energy = { ...b.energy, meter: { floor_id: "ground", x: 0.5, z: 1.5 }, grid: "sensor.grid", solar: "sensor.solar" };
   return b;
 }
 
@@ -83,16 +83,16 @@ test("cables run from the meter through the shared wall and add up where they sh
   const b = house();
   const consumers = findConsumers(hass, b);
   const segs = flowSegments({ building: b, consumers, summary: energySummary(hass, b, consumers) });
-  const eg = segs.filter((s) => s.floorId === "eg" && s.kind === "consumer");
+  const groundFloor = segs.filter((s) => s.floorId === "ground" && s.kind === "consumer");
   // a segment crosses the interior wall at x = 4
-  assert.ok(eg.some((s) => (s.a[0] - 4) * (s.b[0] - 4) < 0 && s.a[1] === s.b[1]), "crosses the wall");
+  assert.ok(groundFloor.some((s) => (s.a[0] - 4) * (s.b[0] - 4) < 0 && s.a[1] === s.b[1]), "crosses the wall");
   // the crossing carries both consumers in room b
-  const crossing = eg.find((s) => (s.a[0] - 4) * (s.b[0] - 4) < 0 && s.a[1] === s.b[1])!;
+  const crossing = groundFloor.find((s) => (s.a[0] - 4) * (s.b[0] - 4) < 0 && s.a[1] === s.b[1])!;
   assert.equal(crossing.power, 95 + 85);
   // the riser to the upper floor starts at the meter and carries the PC
-  const up = eg.find((s) => s.a[0] === 0.5 && s.a[2] === 1.5 && s.b[1] > 2)!;
+  const up = groundFloor.find((s) => s.a[0] === 0.5 && s.a[2] === 1.5 && s.b[1] > 2)!;
   assert.equal(up.power, 70);
-  assert.ok(segs.some((s) => s.floorId === "og" && s.kind === "consumer"));
+  assert.ok(segs.some((s) => s.floorId === "upper" && s.kind === "consumer"));
   // exporting: the grid cable flows from the meter through the west wall and on to the street
   const grid = segs.filter((s) => s.kind === "export");
   assert.deepEqual([grid[0].a[0], grid[0].a[2]], [0.5, 1.5]);
@@ -100,7 +100,7 @@ test("cables run from the meter through the shared wall and add up where they sh
   assert.ok(grid[grid.length - 1].b[0] < -2, "ends out at the street");
   assert.ok(grid.every((s) => s.power === 300));
   // the cable distance grows along the path
-  const far = eg.filter((s) => s.a[0] > 4).map((s) => s.dist);
+  const far = groundFloor.filter((s) => s.a[0] > 4).map((s) => s.dist);
   assert.ok(Math.min(...far) > 3);
 });
 
@@ -119,7 +119,7 @@ test("new power values re-weigh the cached cable routes", () => {
     const consumers = findConsumers(hass, b);
     return flowSegments({ building: b, consumers, summary: energySummary(hass, b, consumers) });
   };
-  const crossing = (segs: ReturnType<typeof run>) => segs.find((s) => s.floorId === "eg" && s.kind === "consumer" && (s.a[0] - 4) * (s.b[0] - 4) < 0 && s.a[1] === s.b[1])!;
+  const crossing = (segs: ReturnType<typeof run>) => segs.find((s) => s.floorId === "ground" && s.kind === "consumer" && (s.a[0] - 4) * (s.b[0] - 4) < 0 && s.a[1] === s.b[1])!;
   const first = run();
   assert.equal(crossing(first).power, 95 + 85);
   hass.states["sensor.tv_power"] = power("sensor.tv_power", "300");
@@ -142,7 +142,7 @@ test("the placed devices bring their sensors: meter = grid, inverters add up, ba
     { id: "bat", type: "home_battery", x: 3, z: 1, rotation: 0, w: 0.6, d: 0.25, h: 1.1, variant: null, power: "sensor.bat", soc: "sensor.soc" },
   );
   assert.deepEqual(deviceSensors(b), { grid: "sensor.grid", gridExport: null, solar: ["sensor.pv1", "sensor.pv2"], battery: ["sensor.bat"], charge: [], batteries: [{ power: "sensor.bat", charge: null }], soc: ["sensor.soc"] });
-  assert.deepEqual(meterPosition(b), { floor_id: "eg", x: 1, z: 0.2 });
+  assert.deepEqual(meterPosition(b), { floor_id: "ground", x: 1, z: 0.2 });
   const hass = hassWith([power("sensor.grid", "-300"), power("sensor.pv1", "800"), power("sensor.pv2", "400"), power("sensor.bat", "-250"), st("sensor.soc", "64", { device_class: "battery" }), power("sensor.house", "1000")]);
   const s = energySummary(hass, b, []);
   assert.equal(s.grid, -300);
@@ -208,17 +208,17 @@ test("Pro cables: roof field → inverter, inverter → meter and battery, meter
   b.floors[0].furniture.push(furn("m", "meter", 0.5, 0.3, { power: "sensor.grid" }), furn("inv", "inverter", 7, 0.3, { power: "sensor.pv1" }), furn("bat", "home_battery", 6, 0.3, { power: "sensor.bat" }), furn("wb", "wallbox", 5, 2.5, { power: "sensor.wb" }));
   const hass = hassWith([power("sensor.grid", "-300"), power("sensor.pv1", "1200"), power("sensor.bat", "-250"), power("sensor.wb", "400"), power("sensor.pc_power", "70"), power("sensor.fridge_power", "0.085", "kW")]);
   const consumers = findConsumers(hass, b);
-  consumers.push({ id: "wb", powerEntity: "sensor.wb", floorId: "eg", x: 5, z: 2.5, power: 400, wallbox: true });
+  consumers.push({ id: "wb", powerEntity: "sensor.wb", floorId: "ground", x: 5, z: 2.5, power: 400, wallbox: true });
   const summary = energySummary(hass, b, consumers);
-  const segs = flowSegments({ building: b, consumers, summary, battery: { floorId: "eg", x: 6, z: 0.3 }, fieldPower: fieldPowers(hass, b, summary.solar) });
+  const segs = flowSegments({ building: b, consumers, summary, battery: { floorId: "ground", x: 6, z: 0.3 }, fieldPower: fieldPowers(hass, b, summary.solar) });
   const kinds = new Set(segs.map((s) => s.kind));
   assert.deepEqual([...kinds].sort(), ["battery", "consumer", "export", "inverter", "solar", "wallbox"]);
   // the roof cable starts on the upper floor at the field and ends at the inverter's top on the ground floor
   const solar = segs.filter((s) => s.kind === "solar");
-  assert.equal(solar[0].floorId, "og");
+  assert.equal(solar[0].floorId, "upper");
   assert.equal(solar[0].power, 1200);
   const last = solar[solar.length - 1];
-  assert.equal(last.floorId, "eg");
+  assert.equal(last.floorId, "ground");
   assert.deepEqual(last.b, [7, 1.75, 0.3]);
   // the inverter feeds the meter with what the sun gives beyond charging the battery
   const feed = segs.filter((s) => s.kind === "inverter");
@@ -345,7 +345,7 @@ test("a consumer in a room's corner gets its cable square to the wall, not slant
   // the fridge right in the corner of room b, between the wall and the cable's ring
   b.floors[0].placements[1] = { entity_id: "sensor.fridge_power", x: 7.97, z: 0.02, y: null };
   const consumers = findConsumers(hass, b);
-  const segs = flowSegments({ building: b, consumers, summary: energySummary(hass, b, consumers) }).filter((s) => s.floorId === "eg" && s.kind === "consumer");
+  const segs = flowSegments({ building: b, consumers, summary: energySummary(hass, b, consumers) }).filter((s) => s.floorId === "ground" && s.kind === "consumer");
   assert.ok(segs.length > 0);
   for (const s of segs) assert.ok(Math.abs(s.a[0] - s.b[0]) < 1e-6 || Math.abs(s.a[2] - s.b[2]) < 1e-6, `slant piece ${s.a} → ${s.b}`);
 });
@@ -358,7 +358,7 @@ test("rooms drawn with a small gap between them still get their cables (#731)", 
   b.floors = [b.floors[0]];
   const consumers = findConsumers(hass, b);
   const segs = flowSegments({ building: b, consumers, summary: energySummary(hass, b, consumers) });
-  const inB = segs.filter((s) => s.floorId === "eg" && s.kind === "consumer" && Math.max(s.a[0], s.b[0]) > 4.3);
+  const inB = segs.filter((s) => s.floorId === "ground" && s.kind === "consumer" && Math.max(s.a[0], s.b[0]) > 4.3);
   assert.ok(inB.length > 0, "a cable reaches the devices in the second room");
   // rooms far apart (a detached garage) are not wired through the garden
   b.floors[0].rooms = [rect("a", 0, 0, 4, 3), rect("b", 8, 0, 12, 3)];
@@ -370,16 +370,16 @@ test("rooms drawn with a small gap between them still get their cables (#731)", 
 
 test("two lights on one device each take their own meter: PowerCalc's by its name, else one of the light's room (#743)", () => {
   const hass = hassWith(
-    [st("light.bad_decke", "on"), st("light.buero", "on"), power("sensor.buero_power_x", "9"), power("sensor.bad_decke_power", "12")],
+    [st("light.bath_ceiling", "on"), st("light.office", "on"), power("sensor.office_power_x", "9"), power("sensor.bath_ceiling_power", "12")],
     {
-      "light.bad_decke": { entity_id: "light.bad_decke", device_id: "act", area_id: "bad" },
-      "light.buero": { entity_id: "light.buero", device_id: "act", area_id: "buero" },
-      "sensor.buero_power_x": { entity_id: "sensor.buero_power_x", device_id: "act", area_id: "buero" },
-      "sensor.bad_decke_power": { entity_id: "sensor.bad_decke_power", device_id: "act", area_id: "bad" },
+      "light.bath_ceiling": { entity_id: "light.bath_ceiling", device_id: "act", area_id: "bath" },
+      "light.office": { entity_id: "light.office", device_id: "act", area_id: "office" },
+      "sensor.office_power_x": { entity_id: "sensor.office_power_x", device_id: "act", area_id: "office" },
+      "sensor.bath_ceiling_power": { entity_id: "sensor.bath_ceiling_power", device_id: "act", area_id: "bath" },
     },
   );
-  assert.equal(powerSensorFor(hass, "light.bad_decke"), "sensor.bad_decke_power");
-  assert.equal(powerSensorFor(hass, "light.buero"), "sensor.buero_power_x");
+  assert.equal(powerSensorFor(hass, "light.bath_ceiling"), "sensor.bath_ceiling_power");
+  assert.equal(powerSensorFor(hass, "light.office"), "sensor.office_power_x");
 });
 
 // ------------------------------------------------------------------ source mix (#28)

@@ -10,7 +10,7 @@ test("no backdrop or the default keeps the look's own sky", () => {
 test("a colour, a gradient and a picture behind a veil", () => {
   assert.equal(backdropCss({ kind: "color", color: "#112233" }), "#112233");
   assert.equal(backdropCss({ kind: "gradient", color: "#112233", color2: "#000000" }), "linear-gradient(180deg, #112233, #000000)");
-  assert.match(backdropCss({ kind: "image", image: "/local/garten.jpg", dim: 0.3 })!, /rgba\(4, 8, 16, 0.3\).*url\("\/local\/garten.jpg"\)/);
+  assert.match(backdropCss({ kind: "image", image: "/local/garden.jpg", dim: 0.3 })!, /rgba\(4, 8, 16, 0.3\).*url\("\/local\/garden.jpg"\)/);
   // a broken colour falls back to the dark blue
   assert.equal(backdropCss({ kind: "color", color: "red; x" }), "#0b1426");
 });

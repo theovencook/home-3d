@@ -8,7 +8,7 @@ const rect = (id: string, x1: number, z1: number): Room => ({ id, name: id, area
 
 function house(terrain?: Building["settings"]["terrain"]): Building {
   const b = emptyBuilding();
-  b.floors = [{ ...newFloor("ug", "UG", -2.6), height: 2.4, rooms: [rect("k", 10, 8)] }, { ...newFloor("eg", "EG", 0), rooms: [rect("a", 10, 8)] }];
+  b.floors = [{ ...newFloor("cellar", "Cellar", -2.6), height: 2.4, rooms: [rect("k", 10, 8)] }, { ...newFloor("ground", "Ground", 0), rooms: [rect("a", 10, 8)] }];
   b.settings = { ...b.settings, wall_exterior: 0.3, wall_interior: 0.12, terrain };
   setTerrain(b);
   return b;
@@ -84,15 +84,15 @@ test("a raised house (the ground lower, no cellar) stands on a plinth; on a flat
   const flat = house();
   flat.floors = [flat.floors[1]];
   setTerrain(flat);
-  const eg = (b: Building) => {
+  const groundFloor = (b: Building) => {
     const f = b.floors[0];
     return buildEarth(b, f, buildFloorGeometry(f, b.settings.wall_exterior, b.settings.wall_interior).openings, true);
   };
-  assert.equal(eg(flat), null);
+  assert.equal(groundFloor(flat), null);
   const hill = house({ level: -1.0 });
   hill.floors = [hill.floors[1]];
   setTerrain(hill);
-  assert.ok(eg(hill)!.earth.count > 0);
+  assert.ok(groundFloor(hill)!.earth.count > 0);
 });
 
 test("a balcony on the floor above does not lift a light well below it (#602)", () => {
@@ -102,7 +102,7 @@ test("a balcony on the floor above does not lift a light well below it (#602)", 
   b.floors[0].openings = [win];
   const bare = top(earthOf(b, 0)!);
   // a first floor with a balcony reaching the wall over the well
-  b.floors.push({ ...newFloor("og", "OG", 2.66), rooms: [rect("o", 10, 8)], outdoor: [{ id: "bal", type: "balcony", points: [[3, -1.5], [7, -1.5], [7, 0], [3, 0]] } as never] });
+  b.floors.push({ ...newFloor("upper", "Upper", 2.66), rooms: [rect("o", 10, 8)], outdoor: [{ id: "bal", type: "balcony", points: [[3, -1.5], [7, -1.5], [7, 0], [3, 0]] } as never] });
   setTerrain(b);
   assert.ok(Math.abs(top(earthOf(b, 0)!) - bare) < 1e-6);
 });

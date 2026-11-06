@@ -1,6 +1,5 @@
-// Guard: a feature on the UNRELEASED list must not show anywhere public – not in the README or the docs. CI fails as
-// soon as one of these texts names it. Releasing a feature means taking it off UNRELEASED first. (CHANGELOG.md is left
-// out: its older entries are the upstream project's history.)
+// Guard: a feature on the UNRELEASED list must not show anywhere public – not in the README, the changelog or the docs.
+// CI fails as soon as one of these texts names it. Releasing a feature means taking it off UNRELEASED first.
 
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
@@ -10,13 +9,13 @@ import { test } from "node:test";
 import { UNRELEASED } from "./features.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..");
-const PUBLIC = ["README.md", "docs/plan-format.md", "docs/ai-import.md", "docs/packs.md"];
+const PUBLIC = ["README.md", "CHANGELOG.md", "docs/plan-format.md", "docs/ai-import.md", "docs/packs.md"];
 
 /** The names users would read for each gated add-on (case-insensitive). */
 const NAMES: Record<string, RegExp> = {
-  pool: /pool\s*pro|pro_pool|pool-modul|pool module/i,
-  diagnostics: /diagnostics_report|debug[- ]daten|nutzungs- und fehlerberichte|usage and error reports/i,
-  locate: /\bortung\b|raumortung|bluetooth[- ]ortung|\blocating\b|room locating/i,
+  pool: /pool\s*pro|pro_pool|pool module/i,
+  diagnostics: /diagnostics_report|usage and error reports/i,
+  locate: /\blocating\b|room locating/i,
 };
 
 test("unreleased add-ons are named in no public text", () => {

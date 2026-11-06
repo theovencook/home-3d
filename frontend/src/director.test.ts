@@ -11,22 +11,22 @@ const hass = {
   states: {
     "event.front_ding": st("event.front_ding", "2026-10-17T10:00:00.000Z", { device_class: "doorbell" }),
     "event.button": st("event.button", "2026-10-17T10:00:00.000Z", { device_class: "button" }),
-    "binary_sensor.haustuer_visitor": st("binary_sensor.haustuer_visitor", "off", { friendly_name: "Haustür Besucher" }),
+    "binary_sensor.front_door_visitor": st("binary_sensor.front_door_visitor", "off", { friendly_name: "Front door visitor" }),
     "binary_sensor.motion": st("binary_sensor.motion", "off"),
-    "camera.haustuer": st("camera.haustuer", "idle"),
-    "camera.garten": st("camera.garten", "idle"),
+    "camera.front_door": st("camera.front_door", "idle"),
+    "camera.garden": st("camera.garden", "idle"),
   },
   entities: {
-    "binary_sensor.haustuer_visitor": { entity_id: "binary_sensor.haustuer_visitor", device_id: "dev_door" },
-    "camera.haustuer": { entity_id: "camera.haustuer", device_id: "dev_door" },
-    "camera.garten": { entity_id: "camera.garten", device_id: "dev_garden", area_id: "garden" },
+    "binary_sensor.front_door_visitor": { entity_id: "binary_sensor.front_door_visitor", device_id: "dev_door" },
+    "camera.front_door": { entity_id: "camera.front_door", device_id: "dev_door" },
+    "camera.garden": { entity_id: "camera.garden", device_id: "dev_garden", area_id: "garden" },
     "event.front_ding": { entity_id: "event.front_ding", device_id: "dev_ring", area_id: "garden" },
   },
   devices: {},
 } as unknown as HomeAssistant;
 
 test("doorbells: event entities of class doorbell and sensors named like one", () => {
-  assert.deepEqual(doorbellEntities(hass), ["binary_sensor.haustuer_visitor", "event.front_ding"]);
+  assert.deepEqual(doorbellEntities(hass), ["binary_sensor.front_door_visitor", "event.front_ding"]);
   assert.deepEqual(doorbellEntities(hass, "event.front_ding"), ["event.front_ding"]);
   assert.deepEqual(doorbellEntities(hass, "event.gone"), []);
 });
@@ -43,11 +43,11 @@ test("a ring: a new recent time stamp, or a sensor turning on – not a restart"
 });
 
 test("the door camera: chosen, else of the doorbell's device, else in its area", () => {
-  const placed = ["camera.haustuer", "camera.garten", "light.x"];
-  assert.equal(doorbellCamera(hass, "binary_sensor.haustuer_visitor", placed), "camera.haustuer");
-  assert.equal(doorbellCamera(hass, "event.front_ding", placed), "camera.garten");
-  assert.equal(doorbellCamera(hass, "event.front_ding", ["camera.haustuer"]), null);
-  assert.equal(doorbellCamera(hass, "event.front_ding", placed, "camera.haustuer"), "camera.haustuer");
+  const placed = ["camera.front_door", "camera.garden", "light.x"];
+  assert.equal(doorbellCamera(hass, "binary_sensor.front_door_visitor", placed), "camera.front_door");
+  assert.equal(doorbellCamera(hass, "event.front_ding", placed), "camera.garden");
+  assert.equal(doorbellCamera(hass, "event.front_ding", ["camera.front_door"]), null);
+  assert.equal(doorbellCamera(hass, "event.front_ding", placed, "camera.front_door"), "camera.front_door");
 });
 
 test("edges: the first look only remembers, then a change counts once", () => {
@@ -71,8 +71,8 @@ test("edges: the first look only remembers, then a change counts once", () => {
   assert.equal(d.resting(), false);
 });
 
-const bell: Shot = { kind: "doorbell", key: "bell", entity: "event.front_ding", camera: "camera.haustuer" };
-const cam: Shot = { kind: "motion", key: "cam", entity: "binary_sensor.motion", camera: "camera.garten" };
+const bell: Shot = { kind: "doorbell", key: "bell", entity: "event.front_ding", camera: "camera.front_door" };
+const cam: Shot = { kind: "motion", key: "cam", entity: "binary_sensor.motion", camera: "camera.garden" };
 const washer: Shot = { kind: "appliance", key: "app:w", entity: "w" };
 
 test("offers: priority, cooldown, someone at the screen", () => {
@@ -100,9 +100,9 @@ test("own triggers: an event's new stamp, or an entity going on or open (D615)",
   const now = Date.parse("2026-10-17T10:00:05.000Z");
   assert.equal(triggerFired(st("cover.garage", "closed"), st("cover.garage", "opening"), now), true);
   assert.equal(triggerFired(st("cover.garage", "opening"), st("cover.garage", "open"), now), false);
-  assert.equal(triggerFired(st("binary_sensor.tor", "off"), st("binary_sensor.tor", "on"), now), true);
-  assert.equal(triggerFired(st("lock.tuer", "locked"), st("lock.tuer", "unlocked"), now), true);
-  assert.equal(triggerFired(st("event.klingel2", "2026-10-17T09:00:00.000Z"), st("event.klingel2", "2026-10-17T10:00:00.000Z"), now), true);
+  assert.equal(triggerFired(st("binary_sensor.gate", "off"), st("binary_sensor.gate", "on"), now), true);
+  assert.equal(triggerFired(st("lock.front_door", "locked"), st("lock.front_door", "unlocked"), now), true);
+  assert.equal(triggerFired(st("event.doorbell2", "2026-10-17T09:00:00.000Z"), st("event.doorbell2", "2026-10-17T10:00:00.000Z"), now), true);
   assert.equal(triggerFired(st("cover.garage", "unavailable"), st("cover.garage", "open"), now), false);
   assert.equal(triggerFired(undefined, st("cover.garage", "open"), now), false);
 });

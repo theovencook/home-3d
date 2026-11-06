@@ -359,7 +359,7 @@ export class PipesPart {
       const toWasteNode = (n: string) => {
         const { kind, id } = splitNode(n);
         if (kind === "port") return area.pool?.ports?.find((q) => q.id === id)?.kind === "waste";
-        return kind === "joint" && /kanal|waste|abwasser|backwash/i.test(joints.find((j) => j.id === id)?.name ?? "");
+        return kind === "joint" && /waste|backwash/i.test(joints.find((j) => j.id === id)?.name ?? "");
       };
       const resolve = (n: string, other: string) => {
         const { kind, id, port } = splitNode(n);

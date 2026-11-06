@@ -14,31 +14,31 @@ function hassWith(): HomeAssistant {
     connection: {} as HomeAssistant["connection"],
     callWS: async () => undefined as never,
     callService: async () => undefined,
-    areas: { flur: { area_id: "flur", name: "Flur" } },
+    areas: { hall: { area_id: "hall", name: "Hall" } },
     devices: { cam: { id: "cam" } },
     entities: {
-      "binary_sensor.flur_bewegung": { entity_id: "binary_sensor.flur_bewegung", area_id: "flur" },
-      "binary_sensor.flur_tuer": { entity_id: "binary_sensor.flur_tuer", area_id: "flur" },
-      "camera.wohnen": { entity_id: "camera.wohnen", device_id: "cam" },
-      "binary_sensor.wohnen_motion": { entity_id: "binary_sensor.wohnen_motion", device_id: "cam" },
-      "binary_sensor.kueche_presence": { entity_id: "binary_sensor.kueche_presence" },
+      "binary_sensor.hall_motion": { entity_id: "binary_sensor.hall_motion", area_id: "hall" },
+      "binary_sensor.hall_door": { entity_id: "binary_sensor.hall_door", area_id: "hall" },
+      "camera.sample_living": { entity_id: "camera.sample_living", device_id: "cam" },
+      "binary_sensor.living_motion": { entity_id: "binary_sensor.living_motion", device_id: "cam" },
+      "binary_sensor.kitchen_presence": { entity_id: "binary_sensor.kitchen_presence" },
     },
     states: {
-      "binary_sensor.flur_bewegung": st("binary_sensor.flur_bewegung", "off", { device_class: "motion" }),
-      "binary_sensor.flur_tuer": st("binary_sensor.flur_tuer", "off", { device_class: "door" }),
-      "camera.wohnen": st("camera.wohnen", "idle"),
-      "binary_sensor.wohnen_motion": st("binary_sensor.wohnen_motion", "on", { device_class: "motion" }),
-      "binary_sensor.kueche_presence": st("binary_sensor.kueche_presence", "off", { device_class: "presence" }),
+      "binary_sensor.hall_motion": st("binary_sensor.hall_motion", "off", { device_class: "motion" }),
+      "binary_sensor.hall_door": st("binary_sensor.hall_door", "off", { device_class: "door" }),
+      "camera.sample_living": st("camera.sample_living", "idle"),
+      "binary_sensor.living_motion": st("binary_sensor.living_motion", "on", { device_class: "motion" }),
+      "binary_sensor.kitchen_presence": st("binary_sensor.kitchen_presence", "off", { device_class: "presence" }),
     },
   };
 }
 
 function building(): Building {
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   floor.rooms.push({
-    id: "flur",
-    name: "Flur",
-    area_id: "flur",
+    id: "hall",
+    name: "Hall",
+    area_id: "hall",
     points: [
       [0, 0],
       [4, 0],
@@ -46,7 +46,7 @@ function building(): Building {
       [0, 2],
     ],
   } as Building["floors"][number]["rooms"][number]);
-  floor.placements.push({ entity_id: "camera.wohnen", x: 6, z: 1, y: null, rotation: 90 }, { entity_id: "binary_sensor.kueche_presence", x: 8, z: 3, y: null });
+  floor.placements.push({ entity_id: "camera.sample_living", x: 6, z: 1, y: null, rotation: 90 }, { entity_id: "binary_sensor.kitchen_presence", x: 8, z: 3, y: null });
   return { version: 1, settings: { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05 }, floors: [floor], energy: {}, presence: [] } as unknown as Building;
 }
 
@@ -55,9 +55,9 @@ test("trail sources: placed sensors, a camera's motion sensor at the camera, are
   assert.deepEqual(
     sources.map((s) => [s.entity, s.x, s.z]),
     [
-      ["binary_sensor.wohnen_motion", 6, 1],
-      ["binary_sensor.kueche_presence", 8, 3],
-      ["binary_sensor.flur_bewegung", 2, 1],
+      ["binary_sensor.living_motion", 6, 1],
+      ["binary_sensor.kitchen_presence", 8, 3],
+      ["binary_sensor.hall_motion", 2, 1],
     ],
   );
 });
@@ -87,8 +87,8 @@ test("trail events: every off→on change in the window, a live 'on' once, in ti
 
 test("trail points: placed in the plan, repeats within a minute merged, age from 0 to 1", () => {
   const sources = [
-    { entity: "binary_sensor.a", floorId: "eg", x: 1, z: 1 },
-    { entity: "binary_sensor.b", floorId: "eg", x: 5, z: 1 },
+    { entity: "binary_sensor.a", floorId: "ground", x: 1, z: 1 },
+    { entity: "binary_sensor.b", floorId: "ground", x: 5, z: 1 },
   ];
   const events = [
     { entity: "binary_sensor.a", time: NOW - 30 * MIN },

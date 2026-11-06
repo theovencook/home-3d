@@ -88,7 +88,7 @@ function ownDomain(type: string): string | null {
 
 /** Words of a name worth comparing (3+ letters). */
 function words(text: string): Set<string> {
-  return new Set(text.toLowerCase().split(/[^a-z0-9äöüß]+/).filter((w) => w.length >= 3));
+  return new Set(text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3));
 }
 
 /**

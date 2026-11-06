@@ -14,14 +14,14 @@ test("heat colours: cold is blue, warm is red, values in between are mixed", () 
 
 test("room values are the average of the room's sensors of that kind", () => {
   const b = emptyBuilding();
-  b.floors = [{ ...newFloor("eg", "EG", 0), rooms: [{ id: "r", name: "R", area_id: "wohnen", points: [[0, 0], [1, 0], [1, 1]], floor_material: "wood" }] }];
+  b.floors = [{ ...newFloor("ground", "Ground floor", 0), rooms: [{ id: "r", name: "R", area_id: "living", points: [[0, 0], [1, 0], [1, 1]], floor_material: "wood" }] }];
   const st = (id: string, state: string, dc: string) => ({ entity_id: id, state, attributes: { device_class: dc } });
   const hass = {
     language: "de",
     entities: {
-      "sensor.a": { entity_id: "sensor.a", area_id: "wohnen" },
-      "sensor.b": { entity_id: "sensor.b", area_id: "wohnen" },
-      "sensor.h": { entity_id: "sensor.h", area_id: "wohnen" },
+      "sensor.a": { entity_id: "sensor.a", area_id: "living" },
+      "sensor.b": { entity_id: "sensor.b", area_id: "living" },
+      "sensor.h": { entity_id: "sensor.h", area_id: "living" },
     },
     states: { "sensor.a": st("sensor.a", "20", "temperature"), "sensor.b": st("sensor.b", "22", "temperature"), "sensor.h": st("sensor.h", "55", "humidity") },
   } as unknown as HomeAssistant;
@@ -32,11 +32,11 @@ test("room values are the average of the room's sensors of that kind", () => {
 
 test("temperatures in °F are coloured as °C and shown in Home Assistant's unit", () => {
   const b = emptyBuilding();
-  b.floors = [{ ...newFloor("eg", "EG", 0), rooms: [{ id: "r", name: "R", area_id: "wohnen", points: [[0, 0], [1, 0], [1, 1]], floor_material: "wood" }] }];
+  b.floors = [{ ...newFloor("ground", "Ground floor", 0), rooms: [{ id: "r", name: "R", area_id: "living", points: [[0, 0], [1, 0], [1, 1]], floor_material: "wood" }] }];
   const hass = {
     language: "en",
     config: { unit_system: { temperature: "°F" } },
-    entities: { "sensor.a": { entity_id: "sensor.a", area_id: "wohnen" } },
+    entities: { "sensor.a": { entity_id: "sensor.a", area_id: "living" } },
     states: { "sensor.a": { entity_id: "sensor.a", state: "71.6", attributes: { device_class: "temperature", unit_of_measurement: "°F" } } },
   } as unknown as HomeAssistant;
   assert.ok(Math.abs(roomValues(hass, b, "temperature").get("r")! - 22) < 1e-9);

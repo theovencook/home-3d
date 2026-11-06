@@ -1,5 +1,5 @@
 """Spoken answers of the locating feature, straight from Home Assistant (no screen needed):
-"Wo ist Torsten?", "Wo ist mein iPhone?", "Wer ist zu Hause?", "Lass mein iPhone klingeln"."""
+"Where is Alex?", "Where is my iPhone?", "Who is home?", "Ring my iPhone"."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from difflib import SequenceMatcher
 import re
 import time
 from typing import Any, NamedTuple
+import unicodedata
 
 from homeassistant.core import HomeAssistant
 
@@ -71,31 +72,16 @@ def taken_off(worn: dict[str, Any], other: dict[str, Any], now: float) -> bool:
     return now - worn_since >= TAKEN_OFF and float(other.get("since") or 0) > worn_since + LEFT_BEHIND
 
 
-_ART_DE = r"(?P<art>mein|meine|meinen|meins|der|die|das|den)?"
 _WHERE = {
-    "de": re.compile(r"^(?:wo (?:ist|steckt|liegt|sind)|finde|such[e]?)\s+" + _ART_DE + r"\s*(?P<what>.+?)[?.!]*$"),
     "en": re.compile(r"^(?:where(?:'s| is| are)|find)\s+(?P<art>my|the)?\s*(?P<what>.+?)[?.!]*$"),
 }
 _WHO = {
-    "de": re.compile(r"^wer ist (?:gerade |denn )?(?:zu ?hause|daheim|da|im haus)[?.!]*$"),
     "en": re.compile(r"^who(?:'s| is) (?:at )?home[?.!]*$"),
 }
 _RING = {
-    "de": re.compile(r"^(?:lass|lasse)\s+" + _ART_DE + r"\s*(?P<what>.+?)\s+(?:klingeln|piepen|läuten)[?.!]*$"),
     "en": re.compile(r"^(?:ring|beep)\s+(?P<art>my|the)?\s*(?P<what>.+?)[?.!]*$"),
 }
 _TEXT = {
-    "de": {
-        "in": "{who} ist im Raum {room}.",
-        "in_ago": "{who} war zuletzt im Raum {room}, vor {min} Minuten.",
-        "away": "{who} ist gerade nicht zu Hause.",
-        "unheard": "Ich höre {who} gerade nicht.",
-        "nobody": "Gerade ist niemand zu Hause, den ich orten kann.",
-        "home": "Zu Hause: {list}.",
-        "ring": "{who} klingelt jetzt.",
-        "no_ring": "Für {who} ist keine App zum Klingeln eingestellt.",
-        "withheld": "Wo sich Personen aufhalten, sagt dir nur ein Administrator.",
-    },
     "en": {
         "in": "{who} is in the {room}.",
         "in_ago": "{who} was last in the {room}, {min} minutes ago.",
@@ -119,17 +105,17 @@ def _person_name(hass: HomeAssistant, entity_id: str | None) -> str | None:
     return str(state.attributes.get("friendly_name") or entity_id) if state else None
 
 
-MINE = {"mein", "meine", "meinen", "meins", "my"}
+MINE = {"my"}
 
 
 def _tokens(text: str) -> list[str]:
-    """Words as speech recognition may write them: lower case, umlauts spelled out, "th" as "t", no punctuation."""
-    text = _norm(text).replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss").replace("th", "t")
-    return [w for w in re.split(r"[^a-z0-9]+", text) if w]
+    """Words as speech recognition may write them: lower case, without accents, no punctuation."""
+    text = "".join(c for c in unicodedata.normalize("NFKD", _norm(text)) if not unicodedata.combining(c))
+    return [w for w in re.split(r"[\W_]+", text) if w]
 
 
 def _same(spoken: str, name: str) -> bool:
-    """One spoken word against one word of a name: equal, a possessive ("Torstens"), or a small mishearing."""
+    """One spoken word against one word of a name: equal, a possessive ("Alexs"), or a small mishearing."""
     if spoken == name or (spoken.endswith("s") and spoken[:-1] == name):
         return True
     return len(spoken) > 3 and len(name) > 3 and SequenceMatcher(None, spoken, name).ratio() >= 0.8
@@ -156,7 +142,7 @@ def _speaker(hass: HomeAssistant, user_id: str | None) -> str | None:
 def _match(
     hass: HomeAssistant, service: LocateService, what: str, mine: bool = False, user_id: str | None = None
 ) -> tuple[str, list[dict[str, Any]]] | None:
-    """The devices a spoken name means - tolerant of how speech recognition writes it ("Thorstens Apple Watch").
+    """The devices a spoken name means - tolerant of how speech recognition writes it ("Alexs Apple Watch").
     A person's name alone means all their devices; "my" prefers the devices of the person who asked."""
     spoken = [w for w in _tokens(what) if w not in MINE]
     if not spoken:
@@ -165,7 +151,7 @@ def _match(
     scored = [(_score(spoken, d["name"]), d) for d in service.devices]
     best = max((sc for sc, _d in scored), default=0.0)
     if best < 0.6:
-        # maybe a person's name from Home Assistant ("Wo ist Frauke?")
+        # maybe a person's name from Home Assistant ("Where is Sam?")
         by_person: dict[str, list[dict[str, Any]]] = {}
         for device in service.devices:
             if device.get("person"):
@@ -180,7 +166,7 @@ def _match(
         own = [d for d in hits if d.get("person") == speaker]
         hits = own or hits
     device = hits[0]
-    # only a person's name said ("Wo ist Torsten?"): the words sit in every device of that person -> the person
+    # only a person's name said ("Where is Alex?"): the words sit in every device of that person -> the person
     person = device.get("person")
     if person:
         theirs = [d for d in service.devices if d.get("person") == person]
@@ -284,7 +270,7 @@ async def _locate(
 async def ring(hass: HomeAssistant, notify: str, lang: str) -> None:
     """A loud notification through the Home Assistant app (critical on iPhone, alarm channel on Android)."""
     service = notify.removeprefix("notify.")
-    message = "Home 3D sucht dich 🔔" if lang == "de" else "Home 3D is looking for you 🔔"
+    message = "Home 3D is looking for you 🔔"
     await hass.services.async_call(
         "notify",
         service,

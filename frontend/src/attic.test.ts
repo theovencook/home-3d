@@ -34,7 +34,7 @@ test("the roof's underside follows the section's profile, minus the slab", () =>
 });
 
 test("an attic floor's walls end under the slope: knee walls at the eaves, gables up to the ridge", () => {
-  const floor: Floor = { ...newFloor("og", "OG", 2.75), height: 2.5, rooms: [rect("a", 0, 0, 8, 6)] };
+  const floor: Floor = { ...newFloor("upper", "First floor", 2.75), height: 2.5, rooms: [rect("a", 0, 0, 8, 6)] };
   const under = (x: number, z: number) => {
     const y = roofUnderAt(building, x, z);
     return y === null ? null : y - floor.elevation;
@@ -55,7 +55,7 @@ test("an attic floor's walls end under the slope: knee walls at the eaves, gable
 
 test("a window stays below the slope", () => {
   const floor: Floor = {
-    ...newFloor("og", "OG", 2.75),
+    ...newFloor("upper", "First floor", 2.75),
     height: 2.5,
     rooms: [rect("a", 0, 0, 8, 6)],
     openings: [{ id: "w", room_id: "a", edge: 0, offset: 4, width: 1, type: "window", sill: 0.3, height: 1.4, hinge: "left", leaves: 1, swing: "in", cover: null, contact: null, contact2: null, tilt: null }],

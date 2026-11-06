@@ -16,7 +16,7 @@ export function isCooktopZone(p: Pick<PackPart, "shape" | "y" | "h" | "axis">): 
 /** A pack item with a cooktop (a hob unit, a cooker, an island with a hob): its zones glow while it cooks. */
 export function isPackCooktop(type: string): boolean {
   const item = packItem(type);
-  return !!item && /(hob|cooker|stove|herd)/.test(type) && item.parts.filter(isCooktopZone).length >= 2;
+  return !!item && /(hob|cooker|stove)/.test(type) && item.parts.filter(isCooktopZone).length >= 2;
 }
 
 export interface PackPart {
@@ -502,7 +502,7 @@ function energyRoleNow(type: string): EnergyRole | null {
   if (type === "meter" || type === "inverter" || type === "home_battery" || type === "wallbox") return type;
   const item = packInfo(type);
   const role = item?.family ? (ENERGY_FAMILIES[item.family] ?? (/^ev_charger_/.test(item.family) ? "wallbox" : null)) : null;
-  if (role === "meter" && (item!.tags ?? []).some((t) => /^(gas|water|wasser)$/i.test(t))) return null;
+  if (role === "meter" && (item!.tags ?? []).some((t) => /^(gas|water)$/i.test(t))) return null;
   return role;
 }
 

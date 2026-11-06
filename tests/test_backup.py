@@ -21,7 +21,7 @@ PAYLOAD = {
     "items": [
         {
             "id": "cube",
-            "name": {"de": "Würfel", "en": "Cube"},
+            "name": {"fr": "Dé", "en": "Cube"},
             "size": [0.5, 0.5, 0.5],
             "parts": [{"shape": "box", "x": 0, "z": 0, "w": 1, "d": 1, "y": 0, "h": 1, "color": "body"}],
         }

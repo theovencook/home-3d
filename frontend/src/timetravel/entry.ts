@@ -189,7 +189,7 @@ export class Session implements TimeTravelSession {
     return typeof c?.latitude === "number" && typeof c?.longitude === "number" ? { lat: c.latitude, lon: c.longitude } : null;
   }
 
-  /** Energie Pro's sensors are part of the summaries and events. */
+  /** the energy feature's sensors are part of the summaries and events. */
   get energy(): boolean {
     return !!this.opts.spec.energy && this.energyIds.length > 0;
   }

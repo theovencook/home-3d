@@ -81,7 +81,7 @@ def _scanner_device(registry: dr.DeviceRegistry, scanner: Any) -> dr.DeviceEntry
         for kind in (dr.CONNECTION_NETWORK_MAC, dr.CONNECTION_BLUETOOTH):
             if device := registry.async_get_device(connections={(kind, mac)}):
                 return device
-    # by name: a Shelly scanner is named after its device ("Herd (08:92:…)")
+    # by name: a Shelly scanner is named after its device ("Cooker (08:92:…)")
     name = scanner.name.split(" (")[0].strip().lower()
     matches = [d for d in registry.devices.values() if name and name in (_lower(d.name_by_user), _lower(d.name))]
     return matches[0] if len(matches) == 1 else None

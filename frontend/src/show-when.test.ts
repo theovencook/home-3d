@@ -107,7 +107,7 @@ test("an entity and intervals together: both must allow it", () => {
 
 function house() {
   const b = emptyBuilding();
-  b.floors.push(newFloor("eg", "EG", 0));
+  b.floors.push(newFloor("ground", "Ground floor", 0));
   const floor = newFloor("gf", "Ground", 0);
   floor.furniture = [item({ id: "sofa" }), item({ id: "tree", show_when: { intervals: [{ from: "12-01", to: "12-31" }] } })];
   b.floors = [floor];
@@ -204,7 +204,7 @@ test("time travel: a car follows its tracker through the replay, the clock rules
   ]);
   const car = item({ id: "car", type: "car", show_when: { entity: "device_tracker.car", when: "on" } });
   const b = emptyBuilding();
-  b.floors.push(newFloor("eg", "EG", 0));
+  b.floors.push(newFloor("ground", "Ground floor", 0));
   b.floors[0].furniture.push(car);
   const liveHass = { states: { "device_tracker.car": { entity_id: "device_tracker.car", state: "home", attributes: { latitude: 1, longitude: 2, friendly_name: "Car" } } } } as never;
   const r = new Replay(tl, { requested: ["device_tracker.car"], allowed: ["device_tracker.car"] });
@@ -216,7 +216,7 @@ test("time travel: a car follows its tracker through the replay, the clock rules
   // an interval item: out of its window at the replayed moment, whatever the clock says now
   const lamp = item({ id: "lamp", show_when: { intervals: [{ start: "18:00", end: "23:00" }] } });
   const c = emptyBuilding();
-  c.floors.push(newFloor("eg", "EG", 0));
+  c.floors.push(newFloor("ground", "Ground floor", 0));
   c.floors[0].furniture.push(lamp);
   assert.deepEqual(planHiddenItems(c, {}, at("2026-11-01T10:00")), ["lamp"]);
   assert.deepEqual(planHiddenItems(c, {}, at("2026-11-01T19:00")), []);

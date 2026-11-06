@@ -108,7 +108,7 @@ async def test_saved_items_check_as_a_pack_folder(hass: HomeAssistant, hass_ws_c
     client = await hass_ws_client(hass)
     lamp = {
         "id": "globe_lamp",
-        "name": {"en": "Globe lamp", "de": "Kugellampe"},
+        "name": {"en": "Globe lamp", "fr": "Lampe boule"},
         "size": [0.3, 0.3, 0.5],
         "group": "lamp",
         "light": "table",

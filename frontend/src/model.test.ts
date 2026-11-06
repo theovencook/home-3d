@@ -58,9 +58,9 @@ const item = (type: string, x: number, z: number, h: number, extra: Partial<Furn
 
 test("lights placed as devices become lamps of their mount type", () => {
   const b = emptyBuilding();
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   floor.placements = [
-    { entity_id: "light.decke", x: 1, z: 2, y: null, mount: null },
+    { entity_id: "light.ceiling", x: 1, z: 2, y: null, mount: null },
     { entity_id: "light.lese", x: 3, z: 1, y: null, mount: "floor" },
     { entity_id: "switch.tv", x: 2, z: 2, y: null },
   ];
@@ -73,7 +73,7 @@ test("lights placed as devices become lamps of their mount type", () => {
   assert.deepEqual(
     out.furniture.map((f) => [f.type, f.entity, f.x, f.z]),
     [
-      ["lamp_ceiling", "light.decke", 1, 2],
+      ["lamp_ceiling", "light.ceiling", 1, 2],
       ["lamp_floor", "light.lese", 3, 1],
     ],
   );
@@ -83,29 +83,29 @@ test("lights placed as devices become lamps of their mount type", () => {
 
 test("a light's mount height becomes the lamp's mount_y (#381)", () => {
   const b = emptyBuilding();
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   floor.placements = [
-    { entity_id: "light.wand", x: 0, z: 1, y: 2.2, mount: "wall" },
-    { entity_id: "light.decke", x: 1, z: 2, y: null, mount: null },
+    { entity_id: "light.wall", x: 0, z: 1, y: 2.2, mount: "wall" },
+    { entity_id: "light.ceiling", x: 1, z: 2, y: null, mount: null },
   ];
   b.floors = [floor];
   const out = normalizeBuilding(b).floors[0];
-  assert.equal(out.furniture.find((f) => f.entity === "light.wand")?.mount_y, 2.2);
-  assert.equal(out.furniture.find((f) => f.entity === "light.decke")?.mount_y, undefined);
+  assert.equal(out.furniture.find((f) => f.entity === "light.wall")?.mount_y, 2.2);
+  assert.equal(out.furniture.find((f) => f.entity === "light.ceiling")?.mount_y, undefined);
 });
 
 test("a light turned back into a device pin stays a pin", () => {
   const b = emptyBuilding();
-  const floor = newFloor("eg", "EG", 0);
-  floor.placements = [{ entity_id: "light.decke", x: 1, z: 2, y: null, mount: "wall", pin: true }];
+  const floor = newFloor("ground", "Ground", 0);
+  floor.placements = [{ entity_id: "light.ceiling", x: 1, z: 2, y: null, mount: "wall", pin: true }];
   b.floors = [floor];
   const out = normalizeBuilding(b).floors[0];
-  assert.deepEqual(out.placements.map((p) => p.entity_id), ["light.decke"]);
+  assert.deepEqual(out.placements.map((p) => p.entity_id), ["light.ceiling"]);
   assert.equal(out.furniture.length, 0);
 });
 
 test("a table lamp stands on the furniture below it", () => {
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   floor.furniture = [item("nightstand", 1, 1, 0.5), item("table", 4, 1, 0.75), item("sofa", 7, 1, 0.8)];
   assert.equal(surfaceHeight(floor, 1.1, 1), 0.5);
   assert.equal(surfaceHeight(floor, 4, 1.2), 0.75);
@@ -125,11 +125,11 @@ test("a spot grid spreads lamps evenly and leaves out cells outside an L-shaped 
 });
 
 test("outdoor lamps stand on the ground, or on a terrace", () => {
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   floor.outdoor = [{ id: "t", type: "terrace", points: [[0, 0], [4, 0], [4, 3], [0, 3]] }];
   assert.equal(outdoorGround(floor, 10, 10), -0.2);
   assert.ok(Math.abs(outdoorGround(floor, 2, 1) - (-0.2 + 0.12)) < 1e-9);
-  assert.equal(outdoorGround({ ...newFloor("og", "OG", 2.75), outdoor: [] }, 1, 1), 0);
+  assert.equal(outdoorGround({ ...newFloor("upper", "Upper", 2.75), outdoor: [] }, 1, 1), 0);
 });
 
 test("resizing drags one corner while the opposite corner stays", () => {
@@ -149,16 +149,16 @@ test("floors from Home Assistant levels are stacked by level", () => {
   assert.equal(floorElevation([], 1), 2.75);
   assert.equal(floorElevation([], -1), -2.75);
   // without a level, the new floor goes on top
-  assert.equal(floorElevation([newFloor("eg", "EG", 0)], null), 2.75);
+  assert.equal(floorElevation([newFloor("ground", "Ground", 0)], null), 2.75);
 });
 
 test("rooms for areas are laid out beside the existing rooms", () => {
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   floor.rooms = [{ id: "r", name: "R", area_id: null, points: [[0, 0], [5, 0], [5, 4], [0, 4]], floor_material: "wood" }];
   let n = 0;
-  const rooms = roomTiles(floor, [{ area_id: "a", name: "Küche" }, { area_id: "b", name: "Bad" }, { area_id: "c", name: "Flur" }, { area_id: "d", name: "Büro" }], () => `t${n++}`);
+  const rooms = roomTiles(floor, [{ area_id: "a", name: "Kitchen" }, { area_id: "b", name: "Bathroom" }, { area_id: "c", name: "Hall" }, { area_id: "d", name: "Office" }], () => `t${n++}`);
   assert.equal(rooms.length, 4);
-  assert.equal(rooms[0].name, "Küche");
+  assert.equal(rooms[0].name, "Kitchen");
   assert.equal(rooms[0].area_id, "a");
   assert.deepEqual(rooms[0].points[0], [6, 0]);
   // three per row
@@ -173,7 +173,7 @@ test("opening kinds: terrace doors are windows down to the floor, double ones ha
 });
 
 test("a sloped area falls from its high edge to its low edge, lamps follow", () => {
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   floor.outdoor = [{ id: "d", type: "driveway", points: [[0, 0], [10, 0], [10, 3], [0, 3]], slope: 1.2, slope_dir: "-x" }];
   const a = floor.outdoor[0];
   assert.equal(outdoorDrop(a, 10, 1), 0);
@@ -183,7 +183,7 @@ test("a sloped area falls from its high edge to its low edge, lamps follow", () 
 });
 
 test("a patch cut out of a lawn decides the ground inside it", () => {
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   floor.outdoor = [
     { id: "l", type: "lawn", points: [[0, 0], [10, 0], [10, 10], [0, 10]] },
     { id: "w", type: "wild", points: [[2, 2], [4, 2], [4, 4], [2, 4]], cut: true },
@@ -200,16 +200,16 @@ test("a glass wall is a preset of its own (#163)", () => {
 test("outdoor areas with a Home Assistant area act as rooms; hedges, fences and areas without one do not (#100)", () => {
   const sq = (x: number): [number, number][] => [[x, 0], [x + 2, 0], [x + 2, 2], [x, 2]];
   const floor = {
-    ...newFloor("f", "EG", 0),
-    rooms: [{ id: "r", name: "Küche", area_id: "kitchen", points: sq(0), floor_material: "wood" }],
+    ...newFloor("f", "Ground", 0),
+    rooms: [{ id: "r", name: "Kitchen", area_id: "kitchen", points: sq(0), floor_material: "wood" }],
     outdoor: [
-      { id: "g", type: "lawn" as const, points: sq(5), area_id: "garden", name: "Garten" },
+      { id: "g", type: "lawn" as const, points: sq(5), area_id: "garden", name: "Garden" },
       { id: "t", type: "terrace" as const, points: sq(10) },
       { id: "h", type: "hedge" as const, points: sq(15), area_id: "garden" },
     ],
   };
   const zones = outdoorZones(floor);
-  assert.deepEqual(zones.map((z) => [z.id, z.name, z.area_id, z.outdoor]), [["g", "Garten", "garden", true]]);
+  assert.deepEqual(zones.map((z) => [z.id, z.name, z.area_id, z.outdoor]), [["g", "Garden", "garden", true]]);
   assert.deepEqual(zonesOf(floor).map((z) => z.id), ["r", "g"]);
 });
 
@@ -219,7 +219,7 @@ test("a wall switch or socket has one to four gangs; the same entity on two sock
   assert.equal(gangPlateWidth(1), 0.085);
   assert.equal(gangPlateWidth(3), 0.227);
   assert.equal(gangPlateWidth(9), gangPlateWidth(4));
-  assert.deepEqual(gangEntities({ gangs: [{ entity: "switch.relais" }, { entity: "switch.relais" }, { entity: "none" }, { entity: "light.flur" }] }), ["switch.relais", "light.flur"]);
+  assert.deepEqual(gangEntities({ gangs: [{ entity: "switch.sample_relay" }, { entity: "switch.sample_relay" }, { entity: "none" }, { entity: "light.sample_hall" }] }), ["switch.sample_relay", "light.sample_hall"]);
 });
 
 test("a lamp fits under a high worktop step and stands on the floor; on a kitchen worktop it stands on top (#614)", () => {
@@ -248,9 +248,9 @@ test("a lock sits on the main leaf of a double door, not on the seam (#645)", ()
 test("a camera and its look stay together: either one moved takes the other along, the camera gone takes its look (#779)", () => {
   const make = () => {
     const b = emptyBuilding();
-    const f = newFloor("eg", "EG", 0);
-    f.placements.push({ entity_id: "camera.flur", x: 1, z: 1, y: null, rotation: 0 });
-    f.furniture.push({ id: "look", type: "camera_dome", x: 1, z: 1, rotation: 0, w: 0.2, d: 0.2, h: 0.2, variant: null, entity: "none", look_of: "camera.flur" } as Furniture);
+    const f = newFloor("ground", "Ground", 0);
+    f.placements.push({ entity_id: "camera.sample_hall", x: 1, z: 1, y: null, rotation: 0 });
+    f.furniture.push({ id: "look", type: "camera_dome", x: 1, z: 1, rotation: 0, w: 0.2, d: 0.2, h: 0.2, variant: null, entity: "none", look_of: "camera.sample_hall" } as Furniture);
     b.floors = [f];
     return b;
   };

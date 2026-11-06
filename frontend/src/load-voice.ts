@@ -39,7 +39,7 @@ export function setVoiceHere(on: boolean): void {
   }
 }
 
-/** This device's screen name for Assist and the service `home_3d.ask` ("Küche"); empty: reacts to every sentence. */
+/** This device's screen name for Assist and the service `home_3d.ask` ("Kitchen"); empty: reacts to every sentence. */
 export function screenName(): string {
   try {
     return localStorage.getItem("home3d.screen") ?? "";

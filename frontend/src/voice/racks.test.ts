@@ -36,13 +36,13 @@ const ask = (s: string, racks: SpokenRack[] = [rack]) => rackAnswer(s, racks, sa
 
 test("how hot is the rack: the hottest gear and its figure", () => {
   assert.equal(ask("How hot is the rack?")?.text, "Comms rack: NAS is the hottest at 51 °C.");
-  assert.equal(ask("wie warm ist der Serverschrank")?.text, "Comms rack: NAS is the hottest at 51 °C.");
+  assert.equal(ask("how warm is the server cabinet")?.text, "Comms rack: NAS is the hottest at 51 °C.");
   assert.equal(ask("How hot is the rack?")?.rackId, "r1");
 });
 
 test("the UPS battery and runtime come from the gear named, without the word rack", () => {
   assert.equal(ask("What's the UPS battery?")?.text, "UPS: Battery 98 %.");
-  assert.equal(ask("wie lange hält die USV")?.text, "UPS: Runtime 45 min.");
+  assert.equal(ask("how long will the UPS run")?.text, "UPS: Runtime 45 min.");
 });
 
 test("devices online, and a summary of the card", () => {

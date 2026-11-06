@@ -12,7 +12,7 @@ const pool: OutdoorArea = {
   points: [[0, -8], [4, -8], [4, -4], [0, -4]],
   pool: { ports: [{ id: "sk", kind: "skimmer", x: 1, z: -4 }], joints: [{ id: "t", x: 3, z: 0.05, y: 0.9 }] },
 } as OutdoorArea;
-const floor = { ...newFloor("eg", "EG", 0), rooms: [garage], outdoor: [pool] };
+const floor = { ...newFloor("ground", "Ground", 0), rooms: [garage], outdoor: [pool] };
 floor.furniture = [{ id: "pump", type: "pool_pump", x: 2, z: 0.4, rotation: 0, w: 0.7, d: 0.32, h: 0.4, variant: null, mount_y: null } as never];
 const b = { floors: [floor], settings: {} } as unknown as Building;
 const nodeAt = poolNodeAt(b, floor, pool);
@@ -26,7 +26,7 @@ test("pool nodes: the pump's connection, a T-piece, unknown nodes", () => {
 });
 
 test("an older level pipe becomes one with a height per point, along the same path", () => {
-  const old: PoolPipe = { id: "p", from: "port:sk", to: "dev:pump", floor_id: "eg", points: [[1, 0.05]], height: -0.3 };
+  const old: PoolPipe = { id: "p", from: "port:sk", to: "dev:pump", floor_id: "ground", points: [[1, 0.05]], height: -0.3 };
   const laid = laidPipe(old, nodeAt);
   assert.equal(laid.points.length, 3);
   assert.deepEqual(laid.heights, [-0.3, -0.3, -0.3]);
@@ -38,7 +38,7 @@ test("a T-piece splits a pipe: both parts meet at the joint, the valve stays on 
     id: "p",
     from: "dev:pump",
     to: "",
-    floor_id: "eg",
+    floor_id: "ground",
     points: [[2, 0.05], [2, 0.05], [4, 0.05]],
     heights: [0.2, 0.9, 0.9],
     fittings: [
@@ -65,13 +65,13 @@ test("runs on a wall: the pieces near the wall in wall coordinates, own points, 
     id: "p",
     from: "",
     to: "dev:pump",
-    floor_id: "eg",
+    floor_id: "ground",
     points: [[1, 0.05], [1, 0.05], [2, 0.05]],
     heights: [-0.3, 0.9, 0.9],
     fittings: [{ id: "v", kind: "valve", at: 0.6 }],
   };
   // a pipe far out in the garden does not show
-  const far: PoolPipe = { id: "far", from: "", to: "", floor_id: "eg", points: [[1, -5], [3, -5]], heights: [0, 0] };
+  const far: PoolPipe = { id: "far", from: "", to: "", floor_id: "ground", points: [[1, -5], [3, -5]], heights: [0, 0] };
   const runs = runsOnWall(roomEdgeFrame(garage, 0), [p, far], nodeAt);
   assert.equal(runs.length, 1);
   const r = runs[0];
@@ -101,7 +101,7 @@ test("a new connection: through a wall hole out under the ground, split at a T-p
   let n = 0;
   const ids = (k: string) => `${k}${++n}`;
   const suction = (node: string) => (node === "port:sk" ? ("source" as const) : node === "dev:pump:suction" ? ("sink" as const) : null);
-  const out = planConnection({ from: "dev:pump", vias: [{ kind: "valve" }, { kind: "hole", joint: "h1" }], to: ["port:in1", "port:in2"], floorId: "eg" }, at, [hole], suction, ids);
+  const out = planConnection({ from: "dev:pump", vias: [{ kind: "valve" }, { kind: "hole", joint: "h1" }], to: ["port:in1", "port:in2"], floorId: "ground" }, at, [hole], suction, ids);
   // pump -> hole inside, hole outside -> T, T -> each inlet
   assert.deepEqual(out.pipes.map((p) => [p.from, p.to]), [
     ["dev:pump", "joint:h1:inside"],
@@ -118,7 +118,7 @@ test("a new connection: through a wall hole out under the ground, split at a T-p
   assert.deepEqual([outside.points[0], outside.heights![0]], [[2, -0.83], 0.4]);
   assert.ok(outside.heights!.slice(1).every((h) => h === -0.3));
   // drawn from the skimmer's side the other way round: the water still runs to the pump
-  const back = planConnection({ from: "dev:pump:suction", vias: [], to: ["port:sk"], floorId: "eg" }, at, [hole], suction, ids);
+  const back = planConnection({ from: "dev:pump:suction", vias: [], to: ["port:sk"], floorId: "ground" }, at, [hole], suction, ids);
   assert.deepEqual([back.pipes[0].from, back.pipes[0].to], ["port:sk", "dev:pump:suction"]);
 });
 
@@ -128,7 +128,7 @@ test("a hole passed the way it was chosen: in from outside (the drain's line com
   const fl = { ...floor, outdoor: [area2] };
   const at = poolNodeAt({ floors: [fl], settings: {} } as unknown as Building, fl, area2);
   let n = 0;
-  const out = planConnection({ from: "port:bd", vias: [{ kind: "hole", joint: "h1", dir: "in" }], to: ["dev:pump:suction"], floorId: "eg" }, at, [hole], (x) => (x === "port:bd" ? "source" : x === "dev:pump:suction" ? "sink" : null), (k) => `${k}${++n}`);
+  const out = planConnection({ from: "port:bd", vias: [{ kind: "hole", joint: "h1", dir: "in" }], to: ["dev:pump:suction"], floorId: "ground" }, at, [hole], (x) => (x === "port:bd" ? "source" : x === "dev:pump:suction" ? "sink" : null), (k) => `${k}${++n}`);
   assert.deepEqual(out.pipes.map((p) => [p.from, p.to]), [
     ["port:bd", "joint:h1:outside"],
     ["joint:h1:inside", "dev:pump:suction"],
@@ -137,7 +137,7 @@ test("a hole passed the way it was chosen: in from outside (the drain's line com
 
 test("connections: followed through holes to the next part, seen from both ends", () => {
   const holes = [{ id: "h", kind: "wall" as const, x: 0, z: 0, y: 0.4, nx: 0, nz: 1, depth: 0.3 }];
-  const p = (id: string, from: string, to: string, fittings: PoolPipe["fittings"] = null): PoolPipe => ({ id, from, to, floor_id: "eg", points: [], fittings });
+  const p = (id: string, from: string, to: string, fittings: PoolPipe["fittings"] = null): PoolPipe => ({ id, from, to, floor_id: "ground", points: [], fittings });
   const pipes = [p("a", "dev:f:return", "joint:h:inside", [{ id: "v", kind: "valve", at: 0.3 }]), p("b", "joint:h:outside", "joint:t:in"), p("c", "joint:t:out1", "port:in1")];
   const fromFilter = connectionsAt(pipes, holes, "dev:f:return");
   assert.deepEqual(fromFilter, [{ start: "dev:f:return", other: "joint:t:in", pipes: ["a", "b"], holes: [{ joint: "h", dir: "out" }], fittings: ["valve"] }]);
@@ -154,7 +154,7 @@ test("the water's direction: built from a T-piece outside to the filter's return
   const at = poolNodeAt({ floors: [fl], settings: {} } as unknown as Building, fl, area2);
   let n = 0;
   const flow = (x: string) => (x === "dev:pump:pressure" ? ("source" as const) : null);
-  const out = planConnection({ from: "joint:t:out2", vias: [{ kind: "hole", joint: "h1", dir: "in" }, { kind: "valve" }], to: ["dev:pump:pressure"], floorId: "eg" }, at, area2.pool!.joints!, flow, (k) => `${k}${++n}`);
+  const out = planConnection({ from: "joint:t:out2", vias: [{ kind: "hole", joint: "h1", dir: "in" }, { kind: "valve" }], to: ["dev:pump:pressure"], floorId: "ground" }, at, area2.pool!.joints!, flow, (k) => `${k}${++n}`);
   assert.deepEqual(out.pipes.map((p) => [p.from, p.to]), [
     ["joint:h1:outside", "joint:t:out2"],
     ["dev:pump:pressure", "joint:h1:inside"],
@@ -165,7 +165,7 @@ test("the water's direction: built from a T-piece outside to the filter's return
 
 test("a pipe at the bottom drain leaves under the pool's floor and comes up outside the pool", async () => {
   const { underBasin } = await import("./pool-runs.ts");
-  const floor = { id: "eg", name: "EG", elevation: 0, height: 2.5, cut_height: 1.15, rooms: [], openings: [], furniture: [], placements: [], background: null } as unknown as Parameters<typeof underBasin>[3];
+  const floor = { id: "ground", name: "Ground", elevation: 0, height: 2.5, cut_height: 1.15, rooms: [], openings: [], furniture: [], placements: [], background: null } as unknown as Parameters<typeof underBasin>[3];
   const area = { id: "p", type: "pool", points: [[0, 0], [8, 0], [8, 4], [0, 4]], depth: 1.5, rim: 0.2, pool: { ports: [{ id: "bd", kind: "drain", x: 4, z: 2 }] } } as unknown as Parameters<typeof underBasin>[2];
   // the pool lies in a lawn (else it is drawn shallow)
   (floor as unknown as { outdoor: unknown[] }).outdoor = [{ id: "l", type: "lawn", points: [[-5, -5], [20, -5], [20, 10], [-5, 10]] }, area];
@@ -184,7 +184,7 @@ test("a pipe at the bottom drain leaves under the pool's floor and comes up outs
 
 test("an inlet's pipe comes straight through the pool wall at its depth, not down through the water", async () => {
   const { poolWallNormal, underBasin } = await import("./pool-runs.ts");
-  const floor = { id: "eg", name: "EG", elevation: 0, height: 2.5, cut_height: 1.15, rooms: [], openings: [], furniture: [], placements: [], background: null } as unknown as Parameters<typeof underBasin>[3];
+  const floor = { id: "ground", name: "Ground", elevation: 0, height: 2.5, cut_height: 1.15, rooms: [], openings: [], furniture: [], placements: [], background: null } as unknown as Parameters<typeof underBasin>[3];
   const area = { id: "p", type: "pool", points: [[0, 0], [8, 0], [8, 4], [0, 4]], pool: { ports: [{ id: "in", kind: "inlet", x: 8, z: 2 }] } } as unknown as Parameters<typeof underBasin>[2];
   assert.deepEqual(poolWallNormal(area, [8, 2]), [1, 0]);
   assert.deepEqual(poolWallNormal({ points: [[0, 0], [0, 4], [8, 4], [8, 0]] }, [8, 2]), [1, 0]);
@@ -196,9 +196,9 @@ test("an inlet's pipe comes straight through the pool wall at its depth, not dow
   assert.deepEqual(path.at(-3), [8.35, -0.3, 2]);
 });
 
-test("an inlet pipe drawn along the wall line moves out behind the wall: no zigzag (Torsten's T-piece)", async () => {
+test("an inlet pipe drawn along the wall line moves out behind the wall: no zigzag (a T-piece at the wall)", async () => {
   const { underBasin } = await import("./pool-runs.ts");
-  const floor = { id: "eg", name: "EG", elevation: 0, height: 2.5, cut_height: 1.15, rooms: [], openings: [], furniture: [], placements: [], background: null } as unknown as Parameters<typeof underBasin>[3];
+  const floor = { id: "ground", name: "Ground", elevation: 0, height: 2.5, cut_height: 1.15, rooms: [], openings: [], furniture: [], placements: [], background: null } as unknown as Parameters<typeof underBasin>[3];
   const area = { id: "p", type: "pool", points: [[3, -7.15], [10.65, -7.15], [10.65, -3.85], [3, -3.85]], pool: { ports: [{ id: "in", kind: "inlet", x: 3, z: -6.55 }] } } as unknown as Parameters<typeof underBasin>[2];
   // T-piece at x 2.15, the pipe along the wall line x = 3 to the inlet, which sits at -0.59
   const path = underBasin([[2.15, -0.3, -5.65], [3, -0.3, -5.65], [3, -0.3, -6.55], [3, -0.59, -6.55]], { from: "joint:t:out1", to: "port:in" }, area, floor);

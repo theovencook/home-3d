@@ -16,13 +16,13 @@ function live() {
   const hass = {
     language: "de",
     entities: { "light.a": { entity_id: "light.a", area_id: "k" } },
-    areas: { k: { area_id: "k", name: "Küche" } },
+    areas: { k: { area_id: "k", name: "Kitchen" } },
     devices: {},
     floors: {},
     config: { latitude: 52.52, longitude: 13.405 },
     states: {
-      "light.a": st("light.a", "on", { friendly_name: "Lampe", supported_color_modes: ["color_temp"], brightness: 255, color_temp_kelvin: 6500 }),
-      "cover.b": st("cover.b", "open", { friendly_name: "Rollo", current_position: 100, supported_features: 15 }),
+      "light.a": st("light.a", "on", { friendly_name: "Lamp", supported_color_modes: ["color_temp"], brightness: 255, color_temp_kelvin: 6500 }),
+      "cover.b": st("cover.b", "open", { friendly_name: "Blind", current_position: 100, supported_features: 15 }),
       "sensor.t": st("sensor.t", "25.3", { unit_of_measurement: "°C", state_class: "measurement" }),
       "binary_sensor.gone": st("binary_sensor.gone", "on", { device_class: "door" }),
       "person.mia": st("person.mia", "home"),
@@ -70,7 +70,7 @@ test("replay: the live registries stay, the states are the past ones with the st
   const light = h.states["light.a"];
   assert.equal(light.state, "on");
   // the past brightness and colour, the name and the colour modes from the live entity
-  assert.deepEqual(light.attributes, { friendly_name: "Lampe", supported_color_modes: ["color_temp"], brightness: 128, color_mode: "color_temp", color_temp_kelvin: 2700 });
+  assert.deepEqual(light.attributes, { friendly_name: "Lamp", supported_color_modes: ["color_temp"], brightness: 128, color_mode: "color_temp", color_temp_kelvin: 2700 });
   assert.equal(light.last_changed, new Date(at(3600)).toISOString());
   // off: no live brightness left over
   const off = r.hassAt(hass, at(8000)).states["light.a"];
@@ -135,13 +135,13 @@ test("replay: a live state change keeps the replayed object – cameras included
   assert.equal(h2, h1);
   assert.equal(h2.states["camera.c"], cam);
   assert.equal(h2.states["scene.s"], st["scene.s"]);
-  assert.equal(h2.states["light.a"].attributes.friendly_name, "Lampe");
+  assert.equal(h2.states["light.a"].attributes.friendly_name, "Lamp");
   assert.equal(h2.states["binary_sensor.gone"].state, "unknown");
   // the clock moves on: the changed light is new, everything else stays the same object
   const h3 = r.hassAt(tick, at(7300));
   assert.notEqual(h3, h1);
   assert.equal(h3.states["light.a"].state, "off");
-  assert.equal(h3.states["light.a"].attributes.friendly_name, "Lampe");
+  assert.equal(h3.states["light.a"].attributes.friendly_name, "Lamp");
   assert.equal(h3.states["camera.c"], cam);
   assert.equal(h3.states["scene.s"], st["scene.s"]);
   assert.equal(h3.states["sensor.t"], h1.states["sensor.t"]);
@@ -209,8 +209,8 @@ test("replay: history rows for the motion trail come from the fetched history", 
 test("the request: the view's entities and the rooms' devices, measurements as statistics, never people", () => {
   const { hass } = live();
   const b = emptyBuilding();
-  const floor = newFloor("eg", "EG", 0);
-  floor.rooms = [{ id: "r", name: "Küche", area_id: "k", points: [[0, 0], [4, 0], [4, 3], [0, 3]], floor_material: "tiles" }];
+  const floor = newFloor("ground", "Ground", 0);
+  floor.rooms = [{ id: "r", name: "Kitchen", area_id: "k", points: [[0, 0], [4, 0], [4, 3], [0, 3]], floor_material: "tiles" }];
   b.floors = [floor];
   b.presence = [{ person: "person.mia", sensor: "sensor.t" }];
   const spec: HistorySpec = { entities: ["cover.b", "person.mia", "device_tracker.phone", "camera.c", "sensor.t", "binary_sensor.gone"], openings: [], furniture: [], low: false };
@@ -229,14 +229,14 @@ test("the request: the view's entities and the rooms' devices, measurements as s
 
 test("roles: a front door, a room door, a garage door and windows from the openings; sensors by their class", () => {
   const b = emptyBuilding();
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   floor.rooms = [
-    { id: "flur", name: "Flur", area_id: null, points: [[0, 0], [3, 0], [3, 3], [0, 3]], floor_material: "oak" },
-    { id: "kueche", name: "Küche", area_id: null, points: [[3, 0], [7, 0], [7, 3], [3, 3]], floor_material: "tiles" },
+    { id: "hall", name: "Hall", area_id: null, points: [[0, 0], [3, 0], [3, 3], [0, 3]], floor_material: "oak" },
+    { id: "kitchen", name: "Kitchen", area_id: null, points: [[3, 0], [7, 0], [7, 3], [3, 3]], floor_material: "tiles" },
   ];
   const o = (id: string, room_id: string, edge: number, type: Opening["type"], extra: Partial<Opening> = {}): Opening => ({ id, room_id, edge, offset: 1.5, width: 0.9, type, sill: 0, height: 2, hinge: "left", leaves: 1, swing: "in", cover: null, contact: null, tilt: null, contact2: null, ...extra }) as Opening;
   // the hall's bottom edge is outside, its right edge is the wall to the kitchen
-  floor.openings = [o("front", "flur", 0, "door"), o("inner", "flur", 1, "door"), o("glass", "kueche", 1, "door", { style: "passage" }), o("win", "kueche", 2, "window"), o("gar", "kueche", 0, "garage")];
+  floor.openings = [o("front", "hall", 0, "door"), o("inner", "hall", 1, "door"), o("glass", "kitchen", 1, "door", { style: "passage" }), o("win", "kitchen", 2, "window"), o("gar", "kitchen", 0, "garage")];
   b.floors = [floor];
   assert.equal(exteriorDoor(floor, floor.openings[0]), true);
   assert.equal(exteriorDoor(floor, floor.openings[1]), false);
@@ -270,7 +270,7 @@ test("roles: a front door, a room door, a garage door and windows from the openi
 
 test("a washing machine is watched through its linked power sensor, else a power plug placed next to it", () => {
   const b = emptyBuilding();
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   const item = (id: string, type: string, x: number) => ({ id, type, x, z: 1, w: 0.6, d: 0.6, h: 0.85, rotation: 0, variant: null });
   floor.furniture = [item("wm", "washer", 2), item("dw", "dishwasher", 6), item("sofa", "sofa", 4)];
   floor.placements = [
@@ -352,7 +352,7 @@ test("the request: the person or tracker of a show/hide rule is fetched as a car
   const { hass } = live();
   hass.states["person.mia"] = { entity_id: "person.mia", state: "home", attributes: { device_trackers: ["device_tracker.phone"] } };
   const b = emptyBuilding();
-  b.floors.push(newFloor("eg", "EG", 0));
+  b.floors.push(newFloor("ground", "Ground", 0));
   b.floors[0].furniture.push({ id: "c", type: "car", x: 0, z: 0, w: 1, d: 1, h: 1, rotation: 0, show_when: { entity: "device_tracker.phone", when: "on" } } as never);
   b.floors[0].furniture.push({ id: "d", type: "car", x: 0, z: 0, w: 1, d: 1, h: 1, rotation: 0, show_when: { entity: "person.mia", when: "on" } } as never);
   const req = historyRequest(hass, b, { entities: [], openings: [], furniture: [], low: false });
@@ -361,7 +361,7 @@ test("the request: the person or tracker of a show/hide rule is fetched as a car
   assert.ok(!req.hidden.includes("person.mia"));
 });
 
-test("the request: a car's tracker is fetched for Auto Pro, a person's own tracker never", () => {
+test("the request: a car's tracker is fetched for the car feature, a person's own tracker never", () => {
   const { hass } = live();
   hass.states["device_tracker.car"] = { entity_id: "device_tracker.car", state: "home", attributes: {} };
   hass.states["person.mia"] = { entity_id: "person.mia", state: "home", attributes: { device_trackers: ["device_tracker.phone"] } };

@@ -93,8 +93,8 @@ shows, and flies to the rack:
 A rack is meant by the word "rack" (or cabinet), by its own name or by a piece of gear it holds, so name the rack when
 there are several ("how hot is the garage rack?"). If the rack has nothing linked for what you asked, it says so;
 "hottest" and "online" work even when the card does not show them. Home 3D answers only from the rack's values and
-does not search the rest of Home Assistant. The sentences work in German and English, with the main words of a few
-other languages; anything that is not a question about a rack goes on to Assist. Voice never switches or restarts gear
+does not search the rest of Home Assistant. The sentences work in English, with the main words of a few other
+languages; anything that is not a question about a rack goes on to Assist. Voice never switches or restarts gear
 here.
 
 ## Performance

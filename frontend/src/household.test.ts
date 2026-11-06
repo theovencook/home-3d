@@ -8,33 +8,33 @@ const st = (entity_id: string, state: string, attributes: Record<string, unknown
 const hassOf = (...states: HassEntity[]): HomeAssistant => ({ states: Object.fromEntries(states.map((s) => [s.entity_id, s])) }) as unknown as HomeAssistant;
 
 test("calendar entries are found by the words of each kind of waste, in many languages", () => {
-  assert.ok(wasteMatches("Papiertonne", "paper"));
-  assert.ok(wasteMatches("Altpapier / Pappe", "paper"));
-  assert.ok(wasteMatches("Biotonne", "bio"));
-  assert.ok(wasteMatches("Restmüll 14-täglich", "rest"));
-  assert.ok(wasteMatches("Gelber Sack", "plastic"));
+  assert.ok(wasteMatches("Paper bin", "paper"));
+  assert.ok(wasteMatches("Paper and cardboard", "paper"));
+  assert.ok(wasteMatches("Food waste", "bio"));
+  assert.ok(wasteMatches("General waste fortnightly", "rest"));
+  assert.ok(wasteMatches("Plastic packaging", "plastic"));
   assert.ok(wasteMatches("GFT-afval", "bio"));
   assert.ok(wasteMatches("PMD", "plastic"));
   assert.ok(wasteMatches("Recycling collection", "recycling"));
   assert.ok(wasteMatches("Garden waste", "garden"));
   assert.ok(wasteMatches("Collecte des emballages", "plastic"));
   // one kind's entry is not another's
-  assert.ok(!wasteMatches("Papiertonne", "bio"));
-  assert.ok(!wasteMatches("Biotonne", "paper"));
-  // an own word wins (a "Grüne Tonne" that takes paper in one town)
-  assert.ok(wasteMatches("Grüne Tonne", "paper", "grüne tonne"));
-  assert.ok(!wasteMatches("Papier", "paper", "grüne tonne"));
-  assert.ok(!wasteMatches("Papier", "other"));
+  assert.ok(!wasteMatches("Paper bin", "bio"));
+  assert.ok(!wasteMatches("Food waste", "paper"));
+  // an own word wins (a "Blue bin" that takes paper in one town)
+  assert.ok(wasteMatches("Blue bin", "paper", "blue bin"));
+  assert.ok(!wasteMatches("Paper", "paper", "blue bin"));
+  assert.ok(!wasteMatches("Paper", "other"));
 });
 
 test("all-day events are local days; the waste calendars of the bins are collected once", () => {
-  const p = pickupsOf([{ summary: "Bio", start: { date: "2026-10-16" } }, { summary: "Papier", start: { dateTime: "2026-10-15T06:00:00+02:00" } }, { summary: "broken" }]);
+  const p = pickupsOf([{ summary: "Bio", start: { date: "2026-10-16" } }, { summary: "Paper", start: { dateTime: "2026-10-15T06:00:00+02:00" } }, { summary: "broken" }]);
   assert.equal(p.length, 2);
-  assert.equal(p[0].summary, "Papier");
+  assert.equal(p[0].summary, "Paper");
   assert.equal(p[1].day.getDate(), 16);
   assert.equal(p[1].day.getHours(), 0);
-  const floors = [{ furniture: [{ type: "waste_bin", bin_source: "calendar.abfall" }, { type: "waste_bin", bin_source: "calendar.abfall" }, { type: "waste_bin", bin_source: "sensor.papier" }] as Furniture[] }];
-  assert.deepEqual(wasteCalendars(floors), ["calendar.abfall"]);
+  const floors = [{ furniture: [{ type: "waste_bin", bin_source: "calendar.waste" }, { type: "waste_bin", bin_source: "calendar.waste" }, { type: "waste_bin", bin_source: "sensor.paper" }] as Furniture[] }];
+  assert.deepEqual(wasteCalendars(floors), ["calendar.waste"]);
 });
 
 test("a bin glows from 2 pm the day before until noon on the day", () => {
@@ -47,13 +47,13 @@ test("a bin glows from 2 pm the day before until noon on the day", () => {
 });
 
 test("the next pickup of a bin from its calendar; after noon on the day the next one counts", () => {
-  const pickups = new Map([["calendar.abfall", pickupsOf([
-    { summary: "Papier", start: { date: "2026-10-15" } },
+  const pickups = new Map([["calendar.waste", pickupsOf([
+    { summary: "Paper", start: { date: "2026-10-15" } },
     { summary: "Bio", start: { date: "2026-10-16" } },
-    { summary: "Papier", start: { date: "2026-10-29" } },
+    { summary: "Paper", start: { date: "2026-10-29" } },
   ])]]);
-  const paper = { bin_kind: "paper", bin_source: "calendar.abfall" } as Furniture;
-  const bio = { bin_kind: "bio", bin_source: "calendar.abfall" } as Furniture;
+  const paper = { bin_kind: "paper", bin_source: "calendar.waste" } as Furniture;
+  const bio = { bin_kind: "bio", bin_source: "calendar.waste" } as Furniture;
   const hass = hassOf();
   const morning = new Date(2026, 9, 15, 8, 0);
   assert.deepEqual([binDue(paper, hass, pickups, morning)?.days, binDue(paper, hass, pickups, morning)?.glow], [0, true]);
@@ -62,7 +62,7 @@ test("the next pickup of a bin from its calendar; after noon on the day the next
   assert.equal(binDue(bio, hass, pickups, evening)?.glow, true);
   // the paper bin was emptied this morning: two weeks to go
   assert.equal(binDue(paper, hass, pickups, evening)?.days, 14);
-  assert.equal(binDue({ bin_kind: "glass", bin_source: "calendar.abfall" } as Furniture, hass, pickups, morning), null);
+  assert.equal(binDue({ bin_kind: "glass", bin_source: "calendar.waste" } as Furniture, hass, pickups, morning), null);
   assert.equal(binDue({ bin_kind: "paper" } as Furniture, hass, pickups, morning), null);
 });
 
@@ -70,8 +70,8 @@ test("a sensor gives the days left: a number, a date, Waste Collection Schedule'
   const now = new Date(2026, 9, 15, 10, 0);
   assert.equal(sensorDays(st("sensor.a", "2"), now), 2);
   assert.equal(sensorDays(st("sensor.a", "2026-10-17"), now), 2);
-  assert.equal(sensorDays(st("sensor.a", "Papier in 3 Tagen", { daysTo: 3 }), now), 3);
-  assert.equal(sensorDays(st("sensor.a", "Morgen"), now), 1);
+  assert.equal(sensorDays(st("sensor.a", "Paper in 3 days", { daysTo: 3 }), now), 3);
+  assert.equal(sensorDays(st("sensor.a", "Tomorrow"), now), 1);
   assert.equal(sensorDays(st("sensor.a", "Today"), now), 0);
   assert.equal(sensorDays(st("sensor.a", "in 5 days"), now), 5);
   const bin = { bin_kind: "paper", bin_source: "sensor.a" } as Furniture;
@@ -127,7 +127,7 @@ test("the time left of a program: minutes, seconds, hours, an end time, H:MM", (
   assert.equal(remainingText(23), "23 min");
   assert.equal(remainingText(65), "1:05 h");
   assert.ok(isFinishedState(st("sensor.program", "Finished")));
-  assert.ok(isFinishedState(st("sensor.program", "Beendet")));
+  assert.ok(isFinishedState(st("sensor.program", "Completed")));
   assert.ok(isFinishedState(st("sensor.program", "Terminé")));
   assert.ok(!isFinishedState(st("sensor.program", "run")));
 });
@@ -175,39 +175,39 @@ test("the glow hours can be set for the house; a tap on a bin lists its next pic
   assert.equal(binGlows(1, new Date(2026, 9, 15, 9, 0), { from: 8 }), true);
   assert.equal(binGlows(1, new Date(2026, 9, 15, 7, 30), { from: 8 }), false);
   assert.equal(binGlows(0, new Date(2026, 9, 15, 15, 0), { until: 18 }), true);
-  const pickups = new Map([["calendar.abfall", pickupsOf([
-    { summary: "Papier", start: { date: "2026-10-15" } },
+  const pickups = new Map([["calendar.waste", pickupsOf([
+    { summary: "Paper", start: { date: "2026-10-15" } },
     { summary: "Bio", start: { date: "2026-10-16" } },
-    { summary: "Papier", start: { date: "2026-10-29" } },
-    { summary: "Papier", start: { date: "2026-11-12" } },
-    { summary: "Papier", start: { date: "2026-11-26" } },
+    { summary: "Paper", start: { date: "2026-10-29" } },
+    { summary: "Paper", start: { date: "2026-11-12" } },
+    { summary: "Paper", start: { date: "2026-11-26" } },
   ])]]);
-  const next = binNext({ bin_kind: "paper", bin_source: "calendar.abfall" }, hassOf(), pickups, new Date(2026, 9, 15, 18, 0));
+  const next = binNext({ bin_kind: "paper", bin_source: "calendar.waste" }, hassOf(), pickups, new Date(2026, 9, 15, 18, 0));
   assert.deepEqual(next.map((p) => p.day.getDate()), [15, 29, 12]);
   assert.deepEqual(binNext({ bin_kind: "paper", bin_source: "sensor.p" }, hassOf(st("sensor.p", "3")), pickups, new Date(2026, 9, 15, 18, 0)).map((p) => p.day.getDate()), [18]);
 });
 
 test("a sensor's free text: the days, not another number in it (D576)", () => {
   const st = (state: string) => ({ entity_id: "sensor.rest", state, attributes: {} });
-  assert.equal(sensorDays(st("Restabfalltonne 2-wöchentlich in 4 Tagen")), 4);
+  assert.equal(sensorDays(st("General waste fortnightly in 4 days")), 4);
   assert.equal(sensorDays(st("in 3 days")), 3);
   assert.equal(sensorDays(st("Bio: 11 dagen")), 11);
-  assert.equal(sensorDays(st("Tonne 120 l, 5")), 5);
+  assert.equal(sensorDays(st("Bin 120 l, 5")), 5);
 });
 
 test("a sensor's date in its text: Waste Collection Schedule's formats (1.20.1 took the year for the days)", () => {
   const now = new Date(2026, 9, 19, 9, 0);
   const st = (state: string) => ({ entity_id: "sensor.bio", state, attributes: {} });
   assert.equal(sensorDays(st("on Mon, 26.10.2026"), now), 7);
-  assert.equal(sensorDays(st("am Mo, 19.10.2026"), now), 0);
-  assert.equal(sensorDays(st("Biotonne 28.10."), now), 9);
-  assert.equal(sensorDays(st("2026-10-29 (Do)"), now), 10);
+  assert.equal(sensorDays(st("Mon 19.10.2026"), now), 0);
+  assert.equal(sensorDays(st("Food waste 28.10."), now), 9);
+  assert.equal(sensorDays(st("2026-10-29 (Thu)"), now), 10);
   assert.equal(sensorDays(st("29/10/2026"), now), 10);
   assert.equal(sensorDays(st("10/29/2026"), now), 10);
   // a date without a year that has passed this year is next year's
-  assert.equal(sensorDays(st("Weihnachtsbaum 05.01."), now), 78);
+  assert.equal(sensorDays(st("Christmas tree 05.01."), now), 78);
   // numbers that are no date stay as they were
-  assert.equal(sensorDays(st("Restabfalltonne 2-wöchentlich in 4 Tagen"), now), 4);
+  assert.equal(sensorDays(st("General waste fortnightly in 4 days"), now), 4);
 });
 
 test("the pickup day across a clock change is the right calendar day (D576)", () => {
@@ -219,10 +219,10 @@ test("the pickup day across a clock change is the right calendar day (D576)", ()
   assert.equal(due?.day.getDay(), 3);
 });
 
-const tag = (id: string, x: number, days: number, extra: Partial<HouseholdTag> = {}): HouseholdTag => ({ id, floorId: "eg", x, z: 0, y: 1, r: 0.37, name: id, color: "#888888", when: `${days}`, days, ...extra });
+const tag = (id: string, x: number, days: number, extra: Partial<HouseholdTag> = {}): HouseholdTag => ({ id, floorId: "ground", x, z: 0, y: 1, r: 0.37, name: id, color: "#888888", when: `${days}`, days, ...extra });
 
 test("bins standing together share one tag, its lines in pickup order; a mailbox and bins far apart keep their own", () => {
-  const groups = groupTags([tag("paper", 0.65, 1), tag("rest", 0, 0), tag("bio", 1.3, 3), tag("far", 5, 0), tag("mail", 0.3, -1, { icon: "mail" }), tag("other floor", 0.65, 2, { floorId: "og" })]);
+  const groups = groupTags([tag("paper", 0.65, 1), tag("rest", 0, 0), tag("bio", 1.3, 3), tag("far", 5, 0), tag("mail", 0.3, -1, { icon: "mail" }), tag("other floor", 0.65, 2, { floorId: "upper" })]);
   assert.equal(groups.length, 4);
   const row = groups.find((g) => g.lines.length === 3)!;
   assert.deepEqual(row.lines.map((l) => l.id), ["rest", "paper", "bio"]);
@@ -292,11 +292,11 @@ test("pack plants are plants by their name, not only by the palette's leaf colou
   setPacks([
     {
       id: "deco",
-      name: "Deko",
+      name: "Decor",
       items: [
-        { id: "plant_monstera_m", name: { de: "Monstera mittel" }, size: [0.6, 0.6, 1.2], parts: [part("pot"), part("#2f6b4a"), part("#1e4a3a")] },
-        { id: "humidifier", name: { de: "Luftbefeuchter", en: "Humidifier" }, size: [0.3, 0.3, 0.4], parts: [part("white")] },
-        { id: "tv_stand", name: { de: "Fernseher auf Standfuß" }, size: [1, 0.5, 1.5], parts: [part("dark")] },
+        { id: "plant_monstera_m", name: { en: "Monstera medium" }, size: [0.6, 0.6, 1.2], parts: [part("pot"), part("#2f6b4a"), part("#1e4a3a")] },
+        { id: "humidifier", name: { fr: "Humidificateur", en: "Humidifier" }, size: [0.3, 0.3, 0.4], parts: [part("white")] },
+        { id: "tv_stand", name: { en: "TV on a stand" }, size: [1, 0.5, 1.5], parts: [part("dark")] },
       ],
     } as never,
   ]);

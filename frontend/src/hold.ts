@@ -4,7 +4,7 @@
  * grid's street end) return null and are handled by their own code.
  */
 export function holdTarget(pinId: string): string | null {
-  // a mailbox's or a plant's sensor, a bin's pickup source (Haushalt Pro): "hh:<entity>#<furniture id>"
+  // a mailbox's or a plant's sensor, a bin's pickup source (household feature): "hh:<entity>#<furniture id>"
   if (pinId.startsWith("hh:")) return pinId.slice(3).split("#")[0] || null;
   // a detection pin stands for its sensor
   if (pinId.startsWith("detect:")) return pinId.slice(7) || null;

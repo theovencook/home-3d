@@ -50,7 +50,7 @@ export function isFloorplanner(data: unknown): boolean {
   return Array.isArray(floors) && floors.some((f) => Array.isArray(f?.designs));
 }
 
-export function readFloorplanner(data: unknown, lang = "de"): RawPlan {
+export function readFloorplanner(data: unknown): RawPlan {
   const d = data as { floors?: FFloor[]; project?: { floors?: FFloor[] } };
   const list = (d.floors ?? d.project?.floors ?? []).filter((f) => f.designs?.length);
   if (!list.length) throw new Error("nothing_found");
@@ -60,7 +60,7 @@ export function readFloorplanner(data: unknown, lang = "de"): RawPlan {
   const floors: RawFloor[] = sorted.map((f, i) => {
     const design = f.designs![0];
     const height = f.height ? m(f.height) : null;
-    const floor: RawFloor = { name: f.name ?? (lang.startsWith("de") ? `Etage ${i + 1}` : `Floor ${i + 1}`), elevation, height, rooms: [], walls: [], openings: [], furniture: [] };
+    const floor: RawFloor = { name: f.name ?? `Floor ${i + 1}`, elevation, height, rooms: [], walls: [], openings: [], furniture: [] };
     elevation += height ?? 2.6;
     for (const w of design.walls ?? []) {
       const a: Vec2 = [m(w.a?.x), m(w.a?.y)];

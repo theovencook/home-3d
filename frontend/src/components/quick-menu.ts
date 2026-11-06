@@ -69,7 +69,7 @@ export class Fp3dQuickMenu extends LitElement {
 
   declare hass: HomeAssistant;
   declare entity: string;
-  /** Auto Pro: the car behind a parking spot's pin – its menu replaces the entity's. */
+  /** Cars: the car behind a parking spot's pin – its menu replaces the entity's. */
   declare car: CarState | null;
   /** Klang & Kino: stations and playlists to start on a speaker. */
   declare presets: { id: string; label: string; type: string; content: string }[];
@@ -259,7 +259,7 @@ export class Fp3dQuickMenu extends LitElement {
     return nothing;
   }
 
-  /** Auto Pro: lock and unlock (unlocking asks first), climate, charging; the charge and range on top. */
+  /** Cars: lock and unlock (unlocking asks first), climate, charging; the charge and range on top. */
   private renderCar(car: CarState) {
     const e = car.entities;
     const svc = (domain: string, service: string, id: string, data: Record<string, unknown> = {}) => callServiceSafe(this.hass, domain, service, { entity_id: id, ...data }, (error) => this.t("service_failed", { error }));

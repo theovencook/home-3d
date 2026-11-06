@@ -176,12 +176,12 @@ async def test_a_device_without_learning_uses_the_others(hass: HomeAssistant) ->
 async def test_spoken_names_are_matched_tolerantly(hass: HomeAssistant) -> None:
     await _setup(hass)
     service: LocateService = hass.data[DATA_LOCATE]
-    hass.states.async_set("person.torsten", "home", {"friendly_name": "Admin", "user_id": "u1"})
-    hass.states.async_set("person.frauke", "home", {"friendly_name": "Frauke", "user_id": "u2"})
+    hass.states.async_set("person.alex", "home", {"friendly_name": "Admin", "user_id": "u1"})
+    hass.states.async_set("person.sam", "home", {"friendly_name": "Sam", "user_id": "u2"})
     devices = [
-        {**WATCH, "id": "w1", "name": "Torsten Apple Watch", "person": "person.torsten"},
-        {**WATCH, "id": "p1", "name": "Torsten Iphone", "person": "person.torsten", "key": "11" * 16},
-        {**WATCH, "id": "p2", "name": "Frauke Iphone", "person": "person.frauke", "key": "22" * 16},
+        {**WATCH, "id": "w1", "name": "Alex Apple Watch", "person": "person.alex"},
+        {**WATCH, "id": "p1", "name": "Alex Iphone", "person": "person.alex", "key": "11" * 16},
+        {**WATCH, "id": "p2", "name": "Sam Iphone", "person": "person.sam", "key": "22" * 16},
     ]
     await service.async_configure({"devices": devices, "rooms": ROOMS})
     now = time.time()
@@ -191,18 +191,19 @@ async def test_spoken_names_are_matched_tolerantly(hass: HomeAssistant) -> None:
     from custom_components.home_3d.locate.answers import async_locate
 
     async def ask(text: str, user: str | None = None) -> str | None:
-        located = await async_locate(hass, service, text, "de", user)
+        located = await async_locate(hass, service, text, "en", user)
         return located.text if located else None
 
-    # speech recognition writes "Thorstens" for "Torsten"
-    assert await ask("Wo ist Thorstens Apple Watch?") == "Torsten Apple Watch ist im Raum Kitchen."
+    # speech recognition misspells a name or writes a possessive without the apostrophe
+    assert await ask("Where is Allex Apple Watch?") == "Alex Apple Watch is in the Kitchen."
+    assert await ask("Where is Alexs Apple Watch?") == "Alex Apple Watch is in the Kitchen."
     # "my iPhone" is the iPhone of the person who asks
-    assert await ask("Wo ist mein iPhone?", "u2") == "Frauke Iphone ist im Raum Living."
-    assert await ask("Wo ist mein iPhone?", "u1") == "Torsten Iphone ist im Raum Hall."
+    assert await ask("Where is my iPhone?", "u2") == "Sam Iphone is in the Living."
+    assert await ask("Where is my iPhone?", "u1") == "Alex Iphone is in the Hall."
     # a first name alone means the person: the watch tells where
-    assert await ask("Wo ist Torsten?") == "Torsten ist im Raum Kitchen."
-    assert await ask("Wo ist Frauke?") == "Frauke Iphone ist im Raum Living."
-    assert await ask("Wo ist der Fernseher?") is None
+    assert await ask("Where is Alex?") == "Alex is in the Kitchen."
+    assert await ask("Where is Sam?") == "Sam Iphone is in the Living."
+    assert await ask("Where is the TV?") is None
 
 
 async def test_weak_beacons_show_among_nearby_devices(hass: HomeAssistant) -> None:
@@ -296,11 +297,11 @@ async def test_located_answers_fly_the_views_into_the_room(hass: HomeAssistant) 
 
     subscribe_view(hass, collect, None, True)
     subscribe_view(hass, others.append, None, False)
-    show_located(hass, Located("Torsten is in the Kitchen.", ["kitchen"], True))
-    show_located(hass, Located("I can't hear Torsten right now.", [], True))
+    show_located(hass, Located("Alex is in the Kitchen.", ["kitchen"], True))
+    show_located(hass, Located("I can't hear Alex right now.", [], True))
     # people shown to admins only: only the views of admins get the rooms of people
     service.admins_only = True
-    show_located(hass, Located("Torsten is in the Kitchen.", ["kitchen"], True))
+    show_located(hass, Located("Alex is in the Kitchen.", ["kitchen"], True))
     show_located(hass, Located("The keys are in the Hall.", ["hall"], False))
     service.fly = False
     show_located(hass, Located("The keys are in the Hall.", ["hall"], False))
@@ -319,17 +320,20 @@ async def test_a_view_asks_locating_first(hass: HomeAssistant, hass_ws_client) -
     await _setup(hass)
     service: LocateService = hass.data[DATA_LOCATE]
     client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": "home_3d/locate/ask", "text": "Wer ist zu Hause?", "language": "de"})
+    await client.send_json_auto_id({"type": "home_3d/locate/ask", "text": "Who is home?", "language": "en"})
     assert (await client.receive_json())["result"] is None
-    service.devices = [dict(WATCH, name="Torsten Apple Watch")]
+    service.devices = [dict(WATCH, name="Alex Apple Watch")]
     service.rooms = ROOMS
     service.state = {
         "irk_watch": {"room": "kitchen", "room_name": "Kitchen", "probability": 0.9, "last_seen": time.time()}
     }
-    await client.send_json_auto_id({"type": "home_3d/locate/ask", "text": "Wer ist zu Hause?", "language": "de"})
+    await client.send_json_auto_id({"type": "home_3d/locate/ask", "text": "Who is home?", "language": "en"})
     res = (await client.receive_json())["result"]
-    assert res == {"text": "Zu Hause: Torsten Apple Watch (Kitchen).", "rooms": ["kitchen"], "admins_only": False}
-    await client.send_json_auto_id({"type": "home_3d/locate/ask", "text": "Zeig die Küche", "language": "de"})
+    assert res == {"text": "At home: Alex Apple Watch (Kitchen).", "rooms": ["kitchen"], "admins_only": False}
+    # a language without locating sentences of its own is answered in English
+    await client.send_json_auto_id({"type": "home_3d/locate/ask", "text": "Who is home?", "language": "fr"})
+    assert (await client.receive_json())["result"]["text"] == "At home: Alex Apple Watch (Kitchen)."
+    await client.send_json_auto_id({"type": "home_3d/locate/ask", "text": "Show the kitchen", "language": "en"})
     assert (await client.receive_json())["result"] is None
 
 
@@ -339,7 +343,7 @@ async def test_people_answers_are_withheld_from_non_admins_on_the_server(
     """With "admins only" on, the server itself gives non-admins no text and no rooms about people (#152)."""
     await _setup(hass)
     service: LocateService = hass.data[DATA_LOCATE]
-    service.devices = [dict(WATCH, name="Torsten Apple Watch", person="person.torsten")]
+    service.devices = [dict(WATCH, name="Alex Apple Watch", person="person.alex")]
     service.rooms = ROOMS
     service.state = {
         "irk_watch": {"room": "kitchen", "room_name": "Kitchen", "probability": 0.9, "last_seen": time.time()}
@@ -347,13 +351,13 @@ async def test_people_answers_are_withheld_from_non_admins_on_the_server(
     service.admins_only = True
     admin = await hass_ws_client(hass)
     other = await hass_ws_client(hass, hass_read_only_access_token)
-    for question in ("Who is home?", "Where is torsten?"):
+    for question in ("Who is home?", "Where is alex?"):
         await admin.send_json_auto_id({"type": "home_3d/locate/ask", "text": question, "language": "en"})
         res = (await admin.receive_json())["result"]
         assert "Kitchen" in res["text"] and res["rooms"] == ["kitchen"], question
         await other.send_json_auto_id({"type": "home_3d/locate/ask", "text": question, "language": "en"})
         res = (await other.receive_json())["result"]
-        assert "Kitchen" not in res["text"] and "Torsten" not in res["text"], question
+        assert "Kitchen" not in res["text"] and "Alex" not in res["text"], question
         assert res["rooms"] == [], question
     # the same through the ask service and Assist: a user who is no admin, or nobody known, is told nothing
     ask = {"text": "who is home"}

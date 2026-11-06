@@ -8,7 +8,7 @@ function rect(id: string, x0: number, z0: number, x1: number, z1: number): Room 
   return { id, name: id, area_id: null, points: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], floor_material: "wood" };
 }
 
-const floor = { ...newFloor("f", "EG", 0), rooms: [rect("r", 0, 0, 8, 5)] };
+const floor = { ...newFloor("f", "Ground", 0), rooms: [rect("r", 0, 0, 8, 5)] };
 const building = { ...emptyBuilding(), floors: [floor] };
 // a sofa across the middle of the room
 const sofa: Obstacle = { c: [4, 2.5], u: [0, 1], hw: 1.2, hd: 0.45 };
@@ -48,7 +48,7 @@ test("a place on the furniture is reached with a last hop, and left with a first
 
 test("an outer door upstairs leads nowhere unless a balcony is drawn behind it; downstairs it leads into the garden (#766)", () => {
   const french = { id: "fd", room_id: "r", edge: 0, offset: 4, width: 1.2, type: "window" as const, sill: 0, height: 2.2, hinge: "left" as const, leaves: 2 as const, swing: "in" as const, cover: null, contact: null, contact2: null, tilt: null };
-  const up = { ...newFloor("og", "OG", 2.8), rooms: [rect("r", 0, 0, 8, 5)], openings: [french] };
+  const up = { ...newFloor("upper", "Upper", 2.8), rooms: [rect("r", 0, 0, 8, 5)], openings: [french] };
   assert.equal(new FloorMap({ ...emptyBuilding(), floors: [up] }, up).doors.length, 0);
   // the room's edge 0 runs along z = 0: a balcony in front of it (z < 0)
   const withBalcony = { ...up, outdoor: [{ id: "b", type: "terrace", points: [[2, -2], [6, -2], [6, 0], [2, 0]] }] } as typeof up;
@@ -96,8 +96,8 @@ function stairWalk(lowerRooms: Room[]) {
   g.cancelAnimationFrame ??= () => undefined;
   g.window ??= new EventTarget();
   g.document ??= new EventTarget();
-  const lower = { ...newFloor("eg", "EG", 0), rooms: lowerRooms };
-  const upper = { ...newFloor("og", "OG", 2.7), rooms: [rect("b", 0, -4, 8, 6)] };
+  const lower = { ...newFloor("ground", "Ground", 0), rooms: lowerRooms };
+  const upper = { ...newFloor("upper", "Upper", 2.7), rooms: [rect("b", 0, -4, 8, 6)] };
   // a straight stair, its foot at the front (+z), its top at the back
   lower.furniture.push({ id: "s", type: "stairs", x: 4, z: 2.5, rotation: 0, w: 1, d: 3, h: 2.7, variant: null, entity: null, power: null });
   const b = { ...emptyBuilding(), floors: [lower, upper] };
@@ -128,22 +128,22 @@ function stairWalk(lowerRooms: Room[]) {
 test("walking onto a stair climbs it and switches to the upper floor at the top, and back down (#270)", () => {
   const { walk, w, shown, step } = stairWalk([rect("a", 0, -4, 8, 6)]);
   step(-0.05, 30);
-  assert.equal(w.map.floor.id, "eg", "still on the steps of the lower floor");
+  assert.equal(w.map.floor.id, "ground", "still on the steps of the lower floor");
   assert.ok(w.lift > 0.1 && w.lift < 2.7, `lifted part of the way (${w.lift})`);
-  assert.deepEqual(shown, ["og"], "the stairs show while on them");
+  assert.deepEqual(shown, ["upper"], "the stairs show while on them");
   step(-0.05, 60);
-  assert.equal(w.map.floor.id, "og", "up on the first floor");
+  assert.equal(w.map.floor.id, "upper", "up on the first floor");
   assert.equal(w.lift, 0);
-  assert.equal(shown.at(-1), "og");
+  assert.equal(shown.at(-1), "upper");
   // away from the top and back onto it: down the stair
   step(-0.05, 30);
-  assert.equal(w.map.floor.id, "og", "no stair taken on the way away");
+  assert.equal(w.map.floor.id, "upper", "no stair taken on the way away");
   step(0.05, 50);
-  assert.equal(w.map.floor.id, "eg", "on the steps down (lower floor)");
+  assert.equal(w.map.floor.id, "ground", "on the steps down (lower floor)");
   assert.ok(w.lift > 0 && w.lift < 2.7, `part of the way down (${w.lift})`);
   step(0.05, 80);
   assert.equal(w.lift, 0);
-  assert.equal(shown.at(-1), "eg");
+  assert.equal(shown.at(-1), "ground");
   walk.dispose();
 });
 
@@ -152,7 +152,7 @@ test("on the steps both floors show; stepping off at the top ends that (#312)", 
   step(-0.05, 30);
   assert.deepEqual(stairs, [true], "on the steps");
   step(-0.05, 60);
-  assert.equal(w.map.floor.id, "og");
+  assert.equal(w.map.floor.id, "upper");
   assert.deepEqual(stairs, [true, false], "off the top");
   walk.dispose();
 });
@@ -161,7 +161,7 @@ test("a wall of the lower floor under the top step does not stop the climb", () 
   // the hall ends where the stair arrives upstairs; behind that wall, a cupboard under the landing
   const { walk, w, step } = stairWalk([rect("hall", 0, 1, 8, 6), rect("cupboard", 0, -4, 8, 1)]);
   step(-0.05, 90);
-  assert.equal(w.map.floor.id, "og", `up on the first floor (stopped at lift ${w.lift})`);
+  assert.equal(w.map.floor.id, "upper", `up on the first floor (stopped at lift ${w.lift})`);
   walk.dispose();
 });
 
@@ -204,17 +204,17 @@ test("a stair drawn as two flights is climbed round the corner and switches floo
   assert.ok(full.w.lift > 0 && full.w.lift < 0.55, `on the first flight (${full.w.lift})`);
   full.to(8.2, 11.688);
   assert.ok(Math.abs(full.w.lift - 0.55) < 0.15, `at the turn (${full.w.lift})`);
-  assert.equal(full.w.map.floor.id, "eg");
+  assert.equal(full.w.map.floor.id, "ground");
   full.to(7.7, 11.188);
   full.to(7.7, 10.3);
   assert.ok(full.w.lift > 1 && full.w.lift < 2.75, `well up the second flight (${full.w.lift})`);
   full.to(7.7, 8.5);
-  assert.equal(full.w.map.floor.id, "og", "up on the next floor");
+  assert.equal(full.w.map.floor.id, "upper", "up on the next floor");
   full.walk.dispose();
   // the short flight alone: no floor change, no lift
   const alone = run([flightA()]);
   alone.to(8.6, 11.688);
-  assert.equal(alone.w.map.floor.id, "eg");
+  assert.equal(alone.w.map.floor.id, "ground");
   assert.equal(alone.w.lift, 0);
   alone.walk.dispose();
 });

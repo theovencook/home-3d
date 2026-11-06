@@ -1,11 +1,11 @@
-// Spoken commands: which room, floor or the whole house a sentence names ("Zeig das Wohnzimmer", "geh ins
-// Obergeschoss", "show the kitchen"). Matched on the plan's own names, so no sentences have to be taught to anyone.
+// Spoken commands: which room, floor or the whole house a sentence names ("show the living room", "go to the
+// first floor", "show the kitchen"). Matched on the plan's own names, so no sentences have to be taught to anyone.
 
 import { zonesOf, type Building, type Room } from "../model.ts";
 
 export type Place = { kind: "room"; floorId: string; roomId: string; name: string } | { kind: "floor"; floorId: string; name: string } | { kind: "house"; name: string };
 
-/** Lower case, without accents and punctuation: "Kinderzimmer (Lea)!" → "kinderzimmer lea". */
+/** Lower case, without accents and punctuation: "Café (Lea)!" → "cafe lea". */
 export function normalize(text: string): string {
   return text
     .toLowerCase()
@@ -21,7 +21,7 @@ export function normalize(text: string): string {
     .trim();
 }
 
-const HOUSE = /\b(ganze[sn]? haus|haus|uebersicht|ubersicht|alles|house|whole house|home|overview|everything)\b/;
+const HOUSE = /\b(house|whole house|home|overview|everything)\b/;
 
 /** Whether `name` stands in `text` as whole words. */
 function says(text: string, name: string): boolean {
@@ -30,7 +30,7 @@ function says(text: string, name: string): boolean {
 }
 
 /**
- * The place a sentence names: a room (the longest name that stands in it wins, "Gäste-WC" before "WC"), else a
+ * The place a sentence names: a room (the longest name that stands in it wins, "Guest WC" before "WC"), else a
  * floor, else the whole house; null when it names none.
  */
 /** Further names of a room: its Home Assistant area's name and its own aliases. */
@@ -46,7 +46,7 @@ export function findPlace(sentence: string, building: Building, alias?: RoomAlia
   // garage's area (#668)
   let rank = -1;
   for (const floor of building.floors) {
-    // outdoor areas acting as rooms ("Garten", "Terrasse") too; a room answers to its Home Assistant area's name as well
+    // outdoor areas acting as rooms ("Garden", "Terrace") too; a room answers to its Home Assistant area's name as well
     for (const room of zonesOf(floor)) {
       const indoor = room.outdoor ? 0 : 1;
       const further = ([] as (string | null | undefined)[]).concat(alias?.(room) ?? [], room.aliases ?? []);
@@ -73,20 +73,20 @@ export function findPlace(sentence: string, building: Building, alias?: RoomAlia
   return HOUSE.test(text) ? { kind: "house", name: "" } : null;
 }
 
-/** Words that ask to see a place ("zeig", "geh ins", "show", "toon", "montre" …). */
-const SHOW = /\b(zeig|zeige|zeigt|geh|gehe|wechsel|wechsle|spring|springe|navigier|show|go|jump|view|toon|ga|montre|affiche|va|aller|mostra|vai|muestra|ve|vaya|visa|vis|ga till|naytta|nayta|pokaz|ukaz|prejdi|arata|mergi|pokazi|mutasd|menj|显示|去)\b/;
+/** Words that ask to see a place ("show", "go to", "toon", "montre" …). */
+const SHOW = /\b(show|go|jump|view|toon|ga|montre|affiche|va|aller|mostra|vai|muestra|ve|vaya|visa|vis|ga till|naytta|nayta|pokaz|ukaz|prejdi|arata|mergi|pokazi|mutasd|menj|显示|去)\b/;
 /**
- * Words that also start a switching command ("switch off the lights in the kitchen", "öffne die Rollos im Wohnzimmer"):
+ * Words that also start a switching command ("switch off the lights in the kitchen", "open the blinds in the living room"):
  * they only ask to see a place when nothing else but the place's name follows (#161); anything more is for Assist.
  */
-export const SHOW_AMBIGUOUS = /\b(switch|open|oeffne|offne|apri|abre)\b/;
-/** Little words around a bare place name ("das Wohnzimmer bitte"). */
-export const FILLER = new Set("das den dem die der ins in im zum zur ins nach bitte mal mir mich the to into please me my het de naar le la les au a la il lo al el ett en till".split(" "));
+export const SHOW_AMBIGUOUS = /\b(switch|open|apri|abre)\b/;
+/** Little words around a bare place name ("the living room please"). */
+export const FILLER = new Set("in the to into please me my het de naar le la les au a la il lo al el ett en till".split(" "));
 
 /**
  * What a spoken sentence asks Home 3D to show: a place, when the sentence says "show/go to …" or is no more than a
- * place's name ("Wohnzimmer", "das Obergeschoss bitte"). Null otherwise – the sentence is for Assist then ("Licht im
- * Wohnzimmer an" names the room but switches a light).
+ * place's name ("Living room", "the first floor please"). Null otherwise – the sentence is for Assist then ("turn on
+ * the living room light" names the room but switches a light).
  */
 export function showCommand(sentence: string, building: Building, alias?: RoomAlias): Place | null {
   const place = findPlace(sentence, building, alias);

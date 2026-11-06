@@ -62,11 +62,11 @@ export function directorAny(s: DirectorSettings | null | undefined): boolean {
   return !!s && !!(s.doorbell || (s.motion && s.motion !== "off") || s.appliances || s.alerts || (s.triggers ?? []).some((t) => t.entity));
 }
 
-const BELL_WORDS = /(doorbell|klingel|visitor|besucher|\bding\b|deurbel|sonnette|campanello)/;
+const BELL_WORDS = /(doorbell|visitor|\bding\b|deurbel|sonnette|campanello)/;
 
 /**
  * Doorbells: event entities of the class "doorbell" (Ring, UniFi Protect, ONVIF …) and binary sensors named like one
- * (Reolink's "Visitor", "Klingel"). The chosen one only, when one is chosen.
+ * (Reolink's "Visitor"). The chosen one only, when one is chosen.
  */
 export function doorbellEntities(hass: HomeAssistant, chosen?: string | null): string[] {
   if (chosen) return hass.states[chosen] ? [chosen] : [];

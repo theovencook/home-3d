@@ -228,7 +228,7 @@ function wordsOf(item: PackItemInfo): string {
 /** The English name (else the id) without what the item comes with: "Bench with cushions" -> "bench". */
 function headOf(item: PackItemInfo): string {
   const name = (item.name.en ?? item.id.replace(/_/g, " ")).toLowerCase();
-  return name.replace(/\s+(with|mit|and|und|plus|incl\.?|including)\b.*$/, "").replace(/\s*\(.*$/, "");
+  return name.replace(/\s+(with|and|plus|incl\.?|including)\b.*$/, "").replace(/\s*\(.*$/, "");
 }
 
 /** Where an item belongs: the pack's own fields, else its words, else its pack. */
@@ -248,48 +248,48 @@ export function classify(packId: string, item: PackItemInfo): { kind: Kind; room
   return { kind: "deco", rooms: ownRooms ?? packRooms };
 }
 
-/** Which room kind a room is, by its name (German, English and the languages Home 3D speaks); null when unclear. */
+/** Which room kind a room is, by its name (English and the other languages Home 3D speaks); null when unclear. */
 export function roomKindOf(name: string): Room | null {
   const n = name.toLowerCase();
   const table: [RegExp, Room][] = [
-    [/en[- ]?suite|ensuite|masterbad|elternbad/, "ensuite"],
+    [/en[- ]?suite|ensuite/, "ensuite"],
     [/cloak ?room|garderobe|guardaroba|vestiaire/, "cloakroom"],
     [/boot ?room|mud ?room/, "bootroom"],
-    [/pantry|larder|speisekammer|vorrat|dispensa|despensa|garde-manger/, "pantry"],
-    [/walk-?in (wardrobe|closet)|ankleide|cabina armadio|vestidor/, "wardrobe"],
-    [/dressing ?room|umkleide/, "dressing"],
-    [/study|studeerkamer|estudio/, "study"],
-    [/play ?room|spielzimmer|speelkamer|sala giochi|salle de jeux/, "playroom"],
-    [/nursery|baby ?room|babyzimmer/, "nursery"],
-    [/gym|fitness ?room|fitnessraum|palestra|gimnasio/, "gym"],
-    [/cinema|home theat(er|re)|media room|heimkino|kinosaal/, "cinema"],
-    [/games? ?room|spielraum|billiard|snooker/, "games"],
-    [/laundry|waschk[üu]che|waschraum|lavander|buanderie|wasruimte|pralni|prádeln|vaskerom/, "laundry"],
-    [/plant ?room|boiler room|heizungsraum|technikraum|sala de m[áa]quinas/, "plantroom"],
-    [/workshop|werkstatt|werkplaats|taller/, "workshop"],
-    [/summer ?house|gartenlaube|gazebo|pavilion|laube/, "summerhouse"],
-    [/green ?house|gew[äa]chshaus|invernadero|broeikas|szklarnia/, "greenhouse"],
-    [/shed|gartenhaus|ger[äa]tehaus|schuppen|cobertizo|capanno/, "shed"],
-    [/cellar|basement|keller|s[óo]tano|cantina|kælder|kjeller|kellari/, "cellar"],
-    [/landing|treppenabsatz/, "landing"],
-    [/porch|windfang|vestibule|vestibül/, "porch"],
+    [/pantry|larder|dispensa|despensa|garde-manger/, "pantry"],
+    [/walk-?in (wardrobe|closet)|cabina armadio|vestidor/, "wardrobe"],
+    [/dressing ?room/, "dressing"],
+    [/\bstudy\b|studeerkamer|estudio/, "study"],
+    [/play ?room|speelkamer|sala giochi|salle de jeux/, "playroom"],
+    [/nursery|baby ?room/, "nursery"],
+    [/\bgym\b|fitness ?room|palestra|gimnasio/, "gym"],
+    [/cinema|home theat(er|re)|media room/, "cinema"],
+    [/games? ?room|billiard|snooker/, "games"],
+    [/laundry|lavander|buanderie|wasruimte|pralni|prádeln|vaskerom/, "laundry"],
+    [/plant ?room|boiler room|sala de m[áa]quinas/, "plantroom"],
+    [/workshop|werkplaats|taller/, "workshop"],
+    [/summer ?house|gazebo|pavilion/, "summerhouse"],
+    [/green ?house|invernadero|broeikas|szklarnia/, "greenhouse"],
+    [/\bshed\b|cobertizo|capanno/, "shed"],
+    [/cellar|basement|s[óo]tano|cantina|kælder|kjeller|kellari/, "cellar"],
+    [/landing/, "landing"],
+    [/porch|vestibule/, "porch"],
     [/balcon|balkon/, "balcony"],
     [/terrace|terrasse|patio|terraza|terrazza/, "terrace"],
-    [/car ?port|unterstand/, "carport"],
-    [/kinder|kids|child|niñ|bambin|enfant|dziec|děts|barn|lapsi|gyerek|copi|otro|儿童|kinderkamer/, "kids"],
-    [/schlaf|bedroom|dormit|camera da letto|chambre|slaapkamer|sypial|ložnic|sover|makuu|háló|dormitor|spaln|卧室|soveværelse/, "bedroom"],
-    [/wohn|living|lounge|salon|soggiorno|sala de estar|woonkamer|obývací|stue|olohuone|nappali|sufrag|dnevn|客厅/, "living"],
-    [/\bess|dining|comedor|pranzo|salle à manger|eetkamer|jadal|jídel|spise|ruokailu|étkez|jedil|餐厅/, "dining"],
-    [/küche|kueche|kitchen|cocina|cucina|cuisine|keuken|kuchn|kuchyn|kjøkken|køkken|keittiö|konyha|bucăt|kuhinj|厨房/, "kitchen"],
-    [/\bbad\b|bath|baño|bagno|salle de bain|badkamer|łazienk|koupeln|baderom|badevær|kylpy|fürdő|baie|kopaln|wc|toilet|gäste|guest|浴室|dusch|shower/, "bath"],
-    [/büro|buero|office|arbeit|studio|bureau|kantoor|biuro|pracovn|kontor|työhuone|iroda|birou|pisarn|gaming|办公/, "office"],
-    [/flur|diele|hall|corridor|entrance|eingang|ingresso|gang|hal\b|przedpok|chodba|entré|eteinen|előszoba|hol\b|hodnik|treppe|stair|walk/, "hall"],
-    [/conservatory|orangery|sun ?room|wintergarten|v[ée]randa|jard[ií]n de invierno|giardino d.inverno|vinterhave|uterum|talvipuutarha|ogr[óo]d zimowy|zimn[íi] zahrada/, "conservatory"],
-    [/\bloft\b|attic|dachboden|spitzboden|speicher|grenier|zolder|soffitta|desv[áa]n|strych|p[ůu]da|loftet|ullakko|padl[áa]s|mansard|podstre[šs]|阁楼/, "loft"],
-    [/hauswirtschaft|hwr|utility|technik|keller|wasch|laundry|lavander|buanderie|berging|bijkeuken|pralni|prádeln|vaskerom|kodinhoito|mosó|tehnic|pralnic|cellar|basement|abstell|storage|vorrat|pantry|heizung|boiler/, "utility"],
-    [/garage|carport|werkstatt|workshop|garaje|garaż|garáž|verkstad|autotalli|garázs|garaj|garaž|车库/, "garage"],
-    [/garten|garden|terrasse|terrace|balkon|balcony|jardin|giardino|tuin|ogród|zahrad|hage|have|puutarha|kert|grădin|vrt|pool|yard|patio|einfahrt|driveway|花园/, "garden"],
-    [/fitness|gym|sport|hobby|kino|cinema|heimkino|home theater|spiel|play|party|bar\b|sauna|wellness/, "hobby"],
+    [/car ?port/, "carport"],
+    [/kids|child|niñ|bambin|enfant|dziec|děts|barn|lapsi|gyerek|copi|otro|儿童|kinderkamer/, "kids"],
+    [/bedroom|dormit|camera da letto|chambre|slaapkamer|sypial|ložnic|sover|makuu|háló|dormitor|spaln|卧室|soveværelse/, "bedroom"],
+    [/living|lounge|salon|soggiorno|sala de estar|woonkamer|obývací|stue|olohuone|nappali|sufrag|dnevn|客厅/, "living"],
+    [/dining|comedor|pranzo|salle à manger|eetkamer|jadal|jídel|spise|ruokailu|étkez|jedil|餐厅/, "dining"],
+    [/kitchen|cocina|cucina|cuisine|keuken|kuchn|kuchyn|kjøkken|køkken|keittiö|konyha|bucăt|kuhinj|厨房/, "kitchen"],
+    [/\bbad\b|bath|baño|bagno|salle de bain|badkamer|łazienk|koupeln|baderom|badevær|kylpy|fürdő|baie|kopaln|wc|toilet|guest|浴室|dusch|shower/, "bath"],
+    [/office|studio|bureau|kantoor|biuro|pracovn|kontor|työhuone|iroda|birou|pisarn|gaming|办公/, "office"],
+    [/hall|corridor|entrance|ingresso|gang|hal\b|przedpok|chodba|entré|eteinen|előszoba|hol\b|hodnik|stair|walk/, "hall"],
+    [/conservatory|orangery|sun ?room|v[ée]randa|jard[ií]n de invierno|giardino d.inverno|vinterhave|uterum|talvipuutarha|ogr[óo]d zimowy|zimn[íi] zahrada/, "conservatory"],
+    [/\bloft\b|attic|grenier|zolder|soffitta|desv[áa]n|strych|p[ůu]da|loftet|ullakko|padl[áa]s|mansard|podstre[šs]|阁楼/, "loft"],
+    [/utility|laundry|lavander|buanderie|berging|bijkeuken|pralni|prádeln|vaskerom|kodinhoito|mosó|tehnic|pralnic|cellar|basement|storage|pantry|boiler/, "utility"],
+    [/garage|carport|workshop|garaje|garaż|garáž|verkstad|autotalli|garázs|garaj|garaž|车库/, "garage"],
+    [/garden|terrasse|terrace|balkon|balcony|jardin|giardino|tuin|ogród|zahrad|hage|have|puutarha|kert|grădin|vrt|pool|yard|patio|driveway|花园/, "garden"],
+    [/fitness|gym|sport|hobby|kino|cinema|home theater|play|party|bar\b|sauna|wellness/, "hobby"],
   ];
   for (const [re, room] of table) if (re.test(n)) return room;
   return null;
@@ -298,7 +298,7 @@ export function roomKindOf(name: string): Room | null {
 // ---------------------------------------------------------------------------------------------- families
 
 /** The sizes and counts in a name that make it a variant: "160 × 200", "2-seater", "3-door", "4 × 2", "15″". */
-const VARIANT_WORDS = /\s*\(?\b\d+(?:[.,]\d+)?\s*(?:[×x]\s*\d+(?:[.,]\d+)?)*\s*(?:cm|m|l|u|″|"|-seater|-sitzer|-door|-türig|-drawer|-teilig|-piece|seats|parts)?\)?/gi;
+const VARIANT_WORDS = /\s*\(?\b\d+(?:[.,]\d+)?\s*(?:[×x]\s*\d+(?:[.,]\d+)?)*\s*(?:cm|m|l|u|″|"|-seater|-door|-drawer|-piece|seats|parts)?\)?/gi;
 
 /** A name without its numbers: "Dining table 160 × 90" → "Dining table", "2-seater sofa" → "Sofa". */
 export function familyLabel(name: string): string {
@@ -315,21 +315,21 @@ export function familyLabel(name: string): string {
 export function variantLabel(name: string): string | null {
   const hits = [...name.matchAll(/\d+(?:[.,]\d+)?(?:\s*[×x]\s*\d+(?:[.,]\d+)?)*/g)].map((m) => m[0].replace(/\s*[×x]\s*/g, " × "));
   if (hits.length) return hits.join(" · ");
-  const side = name.match(/\b(links|rechts|left|right)\b/i);
+  const side = name.match(/\b(left|right)\b/i);
   return side ? side[1].toLowerCase() : null;
 }
 
 /** The side an item is made for, by its name: "left" / "right", null for the rest. */
 export function sideOf(name: string): "left" | "right" | null {
-  if (/\b(links|left)\b/i.test(name)) return "left";
-  if (/\b(rechts|right)\b/i.test(name)) return "right";
+  if (/\bleft\b/i.test(name)) return "left";
+  if (/\bright\b/i.test(name)) return "right";
   return null;
 }
 
-/** The name for the other side: "Ecksofa links" → "Ecksofa rechts", "Corner sofa (left)" → "Corner sofa (right)". */
+/** The name for the other side: "Corner sofa (left)" → "Corner sofa (right)". */
 export function otherSideName(name: string): string {
-  return name.replace(/\b(links|rechts|left|right)\b/i, (w) => {
-    const map: Record<string, string> = { links: "rechts", rechts: "links", left: "right", right: "left" };
+  return name.replace(/\b(left|right)\b/i, (w) => {
+    const map: Record<string, string> = { left: "right", right: "left" };
     const out = map[w.toLowerCase()] ?? w;
     return w[0] === w[0].toUpperCase() ? out[0].toUpperCase() + out.slice(1) : out;
   });
@@ -338,7 +338,7 @@ export function otherSideName(name: string): string {
 /** An item's family key: its own field, else its id without the size suffix (sofa_3 → sofa, base_60 → base, cube_4x2 → cube). */
 export function familyOf(item: PackItemInfo): string | null {
   if (item.family) return item.family;
-  const m = item.id.match(/^(.*?)_(\d+(?:x\d+)?|left|right|links|rechts)$/);
+  const m = item.id.match(/^(.*?)_(\d+(?:x\d+)?|left|right)$/);
   return m ? m[1] : null;
 }
 
@@ -422,7 +422,7 @@ export function buildIndex(src: IndexSource): LibraryEntry[] {
   for (const e of [...out]) {
     const side = sideOf(e.label);
     if (!side || e.mirror) continue;
-    const twinType = e.type.replace(/(_|\b)(left|right|links|rechts)(?=$|[_\s)])/i, (_m: string, sep: string, w: string) => sep + (({ left: "right", right: "left", links: "rechts", rechts: "links" } as Record<string, string>)[w.toLowerCase()] ?? w));
+    const twinType = e.type.replace(/(_|\b)(left|right)(?=$|[_\s)])/i, (_m: string, sep: string, w: string) => sep + (({ left: "right", right: "left" } as Record<string, string>)[w.toLowerCase()] ?? w));
     if (twinType !== e.type && byType.has(twinType)) continue;
     const label = otherSideName(e.label);
     out.push({ ...e, key: `${e.type}#m`, mirror: true, label, search: `${e.search} ${label}`, tags: `${e.tags} ${label}`, family: e.family ?? e.type, variant: variantLabel(label) });

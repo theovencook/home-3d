@@ -171,9 +171,9 @@ export class LocateSetup extends LitElement {
     return new Proxy({} as Record<LocKey, string>, { get: (_, key) => translate(hass, `loc_${String(key)}` as I18nKey) });
   }
 
-  /** The voice sentences exist in German and English only. */
+  /** The voice sentences exist in English only. */
   private get voiceLanguage(): boolean {
-    return /^(de|en)/.test(this.hass?.language ?? "en");
+    return /^en/.test(this.hass?.language ?? "en");
   }
 
   private tr(text: string, vars: Record<string, string | number>): string {
@@ -241,7 +241,7 @@ export class LocateSetup extends LitElement {
   /**
    * The room a scanner most likely stands in: a pin or a piece of furniture of its device in the plan (a Shelly's
    * switch, the washing machine with the plug's power sensor), its Home Assistant area, or a room named in its name
-   * ("PC Büro Steckdose", "bluetooth-proxy-kueche"). After the calibration walk the signals tell as well (backend).
+   * ("Office PC plug", "bluetooth-proxy-kitchen"). After the calibration walk the signals tell as well (backend).
    */
   private guessRoom(s: Scanner): string | null {
     const ofDevice = (entity: unknown) => typeof entity === "string" && !!s.device_id && this.hass.entities?.[entity]?.device_id === s.device_id;
@@ -270,14 +270,13 @@ export class LocateSetup extends LitElement {
     const plain = (text: string) =>
       text
         .toLowerCase()
-        .replace(/ä/g, "ae")
-        .replace(/ö/g, "oe")
-        .replace(/ü/g, "ue")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
         .replace(/ß/g, "ss")
         .replace(/[^a-z0-9]+/g, " ");
     const name = ` ${plain(s.name)} `;
     const hits = this.rooms.filter((r) => plain(r.name).trim().length >= 3 && name.includes(plain(r.name).trim()));
-    // the longest name wins ("badezimmer" over "bad"); a name on two floors is no answer
+    // the longest name wins ("bathroom" over "bath"); a name on two floors is no answer
     hits.sort((a, b) => plain(b.name).length - plain(a.name).length);
     if (hits.length && hits.filter((r) => plain(r.name) === plain(hits[0].name)).length === 1) return hits[0].id;
     return null;
@@ -495,7 +494,7 @@ export class LocateSetup extends LitElement {
         : nothing}`;
   }
 
-  /** The Home Assistant app on a phone, to ring it ("Lass mein iPhone klingeln"). */
+  /** The Home Assistant app on a phone, to ring it ("Ring my iPhone"). */
   private notifySelect(value: string | null, onPick: (n: string | null) => void) {
     const all = (this.hass as unknown as { services?: Record<string, Record<string, unknown>> }).services;
     const services = Object.keys(all?.notify ?? {}).filter((s) => s.startsWith("mobile_app_"));

@@ -468,7 +468,7 @@ export class ItemFormPart {
   }
 
   /**
-   * Waste bin and mailbox: shape and colours for everyone; the waste calendar and the post sensors with Haushalt Pro
+   * Waste bin and mailbox: shape and colours for everyone; the waste calendar and the post sensors for live data
    * (a teaser while it is locked).
    */
   renderHouseholdForm(this: Fp3dEditor, f: Furniture) {
@@ -532,7 +532,7 @@ export class ItemFormPart {
   }
 
   /**
-   * Haushalt Pro on other items: a plant's moisture, a washer's time left and door, a fridge's door warning, and a
+   * Household data on other items: a plant's moisture, a washer's time left and door, a fridge's door warning, and a
    * consumable or service for every electric item. A teaser on plants, appliances and fridges while it is locked.
    */
   renderHouseholdExtras(this: Fp3dEditor, f: Furniture) {

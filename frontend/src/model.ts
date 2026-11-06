@@ -256,9 +256,9 @@ export interface Furniture {
   stair_landing?: number | null;
   /** Straight stairs: the top step runs on flat for this many metres (steps up to a landing). */
   stair_top?: number | null;
-  /** Own name (e.g. "Wechselrichter Nord"); null = the type's name. */
+  /** Own name (e.g. "Inverter north"); null = the type's name. */
   name?: string | null;
-  /** Further names the voice answers to ("Wohnzimmerfernseher", "Glotze"). */
+  /** Further names the voice answers to ("Lounge telly", "Goggle box"). */
   aliases?: string[];
   /** The own name shows as a small label under its marker in 3D. */
   show_name?: boolean;
@@ -287,32 +287,32 @@ export interface Furniture {
   bin_color?: string | null;
   /** Waste bin: its lid colour ("#rrggbb"; null = like the body, or the country's usual lid). */
   bin_lid?: string | null;
-  /** Haushalt Pro: the waste calendar (calendar.*) or a sensor with the next pickup of this bin. */
+  /** Household: the waste calendar (calendar.*) or a sensor with the next pickup of this bin. */
   bin_source?: EntityRef;
-  /** Haushalt Pro: own words that find this bin's entries in the calendar (comma separated; null = by its kind). */
+  /** Household: own words that find this bin's entries in the calendar (comma separated; null = by its kind). */
   bin_match?: string | null;
-  /** Haushalt Pro: an entity that is on while the bin is out (input_boolean, switch, binary_sensor; null = none). */
+  /** Household: an entity that is on while the bin is out (input_boolean, switch, binary_sensor; null = none). */
   bin_out?: EntityRef;
-  /** Haushalt Pro: where the bin stands while it is out (a point on its floor's plan, #142; null = it does not move). */
+  /** Household: where the bin stands while it is out (a point on its floor's plan, #142; null = it does not move). */
   bin_kerb?: { x: number; z: number } | null;
-  /** Haushalt Pro, mailbox: the sensor of the door it is emptied through (post counts until it opens). */
+  /** Household, mailbox: the sensor of the door it is emptied through (post counts until it opens). */
   mailbox_door?: EntityRef;
-  /** Haushalt Pro, plant: a plant.* entity or a soil moisture sensor; thirsty below `moisture_min`. */
+  /** Household, plant: a plant.* entity or a soil moisture sensor; thirsty below `moisture_min`. */
   moisture?: EntityRef;
-  /** Haushalt Pro, plant: the moisture (%) below which it is thirsty (null = 20). */
+  /** Household, plant: the moisture (%) below which it is thirsty (null = 20). */
   moisture_min?: number | null;
-  /** Haushalt Pro, washer, dryer, dishwasher: the time left (minutes, an end time or "H:MM"). */
+  /** Household, washer, dryer, dishwasher: the time left (minutes, an end time or "H:MM"). */
   remaining?: EntityRef;
   /** Radiator: a sensor that says whether it heats (a valve's work state, an opening percentage) when the thermostat does not (D637). */
   heat_sensor?: EntityRef;
-  /** Haushalt Pro: a consumable or service of the item (a filter, salt, rinse aid): due when on, at or below `service_min`, or its date. */
+  /** Household: a consumable or service of the item (a filter, salt, rinse aid): due when on, at or below `service_min`, or its date. */
   service?: EntityRef;
-  /** Haushalt Pro: the number (percent or days left) at or below which the service is due (null = 10). */
+  /** Household: the number (percent or days left) at or below which the service is due (null = 10). */
   service_min?: number | null;
-  /** Haushalt Pro: a second service (a robot vacuum's dock), like `service` with its own threshold `service2_min`. */
+  /** Household: a second service (a robot vacuum's dock), like `service` with its own threshold `service2_min`. */
   service2?: EntityRef;
   service2_min?: number | null;
-  /** Haushalt Pro, fridge: minutes a door may stand open before it warns (null = 2). */
+  /** Household, fridge: minutes a door may stand open before it warns (null = 2). */
   door_alarm?: number | null;
   /** An own symbol for the marker: a Material Design icon name without "mdi:" (null = by kind). */
   icon?: string | null;
@@ -329,15 +329,15 @@ export interface Furniture {
   charge?: EntityRef;
   /** Meter: a separate sensor with the export power (W) when the power sensor only reports import. */
   export?: EntityRef;
-  /** Energie Pro: a glass card over the device with its power now, today's kWh and the day curve. */
+  /** Energy: a glass card over the device with its power now, today's kWh and the day curve. */
   holo?: boolean;
   /** The power sensor of the circuit it hangs on (a circuit monitor's channel): its watts are inside that one's (#43). */
   circuit?: EntityRef;
   /** The energy sensor (kWh) its wire end shows today's use of (null = found on the device, "none" = none) – #29. */
   energy?: EntityRef;
-  /** Energie Pro, inverter: false hides the plant's card over its field. */
+  /** Energy, inverter: false hides the plant's card over its field. */
   plant_card?: boolean;
-  /** Energie Pro, inverter: its plant card moved from its field's middle along the eave (m, + = right) and up the slope (#335). */
+  /** Energy, inverter: its plant card moved from its field's middle along the eave (m, + = right) and up the slope (#335). */
   plant_right?: number;
   plant_up?: number;
   status?: EntityRef;
@@ -386,7 +386,7 @@ export interface Furniture {
   active_color?: string | null;
   /** Parking spots: the vehicle shown (a pack item type) while `entity` reports a car. */
   vehicle?: string | null;
-  /** Auto Pro: the car's entities (each null = found on the device of `device`, or of the presence entity). */
+  /** Cars: the car's entities (each null = found on the device of `device`, or of the presence entity). */
   car?: CarLinks | null;
   /** Parking spots: size factor of the vehicle (1 = the pack item's size). */
   scale?: number;
@@ -423,7 +423,7 @@ export interface Placement {
   y: number | null;
   /** Lights: how the lamp is mounted; null = ceiling. */
   mount?: LampMount | null;
-  /** A light kept as a device pin on purpose ("Wieder als Geräte-Pin"): not turned into a lamp on load. */
+  /** A light kept as a device pin on purpose ("Keep as device pin"): not turned into a lamp on load. */
   pin?: boolean;
   /** Turn around the vertical axis (degrees): wall lamps, spots, displays face that way. */
   rotation?: number;
@@ -446,7 +446,7 @@ export interface Placement {
   show_name?: boolean;
   /** Lights: how strongly the light glows in 3D, 0.1–1.5 (1 = as bright as the light reports) – #181. */
   glow_scale?: number | null;
-  /** Energie Pro: a glass card over the device (a smart plug) with its power, today's kWh and the day curve (D178). */
+  /** Energy: a glass card over the device (a smart plug) with its power, today's kWh and the day curve (D178). */
   holo?: boolean;
   /** The power sensor of the circuit it hangs on (a circuit monitor's channel): its watts are inside that one's (#43). */
   circuit?: string | null;
@@ -580,9 +580,9 @@ export interface RoofSettings {
   strings?: SolarString[];
   /** Roof windows on the roof faces. */
   windows?: RoofWindow[];
-  /** Energie Pro: the hologram's place and size. */
+  /** Energy: the hologram's place and size. */
   hologram?: HologramSettings | null;
-  /** Energie Pro: cables laid by hand (the others find their own way). */
+  /** Energy: cables laid by hand (the others find their own way). */
   cables?: CableRoute[];
 }
 
@@ -635,7 +635,7 @@ export interface SolarField {
  * A roof window on a roof face (u along the eave, v up the slope, in metres, at its lower left corner). Like a
  * window it follows a contact (open or tilted: the sash swings out at the top) and a blind (cover).
  */
-/** Energie Pro: where the hologram hangs – on a solar field, moved along the field and up the slope, scaled. */
+/** Energy: where the hologram hangs – on a solar field, moved along the field and up the slope, scaled. */
 export interface HologramSettings {
   /** Where it hangs: on a solar field (default), or free at a point in the plan. */
   place?: "field" | "free";
@@ -665,7 +665,7 @@ export interface HologramSettings {
 export const DEFAULT_HOLOGRAM: HologramSettings = { field: null, size: 1, right: 0, up: 0 };
 
 /**
- * Energie Pro: a cable laid by hand. Its id names the cable ("solar:<field>", "inv:<inverter>", "bat:<battery>",
+ * Energy: a cable laid by hand. Its id names the cable ("solar:<field>", "inv:<inverter>", "bat:<battery>",
  * "grid"); the points are its way in the plan, run at `height` above the given floor.
  */
 export interface CableRoute {
@@ -723,7 +723,7 @@ export interface CustomButton {
   /** Material Design icon name without "mdi:". */
   icon?: string | null;
   action: ButtonAction;
-  /** navigate: the path ("/lovelace/rollos"); more_info: the entity; service: "domain.service". */
+  /** navigate: the path ("/lovelace/blinds"); more_info: the entity; service: "domain.service". */
   target?: string | null;
   /** service: its data; fire_dom_event: the event's detail (e.g. { browser_mod: { service, data } }). */
   data?: Record<string, unknown> | null;
@@ -732,7 +732,7 @@ export interface CustomButton {
 /**
  * Something to play on a speaker from its quick menu (Klang & Kino): media_player.play_media with this
  * content type and id – a radio stream URL, a Music Assistant or Sonos URI, or for an Echo (Alexa Media
- * Player) the type SPOTIFY / AMAZON_MUSIC / TUNEIN with what you would say ("Rock Antenne").
+ * Player) the type SPOTIFY / AMAZON_MUSIC / TUNEIN with what you would say ("Classic FM").
  */
 export interface MediaPreset {
   id: string;
@@ -938,7 +938,7 @@ export interface BuildingSettings {
   /** The ground around the house: its height and the earth around cellars. */
   terrain?: Terrain | null;
   /**
-   * Haushalt Pro: from which hour the day before a bin glows (null = 14) and until which hour on the day (null = 12);
+   * Household: from which hour the day before a bin glows (null = 14) and until which hour on the day (null = 12);
    * only the bins of the next pickup wear a tag (`bin_next_only`), tags only from `bin_days` days before (null = always).
    */
   household?: { bin_from?: number | null; bin_until?: number | null; notes?: EntityRef; bin_next_only?: boolean | null; bin_days?: number | null } | null;
@@ -1123,7 +1123,7 @@ export function outdoorGround(floor: Floor, x: number, z: number): number {
   return a ? outdoorTopAt(floor, a, x, z) : groundLevel(floor);
 }
 
-/** Auto Pro: which entities tell the car's state; null = automatic (an entity of the car's Home Assistant device). */
+/** Cars: which entities tell the car's state; null = automatic (an entity of the car's Home Assistant device). */
 export interface CarLinks {
   /** Any entity of the car's device: the others are found beside it. */
   device?: EntityRef;
@@ -1369,7 +1369,7 @@ export interface EnergySettings {
   /** House consumption (W); null = from the balance of grid, solar and battery. */
   consumption: string | null;
   tariff: string | null;
-  /** Energie Pro: gas and water meters (counters such as m³ or litres); the house card shows today's use. */
+  /** Energy: gas and water meters (counters such as m³ or litres); the house card shows today's use. */
   gas?: string | null;
   water?: string | null;
   /** An entity that is "on" while the cheap rate runs (a binary sensor, schedule or input boolean); wins over the window (#29). */
@@ -1895,7 +1895,7 @@ export function surfaceHeight(floor: Floor, x: number, z: number, itemH = 0): nu
   return top;
 }
 
-/** "Glotze, Wohnzimmerfernseher" → the names, trimmed, empty ones dropped (at most 12). */
+/** "Goggle box, Lounge telly" → the names, trimmed, empty ones dropped (at most 12). */
 export function splitAliases(text: string): string[] | undefined {
   const out = text.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean).slice(0, 12);
   return out.length ? out : undefined;

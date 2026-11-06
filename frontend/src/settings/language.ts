@@ -9,7 +9,7 @@ import type { Option, Setting } from "./registry.ts";
 /** The languages that come with Home 3D (bundled_languages/), besides English. */
 export const LANGUAGES = ["cs", "da", "de", "es", "fi", "fr", "hu", "it", "nb", "nl", "nn", "pl", "pt", "ro", "sl", "sv", "zh"] as const;
 
-/** A language's own name ("Deutsch"), the code itself when the browser cannot name it. */
+/** A language's own name ("Français"), the code itself when the browser cannot name it. */
 export function languageName(code: string): string {
   try {
     const name = new Intl.DisplayNames([code], { type: "language" }).of(code);

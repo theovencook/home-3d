@@ -163,8 +163,6 @@ def notice(packs: list[dict]) -> str:
     text = (
         "Home 3D packs\nCopyright (c) 2026 theovencook\n\n"
         "The furniture packs in this repository are original work, published under the MIT License (LICENSE).\n"
-        "They are not copies of the packs sold in Mastershort's shop. Home 3D is not affiliated with or endorsed by\n"
-        "Mastershort.\n"
     )
     if any(p["id"] == IKEA_PACK for p in packs):
         text += "\n" + IKEA_NOTICE + "\n"

@@ -454,7 +454,7 @@ export class OpeningsPart {
     const handles = this.entityOptions((id) => {
       const st = this.hass?.states[id];
       if (id.startsWith("binary_sensor.")) return typeof st?.attributes.window_state === "string";
-      return numberish(id) && (windowPosition(st) !== null || /griff|handle|fenster|window|drehgriff/i.test(`${id} ${entityName(this.hass, id)}`));
+      return numberish(id) && (windowPosition(st) !== null || /handle|window/i.test(`${id} ${entityName(this.hass, id)}`));
     });
     const plainContacts = this.entityOptions(isContact);
     type Kind = NonNullable<Opening["sensor"]>;

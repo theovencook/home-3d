@@ -12,9 +12,9 @@ export interface HistorySpec {
   furniture: [string, FurnitureLinks][];
   /** The view runs at the tablet level (fewer updates per second). */
   low: boolean;
-  /** The cars' own trackers (Auto Pro): replayed as home or away only, never a place. */
+  /** The cars' own trackers (car feature): replayed as home or away only, never a place. */
   cars?: string[];
-  /** Pro add-ons the owner has: Energie Pro (energy in the summaries and events), Auto Pro. */
+  /** Features in use: energy (in the summaries and events) and cars. */
   energy?: boolean;
   auto?: boolean;
 }

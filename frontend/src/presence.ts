@@ -229,15 +229,15 @@ export function locatedPersons(hass: HomeAssistant, building: Building, skip: Re
 // what a zone of a presence sensor may be called, per furniture kind – built-in or from a pack, by the kind's id
 // after the pack prefix ("pack:home3d.living:corner_right"); an own furniture name always counts too
 const ZONE_WORDS: [RegExp, string[]][] = [
-  [/sofa|couch|corner|chesterfield|recamiere|chaise|^module_/, ["sofa", "couch", "wohnlandschaft", "ecksofa", "eckcouch"]],
-  [/armchair|club_chair|wingback|recliner|lounge_chair|cocktail_chair|rocking_chair|bean_bag/, ["sessel", "armchair", "ohrensessel", "relaxsessel", "chair"]],
-  [/bed/, ["bett", "bed"]],
-  [/^dining/, ["esstisch", "essen", "essbereich", "dining", "tisch", "table"]],
-  [/^coffee/, ["couchtisch"]],
-  [/desk/, ["schreibtisch", "desk", "arbeitsplatz", "office"]],
+  [/sofa|couch|corner|chesterfield|recamiere|chaise|^module_/, ["sofa", "couch", "corner"]],
+  [/armchair|club_chair|wingback|recliner|lounge_chair|cocktail_chair|rocking_chair|bean_bag/, ["armchair", "recliner", "chair"]],
+  [/bed/, ["bed"]],
+  [/^dining/, ["dining", "table"]],
+  [/^coffee/, ["coffee"]],
+  [/desk/, ["desk", "office"]],
 ];
 
-const OUTSIDE = ["terrasse", "garten", "balkon", "aussen", "draussen", "terrace", "garden", "patio", "balcony", "outside"];
+const OUTSIDE = ["terrasse", "balkon", "terrace", "garden", "patio", "balcony", "outside"];
 
 /**
  * The doors of a room (and windows one can walk through, a French window) with the words of the room on the other
@@ -272,22 +272,21 @@ function roomDoors(floor: Building["floors"][number], room: Room): { to: string[
   return out;
 }
 
-const ZONE_NOISE = ["praesenz", "presence", "occupancy", "anwesenheit", "belegt", "zone", "bereich", "raum", "room", "rest", "sensor", "fp2"];
+const ZONE_NOISE = ["presence", "occupancy", "occupied", "zone", "area", "room", "rest", "sensor", "fp2"];
 
 const words = (text: string) =>
   text
     .toLowerCase()
-    .replace(/ä/g, "ae")
-    .replace(/ö/g, "oe")
-    .replace(/ü/g, "ue")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/ß/g, "ss")
-    .split(/[^a-z0-9]+/)
+    .split(/[^\p{L}\p{N}]+/u)
     .filter((w) => w.length > 1);
 
 /**
- * Where people in a room sit by the zones of its presence sensors (an Aqara FP2's "Sofa", "Sessel"): an occupied
+ * Where people in a room sit by the zones of its presence sensors (an Aqara FP2's "Sofa", "Armchair"): an occupied
  * zone named like a piece of furniture in the room gives that furniture's spot. The sensor belongs to the room by
- * its own or its device's Home Assistant area; zones without furniture ("Rest", "Eingang") give nothing.
+ * its own or its device's Home Assistant area; zones without furniture ("Rest", "Entrance") give nothing.
  */
 export function zoneSpots(hass: HomeAssistant, building: Building, floorId: string, room: Room): [number, number][] {
   const floor = building.floors.find((f) => f.id === floorId);
@@ -303,14 +302,14 @@ export function zoneSpots(hass: HomeAssistant, building: Building, floorId: stri
     const entry = hass.entities?.[entityId];
     const area = entry?.area_id ?? (entry?.device_id ? hass.devices?.[entry.device_id]?.area_id : null);
     if (area !== room.area_id) continue;
-    // the zone's own words: not the room's name nor the sensor's ("Wohnzimmer Präsenz Sofa" → "sofa")
+    // the zone's own words: not the room's name nor the sensor's ("Living room presence sofa" → "sofa")
     const said = new Set(words(String(st.attributes.friendly_name ?? entityId.slice(14))).filter((w) => !skip.has(w)));
     const hit = inRoom.find(
       (f) =>
         (f.name && words(f.name).some((w) => said.has(w))) ||
         ZONE_WORDS.some(([kind, names]) => kind.test(f.type.split(":").pop() ?? "") && names.some((n) => said.has(n))),
     );
-    // "Eingang Flur", "Terrassentür": the door to the room of that name, or a door to the outside
+    // "Entrance hall", "Terrace door": the door to the room of that name, or a door to the outside
     const door = hit
       ? null
       : doors.find((d) => (d.to ? d.to.some((w) => said.has(w)) : [...said].some((w) => OUTSIDE.some((o) => w.includes(o)))));

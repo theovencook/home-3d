@@ -255,7 +255,7 @@ export function compareDays(a: DaySummary, b: DaySummary): { roomId: string; nam
   });
 }
 
-// ---- energy at a moment (Energie Pro) ----
+// ---- energy at a moment (energy feature) ----
 
 /** A sensor's state at t: its five-minute mean, else its row. */
 function stateAt(timeline: Timeline, id: string, t: number): string | null {

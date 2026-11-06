@@ -9,16 +9,16 @@ const rect = (id: string, x1: number, z1: number): Room => ({ id, name: id, area
 function house(type: "none" | "flat" | "gable") {
   const b = emptyBuilding();
   b.floors = [
-    { ...newFloor("eg", "EG", 0), rooms: [rect("a", 10, 8)] },
-    { ...newFloor("og", "OG", 2.75), rooms: [rect("b", 10, 8)] },
-    { ...newFloor("dg", "Dachboden", 5.5) },
+    { ...newFloor("ground", "Ground", 0), rooms: [rect("a", 10, 8)] },
+    { ...newFloor("upper", "Upper", 2.75), rooms: [rect("b", 10, 8)] },
+    { ...newFloor("attic", "Attic", 5.5) },
   ];
   b.settings.roof = { type, pitch: 45, overhang: 0.5 };
   return b;
 }
 
 test("the roof sits on the highest floor with rooms", () => {
-  assert.equal(roofFloor(house("gable"))?.id, "og");
+  assert.equal(roofFloor(house("gable"))?.id, "upper");
   assert.equal(buildRoof(house("none")).length, 0);
 });
 
@@ -63,8 +63,8 @@ test("a floating roof window over a room of a lower floor belongs to that floor 
   const side = (id: string, x0: number, x1: number): Room => ({ id, name: id, area_id: null, points: [[x0, 0], [x1, 0], [x1, 8], [x0, 8]], floor_material: "wood" });
   const b = emptyBuilding();
   b.floors = [
-    { ...newFloor("eg", "EG", 0), rooms: [rect("a", 10, 8)] },
-    { ...newFloor("og", "OG", 2.75), rooms: [side("b1", 0, 4), side("b2", 6, 10)] },
+    { ...newFloor("ground", "Ground", 0), rooms: [rect("a", 10, 8)] },
+    { ...newFloor("upper", "Upper", 2.75), rooms: [side("b1", 0, 4), side("b2", 6, 10)] },
   ];
   b.settings.roof = { type: "gable", pitch: 45, overhang: 0.5 };
   const face = roofFaces(b)[0].key;
@@ -74,7 +74,7 @@ test("a floating roof window over a room of a lower floor belongs to that floor 
   ];
   const [part] = buildRoof(b);
   assert.ok(part.win?.solid.count, "the window over the top floor's room rides with the roof's part");
-  const below = part.winBelow?.get("eg");
+  const below = part.winBelow?.get("ground");
   assert.ok(below?.solid.count, "the window over the ground floor's room goes with the ground floor");
   // in the ground floor's own heights: above its ceiling (2.75 m), below the ridge
   const ys = below!.solid.p.filter((_, i) => i % 3 === 1);
@@ -92,9 +92,9 @@ test("a cross gable a top floor reaches into leaves its walls to that floor, lik
     const b = emptyBuilding();
     const wing = (id: string): Room => ({ id, name: id, area_id: null, points: [[3, 8], [7, 8], [7, 11], [3, 11]], floor_material: "wood" });
     b.floors = [
-      { ...newFloor("eg", "EG", 0), rooms: [rect("a", 10, 8), wing("w0")] },
-      { ...newFloor("og", "OG", 2.75), height: 2.5, rooms: [rect("b", 10, 8), wing("w1")] },
-      { ...newFloor("dg", "DG", 5.5), height: 2.4, rooms: intoWing ? [rect("c", 10, 8), wing("w2")] : [rect("c", 10, 8)] },
+      { ...newFloor("ground", "Ground", 0), rooms: [rect("a", 10, 8), wing("w0")] },
+      { ...newFloor("upper", "Upper", 2.75), height: 2.5, rooms: [rect("b", 10, 8), wing("w1")] },
+      { ...newFloor("attic", "Attic", 5.5), height: 2.4, rooms: intoWing ? [rect("c", 10, 8), wing("w2")] : [rect("c", 10, 8)] },
     ];
     b.settings.roof = {
       type: "custom",

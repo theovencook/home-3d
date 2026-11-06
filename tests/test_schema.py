@@ -190,11 +190,11 @@ def test_household_fields_are_kept_and_checked() -> None:
             "bin_kind": "paper",
             "bin_color": "#1f4fa8",
             "bin_lid": None,
-            "bin_source": "calendar.abfall",
+            "bin_source": "calendar.waste",
             "bin_match": "Papier",
         }
     )
-    assert out["bin_kind"] == "paper" and out["bin_source"] == "calendar.abfall"
+    assert out["bin_kind"] == "paper" and out["bin_source"] == "calendar.waste"
     assert "bin_kind" not in FURNITURE_SCHEMA(base)
     mail = FURNITURE_SCHEMA({**base, "type": "mailbox", "mailbox_door": "binary_sensor.door"})
     assert mail["mailbox_door"] == "binary_sensor.door"
@@ -284,8 +284,8 @@ def test_household_tag_settings_are_optional() -> None:
 def test_outdoor_area_keeps_its_name_and_area() -> None:
     """An outdoor area acting as a room (#100) keeps its name and Home Assistant area; without them both are None."""
     base = {"id": "g1", "type": "lawn", "points": [[0, 0], [4, 0], [4, 3]]}
-    out = OUTDOOR_SCHEMA({**base, "name": "Garten", "area_id": "garden"})
-    assert out["name"] == "Garten" and out["area_id"] == "garden"
+    out = OUTDOOR_SCHEMA({**base, "name": "Back garden", "area_id": "garden"})
+    assert out["name"] == "Back garden" and out["area_id"] == "garden"
     plain = OUTDOOR_SCHEMA(base)
     assert plain["name"] is None and plain["area_id"] is None
 
@@ -329,14 +329,14 @@ def test_live_director_triggers_and_live_picture() -> None:
         {
             **base,
             "director": {
-                "triggers": [{"entity": "cover.garage", "camera": "camera.hof"}, {"entity": "event.klingel_2"}],
+                "triggers": [{"entity": "cover.garage", "camera": "camera.yard"}, {"entity": "event.doorbell_2"}],
                 "live": True,
             },
         }
     )["director"]
     assert d["triggers"] == [
-        {"entity": "cover.garage", "camera": "camera.hof"},
-        {"entity": "event.klingel_2", "camera": None},
+        {"entity": "cover.garage", "camera": "camera.yard"},
+        {"entity": "event.doorbell_2", "camera": None},
     ]
     assert d["live"] is True
 
@@ -362,8 +362,8 @@ def test_ceiling_fan_keeps_its_fan() -> None:
         "h": 0.45,
         "variant": None,
     }
-    out = FURNITURE_SCHEMA({**fan, "entity": "light.decke", "fan": "fan.decke"})
-    assert out["fan"] == "fan.decke"
+    out = FURNITURE_SCHEMA({**fan, "entity": "light.ceiling", "fan": "fan.ceiling"})
+    assert out["fan"] == "fan.ceiling"
     assert "fan" not in FURNITURE_SCHEMA(fan)
 
 

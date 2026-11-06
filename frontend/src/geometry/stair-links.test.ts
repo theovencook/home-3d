@@ -7,8 +7,8 @@ test("two flights that meet join into one way that turns the corner and reaches 
   const links = stairLinks(twoFloors(flightA(), flightB()));
   assert.equal(links.length, 1);
   const [l] = links;
-  assert.equal(l.lower, "eg");
-  assert.equal(l.upper, "og");
+  assert.equal(l.lower, "ground");
+  assert.equal(l.upper, "upper");
   const hs = l.pts.map((p) => p[1]);
   assert.equal(hs[0], 0);
   assert.ok(Math.abs(hs[hs.length - 1] - 2.75) < 1e-9, "ends at the floor above");

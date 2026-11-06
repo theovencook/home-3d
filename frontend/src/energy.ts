@@ -244,7 +244,7 @@ function powerOfDevice(hass: HomeAssistant, statId: string | undefined, deviceCl
   const candidates = Object.keys(hass.states).filter((id) => id.startsWith("sensor.") && hass.entities?.[id]?.device_id === device && hass.states[id]?.attributes.device_class === deviceClass);
   if (candidates.length <= 1) return candidates[0] ?? null;
   // a total over several phases rather than a single phase or a daily value
-  const total = candidates.filter((id) => !/(phase|_l[123]\b|_[abc]$|today|daily|heute)/.test(id));
+  const total = candidates.filter((id) => !/(phase|_l[123]\b|_[abc]$|today|daily)/.test(id));
   const stem = statId.replace(/^sensor\./, "").replace(/_?(energy|energie|total|today|daily|kwh|import|export|consumption|production)/g, "");
   return total.find((id) => stem && id.includes(stem)) ?? total[0] ?? candidates[0];
 }

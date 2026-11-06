@@ -176,7 +176,7 @@ export class WallKitPart {
     this._wallPicTick++;
   }
 
-  /** The wall view's side bar: pool devices, ball valves and sight glasses (Pool Pro), energy devices (Energie Pro). */
+  /** The wall view's side bar: pool devices, ball valves and sight glasses (Pool Pro), energy devices (energy feature). */
   renderWallKit(this: Fp3dEditor, frame: WallFrame, room: Room, rc: RunCtx | null) {
     const pool = !!rc;
     if (!pool) return this.isEditor ? this.renderWallFurniture(frame, room) : nothing;

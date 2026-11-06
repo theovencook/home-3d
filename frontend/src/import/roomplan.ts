@@ -22,13 +22,13 @@ interface Section {
   story?: number;
 }
 
-const LABELS: Record<string, [string, string]> = {
-  livingRoom: ["Wohnzimmer", "Living room"],
-  bedroom: ["Schlafzimmer", "Bedroom"],
-  bathroom: ["Bad", "Bathroom"],
-  kitchen: ["Küche", "Kitchen"],
-  diningRoom: ["Esszimmer", "Dining room"],
-  unidentified: ["", ""],
+const LABELS: Record<string, string> = {
+  livingRoom: "Living room",
+  bedroom: "Bedroom",
+  bathroom: "Bathroom",
+  kitchen: "Kitchen",
+  diningRoom: "Dining room",
+  unidentified: "",
 };
 
 /** A 4×4 matrix (column-major, flat or as four columns). */
@@ -45,7 +45,7 @@ export function isRoomPlan(data: unknown): boolean {
   return walls.length > 0 && !!walls[0]?.dimensions && !!walls[0]?.transform;
 }
 
-export function readRoomPlan(data: unknown, lang = "de"): RawPlan {
+export function readRoomPlan(data: unknown): RawPlan {
   const d = data as Record<string, unknown>;
   const rooms = Array.isArray(d.rooms) ? (d.rooms as Record<string, unknown>[]) : [];
   // a structure lists everything at the top; older exports only per room
@@ -55,7 +55,6 @@ export function readRoomPlan(data: unknown, lang = "de"): RawPlan {
   };
   const walls = list<Surface>("walls");
   if (!walls.length) throw new Error("nothing_found");
-  const de = lang.startsWith("de");
   const floors = new Map<number, RawFloor & { base: number[] }>();
   const floorOf = (story = 0) => {
     let f = floors.get(story);
@@ -132,7 +131,7 @@ export function readRoomPlan(data: unknown, lang = "de"): RawPlan {
   for (const f of floors.values())
     for (const r of f.rooms) {
       const s = sections.find((x) => x.center && pointInPolygon([x.center[0], x.center[2]], r.points));
-      if (s?.label) r.name = LABELS[s.label]?.[de ? 0 : 1] ?? s.label;
+      if (s?.label) r.name = LABELS[s.label] ?? s.label;
     }
 
   // heights from the ground floor's level (the phone's own height is the scan's origin)
@@ -141,7 +140,7 @@ export function readRoomPlan(data: unknown, lang = "de"): RawPlan {
   const out = [...floors.entries()].sort((a, b) => a[0] - b[0]).map(([, f], i, all) => {
     const { base: _base, ...floor } = f;
     void _base;
-    return { ...floor, name: all.length > 1 ? (de ? `Etage ${i + 1}` : `Floor ${i + 1}`) : de ? "Erdgeschoss" : "Ground floor" };
+    return { ...floor, name: all.length > 1 ? `Floor ${i + 1}` : "Ground floor" };
   });
   // RoomPlan places the walls at their room-side surfaces: neighbouring rooms lie a wall apart
   return { source: "RoomPlan", floors: out, roomsAtInnerFaces: true, wallFaces: true, align: true };

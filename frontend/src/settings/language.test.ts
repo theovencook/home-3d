@@ -15,7 +15,7 @@ test("the language row is a device setting that search finds by language, transl
   const s = settingById("language")!;
   assert.equal(s.scope, "device");
   assert.equal(audienceOf(sectionOf(s.section)!), "device");
-  for (const q of ["language", "translation", "german", "deutsch"]) {
+  for (const q of ["language", "translation", "french", "francais"]) {
     assert.ok(searchSettings(q, env(), (k) => en[k] ?? k).some((r) => r.id === "language"), q);
   }
   assert.match(en.st_language_auto!, /Home Assistant/);
@@ -25,13 +25,13 @@ test("Automatic follows Home Assistant, a chosen language overrides it", () => {
   const s = settingById("language")!;
   const e = env();
   assert.equal(s.read(e), "auto");
-  assert.ok(languageOptions().some((o) => o.value === "de" && o.label === "Deutsch"));
+  assert.ok(languageOptions().some((o) => o.value === "fr" && o.label === "Français"));
   setChosenLanguage(null);
-  assert.equal(languageCode("de"), "de");
+  assert.equal(languageCode("nl"), "nl");
   s.write!(e, "fr" as never);
   setChosenLanguage(e.prefs.get("language"));
-  assert.equal(languageCode("de"), "fr");
-  assert.equal(uiLanguage({ language: "de" } as never), "en"); // French texts are not loaded here
+  assert.equal(languageCode("nl"), "fr");
+  assert.equal(uiLanguage({ language: "nl" } as never), "en"); // French texts are not loaded here
   setChosenLanguage("auto");
-  assert.equal(languageCode("de"), "de");
+  assert.equal(languageCode("nl"), "nl");
 });

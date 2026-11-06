@@ -43,7 +43,7 @@ export class EnergyPart {
     return keys.sort((p, q) => rank(p) - rank(q) || p.localeCompare(q));
   }
 
-  /** What a cable key means to the user: "Solarfeld 1 → Wechselrichter Nord". */
+  /** What a cable key means to the user: "Solar field 1 → Inverter north". */
   cableLabel(this: Fp3dEditor, key: string): string {
     const furn = (id: string) => {
       const m = this._doc.floors.flatMap((f) => f.furniture).find((x) => x.id === id);
@@ -118,7 +118,7 @@ export class EnergyPart {
     })}</g>`;
   }
 
-  /** Energie Pro: the cables, each to lay by hand with points and a height. */
+  /** Energy: the cables, each to lay by hand with points and a height. */
   renderCableSettings(this: Fp3dEditor) {
     const keys = this.cableKeys();
     if (!keys.length) return nothing;
@@ -212,7 +212,7 @@ export class EnergyPart {
   }
 
   /**
-   * Energie Pro: which solar field the hologram hangs on, how big it is and where exactly. Shown without solar
+   * Energy: which solar field the hologram hangs on, how big it is and where exactly. Shown without solar
    * fields too (the house card then hangs beside the house), only the field's own settings wait for a field (#334).
    */
   renderHologramSettings(this: Fp3dEditor) {
@@ -370,8 +370,8 @@ export class EnergyPart {
     const find = (re: RegExp) => rooms.find((r) => re.test(areaName(r)));
     const parked = rooms.find((r) => floor.furniture.some((m) => m.type === "parking" && pointInPolygon([m.x, m.z], r.points)));
     const garage = find(/garage|carport/) ?? parked;
-    const utility = find(/hwr|hauswirt|technik|keller|abstell|utility|basement|boiler|heiz/);
-    const hall = find(/flur|diele|eingang|hall|entr|lobby/);
+    const utility = find(/utility|basement|cellar|boiler|plant ?room/);
+    const hall = find(/hall|entr|lobby/);
     const room = (type === "wallbox" ? garage : type === "meter" ? (utility ?? hall ?? garage) : (utility ?? garage)) ?? this.room ?? rooms.sort((a, b) => Math.abs(signedArea(b.points)) - Math.abs(signedArea(a.points)))[0];
     const [w, d, h] = furnitureSize(type);
     let [x, z] = room ? centroid(room.points) : this.toWorld(this._size.w / 2, this._size.h / 2);

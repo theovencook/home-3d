@@ -34,10 +34,10 @@ test("a drag stays in the room it started in: it slides along the wall or stops"
 });
 
 test("clampIntoRoom: a cabinet pushed into the wall stops at the wall face, in a corner at both walls", () => {
-  const floor = newFloor("eg", "EG", 0);
+  const floor = newFloor("ground", "Ground", 0);
   floor.rooms = [
-    { id: "k", name: "Küche", area_id: null, points: [[0, 0], [4, 0], [4, 3], [0, 3]], floor_material: "tiles" },
-    { id: "f", name: "Flur", area_id: null, points: [[0, 3], [4, 3], [4, 5], [0, 5]], floor_material: "tiles" },
+    { id: "k", name: "Kitchen", area_id: null, points: [[0, 0], [4, 0], [4, 3], [0, 3]], floor_material: "tiles" },
+    { id: "f", name: "Hall", area_id: null, points: [[0, 3], [4, 3], [4, 5], [0, 5]], floor_material: "tiles" },
   ];
   const cab = { x: 2, z: 0.2, w: 0.8, d: 0.35, rotation: 0 };
   // pushed 30 cm towards the outer wall (z = 0): its back stops at z = 0

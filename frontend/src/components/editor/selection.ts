@@ -447,7 +447,7 @@ export class SelectionPart {
     });
   }
 
-  /** "Als Block zusammenfassen": the selection becomes one block. */
+  /** "Group as block": the selection becomes one block. */
   groupSelection(this: Fp3dEditor): void {
     const ids = new Set(this.selection());
     if (ids.size < 2) return;
@@ -459,7 +459,7 @@ export class SelectionPart {
     this._single = false;
   }
 
-  /** "Block auflösen": every part on its own again (the parts stay selected). */
+  /** "Ungroup": every part on its own again (the parts stay selected). */
   ungroupSelection(this: Fp3dEditor): void {
     const set = this.selection();
     const ids = new Set(set);

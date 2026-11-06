@@ -7,47 +7,47 @@ const room = (id: string, name: string): Room => ({ id, name, area_id: null, poi
 const building = {
   ...emptyBuilding(),
   floors: [
-    { ...newFloor("eg", "Erdgeschoss", 0), rooms: [room("wz", "Wohnzimmer"), room("wc", "WC"), room("gwc", "Gäste-WC")] },
-    { ...newFloor("og", "Obergeschoss", 2.8), rooms: [room("kz", "Kinderzimmer")] },
+    { ...newFloor("ground", "Ground floor", 0), rooms: [room("lr", "Living room"), room("wc", "WC"), room("gwc", "Guest WC")] },
+    { ...newFloor("first", "First floor", 2.8), rooms: [room("kr", "Nursery")] },
   ],
 };
 
 test("normalize: lower case, no accents or punctuation", () => {
-  assert.equal(normalize("Gäste-WC!"), "gaste wc");
-  assert.equal(normalize("  Straße "), "strasse");
+  assert.equal(normalize("Café-WC!"), "cafe wc");
+  assert.equal(normalize("  ß "), "ss");
 });
 
 test("a sentence names a room, a floor or the house", () => {
-  assert.deepEqual(findPlace("Zeig mir das Wohnzimmer", building), { kind: "room", floorId: "eg", roomId: "wz", name: "Wohnzimmer" });
-  assert.equal(findPlace("geh ins Gäste-WC", building)?.name, "Gäste-WC");
-  assert.equal(findPlace("WC bitte", building)?.name, "WC");
-  assert.deepEqual(findPlace("Obergeschoss", building), { kind: "floor", floorId: "og", name: "Obergeschoss" });
-  assert.equal(findPlace("zeig das ganze Haus", building)?.kind, "house");
-  assert.equal(findPlace("mach das Licht an", building), null);
+  assert.deepEqual(findPlace("Show me the living room", building), { kind: "room", floorId: "ground", roomId: "lr", name: "Living room" });
+  assert.equal(findPlace("go to the guest WC", building)?.name, "Guest WC");
+  assert.equal(findPlace("WC please", building)?.name, "WC");
+  assert.deepEqual(findPlace("First floor", building), { kind: "floor", floorId: "first", name: "First floor" });
+  assert.equal(findPlace("show the whole house", building)?.kind, "house");
+  assert.equal(findPlace("turn the light on", building), null);
   assert.equal(findPlace("", building), null);
 });
 
 test("a command to show: a show word or a bare place name – not a sentence that only names the room", () => {
-  assert.equal(showCommand("Zeig das Wohnzimmer", building)?.name, "Wohnzimmer");
-  assert.equal(showCommand("Wohnzimmer", building)?.name, "Wohnzimmer");
-  assert.equal(showCommand("das Obergeschoss bitte", building)?.name, "Obergeschoss");
+  assert.equal(showCommand("Show the living room", building)?.name, "Living room");
+  assert.equal(showCommand("Living room", building)?.name, "Living room");
+  assert.equal(showCommand("the first floor please", building)?.name, "First floor");
   assert.equal(showCommand("show the whole house", building)?.kind, "house");
-  assert.equal(showCommand("Licht im Wohnzimmer an", building), null);
-  assert.equal(showCommand("Wie warm ist es im Kinderzimmer", building), null);
+  assert.equal(showCommand("turn on the living room light", building), null);
+  assert.equal(showCommand("How warm is it in the nursery", building), null);
   // the Home Assistant area's own name counts too
-  assert.equal(showCommand("geh in die Stube", building, (r) => (r.id === "wz" ? "Stube" : null))?.name, "Wohnzimmer");
+  assert.equal(showCommand("go to the lounge", building, (r) => (r.id === "lr" ? "Lounge" : null))?.name, "Living room");
 });
 
 test("switch and open claim a sentence only when it names nothing but a place (#161)", () => {
   // switching and opening commands that happen to name a room are for Assist
-  for (const s of ["switch off the lights in the Wohnzimmer", "switch the Wohnzimmer light on", "open the blinds in the Wohnzimmer", "oeffne die Rollos im Wohnzimmer", "Öffne das Fenster im Kinderzimmer", "apri la tapparella del Wohnzimmer"]) {
+  for (const s of ["switch off the lights in the living room", "switch the living room light on", "open the blinds in the living room", "open the window in the nursery", "apri la tapparella del living room"]) {
     assert.equal(showCommand(s, building), null, s);
   }
   // asking to see the place with them still works
-  assert.equal(showCommand("switch to the Wohnzimmer", building)?.name, "Wohnzimmer");
-  assert.equal(showCommand("open the Wohnzimmer", building)?.name, "Wohnzimmer");
-  assert.equal(showCommand("öffne das Wohnzimmer bitte", building)?.name, "Wohnzimmer");
-  assert.equal(showCommand("show the Wohnzimmer", building)?.name, "Wohnzimmer");
+  assert.equal(showCommand("switch to the living room", building)?.name, "Living room");
+  assert.equal(showCommand("open the living room", building)?.name, "Living room");
+  assert.equal(showCommand("open the living room please", building)?.name, "Living room");
+  assert.equal(showCommand("show the living room", building)?.name, "Living room");
 });
 
 test("room names in other scripts and with undecomposable letters can be addressed (#199)", () => {
@@ -60,7 +60,7 @@ test("room names in other scripts and with undecomposable letters can be address
   assert.equal(normalize("Phòng đọc"), normalize("Phong doc"));
   const b = {
     ...emptyBuilding(),
-    floors: [{ ...newFloor("eg", "EG", 0), rooms: [room("k", "Кухня"), room("l", "Łazienka"), room("r", "リビング")] }],
+    floors: [{ ...newFloor("ground", "Ground floor", 0), rooms: [room("k", "Кухня"), room("l", "Łazienka"), room("r", "リビング")] }],
   };
   assert.equal(findPlace("покажи Кухня", b)?.name, "Кухня");
   assert.equal(findPlace("show lazienka", b)?.name, "Łazienka");

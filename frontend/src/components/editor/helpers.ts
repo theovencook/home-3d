@@ -235,7 +235,7 @@ export function isEnergyDevice(type: string): boolean {
 /** A gas or water meter from a pack (its reading in m³ or litres, no power): family "meter" tagged gas or water. */
 export function volumeMeter(type: string): boolean {
   const item = packInfo(type);
-  return item?.family === "meter" && (item.tags ?? []).some((t) => /^(gas|water|wasser)$/i.test(t));
+  return item?.family === "meter" && (item.tags ?? []).some((t) => /^(gas|water)$/i.test(t));
 }
 
 /** Distance of a plan point from a segment. */
@@ -247,7 +247,7 @@ export function distToSegment(p: Vec2, a: Vec2, b: Vec2): number {
   return Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dz * t);
 }
 
-/** Lower case without accents, so "kuche" finds "Küche" and "chaise" finds "Chaise longue". */
+/** Lower case without accents, so "cafe" finds "Café" and "chaise" finds "Chaise longue". */
 export function fold(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
 }

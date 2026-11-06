@@ -259,7 +259,7 @@ _SCREEN_PICTURE_SCHEMA = vol.Schema(
     }
 )
 
-# Auto Pro: the car's entities on a parking spot (None = found on the car's device)
+# Cars: the car's entities on a parking spot (None = found on the car's device)
 _CAR_ENTITY = vol.Any(None, vol.All(str, vol.Length(max=255)))
 CAR_SCHEMA = vol.Schema(
     {
@@ -485,7 +485,7 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Required("d"): _LENGTH,
         vol.Required("h"): _LENGTH,
         vol.Required("variant"): vol.Any(None, vol.All(str, vol.Length(max=32))),
-        # its own name (e.g. "Wechselrichter Nord"); None = the type's name; show_name puts it under the marker
+        # its own name (e.g. "Inverter north"); None = the type's name; show_name puts it under the marker
         vol.Optional("name", default=None): vol.Any(None, vol.All(str, vol.Length(max=60))),
         vol.Optional("aliases"): vol.All([vol.All(str, vol.Length(min=1, max=60))], vol.Length(max=12)),
         vol.Optional("show_name", default=False): bool,
@@ -505,15 +505,15 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("charge", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # meter: a separate export power sensor when the power sensor only reports import
         vol.Optional("export", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
-        # Energie Pro: a hologram card over the device (power now, today's kWh, day curve)
+        # Energy: a hologram card over the device (power now, today's kWh, day curve)
         vol.Optional("holo", default=False): bool,
         # the power sensor of the circuit it is inside (a circuit monitor's channel): not counted twice (#43)
         vol.Optional("circuit"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # the energy sensor (kWh) its wire end shows today's use of (#29; left out = found on the device)
         vol.Optional("energy"): vol.Any(None, vol.All(str, vol.Length(max=255))),
-        # Energie Pro, inverter: False hides the plant's card over its field
+        # Energy, inverter: False hides the plant's card over its field
         vol.Optional("plant_card"): bool,
-        # Energie Pro, inverter: its plant card moved along the eave / up the slope (m)
+        # Energy, inverter: its plant card moved along the eave / up the slope (m)
         vol.Optional("plant_right"): vol.All(vol.Coerce(float), vol.Range(min=-30, max=30)),
         vol.Optional("plant_up"): vol.All(vol.Coerce(float), vol.Range(min=-30, max=30)),
         vol.Optional("status", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
@@ -572,20 +572,20 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("materials"): vol.Any(
             None, vol.Schema({vol.In(COLOUR_ROLES): vol.In(MATERIALS)}, extra=vol.PREVENT_EXTRA)
         ),
-        # household: a waste bin's kind and colours, its calendar (Haushalt Pro); a mailbox's emptying door
+        # household: a waste bin's kind and colours, its calendar (household feature); a mailbox's emptying door
         vol.Optional("bin_kind"): vol.Any(None, vol.In(WASTE_KINDS)),
         vol.Optional("bin_color"): vol.Any(None, vol.Match(r"^#[0-9a-fA-F]{6}$")),
         vol.Optional("bin_lid"): vol.Any(None, vol.Match(r"^#[0-9a-fA-F]{6}$")),
         vol.Optional("bin_source"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("bin_match"): vol.Any(None, vol.All(str, vol.Length(max=120))),
         vol.Optional("mailbox_door"): vol.Any(None, vol.All(str, vol.Length(max=255))),
-        # Haushalt Pro: on while the bin is out (an input_boolean a nightly automation resets)
+        # Household: on while the bin is out (an input_boolean a nightly automation resets)
         vol.Optional("bin_out"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # where the bin stands while it is out (#142): a point on its floor's plan, drawn there while bin_out is on
         vol.Optional("bin_kerb"): vol.Any(
             None, vol.Schema({vol.Required("x"): _COORD, vol.Required("z"): _COORD}, extra=vol.PREVENT_EXTRA)
         ),
-        # Haushalt Pro: a plant's moisture, an appliance's time left, a service, a fridge's door alarm
+        # Household: a plant's moisture, an appliance's time left, a service, a fridge's door alarm
         vol.Optional("moisture"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("moisture_min"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=100))),
         vol.Optional("remaining"): vol.Any(None, vol.All(str, vol.Length(max=255))),
@@ -629,7 +629,7 @@ FURNITURE_SCHEMA = vol.Schema(
             None, vol.In(["filter", "backwash", "rinse", "waste", "recirculate", "closed"])
         ),
         vol.Optional("valve_open", default=None): vol.Any(None, bool),
-        # Auto Pro: the car's entities
+        # Cars: the car's entities
         vol.Optional("car", default=None): vol.Any(None, CAR_SCHEMA),
         vol.Optional("scale", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.2, max=2)),
         vol.Optional("type_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
@@ -679,7 +679,7 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Optional("glow_scale", default=None): vol.Any(
             None, vol.All(vol.Coerce(float), vol.Range(min=0.1, max=1.5))
         ),
-        # Energie Pro: a glass card over the placed device (a smart plug)
+        # Energy: a glass card over the placed device (a smart plug)
         vol.Optional("holo", default=False): bool,
         # the power sensor of the circuit it is inside (a circuit monitor's channel): not counted twice (#43)
         vol.Optional("circuit"): vol.Any(None, vol.All(str, vol.Length(max=255))),
@@ -937,7 +937,7 @@ ROOF_WINDOW_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
-# Energie Pro: a cable laid by hand: its way in the plan at a height above its floor
+# Energy: a cable laid by hand: its way in the plan at a height above its floor
 CABLE_SCHEMA = vol.Schema(
     {
         vol.Required("id"): vol.All(str, vol.Length(max=80)),
@@ -949,7 +949,7 @@ CABLE_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
-# Energie Pro: the hologram hangs on a solar field, moved along it and scaled
+# Energy: the hologram hangs on a solar field, moved along it and scaled
 HOLOGRAM_SCHEMA = vol.Schema(
     {
         vol.Optional("place", default="field"): vol.In(["field", "free"]),
@@ -1142,7 +1142,7 @@ SETTINGS_SCHEMA = vol.Schema(
         vol.Optional("sun_shadow", default=True): bool,
         vol.Optional("window_glow", default=True): bool,
         # fun pack "Halloween": the ghost floating through the house (on unless switched off)
-        # Haushalt Pro: the hours a waste bin glows (from the day before, until on the day)
+        # Household: the hours a waste bin glows (from the day before, until on the day)
         vol.Optional("household"): vol.Any(
             None,
             vol.Schema(
@@ -1395,7 +1395,7 @@ ENERGY_SCHEMA = vol.Schema(
         vol.Optional("battery_soc", default=None): _ENTITY,
         vol.Optional("consumption", default=None): _ENTITY,
         vol.Optional("tariff", default=None): _ENTITY,
-        # Energie Pro: gas and water meters (counters, e.g. m³); the house card shows today's use
+        # Energy: gas and water meters (counters, e.g. m³); the house card shows today's use
         vol.Optional("gas", default=None): _ENTITY,
         vol.Optional("water", default=None): _ENTITY,
         # the cheap rate (#29): an entity that is "on" while it runs, or a daily window "HH:MM" (over midnight when

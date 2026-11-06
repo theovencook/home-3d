@@ -1,9 +1,9 @@
 /**
- * Household (free models, Haushalt Pro life): waste bins and mailboxes.
+ * Household: waste bins and mailboxes, as models and live.
  *
  * The models are for everyone: bins in the shapes used around the world (wheelie bins, sacks, caddies, underground
  * containers, multi-compartment bins) with a body and a lid colour of their own – starting from what is usual in the
- * Home Assistant's country – and mailboxes in their local shapes. Haushalt Pro brings them to life: a bin glows the
+ * Home Assistant's country – and mailboxes in their local shapes. Live data brings them to life: a bin glows the
  * evening before its pickup (from a waste calendar, e.g. Waste Collection Schedule, or a sensor with the days left),
  * a mailbox glows while post lies in it.
  */
@@ -50,7 +50,7 @@ export function isPackBin(type: string): boolean {
   return !!packItem(type)?.tags?.includes("bin");
 }
 
-const PLANT_WORDS = /plant|pflanz|palm|monstera|ficus|feige|\bfig\b|fig_|bonsai|kaktus|cactus|yucca|orchid|bambus|bamboo|bogenhanf|snake_|einblatt|lily|gummibaum|rubber|olive|kräuter|\bherb|\bfarn|\bfern\b|\befeu\b|\bivy\b|blumen|flower|tulp|tulip/i;
+const PLANT_WORDS = /plant|palm|monstera|ficus|\bfig\b|fig_|bonsai|kaktus|cactus|yucca|orchid|bambus|bamboo|snake_|lily|rubber|olive|\bherb|\bfern\b|\bivy\b|flower|tulp|tulip/i;
 
 export const BIN_SHAPES = ["bin120", "bin240", "bin1100", "multi", "bag", "caddy", "underground"] as const;
 export type BinShape = (typeof BIN_SHAPES)[number];
@@ -105,7 +105,7 @@ const GREEN: Pair = ["#2f7d3b", "#2f7d3b"];
 
 /**
  * Usual colours of each kind of waste, per country (body, lid) – a start that every bin can change. Countries
- * without an entry use the default (the German one).
+ * without an entry use the default.
  */
 const PRESETS: Record<string, Partial<Record<WasteKind, Pair>>> = {
   default: { rest: GREY, bio: BROWN, paper: BLUE, plastic: YELLOW, glass: GREEN, garden: GREEN, recycling: YELLOW, other: GREY },
@@ -163,13 +163,13 @@ export function binColors(f: Pick<Furniture, "bin_kind" | "bin_color" | "bin_lid
 
 /** Words that name a kind of waste in calendar entries, in many languages (lower case; matched as parts of words). */
 const KEYWORDS: Record<Exclude<WasteKind, "other">, string[]> = {
-  rest: ["rest", "hausmüll", "hausmuell", "general", "garbage", "trash", "refuse", "landfill", "residual", "black bin", "grijs", "ordures", "ménag", "indifferenzia", "secco", "residu", "restavfall", "sekajäte", "sekajate", "dagrenovation", "hushold", "kommunal", "zmieszane", "směsn", "smesn", "vegyes", "rifiut", "basura", "resto", "lixo", "indiferenciad", "其他垃圾"],
+  rest: ["rest", "general", "garbage", "trash", "refuse", "landfill", "residual", "black bin", "grijs", "ordures", "ménag", "indifferenzia", "secco", "residu", "restavfall", "sekajäte", "sekajate", "dagrenovation", "hushold", "kommunal", "zmieszane", "směsn", "smesn", "vegyes", "rifiut", "basura", "resto", "lixo", "indiferenciad", "其他垃圾"],
   bio: ["bio", "organic", "food", "gft", "vgf", "compost", "kompost", "organico", "organique", "umido", "matavfall", "biojäte", "biojate", "madaffald", "bioaffald", "bioodpad", "organik", "orgánic", "organic", "厨余"],
   paper: ["papier", "paper", "papp", "karton", "cardboard", "carta", "cartón", "carton", "papír", "paperi", "papper", "pap ", "papír", "papel", "makulatur", "纸"],
-  plastic: ["gelb", "gelbe", "verpackung", "lvp", "plastic", "plastik", "plastica", "pmd", "emballage", "packaging", "envases", "embalag", "muovi", "förpackning", "forpackning", "emballasje", "obaly", "műanyag", "tworzyw", "塑料"],
+  plastic: ["plastic", "plastik", "plastica", "pmd", "emballage", "packaging", "envases", "embalag", "muovi", "förpackning", "forpackning", "emballasje", "obaly", "műanyag", "tworzyw", "塑料"],
   glass: ["glas", "glass", "verre", "vetro", "vidrio", "vidro", "lasi", "sklo", "üveg", "szkło", "玻璃"],
-  garden: ["garten", "grün", "gruen", "baum", "laub", "garden", "yard", "green waste", "tuin", "snoei", "sfalci", "potature", "déchets verts", "dechets verts", "jardín", "jardin", "trädgård", "tradgard", "have", "puutarha", "zahrad", "zöld", "zielone"],
-  recycling: ["recycl", "wertstoff", "recyclage", "riciclo", "reciclaje", "kierrätys", "återvinning", "genbrug", "gjenvinning", "可回收"],
+  garden: ["garden", "yard", "green waste", "tuin", "snoei", "sfalci", "potature", "déchets verts", "dechets verts", "jardín", "jardin", "trädgård", "tradgard", "have", "puutarha", "zahrad", "zöld", "zielone"],
+  recycling: ["recycl", "recyclage", "riciclo", "reciclaje", "kierrätys", "återvinning", "genbrug", "gjenvinning", "可回收"],
 };
 
 /** Whether a calendar entry's title is about this bin: its own keyword, else the words of its kind. */
@@ -177,7 +177,7 @@ export function wasteMatches(summary: string, kind: WasteKind, own?: string | nu
   const text = ` ${summary.toLowerCase()} `;
   if (own && own.trim()) return own.toLowerCase().split(/[,;|]/).some((w) => w.trim() && text.includes(w.trim()));
   if (kind === "other") return false;
-  // "Biotonne" is bio, "Restmüll" rest – but "Papier/Pappe" is not plastic: each kind's words only
+  // "Food waste" is bio, "General waste" rest – but "Paper and card" is not plastic: each kind's words only
   return KEYWORDS[kind].some((w) => text.includes(w));
 }
 
@@ -417,7 +417,7 @@ export function binTagsShown(bins: readonly { id: string; days: number }[], o: B
 /** Days until the pickup a sensor tells: a number, a date or a timestamp, or Waste Collection Schedule's `daysTo`. */
 /**
  * A date written inside a sensor's text, as Waste Collection Schedule's own formats show it: "on Mon, 26.10.2026",
- * "Biotonne 26.10.", "2026-10-26 (Mo)", "26/10/2026" (day first unless that cannot be). A date without a year that
+ * "Food waste 26.10.", "2026-10-26 (Mon)", "26/10/2026" (day first unless that cannot be). A date without a year that
  * has passed this year is next year's. Null when the text holds none – its numbers are no date then.
  */
 export function dateInText(text: string, now = new Date()): Date | null {
@@ -449,16 +449,16 @@ export function sensorDays(st: HassEntity, now = new Date()): number | null {
   const s = String(st.state).trim();
   if (/^-?\d+(\.\d+)?$/.test(s)) return Math.round(Number(s));
   // a timestamp is read as a moment (its local day); any other text for a date written in it – the browser's own
-  // reading of free text would make "Weihnachtsbaum 05.01." the year 2001
+  // reading of free text would make "Christmas tree 05.01." the year 2001
   const date = /^\d{4}-\d{2}-\d{2}T/.test(s) ? dayOf(s) : dateInText(s, now);
   if (date) return daysBetween(now, date);
-  // "in 2 Tagen", "in 3 days", "morgen"/"tomorrow", "heute"/"today"
+  // "in 3 days", "tomorrow", "today" (and the same in other languages)
   const low = s.toLowerCase();
-  if (/(^|\s)(heute|today|vandaag|aujourd|oggi|hoy|hoje|idag|i dag|tänään|dnes|ma$|dziś|dzis|今天)/.test(low)) return 0;
+  if (/(^|\s)(today|vandaag|aujourd|oggi|hoy|hoje|idag|i dag|tänään|dnes|ma$|dziś|dzis|今天)/.test(low)) return 0;
   if (/(^|\s)(morgen|tomorrow|demain|domani|mañana|amanhã|imorgon|i morgen|huomenna|zítra|holnap|jutro|明天)/.test(low)) return 1;
-  // the days are the number before a word for days or after "in" ("Restabfall 2-wöchentlich in 4 Tagen" is 4, D576),
+  // the days are the number before a word for days or after "in" ("General waste fortnightly in 4 days" is 4, D576),
   // else the last number of the text
-  const unit = /(\d+)\s*(tag|day|dag|jour|giorn|día|dia|päiv|paiv|den|dn|nap|天)/.exec(low) ?? /\bin\s+(\d+)/.exec(low);
+  const unit = /(\d+)\s*(day|dag|jour|giorn|día|dia|päiv|paiv|den|dn|nap|天)/.exec(low) ?? /\bin\s+(\d+)/.exec(low);
   if (unit) return Number(unit[1]);
   const all = low.match(/\d+/g);
   return all ? Number(all[all.length - 1]) : null;
@@ -502,7 +502,7 @@ export function householdEntities(f: Furniture): EntityRef[] {
   return householdExtras(f);
 }
 
-// ---------------------------------------------------------------- Haushalt Pro, part 2: plants, appliances, upkeep, fridge
+// ---------------------------------------------------------------- Household, part 2: plants, appliances, upkeep, fridge
 
 /** The number of an entity's state, when it is one. */
 const num = (st: HassEntity | undefined): number | null => {
@@ -546,7 +546,7 @@ export function remainingMinutes(st: HassEntity | undefined, now = Date.now()): 
 }
 
 /** States of an appliance or its program sensor that mean the program has ended. */
-const FINISHED = new Set(["finished", "end", "ended", "done", "complete", "completed", "program_finished", "programfinished", "fertig", "beendet", "ende", "termine", "finito", "klaar", "klar", "valmis"]);
+const FINISHED = new Set(["finished", "end", "ended", "done", "complete", "completed", "program_finished", "programfinished", "termine", "finito", "klaar", "klar", "valmis"]);
 
 export function isFinishedState(st: HassEntity | undefined): boolean {
   if (!st) return false;
@@ -555,7 +555,7 @@ export function isFinishedState(st: HassEntity | undefined): boolean {
 }
 
 /** States of an appliance (or of its status sensor) that say it runs no program. */
-const IDLE = new Set(["off", "idle", "standby", "stand_by", "ready", "inactive", "sleep", "sleeping", "power_off", "aus", "bereit", "unavailable"]);
+const IDLE = new Set(["off", "idle", "standby", "stand_by", "ready", "inactive", "sleep", "sleeping", "power_off", "unavailable"]);
 
 /**
  * Whether an appliance's own readings say it is idle, so a time left on its display sensor is a leftover (after a
@@ -567,7 +567,7 @@ export function applianceIdle(st: HassEntity | undefined, power: number | null, 
   const s = st ? String(st.state).toLowerCase().replace(/\s+/g, "_") : null;
   if (s !== null && IDLE.has(s)) return true;
   const plug = !!st && /^(switch|input_boolean|light)\./.test(st.entity_id);
-  const reportsRun = !!st && !plug && s !== null && (s === "on" || /run|wash|dry|rinse|spin|clean|läuft|laeuft|betrieb/.test(s));
+  const reportsRun = !!st && !plug && s !== null && (s === "on" || /run|wash|dry|rinse|spin|clean/.test(s));
   return power !== null && power <= runW && !reportsRun;
 }
 

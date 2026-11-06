@@ -69,7 +69,7 @@ in the importer and every folder with a `pack.json` in it is imported as its own
 | `kind` | no | `"furniture"` (the default) or `"language"` for a [language pack](languages.md). |
 | `language` | language packs only | The language a language pack is for, e.g. `"fr"`. |
 
-No other fields are allowed. The fields of the old signed shop packs (`signature`, `licensee`, `instance`) are not
+No other fields are allowed. The fields of older signed packs (`signature`, `licensee`, `instance`) are not
 part of v2 and make a v2 pack fail.
 
 ## Item ids
@@ -136,7 +136,7 @@ draw from the plan's recipe copies. The editor and the extensions page load the 
 ```json
 {
   "id": "bar_stool",
-  "name": { "en": "Bar stool", "de": "Barhocker" },
+  "name": { "en": "Bar stool", "fr": "Tabouret de bar" },
   "size": [0.42, 0.42, 0.75],
   "group": "seating",
   "room": ["kitchen", "dining"],
@@ -153,7 +153,7 @@ draw from the plan's recipe copies. The editor and the extensions page load the 
 ### Required fields
 
 - `id`: the item id; it must match the file name.
-- `name`: the name by language code (`"en"`, `"de"`, …; 1 to 10 languages, 1 to 80 characters each). English, then
+- `name`: the name by language code (`"en"`, `"fr"`, …; 1 to 10 languages, 1 to 80 characters each). English, then
   the first name, is the fallback for other languages. Write the English name first, as a readable name in UK
   words: "Wardrobe", "Hob", "Worktop", "Bedside table", "Cooker" (not a product name: that goes in `ikea`).
 - `size`: the default size in metres as `[width, depth, height]` (0.01 to 10 each). In the plan every item can be
@@ -976,7 +976,7 @@ a name, a library section (`group`), rooms, search words (`tags`) and an optiona
 Packs made for earlier versions are one JSON file: `{"payload": {…}}` or the payload itself, with
 `"format": "fp3dpack"`, `"version": 1`, an `id` without a publisher prefix and all items in an `items` list. They
 still import through **Extensions** → **Import pack files …**, and `tools/fp3dpack.py validate old-pack.json` checks
-them. Their items use the same fields as above. They declare no licence. Fields of the old signed shop packs
+them. Their items use the same fields as above. They declare no licence. Fields of older signed packs
 (`signature`, `licensee`, `instance`) are dropped on import. An old pack may list `features`; they unlock nothing,
 since every feature whose code is in this repository is always on.
 

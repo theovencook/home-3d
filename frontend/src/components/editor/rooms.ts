@@ -313,7 +313,9 @@ export class RoomsPart {
     const room = this.room;
     if (!room) return;
     const area = areaId ? this.hass?.areas?.[areaId] : undefined;
-    const generic = !room.name || /^(Raum|Room) \d+$/.test(room.name) || Object.values(this.hass?.areas ?? {}).some((a) => a.name === room.name);
+    // a numbered default name ("Room 3", in the language shown or in English) gives way to the area's name
+    const numbered = [this.t("new_room", { n: "#N#" }), "Room #N#"].some((p) => new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("#N#", "\\d+")}$`).test(room.name));
+    const generic = !room.name || numbered || Object.values(this.hass?.areas ?? {}).some((a) => a.name === room.name);
     this.updateRoom({ area_id: areaId || null, ...(area && generic ? { name: area.name } : {}) });
   }
 

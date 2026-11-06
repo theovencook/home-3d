@@ -5,7 +5,7 @@ pack**: a small folder with the texts of that language, which installs like a [f
 make one and publish it, and a text the pack lacks shows in English, so a pack that covers only part of the screens
 is still useful.
 
-German and 16 further languages ship with Home 3D as language packs. Home 3D shows the language Home Assistant runs in (the user's
+Seventeen languages ship with Home 3D as language packs (see [What ships](#what-ships)). Home 3D shows the language Home Assistant runs in (the user's
 language in their profile).
 
 ## A language pack is a folder
@@ -45,7 +45,7 @@ It is the `pack.json` of a furniture pack (see [pack.json](packs.md#packjson): `
 | `kind` | yes | `"language"`. (A furniture pack leaves it out, or says `"furniture"`.) |
 | `language` | yes | The base language code, lower case: `"fr"`, `"de"`, `"pt"`, `"nb"`. A page in a regional variant (`fr-CA`, `de-AT`, `pt-BR`) uses the pack of its base language. Norwegian `no` reads as `nb`. |
 
-Write `name` in the language itself ("Français", "Deutsch"), so people find it on the list.
+Write `name` in the language itself ("Français", "Español"), so people find it on the list.
 
 ### strings.json
 
@@ -60,9 +60,9 @@ One object of text keys and texts:
 }
 ```
 
-- The keys are the keys of Home 3D's English table, `frontend/src/i18n.ts`. The German pack
-  (`custom_components/home_3d/bundled_languages/theovencook.lang-de/strings.json`) has every key and makes a good
-  starting point.
+- The keys are the keys of Home 3D's English table, `frontend/src/i18n.ts`. The bundled packs
+  (`custom_components/home_3d/bundled_languages/theovencook.lang-*/strings.json`) show the format; the ones with
+  every key (see [What ships](#what-ships)) make a good starting point.
 - Keep the placeholders in braces (`{n}`, `{name}`) as the English text has them; they are filled in on the screen.
 - A key the pack leaves out shows in English. A key this version of Home 3D does not know is ignored, so a pack made
   for a newer version still works with an older one.
@@ -99,7 +99,7 @@ They are listed under **Languages** with their language and how many texts they 
 installed one there. Packs installed from GitHub are checked for new releases, pinned and rolled back like furniture
 packs ([Updates](packs.md#updates)). A backup carries the installed language packs.
 
-- The German pack comes with Home 3D (`custom_components/home_3d/bundled_languages/`) and cannot be removed. An
+- The bundled packs come with Home 3D (`custom_components/home_3d/bundled_languages/`) and cannot be removed. An
   installed pack with the same id and at least the same `release` takes its place; removing that copy brings the
   bundled one back.
 - Several packs for the same language add up: a key in a pack installed later wins over the same key in the bundled
@@ -119,7 +119,8 @@ packs ([Updates](packs.md#updates)). A backup carries the installed language pac
 
 ## What ships
 
-The bundled packs are `theovencook.lang-de` (every text) and `theovencook.lang-fr`, `-es`, `-nl`, `-it`, `-hu`, `-da`, `-sv`, `-nb`, `-nn`, `-fi`, `-cs`, `-pl`, `-ro`, `-sl`, `-zh` and `-pt`. The 16 are partial: a text they lack
+The bundled packs are `theovencook.lang-cs`, `-da`, `-de`, `-es`, `-fi`, `-fr`, `-hu`, `-it`, `-nb`, `-nl`, `-nn`,
+`-pl`, `-pt`, `-ro`, `-sl`, `-sv` and `-zh`. `theovencook.lang-de` has every text; the others have nearly every text, and a text they lack
 shows in English, and a pack installed later (or a newer release of a bundled one) can add the missing ones.
 
 The names of furniture come from their packs (`name` by language), not from a language pack.
