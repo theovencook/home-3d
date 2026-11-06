@@ -39,13 +39,13 @@ export interface ToolPanelKit {
   nothing: typeof Lit.nothing;
   defineElement: typeof defineElement;
   touchWording: typeof touchWording;
-  cards: Pick<typeof Cards, "howKey" | "recentCards" | "RECENT_KEY" | "searchCards" | "useCard">;
+  cards: Pick<typeof Cards, "fold" | "howKey" | "recentCards" | "RECENT_KEY" | "searchCards" | "useCard">;
 }
 
 /** Defines <fp3d-tool-panel> with the editor's Lit (lazy.ts calls it when the chunk arrives); returns its class. */
 export function defineToolPanel(kit: ToolPanelKit) {
   const { LitElement, html, css, nothing, touchWording } = kit;
-  const { howKey, recentCards, RECENT_KEY, searchCards, useCard } = kit.cards;
+  const { fold, howKey, recentCards, RECENT_KEY, searchCards, useCard } = kit.cards;
   const toolPic = toolPictures(kit.svg).pic;
 
   function loadRecent(): string[] {
@@ -242,9 +242,20 @@ export function defineToolPanel(kit: ToolPanelKit) {
         ${pools.length ? html`<h4 class="head">${this.t("tool_pool")}</h4><div class="grid">${pools.map((c) => this.card(c))}</div>` : nothing}`;
     }
 
-    /** Outside: the outdoor areas of the plan (#401), filled in by the editor. */
+    /** Outside: the home's outdoor areas (#401), as the search narrows them; a tap goes to one, on its floor. */
     renderAreas() {
-      return nothing;
+      if (this.group !== "outside" || !this.areas.length) return nothing;
+      const words = fold(this._query).split(/\s+/).filter(Boolean);
+      const rows = this.areas.filter((r) => words.every((w) => fold(`${r.name} ${r.note}`).includes(w)));
+      if (!rows.length) return nothing;
+      return html`<h4 class="head">${this.t("tp_on_plan", { n: rows.length })}</h4>
+        <div class="areas">
+          ${rows.map(
+            (r) => html`<button class="area" aria-pressed=${r.selected ? "true" : "false"} @click=${() => this.send("area-go", { floor: r.floor, id: r.id })}>
+              <span>${r.name}</span><small>${r.note}</small>
+            </button>`,
+          )}
+        </div>`;
     }
 
     static styles = css`
@@ -459,6 +470,44 @@ export function defineToolPanel(kit: ToolPanelKit) {
         font-size: 13px;
         font-weight: 500;
         line-height: 1.25;
+      }
+      .areas {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .area {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        min-height: 36px;
+        padding: 6px 8px;
+        font: inherit;
+        text-align: left;
+        color: var(--fp3d-text);
+        background: none;
+        border: 0;
+        border-radius: var(--fp3d-radius-control, 6px);
+        cursor: pointer;
+      }
+      .area:hover {
+        background: color-mix(in srgb, var(--fp3d-accent) 14%, transparent);
+      }
+      .area[aria-pressed="true"] {
+        color: var(--fp3d-accent);
+        font-weight: 600;
+      }
+      .area span {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .area small {
+        flex: none;
+        font-size: 12px;
+        color: var(--fp3d-muted);
       }
       .none {
         margin: 8px 0;

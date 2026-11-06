@@ -152,7 +152,11 @@ export class PlanViewPart {
   /** "Whole plan": the floor's rooms; `all` ("Fit everything", #91): the plot, items and devices in the garden too. */
   fit(this: Fp3dEditor, all = false): void {
     const pts = this.floor?.rooms.flatMap((r) => r.points) ?? [];
-    if (all || this._tool === "outdoor" || this._tool === "pool") for (const a of this.floor?.outdoor ?? []) pts.push(...a.points);
+    // the garden too with the outdoor tools, the Outside panel or the list of outdoor areas open (#401); from upstairs the
+    // garden of the floors below, drawn faintly
+    const garden = all || this._tool === "outdoor" || this._tool === "pool" || this._toolMenu === "outside" || this.outdoorListOpen;
+    if (garden) for (const a of this.floor?.outdoor ?? []) pts.push(...a.points);
+    if (garden && this.floor) for (const f of this._doc.floors) if (f.elevation < this.floor.elevation) for (const a of f.outdoor) pts.push(...a.points);
     if (all) {
       for (const f of this.floor?.furniture ?? []) {
         const r = Math.max(f.w, f.d) / 2;

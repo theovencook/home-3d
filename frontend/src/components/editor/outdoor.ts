@@ -8,6 +8,7 @@ import { iconPath } from "../../icons.ts";
 import { bounds, centroid, isLamp, isAxisRect, OUTDOOR_TYPES, outdoorStanding, outdoorZones, SLOPE_DIRS, type SlopeDir, pointInPolygon, uid, type Floor, type OutdoorArea, type OutdoorType, type Vec2 } from "../../model.ts";
 import { round, patchItem } from "./helpers.ts";
 import { withKeys } from "../../clipboard.ts";
+import { thinArea, THIN_HIT_PX } from "./outdoor-find.ts";
 import { chosenPoint, pointKeys, renderMids } from "./points.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
@@ -101,10 +102,13 @@ export class OutdoorPart {
   renderOutdoor(this: Fp3dEditor, floor: Floor) {
     // one pass for every name on the plan (#341): an area's name shows when it has room
     const shown = this.planLabels(floor);
+    const hidden = this._hiddenItems;
     return svg`<g>${floor.outdoor.map((a) => {
+      if (hidden.length && hidden.includes(a.id)) return nothing;
       const pts = a.points.map((p) => this.toScreen(p).join(",")).join(" ");
       const [cx, cy] = this.toScreen(centroid(a.points));
       return svg`<g data-outdoor=${a.id} class=${`fp3d-out fp3d-out-${a.type}${a.id === this._outdoorId || this._multiOut.includes(a.id) ? " fp3d-out-sel" : ""}`}>
+        ${thinArea(a) ? svg`<polygon class="fp3d-out-hit" points=${pts} style=${`stroke-width:${THIN_HIT_PX}px`} />` : nothing}
         <polygon points=${pts} />
         ${shown.has(`o:${a.id}`) ? svg`<text x=${cx} y=${cy + 4}>${this.t(`out_${a.type}` as I18nKey)}</text>` : nothing}
       </g>`;

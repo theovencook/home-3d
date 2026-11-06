@@ -3434,5 +3434,9 @@
  "tp_pick": "Wähle, was du zeichnen willst · Esc schließt",
  "tp_how_drag": "Ein Rechteck auf dem Plan aufziehen und loslassen · Esc beendet das Werkzeug",
  "tp_how_box": "Den Rahmen auf dem Plan aufziehen und loslassen · Esc beendet das Werkzeug",
- "tp_how_opening": "Eine Wand antippen, um dort eine Tür oder ein Fenster einzusetzen; die Art wählst du im Seitenbereich"
+ "tp_how_opening": "Eine Wand antippen, um dort eine Tür oder ein Fenster einzusetzen; die Art wählst du im Seitenbereich",
+ "out_list": "Außenflächen",
+ "out_ghost_ask": "{name} liegt auf {floor}. Dorthin wechseln, um es zu bearbeiten?",
+ "out_ghost_go": "Zu {floor}",
+ "tp_on_plan": "Im Plan ({n})"
 }

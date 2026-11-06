@@ -501,6 +501,14 @@ export class PointerPart {
       this.drag = this.isEditor ? { kind: "outdoor", id, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
       return;
     }
+    const ghostEl = target.closest("[data-out-ghost]");
+    if (ghostEl && !target.closest("[data-room]") && !this.roomAt(world)) {
+      // an outdoor area of a floor below (#401): a tap offers to go there, a drag pans
+      const v = ghostEl.getAttribute("data-out-ghost")!;
+      const at = v.indexOf(":");
+      this.drag = { kind: "tap", startScreen: local, last: local, panning: false, ghost: { floor: v.slice(0, at), id: v.slice(at + 1) } };
+      return;
+    }
     const roomId = target.closest("[data-room]")?.getAttribute("data-room") ?? this.roomAt(world);
     if (roomId) {
       if (roomId !== this._roomId) this._vertex = null;
@@ -1126,6 +1134,10 @@ export class PointerPart {
       }
       case "tap":
         if (drag.panning) break;
+        if (drag.ghost) {
+          void this.offerOutdoorFloor(drag.ghost.floor, drag.ghost.id);
+          break;
+        }
         // by measure, the first tap sets the start; the next ones add a point, a typed length setting how far along the pull (#294)
         if (this._tool === "measure" && !this._draft.length) this._draft = [this.snap(this.toWorld(...local), undefined, e.altKey)];
         else if (this._tool === "measure") {

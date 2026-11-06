@@ -80,6 +80,7 @@ import { PipesPart } from "./editor/pipes.ts";
 import { PoolPart } from "./editor/pool.ts";
 import { AreaSelectPart } from "./editor/area-select.ts";
 import { ToolPanelPart } from "./editor/tool-panels.ts";
+import { OutdoorFindPart } from "./editor/outdoor-find.ts";
 import { FieldsPart } from "./editor/fields.ts";
 import { SettingsPart } from "./editor/settings.ts";
 import { preloadParts } from "./editor/lazy.ts";
@@ -1203,7 +1204,7 @@ export class Fp3dEditor extends LitElement {
               @drop=${this.onPlanDrop}
             >
               ${this.renderBackground(floor)} ${this.renderGrid()} ${this.renderGhost()} ${walls ? this.renderWalls(walls.walls) : nothing}
-              ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing} ${this.renderPlaceGhost()}
+              ${floor ? this.renderOutdoorGhosts(floor) : nothing} ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing} ${this.renderPlaceGhost()}
               ${floor ? this.renderFreeWalls(floor) : nothing}
               ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
@@ -1286,6 +1287,9 @@ export class Fp3dEditor extends LitElement {
   /** Where the pointer is on the plan (m), null while it is off the plan: Ctrl+V pastes there (#400). */
   planPointer: Vec2 | null = null;
 
+  /** The floor page's list of outdoor areas is open (#401): Fit takes the garden in then. */
+  outdoorListOpen = false;
+
   planMemo: { doc: Building; entities: unknown; devices: unknown; areas: unknown; count: number; kept: Map<string, unknown> } | null = null;
 
   /** The editors list (#7) as the backend last sent it; null until asked. */
@@ -1334,8 +1338,8 @@ export class Fp3dEditor extends LitElement {
 }
 
 /** The area modules' methods (#202): one class per editor area under editor/, all on this element. */
-export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, ItemFoldsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart, AreaSelectPart, ToolPanelPart {}
-mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, ItemFoldsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart, AreaSelectPart, ToolPanelPart]);
+export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, ItemFoldsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart, AreaSelectPart, ToolPanelPart, OutdoorFindPart {}
+mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, ItemFoldsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart, AreaSelectPart, ToolPanelPart, OutdoorFindPart]);
 
 defineElement("fp3d-editor", Fp3dEditor);
 

@@ -2323,4 +2323,8 @@ export const lateEnglish = {
   tp_how_drag: "Drag a rectangle on the plan and let go · Esc ends the tool",
   tp_how_box: "Drag its outline box on the plan and let go · Esc ends the tool",
   tp_how_opening: "Tap a wall to put a door or window there; pick its kind in the side panel",
+  out_list: "Outdoor areas",
+  out_ghost_ask: "{name} is on {floor}. Go there to edit it?",
+  out_ghost_go: "Go to {floor}",
+  tp_on_plan: "On the plan ({n})",
 };

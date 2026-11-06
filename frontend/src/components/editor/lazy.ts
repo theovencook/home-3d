@@ -9,7 +9,7 @@ import { once } from "../../lazy-part.ts";
 import { defineElement } from "../../define.ts";
 import { uiIcon } from "../../ui-icons.ts";
 import { touchWording } from "../../editor-hint.ts";
-import { howKey, recentCards, RECENT_KEY, searchCards, useCard } from "../../tool-cards.ts";
+import { fold, howKey, recentCards, RECENT_KEY, searchCards, useCard } from "../../tool-cards.ts";
 
 export { need } from "../../lazy-part.ts";
 const loadParts = once(() => import("./lazy-parts.ts"));
@@ -33,7 +33,7 @@ export const loadVacuumPanel = once(() => import("../vacuum-panel.ts"));
 export const loadPhoneBar = once(() => import("./phone-bar.ts").then((m) => m.definePhoneBar({ LitElement, html, css, nothing, uiIcon, defineElement })));
 /** The Build and Outside panels (#402): a chunk of their own that borrows Lit and the card functions (tool-panel.ts). */
 export const loadToolPanel = once(() =>
-  import("../tool-panel.ts").then((m) => m.defineToolPanel({ LitElement, html, svg, css, nothing, defineElement, touchWording, cards: { howKey, recentCards, RECENT_KEY, searchCards, useCard } })),
+  import("../tool-panel.ts").then((m) => m.defineToolPanel({ LitElement, html, svg, css, nothing, defineElement, touchWording, cards: { fold, howKey, recentCards, RECENT_KEY, searchCards, useCard } })),
 );
 
 let preloaded = false;

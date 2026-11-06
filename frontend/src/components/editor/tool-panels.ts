@@ -10,6 +10,7 @@ import type { Fp3dEditor } from "../editor.ts";
 
 /** The cards per panel and pipe rule, made once: the same array is no new property for the panel element. */
 const CARDS = new Map<string, ToolCard[]>();
+const NO_AREAS: never[] = [];
 /** One `t` per editor, for the same reason. */
 const TEXTS = new WeakMap<Fp3dEditor, (k: I18nKey, p?: Record<string, string | number>) => string>();
 
@@ -32,6 +33,8 @@ export class ToolPanelPart {
       .free=${this._areaFree}
       .touch=${touchOnly()}
       .t=${t}
+      .areas=${group === "outside" ? this.outdoorRows() : NO_AREAS}
+      @area-go=${(e: CustomEvent<{ floor: string; id: string }>) => this.goToOutdoor(e.detail.floor, e.detail.id)}
       @tool-pick=${(e: CustomEvent<{ id: string }>) => this.pickToolCard(e.detail.id)}
       @tool-free=${(e: CustomEvent<{ free: boolean }>) => this.setAreaFree(e.detail.free)}
       @tool-close=${(e: CustomEvent<{ refocus: boolean }>) => this.closeToolPanel(e.detail.refocus)}

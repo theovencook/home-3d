@@ -123,7 +123,7 @@ export class SelectionPart {
   toggleItemHidden(this: Fp3dEditor, id: string): void {
     const hidden = this._hiddenItems;
     this._hiddenItems = hidden.includes(id) ? hidden.filter((x) => x !== id) : [...hidden, id];
-    if (this._hiddenItems.includes(id) && this.selection().includes(id)) this.selectItem("room", this._roomId);
+    if (this._hiddenItems.includes(id) && (this.selection().includes(id) || this._outdoorId === id)) this.selectItem("room", this._roomId);
   }
 
   /** The items Tab cycles through (#75): the shown ones in the selected item's room, else on the floor. */
