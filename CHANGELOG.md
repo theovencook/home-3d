@@ -3,6 +3,10 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
+## Unreleased
+
+- Editor: outdoor areas and pools copy and paste like items. Ctrl+C / Ctrl+V and Copy / Paste (in the area's panel, its floating toolbar and its right-click menu) work for an area alone or chosen together with items (Shift + click, a frame, Select several); a mixed selection also drags and deletes together. Ctrl+V puts the copy at the pointer when it is on the plan, else a step off the original (or right above it on another floor), chooses it and is one undo step; it works across floors and homes in the same browser session. A pasted area gets a new id and no Home Assistant area; a pasted pool keeps its entities and ports but not its pipes. Ctrl+D duplicates an area (#400).
+
 ## Home 3D 1.1.0 (6 November 2026)
 
 - Time travel: items with a "When it shows" rule follow the past. A car that only shows while its tracker is home is hidden at a moment it was away, and an item with days or times shows by the replayed moment, not the clock now. The people and trackers a rule follows are replayed as home or away only (no zone, coordinates or other attributes); every other person and tracker stays out (#394).

@@ -34,7 +34,7 @@ export type Drag =
   | { kind: "opening"; id: string; startScreen: [number, number]; base: Building; moved: boolean; peers?: Span[] }
   // `pick`: an Alt+click without moving selects this item instead (#75, #125)
   | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; pick?: string | null; lines?: AlignLines }
-  | { kind: "furnset"; ids: string[]; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; pick?: string | null }
+  | { kind: "furnset"; ids: string[]; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; pick?: string | null; areas?: string[] }
   | { kind: "marquee"; start: Vec2; end: Vec2; add: boolean }
   | { kind: "rotate"; id: string; base: Building; moved: boolean }
   | { kind: "resize"; id: string; corner: [1 | -1, 1 | -1]; base: Building; moved: boolean }

@@ -5,7 +5,7 @@ import { html, nothing, svg } from "lit";
 import { firmHit, itemsAt, minHitPx } from "../../geometry/pick.ts";
 import { itemsByRoom } from "../../item-list.ts";
 import { furnitureFootprint } from "../../model.ts";
-import { copyItems, pasteItems, withKeys, type ItemClip } from "../../clipboard.ts";
+import { clipSize, copyItems, pasteClip, withKeys, type ItemClip } from "../../clipboard.ts";
 import { touchOnly, touchWording } from "../../editor-hint.ts";
 import { isFixed, uid, type Floor, type Vec2 } from "../../model.ts";
 import { askConfirm, tell } from "../../ask.ts";
@@ -217,7 +217,13 @@ export class SelectionPart {
       acts.push({ key: "lock", icon: fixed ? "🔒" : "🔓", label: this.t("bar_lock"), text: this.t("lock_position"), title: withKeys(this.t("fix_hint"), ["L"]), pressed: fixed, run: () => this.toggleFixed(kind, id) });
     else acts.push({ key: "lock_plan", icon: this._doc.settings.lock_plan ? "🔓" : "🔒", label: this.t(this._doc.settings.lock_plan ? "plan_unlock" : "plan_lock"), title: this.t("lock_plan_hint"), run: () => this.toggleLockPlan() });
     if (kind === "room") acts.push({ key: "duplicate", icon: "⧉", label: this.t("duplicate"), run: () => this.duplicateRoom() });
-    if (kind === "room" && clipboard) acts.push({ key: "paste", icon: "⎘", label: this.t("paste_items_n", { n: clipboard.items.length }), title: withKeys(this.t("paste_items"), ["Ctrl+V"]), run: () => this.pasteClipboard() });
+    if (kind === "room" && clipboard) acts.push({ key: "paste", icon: "⎘", label: this.t("paste_items_n", { n: clipSize(clipboard) }), title: withKeys(this.t("paste_items"), ["Ctrl+V"]), run: () => this.pasteClipboard() });
+    // an outdoor area copies like an item (#400): Duplicate here, Copy for another place, floor or home
+    if (kind === "outdoor")
+      acts.push(
+        { key: "duplicate", icon: "⧉", label: this.t("duplicate"), run: () => this.duplicateOutdoor() },
+        { key: "copy", icon: "⎘", label: this.t("copy_items"), title: withKeys(this.t("copy_items"), ["Ctrl+C"]), run: () => this.copySelection() },
+      );
     if (kind === "furniture") {
       acts.push(
         { key: "duplicate", icon: "⧉", label: this.t("duplicate"), title: withKeys(this.t("duplicate"), ["Ctrl+D"]), run: () => this.duplicateFurniture() },
@@ -318,6 +324,7 @@ export class SelectionPart {
     this._openingId = kind === "opening" ? id : null;
     this._furnitureId = kind === "furniture" ? id : null;
     this._multi = [];
+    this._multiOut = [];
     this._single = false;
     this._deviceId = kind === "device" ? id : null;
     if (kind === "device" && id) {
@@ -338,24 +345,32 @@ export class SelectionPart {
     return true;
   }
 
-  /** Ctrl+C (#74): the chosen items (block, multi selection) go to the editor's clipboard; false when none is chosen. */
+  /** Ctrl+C (#74, #400): the chosen items (block, multi selection) and outdoor areas go to the editor's clipboard; false when none is chosen. */
   copySelection(this: Fp3dEditor): boolean {
     const floor = this.floor;
-    const clip = floor && this._furnitureId ? copyItems(floor, this.selection()) : null;
+    const areas = this.areaSelection();
+    const clip = floor && (this._furnitureId || areas.length) ? copyItems(floor, this._furnitureId ? this.selection() : [], areas) : null;
     if (!clip) return false;
     clipboard = clip;
     this.requestUpdate();
     return true;
   }
 
-  /** Ctrl+V (#74): copies of the clipboard's items on the floor being edited, chosen; false with nothing to paste. */
-  pasteClipboard(this: Fp3dEditor): boolean {
+  /**
+   * Ctrl+V (#74, #400): copies of the clipboard's items and outdoor areas on the floor being edited, chosen, in one undo
+   * step; at the pointer when it is on the plan (`at`, from Ctrl+V), else a step off the originals. False with nothing
+   * to paste.
+   */
+  pasteClipboard(this: Fp3dEditor, at: Vec2 | null = null): boolean {
     const floor = this.floor;
     if (!clipboard || !floor || !this.isEditor) return false;
-    const copies = pasteItems(clipboard, floor.id, uid);
+    const { items: copies, areas } = pasteClip(clipboard, floor.id, uid, at, this._doc.settings.grid);
     const dropped = this.dropCopiedAdminActions(copies);
-    this.change((_, f) => f.furniture.push(...copies));
-    this.setMulti(copies.map((c) => c.id));
+    this.change((_, f) => {
+      f.furniture.push(...copies);
+      f.outdoor.push(...areas);
+    });
+    this.selectMixed(copies.map((c) => c.id), areas.map((a) => a.id));
     const first = this.furnitureItem;
     if (first) this._roomId = this.roomAt([first.x, first.z]) ?? this._roomId;
     this.noteDroppedActions(dropped);
@@ -380,7 +395,7 @@ export class SelectionPart {
   /** "Paste (n)" while the clipboard holds items (#74): pastes them on this floor. */
   renderPasteButton(this: Fp3dEditor) {
     if (!clipboard || !this.isEditor) return nothing;
-    return html`<button class="fp3d-btn" title=${withKeys(this.t("help_key_paste"), ["Ctrl+V"])} @click=${() => this.pasteClipboard()}>${this.t("paste_items_n", { n: clipboard.items.length })}</button>`;
+    return html`<button class="fp3d-btn" title=${withKeys(this.t("help_key_paste"), ["Ctrl+V"])} @click=${() => this.pasteClipboard()}>${this.t("paste_items_n", { n: clipSize(clipboard) })}</button>`;
   }
 
   // ------------------------------------------------------------------ furniture blocks and multi selection
@@ -413,7 +428,8 @@ export class SelectionPart {
     const cur = this._furnitureId ? this.selection() : [];
     const part = this.withGroups([id]);
     const next = cur.includes(id) ? cur.filter((x) => !part.includes(x)) : [...new Set([...cur, ...part])];
-    this.setMulti(next);
+    // the outdoor areas chosen with them stay chosen (#400)
+    this.selectMixed(next, this.areaSelection());
   }
 
   /** The selection's centre (middle of its items' extent). */
@@ -484,7 +500,8 @@ export class SelectionPart {
   deleteSelected(this: Fp3dEditor): void {
     // a chosen outdoor or roof point goes alone (#395); a room's corner below, as before
     const pt = chosenPoint(this);
-    if (pt && pt.kind !== "room") void removePoint(this, pt);
+    if (this._multiOut.length) void this.deleteMixed();
+    else if (pt && pt.kind !== "room") void removePoint(this, pt);
     else if (this._roofWinId && this._tool === "roof") this.deleteRoofWindow();
     else if (this._solarId && this.houseTool) this.deleteSolar();
     else if (this._roofId && this._tool === "roof") this.deleteRoofSection();
@@ -507,6 +524,7 @@ export class SelectionPart {
     this._vertex = null;
     this._point = null;
     this._multi = [];
+    this._multiOut = [];
     this._single = false;
     this._roofId = null;
     this._solarId = null;
@@ -520,20 +538,23 @@ export class SelectionPart {
   renderSelectionFrame(this: Fp3dEditor, floor: Floor, set: string[]) {
     const d = this.drag;
     const drawing = d?.kind === "marquee" ? svg`<rect class="fp3d-marquee" x=${Math.min(...[d.start, d.end].map((p) => this.toScreen(p)[0]))} y=${Math.min(...[d.start, d.end].map((p) => this.toScreen(p)[1]))} width=${Math.abs(this.toScreen(d.end)[0] - this.toScreen(d.start)[0])} height=${Math.abs(this.toScreen(d.end)[1] - this.toScreen(d.start)[1])} />` : nothing;
-    if (set.length < 2) return drawing;
-    const pts = floor.furniture.filter((m) => set.includes(m.id)).flatMap((m) => furnitureFootprint(m));
+    // outdoor areas chosen with the items (#400) are inside the frame too
+    const areas = this._multiOut.length ? floor.outdoor.filter((a) => this._multiOut.includes(a.id)) : [];
+    if (set.length + areas.length < 2) return drawing;
+    const pts = [...floor.furniture.filter((m) => set.includes(m.id)).flatMap((m) => furnitureFootprint(m)), ...areas.flatMap((a) => a.points)];
     if (!pts.length) return drawing;
     const [x0, y0] = this.toScreen([Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1]))]);
     const [x1, y1] = this.toScreen([Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))]);
-    const block = !this._multi.length;
+    const block = !this._multi.length && !areas.length;
     return svg`${drawing}<g class=${`fp3d-selframe${block ? " fp3d-selframe-block" : ""}`}>
       <rect x=${x0 - 6} y=${y0 - 6} width=${x1 - x0 + 12} height=${y1 - y0 + 12} rx="6" />
-      <text x=${x0 - 4} y=${y0 - 12}>${block ? `▣ ${this.t("block_title")} · ${set.length}` : this.t("multi_title", { n: set.length })}</text>
+      <text x=${x0 - 4} y=${y0 - 12}>${block ? `▣ ${this.t("block_title")} · ${set.length}` : this.t(areas.length ? "mixed_title" : "multi_title", { n: set.length + areas.length })}</text>
     </g>`;
   }
 
   /** Side panel for several items: a block (or a multi selection that can become one). */
   renderBlockForm(this: Fp3dEditor) {
+    if (this._multiOut.length) return this.renderMixedForm();
     const set = this.selection();
     const items = (this.floor?.furniture ?? []).filter((m) => set.includes(m.id));
     const block = !this._multi.length && !!items[0]?.group;

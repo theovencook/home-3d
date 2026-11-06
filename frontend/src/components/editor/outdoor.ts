@@ -7,6 +7,7 @@ import type { I18nKey } from "../../i18n.ts";
 import { iconPath } from "../../icons.ts";
 import { bounds, centroid, isLamp, isAxisRect, OUTDOOR_TYPES, outdoorStanding, outdoorZones, SLOPE_DIRS, type SlopeDir, pointInPolygon, uid, type Floor, type OutdoorArea, type OutdoorType, type Vec2 } from "../../model.ts";
 import { round, patchItem } from "./helpers.ts";
+import { withKeys } from "../../clipboard.ts";
 import { chosenPoint, pointKeys, renderMids } from "./points.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
@@ -76,7 +77,7 @@ export class OutdoorPart {
 
   /** Corner handles of the selected outdoor area (a rectangle stays a rectangle while dragging). */
   renderOutdoorHandles(this: Fp3dEditor, floor: Floor) {
-    const a = this._outdoorId ? floor.outdoor.find((x) => x.id === this._outdoorId) : undefined;
+    const a = this._outdoorId && !this._multiOut.length ? floor.outdoor.find((x) => x.id === this._outdoorId) : undefined;
     if (!a || !this.isEditor || (this._tool !== "select" && !(this._tool === "pool" && !this._pipeMode)) || this._doc.settings.lock_plan) return nothing;
     if (a.pool_shape) {
       // a round or oval pool: the corners of its box (it keeps its shape while it grows)
@@ -103,7 +104,7 @@ export class OutdoorPart {
     return svg`<g>${floor.outdoor.map((a) => {
       const pts = a.points.map((p) => this.toScreen(p).join(",")).join(" ");
       const [cx, cy] = this.toScreen(centroid(a.points));
-      return svg`<g data-outdoor=${a.id} class=${`fp3d-out fp3d-out-${a.type}${a.id === this._outdoorId ? " fp3d-out-sel" : ""}`}>
+      return svg`<g data-outdoor=${a.id} class=${`fp3d-out fp3d-out-${a.type}${a.id === this._outdoorId || this._multiOut.includes(a.id) ? " fp3d-out-sel" : ""}`}>
         <polygon points=${pts} />
         ${shown.has(`o:${a.id}`) ? svg`<text x=${cx} y=${cy + 4}>${this.t(`out_${a.type}` as I18nKey)}</text>` : nothing}
       </g>`;
@@ -212,6 +213,7 @@ export class OutdoorPart {
   }
 
   renderOutdoorForm(this: Fp3dEditor, a: OutdoorArea) {
+    if (this._multiOut.length > 1) return this.renderMixedForm();
     const admin = this.isEditor;
     const rect = isAxisRect(a.points);
     const b = bounds(a.points);
@@ -280,6 +282,8 @@ export class OutdoorPart {
       ${admin
         ? html`<div class="fp3d-actions">
             <button class="fp3d-btn" @click=${() => this.duplicateOutdoor()}>${this.t("duplicate")}</button>
+            <button class="fp3d-btn" title=${withKeys(this.t("help_key_copy"), ["Ctrl+C"])} @click=${() => this.copySelection()}>${this.t("copy_items")}</button>
+            ${this.renderPasteButton()}
             <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteOutdoor()}>${this.t("delete")}</button>
           </div>`
         : nothing}

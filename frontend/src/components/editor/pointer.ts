@@ -13,6 +13,7 @@ import { movePet, placeOfRef } from "../../pet-place.ts";
 import { insertCorner } from "../../geometry/room-corners.ts";
 import { type FixKind, EDIT_DRAGS, wallPeers, SNAP_PX, round, patchItem, distToSegment } from "./helpers.ts";
 import { addPoint, pointOf } from "./points.ts";
+import { areasInFrame, moveAreas } from "./area-select.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** Whether a long press (touch) on what this drag holds starts Select several (#263): an item, outside Select several. */
@@ -67,7 +68,7 @@ export class PointerPart {
     else if (d.kind === "device") target = ["device", d.entityId];
     else if (d.kind === "opening") target = ["opening", d.id];
     else if (d.kind === "furniture" || d.kind === "rotate" || d.kind === "resize") target = ["furniture", d.id];
-    else if (d.kind === "furnset") target = ["furniture", d.ids.find((id) => this.isFixedItem("furniture", id)) ?? d.ids[0]];
+    else if (d.kind === "furnset") target = d.areas?.length && this.isFixedItem("outdoor", d.areas[0]) ? ["outdoor", d.areas[0]] : ["furniture", d.ids.find((id) => this.isFixedItem("furniture", id)) ?? d.ids[0]];
     else if (d.kind === "wallmove") target = ["wall", d.id];
     else if (d.kind === "outdoor") target = ["outdoor", d.id];
     if (!target || !this.isFixedItem(...target)) return;
@@ -366,8 +367,13 @@ export class PointerPart {
     if (this.isEditor && (this._tool === "select" || this._tool === "furniture") && (e.shiftKey || this._multiMode)) {
       // several furniture items: shift-click (or the multi mode on touch) adds or removes one, a drag draws a frame
       const fEl = target.closest("[data-furniture]");
+      const outEl = fEl ? null : target.closest("[data-outdoor]");
       if (fEl) {
         this.toggleMulti(fEl.getAttribute("data-furniture")!);
+        this.drag = null;
+      } else if (outEl && !target.closest("[data-room]") && !this.roomAt(world)) {
+        // an outdoor area joins or leaves the selection too (#400)
+        this.toggleAreaMulti(this.outdoorAt(world) ?? outEl.getAttribute("data-outdoor")!);
         this.drag = null;
       } else this.drag = { kind: "marquee", start: world, end: world, add: true };
       return;
@@ -419,10 +425,12 @@ export class PointerPart {
         this.selectItem("furniture", id);
       }
       const set = this.selection();
+      // outdoor areas chosen with the items move with them (#400)
+      const areas = this._multiOut.length ? [...this._multiOut] : undefined;
       this.drag = !this.isEditor
         ? { kind: "pan", last: local }
-        : set.length > 1
-          ? { kind: "furnset", ids: set, start: world, startScreen: local, base: this._doc, moved: false, pick: alt?.next }
+        : set.length > 1 || areas
+          ? { kind: "furnset", ids: set, start: world, startScreen: local, base: this._doc, moved: false, pick: alt?.next, areas }
           : { kind: "furniture", id, start: world, startScreen: local, base: this._doc, moved: false, pick: alt?.next };
       return;
     }
@@ -484,6 +492,11 @@ export class PointerPart {
     if (outdoorEl && !target.closest("[data-room]") && !this.roomAt(world)) {
       // the drawn element is the topmost area; a smaller one under the point (a pool in the lawn) wins
       const id = this.outdoorAt(world) ?? outdoorEl.getAttribute("data-outdoor")!;
+      if (this.isEditor && this._multiOut.includes(id)) {
+        // one of several chosen areas (with items or not): the whole selection moves (#400)
+        this.drag = { kind: "furnset", ids: this._furnitureId ? this.selection() : [], start: world, startScreen: local, base: this._doc, moved: false, areas: [...this._multiOut] };
+        return;
+      }
       this.selectItem("outdoor", id);
       this.drag = this.isEditor ? { kind: "outdoor", id, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
       return;
@@ -529,6 +542,7 @@ export class PointerPart {
       return;
     }
     const world = this.toWorld(...local);
+    this.planPointer = e.pointerType === "mouse" ? world : null;
     const drag = this.drag;
     if (!drag) {
       if (this._placing) this._placeAt = this.placeTarget(world, this.snapOff(e));
@@ -986,8 +1000,10 @@ export class PointerPart {
         const dx = round(Math.round((world[0] - drag.start[0]) / g) * g);
         const dz = round(Math.round((world[1] - drag.start[1]) / g) * g);
         const ids = new Set(drag.ids);
+        const baseFloor = drag.areas && drag.base.floors.find((f) => f.id === this._floorId);
         this.changeFloor((floor) => {
           for (const m of floor.furniture) if (ids.has(m.id)) Object.assign(m, { x: round(m.x + dx), z: round(m.z + dz) });
+          if (baseFloor) moveAreas(floor, baseFloor, drag.areas!, dx, dz);
         }, drag.base);
         break;
       }
@@ -1124,7 +1140,9 @@ export class PointerPart {
         const [x0, x1] = [Math.min(drag.start[0], drag.end[0]), Math.max(drag.start[0], drag.end[0])];
         const [z0, z1] = [Math.min(drag.start[1], drag.end[1]), Math.max(drag.start[1], drag.end[1])];
         const hit = (this.floor?.furniture ?? []).filter((m) => m.x >= x0 && m.x <= x1 && m.z >= z0 && m.z <= z1).map((m) => m.id);
-        if (hit.length) this.setMulti([...new Set([...this.selection(), ...this.withGroups(hit)])]);
+        // outdoor areas wholly inside the frame join too (#400)
+        const areas = this.floor ? areasInFrame(this.floor, drag.start, drag.end) : [];
+        if (hit.length || areas.length) this.selectMixed([...new Set([...(this._furnitureId ? this.selection() : []), ...this.withGroups(hit)])], [...new Set([...this.areaSelection(), ...areas])]);
         break;
       }
       case "opening":
