@@ -637,14 +637,17 @@ async def test_last_seen_is_sent_on_while_the_room_stays(hass: HomeAssistant) ->
     service: LocateService = hass.data[DATA_LOCATE]
     await service.async_configure({"devices": [WATCH], "rooms": ROOMS})
     signals = []
+    from homeassistant.core import callback
     from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-    async_dispatcher_connect(hass, SIGNAL_LOCATE, lambda: signals.append(1))
+    # a callback runs at once; a plain lambda would go to the executor and could be counted after the assert
+    async_dispatcher_connect(hass, SIGNAL_LOCATE, callback(lambda: signals.append(1)))
     tracker = service._trackers["irk_watch"]
     now = time.time()
     for second in range(int(LAST_SEEN_REFRESH) + 2):
         tracker.add(now + second, "s1", -60.0)
         service._estimate(now + second)
+    await hass.async_block_till_done()
     # the first estimate, then once more a minute later: not every second
     assert len(signals) == 2
 
