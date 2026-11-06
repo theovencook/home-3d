@@ -3,7 +3,7 @@
 All notable changes to Home 3D. The entries below 0.1.0 are the history of the upstream project NeonPlan 3D
 by Mastershort (https://github.com/Mastershort/neonplan3d), kept as they were.
 
-## Unreleased
+## Home 3D 1.1.0 (6 November 2026)
 
 - Time travel: items with a "When it shows" rule follow the past. A car that only shows while its tracker is home is hidden at a moment it was away, and an item with days or times shows by the replayed moment, not the clock now. The people and trackers a rule follows are replayed as home or away only (no zone, coordinates or other attributes); every other person and tracker stays out (#394).
 - Editor plan: a small toolbar floats over the selected item and follows it: turn left or right by 90°, duplicate, lock position, delete, and "⋯" with the right-click menu (copy, mirror, wall view). It flips below the item near the top edge, works by keyboard (Tab from the item, arrows, Escape) and is 44 px on touch. "Select several" moved to the main toolbar. While an item is dragged the side panel is no longer drawn again on every move (#398).
