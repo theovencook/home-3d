@@ -690,7 +690,7 @@ export class WallViewPart {
     // labels, markers and fittings grow slower than the wall when zoomed
     this.wvScale = 1 / Math.sqrt(vb.k);
     const fs = Math.max(0.09, Math.min(0.16, L / 40)) * this.wvScale;
-    // Pool Pro: the pipes on this wall
+    // Pool module: the pipes on this wall
     const pool = this.canLayRuns ? this.runPool : undefined;
     const rc: RunCtx | null = (this.runCtx3d = pool
       ? {

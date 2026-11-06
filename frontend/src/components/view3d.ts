@@ -82,7 +82,7 @@ interface HoloCard {
   bin?: { lines: { color: string; when: string; name: string; soon: boolean; out: boolean }[]; soon: boolean; icon: "mail" | "plant" | null };
   /** A module's small label, drawn like a bin's tag. */
   tag?: boolean;
-  /** A module's card (Pool Pro: the pool), drawn by the host from what the module says. */
+  /** A module's card (the pool module: the pool), drawn by the host from what the module says. */
   module?: ModuleCard;
   name: string;
   /** Cars: the car in its parking spot (charge, range, charging, lock, climate). */
@@ -1584,7 +1584,7 @@ export class Fp3dView3d extends LitElement {
     const began = this.showStats ? performance.now() : 0;
     this.shownStates = new Map(this.watched.map((id) => [id, hass.states[id]]));
 
-    // what the modules add to the stage (Pool Pro: the water, the water in the pipes, the glow of the technical room)
+    // what the modules add to the stage (the pool module: the water, the water in the pipes, the glow of the technical room)
     this.scene = anyModule() ? moduleScene(this.sceneHost(hass, b)) : [];
     // the energy devices' own sensors: no consumers (#43)
     const devices = deviceSensors(b, (f) => this.furnitureLinks?.get(f.id)?.power ?? null);
@@ -1988,9 +1988,9 @@ export class Fp3dView3d extends LitElement {
       anchors.push(anchor);
       cards.push(card);
     }
-    // Pool Pro: living water (light colour, moving with the filter pump, warm shimmer while heating, the cover)
+    // Pool module: living water (light colour, moving with the filter pump, warm shimmer while heating, the cover)
     // and a glass card over every pool with links
-    // the modules' water (Pool Pro: living water, the cover) and their glass cards
+    // the modules' water (the pool module: living water, the cover) and their glass cards
     const water: PoolPiece[] = this.scene.filter((p): p is Extract<ScenePiece, { kind: "water" }> => p.kind === "water").map((p) => ({ ...p, level: this.dimmed ? p.level * 0.4 : p.level }));
     v.setPools(water);
     if (anyModule()) {
@@ -2476,7 +2476,7 @@ export class Fp3dView3d extends LitElement {
 
   /**
    * The pipes of every pool – drawn for everyone; what flows in them (blue, warm after a heating heat pump, brown to
-   * the waste drain) a module says (Pool Pro), without one they rest.
+   * the waste drain) a module says (pool module), without one they rest.
    */
   private poolPipes(b: Building): { flows: PipePiece[]; tubes: PipeTube[] } {
     const out: PipePiece[] = [];
@@ -2792,7 +2792,7 @@ export class Fp3dView3d extends LitElement {
       </div>`;
   }
 
-  /** A module's glass card (Pool Pro: the pool), in the look of the house's own cards. */
+  /** A module's glass card (the pool module: the pool), in the look of the house's own cards. */
   private renderModuleCard(card: HoloCard, index: number) {
     const m = card.module!;
     const open = !this.mediaFolded.has(m.id);
@@ -3648,7 +3648,7 @@ export class Fp3dView3d extends LitElement {
     this.binSpots = new Map();
     this.binCues = [];
     this.printerCams.clear();
-    // a module lights furniture of its own (Pool Pro: the pump while it runs, the heat pump while it heats)
+    // a module lights furniture of its own (the pool module: the pump while it runs, the heat pump while it heats)
     const glows = new Map(this.scene.filter((p): p is Extract<ScenePiece, { kind: "glow" }> => p.kind === "glow").map((p) => [p.furnitureId, p]));
     for (const floor of b.floors) {
       for (const f of floor.furniture) {
@@ -8997,7 +8997,7 @@ export class Fp3dView3d extends LitElement {
         vector-effect: non-scaling-stroke;
         stroke-linejoin: round;
       }
-      /* a module's chips (Pool Pro: ball valves and the six-way valve, set by hand) */
+      /* a module's chips (the pool module: ball valves and the six-way valve, set by hand) */
       .fp3d-holo-chips {
         display: grid;
         gap: 4px;

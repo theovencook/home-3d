@@ -1661,7 +1661,7 @@ function screenRectUnmirrored(f: Furniture, floor?: Floor): { x0: number; x1: nu
 }
 
 function builtInScreen(f: Furniture, w: number, d: number, h: number, floor?: Floor): { x0: number; x1: number; y0: number; y1: number; z: number } | null {
-  // Pool Pro: the pump's motor side, the heat pump's grille, the filter's valve head, the dosing unit's front
+  // Pool module: the pump's motor side, the heat pump's grille, the filter's valve head, the dosing unit's front
   if (f.type === "pool_pump") {
     const r = Math.min(d, h) * 0.32;
     return { x0: -w / 2 + 0.03, x1: w * 0.08, y0: 0.07, y1: 0.03 + r * 2, z: r + 0.004 };

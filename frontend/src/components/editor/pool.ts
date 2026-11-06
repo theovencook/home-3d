@@ -1,4 +1,4 @@
-// The pool tool (Pool Pro): pipes, ports, devices and joints on the plan, the part cards with their connections,
+// The pool tool (pool module): pipes, ports, devices and joints on the plan, the part cards with their connections,
 // and the pool panel, tech and shape forms.
 
 import { html, nothing, svg } from "lit";
@@ -808,7 +808,7 @@ export class PoolPart {
   }
 
   renderPoolTech(this: Fp3dEditor, a: OutdoorArea) {
-    // pool equipment, ports and pipes: only with a module that knows pipes (Pool Pro)
+    // pool equipment, ports and pipes: only with a module that knows pipes (pool module)
     if (!this.pipeRules) return nothing;
     const admin = this.isEditor;
     const ports = a.pool?.ports ?? [];

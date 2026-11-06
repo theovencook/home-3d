@@ -65,7 +65,7 @@ export interface CardConfig {
   energy?: boolean;
   /** Power flow lines always on or off; without it the card has its own switch. */
   flows?: boolean;
-  /** Energy Pro holograms always on or off; without it the card has its own switch. */
+  /** Energy holograms always on or off; without it the card has its own switch. */
   holograms?: boolean;
   /** Tapping a room opens its details (lights, blinds, cameras); default true. */
   room_panel?: boolean;

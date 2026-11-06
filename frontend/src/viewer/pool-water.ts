@@ -1,4 +1,4 @@
-// Pool Pro: living water over a pool's static surface. A thin sheet glows in the pool light's colour (or
+// Pool module: living water over a pool's static surface. A thin sheet glows in the pool light's colour (or
 // tinted by the water temperature) with moving caustics while the filter pump runs; a warm shimmer shows the
 // heat pump heating; the cover slides over the water as far as it is closed. The sheet only moves while
 // frames are drawn (the viewer keeps drawing while a pump runs), so a resting pool costs nothing.

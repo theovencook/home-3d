@@ -85,7 +85,7 @@ export interface SpokenCar {
   locked: boolean | null;
 }
 
-/** Pool Pro: a pool with links. */
+/** Pool module: a pool with links. */
 export interface SpokenPool {
   name: string;
   floorId: string;
@@ -137,7 +137,7 @@ export interface ModuleHost {
   alerts?(): SpokenAlert[];
   /** Cars: the cars of the plan (empty when there are none). */
   cars?(): SpokenCar[];
-  /** Pool Pro: the pools with links (empty when there are none). */
+  /** Pool module: the pools with links (empty when there are none). */
   pools?(): SpokenPool[];
   /** The weather entity the plan uses (null without one). */
   weather?(): string | null;
@@ -454,7 +454,7 @@ export interface NeonModule {
   menuSheets?(host: ModuleHost): ModuleSheet[];
   /** The module's knowledge about drawing pipes (the host's pipe tools show only with it). */
   pipes?: PipeRules;
-  /** Pool Pro: the pools as the voice modules ask for them. */
+  /** Pool module: the pools as the voice modules ask for them. */
   pools?(host: ModuleHost): SpokenPool[];
 }
 

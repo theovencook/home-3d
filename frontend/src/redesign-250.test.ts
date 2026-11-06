@@ -105,7 +105,7 @@ function press(el: Record<string, any>, id: string): Record<string, any> {
 
 test("every control of the desktop toolbar and its menus is reachable on a phone: the bar, More, the Build and Outside menus, the floor chip", () => {
   const el = editor();
-  // Pool Pro's "Draw a pipe" is in the Outside menu when the extension is there: on a phone too
+  // the pool module's "Draw a pipe" is in the Outside menu when the extension is there: on a phone too
   Object.defineProperty(el, "pipeRules", { get: () => ({}) });
   // what a phone shows: the bar's buttons, More's rows, the toolbar's own menus (drawn as sheets above the bar) and
   // the floor chip with its menu

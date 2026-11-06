@@ -1,6 +1,6 @@
 // Pipes of a pool as runs – where their nodes sit (ports, devices, T-pieces), turning an older level pipe into
 // one with a height per point, splitting a pipe for a T-piece, drawing them on a wall and as 3D pieces. Pure
-// geometry shared by the 3D view and the editor's wall view; what flows in them is a module's business (Pool Pro).
+// geometry shared by the 3D view and the editor's wall view; what flows in them is a module's business (pool module).
 
 import { pointInPolygon, POOL_DEVICES, POOL_VALVE_Y, poolFloorY, poolWaterY, type Building, type Floor, type OutdoorArea, type PoolJoint, type PoolPipe, type Vec2 } from "./model.ts";
 import { mountBase } from "./packs.ts";

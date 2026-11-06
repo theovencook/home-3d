@@ -570,7 +570,7 @@ interface FloorView {
   rackLedColor: string;
   /** Triangle range of each LED, by "<rack id>/<slot id>". */
   rackLedRanges: Map<string, { start: number; end: number }>;
-  /** Pool Pro: the pipes as tubes. */
+  /** Pool module: the pipes as tubes. */
   pipeMesh: Mesh;
   pipeSig: string;
   /** A module's see-through surfaces (see PatchPiece). */
@@ -589,7 +589,7 @@ interface FloorView {
   screenSig: string;
   /** Klang & Kino: rings around playing speakers and lines between grouped ones (made when first needed). */
   soundGroup?: Group;
-  /** Pool Pro: the living water and covers of the pools on this floor. */
+  /** Pool module: the living water and covers of the pools on this floor. */
   poolGroup?: Group;
   /** Pictures shown on lit screens, by furniture id. */
   screenPics: Map<string, { url: string; mesh: Mesh; texture: Texture | null }>;
@@ -1454,7 +1454,7 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
-  /** Pool Pro: the pools' water colour, movement, heating shimmer and cover; an empty list clears them. */
+  /** Pool module: the pools' water colour, movement, heating shimmer and cover; an empty list clears them. */
   setPools(list: PoolPiece[]): void {
     const sig = (l: PoolPiece[]) =>
       l.map((p) => `${p.id}:${p.floorId}:${p.points.length}:${p.points[0]?.join(",")}:${p.y.toFixed(3)}:${p.color.map((c) => c.toFixed(2)).join("/")}:${p.level.toFixed(2)}:${p.flow ? 1 : 0}:${p.heat ? 1 : 0}:${p.cover.toFixed(2)}`).join(";");
@@ -1569,7 +1569,7 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
-  /** Pool Pro: the pipes drawn as tubes (their water flows in the flow layer). */
+  /** Pool module: the pipes drawn as tubes (their water flows in the flow layer). */
   setPipes(pipes: PipeTube[]): void {
     this.pipes = pipes;
     for (const fv of this.floors) this.buildPipes(fv);

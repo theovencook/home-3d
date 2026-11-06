@@ -1,6 +1,6 @@
 // What a module needs to lay pipes the way the editor's wall view does: the walls of a room (with what stands on
 // them), where a pool's pipe nodes sit, and a connection laid from part to part through holes and valves. Pure
-// host geometry handed to modules (Pool Pro's plant assistant describes the plant, this lays it).
+// host geometry handed to modules (the pool module's plant assistant describes the plant, this lays it).
 
 import type { Building, PoolJoint, PoolPipe, Vec2 } from "./model.ts";
 import { fromWall, furnitureOnWall, openingsOnWall, roomEdgeFrame, type WallFrame } from "./geometry/wall-frame.ts";

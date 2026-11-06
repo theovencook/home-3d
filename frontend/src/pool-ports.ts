@@ -1,4 +1,4 @@
-// Pool Pro: the connections of the pool's parts. A pipe can end at a part as a whole ("dev:<id>", as before) or
+// Pool module: the connections of the pool's parts. A pipe can end at a part as a whole ("dev:<id>", as before) or
 // at one of its connections ("dev:<id>:<port>"): the pump's suction and pressure side, the sand filter's
 // multiport valve (from the pump, the return to the pool, the waste), the heat pump's in and out, the three
 // ends of a T- or Y-piece, both sides of a hole in a wall or the floor. Pure functions.

@@ -57,7 +57,7 @@ export class FieldsPart {
     return fields;
   }
 
-  /** Fields a module adds to an outdoor area's form (Pool Pro: the pool's entities, the assistant), rendered here. */
+  /** Fields a module adds to an outdoor area's form (the pool module: the pool's entities, the assistant), rendered here. */
   renderModuleFields(this: Fp3dEditor, a: OutdoorArea) {
     if (!this.hass) return nothing;
     return this.renderFields(this.memoFields(a, () => moduleAreaFields(this.editorHost(), a)));

@@ -1,4 +1,4 @@
-// The wall view and its pipe tools (Pool Pro): stage, pieces, part cards, tech steps.
+// The wall view and its pipe tools (pool module): stage, pieces, part cards, tech steps.
 // Part of the editor's styles (fp3d-editor static styles, #202): the slices are applied in the order editor.ts lists them.
 
 import { css } from "lit";

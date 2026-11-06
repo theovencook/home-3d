@@ -137,7 +137,7 @@ const BASIC: Record<string, [Kind, Room[]]> = {
   water_heater: ["heating", ["utility", "bath", "garage", "loft"]],
 };
 
-/** The built-in kinds the library offers (the pool devices stand in Pool Pro's tools, energy devices in the energy tool). */
+/** The built-in kinds the library offers (the pool devices stand in the pool module's tools, energy devices in the energy tool). */
 export function basicTypes(extra: string[] = []): string[] {
   const shown = new Set<string>(Object.values(FURNITURE_GROUPS).flat());
   for (const t of extra) shown.add(t);
@@ -304,7 +304,7 @@ const VARIANT_WORDS = /\s*\(?\b\d+(?:[.,]\d+)?\s*(?:[×x]\s*\d+(?:[.,]\d+)?)*\s*
 export function familyLabel(name: string): string {
   const out = name
     .replace(VARIANT_WORDS, " ")
-    .replace(/\s+(mit|with|avec|con)\s*$/i, "")
+    .replace(/\s+(with|avec|con)\s*$/i, "")
     .replace(/\s{2,}/g, " ")
     .replace(/^[\s,–-]+|[\s,–-]+$/g, "")
     .trim();

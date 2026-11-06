@@ -235,9 +235,9 @@ export interface Furniture {
   locked?: boolean | null;
   /** Furniture block: items with the same group id are selected, moved and turned together (a kitchen, a wall unit). */
   group?: string | null;
-  /** Pool Pro, sand filter: the six-way valve's position (null = filter). */
+  /** Pool module, sand filter: the six-way valve's position (null = filter). */
   valve_position?: ValvePosition | null;
-  /** Pool Pro, ball valve: closed stops the water (null / true = open). */
+  /** Pool module, ball valve: closed stops the water (null / true = open). */
   valve_open?: boolean | null;
   id: string;
   type: string;
@@ -1165,7 +1165,7 @@ export interface OutdoorArea {
   depth?: number | null;
   /** Pool in the ground: how far the rim stands above the lawn (m); null = 6 cm. */
   rim?: number | null;
-  /** Pool Pro: the pool's entities (water temperature, heat pump, filter pump, light, pH, chlorine, cover). */
+  /** Pool module: the pool's entities (water temperature, heat pump, filter pump, light, pH, chlorine, cover). */
   pool?: PoolLinks | null;
   /** What a module keeps for this area, by the module's id. */
   mods?: ModuleData | null;
@@ -1179,7 +1179,7 @@ export interface OutdoorArea {
   panel_layout?: PanelLayout | null;
 }
 
-/** Pool Pro: the entities of a pool; a role left empty is searched by name ("pool"), "none" switches it off. */
+/** Pool module: the entities of a pool; a role left empty is searched by name ("pool"), "none" switches it off. */
 export interface PoolLinks {
   /** Water temperature (a sensor; a climate or water_heater entity reports it too). */
   temperature?: EntityRef;
@@ -1197,11 +1197,11 @@ export interface PoolLinks {
   salt?: EntityRef;
   /** Pool cover (a cover entity): it slides over the water as far as it is closed. */
   cover?: EntityRef;
-  /** Pool Pro: the pool's ports (skimmer, bottom drain, inlets) and the waste drain the backwash goes to. */
+  /** Pool module: the pool's ports (skimmer, bottom drain, inlets) and the waste drain the backwash goes to. */
   ports?: PoolPort[];
-  /** Pool Pro: the pipes between ports and pool devices; the water flows from `from` to `to`. */
+  /** Pool module: the pipes between ports and pool devices; the water flows from `from` to `to`. */
   pipes?: PoolPipe[];
-  /** Pool Pro: T-pieces joining pipes. */
+  /** Pool module: T-pieces joining pipes. */
   joints?: PoolJoint[];
 }
 
@@ -1639,7 +1639,7 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
 };
 
 /** Energy devices: placed and set up in the Energy tool (stored like furniture, not in the library). */
-/** Pool Pro: the devices of a pool's technical room (they stand in the plan like furniture, the pipes join them). */
+/** Pool module: the devices of a pool's technical room (they stand in the plan like furniture, the pipes join them). */
 export const POOL_DEVICES = ["pool_pump", "pool_filter", "pool_heat_pump", "pool_dosing", "pool_valve"] as const;
 /** Height of a ball valve's pipe above the floor. */
 export const POOL_VALVE_Y = 0.3;
@@ -1988,7 +1988,7 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   inverter: [0.5, 0.2, 0.65],
   home_battery: [0.6, 0.25, 1.1],
   wallbox: [0.3, 0.15, 0.42],
-  // Pool Pro's technical room: pump with pre-filter, sand filter with six-way valve, heat pump, dosing unit, ball valve
+  // the pool module's technical room: pump with pre-filter, sand filter with six-way valve, heat pump, dosing unit, ball valve
   pool_pump: [0.7, 0.32, 0.4],
   pool_filter: [0.6, 0.6, 1.0],
   pool_heat_pump: [1.0, 0.45, 0.75],

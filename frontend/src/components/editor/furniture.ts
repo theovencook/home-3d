@@ -39,7 +39,7 @@ export class FurniturePart {
 
   /**
    * The built-in types offered in a furniture item's type list: what the library offers (#530 – devices of the energy
-   * tool, Pool Pro parts not released yet and the stairwell are no furniture to switch to), plus the item's own type.
+   * tool, the pool module parts not released yet and the stairwell are no furniture to switch to), plus the item's own type.
    */
   typeChoices(this: Fp3dEditor, current: string): string[] {
     const shown = new Set<string>(Object.values(FURNITURE_GROUPS).flat());

@@ -378,9 +378,9 @@ export class Fp3dEditor extends LitElement {
   declare _wallPick: boolean;
   /** A bin's "Set kerb spot" is on (#142): the next tap in the plan is where the bin stands while it is out. */
   declare _kerbPick: boolean;
-  /** Pool Pro in the wall view: laying a pipe, or placing a ball valve or sight glass on one. */
+  /** Pool module in the wall view: laying a pipe, or placing a ball valve or sight glass on one. */
   declare _runMode: "draw" | "valve" | "sight" | "hole_wall" | "hole_floor" | "tee" | "y" | "feed" | "erase" | null;
-  /** Pool Pro, "Technik zeichnen": the wall view draws the technical room (devices, lines from outside, pipes). */
+  /** Pool module, technical-room mode: the wall view draws the technical room (devices, lines from outside, pipes). */
   declare _techMode: boolean;
   /** The pool line being brought in ("skimmer", "drain", "inlet", "waste"): the next tap on the wall places it. */
   declare _feedKind: string | null;
@@ -398,15 +398,15 @@ export class Fp3dEditor extends LitElement {
   /** A touch while drawing waits for its release (a second finger makes it a zoom instead of a point). */
   wvTap: { s: number; y: number } | null = null;
   wvScale = 1;
-  /** The wall about to be picked opens straight in "Technik zeichnen" (asked from the pool tool). */
+  /** The wall about to be picked opens straight in technical-room mode (asked from the pool tool). */
   techPick = false;
-  /** Pool Pro: the part whose card is open ("dev:<id>", "joint:<id>", "port:<id>") and its pool. */
+  /** Pool module: the part whose card is open ("dev:<id>", "joint:<id>", "port:<id>") and its pool. */
   declare _card: { pool: string; part: string } | null;
   /** The card's open connection being joined: its target and stops. */
   declare _cardJoin: { port: string; to: string; vias: ConnectVia[] } | null;
-  /** Pool Pro: a T- or Y-piece waiting for a tap in the plan (on a pipe it is put into the pipe). */
+  /** Pool module: a T- or Y-piece waiting for a tap in the plan (on a pipe it is put into the pipe). */
   declare _jointPlace: "tee" | "y" | null;
-  /** Pool Pro: the connection being put together in the pool tool (from, its stops, one or two ends). */
+  /** Pool module: the connection being put together in the pool tool (from, its stops, one or two ends). */
   declare _conn: { from: string; vias: ConnectVia[]; to: string; to2: string };
   declare _runDraft: RunDraft | null;
   /** The chosen pipe in the wall view and its chosen point. */
@@ -1243,7 +1243,7 @@ export class Fp3dEditor extends LitElement {
     return this.poolArea ?? this.floor?.outdoor.find((o) => o.type === "pool" && o.points.length >= 3);
   }
 
-  /** The pipe tools of the wall view: "Technik zeichnen" (Pool Pro) switched on, or the lab switch. */
+  /** The pipe tools of the wall view: technical-room mode (pool module) switched on, or the lab switch. */
   get canLayRuns(): boolean {
     return (labOn() || this._techMode) && !!this.runPool;
   }
@@ -1257,7 +1257,7 @@ export class Fp3dEditor extends LitElement {
     return pools.length === 1 ? pools[0] : undefined;
   }
 
-  /** The pipe rules of a loaded module (Pool Pro); without them the pipe tools stay hidden. */
+  /** The pipe rules of a loaded module (pool module); without them the pipe tools stay hidden. */
   get pipeRules(): PipeRules | null {
     return modulePipeRules();
   }

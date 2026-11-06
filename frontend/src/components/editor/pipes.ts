@@ -1,4 +1,4 @@
-// Pipes on walls (Pool Pro) in the wall view: tech mode, laying, editing and erasing runs, joints, feeds,
+// Pipes on walls (pool module) in the wall view: tech mode, laying, editing and erasing runs, joints, feeds,
 // fittings, and their drawing.
 
 import { uiIcon } from "../../ui-icons.ts";
@@ -25,7 +25,7 @@ export class PipesPart {
     this.techDocCache = { src: b, doc };
     return doc;
   }
-  /** "Technik zeichnen" on: only the wall, the pool devices and the pipes; the pen in the hand. */
+  /** technical-room mode on: only the wall, the pool devices and the pipes; the pen in the hand. */
   enterTech(this: Fp3dEditor): void {
     this.techPick = false;
     this._techMode = true;
@@ -162,7 +162,7 @@ export class PipesPart {
     if (!this._runMode || !this.isEditor) return;
     e.stopPropagation();
     this._techAsk = null;
-    // the pen of "Technik zeichnen": the press only marks where; the stroke begins with the first movement, and a
+    // the pen of technical-room mode: the press only marks where; the stroke begins with the first movement, and a
     // press without one is a tap (it chooses the pipe under it, or nothing)
     if (this._techMode && this._runMode === "draw") return;
     const { s, y } = c.pt(e);
@@ -531,7 +531,7 @@ export class PipesPart {
     });
   }
 
-  /** The side bar of "Technik zeichnen": devices, the pool's lines to bring in, ball valve and sight glass, what is missing. */
+  /** The side bar of technical-room mode: devices, the pool's lines to bring in, ball valve and sight glass, what is missing. */
   renderTechKit(this: Fp3dEditor, frame: WallFrame, room: Room, c: RunCtx) {
     const area = c.pool;
     const rules = this.pipeRules;
@@ -642,7 +642,7 @@ export class PipesPart {
     return box(null, this.t("tech_ok"));
   }
 
-  /** "Technik zeichnen": what is still missing, or that the water flows. */
+  /** technical-room mode: what is still missing, or that the water flows. */
   renderTechIssues(this: Fp3dEditor, c: RunCtx) {
     const devs = c.floor.furniture.filter((f) => (POOL_DEVICES as readonly string[]).includes(f.type)).map((f) => ({ id: f.id, type: f.type }));
     const rules = this.pipeRules;

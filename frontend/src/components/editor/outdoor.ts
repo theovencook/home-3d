@@ -24,7 +24,7 @@ export class OutdoorPart {
       area.points = poolShapePoints(shape, b.x0, b.z0, b.x1, b.z1);
       area.pool_shape = shape;
     }
-    // a new pool comes with its links when a module draws pools (Pool Pro: its entities are found by name)
+    // a new pool comes with its links when a module draws pools (the pool module: its entities are found by name)
     if (type === "pool" && this.pipeRules) area.pool = {};
     this.change((_, floor) => floor.outdoor.push(area));
     this.selectItem("outdoor", area.id);

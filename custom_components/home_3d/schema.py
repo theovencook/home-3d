@@ -624,7 +624,7 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("active_color", default=None): vol.Any(None, vol.Match(r"^#[0-9a-fA-F]{6}$")),
         vol.Optional("screen_bg", default="black"): vol.In(["black", "white"]),
         vol.Optional("vehicle", default=None): vol.Any(None, vol.All(str, vol.Length(max=96))),
-        # Pool Pro: the sand filter's six-way valve and whether a ball valve is open
+        # Pool module: the sand filter's six-way valve and whether a ball valve is open
         vol.Optional("valve_position", default=None): vol.Any(
             None, vol.In(["filter", "backwash", "rinse", "waste", "recirculate", "closed"])
         ),
@@ -712,7 +712,7 @@ BACKGROUND_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
-# Pool Pro: water temperature, heat pump, filter pump, light, pH, chlorine and cover of a pool
+# Pool module: water temperature, heat pump, filter pump, light, pH, chlorine and cover of a pool
 _POOL_ENTITY = vol.Any(None, vol.All(str, vol.Length(max=255)))
 _POINT = vol.All([vol.Coerce(float)], vol.Length(min=2, max=2))
 POOL_PORT_SCHEMA = vol.Schema(
@@ -810,7 +810,7 @@ OUTDOOR_SCHEMA = vol.Schema(
         # pool: depth of the basin (rim to floor) and, in the ground, the rim's height above the lawn
         vol.Optional("depth", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=5))),
         vol.Optional("rim", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=-0.5, max=2))),
-        # Pool Pro: the pool's entities
+        # Pool module: the pool's entities
         vol.Optional("pool", default=None): vol.Any(None, POOL_SCHEMA),
         # an outdoor area like a room (#100): its name and Home Assistant area
         vol.Optional("name", default=None): vol.Any(None, vol.All(str, vol.Length(max=80))),

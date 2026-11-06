@@ -1,4 +1,4 @@
-// Pool Pro: pipes as real tubes – grey PVC with rounded bends, sleeves at the joints, blue ball valves (the
+// Pool module: pipes as real tubes – grey PVC with rounded bends, sleeves at the joints, blue ball valves (the
 // lever along the pipe when open, across it when closed) and sight glasses showing the water's colour. Shaded
 // by hand into the vertex colours (the material is unlit).
 

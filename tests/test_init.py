@@ -355,7 +355,7 @@ async def test_outdoor_roof_and_north_get_defaults(hass: HomeAssistant, hass_ws_
     await client.send_json_auto_id({"type": "home_3d/building/save", "building": cleared})
     assert (await client.receive_json())["success"]
 
-    # Pool Pro: an above-ground pool with its entities
+    # Pool module: an above-ground pool with its entities
     pool = copy.deepcopy(building)
     pool["floors"][0]["outdoor"][0].update(
         {
@@ -372,7 +372,7 @@ async def test_outdoor_roof_and_north_get_defaults(hass: HomeAssistant, hass_ws_
     assert saved["above"] is True
     assert saved["pool"]["heater"] == "climate.pool"
 
-    # Pool Pro: ports and pipes on the pool, the six-way valve and a closed ball valve on the devices
+    # Pool module: ports and pipes on the pool, the six-way valve and a closed ball valve on the devices
     plumbing = copy.deepcopy(pool)
     plumbing["floors"][0]["outdoor"][0]["pool"].update(
         {

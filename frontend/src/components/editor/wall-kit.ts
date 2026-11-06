@@ -13,7 +13,7 @@ import type { Fp3dEditor } from "../editor.ts";
 
 /** WallKitPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class WallKitPart {
-  // ------------------------------------------------------------------ pipes on walls (Pool Pro)
+  // ------------------------------------------------------------------ pipes on walls (pool module)
 
   /**
    * A device from the wall view's side bar straight onto the wall shown: at the first free place from the left
@@ -176,7 +176,7 @@ export class WallKitPart {
     this._wallPicTick++;
   }
 
-  /** The wall view's side bar: pool devices, ball valves and sight glasses (Pool Pro), energy devices (energy feature). */
+  /** The wall view's side bar: pool devices, ball valves and sight glasses (pool module), energy devices (energy feature). */
   renderWallKit(this: Fp3dEditor, frame: WallFrame, room: Room, rc: RunCtx | null) {
     const pool = !!rc;
     if (!pool) return this.isEditor ? this.renderWallFurniture(frame, room) : nothing;
