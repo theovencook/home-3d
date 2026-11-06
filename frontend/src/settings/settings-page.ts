@@ -17,6 +17,7 @@ import type { Building, StartView } from "../model.ts";
 import type { FurniturePack } from "../packs.ts";
 import type { HomeAssistant } from "../types.ts";
 import { colourReset } from "../colour-reset.ts";
+import { colourField } from "../colour-field-tag.ts";
 import { optionGroups, optionText } from "./view-settings.ts";
 import type { ExtensionEntry } from "./extensions-index.ts";
 import { controls, tokens } from "../styles.ts";
@@ -55,6 +56,8 @@ const loadEntityPicker = loadTimeField;
 // the Homes page is a chunk of its own too (#296), loaded when it is first drawn
 const loadHomes = once(() => import("./homes.ts"));
 const loadMultiSelect = once(() => import("../components/multi-select.ts"));
+// the shared colour field (#403): Settings' first open has no room for it
+const loadColourField = once(() => import("../components/colour-field.ts"));
 
 /** A line icon of the menu (#248, settings-icons.ts); `small` draws it at 16 px. Its code comes with the pickers. */
 function icon(name: string, small = false) {
@@ -704,7 +707,7 @@ export class SettingsPage extends LitElement {
         return this.timeField(hoursToTime(value as number | null), aria, disabled, (v) => timeToHours(v) !== null && this.write(s as Setting<number>, timeToHours(v)!), false);
       case "colour":
         return html`<span class="st-colour">
-          <input type="color" .value=${String(value ?? c.fallback)} aria-label=${aria} ?disabled=${disabled} @input=${(e: Event) => this.write(s as Setting<string | null>, (e.target as HTMLInputElement).value)} />
+          ${this.colourField(value as string | null, c.fallback, aria, disabled, (hex) => this.write(s as Setting<string | null>, hex))}
           ${colourReset({ value: value as string | null, fallback: c.fallback, label: this.tr(c.clearable ? "st_accent_default" : "colour_reset"), disabled, onReset: () => this.write(s as Setting<string | null>, null) })}
         </span>`;
       case "range":
@@ -744,6 +747,12 @@ export class SettingsPage extends LitElement {
       case "info":
         return html`<span class="st-info">${String(value ?? "–")}</span>`;
     }
+  }
+
+  /** The shared colour field (#403): swatch, hex value and copy; its code is a chunk of its own. */
+  private colourField(value: string | null, fallback: string, label: string, disabled: boolean, set: (hex: string) => unknown) {
+    need(loadColourField);
+    return colourField({ value: value ?? fallback, label, t: (k, v) => this.tr(k, v), disabled, live: true, onChange: (hex) => hex && set(hex) });
   }
 
   /** A time of day picker (#225) in the profile's 12 or 24 hours. */
@@ -1206,14 +1215,6 @@ export class SettingsPage extends LitElement {
         display: inline-flex;
         gap: 6px;
         align-items: center;
-      }
-      .st-colour input {
-        width: 52px;
-        height: 36px;
-        padding: 2px;
-        border: 1px solid var(--fp3d-line);
-        border-radius: 8px;
-        background: var(--fp3d-bg2);
       }
       .st-multi {
         width: 100%;

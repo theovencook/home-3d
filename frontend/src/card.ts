@@ -7,7 +7,7 @@ import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { uiIcon } from "./ui-icons.ts";
 import { BuildingController, type PlanChange } from "./building-controller.ts";
 import { loadView, readyView } from "./load-view.ts";
-import { loadRoomPanel } from "./load-parts.ts";
+import { loadColourField, loadRoomPanel } from "./load-parts.ts";
 import { need } from "./lazy-part.ts";
 import { languageReady, loadLanguage, translate, uiLanguage, type I18nKey } from "./i18n.ts";
 import { controls, tokens } from "./styles.ts";
@@ -284,7 +284,8 @@ clearTimeout(this.cleanTimer);
 
   /** Visual editor in the dashboard (no YAML needed). */
   static async getConfigElement(): Promise<HTMLElement> {
-    await loadCardEditor();
+    // its accent colour field (#403) is a chunk of the main bundle
+    await Promise.all([loadCardEditor(), loadColourField()]);
     return document.createElement("home-3d-card-editor");
   }
 

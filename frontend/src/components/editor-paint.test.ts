@@ -40,12 +40,13 @@ async function editor() {
 }
 const colours = (ed: Awaited<ReturnType<typeof editor>>) => ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "car").colors;
 
-test("the paint role of a car offers ten swatches and a hex field in the item panel (#129)", async () => {
+test("the paint role of a car offers ten swatches and the colour field in the item panel (#129, #403)", async () => {
   const ed = await editor();
   const html = flat(ed.renderColourRoles(ed.furnitureItem));
   for (const name of ["White", "Black", "Silver", "Grey", "Blue", "Red", "Green", "Yellow/orange", "Brown/bronze", "Dark blue"]) assert.ok(html.includes(`aria-label=${name} `) || html.includes(`title=${name} `), name);
   assert.equal((html.match(/class="fp3d-swatch"/g) ?? []).length, 10);
-  assert.match(html, /Hex colour/);
+  // the shared colour field (#403): swatch, hex value and copy
+  assert.equal((flat(ed.renderPaint(ed.furnitureItem, null)).match(/<fp3d-colour-field/g) ?? []).length, 1);
 });
 
 test("picking a swatch saves the colour in the paint role of the placed item (#129)", async () => {

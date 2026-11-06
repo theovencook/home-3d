@@ -13,6 +13,8 @@ import { defineElement } from "../define.ts";
 import { css, html, LitElement, nothing, unsafeCSS, type PropertyValues, type TemplateResult } from "lit";
 import { translate, type I18nKey } from "../i18n.ts";
 import { colourReset } from "../colour-reset.ts";
+import { colourField } from "../colour-field-tag.ts";
+import { loadColourField } from "../load-parts.ts";
 import { need, once } from "../lazy-part.ts";
 import { PHONE_MEDIA } from "../phone.ts";
 import { FloatDrag } from "../float-panel.ts";
@@ -205,10 +207,11 @@ export class Fp3dViewPanel extends LitElement {
   }
 
   private renderAccent(s: Setting) {
+    need(loadColourField);
     const value = s.read(this.env) as string | null;
     const fallback = s.control.kind === "colour" ? s.control.fallback : "#48cdeb";
     return html`<span class="vp-accent" title=${this.t("accent_hint")}>
-      <input type="color" .value=${value ?? fallback} aria-label=${this.t("accent")} @input=${(e: Event) => this.write(s, (e.target as HTMLInputElement).value)} />
+      ${colourField({ value: value ?? fallback, label: this.t("accent"), t: (k, v) => this.t(k, v), live: true, onChange: (hex) => hex && this.write(s, hex) })}
       ${colourReset({ value, fallback, label: this.t("accent_reset"), onReset: () => this.write(s, null) })}
     </span>`;
   }
@@ -576,22 +579,6 @@ export class Fp3dViewPanel extends LitElement {
         display: inline-flex;
         align-items: center;
         gap: 2px;
-      }
-      .vp-accent input[type="color"] {
-        width: 30px;
-        height: 30px;
-        padding: 0;
-        border: 1px solid var(--fp3d-line);
-        border-radius: 50%;
-        background: none;
-        cursor: pointer;
-      }
-      .vp-accent input[type="color"]::-webkit-color-swatch-wrapper {
-        padding: 2px;
-      }
-      .vp-accent input[type="color"]::-webkit-color-swatch {
-        border: none;
-        border-radius: 50%;
       }
       .vp-help {
         margin: var(--fp3d-space-1) 0 0;

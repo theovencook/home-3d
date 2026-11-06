@@ -63,7 +63,7 @@ test("an item's colour roles and paint reset to the look (#230)", async () => {
   const ed = await makeEditor([square("r1", 0, 0, 6, 6)], [{ id: "s", type: "sofa", x: 1, z: 1, rotation: 0, w: 2, d: 0.9, h: 0.8, variant: null }]);
   ed.selectItem("furniture", "s");
   const none = flat(ed.renderColourRoles(ed.furnitureItem));
-  assert.match(none, /type="color"/);
+  assert.match(none, /<fp3d-colour-field/);
   assert.equal(resetsIn(none), 0, "following the look: nothing to reset");
   const role = itemColourRoles("sofa")[0];
   ed.updateFurniture({ colors: setRoleColour(ed.furnitureItem.colors, role, "#123456") });
@@ -72,14 +72,14 @@ test("an item's colour roles and paint reset to the look (#230)", async () => {
   assert.match(own, /aria-label=From the appearance/);
 });
 
-test("every colour picker in the source has a reset beside it (#230)", () => {
+test("every colour field in the source has a reset beside it (#230), and every one is the shared field (#403)", () => {
   const src = fileURLToPath(new URL(".", import.meta.url));
   const files: string[] = [];
   const walk = (dir: string): void => {
     for (const name of readdirSync(dir)) {
       const p = join(dir, name);
       if (statSync(p).isDirectory()) walk(p);
-      else if (p.endsWith(".ts") && !p.endsWith(".test.ts") && !p.endsWith("colour-reset.ts")) files.push(p);
+      else if (p.endsWith(".ts") && !p.endsWith(".test.ts") && !p.endsWith("colour-reset.ts") && !p.endsWith("colour-text.ts")) files.push(p);
     }
   };
   walk(src);
@@ -87,7 +87,11 @@ test("every colour picker in the source has a reset beside it (#230)", () => {
   let pickers = 0;
   for (const f of files) {
     const text = readFileSync(f, "utf8");
-    const n = (text.match(/type="color"/g) ?? []).length - (text.match(/input\[type="color"\]/g) ?? []).length;
+    // the browser's own picker only inside the shared field; everywhere else the field (colourField)
+    const bare = (text.match(/type="color"/g) ?? []).length - (text.match(/input\[type="color"\]/g) ?? []).length;
+    if (bare && !f.endsWith("colour-field.ts")) bad.push(`${f.slice(src.length)}: a bare colour picker`);
+    if (f.endsWith("colour-field.ts")) continue;
+    const n = (text.match(/colourField\(\{/g) ?? []).length;
     if (!n) continue;
     pickers += n;
     const resets = (text.match(/colourReset\(/g) ?? []).length;

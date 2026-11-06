@@ -166,7 +166,7 @@ test("a sofa opens Appearance with one swatch per part; its other folds stay clo
   assert.match(form, /Occupancy sensor/);
   assert.match(form, /Taps and visibility/);
   assert.match(form, /More options/);
-  assert.match(form, /type="color"/, "Appearance is open: the colour swatches show");
+  assert.match(form, /<fp3d-colour-field/, "Appearance is open: the colour fields show");
   assert.match(form, /Finishes and presets/);
   assert.doesNotMatch(form, /class="fp3d-material"/, "materials are one link away");
   assert.doesNotMatch(form, /Glow when this is on<fp3d-entity-picker/, "the occupancy fold is closed");

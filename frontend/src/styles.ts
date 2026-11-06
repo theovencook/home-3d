@@ -147,13 +147,6 @@ export const controls = css`
   input[type="radio"] {
     accent-color: var(--fp3d-primary);
   }
-  /* a colour picker shows its colour as a full swatch, not a line inside the text field's padding */
-  .fp3d-field input[type="color"] {
-    padding: 3px;
-    height: 36px;
-    width: 100%;
-    cursor: pointer;
-  }
   /* colour per role (#12): a swatch beside the presets; a role following the look shows a faded swatch */
   .fp3d-paint {
     display: flex;
@@ -173,17 +166,19 @@ export const controls = css`
     border-color: var(--fp3d-accent, #37e0ff);
     box-shadow: 0 0 0 2px var(--fp3d-accent, #37e0ff);
   }
-  .fp3d-paint-hex {
-    width: 5.5em;
-  }
+  /* the colour field (#403) with its reset, then the presets and the material, each on a line of its own: the field
+     takes the width of a two-column row */
   .fp3d-colour-pick {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 6px;
   }
+  /* the shared colour field (#403) and its reset */
   .fp3d-colour-swatch {
+    flex: none;
     display: grid;
-    grid-template-columns: 44px auto;
+    grid-template-columns: auto auto;
+    justify-content: start;
     align-items: center;
   }
   /* a picker with its reset (#230) on a line of its own: the swatch takes the width */
@@ -192,15 +187,9 @@ export const controls = css`
     align-items: center;
     gap: 4px;
   }
-  .fp3d-colour-row input[type="color"] {
-    flex: 1;
-  }
   /* its material (#40) on a line of its own under the colour */
   .fp3d-colour-pick .fp3d-material {
     grid-column: 1 / -1;
-  }
-  .fp3d-field input[type="color"].fp3d-colour-unset {
-    opacity: 0.35;
   }
   .fp3d-field select option,
   select option {
