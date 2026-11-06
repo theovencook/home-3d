@@ -53,6 +53,10 @@ export const sideStyles = css`
       details[open] > summary {
         margin-bottom: 8px;
       }
+      summary:focus-visible {
+        outline: 2px solid var(--fp3d-accent);
+        outline-offset: 2px;
+      }
       .fp3d-floor-list,
       /* align and distribute buttons of the multi-selection panel (#235) */
       .fp3d-align {

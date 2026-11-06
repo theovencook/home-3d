@@ -11,21 +11,256 @@ export const formStyles = css`
         letter-spacing: 0.06em;
         text-transform: uppercase;
       }
-      /* the item's title and position fields stay at the top while the panel scrolls (#71); -12px = the side
-         bar's top padding, so nothing shows above it */
-      .fp3d-pos-head {
+      /* the item panel (#396, #397): only the header is pinned (name, live state, Lock position, "⋯"); -12px = the
+         side bar's top padding, so nothing shows above it. Position scrolls with the rest. */
+      .fp3d-item-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .fp3d-item-head {
         position: sticky;
         top: -12px;
         z-index: 3;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 4px 8px;
         background: var(--fp3d-chrome-solid);
-        padding: 4px 0 10px;
+        padding: 4px 0 8px;
         border-bottom: 1px solid var(--fp3d-line);
       }
-      .fp3d-pos-head h3 {
+      .fp3d-sheet-body .fp3d-item-head {
+        top: -4px;
+      }
+      .fp3d-item-title {
+        min-width: 0;
+      }
+      .fp3d-item-title h2 {
+        margin: 0;
+        font-size: 17px;
+        line-height: 1.25;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+      .fp3d-item-tools {
+        display: flex;
+        gap: 6px;
+      }
+      .fp3d-icon-btn {
+        min-width: 36px;
+        min-height: 36px;
+        padding: 0;
+        display: inline-grid;
+        place-items: center;
+      }
+      .fp3d-live {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .fp3d-live-chip {
+        padding: 2px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--fp3d-accent);
+        background: color-mix(in srgb, var(--fp3d-accent) 14%, transparent);
+      }
+      .fp3d-menu-wrap {
+        position: relative;
+      }
+      .fp3d-item-menu {
+        right: 0;
+        top: calc(100% + 4px);
+        z-index: 6;
+      }
+      .fp3d-item-menu button {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 36px;
+      }
+      .fp3d-item-menu kbd {
+        font: inherit;
+        font-size: 11.5px;
+        color: var(--fp3d-muted);
+      }
+      .fp3d-item-pos h3,
+      .fp3d-link-block h3,
+      .fp3d-fold-h {
+        margin: 0;
+      }
+      .fp3d-pos-row {
+        margin-top: 6px;
+      }
+      .fp3d-turn {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: flex-end;
+        gap: 6px;
+      }
+      .fp3d-turn > .fp3d-field {
+        flex: 1 1 auto;
         min-width: 0;
+      }
+      .fp3d-plan-hint {
+        margin: 6px 0 0;
+      }
+      .fp3d-nav-row {
+        display: flex;
+        flex: 1 1 auto;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 36px;
+      }
+      .fp3d-nav-row .fp3d-side-fold {
+        margin-left: auto;
+      }
+      .fp3d-crumb {
+        min-height: 32px;
+        padding: 0 4px;
+        font-size: 13.5px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      /* a fold: a full-width button row, at least 44 px, with its summary and badge while closed */
+      .fp3d-fold {
+        border-top: 1px solid var(--fp3d-line);
+      }
+      .fp3d-fold-btn {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        width: 100%;
+        min-height: 44px;
+        padding: 6px 28px 6px 2px;
+        border: 0;
+        background: none;
+        color: var(--fp3d-text);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-fold-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .fp3d-fold-sum {
+        font-size: 12px;
+        font-weight: 400;
+        color: var(--fp3d-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+      .fp3d-fold-chev {
+        position: absolute;
+        right: 4px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--fp3d-muted);
+        transition: transform 0.15s ease;
+      }
+      .fp3d-fold[data-open] .fp3d-fold-chev {
+        transform: translateY(-50%) rotate(90deg);
+      }
+      .fp3d-fold-body {
+        padding-bottom: 10px;
+      }
+      .fp3d-fold-badge {
+        padding: 1px 7px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--fp3d-accent);
+        background: color-mix(in srgb, var(--fp3d-accent) 14%, transparent);
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      /* help on demand: an "i" beside the field, its text under it once opened */
+      .fp3d-with-info {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 4px 6px;
+        min-width: 0;
+      }
+      .fp3d-with-info > :first-child {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+      .fp3d-info {
+        flex: none;
+        width: 24px;
+        height: 24px;
+        margin-bottom: 6px;
+        padding: 0;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 50%;
+        background: none;
+        color: var(--fp3d-muted);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        font-style: italic;
+        cursor: pointer;
+      }
+      .fp3d-info[aria-expanded="true"] {
+        color: var(--fp3d-accent);
+        border-color: var(--fp3d-accent);
+      }
+      .fp3d-help-text {
+        flex: 1 0 100%;
+        margin: 0;
+      }
+      .fp3d-found {
+        display: grid;
+        gap: 2px;
+        margin: 8px 0 4px;
+      }
+      .fp3d-found-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 13px;
+      }
+      .fp3d-found-row dt {
+        color: var(--fp3d-muted);
+      }
+      .fp3d-found-row dd {
+        margin: 0;
+        text-align: right;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .fp3d-found-row[data-missing] dd {
+        color: var(--fp3d-muted);
+      }
+      .fp3d-found-toggle,
+      .fp3d-finishes {
+        justify-self: start;
+        min-height: 32px;
+        text-align: left;
+      }
+      .fp3d-colour-slim {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .fp3d-colour-slim > .fp3d-sub {
+        margin-left: auto;
       }
       .fp3d-link-block {
         margin: 10px 0 4px;
@@ -926,8 +1161,21 @@ export const formStyles = css`
         .fp3d-point .fp3d-btn,
         .fp3d-seg .fp3d-menu-sub .fp3d-chip,
         .fp3d-presets .fp3d-chip,
-        .fp3d-settings-link {
+        .fp3d-settings-link,
+        .fp3d-icon-btn,
+        .fp3d-crumb,
+        .fp3d-found-toggle,
+        .fp3d-finishes {
           min-height: 44px;
+        }
+        .fp3d-icon-btn,
+        .fp3d-info {
+          min-width: 44px;
+        }
+        .fp3d-info {
+          height: 44px;
+          margin-bottom: 0;
+          border-radius: 22px;
         }
         .fp3d-pin {
           min-width: 44px;

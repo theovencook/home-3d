@@ -29,6 +29,8 @@ export class EntityPicker extends LitElement {
     placeholder: { attribute: false },
     prefer: { attribute: false },
     groups: { attribute: false },
+    label: { attribute: false },
+    live: { attribute: false },
     _query: { state: true },
     _open: { state: true },
     _cursor: { state: true },
@@ -46,6 +48,10 @@ export class EntityPicker extends LitElement {
   declare prefer: OptionPreference;
   /** Headings that split the list by the link's domains (#172): the entities that fit, then the others. Off when null. */
   declare groups: { likely: string; other: string } | null;
+  /** The accessible name of the box (#396): the field's visible label, so a screen reader hears it, not the value. */
+  declare label: string;
+  /** What the chosen entity reports now (#396), shown after its name: "Car battery · 78 %". */
+  declare live: string;
   private declare _query: string;
   private declare _open: boolean;
   private declare _cursor: number;
@@ -63,6 +69,8 @@ export class EntityPicker extends LitElement {
     this.placeholder = "";
     this.prefer = {};
     this.groups = null;
+    this.label = "";
+    this.live = "";
     this._query = "";
     this._open = false;
     this._cursor = 0;
@@ -195,9 +203,11 @@ export class EntityPicker extends LitElement {
         type="text"
         role="combobox"
         aria-expanded=${this._open}
+        aria-label=${this.label || nothing}
+        title=${picked ?? nothing}
         ?disabled=${this.disabled}
         placeholder=${current ? current.label : this.placeholder}
-        .value=${this._open ? this._query : (current?.label ?? "")}
+        .value=${this._open ? this._query : current ? (this.live && picked ? `${current.label} · ${this.live}` : current.label) : ""}
         @focus=${() => this.openList()}
         @click=${() => {
           // a second click on the box (it kept the focus after a pick) opens the list again (#132)
@@ -230,7 +240,6 @@ export class EntityPicker extends LitElement {
             ${this.leftOut > 0 ? html`<li class="empty">… +${this.leftOut} · ${this.placeholder}</li>` : nothing}
           </ul>`
         : nothing}
-      ${picked ? html`<small class="picked" title=${picked}>${picked}</small>` : nothing}
     </div>`;
   }
 
@@ -297,15 +306,6 @@ export class EntityPicker extends LitElement {
       }
       li.chosen {
         color: var(--fp3d-accent);
-      }
-      .picked {
-        display: block;
-        margin-top: 2px;
-        color: var(--fp3d-muted);
-        font-size: 11px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
       li.group {
         color: var(--fp3d-muted);

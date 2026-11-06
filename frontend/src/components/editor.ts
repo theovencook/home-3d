@@ -64,6 +64,7 @@ import { SelectionPart } from "./editor/selection.ts";
 import { OpeningsPart } from "./editor/openings.ts";
 import { FurniturePart } from "./editor/furniture.ts";
 import { ItemFormPart } from "./editor/item-form.ts";
+import { ItemSectionsPart } from "./editor/item-sections.ts";
 import { DevicePanelPart } from "./editor/device-panel.ts";
 import { CamerasPart } from "./editor/cameras.ts";
 import { ToolbarPart } from "./editor/toolbar.ts";
@@ -1304,8 +1305,8 @@ export class Fp3dEditor extends LitElement {
 }
 
 /** The area modules' methods (#202): one class per editor area under editor/, all on this element. */
-export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart {}
-mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart]);
+export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart {}
+mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart]);
 
 defineElement("fp3d-editor", Fp3dEditor);
 
