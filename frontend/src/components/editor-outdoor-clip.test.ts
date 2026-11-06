@@ -167,3 +167,15 @@ test("the floating toolbar and the right-click menu of an outdoor area offer Dup
   const keys = el.itemActions("outdoor", "lawn").map((a: { key: string }) => a.key);
   assert.ok(keys.includes("duplicate") && keys.includes("copy"), keys.join());
 });
+
+test("a paste out of view is brought into view (#400)", async () => {
+  const el = await editor();
+  el.selectItem("outdoor", "lawn");
+  el.copySelection();
+  el._view = { scale: 100, ox: -3000, oy: 0 };
+  el.pasteClipboard();
+  const copy = outdoor(el).at(-1)!;
+  const [x0, y0] = el.toScreen(copy.points[0]);
+  const [x1, y1] = el.toScreen(copy.points[2]);
+  assert.ok(x0 >= 0 && y0 >= 0 && x1 <= el._size.w && y1 <= el._size.h, `${x0},${y0} ${x1},${y1}`);
+});

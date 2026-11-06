@@ -373,6 +373,8 @@ export class SelectionPart {
     this.selectMixed(copies.map((c) => c.id), areas.map((a) => a.id));
     const first = this.furnitureItem;
     if (first) this._roomId = this.roomAt([first.x, first.z]) ?? this._roomId;
+    // where it can be seen: a paste out of view (another floor, a far corner) is brought into it
+    this.showArea([...copies.map((c): Vec2 => [c.x, c.z]), ...areas.flatMap((a) => a.points)]);
     this.noteDroppedActions(dropped);
     return true;
   }
