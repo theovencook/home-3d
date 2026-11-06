@@ -4,10 +4,12 @@
 // to fetch, and on a slow link each extra file is another wait. The editor draws a tag at once and starts loading the
 // chunk; once the editor has drawn and the page is idle it loads anyway, so a panel that needs a part rarely waits.
 
-import { css, html, LitElement, nothing } from "lit";
+import { css, html, LitElement, nothing, svg } from "lit";
 import { once } from "../../lazy-part.ts";
 import { defineElement } from "../../define.ts";
 import { uiIcon } from "../../ui-icons.ts";
+import { touchWording } from "../../editor-hint.ts";
+import { fold, howKey, recentCards, RECENT_KEY, searchCards, useCard } from "../../tool-cards.ts";
 
 export { need } from "../../lazy-part.ts";
 const loadParts = once(() => import("./lazy-parts.ts"));
@@ -29,6 +31,10 @@ export const loadPetPanel = once(() => import("../pet-panel.ts"));
 export const loadVacuumPanel = once(() => import("../vacuum-panel.ts"));
 /** The phone editor's bottom bar and More (#250): a chunk of its own, as only phone-wide screens draw it. */
 export const loadPhoneBar = once(() => import("./phone-bar.ts").then((m) => m.definePhoneBar({ LitElement, html, css, nothing, uiIcon, defineElement })));
+/** The Build and Outside panels (#402): a chunk of their own that borrows Lit and the card functions (tool-panel.ts). */
+export const loadToolPanel = once(() =>
+  import("../tool-panel.ts").then((m) => m.defineToolPanel({ LitElement, html, svg, css, nothing, defineElement, touchWording, cards: { fold, howKey, recentCards, RECENT_KEY, searchCards, useCard } })),
+);
 
 let preloaded = false;
 
@@ -36,7 +42,10 @@ let preloaded = false;
 export function preloadParts(): void {
   if (preloaded) return;
   preloaded = true;
-  const all = () => void loadParts().catch(() => (preloaded = false));
+  const all = () => {
+    void loadParts().catch(() => (preloaded = false));
+    void loadToolPanel().catch(() => undefined);
+  };
   if (typeof requestIdleCallback === "function") requestIdleCallback(all, { timeout: 3000 });
   else setTimeout(all, 1000);
 }

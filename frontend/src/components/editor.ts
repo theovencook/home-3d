@@ -78,6 +78,9 @@ import { WallViewPart } from "./editor/wall-view.ts";
 import { WallKitPart } from "./editor/wall-kit.ts";
 import { PipesPart } from "./editor/pipes.ts";
 import { PoolPart } from "./editor/pool.ts";
+import { AreaSelectPart } from "./editor/area-select.ts";
+import { ToolPanelPart } from "./editor/tool-panels.ts";
+import { OutdoorFindPart } from "./editor/outdoor-find.ts";
 import { FieldsPart } from "./editor/fields.ts";
 import { SettingsPart } from "./editor/settings.ts";
 import { preloadParts } from "./editor/lazy.ts";
@@ -125,6 +128,7 @@ export class Fp3dEditor extends LitElement {
     _openingId: { state: true },
     _furnitureId: { state: true },
     _multi: { state: true },
+    _multiOut: { state: true },
     _hiddenItems: { state: true },
     _placing: { state: true },
     _placeAt: { state: true },
@@ -194,6 +198,7 @@ export class Fp3dEditor extends LitElement {
     _viewMenu: { state: true },
     _draft: { state: true },
     _outdoorFree: { state: true },
+    _areaFree: { state: true },
     _outdoorType: { state: true },
     _poolShape: { state: true },
     _pipeMode: { state: true },
@@ -286,6 +291,8 @@ export class Fp3dEditor extends LitElement {
   declare _furnitureId: string | null;
   /** Several furniture items selected together (shift-click, a frame); empty = the usual single selection. */
   declare _multi: string[];
+  /** Outdoor areas in a multi selection (#400), alone or with the items of `_multi` / `_furnitureId`. */
+  declare _multiOut: string[];
   /** Items hidden in this editor's plan only (#75), to reach what lies under them; not saved. */
   declare _hiddenItems: string[];
   /** A library card waiting for a click on the plan that places it (#76). */
@@ -499,6 +506,8 @@ export class Fp3dEditor extends LitElement {
   declare _draft: Vec2[];
   /** Outdoor tool: corner by corner like a free-form room instead of a dragged rectangle (#97). */
   declare _outdoorFree: boolean;
+  /** The Outside panel's shape choice for areas (#402): by their corners rather than as a dragged rectangle. */
+  declare _areaFree: boolean;
   /** What the outdoor tool draws next (lawn, terrace, pool …), chosen before drawing. */
   declare _outdoorType: OutdoorType;
   /** Pools: the shape drawn next (rectangle, round, oval or free). */
@@ -557,6 +566,7 @@ export class Fp3dEditor extends LitElement {
     this._openingId = null;
     this._furnitureId = null;
     this._multi = [];
+    this._multiOut = [];
     this._hiddenItems = [];
     this._placing = null;
     this._placeAt = null;
@@ -707,6 +717,7 @@ export class Fp3dEditor extends LitElement {
     this._viewMenu = false;
     this._draft = [];
     this._outdoorFree = false;
+    this._areaFree = false;
     this._outdoorType = "lawn";
     this._poolShape = "rect";
     this._pipeMode = false;
@@ -1028,10 +1039,11 @@ export class Fp3dEditor extends LitElement {
     } else if (clipboardKey(e)) {
       // the editor's own clipboard (#74); a key with nothing to do leaves the browser's copy and paste alone
       const act = clipboardKey(e);
-      if (act === "copy" ? this.copySelection() : act === "paste" ? this.pasteClipboard() : this.selectAll()) e.preventDefault();
+      if (act === "copy" ? this.copySelection() : act === "paste" ? this.pasteClipboard(this.planPointer) : this.selectAll()) e.preventDefault();
     } else if (mod && e.key.toLowerCase() === "d") {
       e.preventDefault();
       if (this._furnitureId) this.duplicateFurniture();
+      else if (this._outdoorId) this.duplicateOutdoor();
       else this.duplicateRoom();
     } else if (e.key === "Delete" || (e.key === "Backspace" && (this._tool === "select" || this._tool === "furniture" || chosenPoint(this)))) {
       this.deleteSelected();
@@ -1182,6 +1194,7 @@ export class Fp3dEditor extends LitElement {
               @pointerup=${this.onPointerUp}
               @pointercancel=${this.onPointerUp}
               @pointerleave=${() => {
+                this.planPointer = null;
                 if (!this.drag) this._cursor = null;
                 this._openingHover = null;
               }}
@@ -1191,7 +1204,7 @@ export class Fp3dEditor extends LitElement {
               @drop=${this.onPlanDrop}
             >
               ${this.renderBackground(floor)} ${this.renderGrid()} ${this.renderGhost()} ${walls ? this.renderWalls(walls.walls) : nothing}
-              ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing} ${this.renderPlaceGhost()}
+              ${floor ? this.renderOutdoorGhosts(floor) : nothing} ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing} ${this.renderPlaceGhost()}
               ${floor ? this.renderFreeWalls(floor) : nothing}
               ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
@@ -1271,6 +1284,12 @@ export class Fp3dEditor extends LitElement {
   /** The last press on a point, to tell a double click (a pointerdown's `detail` stays 0 in Chrome, D410). */
   lastTap: { key: string; at: number } | null = null;
 
+  /** Where the pointer is on the plan (m), null while it is off the plan: Ctrl+V pastes there (#400). */
+  planPointer: Vec2 | null = null;
+
+  /** The floor page's list of outdoor areas is open (#401): Fit takes the garden in then. */
+  outdoorListOpen = false;
+
   planMemo: { doc: Building; entities: unknown; devices: unknown; areas: unknown; count: number; kept: Map<string, unknown> } | null = null;
 
   /** The editors list (#7) as the backend last sent it; null until asked. */
@@ -1319,8 +1338,8 @@ export class Fp3dEditor extends LitElement {
 }
 
 /** The area modules' methods (#202): one class per editor area under editor/, all on this element. */
-export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, ItemFoldsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart {}
-mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, ItemFoldsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart]);
+export interface Fp3dEditor extends Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, ItemFoldsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart, AreaSelectPart, ToolPanelPart, OutdoorFindPart {}
+mixParts(Fp3dEditor, [Pane3dPart, PlanViewPart, PointerPart, KeysPart, RoomsPart, WallsPart, OutdoorPart, FloorsPart, RoofPart, SolarPart, EnergyPart, SelectionPart, OpeningsPart, FurniturePart, ItemFormPart, ItemSectionsPart, ItemFoldsPart, DevicePanelPart, CamerasPart, ToolbarPart, SidePanelPart, RacksPart, WallViewPart, WallKitPart, PipesPart, PoolPart, FieldsPart, SettingsPart, BackupPart, PhonePart, PetsPart, AreaSelectPart, ToolPanelPart, OutdoorFindPart]);
 
 defineElement("fp3d-editor", Fp3dEditor);
 

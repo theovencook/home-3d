@@ -308,7 +308,7 @@ export class SidePanelPart {
           : room
             ? html`${this.renderRoomForm(room, areas)}`
             : floor
-              ? html`${this.renderRoomList(floor)} ${this.renderPetList(floor)} ${this.renderItemsList(floor.furniture, true)} ${this.renderUnplaced()} ${this.renderHomeLinks()}`
+              ? html`${this.renderRoomList(floor)} ${this.renderPetList(floor)} ${this.renderItemsList(floor.furniture, true)} ${this.renderOutdoorList()} ${this.renderUnplaced()} ${this.renderHomeLinks()}`
               : nothing}
       ${this.renderHelpLinks()}
       ${admin && SHOW_PRESENCE ? this.renderPresenceSettings() : nothing}

@@ -372,6 +372,24 @@ export const sideStyles = css`
       .fp3d-out-terrace polygon {
         fill: rgba(150, 130, 255, 0.12);
       }
+      /* thin areas (paths, fences, hedges): an invisible margin round the outline takes the tap (#401) */
+      .fp3d-out polygon.fp3d-out-hit {
+        fill: none;
+        stroke: transparent;
+        stroke-dasharray: none;
+        pointer-events: stroke;
+      }
+      /* the outdoor areas of a floor below, faint, seen from upstairs (#401): a tap offers to go there */
+      .fp3d-out-ghost {
+        fill: color-mix(in srgb, var(--fp3d-success) 6%, transparent);
+        stroke: color-mix(in srgb, var(--fp3d-success) 45%, transparent);
+        stroke-width: 1;
+        stroke-dasharray: 2 4;
+        cursor: pointer;
+      }
+      .fp3d-out-ghost:hover {
+        stroke: var(--fp3d-success);
+      }
       .fp3d-free-wall {
         cursor: grab;
       }

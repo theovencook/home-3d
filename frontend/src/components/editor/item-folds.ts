@@ -23,7 +23,7 @@ const CIRCUIT_MONITOR = /(circuit|ct_clamp|ct clamp|consumer_unit|consumer unit|
 export class ItemFoldsPart {
   /** The item panel (#396, #397): header, Position, the kind's main section, then its closed folds. */
   renderFurnitureForm(this: Fp3dEditor, f: Furniture) {
-    if (this.selection().length > 1) return this.renderBlockForm();
+    if (this.selection().length > 1 || this._multiOut.length) return this.renderBlockForm();
     const p = itemProfile(f.type);
     return html`<section class="fp3d-item-panel" data-kind=${p.kind}>
       ${this.renderItemHeader(f, p)} ${this.renderItemPosition(f)}
