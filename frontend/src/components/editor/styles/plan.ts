@@ -335,4 +335,25 @@ export const planStyles = css`
         color: var(--fp3d-text);
         border-color: var(--fp3d-accent);
       }
+      /* the points of a drawn outline (#395): a 44 px target on touch, a ring when the keyboard is on one */
+      .fp3d-vertex:focus,
+      .fp3d-mid:focus {
+        outline: none;
+      }
+      .fp3d-vertex:focus-visible circle:not(.fp3d-hit) {
+        stroke: var(--fp3d-text);
+        stroke-width: 3;
+      }
+      @media (pointer: coarse) {
+        .fp3d-vertex .fp3d-hit,
+        .fp3d-mid .fp3d-hit {
+          r: 22px;
+        }
+      }
+      /* Select several in the main toolbar (#398): its word only where the row has room for it, else the icon (named) */
+      @media (max-width: 1439px) {
+        .fp3d-multi-btn .fp3d-tool-word {
+          display: none;
+        }
+      }
 `;

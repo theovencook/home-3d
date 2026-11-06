@@ -6,6 +6,7 @@ import { bestFace, clampField, pointOnFace, proposeWindow, roofFaces, windowAsFi
 import type { I18nKey } from "../../i18n.ts";
 import { uid, type Building, type RoofSection, type RoofShape, type RoofEnd, ROOF_ENDS, type RoofWindow, ROOF_SHAPES, type RoofType, type Vec2 } from "../../model.ts";
 import { turnBy, round, numberish, binaryish } from "./helpers.ts";
+import { chosenPoint, pointKeys, renderMids } from "./points.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** RoofPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
@@ -169,10 +170,14 @@ export class RoofPart {
           <text x=${cx} y=${cy - 14}>${label}</text>
         </g>
         ${sel && this.isEditor && !this.roofFixed(sec) && shape
-          ? shape.map((p, k) => {
+          ? svg`${renderMids(this, "data-roof-mid", sec.id, shape)}${shape.map((p, k) => {
               const [x, y] = this.toScreen(p);
-              return svg`<g class="fp3d-vertex" data-roof-vertex=${`${sec.id}:${k}`}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>`;
-            })
+              // a "+" on every edge adds a point (#395); the points take the keyboard: Tab, the arrows, Delete
+              const keys = pointKeys(this, { kind: "roof", id: sec.id, index: k }, shape.length);
+              const pt = chosenPoint(this);
+              const on = pt?.kind === "roof" && pt.id === sec.id && pt.index === k;
+              return svg`<g class=${on ? "fp3d-vertex fp3d-vertex-sel" : "fp3d-vertex"} data-roof-vertex=${`${sec.id}:${k}`} tabindex="0" role="button" aria-label=${keys.label} @focus=${keys.focus}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>`;
+            })}`
           : nothing}
         ${sel && this.isEditor && !this.roofFixed(sec) && !shape && !sectionTurn(sec)
           ? ([[0, 0], [1, 0], [1, 1], [0, 1]] as const).map(([kx, kz]) => {

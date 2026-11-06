@@ -7,6 +7,7 @@ import type { I18nKey } from "../../i18n.ts";
 import { iconPath } from "../../icons.ts";
 import { bounds, centroid, isLamp, isAxisRect, OUTDOOR_TYPES, outdoorStanding, outdoorZones, SLOPE_DIRS, type SlopeDir, pointInPolygon, uid, type Floor, type OutdoorArea, type OutdoorType, type Vec2 } from "../../model.ts";
 import { round, patchItem } from "./helpers.ts";
+import { chosenPoint, pointKeys, renderMids } from "./points.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** OutdoorPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
@@ -86,9 +87,13 @@ export class OutdoorPart {
         return svg`<g class="fp3d-vertex fp3d-box-corner" data-out-box=${`${a.id}:${i}`}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><rect x=${x - 5} y=${y - 5} width="10" height="10" /></g>`;
       })}`;
     }
-    return svg`${a.points.map((p, i) => {
+    // a "+" on every edge adds a point (#395); the points take the keyboard: Tab, the arrows, Delete
+    const sel = chosenPoint(this);
+    return svg`${renderMids(this, "data-out-mid", a.id, a.points, !!a.open)}${a.points.map((p, i) => {
       const [x, y] = this.toScreen(p);
-      return svg`<g class="fp3d-vertex" data-out-vertex=${`${a.id}:${i}`}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>`;
+      const keys = pointKeys(this, { kind: "out", id: a.id, index: i }, a.points.length);
+      const on = sel?.kind === "out" && sel.index === i;
+      return svg`<g class=${on ? "fp3d-vertex fp3d-vertex-sel" : "fp3d-vertex"} data-out-vertex=${`${a.id}:${i}`} tabindex="0" role="button" aria-label=${keys.label} @focus=${keys.focus}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>`;
     })}`;
   }
 

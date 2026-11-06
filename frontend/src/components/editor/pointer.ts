@@ -12,6 +12,7 @@ import { bounds, DEFAULT_HOLOGRAM, isAxisRect, resizeFurniture, pointInPolygon, 
 import { movePet, placeOfRef } from "../../pet-place.ts";
 import { insertCorner } from "../../geometry/room-corners.ts";
 import { type FixKind, EDIT_DRAGS, wallPeers, SNAP_PX, round, patchItem, distToSegment } from "./helpers.ts";
+import { addPoint, pointOf } from "./points.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** Whether a long press (touch) on what this drag holds starts Select several (#263): an item, outside Select several. */
@@ -37,7 +38,7 @@ export class PointerPart {
     this.guardFixed(this.localPoint(e));
     clearTimeout(this.pressTimer);
     this.pressStart = null;
-    if (e.pointerType === "touch" && !placing && (this._tool === "select" || this._tool === "furniture")) {
+    if (e.pointerType === "touch" && !placing && (this._tool === "select" || this._tool === "furniture" || pointOf(e.target as Element, this._roomId))) {
       const at = this.localPoint(e);
       const target = e.target as Element;
       this.pressStart = at;
@@ -178,6 +179,7 @@ export class PointerPart {
       }
       this._bgEdit = false;
     }
+    if (this.isEditor && this.pressPoint(target)) return;
     if (this._tool === "wall") {
       const start = this.snap(world, undefined, e.altKey);
       this.drag = { kind: "freewall", start, end: start };
@@ -327,6 +329,7 @@ export class PointerPart {
         const fixed = this.roofFixed(this._doc.settings.roof.sections?.find((x) => x.id === body));
         if (fixed && this._roofId === body) this._fixedHint = true;
         this._roofId = body;
+        this._point = null;
         this.drag = this.isEditor && !fixed ? { kind: "roofmove", id: body, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
       } else if (this.isEditor) {
         this._roofId = null;
@@ -448,7 +451,8 @@ export class PointerPart {
         false,
       );
       this._vertex = i + 1;
-      this.drag = { kind: "vertex", roomId, index: i + 1, base, moved: true };
+      // the moves edit the plan with the new corner in it (`from`); `base`, without it, is the undo step
+      this.drag = { kind: "vertex", roomId, index: i + 1, base, from: this._doc, moved: true };
       return;
     }
     const wallEndEl = target.closest("[data-wall-end]");
@@ -585,7 +589,7 @@ export class PointerPart {
           (_, floor) => {
             floor.rooms.find((r) => r.id === drag.roomId)!.points[drag.index] = p;
           },
-          drag.base,
+          drag.from ?? drag.base,
           false,
         );
         break;
@@ -807,7 +811,7 @@ export class PointerPart {
       case "outvertex": {
         drag.moved = true;
         const p = this.snap(world, undefined, e.altKey);
-        const src = drag.base.floors.find((f) => f.id === this._floorId)?.outdoor.find((a) => a.id === drag.id);
+        const src = (drag.from ?? drag.base).floors.find((f) => f.id === this._floorId)?.outdoor.find((a) => a.id === drag.id);
         if (!src) return;
         const rect = isAxisRect(src.points);
         this.change(
@@ -827,7 +831,7 @@ export class PointerPart {
               });
             a.points = pts;
           },
-          drag.base,
+          drag.from ?? drag.base,
           false,
         );
         break;
@@ -915,7 +919,7 @@ export class PointerPart {
             sec.points[drag.index] = [round(p[0]), round(p[1])];
             Object.assign(sec, polygonBox(sec.points));
           },
-          drag.base,
+          drag.from ?? drag.base,
           false,
         );
         break;
@@ -1060,7 +1064,7 @@ export class PointerPart {
     if (right && e.button === 2) {
       // the browser's contextmenu event (before or after this) stays quiet; a click without moving opens the menu
       this.rightUp = performance.now();
-      if (!right.moved && e.type !== "pointercancel" && (this._tool === "select" || this._tool === "furniture")) this.openContext(right.target, right.at);
+      if (!right.moved && e.type !== "pointercancel" && (this._tool === "select" || this._tool === "furniture" || pointOf(right.target, this._roomId))) this.openContext(right.target, right.at);
     }
     clearTimeout(this.pressTimer);
     this.pressStart = null;
@@ -1240,9 +1244,32 @@ export class PointerPart {
     e.preventDefault();
     // a mouse's right button is handled on its release (drag = move the plan); this is a long press on a tablet
     if (this.rightPress || performance.now() - this.rightUp < 600) return;
-    if (this._tool !== "select" && this._tool !== "furniture") return;
+    if (this._tool !== "select" && this._tool !== "furniture" && !pointOf(e.target as Element, this._roomId)) return;
     this.drag = null;
     this.openContext(e.target as Element, this.localPoint(e as PointerEvent));
+  }
+
+  /**
+   * A press on an outdoor area's or a roof outline's point or "+" (#395): the point is chosen and dragged; a "+" adds a
+   * point there first (one undo step with the drag that follows). False for anything else.
+   */
+  pressPoint(this: Fp3dEditor, target: Element): boolean {
+    const mid = target.closest("[data-out-mid], [data-roof-mid]");
+    if (mid) {
+      const out = mid.getAttribute("data-out-mid");
+      const v = out ?? mid.getAttribute("data-roof-mid")!;
+      const at = v.lastIndexOf(":");
+      const base = this._doc;
+      const p = addPoint(this, { kind: out ? "out" : "roof", id: v.slice(0, at), edge: Number(v.slice(at + 1)) });
+      if (!p) return false;
+      this.drag = p.kind === "out" ? { kind: "outvertex", id: p.id, index: p.index, base, from: this._doc, moved: true } : { kind: "roofvertex", id: p.id, index: p.index, base, from: this._doc, moved: true };
+      return true;
+    }
+    const p = pointOf(target, null);
+    if (!p) return false;
+    this._point = p;
+    this.drag = p.kind === "out" ? { kind: "outvertex", id: p.id, index: p.index, base: this._doc, moved: false } : { kind: "roofvertex", id: p.id, index: p.index, base: this._doc, moved: false };
+    return true;
   }
 
   /** Whether this press is the second of a double click on the same point (within 450 ms). */
