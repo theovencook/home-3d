@@ -287,8 +287,9 @@ export class SelectionPart {
         : nothing;
     }
     const fixed = this.isFixedItem(kind, id);
-    return html`<button class="fp3d-btn fp3d-fix" aria-pressed=${fixed} title=${this.t("fix_hint")} @click=${() => this.toggleFixed(kind, id)}>
-      ${fixed ? `🔒 ${this.t("unfix")}` : `🔓 ${this.t("fix")}`}
+    // one constant name, the state as "pressed" (#396)
+    return html`<button class="fp3d-btn fp3d-fix" aria-pressed=${fixed ? "true" : "false"} title=${withKeys(this.t("fix_hint"), ["L"])} @click=${() => this.toggleFixed(kind, id)}>
+      ${this.t("lock_position")}
     </button>`;
   }
 
