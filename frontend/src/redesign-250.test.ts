@@ -234,7 +234,8 @@ test("choosing something pulls the sheet up to its title row; Details goes to ha
   el.selectItem("furniture", "lamp");
   el.syncSheet();
   assert.equal(el._sheet, "full");
-  assert.match(flat(el.renderSheet(el.floor)), /· Furniture/);
+  // the sheet names the kind of item (#397): a floor lamp is a Lamp
+  assert.match(flat(el.renderSheet(el.floor)), /· Lamp/);
   el.closeSheet();
   el.syncSheet();
   assert.equal(el._sheet, "closed");

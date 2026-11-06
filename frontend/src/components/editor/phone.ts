@@ -9,8 +9,8 @@
 import { html, nothing } from "lit";
 import { COMPACT_MAX_PX, COMPACT_MEDIA, PHONE_MEDIA, SHORT_MEDIA } from "../../phone.ts";
 import { polygonArea, type Floor, type Vec2 } from "../../model.ts";
-import { furnitureName } from "../../furniture-names.ts";
 import { uiIcon } from "../../ui-icons.ts";
+import { itemProfile } from "../../item-profile.ts";
 import type { I18nKey } from "../../i18n.ts";
 import type { Tool } from "../../editor-hint.ts";
 import { loadPhoneBar, need } from "./lazy.ts";
@@ -143,7 +143,7 @@ export class PhonePart {
     // several items chosen: the sheet is about all of them, not about the one the panel happens to hold (#261)
     const many = this.selection().length;
     if (many > 1 && f) return { title: this._multi.length ? this.t("multi_title", { n: many }) : `▣ ${this.t("block_title")}`, kind: this._multi.length ? "" : String(many), sub: "" };
-    if (f) return { title: furnitureName(this.hass, f.type), kind: this.t("furniture"), sub: "" };
+    if (f) return { title: this.itemTitle(f), kind: this.t(`item_kind_${itemProfile(f.type).kind}` as I18nKey), sub: "" };
     // the library is what the Furniture tool shows, whatever lies under the last tap (#262)
     if (this._tool === "furniture" && !f) return { title: this.t("tool_furniture"), kind: room?.name ?? "", sub: this.hintText() };
     if (this.opening) return { title: this.t("sheet_opening"), kind: "", sub: "" };
