@@ -131,16 +131,35 @@ export class SidePanelPart {
       </aside>`;
   }
 
+  /**
+   * One slim navigation row (#396): "‹ <room or floor>" back from what is chosen, and a small icon that folds the side
+   * bar (beside the 3D pane also the pin).
+   */
   renderPinRow(this: Fp3dEditor, _overlay = false) {
     if (this.narrow) return nothing;
-    const fold = html`<button class="fp3d-btn" title=${this.t("side_fold_hint")} @click=${() => this.setSideFolded(true)}>${this.t("side_close")} ›</button>`;
-    if (!this._split) return html`<div class="fp3d-pin-row">${fold}</div>`;
+    const row = this.renderNavRow(this.sideBack(), true);
+    if (!this._split) return row;
     return html`<div class="fp3d-pin-row">
-      ${fold}
+      ${row}
       <button class="fp3d-btn" aria-pressed=${this._sidePinned} title=${this.t("side_pin_hint")} @click=${() => this.setSidePinned(!this._sidePinned)}>
         📌 ${this.t(this._sidePinned ? "side_pinned" : "side_pin")}
       </button>
     </div>`;
+  }
+
+  /** Where the side panel's back link goes (#396): from an item to its room or the floor, from a room to the floor, from an item while furnishing to the library. */
+  sideBack(this: Fp3dEditor): { label: string; name: string; go: () => void } | null {
+    const t = this._tool;
+    if (t === "roof" || t === "energy" || t === "pool" || t === "measure") return null;
+    const room = this.room;
+    const floorName = this.floor?.name ?? this.t("floor");
+    if (t === "furniture" && this.isEditor) {
+      return this.furnitureItem ? { label: this.t("back_to_library"), name: this.t("library_crumb"), go: () => this.selectItem("room", this._roomId) } : null;
+    }
+    const item = this.furnitureItem || this.opening || this.device || this.outdoorArea || this.freeWall || this._petId;
+    if (item) return { label: this.t(room ? "back_to_room" : "back_to_floor", { room: room?.name ?? "" }), name: room?.name ?? floorName, go: () => this.selectItem("room", this._roomId) };
+    if (room) return { label: this.t("back_to_floor"), name: floorName, go: () => this.selectItem("room", null) };
+    return null;
   }
 
   renderSide(this: Fp3dEditor, floor: Floor | undefined) {
@@ -157,7 +176,7 @@ export class SidePanelPart {
     if (this._tool === "furniture" && floor && admin) {
       // a way back to the library: the item panel takes its place while an item is chosen (#70)
       return html`${this.furnitureItem
-          ? html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", this._roomId)}>‹ ${this.t("back_to_library")}</button>
+          ? html`${this.narrow ? this.renderNavRow(this.sideBack(), false) : nothing}
               ${this.renderFurnitureForm(this.furnitureItem)}`
           : nothing}
         ${this.renderFurnitureLibrary()}`;
@@ -189,11 +208,11 @@ export class SidePanelPart {
           </section>`
         : nothing;
     if (item) {
-      return html`${nextKind}<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", this._roomId)}>‹ ${this.t(room ? "back_to_room" : "back_to_floor", { room: room?.name ?? "" })}</button>
+      return html`${nextKind}${this.narrow ? this.renderNavRow(this.sideBack(), false) : nothing}
         ${item}`;
     }
     if (room && this._tool !== "measure") {
-      return html`${nextKind}<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", null)}>‹ ${this.t("back_to_floor")}</button>
+      return html`${nextKind}${this.narrow ? this.renderNavRow(this.sideBack(), false) : nothing}
         ${this.renderRoomForm(room, areas)}`;
     }
     // "Add rooms from HA areas": on top while the floor has no rooms (the quick start), else after the floor's fields (#262)

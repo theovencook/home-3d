@@ -52,8 +52,17 @@ const cardEditorConfig = { ...common, entryPoints: ["src/card-editor.ts"], outfi
 // file more is a round trip more on a slow link. The main bundle loads the entry by its hash (it changes with any chunk's
 // name) and fetches the shared chunks alongside it (load-editor.ts).
 const EDITOR = `${out}/home-3d-editor.js`;
+// run 10 (#397): the editor's stylesheet slices (components/editor/styles/*.ts, about 4,000 lines) lose their indentation and
+// comments too (src/css-shrink.ts), so the item panel's folds fit the "editor first open" budget without raising it
+const shrinkEditorCss = {
+  name: "shrink-editor-css",
+  setup(b) {
+    b.onLoad({ filter: /src.components.editor.styles.[a-z0-9-]+[.]ts$/ }, (args) => ({ contents: shrinkCssTemplates(readFileSync(args.path, "utf8")), loader: "ts" }));
+  },
+};
 const editorConfig = (viewerHash, locateHash, itemsHash, alignHash) => ({
   ...common,
+  plugins: [...common.plugins, shrinkEditorCss],
   entryPoints: { "home-3d-editor": "src/components/editor.ts" },
   outdir: out,
   splitting: true,

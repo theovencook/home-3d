@@ -5,6 +5,7 @@ import { html, nothing } from "lit";
 import { linesField } from "../lines-field.ts";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { entityName } from "../../devices.ts";
+import { stateText } from "../../markers.ts";
 import { areaText, formatImperial, lengthText, parseLength, unitLabel } from "../../units.ts";
 import { formatNumber, type I18nKey } from "../../i18n.ts";
 import { typedValue } from "../typed-value.ts";
@@ -298,6 +299,12 @@ export class FieldsPart {
     ></fp3d-time-field>`;
   }
 
+  /** What an entity reports now, short (#396: "78 %", "On"), for its picker; "" for none or an unknown one. */
+  liveValue(this: Fp3dEditor, id: string | null): string {
+    const st = id && id !== "none" ? this.hass?.states?.[id] : undefined;
+    return st ? stateText(this.hass, st) : "";
+  }
+
   /** `domains`: the link's likely entity domains, best first (#132); with the room's area they lead the list. */
   entitySelect(this: Fp3dEditor,
     label: string,
@@ -321,6 +328,8 @@ export class FieldsPart {
         .prefer=${{ area: this.pickerArea(), domains }}
         .groups=${domains.length ? { likely: this.t("picker_likely"), other: this.t("picker_other") } : null}
         .placeholder=${this.t("entity_search")}
+        .label=${label}
+        .live=${this.liveValue(value)}
         ?disabled=${!this.isEditor}
         @change=${(e: CustomEvent<{ value: string }>) => {
           e.stopPropagation();

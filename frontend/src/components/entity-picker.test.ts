@@ -57,13 +57,16 @@ test("typing moves the highlight to the first entity that matches, and Enter tak
   assert.equal(p.open, false);
 });
 
-test("the chosen entity's id stays shown under the box (#132)", () => {
+test("the chosen entity's id shows on hover, its friendly name and live value in the box (#132, #396)", () => {
   const p = picker();
   p.value = "light.lounge";
+  p.live = "On";
   const text = flat(p.render());
-  assert.match(text, /class="picked"[^>]*>light\.lounge</);
+  assert.match(text, /title=light\.lounge/);
+  assert.match(text, /\.value=Lounge lamp · On/);
+  assert.doesNotMatch(text, /class="picked"/, "no raw id line under the box any more");
   p.value = "none";
-  assert.doesNotMatch(flat(p.render()), /class="picked"/);
+  assert.doesNotMatch(flat(p.render()), /title=light/);
 });
 
 test("the picker says when its list is open (#132)", () => {

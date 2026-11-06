@@ -23,22 +23,20 @@ function flat(v: unknown): string {
 const lamp: Furniture = { id: "lamp", type: "lamp_floor", x: 2, z: 2, rotation: 0, w: 0.4, d: 0.4, h: 1.5, variant: null, entity: null, color: "#ffffff", hologram: true } as unknown as Furniture;
 const st = (id: string, name: string) => ({ entity_id: id, state: "on", attributes: { friendly_name: name } });
 
-test("the link block sits right under the position fields, before the size, colours and the household forms (#172)", async () => {
+test("the link block sits right under the position fields, before the folds with the size, colours and the rest (#172, #397)", async () => {
   const ed = await makeEditor([square("r", 0, 0, 4, 4)], [lamp]);
   ed.hass = { states: { "light.lamp": st("light.lamp", "Lamp") }, entities: {}, devices: {}, areas: {}, user: { is_admin: true }, language: "en", locale: { language: "en" } };
   ed.selectItem("furniture", "lamp");
   const form = flat(ed.renderFurnitureForm(ed.furnitureItem));
-  const head = form.indexOf("fp3d-pos-head");
+  const head = form.indexOf("fp3d-item-pos");
   const block = form.indexOf("fp3d-link-block");
-  assert.ok(head >= 0 && block > head, "the block follows the position head");
-  assert.match(form, /Link a device/);
-  // nothing of the long panel (the body fields, the colours, the show-when rule, the actions) comes before it
-  const body = form.indexOf("fp3d-form", block + 20);
-  for (const later of ["fp3d-block-note", "furn_colour", "fp3d-actions"]) {
+  assert.ok(head >= 0 && block > head, "the block follows Position");
+  assert.match(form, /<h3 id="fp3d-main-h">Light<\/h3>/);
+  // nothing of the long panel (the folds: size, colours, taps and visibility, more options) comes before it
+  for (const later of ["fp3d-block-note", "fp3d-fold", "fp3d-actions"]) {
     const at = form.indexOf(later);
     if (at >= 0) assert.ok(at > block, `${later} comes after the link block`);
   }
-  assert.ok(body > block);
   // exactly one block
   assert.equal(form.split("fp3d-link-block").length - 1, 1);
 });

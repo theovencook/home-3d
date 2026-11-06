@@ -1,0 +1,348 @@
+// The item panel's frame (#396, #397): the header (name, kind and room, live state, Lock position and the "⋯" menu),
+// the Position section, the folds with their summaries and badges, the "i" help buttons, and the car's main section.
+// The fields inside come from item-form.ts; which sections and folds an item gets comes from its kind profile
+// (item-profile.ts).
+
+import { html, nothing, svg, type TemplateResult } from "lit";
+import { carEntities, carState, entityName, type CarEntities } from "../../devices.ts";
+import { formatNumber, type I18nKey } from "../../i18n.ts";
+import { stateText } from "../../markers.ts";
+import { withKeys } from "../../clipboard.ts";
+import { furnitureName } from "../../furniture-names.ts";
+import { itemProfile, type ItemProfile, type PanelFold } from "../../item-profile.ts";
+import { type CarLinks, type Furniture } from "../../model.ts";
+import { numberish, binaryish } from "./helpers.ts";
+import type { Fp3dEditor } from "../editor.ts";
+
+/** Small line icons of the item panel (24 x 24, stroke = currentColor), decorative: the buttons carry the names. */
+const ICONS = {
+  lock: svg`<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>`,
+  unlock: svg`<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/>`,
+  left: svg`<path d="M4 9a8 8 0 1 1 2 7"/><path d="M4 4v5h5"/>`,
+  right: svg`<path d="M20 9a8 8 0 1 0-2 7"/><path d="M20 4v5h-5"/>`,
+  more: svg`<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>`,
+  chevron: svg`<path d="m9 6 6 6-6 6"/>`,
+  collapse: svg`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M15 5v14M10 10l2 2-2 2"/>`,
+};
+
+export function panelIcon(name: keyof typeof ICONS): TemplateResult {
+  return html`<svg class="fp3d-ui-icon" viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name]}</svg>`;
+}
+
+/** The car's roles in the order the found list shows them, with their labels. */
+export const CAR_ROLES: readonly { key: keyof CarEntities & keyof CarLinks; label: I18nKey }[] = [
+  { key: "soc", label: "car_soc" },
+  { key: "range", label: "car_range" },
+  { key: "charging", label: "car_charging" },
+  { key: "plugged", label: "car_plugged" },
+  { key: "tracker", label: "car_tracker" },
+  { key: "lock", label: "car_lock" },
+  { key: "climate", label: "car_climate" },
+];
+
+// ------------------------------------------------------------------ fold state, remembered per kind
+
+const FOLD_KEY = "home3d.itemFolds";
+let folds: Record<string, PanelFold[]> | null = null;
+
+function foldTable(): Record<string, PanelFold[]> {
+  if (folds) return folds;
+  folds = {};
+  try {
+    const raw = JSON.parse(localStorage.getItem(FOLD_KEY) ?? "{}");
+    if (raw && typeof raw === "object") for (const [k, v] of Object.entries(raw)) if (Array.isArray(v)) folds[k] = v.filter((x): x is PanelFold => typeof x === "string");
+  } catch {
+    // no storage, or rubbish in it: the profile's defaults
+  }
+  return folds;
+}
+
+/** The folds open for a kind: what was opened last time, else the profile's first fold. */
+export function openFolds(p: ItemProfile): PanelFold[] {
+  return foldTable()[p.kind] ?? (p.openFirst ? [p.openFirst] : []);
+}
+
+/** Opens or closes a fold for every item of the kind (and remembers it in this browser). */
+export function setFoldOpen(p: ItemProfile, fold: PanelFold, open: boolean): void {
+  const now = openFolds(p).filter((f) => f !== fold);
+  foldTable()[p.kind] = open ? [...now, fold] : now;
+  try {
+    localStorage.setItem(FOLD_KEY, JSON.stringify(foldTable()));
+  } catch {
+    // no storage: it lasts for this visit
+  }
+}
+
+/** Forgets every remembered fold (tests). */
+export function resetFolds(): void {
+  folds = {};
+}
+
+// ------------------------------------------------------------------ per selection: the menu, the help, the car's pickers
+
+interface PanelUi {
+  id: string;
+  menu: boolean;
+  help: string | null;
+  found: boolean;
+  /** The colour rows show presets, materials and the active colour (the "Finishes and presets" link). */
+  finishes: boolean;
+}
+const ui = new WeakMap<object, PanelUi>();
+
+/** The panel's passing state for the chosen item; a new item starts closed. */
+export function panelUi(ed: object, id: string): PanelUi {
+  let s = ui.get(ed);
+  if (!s || s.id !== id) ui.set(ed, (s = { id, menu: false, help: null, found: false, finishes: false }));
+  return s;
+}
+
+/** ItemSectionsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
+export class ItemSectionsPart {
+  /**
+   * An "i" button that opens one help text under its field by click, tap or keyboard (#396): help is never only a
+   * tooltip. `key` is the help text; `name` what it is about (its accessible name: "More about …").
+   */
+  infoButton(this: Fp3dEditor, key: I18nKey, name: string) {
+    const f = this.furnitureItem;
+    const s = panelUi(this, f?.id ?? "");
+    const open = s.help === key;
+    const id = `fp3d-help-${key}`;
+    return html`<button type="button" class="fp3d-info" aria-expanded=${open ? "true" : "false"} aria-controls=${id} aria-label=${this.t("help_more", { field: name })} @click=${(e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        s.help = open ? null : key;
+        this.requestUpdate();
+      }}>i</button>${open ? html`<span class="fp3d-sub fp3d-help-text" id=${id} role="note">${this.t(key)}</span>` : nothing}`;
+  }
+
+  /** A field with its "i" help beside it (#396): the help opens under it. */
+  withInfo(this: Fp3dEditor, field: unknown, key: I18nKey, name: string, wide = true) {
+    return html`<div class="fp3d-with-info ${wide ? "fp3d-wide" : ""}">${field}${this.infoButton(key, name)}</div>`;
+  }
+
+  /** The item's name for its header: its own name, else its catalogue name. */
+  itemTitle(this: Fp3dEditor, f: Furniture): string {
+    return f.name || furnitureName(this.hass, f.type);
+  }
+
+  /** What the item reports now, for the header (#397, from option C): "Charging 3.6 kW · 78 %", a lamp's "On", a power sensor's watts. */
+  itemLiveState(this: Fp3dEditor, f: Furniture, p: ItemProfile = itemProfile(f.type)): string[] {
+    const hass = this.hass;
+    if (!hass?.states) return [];
+    const ref = (v: unknown) => (typeof v === "string" && v && v !== "none" ? v : null);
+    if (p.kind === "car" || (p.kind === "parking" && f.car)) {
+      const c = carState(hass, f);
+      const out: string[] = [];
+      const kw = c.chargingW !== null ? `${formatNumber(hass, c.chargingW / 1000, 1)} kW` : "";
+      if (c.charging) out.push(kw ? this.t("live_charging", { power: kw }) : this.t("live_charging", { power: "" }).trim());
+      else if (c.plugged) out.push(this.t("live_plugged"));
+      if (c.soc !== null) out.push(`${formatNumber(hass, c.soc, 0)} %`);
+      if (c.away !== null) out.push(c.away || this.t("car_away"));
+      else if (c.entities.tracker && hass.states[c.entities.tracker]) out.push(this.t("live_home"));
+      return out;
+    }
+    const out: string[] = [];
+    const main = ref(f.entity);
+    const st = main ? hass.states[main] : undefined;
+    if (st) {
+      const text = stateText(hass, st);
+      if (text) out.push(text);
+    }
+    const power = ref(f.power);
+    const pw = power ? hass.states[power] : undefined;
+    if (pw) out.push(stateText(hass, pw));
+    return out.filter(Boolean);
+  }
+
+  /** "Lock position": one constant name, aria-pressed for the state, a lock icon (#396). */
+  lockPositionButton(this: Fp3dEditor, f: Furniture) {
+    if (!this.isEditor) return nothing;
+    const fixed = this.isFixedItem("furniture", f.id);
+    const name = this.t("lock_position");
+    return html`<button type="button" class="fp3d-btn fp3d-fix fp3d-icon-btn" aria-pressed=${fixed ? "true" : "false"} aria-label=${name} title=${withKeys(name, ["L"])} @click=${() => this.toggleFixed("furniture", f.id)}>
+      ${panelIcon(fixed ? "lock" : "unlock")}
+    </button>`;
+  }
+
+  /** The header's "⋯" menu (#396): rename, duplicate, copy, the wall view, the rack and delete, with their keys. */
+  itemMenu(this: Fp3dEditor, f: Furniture, p: ItemProfile) {
+    if (!this.isEditor) return nothing;
+    const s = panelUi(this, f.id);
+    const close = () => {
+      s.menu = false;
+      this.requestUpdate();
+    };
+    const run = (fn: () => void) => () => {
+      s.menu = false;
+      fn();
+      this.requestUpdate();
+    };
+    const item = (label: string, keys: string[], fn: () => void, danger = false) =>
+      html`<button type="button" role="menuitem" class=${danger ? "fp3d-ctx-danger" : ""} @click=${run(fn)}><span>${label}</span>${keys.length ? html`<kbd>${keys.join(", ")}</kbd>` : nothing}</button>`;
+    return html`<span class="fp3d-menu-wrap"
+      @keydown=${(e: KeyboardEvent) => {
+        if (e.key !== "Escape" || !s.menu) return;
+        e.stopPropagation();
+        close();
+        (this.renderRoot.querySelector?.(".fp3d-item-more") as HTMLElement | null)?.focus();
+      }}
+      @focusout=${(e: FocusEvent) => {
+        const to = e.relatedTarget as Node | null;
+        if (s.menu && to && !(e.currentTarget as HTMLElement).contains(to)) close();
+      }}
+      ><button type="button" class="fp3d-btn fp3d-icon-btn fp3d-item-more" aria-haspopup="menu" aria-expanded=${s.menu ? "true" : "false"} aria-label=${this.t("item_menu")} title=${this.t("item_menu")} @click=${() => {
+        s.menu = !s.menu;
+        this.requestUpdate();
+      }}>${panelIcon("more")}</button>
+      ${s.menu
+        ? html`<div class="fp3d-ctx fp3d-item-menu" role="menu" aria-label=${this.t("item_menu")}>
+            ${item(this.t("item_rename"), [], () => this.renameItem(f, p))}
+            ${item(this.t("duplicate"), ["Ctrl+D"], () => this.duplicateFurniture())}
+            ${item(this.t("copy_items"), ["Ctrl+C"], () => this.copySelection())}
+            ${item(this.t("wall_view"), [], () => this.openWallViewFor(f))}
+            ${item(this.t("delete"), ["Del"], () => void this.deleteFurniture(), true)}
+          </div>`
+        : nothing}</span
+    >`;
+  }
+
+  /** Rename: More options opens with the name box focused. */
+  renameItem(this: Fp3dEditor, _f: Furniture, p: ItemProfile): void {
+    setFoldOpen(p, "more", true);
+    this.requestUpdate();
+    void this.updateComplete.then(() => (this.renderRoot.querySelector?.(".fp3d-item-name") as HTMLInputElement | null)?.focus());
+  }
+
+  /** The header (#396, #397): the item's name as the heading, its kind and room, its live state, Lock position and "⋯". */
+  renderItemHeader(this: Fp3dEditor, f: Furniture, p: ItemProfile) {
+    const roomId = this.roomAt([f.x, f.z]);
+    const room = roomId ? this.floor?.rooms.find((r) => r.id === roomId)?.name : null;
+    const where = room || this.floor?.name || "";
+    const live = this.itemLiveState(f, p);
+    return html`<header class="fp3d-item-head">
+      <div class="fp3d-item-title">
+        <h2>${this.itemTitle(f)}</h2>
+        <span class="fp3d-sub">${[this.t(`item_kind_${p.kind}` as I18nKey), where].filter(Boolean).join(" · ")}</span>
+      </div>
+      <div class="fp3d-item-tools">${this.lockPositionButton(f)}${this.itemMenu(f, p)}</div>
+      ${live.length ? html`<div class="fp3d-live" role="status">${live.map((s) => html`<span class="fp3d-live-chip">${s}</span>`)}</div>` : nothing}
+    </header>`;
+  }
+
+  /** Position (#397): always open, never sticky; X, Y, Turn with the 90° buttons beside it, and the plan hint (from option D). */
+  renderItemPosition(this: Fp3dEditor, f: Furniture) {
+    const admin = this.isEditor;
+    return html`<section class="fp3d-item-pos" aria-labelledby="fp3d-pos-h">
+      <h3 id="fp3d-pos-h">${this.t("item_position")}</h3>
+      <div class="fp3d-form fp3d-pos-row">
+        ${this.furnitureField(f, "x")} ${this.furnitureField(f, "z")}
+        <div class="fp3d-turn">
+          ${this.num(this.t("item_turn"), f.rotation, (v) => this.updateFurniture({ rotation: ((v % 360) + 360) % 360 }), 1)}
+          ${admin
+            ? html`<button type="button" class="fp3d-btn fp3d-icon-btn" aria-label=${this.t("turn_left_90")} title=${withKeys(this.t("turn_left_90"), ["Shift+R"])} @click=${() => this.rotateFurniture(-90)}>${panelIcon("left")}</button>
+                <button type="button" class="fp3d-btn fp3d-icon-btn" aria-label=${this.t("turn_right_90")} title=${withKeys(this.t("turn_right_90"), ["R"])} @click=${() => this.rotateFurniture(90)}>${panelIcon("right")}</button>`
+            : nothing}
+        </div>
+      </div>
+      ${admin ? html`<p class="fp3d-sub fp3d-plan-hint">${this.t("item_plan_hint")}</p>` : nothing}
+    </section>`;
+  }
+
+  /**
+   * A fold (#396 rule 13, #397): a heading with a button (aria-expanded, 44 px row, focus ring) that shows the set
+   * values in its summary and an "N set" badge while it is closed. A closed fold renders nothing of its body.
+   */
+  renderFold(this: Fp3dEditor, p: ItemProfile, fold: PanelFold, title: string, summary: string, set: number, body: () => unknown) {
+    const open = openFolds(p).includes(fold);
+    const id = `fp3d-fold-${fold}`;
+    return html`<section class="fp3d-fold" data-fold=${fold} ?data-open=${open}>
+      <h3 class="fp3d-fold-h">
+        <button type="button" class="fp3d-fold-btn" aria-expanded=${open ? "true" : "false"} aria-controls=${id} @click=${() => {
+          setFoldOpen(p, fold, !open);
+          this.requestUpdate();
+        }}>
+          <span class="fp3d-fold-top"><span class="fp3d-fold-title">${title}</span>${set ? html`<span class="fp3d-fold-badge">${this.t("fold_set", { n: set })}</span>` : nothing}</span>
+          ${summary && !open ? html`<span class="fp3d-fold-sum">${summary}</span>` : nothing}
+          <span class="fp3d-fold-chev" aria-hidden="true">${panelIcon("chevron")}</span>
+        </button>
+      </h3>
+      ${open ? html`<div class="fp3d-fold-body" id=${id}>${body()}</div>` : nothing}
+    </section>`;
+  }
+
+  /** An entity's friendly name for a summary line, or "" for none. */
+  linkName(this: Fp3dEditor, ref: unknown): string {
+    if (typeof ref !== "string" || !ref || ref === "none" || !this.hass) return "";
+    return entityName(this.hass, ref);
+  }
+
+  /**
+   * The car's main section (#396 win 1, #397): one picker for any entity of the car, then a read-only list of what
+   * was found beside it (charge, range, charging, cable, location, lock, climate); "Change what was found" opens the
+   * role pickers in place. `seed` is the picker of a vehicle item (its main link); a parking spot passes none (its
+   * presence sensor is its main link, the car is chosen with car_device).
+   */
+  renderCarMain(this: Fp3dEditor, f: Furniture, vehicle: boolean) {
+    if (!this.hass) return nothing;
+    const hass = this.hass;
+    const car = f.car ?? {};
+    const s = panelUi(this, f.id);
+    const auto = carEntities(hass, { entity: f.entity, car: { device: car.device } });
+    const now = carEntities(hass, f);
+    const set = (patch: Partial<CarLinks>) => this.updateFurniture({ car: { ...car, ...patch } });
+    const any = this.entityOptions((id) => /^(sensor|binary_sensor|lock|climate|switch|device_tracker|number|select|input_number|input_boolean)\./.test(id));
+    const found = CAR_ROLES.filter((r) => now[r.key]).length;
+    const options: Record<string, (id: string) => boolean> = {
+      soc: (id) => numberish(id),
+      range: (id) => numberish(id),
+      charging: (id) => /^(sensor|binary_sensor|switch|input_boolean|input_number|number)\./.test(id),
+      plugged: (id) => binaryish(id),
+      lock: (id) => /^(lock|binary_sensor|sensor|input_boolean|switch)\./.test(id),
+      climate: (id) => /^(climate|switch|binary_sensor|input_boolean)\./.test(id),
+      tracker: (id) => id.startsWith("device_tracker."),
+    };
+    const value = (id: string | null) => {
+      const st = id ? hass.states[id] : undefined;
+      return st ? stateText(hass, st) || st.state : "";
+    };
+    return html`<section class="fp3d-link-block fp3d-car-main" aria-labelledby="fp3d-car-h">
+      <div class="fp3d-h3row"><h3 id="fp3d-car-h">${this.t("section_car")}</h3><span class="fp3d-fold-badge">${this.t("car_found", { n: found, total: CAR_ROLES.length })}</span></div>
+      <div class="fp3d-form fp3d-links">
+        ${this.withInfo(
+          vehicle
+            ? this.entitySelect(this.t("car_device"), f.entity ?? null, undefined, any, (v) => this.updateFurniture({ entity: v }), ["sensor", "device_tracker", "binary_sensor"])
+            : this.entitySelect(this.t("car_device"), car.device ?? null, undefined, any, (v) => set({ device: v === "none" ? null : v })),
+          "car_hint",
+          this.t("car_device"),
+        )}
+      </div>
+      <dl class="fp3d-found">
+        ${CAR_ROLES.map((r) => {
+          const id = now[r.key];
+          return html`<div class="fp3d-found-row" ?data-missing=${!id}><dt>${this.t(r.label)}</dt><dd title=${id ?? ""}>${id ? value(id) || entityName(hass, id) : this.t("car_not_found")}</dd></div>`;
+        })}
+      </dl>
+      ${this.isEditor
+        ? html`<button type="button" class="fp3d-link fp3d-found-toggle" aria-expanded=${s.found ? "true" : "false"} @click=${() => {
+            s.found = !s.found;
+            this.requestUpdate();
+          }}>${this.t(s.found ? "car_found_done" : "car_change_found")}</button>`
+        : nothing}
+      ${s.found
+        ? html`<div class="fp3d-form fp3d-links">
+            ${vehicle ? this.entitySelect(this.t("car_device_other"), car.device ?? null, undefined, any, (v) => set({ device: v === "none" ? null : v })) : nothing}
+            ${CAR_ROLES.map((r) => this.entitySelect(this.t(r.label), car[r.key] ?? null, auto[r.key], this.entityOptions(options[r.key], r.key), (v) => set({ [r.key]: v === "none" ? "none" : v })))}
+          </div>`
+        : nothing}
+    </section>`;
+  }
+
+  /** The one slim navigation row (#396 win 3): "‹ <room or floor>" back to it, and a small icon that folds the bar. */
+  renderNavRow(this: Fp3dEditor, back: { label: string; name: string; go: () => void } | null, fold: boolean) {
+    return html`<div class="fp3d-pin-row fp3d-nav-row">
+      ${back ? html`<button type="button" class="fp3d-link fp3d-back fp3d-crumb" aria-label=${back.label} @click=${back.go}>‹ ${back.name}</button>` : nothing}
+      ${fold ? html`<button type="button" class="fp3d-btn fp3d-icon-btn fp3d-side-fold" aria-label=${this.t("side_fold_hint")} title=${this.t("side_fold_hint")} @click=${() => this.setSideFolded(true)}>${panelIcon("collapse")}</button>` : nothing}
+    </div>`;
+  }
+}

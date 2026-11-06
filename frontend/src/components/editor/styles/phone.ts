@@ -269,9 +269,14 @@ export const phoneStyles = css`
         display: flex;
         flex-direction: column;
         gap: 18px;
-        padding: 4px 14px 24px;
+        /* the last row clears the bottom bar (#396) */
+        padding: 4px 14px calc(24px + var(--fp3d-bar-h, 0px));
+        scroll-padding-bottom: calc(24px + var(--fp3d-bar-h, 0px));
       }
       /* "Back to the floor" is a small link here, so the name and area come first (#262) */
+      .fp3d-sheet-body > .fp3d-nav-row {
+        margin-bottom: -10px;
+      }
       .fp3d-sheet-body > .fp3d-back {
         align-self: flex-start;
         min-height: 32px;
