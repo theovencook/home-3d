@@ -330,6 +330,21 @@ function contribution(s: LightSource, px: number, py: number, pz: number, nx: nu
  * door index, default half open).
  */
 export function lightColors(surface: LightSurface, sources: LightSource[], strength = 0.7, doorOpen: number[] = []): Float32Array {
+  const byRoom = zoneSources(surface, sources, doorOpen);
+  const { room } = surface;
+  const out = new Float32Array(surface.pos.length);
+  for (let v = 0; v < room.length; v++) {
+    const list = byRoom.get(room[v]);
+    if (list) shade(surface, list, v, strength, out);
+  }
+  return out;
+}
+
+/** A lamp as one light zone sees it: its colour on the curve, and the walls of that zone that can shadow it. */
+type ZoneSource = LightSource & { walls: Blocker[] };
+
+/** Per light zone, the lamps that light it: its own and the light that comes in through its open doors. */
+function zoneSources(surface: LightSurface, sources: LightSource[], doorOpen: number[]): Map<number, ZoneSource[]> {
   const all = [...sources];
   surface.doors.forEach((door, i) => {
     const open = doorOpen[i] ?? 0.5;
@@ -356,7 +371,7 @@ export function lightColors(surface: LightSurface, sources: LightSource[], stren
       all.push({ x: door.x, y: door.y, z: door.z, color: [c[0] / level, c[1] / level, c[2] / level], level: Math.min(1, level * 0.9 * (0.35 + 0.65 * open)), kind: "wall", room: to });
     }
   });
-  const byRoom = new Map<number, (LightSource & { walls: Blocker[] })[]>();
+  const byRoom = new Map<number, ZoneSource[]>();
   for (const s of all) {
     // warm light stays warm on the blue floor (the same curve as before); only the walls of its own
     // room can stand between a lamp and what it lights
@@ -364,28 +379,135 @@ export function lightColors(surface: LightSurface, sources: LightSource[], stren
     const t = { ...s, color: s.color.map((v) => Math.pow(v, 1.5)) as [number, number, number], walls };
     byRoom.set(s.room, [...(byRoom.get(s.room) ?? []), t]);
   }
-  const { pos, normal, room } = surface;
-  const out = new Float32Array(pos.length);
-  for (let v = 0; v < room.length; v++) {
-    const list = byRoom.get(room[v]);
-    if (!list) continue;
-    const i = v * 3;
-    let r = 0;
-    let g = 0;
-    let b = 0;
-    for (const s of list) {
-      if (s.walls.length && shadowed(s, s.walls, pos[i], pos[i + 1], pos[i + 2])) continue;
-      const k = contribution(s, pos[i], pos[i + 1], pos[i + 2], normal[i], normal[i + 1], normal[i + 2]);
-      r += s.color[0] * k;
-      g += s.color[1] * k;
-      b += s.color[2] * k;
-    }
-    // soft saturation: several lamps add up without clipping to flat white
-    out[i] = 1 - Math.exp(-r * strength * 1.6);
-    out[i + 1] = 1 - Math.exp(-g * strength * 1.6);
-    out[i + 2] = 1 - Math.exp(-b * strength * 1.6);
+  return byRoom;
+}
+
+/**
+ * The colour of vertex `v` under the lamps of its zone, written into `out`. `shade(j)`, when given, says whether the
+ * j-th lamp of the list is shadowed at this vertex (known from before), instead of testing the walls again.
+ */
+function shade(surface: LightSurface, list: readonly ZoneSource[], v: number, strength: number, out: Float32Array, dark?: (j: number) => boolean): void {
+  const { pos, normal } = surface;
+  const i = v * 3;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  for (let j = 0; j < list.length; j++) {
+    const s = list[j];
+    if (dark ? dark(j) : s.walls.length && shadowed(s, s.walls, pos[i], pos[i + 1], pos[i + 2])) continue;
+    const k = contribution(s, pos[i], pos[i + 1], pos[i + 2], normal[i], normal[i + 1], normal[i + 2]);
+    r += s.color[0] * k;
+    g += s.color[1] * k;
+    b += s.color[2] * k;
   }
-  return out;
+  // soft saturation: several lamps add up without clipping to flat white
+  out[i] = 1 - Math.exp(-r * strength * 1.6);
+  out[i + 1] = 1 - Math.exp(-g * strength * 1.6);
+  out[i + 2] = 1 - Math.exp(-b * strength * 1.6);
+}
+
+/**
+ * The colours of one light surface kept from the last relight (#389): per light zone the signature of the lamps that
+ * lit it. A lamp switched in one room then recolours that room (and the rooms its open doors pass light to), not the
+ * whole floor: a vertex only ever takes light from the lamps of its own zone.
+ */
+export interface GlowCache {
+  surface: LightSurface;
+  /** Strength and anything else that changes every vertex (the heatmap's dimming): a new key relights all. */
+  key: string;
+  colors: Float32Array;
+  sigs: Map<number, string>;
+}
+
+/**
+ * Which vertices of a zone a lamp at a point cannot reach past the walls, per surface, zone and lamp position (most of
+ * a relight's time is this test; a lamp switched or dimmed stays where it is, and so do its shadows).
+ */
+const shadowMasks = new WeakMap<LightSurface, Map<string, Uint8Array>>();
+/** Lamp positions remembered per surface at most: a lamp dragged around adds one each time. */
+const MAX_MASKS = 600;
+
+function shadowMask(surface: LightSurface, zone: number, s: ZoneSource, vs: readonly number[]): Uint8Array | null {
+  if (!s.walls.length) return null;
+  let masks = shadowMasks.get(surface);
+  if (!masks) shadowMasks.set(surface, (masks = new Map()));
+  const key = `${zone}|${s.x},${s.y},${s.z}`;
+  let mask = masks.get(key);
+  if (!mask) {
+    if (masks.size >= MAX_MASKS) masks.clear();
+    const { pos } = surface;
+    mask = new Uint8Array(vs.length);
+    for (let n = 0; n < vs.length; n++) {
+      const i = vs[n] * 3;
+      mask[n] = shadowed(s, s.walls, pos[i], pos[i + 1], pos[i + 2]) ? 1 : 0;
+    }
+    masks.set(key, mask);
+  }
+  return mask;
+}
+
+/** The vertices of each light zone of a surface, found once per surface. */
+const zoneVertices = new WeakMap<LightSurface, Map<number, number[]>>();
+
+function verticesOf(surface: LightSurface): Map<number, number[]> {
+  let map = zoneVertices.get(surface);
+  if (!map) {
+    map = new Map();
+    const { room } = surface;
+    for (let v = 0; v < room.length; v++) {
+      let list = map.get(room[v]);
+      if (!list) map.set(room[v], (list = []));
+      list.push(v);
+    }
+    zoneVertices.set(surface, map);
+  }
+  return map;
+}
+
+function zoneSig(list: readonly ZoneSource[]): string {
+  return list.map((l) => `${l.x.toFixed(3)},${l.y.toFixed(3)},${l.z.toFixed(3)},${l.kind},${l.level.toFixed(4)},${l.color.map((c) => c.toFixed(4)).join("/")}`).join(";");
+}
+
+/**
+ * lightColors that recolours only the light zones whose lamps changed since `cache` (#389). `scale` dims a zone's
+ * colours after the light (its value must only change with `key`). Returns the new cache (its `colors` are the
+ * surface's colours) and the zones it recoloured: null when it recoloured every vertex.
+ */
+export function relight(
+  surface: LightSurface,
+  sources: LightSource[],
+  strength: number,
+  doorOpen: number[],
+  cache: GlowCache | null,
+  key = "",
+  scale?: (zone: number) => number,
+): { cache: GlowCache; zones: number[] | null } {
+  const byRoom = zoneSources(surface, sources, doorOpen);
+  const sigs = new Map([...byRoom].map(([z, list]) => [z, zoneSig(list)]));
+  const fullKey = `${strength}|${key}`;
+  const verts = verticesOf(surface);
+  const paint = (zone: number, colors: Float32Array) => {
+    const list = byRoom.get(zone);
+    const vs = verts.get(zone) ?? [];
+    const k = scale ? scale(zone) : 1;
+    const masks = list ? list.map((s) => shadowMask(surface, zone, s, vs)) : [];
+    let n = 0;
+    const dark = (j: number) => masks[j]?.[n] === 1;
+    for (; n < vs.length; n++) {
+      const v = vs[n];
+      if (list) shade(surface, list, v, strength, colors, dark);
+      else colors.fill(0, v * 3, v * 3 + 3);
+      if (k !== 1) for (let c = 0; c < 3; c++) colors[v * 3 + c] *= k;
+    }
+  };
+  if (!cache || cache.surface !== surface || cache.key !== fullKey || cache.colors.length !== surface.pos.length) {
+    const colors = new Float32Array(surface.pos.length);
+    for (const zone of verts.keys()) if (byRoom.has(zone)) paint(zone, colors);
+    return { cache: { surface, key: fullKey, colors, sigs }, zones: null };
+  }
+  const zones = [...new Set([...sigs.keys(), ...cache.sigs.keys()])].filter((z) => sigs.get(z) !== cache.sigs.get(z));
+  for (const zone of zones) paint(zone, cache.colors);
+  return { cache: { surface, key: fullKey, colors: cache.colors, sigs }, zones };
 }
 
 /**

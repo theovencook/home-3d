@@ -43,7 +43,7 @@ import { effectSettings, itemShade, motionRooms, tempShade } from "../room-effec
 import { alertEntities, alertKey, alertSources, alertText, alertTint, clearedSnoozes, dismissAlert, findAlerts, HOUSE_ALERTS, isOutage, mayIgnoreAlert, shownAlerts, snoozeKey, type Alert, type AlertSources } from "../alerts.ts";
 import { iconSvg, mdiIcon } from "../icons.ts";
 import { uiIcon } from "../ui-icons.ts";
-import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binPlace, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
+import { applianceIdle, binColors, binDue, binNext, binOut, binOutToggleable, binPlace, binTagsShown, doorsOf, fetchPickups, FinishedMemory, fridgeOpenTooLong, groupTags, hassCountry, isFinishedState, mailboxPost, nextFridgeCheck, plantThirsty, remainingMinutes, remainingText, servicesDue, sameHousehold, setHouseholdCountry, wasteCalendars, isPackPlant, type HouseholdItem, type HouseholdTag, type Pickup } from "../household.ts";
 import { BAR_RGB, CHARGE_BAR_COUNT, chargeBars, DARK_BAR_RGB } from "../charge-bars.ts";
 import { batteryCharge, deviceSensors, energySummary, fetchSolarRows, fetchTodayChange, type EnergyPrefs, fieldLevels, fieldPowers, findConsumers, flowDots, isLoad, flowSegments, mixColor, sourceMix, gridPoint, powerSensorFor, readPower, solarCurvePath, solarDayFromStats, type Consumer, type EnergySummary, type SolarDay, type FlowKind, type StatRow } from "../energy.ts";
 import { fieldFace, fieldSize, roofFaces, roofWindowRoom } from "../solar.ts";
@@ -173,7 +173,7 @@ import { pathLength, pipePath, pointAlong, type P3 } from "../geometry/runs.ts";
 import { pipePieces, poolAreas, poolNodeAt, poolWallNormal, underBasin, PIPE_IDLE, type PipePiece } from "../pool-runs.ts";
 import type { PipeTube } from "../viewer/viewer3d.ts";
 import type { PoolPiece } from "../viewer/pool-water.ts";
-import { sensorSyncDelay } from "../viewer/pace.ts";
+import { pacedSyncDelay, sensorSyncDelay } from "../viewer/pace.ts";
 import { nextTask } from "../viewer/slices.ts";
 import { flowWidth } from "../viewer/flow-style.ts";
 import { roomSentence, sceneSummary, type FloorSummary } from "../room-summary.ts";
@@ -827,6 +827,11 @@ export class Fp3dView3d extends LitElement {
   /** A module asked to be drawn again (its own state changed: a target just set, a simulation ticking). */
   private moduleTimer: ReturnType<typeof setTimeout> | undefined;
   private lastSync = 0;
+  /**
+   * The 3D view beside the editor's plan (#389): a state change (lamp, door, sensor) reaches it at most this often, in
+   * ms, trailing; the plan, the look and the selection still show at once. 0: every change shows at once.
+   */
+  syncPace = 0;
   /** Room values of the current heatmap (for the legend). */
   private heatValues = new Map<string, number>();
   /** Entities whose state changes redraw markers, cables, people and floor labels. */
@@ -1476,6 +1481,8 @@ export class Fp3dView3d extends LitElement {
     if (force || !this.openingLinks || this.linkedRegistry !== hass.entities) {
       this.openingLinks = openingEntities(hass, b.floors);
       this.furnitureLinks = furnitureEntities(hass, b.floors);
+      // what asks before it switches: the plan and the registry decide it, not the states (found once, not per sync, #389)
+      this.confirmSet = confirmEntities(hass, b.floors);
       this.linkedRegistry = hass.entities;
       this.findIndex = null;
       this.alertSrc = this.alerts ? alertSources(hass, b, this.weatherEntityId) : null;
@@ -1508,6 +1515,18 @@ export class Fp3dView3d extends LitElement {
     this.seenSeek = this.replay?.seek ?? 0;
     this.seenT = this.replay?.t ?? 0;
     if (!changed) return;
+    // beside the editor's plan the states are context only: one sync at most every `syncPace` ms, so the input never
+    // waits behind a run of them (#389)
+    if (!force && !timed && this.syncPace > 0 && !this.replay) {
+      const wait = pacedSyncDelay(performance.now() - this.lastSync, this.syncPace);
+      if (wait > 0) {
+        this.sensorTimer ??= setTimeout(() => {
+          this.sensorTimer = undefined;
+          this.syncDevices(false);
+        }, wait);
+        return;
+      }
+    }
     // a change of measured values alone is shown at most once a second, every 2 s on the tablet level (power sensors
     // tick several times a second and each sync redoes markers, light, cables and cards, #131); a switch, door or
     // alarm shows at once
@@ -1546,7 +1565,6 @@ export class Fp3dView3d extends LitElement {
     const summary = energySummary(hass, b, consumers, devices);
     // a placed power sensor shows its value as state text already, so only devices get a watt badge
     const byDevice = new Map(consumers.filter((c) => c.id !== c.powerEntity).map((c) => [c.id, c.power]));
-    this.confirmSet = confirmEntities(hass, b.floors);
     const trail = this.trail ? this.trailNow(hass, b) : [];
     const detections = !this.dimmed ? this.detectionPins(hass, deviceMarkers) : [];
     this.detecting = detections.length > 0;
@@ -3902,7 +3920,9 @@ export class Fp3dView3d extends LitElement {
         .slice(0, 8);
       today.unshift(...lines.map((text) => ({ icon: "pin-outline", text, entity: notes as string })));
     }
-    this._household = today.filter((it, i) => today.findIndex((x) => x.text === it.text) === i);
+    // the same list again is no new state: no second update of the view after every sync (#389)
+    const household = today.filter((it, i) => today.findIndex((x) => x.text === it.text) === i);
+    if (!sameHousehold(household, this._household)) this._household = household;
     // picture rules: the first rule whose entity is in its state puts its picture on the screen (a Pro feature)
     this.cameraScreens = 0;
     const fridges = fridgeDoors(hass, b.floors);
@@ -4603,7 +4623,8 @@ export class Fp3dView3d extends LitElement {
     clearTimeout(this.thumbTimer);
     const floors = this.building?.floors.filter((f) => f.rooms.length).length ?? 0;
     if (!this.floorThumbs || floors < 2) {
-      this._thumbs = [];
+      // already empty: no new array, no second update after every sync (#389)
+      if (this._thumbs.length) this._thumbs = [];
       return;
     }
     // at most every few seconds, however often lamps change (the tablet level waits longer)

@@ -12,6 +12,7 @@ import type { WallMode } from "../../viewer/viewer3d.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { mountBase } from "../../packs.ts";
 import { MAX_MOUNT_Y, round } from "./helpers.ts";
+import { EDITOR_SYNC_MS } from "../../viewer/pace.ts";
 import type { PlanChange } from "../../building-controller.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
@@ -267,6 +268,7 @@ export class Pane3dPart {
               .walkable=${false}
         .pivotMark=${true}
         .hass=${this.rawHass}
+        .syncPace=${EDITOR_SYNC_MS}
         .home=${this.home}
         .building=${this._doc3d}
         .floorId=${this.houseTool ? null : this._floorId}

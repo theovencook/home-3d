@@ -52,9 +52,11 @@ const planFile = resolve(opt("plan", resolve(here, "../../custom_components/home
 // only catches a hang. The speed check's limits are about 3x the times in docs/performance.md (#178, sample home,
 // desktop GPU), so they catch a regression of the kind #130/#131/#177 fixed (a render on every update, a selection
 // twice as slow), not noise. Times in ms, background load in ms per second.
+// The large-floor editor measure (#389, #390: 3D beside on, ~330 items, 5 updates a second, an item selected) gates
+// the long frames meanwhile and the longest frame after an arrow nudge, at the tickets' targets.
 const SPEED_LIMITS = {
-  1: { ready: 5000, selectLinked: 50, selectPlain: 35, viewMsPerS: 5, panelMsPerS: 5 },
-  4: { ready: 15000, selectLinked: 300, selectPlain: 200, viewMsPerS: 20, panelMsPerS: 20 },
+  1: { ready: 5000, selectLinked: 50, selectPlain: 35, viewMsPerS: 5, panelMsPerS: 5, big3dBgMsPerS: 10, big3dNudge: 50 },
+  4: { ready: 15000, selectLinked: 300, selectPlain: 200, viewMsPerS: 20, panelMsPerS: 20, big3dBgMsPerS: 40, big3dNudge: 150 },
 };
 const limits = { rendersPerS: 0.5, ...(speed ? (SPEED_LIMITS[throttle] ?? {}) : { ready: 60000 }) };
 
@@ -130,10 +132,10 @@ const browser = await puppeteer.launch({
   ],
 });
 /** A page of the check, `copies` as in harness.js (#218); every problem it logs is labelled with it. */
-async function openPage(copies) {
+async function openPage(copies, extra = "") {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1 });
-  const where = copies === "two" ? "" : ` [copies=${copies}]`;
+  const where = copies === "two" ? "" : ` [copies=${copies}${extra}]`;
   page.on("console", (m) => {
     if (m.type() === "error") problems.push(`console${where}: ${m.text()}`);
   });
@@ -148,7 +150,7 @@ async function openPage(copies) {
     await cdp.send("Network.enable");
     await cdp.send("Network.emulateNetworkConditions", { offline: false, latency, downloadThroughput: -1, uploadThroughput: -1 });
   }
-  await page.goto(`${origin}/?copies=${copies}`, { waitUntil: "load" });
+  await page.goto(`${origin}/?copies=${copies}${extra}`, { waitUntil: "load" });
   await page.waitForFunction(() => !!window.check, { timeout: 30000 });
   const run = (name, arg) => page.evaluate((n, a) => window.check[n](a), name, arg);
   return { page, run, where };
@@ -212,6 +214,19 @@ try {
   await run("reenter", { times: 2 });
   results.unknownCalls = await run("unknownCalls");
   await page.close();
+  // #389: the editor with 3D beside on a large floor (the sample's ground floor copied to ~330 items)
+  if (speed) {
+    const bigPage = await openPage("one", "&big=330");
+    try {
+      await bigPage.run("start");
+      await bigPage.run("editor");
+      results.big3d = await bigPage.run("editor3d", { seconds: 6, rate: 5, watchedEvery: 5, nudges: 4 });
+    } catch (err) {
+      problems.push(`check failed${bigPage.where}: ${err.message}`);
+    } finally {
+      await bigPage.page.close();
+    }
+  }
   // #218: the other ways the bundle can be on the page, each loaded and left and entered again
   for (const copies of ["one", "early"]) {
     const other = await openPage(copies);
@@ -249,6 +264,8 @@ if (speed) {
   gate("view mode, home-3d-panel ms/s", results.idleView?.["home-3d-panel"]?.msPerS, limits.panelMsPerS);
   gate("editor selection, linked item median ms", results.select?.linked.median, limits.selectLinked);
   gate("editor selection, plain item median ms", results.select?.plain.median, limits.selectPlain);
+  gate("editor, 3D beside, large floor: long-frame ms/s at 5 updates/s", results.big3d?.background.longFrameMsPerS, limits.big3dBgMsPerS);
+  gate("editor, 3D beside, large floor: longest frame after a nudge, median ms", results.big3d?.nudge.median, limits.big3dNudge);
 }
 
 if (flag("json")) console.log(JSON.stringify({ throttle, plan: planFile, ...results, problems, over }));
@@ -270,6 +287,11 @@ else {
   }
   if (results.renderTrap) row("3D: renderer.render, auto / low quality (median / worst)", results.renderTrap.map((r) => `${r.frames.median} / ${r.frames.worst} ms`).join(", "));
   if (results.editorOpen !== undefined) row(`Editor first open (button to plan drawn${latency ? `, +${latency} ms a request` : ""})`, `${results.editorOpen} ms`);
+  const b3 = results.big3d;
+  if (b3) {
+    row(`Editor, 3D beside, ${b3.items} items, 5 updates/s: long frames`, `${b3.background.longFramesPerS}/s, ${b3.background.longFrameMsPerS} ms/s (worst ${b3.background.worst} ms)`);
+    row("Editor, 3D beside, large floor: longest frame after a nudge (median / worst)", `${b3.nudge.median} / ${b3.nudge.worst} ms`);
+  }
   if (results.select) row("Editor selection, linked / plain (median / worst)", `${results.select.linked.median} / ${results.select.linked.worst} ms, ${results.select.plain.median} / ${results.select.plain.worst} ms`);
   if (results.unknownCalls?.length) console.log(`\nCalls the fake backend has no answer for: ${results.unknownCalls.join(", ")}`);
   for (const p of problems) console.log(`PROBLEM ${p}`);

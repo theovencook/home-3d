@@ -20,6 +20,11 @@ export interface HouseholdItem {
   hot?: boolean;
 }
 
+/** Two household lists with the same lines (icon, text, entity, glow) in the same order (#389). */
+export function sameHousehold(a: readonly HouseholdItem[], b: readonly HouseholdItem[]): boolean {
+  return a.length === b.length && a.every((x, i) => x.icon === b[i].icon && x.text === b[i].text && x.entity === b[i].entity && !!x.hot === !!b[i].hot);
+}
+
 /** A pack item that is a plant: most of its parts are leaves or a pot. */
 export function isPackPlant(type: string): boolean {
   const item = packItem(type);

@@ -60,6 +60,28 @@ async function waitFor(fn, timeout = 60000, what = "condition") {
   }
 }
 
+/**
+ * A large home from the sample (#389): its ground floor's items copied until it holds `target`, each copy set off a
+ * little and linked to entities of its own (the same ids with "_dN" added), as a large real home has. Generic data only.
+ */
+function enlarge(plan, target) {
+  const floor = plan.floors.reduce((a, f) => ((f.furniture?.length ?? 0) > (a.furniture?.length ?? 0) ? f : a), plan.floors[0]);
+  const orig = [...floor.furniture];
+  const places = [...(floor.placements ?? [])];
+  let seed = 1;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 1.2 - 0.6;
+  const own = (v, n) => (typeof v === "string" && /^(light|sensor|switch|binary_sensor|input_boolean|climate|media_player|camera|cover|lock)\.[a-z0-9_]+$/.test(v) ? `${v}_d${n}` : v);
+  const relink = (o, n) => (Array.isArray(o) ? o.map((x) => relink(x, n)) : o && typeof o === "object" ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, relink(v, n)])) : own(o, n));
+  for (let n = 1; floor.furniture.length < target && orig.length; n++) {
+    for (const f of orig) {
+      if (floor.furniture.length >= target) break;
+      floor.furniture.push({ ...relink(structuredClone(f), n), id: `${f.id}_d${n}`, x: +(f.x + rnd()).toFixed(2), z: +(f.z + rnd()).toFixed(2) });
+    }
+    for (const d of places) floor.placements.push({ ...structuredClone(d), entity_id: `${d.entity_id}_d${n}`, x: +(d.x + rnd()).toFixed(2), z: +(d.z + rnd()).toFixed(2) });
+  }
+  return plan;
+}
+
 let fake;
 let panel;
 let host;
@@ -137,6 +159,9 @@ const check = {
   /** Mount the panel; resolves when the 3D view has built the plan. Times in ms from mounting the panel. */
   async start() {
     const [plan, build] = await Promise.all([fetch("/plan.json").then((r) => r.json()), fetch("/static/build.json").then((r) => r.json())]);
+    // ?big=330: the large home of the editor speed measure (#389)
+    const big = Number(new URLSearchParams(location.search).get("big") ?? 0);
+    if (big > 0) enlarge(plan, big);
     fake = makeFakeHass(plan, build);
     await loadLikeHomeAssistant();
     countUpdates("home-3d-panel");
@@ -317,6 +342,51 @@ const check = {
       await sleep(60);
     }
     return { linked: stats(times.linked), plain: stats(times.plain) };
+  },
+
+  /**
+   * The editor with 3D beside on, on a large floor (#389, #390): an item selected, `rate` hass updates a second for
+   * `seconds` (every `watchedEvery`-th a state the plan shows: lamps and sensors), long-frame ms a second meanwhile; then
+   * `nudges` arrow nudges of the item, each with the longest frame in the 1.2 s after it (the 3D beside follows the
+   * edit). The nudges are undone again.
+   */
+  async editor3d({ seconds = 6, rate = 5, watchedEvery = 5, nudges = 4 } = {}) {
+    const ed = panel.shadowRoot.querySelector("fp3d-editor") ?? (await check.editor());
+    if (!ed._split) {
+      ed._split = true;
+      await ed.updateComplete;
+    }
+    const view = await waitFor(() => ed.shadowRoot.querySelector("fp3d-view3d"), 30000, "the 3D view beside the plan");
+    await waitFor(() => view.viewer?.busy && !view.viewer.busy(), 60000, "the 3D view beside the plan to build");
+    const items = ed.floor?.furniture ?? [];
+    const item = items.find((f) => !f.entity && !f.power && !f.state_entity && f.w > 0.4 && f.d > 0.4) ?? items[0];
+    ed.selectItem("furniture", item.id);
+    await ed.updateComplete;
+    await sleep(1500);
+    const shown = fake.linked.filter((id) => id.startsWith("sensor.") || id.startsWith("light."));
+    const lf0 = longFrames.length;
+    const t0 = performance.now();
+    for (let i = 1; i <= seconds * rate; i++) {
+      const id = watchedEvery && i % watchedEvery === 0 ? shown[(i * 31) % shown.length] : undefined;
+      panel.hass = fake.tick(id);
+      await sleep(1000 / rate);
+    }
+    await nextFrame();
+    const secs = (performance.now() - t0) / 1000;
+    const lf = longFrames.slice(lf0);
+    const background = { longFramesPerS: +(lf.length / secs).toFixed(2), longFrameMsPerS: +(lf.reduce((s, f) => s + f.ms, 0) / secs).toFixed(1), worst: +Math.max(0, ...lf.map((f) => f.ms)).toFixed(0) };
+    const after = [];
+    for (let i = 0; i < nudges; i++) {
+      const at = performance.now();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      await ed.updateComplete;
+      await sleep(1200);
+      after.push(Math.max(0, ...longFrames.filter((f) => f.at + f.ms >= at).map((f) => f.ms)));
+    }
+    for (let i = 0; i < nudges; i++) window.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+    await ed.updateComplete;
+    await sleep(500);
+    return { items: items.length, background, nudge: stats(after) };
   },
 
   /** The 3D view's renderer counters after load. */

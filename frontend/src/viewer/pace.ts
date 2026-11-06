@@ -60,3 +60,14 @@ export const SENSOR_SYNC_FULL_MS = 1000;
 export function sensorSyncDelay(sinceLast: number, low: boolean): number {
   return low ? lowSyncDelay(sinceLast) : Math.max(0, SENSOR_SYNC_FULL_MS - sinceLast);
 }
+
+/**
+ * The 3D view beside the editor's plan (#389): a change of states reaches it at most this often. There the states are
+ * context only, and each sync redoes markers, light and cards of the whole plan while the owner is typing or dragging.
+ */
+export const EDITOR_SYNC_MS = 1000;
+
+/** How long a paced state change waits, given the time since the last sync and the pace (0: show it now). */
+export function pacedSyncDelay(sinceLast: number, pace: number): number {
+  return pace > 0 ? Math.max(0, pace - sinceLast) : 0;
+}

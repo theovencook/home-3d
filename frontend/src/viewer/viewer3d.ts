@@ -96,7 +96,7 @@ import { accentOnUniform, accentUniform, parseAccent, lineBlending, themed, them
 
 export type { Theme } from "./theme.ts";
 import { ALWAYS, DEG, GeoBuffer, LineBuffer, pushPrism, triangulate } from "./geo.ts";
-import { buildLightSurface, lightSurfaceSteps, lightColors, roomIndexAt, type LightKind, type LightSource, type LightSurface, zoneOf } from "./lighting.ts";
+import { buildLightSurface, lightSurfaceSteps, relight, roomIndexAt, type GlowCache, type LightKind, type LightSource, type LightSurface, zoneOf } from "./lighting.ts";
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
 import { circlePath, cleaningPath, stepRobot, type RobotInfo, type RobotMotion } from "./robot.ts";
 import { decorDelay, lowEndDevice, petDelay } from "./pace.ts";
@@ -595,6 +595,8 @@ interface FloorView {
   /** Content signatures: meshes are only rebuilt when these change. */
   flowLayout: string;
   glowSig: string;
+  /** The light surface's colours from the last relight: a lamp switched recolours only its rooms (#389). */
+  glowCache?: GlowCache | null;
   /** Lamp shapes (rebuilt when they change) and lamp colours (written into the mesh in place). */
   lampShapeSig: string;
   lampColorSig: string;
@@ -3057,16 +3059,14 @@ export class FloorplanViewer {
       g.setDrawRange(0, 0);
       return;
     }
-    const colors = lightColors(surface, sources, 0.42, doorOpen);
-    if (this.roomTint) {
-      // the heatmap is an analysis view: inside the rooms the light is only a hint, so their colours read;
-      // outside (garden, outer walls) it stays as it is (D205)
-      const outside = fv.floor.rooms.length;
-      for (let v = 0; v < surface.room.length; v++) {
-        if (surface.room[v] === outside) continue;
-        for (let k = 0; k < 3; k++) colors[v * 3 + k] *= 0.12;
-      }
-    }
+    // the heatmap is an analysis view: inside the rooms the light is only a hint, so their colours read;
+    // outside (garden, outer walls) it stays as it is (D205)
+    const outside = fv.floor.rooms.length;
+    const tint = this.roomTint ? (zone: number) => (zone === outside ? 1 : 0.12) : undefined;
+    // only the rooms whose lamps (or open doors) changed are recoloured (#389)
+    const lit = relight(surface, sources, 0.42, doorOpen, fv.glowCache ?? null, this.roomTint ? "tint" : "", tint);
+    fv.glowCache = lit.cache;
+    const colors = lit.cache.colors;
     (attr.array as Float32Array).set(colors);
     attr.needsUpdate = true;
     // only quads that receive light are drawn (dark ones would cost fill rate for nothing)
