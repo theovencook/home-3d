@@ -84,41 +84,29 @@ export const wallsRoofStyles = css`
       .fp3d-wv-dims text.fp3d-wv-up {
         text-anchor: start;
       }
-      .fp3d-edge-box {
-        margin: 12px 0;
-        padding: 10px 12px;
-        border: 1px solid color-mix(in srgb, var(--fp3d-accent) 45%, transparent);
-        border-radius: 12px;
-        background: color-mix(in srgb, var(--fp3d-accent) 6%, transparent);
-      }
       .fp3d-roof-floors {
         display: flex;
         flex-direction: column;
         gap: 4px;
         margin: 0 0 10px;
       }
-      .fp3d-edge-box > summary {
+      /* the room's Walls fold (#416): the room's wall view and the "i" on top, then one fold row per wall */
+      .fp3d-walls-top {
         display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: 4px 10px;
-        cursor: pointer;
+        align-items: center;
+        gap: 6px;
+        margin: 2px 0 6px;
       }
-      .fp3d-edge-box > summary h4 {
-        display: inline;
+      .fp3d-wall-row {
+        margin: 0 -6px;
+        padding: 0 6px;
+        border-radius: 8px;
       }
-      .fp3d-edge-box[open] > summary {
-        margin-bottom: 6px;
+      .fp3d-wall-row .fp3d-fold-top {
+        font-weight: 500;
       }
-      .fp3d-edge-box h4 {
-        margin: 0 0 4px;
-        color: var(--fp3d-accent);
-        font-size: 13px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-      }
-      /* a wall row: name and length, the height, then the buttons (full height, no wall, cut) in one line;
-         a split point gets a line of its own below */
+      /* an open wall: the height, then the buttons (Sloping, Full room height, No wall, Split) in one line; a
+         split point, the thickness and the wall view get a line of their own */
       .fp3d-edge-height {
         display: flex;
         flex-wrap: wrap;

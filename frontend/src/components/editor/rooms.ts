@@ -11,7 +11,7 @@ import { furnishRoom, PACKAGES, type PackageId } from "../../packages.ts";
 import { nameNewRoom, roomNameSuggestions } from "../../room-naming.ts";
 import { carryRectResize, strandedBy } from "../../geometry/room-resize.ts";
 import { formatNumber, type I18nKey } from "../../i18n.ts";
-import { bounds, centroid, FLOOR_MATERIALS, splitAliases, FURNITURE_SIZE, isAxisRect, spotGrid, step, type Direction, pointInPolygon, polygonArea, uid, type Building, type Floor, type Furniture, type FurnitureType, type Room, type Vec2 } from "../../model.ts";
+import { bounds, centroid, FLOOR_MATERIALS, isLamp, splitAliases, FURNITURE_SIZE, isAxisRect, spotGrid, step, type Direction, pointInPolygon, polygonArea, uid, type Building, type Floor, type Furniture, type FurnitureType, type Room, type Vec2 } from "../../model.ts";
 import { roomLiveSensors, type LiveKind } from "../../room-effects.ts";
 import { askConfirm } from "../../ask.ts";
 import { cornerLoss, removeCorner } from "../../geometry/room-corners.ts";
@@ -540,7 +540,7 @@ export class RoomsPart {
   renderRoomForm(this: Fp3dEditor, room: Room, areas: { area_id: string; name: string }[]) {
     const admin = this.isEditor;
     const rect = isAxisRect(room.points);
-    const b = bounds(room.points);
+    // name, area, floor finish and size first; walls, devices and the rest as folds (#416, MANY-4, ORDER-7)
     return html`<section>
       ${this.renderPanelHeader({
         id: `room:${room.id}`,
@@ -589,71 +589,111 @@ export class RoomsPart {
             ${areas.map((a) => html`<option value=${a.area_id} ?selected=${a.area_id === room.area_id}>${a.name}</option>`)}
           </select></label
         >
-        <label class="fp3d-field fp3d-wide" title=${this.t("aliases_hint")}
-          >${this.t("aliases")}
-          <input type="text" maxlength="240" .value=${(room.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.aliasPlaceholder(room.name, true)} @change=${(e: Event) => this.updateRoom({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
-        /></label>
-        <label class="fp3d-check fp3d-wide" title=${this.t("room_hide_hint")}
-          ><input type="checkbox" .checked=${room.hide_in_picker === true} ?disabled=${!admin} @change=${(e: Event) => this.updateRoom({ hide_in_picker: (e.target as HTMLInputElement).checked ? true : undefined })} />
-          ${this.t("room_hide_in_picker")}</label
-        >
         <label class="fp3d-field fp3d-wide"
           >${this.t("material")}
           <select ?disabled=${!admin} @change=${(e: Event) => this.updateRoom({ floor_material: (e.target as HTMLSelectElement).value })}>
             ${FLOOR_MATERIALS.map((m) => html`<option value=${m} ?selected=${m === room.floor_material}>${this.t(`mat_${m}` as I18nKey)}</option>`)}
           </select></label
         >
+      </div>
+      ${this.renderRoomSize(room, rect)}
+    </section>
+    ${this.renderEdgeHeights(room)}
+    ${this.sideFold("room-devices", "", false, this.t("devices"), this.t("room_devices_n", { n: this.roomDeviceCount(room) }), 0, () => this.renderDeviceList(room, false))}
+    ${this.renderRoomClimate(room)} ${this.renderRoomLive(room)} ${this.renderRoomOpenings(room)}
+    ${this.renderItemsList(this.floor ? (itemsByRoom(this.floor.rooms, this.floor.furniture).get(room.id) ?? []) : [], false)}
+    ${this.sideFold("corners", room.id, false, `${this.t("points")} (${room.points.length})`, "", 0, () =>
+      room.points.map(
+        (p, i) => html`<div class="fp3d-point ${i === this._vertex ? "fp3d-point-sel" : ""}">
+          <span class="fp3d-muted">${i + 1}</span>
+          ${this.len(this.t("x"), p[0], (v) => this.setPoint(i, 0, v))} ${this.len(this.t("z"), p[1], (v) => this.setPoint(i, 1, v))}
+          ${admin
+            ? html`<button class="fp3d-btn" aria-label=${this.t("delete_point")} title=${this.t("delete_point")} ?disabled=${room.points.length <= 3} @click=${() => void this.deleteVertex(i)}>
+                ×
+              </button>`
+            : nothing}
+        </div>`,
+      ),
+    )}
+    ${this.renderRoomMore(room)} ${this.renderModuleRoomFields(room)}`;
+  }
+
+  /** The devices placed in a room (pins and lamps with a light), for the closed Devices fold (#416). */
+  roomDeviceCount(this: Fp3dEditor, room: Room): number {
+    const floor = this.floor;
+    if (!floor) return 0;
+    const inRoom = (x: number, z: number) => pointInPolygon([x, z], room.points);
+    return floor.placements.filter((pl) => inRoom(pl.x, pl.z)).length + floor.furniture.filter((m) => isLamp(m.type) && !!m.entity && m.entity !== "none" && inRoom(m.x, m.z)).length;
+  }
+
+  /**
+   * The room's Size fold (#416, ORDER-7): position and size of a rectangle, the ceiling height with one line of help
+   * and an "i", and the area. Open by default, as it was left in this visit.
+   */
+  renderRoomSize(this: Fp3dEditor, room: Room, rect: boolean) {
+    const admin = this.isEditor;
+    const b = bounds(room.points);
+    const net = netRoomArea(room, this.floor!, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior });
+    const area = this.t("room_area_net", { a: this.area(polygonArea(room.points)), n: this.area(net) });
+    const summary = [rect ? `${this.m(b.x1 - b.x0)} × ${this.m(b.z1 - b.z0)}` : "", this.area(polygonArea(room.points)), room.ceiling_height != null ? this.t("room_ceiling_at", { h: this.m(room.ceiling_height) }) : ""].filter(Boolean).join(" · ");
+    return this.sideFold("room-size", "", true, this.t("fold_size"), summary, room.ceiling_height != null ? 1 : 0, () => html`<div class="fp3d-form">
         ${rect
           ? html`${this.len(this.t("x"), b.x0, (v) => this.setRect("x", v))} ${this.len(this.t("z"), b.z0, (v) => this.setRect("z", v))}
             ${this.len(this.t("width"), b.x1 - b.x0, (v) => this.setRect("w", v), 0.01, 0.05)}
             ${this.len(this.t("depth"), b.z1 - b.z0, (v) => this.setRect("d", v), 0.01, 0.05)}`
           : nothing}
-      </div>
-    </section>
-    ${this.renderDeviceList(room)}
-    <section>
-      <button class="fp3d-btn fp3d-wv-open" title=${this.t("wall_view_open")} @click=${() => this.openRoomWalls(room)}>▦ ${this.t("wall_view_room")}</button>
-      ${this.renderEdgeHeights(room)}
-      <div class="fp3d-form">
-        <label class="fp3d-field" title=${this.t("room_ceiling_hint")}
-          >${unitLabel(this.t("room_ceiling"), this.unit)}
-          <input
-            type=${this.unit === "imperial" ? "text" : "number"}
-            step="0.05"
-            min="1"
-            placeholder=${this.floor ? this.lenValue(this.floor.height) : ""}
-            .value=${room.ceiling_height != null ? this.lenValue(room.ceiling_height) : ""}
-            ?disabled=${!admin}
-            @change=${(e: Event) => {
-              const raw = (e.target as HTMLInputElement).value.trim();
-              const v = raw === "" ? null : this.readLen(raw);
-              this.updateRoom({ ceiling_height: v === null || v <= 0 ? null : Math.min(30, Math.max(1, v)) });
-            }}
-        /></label>
-        <p class="fp3d-sub fp3d-wide">${this.t("room_ceiling_hint")}</p>
-      </div>
-      <div class="fp3d-actions">
-        <button class="fp3d-btn" title=${this.t("room_start_view_hint")} ?disabled=${!admin} @click=${() => this.rememberRoomView()}>${this.t("room_start_view")}</button>
-        ${room.start_view ? html`<button class="fp3d-btn" aria-label=${this.t("room_start_view_reset")} title=${this.t("room_start_view_reset")} ?disabled=${!admin} @click=${() => this.updateRoom({ start_view: null })}>↺</button>` : nothing}
-      </div>
-      <p class="fp3d-sub" title=${this.t("room_area_net_hint")}>${this.t("room_area_net", { a: this.area(polygonArea(room.points)), n: this.area(netRoomArea(room, this.floor!, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior })) })}</p>
-      ${this.renderRoomClimate(room)} ${this.renderRoomLive(room)} ${this.renderRoomOpenings(room)}
-      ${this.renderItemsList(this.floor ? (itemsByRoom(this.floor.rooms, this.floor.furniture).get(room.id) ?? []) : [], false)}
-      ${this.sideFold("corners", room.id, !rect, `${this.t("points")} (${room.points.length})`, "", 0, () =>
-        room.points.map(
-          (p, i) => html`<div class="fp3d-point ${i === this._vertex ? "fp3d-point-sel" : ""}">
-            <span class="fp3d-muted">${i + 1}</span>
-            ${this.len(this.t("x"), p[0], (v) => this.setPoint(i, 0, v))} ${this.len(this.t("z"), p[1], (v) => this.setPoint(i, 1, v))}
-            ${admin
-              ? html`<button class="fp3d-btn" aria-label=${this.t("delete_point")} title=${this.t("delete_point")} ?disabled=${room.points.length <= 3} @click=${() => void this.deleteVertex(i)}>
-                  ×
-                </button>`
-              : nothing}
-          </div>`,
-        ),
-      )}
-      ${this.renderModuleRoomFields(room)}
-    </section>`;
+        ${this.withInfo(
+          html`<label class="fp3d-field"
+            >${unitLabel(this.t("room_ceiling"), this.unit)}
+            <input
+              type=${this.unit === "imperial" ? "text" : "number"}
+              step="0.05"
+              min="1"
+              placeholder=${this.floor ? this.lenValue(this.floor.height) : ""}
+              .value=${room.ceiling_height != null ? this.lenValue(room.ceiling_height) : ""}
+              ?disabled=${!admin}
+              @change=${(e: Event) => {
+                const raw = (e.target as HTMLInputElement).value.trim();
+                const v = raw === "" ? null : this.readLen(raw);
+                this.updateRoom({ ceiling_height: v === null || v <= 0 ? null : Math.min(30, Math.max(1, v)) });
+              }}
+          /></label>`,
+          "room_ceiling_hint",
+          this.t("room_ceiling"),
+        )}
+        <p class="fp3d-sub fp3d-wide">${this.t("room_ceiling_short")}</p>
+        <div class="fp3d-with-info fp3d-wide"><p class="fp3d-sub fp3d-room-area">${area}</p>${this.infoButton("room_area_net_hint", this.t("room_area_size"))}</div>
+      </div>`);
+  }
+
+  /** More options of a room (#416): other names, hide from the room list and the start view, each with its "i". */
+  renderRoomMore(this: Fp3dEditor, room: Room) {
+    const admin = this.isEditor;
+    const summary = [(room.aliases ?? []).join(", "), room.hide_in_picker ? this.t("room_hidden_short") : "", room.start_view ? this.t("room_start_view_set") : ""].filter(Boolean);
+    return this.sideFold("room-more", "", false, this.t("fold_more"), summary.join(" · ") || this.t("room_more_none"), summary.length, () => html`<div class="fp3d-form">
+        ${this.withInfo(
+          html`<label class="fp3d-field"
+            >${this.t("aliases")}
+            <input type="text" maxlength="240" .value=${(room.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.aliasPlaceholder(room.name, true)} @change=${(e: Event) => this.updateRoom({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
+          /></label>`,
+          "aliases_hint",
+          this.t("aliases"),
+        )}
+        ${this.withInfo(
+          html`<label class="fp3d-check"
+            ><input type="checkbox" .checked=${room.hide_in_picker === true} ?disabled=${!admin} @change=${(e: Event) => this.updateRoom({ hide_in_picker: (e.target as HTMLInputElement).checked ? true : undefined })} />
+            ${this.t("room_hide_in_picker")}</label
+          >`,
+          "room_hide_hint",
+          this.t("room_hide_in_picker"),
+        )}
+        ${this.withInfo(
+          html`<button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.rememberRoomView()}>${this.t("room_start_view")}</button>`,
+          "room_start_view_hint",
+          this.t("room_start_view"),
+        )}
+        ${room.start_view ? html`<button class="fp3d-btn fp3d-wide" ?disabled=${!admin} @click=${() => this.updateRoom({ start_view: null })}>${this.t("room_start_view_reset")}</button>` : nothing}
+      </div>`);
   }
 
   /** Adds the furniture of a room package (lamps link to the room's lights automatically). */

@@ -334,7 +334,7 @@ export class DevicePanelPart {
     </section>`;
   }
 
-  renderDeviceList(this: Fp3dEditor, room: Room) {
+  renderDeviceList(this: Fp3dEditor, room: Room, heading = true) {
     const admin = this.isEditor;
     const hass = this.hass;
     const areaName = room.area_id ? hass?.areas?.[room.area_id]?.name : undefined;
@@ -431,8 +431,9 @@ export class DevicePanelPart {
     const placeAll = async () => {
       if (await this.ask(this.t("devices_place_all_confirm", { n: unplacedMain.length }), this.t("ask_ok"), false)) this.placeDevices(unplacedMain);
     };
+    // inside the room panel's Devices fold (#416) the fold row is its heading
     return html`<section>
-      <h3>${this.t("devices")}</h3>
+      ${heading ? html`<h3>${this.t("devices")}</h3>` : nothing}
       <p class="fp3d-sub">${this.t("devices_panel_hint")}</p>
       ${admin && source === "area" && ids.length
         ? html`<p class="fp3d-dev-legend">

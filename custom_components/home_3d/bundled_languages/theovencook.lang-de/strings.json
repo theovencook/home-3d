@@ -3497,5 +3497,16 @@
  "out_ghost_go": "Zu {floor}",
  "tp_on_plan": "Im Plan ({n})",
  "fold_auto": "Automatisch gewählt",
- "taps_row": "Tippen"
+ "taps_row": "Tippen",
+ "wall_row_high": "{h} hoch",
+ "wall_row_sloping": "schräg {a}–{b}",
+ "wall_row_parts": "{n} Teile",
+ "wall_join": "Teile verbinden",
+ "room_devices_n": "{n} platziert",
+ "room_ceiling_at": "Decke {h}",
+ "room_ceiling_short": "Leer: Höhe der Etage.",
+ "room_area_size": "Grundfläche",
+ "room_hidden_short": "Nicht in der Raumliste",
+ "room_start_view_set": "Eigene Startansicht",
+ "room_more_none": "Weitere Namen, Raumliste, Startansicht"
 }

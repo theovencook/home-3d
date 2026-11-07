@@ -57,9 +57,11 @@ test("the room panel has no <details> left; its corners, climate and sensors are
   const rect = flat(ed.renderRoomForm(ed.room, []));
   assert.doesNotMatch(rect, /<details|<summary/);
   for (const key of ["corners", "room-climate", "room-live"]) assert.match(rect, new RegExp(`data-fold=${key}`), key);
-  // a rectangle edits its size in the form: its corners start closed; an L shape has only them, so they start open
+  // the corners start closed, also for an L shape (#416: the panel opens short; the plan's handles move them)
   assert.doesNotMatch(rect, /fp3d-point /);
   ed._roomId = "l";
+  assert.doesNotMatch(flat(ed.renderRoomForm(ed.room, [])), /fp3d-point /);
+  setSideFold(ed, "corners:l", true);
   assert.match(flat(ed.renderRoomForm(ed.room, [])), /fp3d-point /);
 });
 
@@ -116,7 +118,7 @@ test("Tap, Hold and Double tap sit behind one 'Taps: Default' row (#413, MANY-6)
 });
 
 test("no side panel source draws a <details> any more (#413)", () => {
-  const files = ["rooms.ts", "openings.ts", "side-panel.ts", "device-panel.ts", "floors.ts", "outdoor-find.ts", "racks.ts"];
+  const files = ["rooms.ts", "walls.ts", "openings.ts", "side-panel.ts", "device-panel.ts", "floors.ts", "outdoor-find.ts", "racks.ts"];
   for (const f of files) assert.doesNotMatch(readFileSync(new URL(`./editor/${f}`, import.meta.url), "utf8"), /<details/, f);
   // Settings: only the Settings page's own topics keep theirs; the floor page's Presence is a fold
   const settings = readFileSync(new URL("./editor/settings.ts", import.meta.url), "utf8");

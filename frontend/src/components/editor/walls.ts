@@ -1,5 +1,5 @@
-// Walls on the plan: free walls, wall heights, slopes and splits (the Walls block of the room form), the edge
-// highlight.
+// Walls on the plan: free walls, wall heights, slopes and splits (the Walls fold of the room form, one row per
+// wall), the edge highlight.
 
 import { html, nothing, svg } from "lit";
 import type { FreeWall } from "../../model.ts";
@@ -7,6 +7,7 @@ import { generateWalls, type Wall } from "../../geometry/walls.ts";
 import { wallSummary } from "../../geometry/room-walls.ts";
 import { isFixed, uid, type Floor, type Room, type Vec2 } from "../../model.ts";
 import { round } from "./helpers.ts";
+import { setSideFold, sideFoldOpen } from "./item-sections.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** WallsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
@@ -229,92 +230,134 @@ export class WallsPart {
     })}`;
   }
 
-  /** Height list per wall of a room in the room form (always open); hovering a row lights the wall up. */
+  /**
+   * The room's Walls fold (#416, MANY-4): one row per wall ("Wall 1–2 · 4 m · 2.5 m high") that opens that wall's
+   * height, slope, thickness, split and wall view. Every button says what it does; the help is behind "i" (HELP-2).
+   * Hovering or focusing a wall's row lights the wall up on the plan.
+   */
   renderEdgeHeights(this: Fp3dEditor, room: Room) {
+    const sum = wallSummary(room);
+    const special = [sum.open ? this.t("walls_open_n", { n: sum.open }) : "", sum.sloping ? this.t("walls_sloping_n", { n: sum.sloping }) : ""].filter(Boolean).join(", ");
+    const own = room.points.filter((_, i) => this.wallOwnSettings(room, i) > 0).length;
+    const open = this._wallsOpen;
+    return this.foldRow("walls", open, () => this.setWallsOpen(!open), this.t("walls_section", { n: sum.walls }), special, own, () =>
+      html`<div class="fp3d-with-info fp3d-walls-top">
+          <button class="fp3d-btn fp3d-wv-open" title=${this.t("wall_view_open")} @click=${() => this.openRoomWalls(room)}>${this.t("wall_view_room")}</button>
+          ${this.infoButton("room_wall_hint", this.t("walls_section", { n: sum.walls }))}
+        </div>
+        ${room.points.map((_, i) => this.renderWallRow(room, i))}`,
+    );
+  }
+
+  /** How many settings of its own one wall of a room has (height, slope, thickness, split points). */
+  wallOwnSettings(this: Fp3dEditor, room: Room, i: number): number {
+    const h = room.wall_heights?.[i] ?? null;
+    const height = Array.isArray(h) ? h.some((x) => x !== null) : h !== null;
+    return (height ? 1 : 0) + (room.wall_slopes?.[i] ? 1 : 0) + (room.wall_thickness?.[i] != null ? 1 : 0) + (room.wall_splits?.[i]?.length ? 1 : 0);
+  }
+
+  /** What a closed wall row says (#416): its length and height ("4 m · 2.5 m high"), sloping, no wall or its parts. */
+  wallRowSummary(this: Fp3dEditor, room: Room, i: number): string {
+    const H = this.floor?.height ?? 2.5;
+    const n = room.points.length;
+    const a = room.points[i];
+    const b = room.points[(i + 1) % n];
+    const len = this.m(Math.hypot(b[0] - a[0], b[1] - a[1]), 2);
+    const entry = room.wall_heights?.[i] ?? null;
+    const slope = room.wall_slopes?.[i] ?? null;
+    const parts = this.edgeParts(room, i).length;
+    const heights = Array.isArray(entry) ? entry : [entry];
+    const height = heights.every((h) => h === 0)
+      ? this.t("wall_none")
+      : slope
+        ? this.t("wall_row_sloping", { a: this.m(slope[0]), b: this.m(slope[1]) })
+        : this.t("wall_row_high", { h: this.m(heights.find((h) => h !== null && h !== 0) ?? H) });
+    return [len, height, parts > 1 ? this.t("wall_row_parts", { n: parts }) : ""].filter(Boolean).join(" · ");
+  }
+
+  /** One wall of the room as a fold row; open, it shows that wall's settings, one block per part of a split wall. */
+  renderWallRow(this: Fp3dEditor, room: Room, i: number) {
+    const n = room.points.length;
+    const key = `wall:${room.id}:${i}`;
+    const open = sideFoldOpen(this, key, false);
+    const on = () => (this._edgeHi = i);
+    const off = () => (this._edgeHi = null);
+    return html`<div class="fp3d-wall-row${i === this._edgeHi ? " fp3d-edge-on" : ""}" @mouseenter=${on} @mouseleave=${off} @focusin=${on} @focusout=${off}>
+      ${this.foldRow(`wall-${i}`, open, () => setSideFold(this, key, !open), this.t("wall_n", { a: i + 1, b: ((i + 1) % n) + 1 }), this.wallRowSummary(room, i), this.wallOwnSettings(room, i), () => this.renderWallBody(room, i))}
+    </div>`;
+  }
+
+  /** The settings of one wall (#416): height or the two slope heights, Sloping, Full room height, No wall, split, thickness, wall view. */
+  renderWallBody(this: Fp3dEditor, room: Room, i: number) {
     const H = this.floor!.height;
     const n = room.points.length;
-    // which edges are outer walls (their default thickness is the exterior one)
     const s = this._doc.settings;
-    const outer = new Set<number>();
-    for (const w of generateWalls(this.floor!.rooms, { exterior: s.wall_exterior, interior: s.wall_interior }, this.floor!.walls ?? []).walls) {
-      if (w.exterior) for (const src of w.sources) if (src.room_id === room.id) outer.add(src.edge);
-    }
-    const setThick = (edge: number, v: number | null) =>
+    const a = room.points[i];
+    const b = room.points[(i + 1) % n];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const entry = room.wall_heights?.[i] ?? null;
+    const slope = room.wall_slopes?.[i] ?? null;
+    // an outer wall's default thickness is the exterior one
+    const outer = generateWalls(this.floor!.rooms, { exterior: s.wall_exterior, interior: s.wall_interior }, this.floor!.walls ?? []).walls.some(
+      (w) => w.exterior && w.sources.some((src) => src.room_id === room.id && src.edge === i),
+    );
+    const def = outer ? s.wall_exterior : s.wall_interior;
+    const setThick = (v: number | null) =>
       this.change((_, f) => {
         const r = f.rooms.find((x) => x.id === room.id);
         if (!r) return;
         const list = (r.wall_thickness ?? []).slice(0, r.points.length);
         while (list.length < r.points.length) list.push(null);
-        list[edge] = v;
+        list[i] = v;
         r.wall_thickness = list.every((t) => t === null) ? undefined : list;
       });
-    const sum = wallSummary(room);
-    const special = [sum.open ? this.t("walls_open_n", { n: sum.open }) : "", sum.sloping ? this.t("walls_sloping_n", { n: sum.sloping }) : ""].filter(Boolean).join(", ");
-    return html`<details class="fp3d-edge-box" ?open=${this._wallsOpen} @toggle=${(e: Event) => this.setWallsOpen((e.target as HTMLDetailsElement).open)}>
-      <summary>
-        <h4>${this.t("walls_section", { n: sum.walls })}</h4>
-        ${special ? html`<span class="fp3d-sub">${special}</span>` : nothing}
-      </summary>
-      ${room.points.flatMap((a, i) => {
-        const b = room.points[(i + 1) % n];
-        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        const entry = room.wall_heights?.[i] ?? null;
-        const slope = room.wall_slopes?.[i] ?? null;
-        const on = () => (this._edgeHi = i);
-        const off = () => (this._edgeHi = null);
-        // an edge another room splits: one row per part, each with its own height (#77)
-        const starts = this.edgeParts(room, i);
-        const parts = starts.length > 1 ? starts.map((_, k) => k) : [undefined];
-        return parts.map((part) => {
-          const h = part === undefined ? (Array.isArray(entry) ? (entry[0] ?? null) : entry) : Array.isArray(entry) ? (entry[part] ?? null) : entry;
-          const partLen = part === undefined ? len : (starts[part + 1] ?? len) - starts[part];
-          const set = (v: number | null) => this.setEdgeHeight(room, i, v, part);
-          return html`<div
-            class="fp3d-edge-height${i === this._edgeHi ? " fp3d-edge-on" : ""}${h !== null ? " fp3d-edge-low" : ""}"
-            @mouseenter=${on}
-            @mouseleave=${off}
-            @focusin=${on}
-            @focusout=${off}
-          >
-            <span
-              ><b>${this.t("wall_n", { a: i + 1, b: ((i + 1) % n) + 1 })}${part === undefined ? "" : ` · ${this.t("wall_part", { n: part + 1 })}`}</b><br /><span class="fp3d-muted"
-                >${this.m(partLen, 2)}</span
-              ></span
-            >
-            ${h === 0
-              ? html`<span class="fp3d-muted">${this.t("wall_none")}</span>`
-              : slope && part === undefined
-                ? html`${this.len(this.t("wall_slope_start", { n: i + 1 }), slope[0], (v) => this.setEdgeSlope(room, i, [v, slope[1]]), 0.05, 0.05)}
-                  ${this.len(this.t("wall_slope_end", { n: ((i + 1) % n) + 1 }), slope[1], (v) => this.setEdgeSlope(room, i, [slope[0], v]), 0.05, 0.05)}`
-                : this.len(this.t("wall_height"), h ?? H, (v) => set(v >= H - 0.005 ? null : Math.max(0.05, v)), 0.05, 0.05)}
-            ${this.isEditor && part === undefined && h !== 0
-              ? html`<button class="fp3d-btn" aria-pressed=${!!slope} title=${this.t("wall_slope_hint")} @click=${() => this.setEdgeSlope(room, i, slope ? null : [h ?? H, h ?? H])}>◢ ${this.t("wall_slope")}</button>`
-              : nothing}
-            ${this.isEditor && h !== null ? html`<button class="fp3d-btn" title=${this.t("wall_height_full")} @click=${() => set(null)}>↥</button>` : nothing}
-            ${this.isEditor && h !== 0 ? html`<button class="fp3d-btn" title=${this.t("wall_none_hint")} @click=${() => set(0)}>${this.t("wall_none")}</button>` : nothing}
-            ${this.isEditor && partLen >= 0.4 ? html`<button class="fp3d-btn" aria-label=${this.t("wall_split")} title=${this.t("wall_split_hint")} @click=${() => this.splitEdge(room, i, part)}>✂</button>` : nothing}
-            ${(part === undefined || part === 0) && h !== 0 ? html`<button class="fp3d-btn" aria-label=${this.t("wall_view")} title=${this.t("wall_view_open")} @click=${() => this.openWallView(room.id, i)}>▦</button>` : nothing}
-            ${(part === undefined || part === 0) && h !== 0
-              ? html`<span class="fp3d-wide fp3d-split-row" title=${this.t("wall_thickness_hint")}
-                  >${this.len(this.t("edge_thickness"), room.wall_thickness?.[i] ?? (outer.has(i) ? s.wall_exterior : s.wall_interior), (v) => {
-                    const def = outer.has(i) ? s.wall_exterior : s.wall_interior;
-                    const t = Math.min(1.5, Math.max(0.02, Math.round(v * 1000) / 1000));
-                    setThick(i, Math.abs(t - def) < 0.0005 ? null : t);
-                  }, 0.01, 0.02)}
-                  ${this.isEditor && room.wall_thickness?.[i] != null ? html`<button class="fp3d-btn" aria-label=${this.t("wall_thickness_reset")} title=${this.t("wall_thickness_reset")} @click=${() => setThick(i, null)}>↺</button>` : nothing}</span
-                >`
-              : nothing}
-            ${part !== undefined && part > 0 && (room.wall_splits?.[i] ?? []).some((d) => Math.abs(d - starts[part]) < 1e-3)
-              ? html`<span class="fp3d-wide fp3d-split-row"
-                  >${this.len(this.t("wall_split_at"), starts[part], (v) => this.moveSplit(room, i, starts[part], v), 0.05, 0.1)}
-                  ${this.isEditor ? html`<button class="fp3d-btn" title=${this.t("wall_join_hint")} @click=${() => this.joinSplit(room, i, starts[part], part)}>⨉</button>` : nothing}</span
-                >`
-              : nothing}
-          </div>`;
-        });
+    // an edge another room splits: one block per part, each with its own height (#77)
+    const starts = this.edgeParts(room, i);
+    const parts = starts.length > 1 ? starts.map((_, k) => k) : [undefined];
+    const first = Array.isArray(entry) ? (entry[0] ?? null) : entry;
+    return html`${parts.map((part) => {
+        const h = part === undefined ? first : Array.isArray(entry) ? (entry[part] ?? null) : entry;
+        const partLen = part === undefined ? len : (starts[part + 1] ?? len) - starts[part];
+        const set = (v: number | null) => this.setEdgeHeight(room, i, v, part);
+        return html`<div class="fp3d-edge-height${h !== null ? " fp3d-edge-low" : ""}" data-part=${part ?? "all"}>
+          ${part === undefined ? nothing : html`<span class="fp3d-wide"><b>${this.t("wall_part", { n: part + 1 })}</b> <span class="fp3d-muted">${this.m(partLen, 2)}</span></span>`}
+          ${h === 0
+            ? html`<span class="fp3d-muted">${this.t("wall_none")}</span>`
+            : slope && part === undefined
+              ? html`${this.len(this.t("wall_slope_start", { n: i + 1 }), slope[0], (v) => this.setEdgeSlope(room, i, [v, slope[1]]), 0.05, 0.05)}
+                ${this.len(this.t("wall_slope_end", { n: ((i + 1) % n) + 1 }), slope[1], (v) => this.setEdgeSlope(room, i, [slope[0], v]), 0.05, 0.05)}`
+              : this.len(this.t("wall_height"), h ?? H, (v) => set(v >= H - 0.005 ? null : Math.max(0.05, v)), 0.05, 0.05)}
+          ${this.isEditor && part === undefined && h !== 0
+            ? html`<button class="fp3d-btn" aria-pressed=${!!slope} title=${this.t("wall_slope_hint")} @click=${() => this.setEdgeSlope(room, i, slope ? null : [h ?? H, h ?? H])}>${this.t("wall_slope")}</button>`
+            : nothing}
+          ${this.isEditor && h !== null ? html`<button class="fp3d-btn" @click=${() => set(null)}>${this.t("wall_height_full")}</button>` : nothing}
+          ${this.isEditor && h !== 0 ? html`<button class="fp3d-btn" title=${this.t("wall_none_hint")} @click=${() => set(0)}>${this.t("wall_none")}</button>` : nothing}
+          ${this.isEditor && partLen >= 0.4 ? html`<button class="fp3d-btn" title=${this.t("wall_split_hint")} @click=${() => this.splitEdge(room, i, part)}>${this.t("wall_split")}</button>` : nothing}
+          ${part !== undefined && part > 0 && (room.wall_splits?.[i] ?? []).some((d) => Math.abs(d - starts[part]) < 1e-3)
+            ? html`<span class="fp3d-wide fp3d-split-row"
+                >${this.len(this.t("wall_split_at"), starts[part], (v) => this.moveSplit(room, i, starts[part], v), 0.05, 0.1)}
+                ${this.isEditor ? html`<button class="fp3d-btn" title=${this.t("wall_join_hint")} @click=${() => this.joinSplit(room, i, starts[part], part)}>${this.t("wall_join")}</button>` : nothing}</span
+              >`
+            : nothing}
+        </div>`;
       })}
-      <p class="fp3d-sub">${this.t("room_wall_hint")}</p>
-    </details>`;
+      ${first !== 0
+        ? html`<div class="fp3d-edge-height fp3d-wall-extra">
+            <span class="fp3d-wide fp3d-split-row"
+              >${this.withInfo(
+                this.len(this.t("edge_thickness"), room.wall_thickness?.[i] ?? def, (v) => {
+                  const t = Math.min(1.5, Math.max(0.02, Math.round(v * 1000) / 1000));
+                  setThick(Math.abs(t - def) < 0.0005 ? null : t);
+                }, 0.01, 0.02),
+                "wall_thickness_hint",
+                this.t("edge_thickness"),
+                false,
+              )}
+              ${this.isEditor && room.wall_thickness?.[i] != null ? html`<button class="fp3d-btn" @click=${() => setThick(null)}>${this.t("wall_thickness_reset")}</button>` : nothing}</span
+            >
+            <button class="fp3d-btn" title=${this.t("wall_view_open")} @click=${() => this.openWallView(room.id, i)}>${this.t("wall_view")}</button>
+          </div>`
+        : nothing}`;
   }
 
   setWallsOpen(this: Fp3dEditor, open: boolean): void {
