@@ -356,7 +356,7 @@ export class SidePanelPart {
       <summary>${this.t("items_list")} (${items.length})</summary>
       <fp3d-item-list
         .rows=${rows}
-        .texts=${{ hide: this.t("item_hide"), show: this.t("item_show"), remove: this.t("delete") }}
+        .texts=${{ hide: this.t("item_hide"), show: this.t("item_show"), remove: this.t("delete"), more: this.t("item_menu") }}
         ?editable=${this.isEditor}
         @item-select=${(e: CustomEvent<{ id: string }>) => this.selectFromList(e.detail.id)}
         @item-hide=${(e: CustomEvent<{ id: string }>) => this.toggleItemHidden(e.detail.id)}

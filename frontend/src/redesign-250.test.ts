@@ -220,22 +220,26 @@ test("choosing something pulls the sheet up to its title row; Details goes to ha
   assert.equal(el._sheet, "peek");
   const head = flat(el.renderSheet(el.floor));
   assert.match(head, /<aside class="fp3d-side fp3d-sheet" data-sheet=peek role="region" aria-label=Kitchen>/);
-  assert.match(head, /<b>Kitchen<\/b> <span class="fp3d-sub">· Room<\/span> <span class="fp3d-sub">· 20/);
-  assert.match(head, /fp3d-sheet-size" aria-expanded=false @click=>Details</);
-  assert.match(head, /fp3d-sheet-close" aria-label=Close/);
+  // the panel's own header is the sheet's title row (#420, CONS-9): the name once, then lock, "⋯" and Close
+  assert.match(head, /fp3d-sheet-row fp3d-sheet-own"><header\s+class="fp3d-item-head fp3d-panel-head[^]*<h2>Kitchen<\/h2>[^]*fp3d-sheet-close" aria-label=Close/);
+  assert.equal(head.match(/>Kitchen</g)?.length, 1, "the name shows once");
+  // the grab bar sizes the sheet: a button named for what it does
+  assert.match(head, /<button type="button" class="fp3d-sheet-grab" aria-label=Details aria-expanded=false/);
+  assert.doesNotMatch(head, /fp3d-sheet-size/);
   // the sheet holds the very side panel the desktop shows: every field and button of it is reachable
-  assert.ok(head.includes(flat(el.renderSide(el.floor))));
+  const side = flat(el.renderSide(el.floor));
+  assert.ok(head.includes(side.slice(side.indexOf("</header>") + "</header>".length)));
   el.renderSheet(el.floor);
   el._sheet = "half";
-  assert.match(flat(el.renderSheet(el.floor)), />Expand panel</);
+  assert.match(flat(el.renderSheet(el.floor)), /fp3d-sheet-grab" aria-label=Expand panel/);
   el._sheet = "full";
-  assert.match(flat(el.renderSheet(el.floor)), />Shrink panel</);
+  assert.match(flat(el.renderSheet(el.floor)), /fp3d-sheet-grab" aria-label=Shrink panel/);
   // another selection keeps the height
   el.selectItem("furniture", "lamp");
   el.syncSheet();
   assert.equal(el._sheet, "full");
   // the sheet names the kind of item (#397): a floor lamp is a Lamp
-  assert.match(flat(el.renderSheet(el.floor)), /· Lamp/);
+  assert.match(flat(el.renderSheet(el.floor)), /<span class="fp3d-sub">Lamp · Kitchen/);
   el.closeSheet();
   el.syncSheet();
   assert.equal(el._sheet, "closed");
@@ -247,11 +251,11 @@ test("the sheet shows every kind of selection and every tool's panel (devices, g
   const el = editor();
   el.selectItem("device", "light.sample_lounge");
   el.syncSheet();
-  assert.match(flat(el.renderSheet(el.floor)), /light\.sample_lounge<\/b> <span class="fp3d-sub">· Device/);
+  assert.match(flat(el.renderSheet(el.floor)), /<h2>light\.sample_lounge<\/h2>\s*<span class="fp3d-sub">Device/);
   el.closeSheet();
   el.selectItem("outdoor", "lawn");
   el.syncSheet();
-  assert.match(flat(el.renderSheet(el.floor)), /Garden<\/b> <span class="fp3d-sub">· Outside area/);
+  assert.match(flat(el.renderSheet(el.floor)), /<h2>Lawn<\/h2>\s*<span class="fp3d-sub">Outdoor area/, "the outdoor panel's own header");
   el.closeSheet();
   el.syncSheet();
   // the furniture tool: its library at peek, so the plan it tells you to tap stays in view (#262)
@@ -295,7 +299,7 @@ test("the sheet shows every kind of selection and every tool's panel (devices, g
   settings!();
   el.syncSheet();
   assert.equal(el._sheet, "half");
-  assert.match(flat(el.renderSheet(el.floor)), /<b>Ground<\/b> <span class="fp3d-sub">· Floor/);
+  assert.match(flat(el.renderSheet(el.floor)), /fp3d-sheet-own"><header[^]*<h2>Ground<\/h2>/);
   assert.match(flat(el.renderSheet(el.floor)), /fp3d-home-links/, "with the Settings for this home links");
 });
 

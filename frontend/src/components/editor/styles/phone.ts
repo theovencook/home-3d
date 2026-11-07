@@ -202,13 +202,31 @@ export const phoneStyles = css`
         flex: none;
         touch-action: none;
       }
+      /* the grab bar sizes the sheet (#420, CONS-9): a button 96 x 24 px round the 40 x 4 px bar */
       .fp3d-sheet-grab {
+        display: block;
+        width: 96px;
+        height: 24px;
+        margin: 0 auto;
+        padding: 0;
+        border: 0;
+        border-radius: 12px;
+        background: none;
+        cursor: pointer;
+      }
+      .fp3d-sheet-grab::before {
+        content: "";
+        display: block;
         width: 40px;
         height: 4px;
-        margin: 8px auto 4px;
+        margin: 0 auto;
         border-radius: 2px;
-        background: #475569;
-        cursor: pointer;
+        background: var(--fp3d-muted);
+        opacity: 0.7;
+      }
+      .fp3d-sheet-grab:focus-visible {
+        outline: 2px solid var(--fp3d-accent);
+        outline-offset: -2px;
       }
       .fp3d-sheet-row {
         display: flex;
@@ -225,6 +243,48 @@ export const phoneStyles = css`
       }
       .fp3d-sheet-title b {
         font-size: 15px;
+      }
+      /* the panel's own header as the sheet's title row: name and "kind · place" on one line, lock, "⋯", Close */
+      .fp3d-sheet-own {
+        align-items: flex-start;
+        padding: 0 10px 8px 14px;
+      }
+      .fp3d-sheet-own > .fp3d-panel-head {
+        flex: 1;
+        min-width: 0;
+        position: static;
+        margin: 0;
+        padding: 0;
+        background: none;
+        border: 0;
+        box-shadow: none;
+        align-items: center;
+      }
+      .fp3d-sheet-own .fp3d-item-title {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .fp3d-sheet-own .fp3d-item-title h2 {
+        flex: 0 1 auto;
+        min-width: 0;
+        font-size: 15px;
+      }
+      .fp3d-sheet-own .fp3d-item-title .fp3d-sub {
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .fp3d-sheet-own .fp3d-item-title .fp3d-sub::before {
+        content: "· ";
+      }
+      .fp3d-sheet-own .fp3d-icon-btn {
+        min-width: 44px;
+        min-height: 44px;
       }
       .fp3d-phone .fp3d-sheet-hint {
         display: block;
@@ -251,7 +311,6 @@ export const phoneStyles = css`
         grid-template-areas: "left down up right";
         gap: 4px;
       }
-      .fp3d-sheet-size,
       .fp3d-sheet-close {
         flex: none;
         min-height: 44px;

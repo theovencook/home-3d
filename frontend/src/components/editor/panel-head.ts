@@ -45,6 +45,25 @@ export interface PanelHead {
   menu?: (PanelAction | null | false | undefined)[];
 }
 
+/**
+ * On a phone sheet the first panel header is the sheet's title row (#420, CONS-9): renderSheet opens a collector, the
+ * header lands there instead of in the sheet's body, and the sheet draws it beside its Close button, so the name shows
+ * once.
+ */
+const sheetHeads = new WeakMap<object, { head: unknown }>();
+
+/** Starts collecting the next panel header for the sheet's title row. */
+export function collectSheetHead(ed: object): void {
+  sheetHeads.set(ed, { head: null });
+}
+
+/** The panel header collected since collectSheetHead (null: the panel drew none), and stops collecting. */
+export function takeSheetHead(ed: object): unknown {
+  const s = sheetHeads.get(ed);
+  sheetHeads.delete(ed);
+  return s?.head ?? null;
+}
+
 /** "online" → "Online", "78 %" stays: the first letter in upper case, the rest as it is (#409, WORD-8). */
 export function sentenceCase(text: string, locale?: string): string {
   const s = text.trim();
@@ -77,7 +96,7 @@ export class PanelHeadPart {
     // the side panel moves by its header (#421): drag it, double-click puts it back
     const drag = sideDragHandle(this);
     const movable = !!sideDrag(this);
-    return html`<header
+    const head = html`<header
       class="fp3d-item-head fp3d-panel-head ${movable ? "fp3d-drag-handle" : ""}"
       title=${movable ? this.t("float_drag_hint") : nothing}
       @pointerdown=${drag.down}
@@ -93,6 +112,12 @@ export class PanelHeadPart {
       <div class="fp3d-item-tools">${h.lock ? this.lockButton(h.lock) : nothing}${this.panelMenu(h.id, h.menu ?? [])}</div>
       ${live.length ? html`<div class="fp3d-live" role="status">${live.map((s) => html`<span class="fp3d-live-chip">${s}</span>`)}</div>` : nothing}
     </header>`;
+    const sink = sheetHeads.get(this);
+    if (sink && !sink.head) {
+      sink.head = head;
+      return nothing;
+    }
+    return head;
   }
 
   /** The lock (#409, CONS-3): the same icon button everywhere, its name constant, its state as aria-pressed. */
@@ -153,6 +178,8 @@ export class PanelHeadPart {
       }}
       ><button type="button" class="fp3d-btn fp3d-icon-btn fp3d-item-more" aria-haspopup="menu" aria-expanded=${s.menu ? "true" : "false"} aria-label=${this.t("item_menu")} title=${this.t("item_menu")} @click=${() => {
         s.menu = !s.menu;
+        // in a phone sheet pulled up to its title row only, the menu needs the room below it (#420)
+        if (s.menu && this._sheeted && this._sheet === "peek") this._sheet = "half";
         this.requestUpdate();
       }}>${panelIcon("more")}</button>
       ${s.menu

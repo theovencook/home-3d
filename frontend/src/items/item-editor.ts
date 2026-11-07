@@ -61,6 +61,16 @@ export interface ItemEditorOptions {
   changed: () => void;
   /** Open this item at once (or a new one: "new"). */
   open?: string;
+  /** The element that opened it: the editor takes that page's look (Day, Neon, High contrast; #420, CONS-7). */
+  from?: Element;
+}
+
+/** The part measures as fields (#420, HELP-3): a real label each, shown in % of the item's size. */
+const PART_FIELDS: Record<"x" | "z" | "w" | "d" | "y" | "h", string> = { x: "ie_px", z: "ie_pz", w: "ie_pw", d: "ie_pd", y: "ie_py", h: "ie_ph" };
+
+/** A fraction of the item's size as the percent the field shows (0.25 -> 25), to 0.1 %. */
+export function partPercent(v: number): number {
+  return Math.round(v * 1000) / 10;
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -405,8 +415,10 @@ export class ItemEditor extends LitElement {
       <div class="ie" role="dialog" aria-modal="true" aria-label=${this.t("ie_title")} ${modalFocus()}>
         <header class="ie-head">
           <h2>${this.t("ie_title")}</h2>
-          <button class="fp3d-btn" @click=${() => this.close()}>${this.t("ie_close")}</button>
+          ${this._draft ? this.renderActions() : nothing}
+          <button class="fp3d-btn ie-close" @click=${() => this.close()}>${this.t("ie_close")}</button>
         </header>
+        ${this._draft && this._msg ? html`<p class="ie-msg ${this._msg.ok ? "ok" : "bad"}" role="status">${this._msg.text}</p>` : nothing}
         <div class="ie-body">
           ${this.renderList()}
           ${this._draft ? this.renderDraft(this._draft) : html`<p class="ie-sub ie-empty">${this.t("ie_intro")}</p>`}
@@ -415,9 +427,19 @@ export class ItemEditor extends LitElement {
     </div>`;
   }
 
+  /** Save, Export and Delete in the header bar (#420, CONS-7): near the fields at every width, not under the picture. */
+  private renderActions() {
+    return html`<div class="ie-actions" role="toolbar" aria-label=${this.t("ie_actions")}>
+      ${this._dirty ? html`<span class="ie-sub">${this.t("ie_unsaved")}</span>` : nothing}
+      <button class="fp3d-btn fp3d-primary" ?disabled=${this._busy} @click=${() => this.save()}>${this.t("ie_save")}</button>
+      <button class="fp3d-btn" @click=${() => this.exportItem()}>${this.t("ie_export")}</button>
+      <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteItem()}>${this.t("ie_delete")}</button>
+    </div>`;
+  }
+
   private renderList() {
     return html`<nav class="ie-list">
-      <p class="ie-sub">${this.t("ie_intro")}</p>
+      ${this._draft ? html`<p class="ie-sub">${this.t("ie_intro")}</p>` : nothing}
       <button class="fp3d-btn fp3d-primary" @click=${async () => (await this.leave()) && this.startNew()}>+ ${this.t("ie_new")}</button>
       <label class="fp3d-btn ie-file">
         ${this.t("ie_import")}
@@ -465,13 +487,6 @@ export class ItemEditor extends LitElement {
           <button class="fp3d-btn ie-look" aria-pressed=${this._light} title=${this.t("ie_light_hint")} @click=${() => this.setLight(!this._light)}>${this.t("ie_light")}</button>
         </div>
         <p class="ie-sub">${this.t("ie_turn_hint")}</p>
-        <div class="ie-actions">
-          <button class="fp3d-btn fp3d-primary" ?disabled=${this._busy} @click=${() => this.save()}>${this.t("ie_save")}</button>
-          <button class="fp3d-btn" @click=${() => this.exportItem()}>${this.t("ie_export")}</button>
-          <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteItem()}>${this.t("ie_delete")}</button>
-          ${this._dirty ? html`<span class="ie-sub">${this.t("ie_unsaved")}</span>` : nothing}
-        </div>
-        ${this._msg ? html`<p class="ie-msg ${this._msg.ok ? "ok" : "bad"}" role="status">${this._msg.text}</p>` : nothing}
       </section>
       <section class="ie-form">${this.renderDetails(draft)} ${this.renderParts(draft)}</section>`;
   }
@@ -511,23 +526,28 @@ export class ItemEditor extends LitElement {
       </div>
       <label class="fp3d-field">${this.t("ie_tags")}<input type="text" .value=${(draft.tags ?? []).join(", ")} @change=${(e: Event) => set({ tags: value(e) })} /></label>
       <label class="fp3d-field">${this.t("ie_ikea")}<input type="text" maxlength="40" .value=${draft.ikea ?? ""} @change=${(e: Event) => set({ ikea: value(e) })} /></label>
-      <div class="fp3d-field">
+      <div class="fp3d-field" role="group" aria-label=${this.t("ie_size")}>
         ${this.t("ie_size")}
         <div class="ie-row3">
-          ${[0, 1, 2].map(
-            (i) => html`<input
-              type="number"
-              min="0.01"
-              max="10"
-              step="0.01"
-              .value=${String(draft.size[i])}
-              @change=${(e: Event) => {
-                const size = [...draft.size] as [number, number, number];
-                const v = Number(value(e));
-                size[i] = Number.isFinite(v) ? Math.min(10, Math.max(0.01, Math.round(v * 1000) / 1000)) : size[i];
-                setItem({ size });
-              }}
-            />`,
+          ${(["ie_pw", "ie_pd", "ie_ph"] as const).map(
+            (label, i) => html`<label class="ie-num"
+              >${this.t(label)}<span class="ie-unit-box"
+                ><input
+                  type="number"
+                  min="0.01"
+                  max="10"
+                  step="0.01"
+                  aria-label=${`${this.t(label)} (m)`}
+                  .value=${String(draft.size[i])}
+                  @change=${(e: Event) => {
+                    const size = [...draft.size] as [number, number, number];
+                    const v = Number(value(e));
+                    size[i] = Number.isFinite(v) ? Math.min(10, Math.max(0.01, Math.round(v * 1000) / 1000)) : size[i];
+                    setItem({ size });
+                  }}
+                /><span class="ie-unit" aria-hidden="true">m</span></span
+              ></label
+            >`,
           )}
         </div>
       </div>
@@ -575,9 +595,28 @@ export class ItemEditor extends LitElement {
 
   private renderPart(draft: CustomItem, p: PackPart, i: number) {
     const change = (patch: Partial<PackPart>) => this.edit(changePart(draft, i, patch));
-    const num = (key: "x" | "z" | "w" | "d" | "y" | "h" | "round" | "taper", min: number, max: number) =>
+    // x, z, w, d, y and h are fractions of the item's size, shown and typed in % of it (#420, HELP-3)
+    const pct = this.t("ie_pct");
+    const share = (key: keyof typeof PART_FIELDS, min: number, max: number) =>
       html`<label class="ie-num"
-        >${key === "round" ? this.t("ie_round") : key}<input
+        >${this.t(PART_FIELDS[key])}<span class="ie-unit-box"
+          ><input
+            type="number"
+            min=${min * 100}
+            max=${max * 100}
+            step="0.1"
+            aria-label=${`${this.t(PART_FIELDS[key])} (${pct})`}
+            .value=${String(partPercent(p[key]))}
+            @change=${(e: Event) => {
+              const v = Number((e.target as HTMLInputElement).value);
+              if (Number.isFinite(v)) change({ [key]: Math.round(v * 10) / 1000 });
+            }}
+          /><span class="ie-unit" aria-hidden="true">${pct}</span></span
+        ></label
+      >`;
+    const num = (key: "round" | "taper", min: number, max: number) =>
+      html`<label class="ie-num"
+        >${this.t(key === "round" ? "ie_round" : "ie_taper")}<input
           type="number"
           min=${min}
           max=${max}
@@ -606,7 +645,7 @@ export class ItemEditor extends LitElement {
         <button class="fp3d-btn" ?disabled=${draft.parts.length >= MAX_PARTS} @click=${() => this.edit(duplicatePart(draft, i))}>${this.t("ie_duplicate")}</button>
         <button class="fp3d-btn fp3d-danger" title=${this.t("ie_remove_part")} aria-label=${this.t("ie_remove_part")} ?disabled=${draft.parts.length <= 1} @click=${() => this.edit(removePart(draft, i))}>✕</button>
       </div>
-      <div class="ie-nums">${num("x", -0.5, 0.5)} ${num("z", -0.5, 0.5)} ${num("w", 0.001, 1)} ${num("d", 0.001, 1)} ${num("y", 0, 1)} ${num("h", 0.001, 1)} ${p.shape === "rbox" || p.shape === "shell" ? num("round", 0.01, 0.5) : nothing} ${p.shape === "shell" ? num("taper", 0.1, 1.5) : nothing}</div>
+      <div class="ie-nums">${share("x", -0.5, 0.5)} ${share("z", -0.5, 0.5)} ${share("w", 0.001, 1)} ${share("d", 0.001, 1)} ${share("y", 0, 1)} ${share("h", 0.001, 1)} ${p.shape === "rbox" || p.shape === "shell" ? num("round", 0.01, 0.5) : nothing} ${p.shape === "shell" ? num("taper", 0.1, 1.5) : nothing}</div>
       ${p.shape === "lathe"
         ? html`<label class="fp3d-field"
             >profile<input
@@ -639,7 +678,7 @@ export class ItemEditor extends LitElement {
       <div class="ie-fix" title=${this.t("ie_fixed_hint")}>
         <span class="ie-sub">${this.t("ie_fixed")}</span>
         ${(["w", "d", "h"] as const).map(
-          (a) => html`<button class="ie-chip ${p.fix?.includes(a) ? "on" : ""}" aria-pressed=${!!p.fix?.includes(a)} @click=${() => this.edit(toggleFix(draft, i, a))}>${a}</button>`,
+          (a) => html`<button class="ie-chip ${p.fix?.includes(a) ? "on" : ""}" aria-pressed=${!!p.fix?.includes(a)} @click=${() => this.edit(toggleFix(draft, i, a))}>${this.t(PART_FIELDS[a])}</button>`,
         )}
       </div>
     </fieldset>`;
@@ -673,11 +712,31 @@ export class ItemEditor extends LitElement {
         padding: 14px 16px;
         box-sizing: border-box;
       }
+      /* the header bar: title, the item's actions, Close (#420, CONS-7) */
       .ie-head {
+        position: sticky;
+        top: -14px;
+        z-index: 2;
         display: flex;
-        justify-content: space-between;
+        flex-wrap: wrap;
         align-items: center;
-        gap: 12px;
+        gap: 8px 12px;
+        margin: -14px -16px 0;
+        padding: 12px 16px;
+        background: var(--fp3d-chrome-solid, #0d1424);
+        border-bottom: 1px solid var(--fp3d-line);
+      }
+      .ie-head .ie-actions {
+        margin-left: auto;
+      }
+      .ie-close {
+        margin-left: auto;
+      }
+      .ie-head .ie-actions + .ie-close {
+        margin-left: 0;
+      }
+      .ie > .ie-msg {
+        margin-top: 8px;
       }
       .ie-head h2 {
         margin: 0;
@@ -725,8 +784,9 @@ export class ItemEditor extends LitElement {
         text-align: center;
         cursor: pointer;
       }
+      /* hints in the muted text colour, not the link blue (#420, CONS-7) */
       .ie-sub {
-        color: var(--fp3d-soft);
+        color: var(--fp3d-muted);
         font-size: 13px;
         margin: 0;
       }
@@ -794,7 +854,7 @@ export class ItemEditor extends LitElement {
         font-size: 13px;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: var(--fp3d-soft);
+        color: var(--fp3d-muted);
       }
       .ie-row3 {
         display: grid;
@@ -826,12 +886,12 @@ export class ItemEditor extends LitElement {
       }
       .ie-part legend {
         font-size: 12px;
-        color: var(--fp3d-soft);
+        color: var(--fp3d-muted);
         padding: 0 4px;
       }
       .ie-nums {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
         gap: 6px;
       }
       .ie-num {
@@ -840,13 +900,34 @@ export class ItemEditor extends LitElement {
         font-size: 12px;
         color: var(--fp3d-muted);
       }
+      /* the unit inside the field, at its end ("m", "% of item") */
+      .ie-unit-box {
+        position: relative;
+        display: grid;
+      }
+      .ie-unit-box > input {
+        padding-right: 64px;
+      }
+      .ie-row3 .ie-unit-box > input {
+        padding-right: 24px;
+      }
+      .ie-unit {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 11px;
+        color: var(--fp3d-muted);
+        pointer-events: none;
+        white-space: nowrap;
+      }
       input,
       select,
       textarea {
         font: inherit;
         font-size: 14px;
         color: var(--fp3d-text);
-        background: rgba(255, 255, 255, 0.04);
+        background: color-mix(in srgb, var(--fp3d-panel) 40%, transparent);
         border: 1px solid var(--fp3d-line);
         border-radius: 8px;
         padding: 6px 8px;
