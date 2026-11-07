@@ -33,6 +33,18 @@ export function focusScheme(start: Element | null = typeof document === "undefin
   return scheme;
 }
 
+/**
+ * The look of the Home 3D host an element sits in (#420): the nearest one up the tree, through shadow roots, with a
+ * scheme attribute ("light" under Day, "contrast" under High contrast); null: the dark look.
+ */
+export function hostScheme(start: Element | null | undefined): "light" | "contrast" | null {
+  for (let el: Element | null = start ?? null; el; el = el.parentElement ?? ((el.getRootNode?.() as ShadowRoot | undefined)?.host ?? null)) {
+    if (el.hasAttribute?.("contrast")) return "contrast";
+    if (el.hasAttribute?.("light")) return "light";
+  }
+  return null;
+}
+
 /** Where the dialog goes: into the element shown full screen (a card on a wall tablet), else the page. */
 function mountPoint(): Element {
   let fs: Element | null = document.fullscreenElement;

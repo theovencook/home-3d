@@ -87,7 +87,7 @@ export class OutdoorFindPart {
     const open = this.outdoorListOpen;
     return this.foldRow("out-list", open, () => (this.outdoorListOpen = !open), `${this.t("out_list")} (${rows.length})`, "", 0, () => html`<fp3d-item-list
         .rows=${list}
-        .texts=${{ hide: this.t("item_hide"), show: this.t("item_show"), remove: this.t("delete") }}
+        .texts=${{ hide: this.t("item_hide"), show: this.t("item_show"), remove: this.t("delete"), more: this.t("item_menu") }}
         ?editable=${this.isEditor}
         @item-select=${(e: CustomEvent<{ id: string }>) => this.goToOutdoor(...split(e))}
         @item-hide=${(e: CustomEvent<{ id: string }>) => this.toggleItemHidden(split(e)[1])}

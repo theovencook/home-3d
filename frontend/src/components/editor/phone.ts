@@ -14,6 +14,7 @@ import { itemProfile } from "../../item-profile.ts";
 import type { I18nKey } from "../../i18n.ts";
 import type { Tool } from "../../editor-hint.ts";
 import { loadPhoneBar, need } from "./lazy.ts";
+import { collectSheetHead, takeSheetHead } from "./panel-head.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** How far the details sheet is pulled up: shut, its title row only, half the plan, or nearly all of it. */
@@ -160,14 +161,24 @@ export class PhonePart {
   }
 
   /**
-   * The details sheet (a named region): a grab line, the title row with Details (peek → half → full → peek) and Close,
-   * and under it the side panel as the desktop draws it. Shut: nothing.
+   * The details sheet (a named region): the grab bar (a button: peek → half → full → peek; a swipe on the head does the
+   * same), the title row with Close, and under it the side panel as the desktop draws it. Shut: nothing. A panel with
+   * its own header (#409) has that header as the title row (#420, CONS-9): name, kind, lock, "⋯" and Close in one
+   * row, the name once. Several items chosen keep the sheet's own title ("2 items selected").
    */
   renderSheet(this: Fp3dEditor, floor: Floor | undefined) {
     const at = this._sheet;
     if (at === "closed") return nothing;
     const head = this.sheetHead(floor);
     const grow = () => (this._sheet = GROW[at]);
+    // the panel's header is the title row when the sheet is about one chosen thing (or the floor); a drawing tool keeps
+    // its name and hint, several items their count
+    const chosen = !!(this.furnitureItem || this.opening || this.device || this.outdoorArea || this.freeWall);
+    const ownHead = !(this.selection().length > 1 && this.furnitureItem) && (chosen || this._tool === "select");
+    if (ownHead) collectSheetHead(this);
+    const body = this.renderSide(floor);
+    const own = ownHead ? takeSheetHead(this) : null;
+    const close = html`<button class="fp3d-btn fp3d-sheet-close" aria-label=${this.t("close")} title=${this.t("close")} @click=${() => this.closeSheet()}>${uiIcon("x")}</button>`;
     const size: I18nKey = at === "peek" ? "details" : at === "half" ? "sheet_taller" : "sheet_smaller";
     // a swipe on the title row: up grows the sheet, down shrinks it (the buttons do the same without dragging)
     const down = (e: PointerEvent) => (this.sheetSwipe = e.clientY);
@@ -181,17 +192,18 @@ export class PhonePart {
     };
     return html`<aside class="fp3d-side fp3d-sheet" data-sheet=${at} role="region" aria-label=${head.title}>
       <div class="fp3d-sheet-head" @pointerdown=${down} @pointerup=${up} @pointercancel=${() => (this.sheetSwipe = null)}>
-        <div class="fp3d-sheet-grab" aria-hidden="true" @click=${grow}></div>
-        <div class="fp3d-sheet-row">
-          <div class="fp3d-sheet-title">
-            <b>${head.title}</b>${head.kind ? html` <span class="fp3d-sub">· ${head.kind}</span>` : nothing}${head.sub && this._tool === "select" ? html` <span class="fp3d-sub">· ${head.sub}</span>` : nothing}
-            ${head.sub && this._tool !== "select" ? html`<span class="fp3d-sheet-hint fp3d-hint-text">${head.sub}</span>` : nothing}
-          </div>
-          <button class="fp3d-btn fp3d-sheet-size" aria-expanded=${at === "peek" ? "false" : "true"} @click=${grow}>${this.t(size)}</button>
-          <button class="fp3d-btn fp3d-sheet-close" aria-label=${this.t("close")} title=${this.t("close")} @click=${() => this.closeSheet()}>${uiIcon("x")}</button>
-        </div>
+        <button type="button" class="fp3d-sheet-grab" aria-label=${this.t(size)} aria-expanded=${at === "peek" ? "false" : "true"} @click=${grow}></button>
+        ${own
+          ? html`<div class="fp3d-sheet-row fp3d-sheet-own">${own}${close}</div>`
+          : html`<div class="fp3d-sheet-row">
+              <div class="fp3d-sheet-title">
+                <b>${head.title}</b>${head.kind ? html` <span class="fp3d-sub">· ${head.kind}</span>` : nothing}${head.sub && this._tool === "select" ? html` <span class="fp3d-sub">· ${head.sub}</span>` : nothing}
+                ${head.sub && this._tool !== "select" ? html`<span class="fp3d-sheet-hint fp3d-hint-text">${head.sub}</span>` : nothing}
+              </div>
+              ${close}
+            </div>`}
       </div>
-      <div class="fp3d-sheet-body">${this.renderSide(floor)}</div>
+      <div class="fp3d-sheet-body">${body}</div>
     </aside>`;
   }
 

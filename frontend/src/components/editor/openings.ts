@@ -9,11 +9,16 @@ import { sidelightLayout } from "../../model.ts";
 import { edgeReach, generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall } from "../../geometry/walls.ts";
 import { edgeStartCorner, openingTap } from "../../geometry/openings.ts";
 import type { I18nKey } from "../../i18n.ts";
-import { signedArea, OPENING_PRESETS, openingPreset, type OpeningPreset, pointInPolygon, uid, type Floor, type Opening, type OpeningType, type Room, type Vec2, openingStyles, SILL_BOARDS, openingStyle, isFrontDoor, type OpeningStyle, type SillBoard } from "../../model.ts";
+import { signedArea, OPENING_PRESETS, openingPreset, type OpeningPreset, pointInPolygon, uid, type Floor, type Opening, type OpeningType, type Room, type Vec2, SILL_BOARDS, openingStyle, isFrontDoor, type SillBoard } from "../../model.ts";
 import { windowGetsWell } from "../../geometry/wells.ts";
 import { wallPeers, SNAP_PX, round, patchItem, numberish } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 import { stateChip } from "./panel-head.ts";
+import { OPENING_CARD_GROUPS, OPENING_CARDS, openingCardOf, openingCardPatch } from "../../opening-cards.ts";
+import { openingPic } from "./opening-pics.ts";
+
+/** The opening whose Type cards are open, per editor (#417): a passing state, gone with another selection. */
+const typeOpen = new WeakMap<object, string>();
 
 /** How far a door stands open by default in 3D, in degrees (viewer/openings.ts: 1.5 rad, half of it without a sensor). */
 const DOOR_OPEN_SENSED = Math.round((1.5 * 180) / Math.PI);
@@ -168,20 +173,83 @@ export class OpeningsPart {
     const d = OPENING_PRESETS[preset];
     const sameWidth = openingPreset(o) === preset;
     const style = "style" in d ? d.style : null;
+    this.updateOpening({ type: d.type, leaves: d.leaves, sill: d.sill, height: d.height, style, ...(sameWidth ? {} : this.fitOpeningWidth(o, d.width)) });
+  }
+
+  /** A new width for an opening, with the same limit as placing one: no wider than its wall, and still inside it. */
+  fitOpeningWidth(this: Fp3dEditor, o: Opening, wanted: number): Partial<Opening> {
     const floor = this.floor;
     const host = floor ? openingHost(o, floor.rooms, floor.walls ?? []) : null;
-    let size: Partial<Opening> = {};
-    if (!sameWidth) {
-      // the same limit as placing one: no wider than its wall, and still inside it afterwards
-      let width: number = d.width;
-      if (host) {
-        const a = host.room.points[host.edge];
-        const b = host.room.points[(host.edge + 1) % host.room.points.length];
-        width = round(Math.min(d.width, Math.max(0.3, Math.hypot(b[0] - a[0], b[1] - a[1]) - 0.1)));
-      }
-      size = { width, ...(host ? { offset: this.clampOffset(host.room, host.edge, width, o.offset) } : {}) };
+    let width = wanted;
+    if (host) {
+      const a = host.room.points[host.edge];
+      const b = host.room.points[(host.edge + 1) % host.room.points.length];
+      width = round(Math.min(wanted, Math.max(0.3, Math.hypot(b[0] - a[0], b[1] - a[1]) - 0.1)));
     }
-    this.updateOpening({ type: d.type, leaves: d.leaves, sill: d.sill, height: d.height, style, ...size });
+    return { width, ...(host ? { offset: this.clampOffset(host.room, host.edge, width, o.offset) } : {}) };
+  }
+
+  /** A Type card picked (#417): the opening takes its kind and look in one undo step; the cards close. */
+  pickOpeningCard(this: Fp3dEditor, o: Opening, id: string): void {
+    const c = OPENING_CARDS.find((x) => x.id === id);
+    if (!c) return;
+    typeOpen.delete(this);
+    const patch = openingCardPatch(o, c, this.floor?.height ?? 2.5);
+    this.updateOpening(patch.width !== undefined ? { ...patch, ...this.fitOpeningWidth(o, patch.width) } : patch);
+  }
+
+  /** Opens or closes the Type cards of the selected opening. */
+  toggleOpeningTypes(this: Fp3dEditor, o: Opening): void {
+    if (typeOpen.get(this) === o.id) typeOpen.delete(this);
+    else typeOpen.set(this, o.id);
+    this.requestUpdate();
+  }
+
+  /**
+   * The Type row (#417, MANY-5): the opening's kind and look as one picture row; it opens the picture cards (the Build
+   * panel's style, #402) grouped by doors, windows and garage doors. Every style has a card, presets such as the
+   * cellar window too (ORDER-6). Read-only users see the row without the cards.
+   */
+  renderOpeningType(this: Fp3dEditor, o: Opening) {
+    const current = openingCardOf(o);
+    const open = this.isEditor && typeOpen.get(this) === o.id;
+    const id = `fp3d-ocards-${o.id}`;
+    return html`<button
+        type="button"
+        class="fp3d-type-row"
+        aria-expanded=${open ? "true" : "false"}
+        aria-controls=${id}
+        ?disabled=${!this.isEditor}
+        @click=${() => this.toggleOpeningTypes(o)}
+      >
+        <span class="fp3d-oc-pic">${openingPic(current.id)}</span>
+        <span class="fp3d-type-text"><span class="fp3d-type-label">${this.t("opening_type")}</span><span class="fp3d-type-value">${this.t(current.name)}</span></span>
+        ${this.isEditor ? html`<span class="fp3d-type-chev" aria-hidden="true">${open ? "▴" : "▾"}</span>` : nothing}
+      </button>
+      ${open
+        ? html`<div class="fp3d-ocards" id=${id} role="group" aria-label=${this.t("opening_type")}>
+            ${OPENING_CARD_GROUPS.map(
+              (g) => html`<div class="fp3d-ocards-head">${this.t(g.name)}</div>
+                <div class="fp3d-ocards-grid">
+                  ${OPENING_CARDS.filter((c) => c.group === g.group).map(
+                    (c) => html`<button type="button" class="fp3d-oc" data-card=${c.id} aria-pressed=${c.id === current.id ? "true" : "false"} @click=${() => this.pickOpeningCard(o, c.id)}>
+                      <span class="fp3d-oc-pic">${openingPic(c.id)}</span><span class="fp3d-oc-name">${this.t(c.name)}</span>
+                    </button>`,
+                  )}
+                </div>`,
+            )}
+          </div>`
+        : nothing}`;
+  }
+
+  /** Left / Right, or Inwards / Outwards: one segmented control with its label (#417). */
+  segField<V extends string>(this: Fp3dEditor, label: string, value: V, options: readonly [V, string][], pick: (v: V) => void) {
+    return html`<div class="fp3d-field fp3d-wide fp3d-seg-field">
+      <span class="fp3d-field-label">${label}</span>
+      <div class="fp3d-seg" role="group" aria-label=${label}>
+        ${options.map(([v, text]) => html`<button type="button" aria-pressed=${v === value ? "true" : "false"} ?disabled=${!this.isEditor} @click=${() => v !== value && pick(v)}>${text}</button>`)}
+      </div>
+    </div>`;
   }
 
   updateOpening(this: Fp3dEditor, patch: Partial<Opening>): void {
@@ -386,19 +454,6 @@ export class OpeningsPart {
       : html`${width("sidelight_width", "sidelight_width_left")} ${width("sidelight_width2", "sidelight_width_right")}`;
   }
 
-  renderStyleSelect(this: Fp3dEditor, o: Opening) {
-    const styles = openingStyles(o.type);
-    const auto = openingStyle({ type: o.type, style: null }, this.openingIsExterior(o));
-    const current = o.style && (styles as readonly string[]).includes(o.style) ? o.style : "";
-    return html`<label class="fp3d-field fp3d-wide"
-      >${this.t("opening_style")}
-      <select ?disabled=${!this.isEditor} @change=${(e: Event) => this.updateOpening({ style: ((e.target as HTMLSelectElement).value || null) as OpeningStyle | null })}>
-        <option value="" ?selected=${!current}>${this.t("style_auto", { style: this.t(`style_${auto}` as I18nKey) })}</option>
-        ${styles.map((s) => html`<option value=${s} ?selected=${s === current}>${this.t(`style_${s}` as I18nKey)}</option>`)}
-      </select></label
-    >`;
-  }
-
   /** The door and window kinds as a fixed grid of chips: none moves when another is picked (#63). */
   renderOpeningKinds(this: Fp3dEditor, active: OpeningPreset, pick: (p: OpeningPreset, ev: Event) => void) {
     return html`<div class="fp3d-presets" role="group" aria-label=${this.t("opening_type")}>
@@ -506,9 +561,8 @@ export class OpeningsPart {
     };
     const preset = openingPreset(o);
     const door = o.type === "door";
-    const minH = this.openingFormMin?.id === o.id ? this.openingFormMin.h : 0;
     const roomName = this.floor?.rooms.find((r) => r.id === o.room_id)?.name;
-    return html`<section style=${minH ? `min-height:${Math.round(minH)}px` : ""}>
+    return html`<section>
       ${this.renderPanelHeader({
         id: `opening:${o.id}`,
         title: this.t(`preset_${preset}` as I18nKey),
@@ -518,58 +572,43 @@ export class OpeningsPart {
         lock: this.fixLock("opening", o.id),
         menu: [{ label: this.t("delete"), keys: ["Del"], danger: true, run: () => this.deleteOpening() }],
       })}
-      ${admin ? html`<p class="fp3d-sub">${this.t("opening_change_to")}</p>` : nothing}
-      ${admin
-        ? this.renderOpeningKinds(preset, (p, ev) => {
-            // the panel below the chips changes with the kind: keep it at least as tall as it was, so the chips
-            // (and the scroll position) stay where they are for the next tap (#63)
-            const section = (ev.currentTarget as Element | null)?.closest?.("section") as HTMLElement | null;
-            const h = section?.getBoundingClientRect().height ?? 0;
-            const prev = this.openingFormMin?.id === o.id ? this.openingFormMin.h : 0;
-            this.openingFormMin = { id: o.id, h: Math.max(prev, h) };
-            this.setOpeningPreset(o, p);
-          })
-        : nothing}
-      ${admin && !garage
-        ? html`<div class="fp3d-actions">
-            <button class="fp3d-btn" title=${this.t("flip_hinge_hint")} @click=${() => this.updateOpening({ hinge: o.hinge === "left" ? "right" : "left" })}>
-              ⇆ ${this.t(o.leaves === 2 ? "flip_main_leaf" : "flip_hinge")}
-            </button>
-            ${door || (window && o.sill < 0.1)
-              ? html`<button class="fp3d-btn" title=${this.t("flip_swing_hint")} @click=${() => this.updateOpening({ swing: o.swing === "out" ? "in" : "out" })}>
-                  ⇅ ${this.t("flip_swing")}
-                </button>`
-              : nothing}
-          </div>`
-        : nothing}
+      ${this.renderOpeningType(o)}
       <div class="fp3d-form">
         ${this.len(this.t("width"), o.width, (v) => this.updateOpening({ width: Math.max(0.3, v) }), 0.01, 0.3)}
         ${this.len(this.openingPositionLabel(o), o.offset, (v) => this.updateOpening({ offset: Math.max(0, v) }), 0.01, 0)}
-        ${window ? this.len(this.t("sill"), o.sill, (v) => this.updateOpening({ sill: Math.max(0, v) }), 0.01, 0) : nothing}
         ${this.len(this.t("opening_height"), o.height, (v) => this.updateOpening({ height: Math.max(0.3, v) }), 0.01, 0.3)}
-        ${window && this.isEditor
-          ? html`<div class="fp3d-actions fp3d-wide">
-              <button
-                class="fp3d-btn"
-                title=${this.t("cellar_window_hint")}
-                @click=${() => {
-                  // small and high up in the wall: 1.0 × 0.5 m, its top 25 cm under the ceiling
-                  const h = this.floor?.height ?? 2.5;
-                  this.updateOpening({ width: 1, height: 0.5, sill: Math.max(0, Math.round((h - 0.75) * 100) / 100) });
-                }}
+        ${window
+          ? html`<div class="fp3d-pair fp3d-wide">
+              <label class="fp3d-field" title=${this.t("sill_board_hint")}
+                ><span class="fp3d-field-label">${this.t("sill_board")}</span>
+                <select ?disabled=${!admin} @change=${(e: Event) => this.updateOpening({ sill_board: ((e.target as HTMLSelectElement).value || "auto") as SillBoard })}>
+                  ${SILL_BOARDS.map((m) => html`<option value=${m} ?selected=${(o.sill_board ?? "auto") === m}>${m === "auto" ? this.sillAutoText(o) : this.t(`sill_board_${m}`)}</option>`)}
+                </select></label
               >
-                ▭ ${this.t("cellar_window")}
-              </button>
+              ${this.len(this.t("sill"), o.sill, (v) => this.updateOpening({ sill: Math.max(0, v) }), 0.01, 0)}
             </div>`
           : nothing}
-        ${this.renderStyleSelect(o)}
-        ${window
-          ? html`<label class="fp3d-field fp3d-wide" title=${this.t("sill_board_hint")}
-              >${this.t("sill_board")}
-              <select ?disabled=${!admin} @change=${(e: Event) => this.updateOpening({ sill_board: ((e.target as HTMLSelectElement).value || "auto") as SillBoard })}>
-                ${SILL_BOARDS.map((m) => html`<option value=${m} ?selected=${(o.sill_board ?? "auto") === m}>${m === "auto" ? this.sillAutoText(o) : this.t(`sill_board_${m}`)}</option>`)}
-              </select></label
-            >`
+        ${garage
+          ? nothing
+          : this.segField(
+              this.t(o.leaves === 2 ? "main_leaf" : "hinge"),
+              o.hinge === "right" ? "right" : "left",
+              [
+                ["left", this.t("hinge_left")],
+                ["right", this.t("hinge_right")],
+              ],
+              (v) => this.updateOpening({ hinge: v }),
+            )}
+        ${!garage && (door || (window && o.sill < 0.1))
+          ? this.segField(
+              this.t("swing_label"),
+              o.swing === "out" ? "out" : "in",
+              [
+                ["in", this.t("swing_in")],
+                ["out", this.t("swing_out")],
+              ],
+              (v) => this.updateOpening({ swing: v }),
+            )
           : nothing}
         ${this.renderSidelightFields(o)}
         <label class="fp3d-field fp3d-wide" title=${this.t("opening_mark_hint")}
@@ -579,15 +618,6 @@ export class OpeningsPart {
             <option value="closed" ?selected=${o.mark === "closed"}>${this.t("opening_mark_closed")}</option>
           </select></label
         >
-        ${garage
-          ? nothing
-          : html`<label class="fp3d-field fp3d-wide"
-          >${this.t(o.leaves === 2 ? "main_leaf" : "hinge")}
-          <select ?disabled=${!admin} @change=${(e: Event) => this.updateOpening({ hinge: (e.target as HTMLSelectElement).value as "left" | "right" })}>
-            <option value="left" ?selected=${o.hinge === "left"}>${this.t("hinge_left")}</option>
-            <option value="right" ?selected=${o.hinge === "right"}>${this.t("hinge_right")}</option>
-          </select></label
-        >`}
         ${window || garage || door ? this.entitySelect(this.t(window ? "cover_entity" : "door_cover"), o.cover, autoPick("cover"), garage ? garageDrives : covers, (v) => this.updateOpening({ cover: v })) : nothing}
         ${garage && isPulseDrive(o.cover) ? html`<p class="fp3d-sub fp3d-wide">${this.t("garage_pulse_hint")}</p>` : nothing}
         ${(window || garage || door) && o.cover !== "none" && (o.cover || autoPick("cover"))
@@ -661,7 +691,9 @@ export class OpeningsPart {
             >`
           : nothing}
       </div>
-      <p class="fp3d-sub">${this.t(window ? "opening_hint" : garage ? "garage_hint" : "door_hint")}</p>
+      ${window
+        ? this.withInfo(html`<p class="fp3d-sub">${this.t("window_sensor_short")}</p>`, "opening_hint", this.t("sensor_kind"))
+        : html`<p class="fp3d-sub">${this.t(garage ? "garage_hint" : "door_hint")}</p>`}
     </section>`;
   }
 }

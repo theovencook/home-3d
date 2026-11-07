@@ -553,6 +553,7 @@ export class Extensions extends LitElement {
         rooms: ROOMS,
         roles: COLOUR_ROLES,
         changed: () => this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true })),
+        from: this,
       });
       this._itemsError = null;
     } catch (err) {
