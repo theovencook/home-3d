@@ -32,8 +32,24 @@ export function kindIcon(kind: ItemProfile["kind"]): string {
     energy: "mdi:lightning-bolt",
     switch: "mdi:power-socket",
     stairs: "mdi:stairs",
+    camera: "mdi:cctv",
+    heating: "mdi:radiator",
+    network: "mdi:server-network",
+    printer: "mdi:printer-3d",
   };
   return icons[kind] ?? "";
+}
+
+const linked = (v: unknown): boolean => typeof v === "string" && !!v && v !== "none";
+
+/**
+ * The folds an item shows: its kind's, plus Energy where a power sensor is set already although the kind has none
+ * (#414: a kind drops fields that cannot apply, but never hides a link that is set). A floor opening keeps Size only.
+ */
+export function itemFolds(f: Pick<Furniture, "power">, p: ItemProfile): PanelFold[] {
+  if (p.kind === "opening" || p.folds.includes("energy") || !linked(f.power)) return p.folds;
+  const at = p.folds.indexOf("taps");
+  return at < 0 ? [...p.folds, "energy"] : [...p.folds.slice(0, at), "energy", ...p.folds.slice(at)];
 }
 
 /** ItemFoldsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
@@ -53,7 +69,7 @@ export class ItemFoldsPart {
       ${this.renderItemMain(f, p)} ${this.renderModuleFurnitureFields(f)}
       ${this.rackOf(f) ? this.renderRackFrameForm(f) : nothing} ${this.renderRackElevation(f)} ${this.renderRackCardForm(f)}
       ${this.rackOf(f) ? html`<div class="fp3d-actions"><button class="fp3d-btn" @click=${() => this.openRackSheet()}>▤ ${this.t("rack_edit")}</button></div>` : nothing}
-      ${p.folds.map((fold) => this.renderItemFold(f, p, fold))}
+      ${itemFolds(f, p).map((fold) => this.renderItemFold(f, p, fold))}
     </section>`;
   }
 
@@ -85,6 +101,12 @@ export class ItemFoldsPart {
           ${f.type === "stairwell" ? this.renderStairwellNote(f) : nothing}
         </section>`;
       default:
+        // a kitchen unit linked before #414 keeps its link where it can be changed or set to none
+        if (p.kind === "kitchen" && linked(f.entity) && this.hass)
+          return html`<section class="fp3d-link-block" aria-labelledby="fp3d-main-h">
+            <div class="fp3d-h3row"><h3 id="fp3d-main-h">${this.t("link_device")}</h3></div>
+            ${this.renderFurnitureLinks(f)}
+          </section>`;
         // a plant's moisture; a bin from a pack says where its kerb spot and calendar are (#170)
         return f.type === "plant" || isPackPlant(f.type) || isPackBin(f.type) ? this.renderHouseholdExtras(f) : nothing;
     }
@@ -118,7 +140,8 @@ export class ItemFoldsPart {
         return [join([furnitureName(this.hass, f.type), ...[...new Set(names)]]), set];
       }
       case "size": {
-        const size = [f.w, f.d, f.h].map((v) => this.m(v)).join(" × ");
+        // a hole in the floor has no height
+        const size = (p.kind === "opening" ? [f.w, f.d] : [f.w, f.d, f.h]).map((v) => this.m(v)).join(" × ");
         return [join([size, this._doc.floors.length > 1 && this.floor?.name, f.mirror && p.mirror && this.t("item_mirrored")]), (f.mirror && p.mirror ? 1 : 0) + (f.mount_y != null ? 1 : 0)];
       }
       case "glow": {
@@ -148,7 +171,7 @@ export class ItemFoldsPart {
         if (f.show_name) parts.push(this.t("more_name_3d"));
         if (ref(f.extra) && !volumeMeter(f.type)) parts.push(this.linkName(f.extra));
         if (f.marker || f.icon) parts.push(this.t("marker_show"));
-        if (p.glow && !p.folds.includes("glow") && ref(f.state_entity)) parts.push(this.t("furn_state_entity"));
+        if (!p.folds.includes("glow") && ref(f.state_entity)) parts.push(this.t("furn_state_entity"));
         if (ref(f.service)) parts.push(this.linkName(f.service));
         return [parts.length ? parts.join(" · ") : this.t("more_none"), parts.length];
       }
@@ -162,6 +185,8 @@ export class ItemFoldsPart {
         return html`<div class="fp3d-form">${this.furnitureField(f, "type")}${this.renderModelSelect(f)}</div>
           ${this.renderColourRoles(f)}`;
       case "size":
+        // a floor opening: its width and depth only (#414, MANY-8)
+        if (p.kind === "opening") return html`<div class="fp3d-form">${this.furnitureField(f, "w")} ${this.furnitureField(f, "d")}</div>`;
         return html`<div class="fp3d-form">
           ${this.furnitureField(f, "w")} ${this.furnitureField(f, "d")} ${this.furnitureField(f, "h")}
           ${this.furnitureField(f, "mount")} ${p.mirror ? this.furnitureField(f, "mirror") : nothing} ${f.type === "led_strip" ? this.furnitureField(f, "strip") : nothing}
@@ -174,9 +199,10 @@ export class ItemFoldsPart {
       case "energy":
         return this.renderEnergyFields(f);
       case "taps": {
+        // "Ask before switching" where the kind switches something, or where it is set already (#414);
         // Tap, Hold and Double tap behind one "Taps: Default" row (#413, MANY-6): rarely changed, so closed
         const own = GESTURES.filter((g) => f.actions?.[g]).length;
-        return html`${p.confirm && isElectric(f.type) && (!isLamp(f.type) || f.entity) ? html`<div class="fp3d-form">${this.confirmField(f)}</div>` : nothing}
+        return html`${(p.confirm || f.confirm) && isElectric(f.type) && (!isLamp(f.type) || f.entity) ? html`<div class="fp3d-form">${this.confirmField(f)}</div>` : nothing}
           ${this.sideFold("taps-gestures", f.id, false, this.t("taps_row"), own ? this.t("taps_own", { n: own }) : this.t("item_action_default"), own, () =>
             this.renderItemActions(f.actions, f.entity && f.entity !== "none" ? f.entity : null, (a) => this.updateFurniture({ actions: a })),
           )}
@@ -190,10 +216,10 @@ export class ItemFoldsPart {
             ${electric && !lamp && !volumeMeter(f.type) && f.type !== "grid_point"
               ? this.entitySelect(this.t("furn_extra"), f.extra ?? null, undefined, this.entityOptions((id) => id.startsWith("sensor.")), (v) => this.updateFurniture({ extra: v === "none" ? null : v }))
               : nothing}
-            ${p.glow && !p.folds.includes("glow") ? html`<div class="fp3d-form fp3d-links fp3d-wide">${this.renderStateLinks(f, p)}</div>` : nothing}
+            ${(p.glow || linked(f.state_entity)) && !p.folds.includes("glow") ? html`<div class="fp3d-form fp3d-links fp3d-wide">${this.renderStateLinks(f, p)}</div>` : nothing}
             ${electric && (!lamp || f.entity) ? html`${this.markerSelect(f.marker ?? null, (v) => this.updateFurniture({ marker: v }))}${this.iconInput(f.icon, (v) => this.updateFurniture({ icon: v }), kindIcon(p.kind))}` : nothing}
           </div>
-          ${p.consumable && electric ? this.renderServiceFields(f) : nothing}`;
+          ${(p.consumable || linked(f.service)) && electric ? this.renderServiceFields(f) : nothing}`;
       }
     }
   }

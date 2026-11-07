@@ -379,7 +379,6 @@
  "vehicle_to_spot_hint": "Et kjøretøy som vanlig møbel står alltid der. Som parkeringsplass vises det bare når en sensor melder at bilen er der, og det er der du setter opp Bil (lading, rekkevidde, lås, klima).",
  "as_furniture": "Vis som møbel",
  "as_furniture_hint": "Erstatter nålen med et møbel på samme sted, koblet til denne enheten – en høyttaler for en mediespiller, en lampe for et lys. Ctrl+Z angrer. Et kamera beholder markøren med alle kamerainnstillinger; modellen kommer bare i tillegg.",
- "as_furniture_pick": "Velg møbel …",
  "camera_look_builtin": "Standard kameramodell",
  "as_device": "Tilbake til enhetsnål",
  "as_device_hint": "Erstatter møbelet med enhetens vanlige nål på samme sted.",

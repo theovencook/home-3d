@@ -52,7 +52,21 @@ export function isTvLike(type: string): boolean {
 
 /** The main link field of an item (#132): its label (an i18n key) and the entity domains that fit it best, best first. */
 export interface LinkField {
-  label: "furn_entity" | "furn_entity_light" | "motor_cover" | "furn_entity_tv" | "awning_cover" | "furn_entity_climate" | "furn_entity_heater" | "furn_entity_vacuum" | "furn_entity_camera" | "furn_entity_sensor" | "furn_entity_car";
+  label:
+    | "furn_entity"
+    | "furn_entity_light"
+    | "motor_cover"
+    | "furn_entity_tv"
+    | "awning_cover"
+    | "furn_entity_climate"
+    | "furn_entity_heater"
+    | "furn_entity_vacuum"
+    | "furn_entity_camera"
+    | "furn_entity_sensor"
+    | "furn_entity_car"
+    | "furn_entity_printer"
+    | "furn_entity_rack"
+    | "furn_entity_battery";
   domains: string[];
 }
 
@@ -66,6 +80,10 @@ export function linkField(type: string): LinkField {
   if (isCameraItem(type)) return { label: "furn_entity_camera", domains: ["camera"] };
   if (isSensorItem(type)) return { label: "furn_entity_sensor", domains: ["sensor", "binary_sensor"] };
   if (isVehicleItem(type)) return { label: "furn_entity_car", domains: ["device_tracker", "binary_sensor", "sensor"] };
+  // the kind's own link names (#414, WORD-6): a printer, a rack's gear, a home battery
+  if (isPrinter(type)) return { label: "furn_entity_printer", domains: ["sensor", "binary_sensor"] };
+  if (packInfo(type)?.rack_frame || packInfo(type)?.family === "network_rack") return { label: "furn_entity_rack", domains: ["switch", "sensor", "binary_sensor"] };
+  if (type === "home_battery" || packInfo(type)?.family === "home_battery") return { label: "furn_entity_battery", domains: ["sensor"] };
   if (isTvLike(type)) return { label: "furn_entity_tv", domains: ["media_player", "switch"] };
   if (type === "awning") return { label: "awning_cover", domains: ["cover"] };
   return { label: "furn_entity", domains: ["switch"] };

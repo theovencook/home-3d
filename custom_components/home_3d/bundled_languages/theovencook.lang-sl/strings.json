@@ -379,7 +379,6 @@
  "vehicle_to_spot_hint": "Vozilo kot navadno pohištvo vedno stoji tam. Kot parkirno mesto se pojavi le, ko senzor javlja avto, in tam se nastavi Avto (napolnjenost, doseg, zaklep, klima).",
  "as_furniture": "Prikaži kot pohištvo",
  "as_furniture_hint": "Zamenja oznako s kosom pohištva na istem mestu, povezanim s to napravo – zvočnik za predvajalnik, svetilko za luč. Ctrl+Z razveljavi. Kamera obdrži svojo oznako z vsemi nastavitvami; model se le doda.",
- "as_furniture_pick": "Izberi pohištvo …",
  "camera_look_builtin": "Privzeti model kamere",
  "as_device": "Nazaj na oznako naprave",
  "as_device_hint": "Zamenja pohištvo s preprosto oznako njegove naprave na istem mestu.",
