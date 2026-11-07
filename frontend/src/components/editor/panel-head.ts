@@ -10,6 +10,7 @@ import type { HassEntity, HomeAssistant } from "../../types.ts";
 import { type FixKind } from "./helpers.ts";
 import { panelIcon, panelUi } from "./item-sections.ts";
 import type { Fp3dEditor } from "../editor.ts";
+import { sideDrag, sideDragHandle } from "./side-drag.ts";
 
 /** One action of a header's "⋯" menu. */
 export interface PanelAction {
@@ -73,7 +74,18 @@ export class PanelHeadPart {
     const lang = this.hass?.locale?.language ?? this.hass?.language;
     const line = [h.kind && h.kind !== h.title ? h.kind : null, h.where].filter(Boolean).join(" · ");
     const live = (h.live ?? []).filter(Boolean).map((s) => sentenceCase(s, lang));
-    return html`<header class="fp3d-item-head fp3d-panel-head">
+    // the side panel moves by its header (#421): drag it, double-click puts it back
+    const drag = sideDragHandle(this);
+    const movable = !!sideDrag(this);
+    return html`<header
+      class="fp3d-item-head fp3d-panel-head ${movable ? "fp3d-drag-handle" : ""}"
+      title=${movable ? this.t("float_drag_hint") : nothing}
+      @pointerdown=${drag.down}
+      @pointermove=${drag.move}
+      @pointerup=${drag.up}
+      @pointercancel=${drag.up}
+      @dblclick=${drag.dblclick}
+    >
       <div class="fp3d-item-title">
         <h2>${h.title}</h2>
         ${line ? html`<span class="fp3d-sub">${line}</span>` : nothing}

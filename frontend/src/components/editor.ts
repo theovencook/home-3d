@@ -69,6 +69,7 @@ import { FurniturePart } from "./editor/furniture.ts";
 import { ItemFormPart } from "./editor/item-form.ts";
 import { ItemSectionsPart } from "./editor/item-sections.ts";
 import { PanelHeadPart } from "./editor/panel-head.ts";
+import { settleSideDrag, syncSideDrag } from "./editor/side-drag.ts";
 import { ItemFoldsPart } from "./editor/item-folds.ts";
 import { DevicePanelPart } from "./editor/device-panel.ts";
 import { CamerasPart } from "./editor/cameras.ts";
@@ -888,6 +889,8 @@ export class Fp3dEditor extends LitElement {
     if (!stage) return;
     this.resizeObserver = new ResizeObserver(() => {
       this._size = { w: stage.clientWidth, h: stage.clientHeight };
+      // a moved side panel settles back inside the editor (#421)
+      settleSideDrag(this);
       // a plan nobody has moved since it was fitted stays fitted (the 3D half opening beside the roof tool)
       if ((!this.fitted || this._view === this.fittedView) && this._size.w > 0) {
         this.fitted = true;
@@ -918,6 +921,8 @@ export class Fp3dEditor extends LitElement {
 
   protected updated(changed: PropertyValues): void {
     this.afterPhoneRender(changed);
+    // the side panel's drag follows the aside drawn now, at this device's place (#421)
+    syncSideDrag(this);
     if (this._tool === "measure" && changed.has("_draft")) this.afterMeasureDraft(changed.get("_draft") as Vec2[] | undefined);
     // another item (room, door, floor …) opens its panel at the top: the fields are where they always are (#71)
     // only a side panel scrolled down is set back (#392): setting scrollTop forced a layout of the panel just drawn on

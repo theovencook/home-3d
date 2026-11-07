@@ -16,6 +16,7 @@ import type { Fp3dEditor } from "../editor.ts";
 import { stateChip, type PanelAction } from "./panel-head.ts";
 import { madeFromPin } from "./from-pin.ts";
 import { isVehicleItem } from "../../furniture-links.ts";
+import { sideDrag, sideDragHandle, sideSnapBack } from "./side-drag.ts";
 
 /** Small line icons of the item panel (24 x 24, stroke = currentColor), decorative: the buttons carry the names. */
 const ICONS = {
@@ -345,8 +346,18 @@ export class ItemSectionsPart {
 
   /** The one slim navigation row (#396 win 3): "‹ <room or floor>" back to it, and a small icon that folds the bar. */
   renderNavRow(this: Fp3dEditor, back: { label: string; name: string; go: () => void } | null, fold: boolean) {
-    return html`<div class="fp3d-pin-row fp3d-nav-row">
+    // the side bar's row (fold = true) is also a handle to move the panel, with the snap-back button while moved (#421)
+    const drag = fold ? sideDragHandle(this) : null;
+    return html`<div
+      class="fp3d-pin-row fp3d-nav-row ${drag && sideDrag(this) ? "fp3d-drag-handle" : ""}"
+      @pointerdown=${drag?.down ?? nothing}
+      @pointermove=${drag?.move ?? nothing}
+      @pointerup=${drag?.up ?? nothing}
+      @pointercancel=${drag?.up ?? nothing}
+      @dblclick=${drag?.dblclick ?? nothing}
+    >
       ${back ? html`<button type="button" class="fp3d-link fp3d-back fp3d-crumb" aria-label=${back.label} @click=${back.go}>‹ ${back.name}</button>` : nothing}
+      ${fold ? sideSnapBack(this) : nothing}
       ${fold ? html`<button type="button" class="fp3d-btn fp3d-icon-btn fp3d-side-fold" aria-label=${this.t("side_fold_hint")} title=${this.t("side_fold_hint")} @click=${() => this.setSideFolded(true)}>${panelIcon("collapse")}</button>` : nothing}
     </div>`;
   }

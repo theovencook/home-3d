@@ -81,7 +81,7 @@ for (const [name, id, open] of PANELS) {
     open(ed);
     const side = flat(ed.renderSide(ed.floor));
     assert.equal((side.match(/fp3d-panel-head/g) ?? []).length, 1, "one shared header");
-    assert.match(side, /class="fp3d-item-head fp3d-panel-head">\s*<div class="fp3d-item-title">\s*<h2>/, "the name is the heading");
+    assert.match(side, /class="fp3d-item-head fp3d-panel-head[^"]*"[^>]*>\s*<div class="fp3d-item-title">\s*<h2>/, "the name is the heading");
     assert.match(side, /aria-label=More actions/, "the ⋯ menu");
     if (name !== "pet") assert.match(side, /class="fp3d-btn fp3d-fix fp3d-icon-btn" aria-pressed=(true|false) aria-label=(Lock position|Lock floor plan)/, "the lock icon button");
     for (const old of ["🔓", "🔒", ">Fix<", "Release", "fp3d-h3row\"><h3>", "fp3d-btn fp3d-danger"]) assert.ok(!side.includes(old), `${name}: no ${old}`);

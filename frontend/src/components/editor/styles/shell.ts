@@ -102,6 +102,35 @@ export const shellStyles = css`
         gap: 8px;
         justify-content: flex-end;
       }
+      /* the side panel moves by its header or navigation row (#421), like the View panel: a moved panel floats over
+         the plan (which then takes the whole width), its place a translate from where it docks */
+      .fp3d-drag-handle {
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+      }
+      .fp3d-drag-handle:active {
+        cursor: grabbing;
+      }
+      aside.fp3d-side[data-floating] {
+        position: absolute;
+        top: var(--fp3d-toolbar-h, 52px);
+        right: 8px;
+        bottom: auto;
+        width: min(var(--fp3d-side-w, 320px), calc(100% - 16px));
+        max-height: calc(100% - var(--fp3d-toolbar-h, 52px) - 16px);
+        border: 1px solid var(--fp3d-line);
+        border-radius: 14px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+        z-index: 30;
+      }
+      .fp3d-editor:has(> aside.fp3d-side[data-floating]:not(.fp3d-side-overlay)) {
+        grid-template-columns: 1fr;
+      }
+      /* while the panel is dragged the plan and the 3D pane beside it do not take the pointer */
+      :host([data-panel-drag]) .fp3d-stage-pair {
+        pointer-events: none;
+      }
       .fp3d-3d-size {
         display: inline-flex;
         align-items: center;
