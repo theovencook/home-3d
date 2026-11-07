@@ -200,6 +200,10 @@ test("the rack card's values: the default set ticked, editors add and remove val
   ed._rackSheet = "rack";
   ed.onRackChange(new CustomEvent("rack-change", { detail: { slots: [{ id: "s1", type: SWITCH, u: 3, name: "Core switch", entity: "binary_sensor.switch_status", links: ["sensor.switch_temperature", "sensor.switch_cpu_utilization"] }] } }));
   ed._rackSheet = null;
+  // the values are a fold (#413): its title counts them; open, it lists them
+  assert.match(flat(ed.renderFurnitureForm(ed.furnitureItem)), /Card values · 2\/8/);
+  const { setSideFold } = await import("./editor/item-sections.ts");
+  setSideFold(ed, "rack-card", true);
   const form = flat(ed.renderFurnitureForm(ed.furnitureItem));
   assert.match(form, /fp3d-rack-card-pick/);
   assert.match(form, /Card values · 2\/8/);
@@ -230,6 +234,8 @@ test("someone who can't edit sees the rack card's values but can't change them (
   ed.selectItem("furniture", "rack");
   ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "rack").rack = { slots: [{ id: "s1", type: SWITCH, u: 3, links: ["sensor.switch_temperature"] }] };
   ed.canEdit = false;
+  const { setSideFold } = await import("./editor/item-sections.ts");
+  setSideFold(ed, "rack-card", true);
   assert.match(flat(ed.renderFurnitureForm(ed.furnitureItem)), /fp3d-rack-card-pick[\s\S]*disabled/);
   ed.toggleRackCardMetric("@hottest");
   assert.equal(ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "rack").rack.card, undefined);

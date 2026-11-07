@@ -2357,7 +2357,6 @@ export const lateEnglish = {
   live_home: "Home",
   car_found: "{n} of {total} found",
   car_change_found: "Change what was found",
-  car_found_done: "Done",
   car_not_found: "Not found",
   car_device_other: "Another entity of the car",
   tc_rect: "Rectangle room",
@@ -2379,4 +2378,6 @@ export const lateEnglish = {
   out_ghost_ask: "{name} is on {floor}. Go there to edit it?",
   out_ghost_go: "Go to {floor}",
   tp_on_plan: "On the plan ({n})",
+  fold_auto: "Picked automatically",
+  taps_row: "Taps",
 };

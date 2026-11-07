@@ -327,9 +327,7 @@ export class SettingsPart {
       if (sensor && sensor !== "none") next.presence.push({ person, sensor });
       this.setDoc(next);
     };
-    return html`<details class="fp3d-section">
-      <summary>${this.t("presence")}</summary>
-      <div class="fp3d-form">
+    return this.sideFold("presence", "", false, this.t("presence"), "", this._doc.presence.length, () => html`<div class="fp3d-form">
         ${persons.length
           ? persons.map((id) =>
               this.entitySelect(
@@ -342,8 +340,7 @@ export class SettingsPart {
             )
           : html`<p class="fp3d-sub fp3d-wide">${this.t("no_persons")}</p>`}
       </div>
-      <p class="fp3d-sub">${this.t("presence_hint")}</p>
-    </details>`;
+      <p class="fp3d-sub">${this.t("presence_hint")}</p>`);
   }
 
   setSettings(this: Fp3dEditor, patch: Partial<Building["settings"]>): void {

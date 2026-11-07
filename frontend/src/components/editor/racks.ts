@@ -57,10 +57,7 @@ export class RacksPart {
     const el = this.rackElevationOf(f);
     if (!el || !el.pieces) return nothing;
     const frame = readRackFrame(rackItemOf(f.type));
-    return html`<details class="fp3d-rack-elev" open>
-      <summary>${this.t("rack_front_view")} · ${this.t("rack_used", { used: el.used, u: frame?.u ?? 0 })}</summary>
-      <div class="fp3d-rack-elev-box">${this.rackElevationPicture(el)}</div>
-    </details>`;
+    return this.sideFold("rack-front", "", true, this.t("rack_front_view"), this.t("rack_used", { used: el.used, u: frame?.u ?? 0 }), 0, () => html`<div class="fp3d-rack-elev-box">${this.rackElevationPicture(el)}</div>`);
   }
 
   /**
@@ -235,9 +232,7 @@ export class RacksPart {
     const ro = !this.isEditor;
     const label = (key: string, kind: string) =>
       key === RACK_HOTTEST ? this.t("rack_card_hottest") : key === RACK_ONLINE ? this.t("rack_card_online") : kind === "other" ? entityName(hass, key) : this.t(`rack_kind_${kind}` as I18nKey);
-    return html`<details class="fp3d-rack-elev fp3d-rack-card-pick">
-      <summary>${this.t("rack_card_values", { n: picked.length, max: RACK_CARD_MAX })}</summary>
-      <p class="fp3d-sub">${this.t("rack_card_values_hint")}</p>
+    return this.sideFold("rack-card", "", false, this.t("rack_card_values", { n: picked.length, max: RACK_CARD_MAX }), "", 0, () => html`<div class="fp3d-rack-card-pick"><p class="fp3d-sub">${this.t("rack_card_values_hint")}</p>
       ${groups.map(
         (g) => html`<fieldset class="fp3d-rack-card-group">
           <legend>${g.name ?? this.t("rack_card_rack")}</legend>
@@ -250,8 +245,7 @@ export class RacksPart {
           })}
         </fieldset>`,
       )}
-      ${f.rack?.card && !ro ? html`<button class="fp3d-btn" @click=${() => this.resetRackCard()}>${this.t("rack_card_default")}</button>` : nothing}
-    </details>`;
+      ${f.rack?.card && !ro ? html`<button class="fp3d-btn" @click=${() => this.resetRackCard()}>${this.t("rack_card_default")}</button>` : nothing}</div>`);
   }
 
   /** The sheet changed the rack's gear: one undo step on the placed rack. */

@@ -145,12 +145,7 @@ export class DevicePanelPart {
           : html`<p class="fp3d-sub">${this.t("unplaced_none")}</p>`}
         ${hiddenN ? html`<button class="fp3d-link" @click=${() => (this._unplacedHiddenView = true)}>${this.t("unplaced_hidden", { n: hiddenN })}</button>` : nothing}`;
     };
-    return html`<section>
-      <details class="fp3d-points fp3d-unplaced" ?open=${open} @toggle=${(e: Event) => (this._unplacedOpen = (e.target as HTMLDetailsElement).open)}>
-        <summary>${this.t("unplaced")}</summary>
-        ${open ? body() : nothing}
-      </details>
-    </section>`;
+    return this.foldRow("unplaced", open, () => (this._unplacedOpen = !open), this.t("unplaced"), "", 0, body);
   }
 
   updateDevice(this: Fp3dEditor, patch: Partial<Placement>): void {

@@ -352,16 +352,13 @@ export class SidePanelPart {
       hidden: this._hiddenItems.includes(f.id),
       selected: set.includes(f.id),
     }));
-    return html`<details class="fp3d-points fp3d-items">
-      <summary>${this.t("items_list")} (${items.length})</summary>
-      <fp3d-item-list
+    return this.sideFold("items", withRoom ? "floor" : "room", false, `${this.t("items_list")} (${items.length})`, "", 0, () => html`<fp3d-item-list
         .rows=${rows}
         .texts=${{ hide: this.t("item_hide"), show: this.t("item_show"), remove: this.t("delete") }}
         ?editable=${this.isEditor}
         @item-select=${(e: CustomEvent<{ id: string }>) => this.selectFromList(e.detail.id)}
         @item-hide=${(e: CustomEvent<{ id: string }>) => this.toggleItemHidden(e.detail.id)}
         @item-delete=${(e: CustomEvent<{ id: string }>) => void this.deleteFromList(e.detail.id)}
-      ></fp3d-item-list>
-    </details>`;
+      ></fp3d-item-list>`);
   }
 }

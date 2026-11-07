@@ -336,16 +336,13 @@ export class OpeningsPart {
   renderRoomOpenings(this: Fp3dEditor, room: Room) {
     const own = (this.floor?.openings ?? []).filter((o) => o.room_id === room.id);
     if (!own.length) return nothing;
-    return html`<details class="fp3d-points">
-      <summary>${this.t("room_openings")} (${own.length})</summary>
-      <div class="fp3d-room-list">
+    return this.sideFold("room-openings", room.id, false, `${this.t("room_openings")} (${own.length})`, "", 0, () => html`<div class="fp3d-room-list">
         ${own.map(
           (o) => html`<button class="fp3d-row" @click=${() => (this.selectItem("opening", o.id), this.renderRoot.querySelector(".fp3d-side")?.scrollTo(0, 0))}>
             <span>${this.t(`preset_${openingPreset(o)}` as I18nKey)}</span><span class="fp3d-muted">${this.m(o.width, 2)}</span>
           </button>`,
         )}
-      </div>
-    </details>`;
+      </div>`);
   }
 
   /** Whether an opening sits in an exterior wall (decides the automatic door style). */

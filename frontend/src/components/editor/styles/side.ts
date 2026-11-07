@@ -302,9 +302,6 @@ export const sideStyles = css`
         clip: rect(0 0 0 0);
         white-space: nowrap;
       }
-      .fp3d-measure-rect > summary {
-        margin-bottom: 8px;
-      }
       .fp3d-library {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
@@ -353,12 +350,6 @@ export const sideStyles = css`
       .fp3d-furn-sym .fp3d-sym-strong {
         stroke: var(--fp3d-accent);
         stroke-width: 2;
-      }
-      .fp3d-rack-elev summary {
-        cursor: pointer;
-        font-size: 13px;
-        color: var(--fp3d-muted, #9aa6ba);
-        margin: 6px 0;
       }
       /* the rack card's values (#120): one group per device, the value's kind, its entity and state */
       .fp3d-rack-card-group {

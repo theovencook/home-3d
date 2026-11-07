@@ -173,9 +173,15 @@ export class ItemFoldsPart {
         return this.renderPictureRules(f);
       case "energy":
         return this.renderEnergyFields(f);
-      case "taps":
+      case "taps": {
+        // Tap, Hold and Double tap behind one "Taps: Default" row (#413, MANY-6): rarely changed, so closed
+        const own = GESTURES.filter((g) => f.actions?.[g]).length;
         return html`${p.confirm && isElectric(f.type) && (!isLamp(f.type) || f.entity) ? html`<div class="fp3d-form">${this.confirmField(f)}</div>` : nothing}
-          ${this.renderItemActions(f.actions, f.entity && f.entity !== "none" ? f.entity : null, (a) => this.updateFurniture({ actions: a }))} ${this.renderShowWhen(f)}`;
+          ${this.sideFold("taps-gestures", f.id, false, this.t("taps_row"), own ? this.t("taps_own", { n: own }) : this.t("item_action_default"), own, () =>
+            this.renderItemActions(f.actions, f.entity && f.entity !== "none" ? f.entity : null, (a) => this.updateFurniture({ actions: a })),
+          )}
+          ${this.renderShowWhen(f)}`;
+      }
       case "more": {
         const electric = isElectric(f.type);
         const lamp = isLamp(f.type);

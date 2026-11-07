@@ -21,7 +21,7 @@ test("the form is a labelled section with a way back, the hint under the heading
   assert.ok(form.indexOf("fp3d-measure-back") < form.indexOf(`id="fp3d-measure-h"`));
   assert.ok(form.indexOf(`id="fp3d-measure-h"`) < form.indexOf("hint_measure"));
   assert.match(form, /this\.setTool\("select"\)/);
-  assert.match(form, /<details class="fp3d-measure-rect">/, "closed by default: no open attribute");
+  assert.match(form, /this\.sideFold\("rect-size", "", false,/, "the rectangle is the shared fold, closed by default (#413)");
 });
 
 test("order: length box, arrow pad (labelled group, labelled buttons), gap, Close room, then the walls", () => {
@@ -30,7 +30,7 @@ test("order: length box, arrow pad (labelled group, labelled buttons), gap, Clos
   assert.ok(at("fp3d-arrows") < at("fp3d-measure-gap"));
   assert.ok(at("fp3d-measure-gap") < at("measure_close"));
   assert.ok(at("measure_close") < at("fp3d-measure-list"));
-  assert.ok(at("fp3d-measure-list") < at("<details"));
+  assert.ok(at("fp3d-measure-list") < at("rect-size"));
   assert.match(form, /class="fp3d-arrows" role="group" aria-label=/);
   assert.match(form, /aria-label=\$\{this\.t\("measure_add_wall"/);
   assert.match(form, /\?disabled=\$\{!first\}[\s\S]*placeholder/, "the length box waits for the start point");

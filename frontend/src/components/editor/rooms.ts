@@ -173,9 +173,7 @@ export class RoomsPart {
               : nothing}`
         : nothing}
       <div class="fp3d-measure-sr" role="status" aria-live="polite">${status}</div>
-      <details class="fp3d-measure-rect">
-        <summary>${this.t("rect_by_size")}</summary>
-      <div class="fp3d-form">
+      ${this.sideFold("rect-size", "", false, this.t("rect_by_size"), "", 0, () => html`<div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
           >${this.t("room_name")}
           <input
@@ -196,8 +194,7 @@ export class RoomsPart {
         ${this.len(this.t("width"), this._rectSize[0], (v) => (this._rectSize = [Math.max(0.1, v), this._rectSize[1]]), 0.01, 0.1)}
         ${this.len(this.t("depth"), this._rectSize[1], (v) => (this._rectSize = [this._rectSize[0], Math.max(0.1, v)]), 0.01, 0.1)}
         <button class="fp3d-btn fp3d-wide" @click=${() => this.rectBySize()}>${this.t("rect_add")}</button>
-      </div>
-      </details>
+      </div>`)}
       <p class="fp3d-sub">${this.t("measure_hint")}</p>
     </section>`;
   }
@@ -642,9 +639,8 @@ export class RoomsPart {
       <p class="fp3d-sub" title=${this.t("room_area_net_hint")}>${this.t("room_area_net", { a: this.area(polygonArea(room.points)), n: this.area(netRoomArea(room, this.floor!, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior })) })}</p>
       ${this.renderRoomClimate(room)} ${this.renderRoomLive(room)} ${this.renderRoomOpenings(room)}
       ${this.renderItemsList(this.floor ? (itemsByRoom(this.floor.rooms, this.floor.furniture).get(room.id) ?? []) : [], false)}
-      <details class="fp3d-points" ?open=${!rect}>
-        <summary>${this.t("points")} (${room.points.length})</summary>
-        ${room.points.map(
+      ${this.sideFold("corners", room.id, !rect, `${this.t("points")} (${room.points.length})`, "", 0, () =>
+        room.points.map(
           (p, i) => html`<div class="fp3d-point ${i === this._vertex ? "fp3d-point-sel" : ""}">
             <span class="fp3d-muted">${i + 1}</span>
             ${this.len(this.t("x"), p[0], (v) => this.setPoint(i, 0, v))} ${this.len(this.t("z"), p[1], (v) => this.setPoint(i, 1, v))}
@@ -654,8 +650,8 @@ export class RoomsPart {
                 </button>`
               : nothing}
           </div>`,
-        )}
-      </details>
+        ),
+      )}
       ${this.renderModuleRoomFields(room)}
     </section>`;
   }
@@ -748,11 +744,11 @@ export class RoomsPart {
         .map(({ id, label }) => ({ id, label }));
       return this.entitySelect(label, room.live?.[key] ?? null, auto[0] ?? null, options, (v) => set(key, v));
     };
-    return html`<details class="fp3d-points" ?open=${chosen}>
-      <summary>${this.t("room_live")}</summary>
-      <div class="fp3d-form">${field("leak", this.t("room_live_leak"))} ${field("motion", this.t("room_live_motion"))}</div>
-      <p class="fp3d-sub">${this.t("room_live_hint")}</p>
-    </details>`;
+    const picked = Object.values(room.live ?? {}).filter((x): x is string => !!x);
+    return this.sideFold("room-live", room.id, chosen, this.t("room_live"), picked.map((id) => this.linkName(id)).join(" · ") || this.t("fold_auto"), picked.length, () =>
+      html`<div class="fp3d-form">${field("leak", this.t("room_live_leak"))} ${field("motion", this.t("room_live_motion"))}</div>
+        <p class="fp3d-sub">${this.t("room_live_hint")}</p>`,
+    );
   }
 
   /** Room climate: temperature, humidity and CO2 from chosen sensors, or picked automatically. */
@@ -777,12 +773,12 @@ export class RoomsPart {
         .map(({ id, label }) => ({ id, label }));
       return this.entitySelect(label, room.climate?.[key] ?? null, auto[0] ?? null, options, (v) => set(key, v));
     };
-    return html`<details class="fp3d-points" ?open=${chosen}>
-      <summary>${this.t("climate")}</summary>
-      <div class="fp3d-form">
-        ${field("temperature", this.t("climate_temperature"))} ${field("humidity", this.t("climate_humidity"))} ${field("co2", this.t("climate_co2"))}
-      </div>
-      <p class="fp3d-sub">${this.t("climate_hint")}</p>
-    </details>`;
+    const picked = Object.values(room.climate ?? {}).filter((x): x is string => !!x);
+    return this.sideFold("room-climate", room.id, chosen, this.t("climate"), picked.map((id) => this.linkName(id)).join(" · ") || this.t("fold_auto"), picked.length, () =>
+      html`<div class="fp3d-form">
+          ${field("temperature", this.t("climate_temperature"))} ${field("humidity", this.t("climate_humidity"))} ${field("co2", this.t("climate_co2"))}
+        </div>
+        <p class="fp3d-sub">${this.t("climate_hint")}</p>`,
+    );
   }
 }

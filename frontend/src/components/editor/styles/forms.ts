@@ -308,11 +308,6 @@ export const formStyles = css`
       .fp3d-found-row[data-missing] dd {
         color: var(--fp3d-muted);
       }
-      .fp3d-found-toggle {
-        justify-self: start;
-        min-height: 32px;
-        text-align: left;
-      }
       /* the colour rows (#410): one full-width row per part (name, hex field, finish chip); on a narrow panel the chip
          goes under the field rather than being cut */
       .fp3d-parts {
@@ -1328,7 +1323,6 @@ export const formStyles = css`
         .fp3d-settings-link,
         .fp3d-icon-btn,
         .fp3d-crumb,
-        .fp3d-found-toggle,
         .fp3d-part-row,
         .fp3d-part-finish,
         .fp3d-tile {

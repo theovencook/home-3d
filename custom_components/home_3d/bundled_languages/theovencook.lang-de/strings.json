@@ -3475,7 +3475,6 @@
  "live_home": "Zu Hause",
  "car_found": "{n} von {total} gefunden",
  "car_change_found": "Gefundenes ändern",
- "car_found_done": "Fertig",
  "car_not_found": "Nicht gefunden",
  "car_device_other": "Eine andere Entität des Autos",
  "tc_rect": "Rechteckiger Raum",
@@ -3496,5 +3495,7 @@
  "out_list": "Außenflächen",
  "out_ghost_ask": "{name} liegt auf {floor}. Dorthin wechseln, um es zu bearbeiten?",
  "out_ghost_go": "Zu {floor}",
- "tp_on_plan": "Im Plan ({n})"
+ "tp_on_plan": "Im Plan ({n})",
+ "fold_auto": "Automatisch gewählt",
+ "taps_row": "Tippen"
 }

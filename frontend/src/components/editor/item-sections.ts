@@ -98,6 +98,22 @@ export function resetFolds(): void {
   folds = {};
 }
 
+// ------------------------------------------------------------------ the folds of the other panels (room, floor, energy …)
+
+const sideFolds = new WeakMap<object, Map<string, boolean>>();
+
+/** Whether a fold of a room, floor or tool panel is open (#413): as it was left in this visit, else `dflt`. */
+export function sideFoldOpen(ed: object, key: string, dflt: boolean): boolean {
+  return sideFolds.get(ed)?.get(key) ?? dflt;
+}
+
+/** Opens or closes a fold of a room, floor or tool panel for this visit (#413). */
+export function setSideFold(ed: object, key: string, open: boolean): void {
+  let m = sideFolds.get(ed);
+  if (!m) sideFolds.set(ed, (m = new Map()));
+  m.set(key, open);
+}
+
 // ------------------------------------------------------------------ per selection: the menu, the help, the car's pickers
 
 interface PanelUi {
@@ -107,15 +123,13 @@ interface PanelUi {
   folds: Set<PanelFold>;
   help: string | null;
   found: boolean;
-  /** The colour rows show presets, materials and the active colour (the "Finishes and presets" link). */
-  finishes: boolean;
 }
 const ui = new WeakMap<object, PanelUi>();
 
 /** The panel's passing state for the chosen item; a new item starts closed. */
 export function panelUi(ed: object, id: string): PanelUi {
   let s = ui.get(ed);
-  if (!s || s.id !== id) ui.set(ed, (s = { id, menu: false, help: null, found: false, finishes: false, folds: new Set() }));
+  if (!s || s.id !== id) ui.set(ed, (s = { id, menu: false, help: null, found: false, folds: new Set() }));
   return s;
 }
 
@@ -278,6 +292,17 @@ export class ItemSectionsPart {
     </section>`;
   }
 
+  /**
+   * The same fold in the room, floor, outdoor, roof and energy panels (#413, CONS-5): the item panel's 44 px row with
+   * its title, summary and badge, never a `<details>`. `key` names it; `scope` (a room id …) keeps it apart per room;
+   * `dflt` is how it starts in this visit.
+   */
+  sideFold(this: Fp3dEditor, key: string, scope: string, dflt: boolean, title: string, summary: string, set: number, body: () => unknown) {
+    const k = scope ? `${key}:${scope}` : key;
+    const open = sideFoldOpen(this, k, dflt);
+    return this.foldRow(key, open, () => setSideFold(this, k, !open), title, summary, set, body);
+  }
+
   /** An entity's friendly name for a summary line, or "" for none. */
   linkName(this: Fp3dEditor, ref: unknown): string {
     if (typeof ref !== "string" || !ref || ref === "none" || !this.hass) return "";
@@ -331,16 +356,19 @@ export class ItemSectionsPart {
         })}
       </dl>
       ${this.isEditor
-        ? html`<button type="button" class="fp3d-link fp3d-found-toggle" aria-expanded=${s.found ? "true" : "false"} @click=${() => {
-            s.found = !s.found;
-            this.requestUpdate();
-          }}>${this.t(s.found ? "car_found_done" : "car_change_found")}</button>`
-        : nothing}
-      ${s.found
-        ? html`<div class="fp3d-form fp3d-links">
-            ${vehicle ? this.entitySelect(this.t("car_device_other"), car.device ?? null, undefined, any, (v) => set({ device: v === "none" ? null : v })) : nothing}
-            ${CAR_ROLES.map((r) => this.entitySelect(this.t(r.label), car[r.key] ?? null, auto[r.key], this.entityOptions(options[r.key], r.key), (v) => set({ [r.key]: v === "none" ? "none" : v })))}
-          </div>`
+        ? // the role pickers are a fold like every other (#413, CONS-5), no "Change" / "Done" link
+          this.foldRow(
+            "car-found",
+            s.found,
+            () => (s.found = !s.found),
+            this.t("car_change_found"),
+            "",
+            CAR_ROLES.filter((r) => car[r.key]).length + (vehicle && car.device ? 1 : 0),
+            () => html`<div class="fp3d-form fp3d-links">
+              ${vehicle ? this.entitySelect(this.t("car_device_other"), car.device ?? null, undefined, any, (v) => set({ device: v === "none" ? null : v })) : nothing}
+              ${CAR_ROLES.map((r) => this.entitySelect(this.t(r.label), car[r.key] ?? null, auto[r.key], this.entityOptions(options[r.key], r.key), (v) => set({ [r.key]: v === "none" ? "none" : v })))}
+            </div>`,
+          )
         : nothing}
     </section>`;
   }

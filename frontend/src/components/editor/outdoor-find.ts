@@ -84,17 +84,15 @@ export class OutdoorFindPart {
     if (!rows.length) return nothing;
     const list: ItemRow[] = rows.map((r) => ({ id: `${r.floor}:${r.id}`, name: r.name, note: r.note, hidden: this._hiddenItems.includes(r.id), selected: r.selected }));
     const split = (e: CustomEvent<{ id: string }>) => e.detail.id.split(":") as [string, string];
-    return html`<details class="fp3d-points fp3d-items fp3d-out-list" ?open=${this.outdoorListOpen} @toggle=${(e: Event) => (this.outdoorListOpen = (e.currentTarget as HTMLDetailsElement).open)}>
-      <summary>${this.t("out_list")} (${rows.length})</summary>
-      <fp3d-item-list
+    const open = this.outdoorListOpen;
+    return this.foldRow("out-list", open, () => (this.outdoorListOpen = !open), `${this.t("out_list")} (${rows.length})`, "", 0, () => html`<fp3d-item-list
         .rows=${list}
         .texts=${{ hide: this.t("item_hide"), show: this.t("item_show"), remove: this.t("delete") }}
         ?editable=${this.isEditor}
         @item-select=${(e: CustomEvent<{ id: string }>) => this.goToOutdoor(...split(e))}
         @item-hide=${(e: CustomEvent<{ id: string }>) => this.toggleItemHidden(split(e)[1])}
         @item-delete=${(e: CustomEvent<{ id: string }>) => this.goToOutdoor(...split(e)) && void this.deleteOutdoor()}
-      ></fp3d-item-list>
-    </details>`;
+      ></fp3d-item-list>`);
   }
 
   /** The floors below: their outdoor areas, faint, on this floor's plan (the garden seen from upstairs). */

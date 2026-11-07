@@ -401,9 +401,8 @@ export class FloorsPart {
 
   renderBackgroundForm(this: Fp3dEditor, floor: Floor) {
     const bg = floor.background;
-    return html`<details class="fp3d-section" ?open=${this._bgOpen} @toggle=${(e: Event) => (this._bgOpen = (e.target as HTMLDetailsElement).open)}>
-      <summary>${this.t("background")}</summary>
-      <div class="fp3d-form">
+    const open = this._bgOpen;
+    return this.foldRow("background", open, () => (this._bgOpen = !open), this.t("background"), "", bg ? 1 : 0, () => html`<div class="fp3d-form">
         <label class="fp3d-btn fp3d-wide fp3d-upload"
           >${this.t("background_upload")}<input type="file" accept="image/png,image/jpeg,image/webp" @change=${this.uploadBackground}
         /></label>
@@ -459,7 +458,6 @@ export class FloorsPart {
               /></label>
               <button class="fp3d-btn fp3d-danger fp3d-wide" @click=${() => this.updateFloor({ background: null })}>${this.t("background_remove")}</button>`
           : nothing}
-      </div>
-    </details>`;
+      </div>`);
   }
 }
