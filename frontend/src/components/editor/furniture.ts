@@ -24,6 +24,7 @@ import { MAX_MOUNT_Y, round, isEnergyDevice, EN_HASS, type PlaceTarget } from ".
 import type { Fp3dEditor } from "../editor.ts";
 import { need, loadLibrary, loadPackBrowser } from "./lazy.ts";
 import { itemShown } from "../../show-when.ts";
+import { rememberFromPin } from "./from-pin.ts";
 
 /** FurniturePart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class FurniturePart {
@@ -109,6 +110,7 @@ export class FurniturePart {
       f.placements = f.placements.filter((p) => p.entity_id !== pl.entity_id);
       f.furniture.push(item);
     });
+    rememberFromPin(item.id);
     this._deviceId = null;
     this.selectItem("furniture", item.id);
   }

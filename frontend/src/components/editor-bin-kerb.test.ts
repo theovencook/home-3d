@@ -24,10 +24,10 @@ test("a selected bin shows Set kerb spot before its shape, colours and collectio
   assert.ok(at("Set kerb spot") > 0, "the button is there");
   for (const later of ["Waste calendar or sensor", "Word in the calendar", "Shape"]) assert.ok(at("Set kerb spot") < at(later), `before "${later}"`);
   assert.equal(out.split("fp3d-kerb-btn").length - 1, 1, "one button, not two");
-  // a bin with a spot offers Move and Remove
+  // a bin with a spot offers Move and Delete (one word for it, #408)
   ed.updateFurniture({ bin_kerb: { x: 3, z: 4 } });
   const set = flat(ed.renderFurnitureForm(ed.furnitureItem));
-  assert.ok(set.includes("Move kerb spot") && set.includes("Remove"));
+  assert.ok(set.includes("Move kerb spot") && set.includes("Delete"));
 });
 
 test("the kerb spot is not on other items (#226)", async () => {

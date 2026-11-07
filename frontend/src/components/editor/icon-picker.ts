@@ -53,7 +53,8 @@ export class IconPicker extends LitElement {
     super();
     this.disabled = false;
     this.label = "";
-    this.placeholder = "mdi:thermometer";
+    // no example icon of another kind (#408): the editor passes the one the thing's kind suggests, or none
+    this.placeholder = "";
     this.searchText = "Search icons";
     this.noneText = "No icon of that name. You can still type it above.";
     this._open = false;

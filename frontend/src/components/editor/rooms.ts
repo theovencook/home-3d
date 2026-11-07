@@ -556,9 +556,18 @@ export class RoomsPart {
           { label: this.t("spots_place"), run: () => this.openSpotForm(room) },
           { label: this.t("duplicate"), keys: ["Ctrl+D"], run: () => this.duplicateRoom() },
           this.pasteAction(),
+          // the id a card's room: option takes, out of the form (#408, WORD-12)
+          {
+            label: this.t("room_id_copy"),
+            run: () => {
+              void navigator.clipboard?.writeText(room.id).catch(() => undefined);
+              this._notice = this.t("room_id_copied", { id: room.id });
+            },
+          },
           { label: this.t("delete"), keys: ["Del"], danger: true, run: () => this.deleteRoom() },
         ],
       })}
+      ${this._notice ? html`<p class="fp3d-sub fp3d-notice" role="status">${this._notice}</p>` : nothing}
       ${this.renderResizeNote(room)}
       ${this._spots ? this.renderSpotForm(room) : nothing}
       ${this._packages
@@ -585,7 +594,7 @@ export class RoomsPart {
         >
         <label class="fp3d-field fp3d-wide" title=${this.t("aliases_hint")}
           >${this.t("aliases")}
-          <input type="text" maxlength="240" .value=${(room.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.t("aliases_placeholder")} @change=${(e: Event) => this.updateRoom({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
+          <input type="text" maxlength="240" .value=${(room.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.aliasPlaceholder(room.name, true)} @change=${(e: Event) => this.updateRoom({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
         /></label>
         <label class="fp3d-check fp3d-wide" title=${this.t("room_hide_hint")}
           ><input type="checkbox" .checked=${room.hide_in_picker === true} ?disabled=${!admin} @change=${(e: Event) => this.updateRoom({ hide_in_picker: (e.target as HTMLInputElement).checked ? true : undefined })} />
@@ -631,7 +640,6 @@ export class RoomsPart {
         ${room.start_view ? html`<button class="fp3d-btn" title=${this.t("room_start_view_reset")} ?disabled=${!admin} @click=${() => this.updateRoom({ start_view: null })}>↺</button>` : nothing}
       </div>
       <p class="fp3d-sub" title=${this.t("room_area_net_hint")}>${this.t("room_area_net", { a: this.area(polygonArea(room.points)), n: this.area(netRoomArea(room, this.floor!, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior })) })}</p>
-      <p class="fp3d-sub fp3d-room-id">${this.t("room_id")} <code title=${this.t("license_copy")} @click=${() => void navigator.clipboard?.writeText(room.id).catch(() => undefined)}>${room.id}</code></p>
       ${this.renderRoomClimate(room)} ${this.renderRoomLive(room)} ${this.renderRoomOpenings(room)}
       ${this.renderItemsList(this.floor ? (itemsByRoom(this.floor.rooms, this.floor.furniture).get(room.id) ?? []) : [], false)}
       <details class="fp3d-points" ?open=${!rect}>

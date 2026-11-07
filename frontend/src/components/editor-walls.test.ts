@@ -38,7 +38,8 @@ test("the Walls section sits near the top of the room panel, before ceiling, are
   const panel = flat(el.renderRoomForm(el.room, []));
   const walls = panel.indexOf('<details class="fp3d-edge-box"');
   assert.ok(walls > 0, "the Walls section is a collapsible <details>");
-  assert.ok(walls < panel.indexOf("fp3d-room-id"));
+  // the room ID line left the form for the header's "⋯" (#408); the rest still follows the walls
+  assert.ok(walls < panel.indexOf('<details class="fp3d-points"'), "before the corners and the room's other folds");
   assert.ok(walls < panel.indexOf(el.t("room_ceiling_hint")));
 });
 

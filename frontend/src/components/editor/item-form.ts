@@ -86,6 +86,17 @@ export class ItemFormPart {
     });
   }
 
+  /**
+   * The "Other names" placeholder from the thing's own name (#408, WORD-5): "e.g. the Leaf" for a Nissan Leaf, not a TV
+   * example on every item. The last word of the name; a catalogue name of one word in lower case ("the sofa").
+   */
+  aliasPlaceholder(this: Fp3dEditor, name: string, own: boolean): string {
+    const words = name.trim().split(/\s+/).filter(Boolean);
+    const last = words.at(-1);
+    if (!last) return "";
+    return this.t("aliases_placeholder_of", { name: words.length === 1 && !own ? last.toLocaleLowerCase(this.hass?.language) : last });
+  }
+
   /** One field (or a few that belong together) of the item panel, in the order of furnitureFields (#70). */
   furnitureField(this: Fp3dEditor, f: Furniture, field: FurnitureField) {
     const admin = this.isEditor;
@@ -140,7 +151,7 @@ export class ItemFormPart {
         return this.withInfo(
           html`<label class="fp3d-field"
             >${this.t("aliases")}
-            <input type="text" maxlength="240" .value=${(f.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.t("aliases_placeholder")} @change=${(e: Event) => this.updateFurniture({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
+            <input type="text" maxlength="240" .value=${(f.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.aliasPlaceholder(this.itemTitle(f), !!f.name)} @change=${(e: Event) => this.updateFurniture({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
           /></label>`,
           "aliases_hint",
           this.t("aliases"),
@@ -174,15 +185,16 @@ export class ItemFormPart {
 
   /** The floor the chosen item (block, multi selection) stands on: picking another moves it there (#73). */
   renderItemFloor(this: Fp3dEditor) {
+    // "On floor": the storey it stands on, not a room's floor finish (#408, WORD-10)
     return this.withInfo(
       html`<label class="fp3d-field"
-        >${this.t("floor")}
+        >${this.t("item_on_floor")}
         <select ?disabled=${!this.isEditor} @change=${(e: Event) => this.moveSelectionToFloor((e.target as HTMLSelectElement).value)}>
           ${[...this._doc.floors].reverse().map((fl) => html`<option value=${fl.id} ?selected=${fl.id === this._floorId}>${fl.name}</option>`)}
         </select></label
       >`,
       "item_floor_hint",
-      this.t("floor"),
+      this.t("item_on_floor"),
     );
   }
 

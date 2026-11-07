@@ -214,21 +214,24 @@ export class FieldsPart {
     /></label>`;
   }
 
-  /** An own symbol for the marker (a Material Design icon name), with a preview. */
-  iconInput(this: Fp3dEditor, value: string | null | undefined, onChange: (v: string | null) => void) {
+  /**
+   * An own symbol for the marker (a Material Design icon name), with a preview. `placeholder`: the icon the thing's
+   * kind suggests ("mdi:car"), else none (#408, WORD-5: not a thermometer on every item).
+   */
+  iconInput(this: Fp3dEditor, value: string | null | undefined, onChange: (v: string | null) => void, placeholder = "") {
     const name = value ? (value.startsWith("mdi:") ? value : `mdi:${value}`) : "";
     // the picker (#327) is a lazy chunk; until it is there the plain text box does the job
     need(loadIconPicker);
     if (customElements.get("fp3d-icon-picker"))
       return html`<div class="fp3d-field fp3d-wide" title=${this.t("marker_icon_hint")}>
         ${this.t("marker_icon")}
-        <fp3d-icon-picker .value=${value ?? null} .hass=${this.hass} .label=${this.t("marker_icon")} .searchText=${this.t("icon_search")} .noneText=${this.t("icon_none")} .disabled=${!this.isEditor} @icon-change=${(e: CustomEvent<{ value: string | null }>) => onChange(e.detail.value)}></fp3d-icon-picker>
+        <fp3d-icon-picker .value=${value ?? null} .hass=${this.hass} .label=${this.t("marker_icon")} .placeholder=${placeholder} .searchText=${this.t("icon_search")} .noneText=${this.t("icon_none")} .disabled=${!this.isEditor} @icon-change=${(e: CustomEvent<{ value: string | null }>) => onChange(e.detail.value)}></fp3d-icon-picker>
       </div>`;
     void customElements.whenDefined("fp3d-icon-picker").then(() => this.requestUpdate());
     return html`<label class="fp3d-field fp3d-wide" title=${this.t("marker_icon_hint")}
       >${this.t("marker_icon")}
       <span class="fp3d-icon-row">
-        <input type="text" placeholder="mdi:thermometer" .value=${value ?? ""} ?disabled=${!this.isEditor} @change=${(e: Event) => onChange((e.target as HTMLInputElement).value.trim().replace(/^mdi:/, "") || null)} />
+        <input type="text" placeholder=${placeholder} .value=${value ?? ""} ?disabled=${!this.isEditor} @change=${(e: Event) => onChange((e.target as HTMLInputElement).value.trim().replace(/^mdi:/, "") || null)} />
         ${name ? unsafeHTML(`<ha-icon icon="${name.replace(/[^a-z0-9:-]/gi, "")}"></ha-icon>`) : nothing}
       </span></label
     >`;

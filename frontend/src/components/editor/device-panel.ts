@@ -291,7 +291,7 @@ export class DevicePanelPart {
               >${this.renderCameraModel(pl)}`
             : nothing}
         ${this.len(this.t("x"), pl.x, (v) => this.updateDevice({ x: v }))} ${this.len(this.t("z"), pl.z, (v) => this.updateDevice({ z: v }))}
-        ${this.len(this.t("marker_height"), pl.y ?? auto, (v) => this.updateDevice({ y: Math.max(0, v) }), 0.05, 0)}
+        ${this.len(this.t("mount_height"), pl.y ?? auto, (v) => this.updateDevice({ y: Math.max(0, v) }), 0.05, 0)}
         ${this.num(this.t("rotation"), pl.rotation ?? 0, (v) => this.updateDevice({ rotation: ((v % 360) + 360) % 360 }), 1)}
         ${kind === "camera"
           ? html`${this.num(this.t("camera_fov"), pl.fov ?? (pl.mount === "ceiling" ? 360 : 90), (v) => this.updateDevice({ fov: Math.min(360, Math.max(10, v)) }), 5, 10)}
@@ -319,12 +319,12 @@ export class DevicePanelPart {
         ${powerSensorFor(this.hass!, pl.entity_id) ? this.wireEnergySelect(pl.energy ?? null, powerSensorFor(this.hass!, pl.entity_id)!, (v) => this.updateDevice({ energy: v })) : nothing}
         ${this.markerSelect(pl.marker ?? null, (v) => this.updateDevice({ marker: v }))}
         <label class="fp3d-field fp3d-wide" title=${this.t("device_name_hint")}
-          >${this.t("device_name")}
+          >${this.t("furn_name")}
           <input type="text" .value=${pl.name ?? ""} ?disabled=${!admin} maxlength="60" placeholder=${entityName(this.hass!, pl.entity_id)} @change=${(e: Event) => this.updateDevice({ name: (e.target as HTMLInputElement).value.trim() || null })}
         /></label>
         <label class="fp3d-field fp3d-wide" title=${this.t("aliases_hint")}
           >${this.t("aliases")}
-          <input type="text" maxlength="240" .value=${(pl.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.t("aliases_placeholder")} @change=${(e: Event) => this.updateDevice({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
+          <input type="text" maxlength="240" .value=${(pl.aliases ?? []).join(", ")} ?disabled=${!admin} placeholder=${this.aliasPlaceholder(pl.name || entityName(this.hass!, pl.entity_id), !!pl.name)} @change=${(e: Event) => this.updateDevice({ aliases: splitAliases((e.target as HTMLInputElement).value) })}
         /></label>
         ${pl.name
           ? html`<label class="fp3d-check fp3d-wide"
@@ -332,7 +332,7 @@ export class DevicePanelPart {
               ${this.t("show_name")}</label
             >`
           : nothing}
-        ${this.iconInput(pl.icon, (v) => this.updateDevice({ icon: v }))}
+        ${this.iconInput(pl.icon, (v) => this.updateDevice({ icon: v }), String(this.hass?.states[pl.entity_id]?.attributes.icon ?? ""))}
         ${this.renderAsFurniture(pl)}
       </div>
       ${this.renderItemActions(pl.actions, pl.entity_id, (a) => this.updateDevice({ actions: a }))}

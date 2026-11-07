@@ -19,6 +19,22 @@ import type { Fp3dEditor } from "../editor.ts";
 /** Pack families and tags of a circuit monitor or a CT clamp (the double-count warning only means something with one). */
 const CIRCUIT_MONITOR = /(circuit|ct_clamp|ct clamp|consumer_unit|consumer unit|emporia|shelly_em|shelly em|iotawatt|energy monitor)/i;
 
+/** The icon an item's kind suggests (#408, WORD-5): the placeholder of its own icon; none where no one icon fits. */
+export function kindIcon(kind: ItemProfile["kind"]): string {
+  const icons: Partial<Record<ItemProfile["kind"], string>> = {
+    car: "mdi:car",
+    parking: "mdi:car",
+    lamp: "mdi:lamp",
+    screen: "mdi:television",
+    bed: "mdi:bed",
+    seating: "mdi:sofa",
+    energy: "mdi:lightning-bolt",
+    switch: "mdi:power-socket",
+    stairs: "mdi:stairs",
+  };
+  return icons[kind] ?? "";
+}
+
 /** ItemFoldsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class ItemFoldsPart {
   /** The item panel (#396, #397): header, Position, the kind's main section, then its closed folds. */
@@ -139,7 +155,6 @@ export class ItemFoldsPart {
 
   /** The fields inside an open fold. */
   foldBody(this: Fp3dEditor, f: Furniture, p: ItemProfile, fold: PanelFold) {
-    const admin = this.isEditor;
     switch (fold) {
       case "appearance":
         return html`<div class="fp3d-form">${this.furnitureField(f, "type")}${this.renderModelSelect(f)}</div>
@@ -168,15 +183,9 @@ export class ItemFoldsPart {
               ? this.entitySelect(this.t("furn_extra"), f.extra ?? null, undefined, this.entityOptions((id) => id.startsWith("sensor.")), (v) => this.updateFurniture({ extra: v === "none" ? null : v }))
               : nothing}
             ${p.glow && !p.folds.includes("glow") ? html`<div class="fp3d-form fp3d-links fp3d-wide">${this.renderStateLinks(f, p)}</div>` : nothing}
-            ${electric && (!lamp || f.entity) ? html`${this.markerSelect(f.marker ?? null, (v) => this.updateFurniture({ marker: v }))}${this.iconInput(f.icon, (v) => this.updateFurniture({ icon: v }))}` : nothing}
+            ${electric && (!lamp || f.entity) ? html`${this.markerSelect(f.marker ?? null, (v) => this.updateFurniture({ marker: v }))}${this.iconInput(f.icon, (v) => this.updateFurniture({ icon: v }), kindIcon(p.kind))}` : nothing}
           </div>
-          ${p.consumable && electric ? this.renderServiceFields(f) : nothing}
-          ${admin && f.entity && f.entity !== "none" && f.type !== "parking"
-            ? html`<div class="fp3d-actions"><button class="fp3d-btn" @click=${() => this.furnitureToDevice(f)}>${this.t("as_device")}</button>${this.infoButton("as_device_hint", this.t("as_device"))}</div>`
-            : nothing}
-          ${admin && isVehicleItem(f.type) && f.type.startsWith("pack:")
-            ? html`<div class="fp3d-actions"><button class="fp3d-btn" @click=${() => this.vehicleToSpot(f)}>🅿 ${this.t("vehicle_to_spot")}</button>${this.infoButton("vehicle_to_spot_hint", this.t("vehicle_to_spot"))}</div>`
-            : nothing}`;
+          ${p.consumable && electric ? this.renderServiceFields(f) : nothing}`;
       }
     }
   }

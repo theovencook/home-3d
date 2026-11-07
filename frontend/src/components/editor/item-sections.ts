@@ -14,6 +14,8 @@ import { type CarLinks, type Furniture } from "../../model.ts";
 import { numberish, binaryish } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 import { stateChip, type PanelAction } from "./panel-head.ts";
+import { madeFromPin } from "./from-pin.ts";
+import { isVehicleItem } from "../../furniture-links.ts";
 
 /** Small line icons of the item panel (24 x 24, stroke = currentColor), decorative: the buttons carry the names. */
 const ICONS = {
@@ -189,8 +191,11 @@ export class ItemSectionsPart {
       { label: this.t("duplicate"), keys: ["Ctrl+D"], run: () => this.duplicateFurniture() },
       { label: this.t("copy_items"), keys: ["Ctrl+C"], run: () => this.copySelection() },
       { label: this.t("wall_view"), run: () => this.openWallViewFor(f) },
+      // the kind's own changes (#408, WORD-11): back to the pin only for an item made from one; a car becomes a spot
+      this.isEditor && madeFromPin(f.id) && !!f.entity && f.entity !== "none" && f.type !== "parking" ? { label: this.t("as_device"), run: () => this.furnitureToDevice(f) } : null,
+      this.isEditor && isVehicleItem(f.type) && f.type.startsWith("pack:") ? { label: this.t("vehicle_to_spot"), run: () => this.vehicleToSpot(f) } : null,
       { label: this.t("delete"), keys: ["Del"], danger: true, run: () => void this.deleteFurniture() },
-    ];
+    ].filter((a): a is PanelAction => !!a);
   }
 
   /** The header's "⋯" menu of an item (the shared panel menu, #409). */
