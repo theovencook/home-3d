@@ -6,6 +6,8 @@
 // - `colour-change` once per change (the swatch's picker closed, a hex value entered or pasted): one undo step;
 // - `colour-input` for every change, and while the swatch's picker is dragged: for hosts that preview live.
 // Both carry `detail.value`: "#rrggbb", or null when a clearable field is emptied.
+// With `menu` set (the item panel's colour rows, #410), the swatch is a button that sends `colour-menu` instead of
+// opening the browser's picker: the host opens its own popover (presets, finish) and says so by `expanded`.
 // Its code goes into several bundles (editor, Settings, View panel, card editor), so it is kept small: the styles are
 // written compactly and use the host's colour tokens (--fp3d-*), which reach into the field, with plain fallbacks
 // (the card editor has no tokens).
@@ -23,6 +25,8 @@ export class ColourField extends LitElement {
     t: { attribute: false },
     disabled: { type: Boolean, reflect: true },
     clearable: { type: Boolean },
+    menu: { type: Boolean },
+    expanded: { type: Boolean },
     draft: { state: true },
     invalid: { state: true },
     copied: { state: true },
@@ -42,6 +46,10 @@ export class ColourField extends LitElement {
   declare disabled: boolean;
   /** Emptying the hex field clears the colour (null); otherwise an empty field goes back to the colour. */
   declare clearable: boolean;
+  /** The swatch opens the host's popover (`colour-menu`) instead of the browser's picker. */
+  declare menu: boolean;
+  /** The host's popover is open (the swatch button says so). */
+  declare expanded: boolean;
   /** The text typed and not yet entered; null while the field shows the value. */
   declare draft: string | null;
   declare invalid: boolean;
@@ -56,6 +64,8 @@ export class ColourField extends LitElement {
     this.t = null;
     this.disabled = false;
     this.clearable = false;
+    this.menu = false;
+    this.expanded = false;
     this.draft = null;
     this.invalid = false;
     this.copied = false;
@@ -152,6 +162,12 @@ export class ColourField extends LitElement {
     this.send(hex, done);
   }
 
+  /** The swatch as a button that asks the host for its popover. */
+  private swatchButton(cls: string, shown: string, dflt: boolean) {
+    // prettier-ignore
+    return html`<button type="button" class=${`${cls} sb`} aria-label=${this.label} aria-haspopup="true" aria-expanded=${this.expanded ? "true" : "false"} title=${dflt ? this.text("colour_default") : nothing} ?disabled=${this.disabled} @click=${() => this.dispatchEvent(new CustomEvent("colour-menu", { detail: { value: this.hex || null }, bubbles: true, composed: true }))}><span style=${`background:${shown || "#808080"}`}></span></button>`;
+  }
+
   private onKey(e: KeyboardEvent): void {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -182,12 +198,13 @@ export class ColourField extends LitElement {
     const copy = this.text("colour_copy_of");
     const hexName = dflt ? `${this.text("colour_hex_of")} (${this.text("colour_default")})` : this.text("colour_hex_of");
     const off = this.disabled;
+    const sw =hex ? "sw" : dflt ? "sw dflt" : "sw unset";
     // prettier-ignore
-    return html`<span class="cf" role="group" aria-label=${label}><input type="color" class=${hex ? "sw" : dflt ? "sw dflt" : "sw unset"} aria-label=${label} title=${dflt ? this.text("colour_default") : nothing} .value=${shown || "#808080"} ?disabled=${off} @input=${(e: Event) => this.onSwatch(e, false)} @change=${(e: Event) => this.onSwatch(e, true)}><input class=${dflt ? "hex dflt" : "hex"} maxlength="24" spellcheck="false" autocomplete="off" placeholder="#rrggbb" aria-label=${hexName} title=${dflt ? this.text("colour_default") : nothing} aria-invalid=${this.invalid ? "true" : "false"} aria-describedby=${this.invalid ? "err" : nothing} .value=${this.draft ?? shown} ?disabled=${off} @focus=${(e: Event) => (e.target as HTMLInputElement).select()} @input=${(e: Event) => (this.draft = (e.target as HTMLInputElement).value)} @keydown=${this.onKey} @paste=${this.onPaste} @change=${(e: Event) => this.commit((e.target as HTMLInputElement).value)}><button type="button" class="cp" title=${copy} aria-label=${copy} ?disabled=${!shown} @click=${this.copy}>${this.copied ? "✓" : "⧉"}</button><span class="sr" aria-live="polite">${this.copied ? this.text("colour_copied") : ""}</span>${this.invalid ? html`<span id="err" class="err" role="alert">${this.text("colour_invalid")}</span>` : nothing}</span>`;
+    return html`<span class="cf" role="group" aria-label=${label}>${this.menu ? this.swatchButton(sw, shown, dflt) : html`<input type="color" class=${sw} aria-label=${label} title=${dflt ? this.text("colour_default") : nothing} .value=${shown || "#808080"} ?disabled=${off} @input=${(e: Event) => this.onSwatch(e, false)} @change=${(e: Event) => this.onSwatch(e, true)}>`}<input class=${dflt ? "hex dflt" : "hex"} maxlength="24" spellcheck="false" autocomplete="off" placeholder="#rrggbb" aria-label=${hexName} title=${dflt ? this.text("colour_default") : nothing} aria-invalid=${this.invalid ? "true" : "false"} aria-describedby=${this.invalid ? "err" : nothing} .value=${this.draft ?? shown} ?disabled=${off} @focus=${(e: Event) => (e.target as HTMLInputElement).select()} @input=${(e: Event) => (this.draft = (e.target as HTMLInputElement).value)} @keydown=${this.onKey} @paste=${this.onPaste} @change=${(e: Event) => this.commit((e.target as HTMLInputElement).value)}><button type="button" class="cp" title=${copy} aria-label=${copy} ?disabled=${!shown} @click=${this.copy}>${this.copied ? "✓" : "⧉"}</button><span class="sr" aria-live="polite">${this.copied ? this.text("colour_copied") : ""}</span>${this.invalid ? html`<span id="err" class="err" role="alert">${this.text("colour_invalid")}</span>` : nothing}</span>`;
   }
 
   // prettier-ignore
-  static styles = css`:host{display:inline-block;min-width:0;max-width:100%}.cf{display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;max-width:100%}input,button{box-sizing:border-box;height:30px;border:1px solid var(--fp3d-line,#8888);border-radius:7px;font:inherit;color:var(--fp3d-text,inherit)}.sw{flex:none;width:30px;padding:2px;background:none;cursor:pointer}.sw::-webkit-color-swatch-wrapper{padding:0}.sw::-webkit-color-swatch{border:none;border-radius:5px}.unset{opacity:.35}.dflt{border-style:dashed}.hex.dflt{color:var(--fp3d-muted,#888);font-style:italic}.hex{flex:none;width:calc(7ch + 8px);min-width:0;padding:0 3px;font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--fp3d-bg2,transparent)}.hex::placeholder{color:var(--fp3d-muted,#888)}.hex[aria-invalid=true]{border-color:var(--fp3d-danger,#ff6b6b)}.cp{flex:none;width:20px;padding:0;border:none;background:none;color:var(--fp3d-muted,#888);font-size:14px;cursor:pointer}.cp:hover:not(:disabled){color:var(--fp3d-accent,#37e0ff)}.cp:disabled{opacity:.35;cursor:default}:focus-visible{outline:2px solid var(--fp3d-accent,#37e0ff);outline-offset:1px}:host([disabled]) input{opacity:.5;cursor:default}.err{flex-basis:100%;font-size:11px;line-height:1.3;color:var(--fp3d-danger,#ff6b6b)}.sr{position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}`;
+  static styles = css`:host{display:inline-block;min-width:0;max-width:100%}.cf{display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;max-width:100%}input,button{box-sizing:border-box;height:30px;border:1px solid var(--fp3d-line,#8888);border-radius:7px;font:inherit;color:var(--fp3d-text,inherit)}.sw{flex:none;width:30px;padding:2px;background:none;cursor:pointer}.sw::-webkit-color-swatch-wrapper{padding:0}.sw::-webkit-color-swatch{border:none;border-radius:5px}.sb span{display:block;width:100%;height:100%;border-radius:5px}.sb[aria-expanded=true]{border-color:var(--fp3d-accent,#37e0ff)}.unset{opacity:.35}.dflt{border-style:dashed}.hex.dflt{color:var(--fp3d-muted,#888);font-style:italic}.hex{flex:none;width:calc(7ch + 8px);min-width:0;padding:0 3px;font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--fp3d-bg2,transparent)}.hex::placeholder{color:var(--fp3d-muted,#888)}.hex[aria-invalid=true]{border-color:var(--fp3d-danger,#ff6b6b)}.cp{flex:none;width:20px;padding:0;border:none;background:none;color:var(--fp3d-muted,#888);font-size:14px;cursor:pointer}.cp:hover:not(:disabled){color:var(--fp3d-accent,#37e0ff)}.cp:disabled{opacity:.35;cursor:default}:focus-visible{outline:2px solid var(--fp3d-accent,#37e0ff);outline-offset:1px}:host([disabled]) input{opacity:.5;cursor:default}.err{flex-basis:100%;font-size:11px;line-height:1.3;color:var(--fp3d-danger,#ff6b6b)}.sr{position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}`;
 }
 
 defineElement("fp3d-colour-field", ColourField);

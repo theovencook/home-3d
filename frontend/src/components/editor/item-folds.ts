@@ -4,7 +4,8 @@
 
 import { html, nothing } from "lit";
 import { energySensorFor } from "../../wire-ends.ts";
-import { COLOUR_PRESETS, itemColourRoles, roleColour } from "../../colour-roles.ts";
+import { itemColourRoles, roleColour } from "../../colour-roles.ts";
+import { presetKey } from "../../colour-parts.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { type I18nKey } from "../../i18n.ts";
 import { itemProfile, type ItemProfile, type PanelFold } from "../../item-profile.ts";
@@ -92,11 +93,12 @@ export class ItemFoldsPart {
         const roles = itemColourRoles(f.type);
         const own = roles.map((r) => roleColour(f.colors, r)).filter((c): c is string => !!c);
         const names = own.map((hex) => {
-          const preset = COLOUR_PRESETS.find((x) => x.hex === hex);
-          return preset ? this.t(`colour_preset_${preset.id}` as I18nKey) : this.t("colour_own");
+          const key = presetKey(hex);
+          return key ? this.t(key as I18nKey) : this.t("colour_own");
         });
         const materials = Object.keys(f.materials ?? {}).length;
-        const set = own.length + materials + (f.active_color ? 1 : 0) + (f.variant && !isVehicleItem(f.type) ? 1 : 0);
+        // the glow colour is with the link now (#410), not a part
+        const set = own.length + materials + (f.variant && !isVehicleItem(f.type) ? 1 : 0);
         return [join([furnitureName(this.hass, f.type), ...[...new Set(names)]]), set];
       }
       case "size": {

@@ -14,8 +14,9 @@ import { furnitureFootprint } from "../../model.ts";
 import { formatNumber, type I18nKey } from "../../i18n.ts";
 import { type FurnitureField } from "../../item-panel.ts";
 import { gangPlateWidth, gangsOf, splitAliases, MAX_GANGS, TECH_SIZE, type Gang, isLamp, pointInPolygon, polygonArea, uid, type Furniture, type ShowInterval, type ShowWhen, type ScreenPicture, clearFirstState } from "../../model.ts";
-import { COLOUR_PRESETS, PAINT_COLOURS, itemColourRoles, itemRoleColour, parseHex, roleColour, setRoleColour, type ColourRole } from "../../colour-roles.ts";
-import { MATERIALS, ownMaterial, setRoleMaterial, usualMaterial, type Material } from "../../role-materials.ts";
+import { itemColourRoles, itemRoleColour, parseHex, roleColour, setRoleColour, type ColourRole } from "../../colour-roles.ts";
+import { familyPresets, partFamily, partFinishes, partName, partOrder } from "../../colour-parts.ts";
+import { ownMaterial, setRoleMaterial, usualMaterial, type Material } from "../../role-materials.ts";
 import { furnitureName } from "../../furniture-names.ts";
 import { itemTempSource, shadeKind } from "../../room-effects.ts";
 import { energyRole, isElectric, isRobotVacuum, mountBase, packInfo, packItemName, packMotion, packName, packType } from "../../packs.ts";
@@ -30,11 +31,21 @@ import { shownLook } from "../../ha-theme.ts";
 import "../colour-field.ts";
 import { loadItemPicker, need } from "./lazy.ts";
 import { itemProfile, type ItemProfile } from "../../item-profile.ts";
-import { panelUi } from "./item-sections.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** The colour an item shown "only in this colour" starts with. */
 const ONLY_COLOUR_DEFAULT = "#ffd400";
+
+/** The glow an item shows while its entity is active, without a glow colour of its own (view3d.ts: the neon cyan). */
+const GLOW_DEFAULT = "#38e0ff";
+
+/** The open part popover of the item panel (#410), per editor: which item's which part. */
+const openParts = new WeakMap<object, { id: string; role: ColourRole }>();
+
+/** The colour a part has without one of its own: the pack item's (a car's colourway, #404), else its role's in the look. */
+function partBase(f: Furniture, role: ColourRole, look: Theme): string | null {
+  return itemRoleColour(f.type, role) ?? roleInLook(role, look);
+}
 
 /** ItemFormPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 /** The look this device shows the 3D view in (the View tab's, #403): a part's default colour is its role's colour there. */
@@ -351,109 +362,126 @@ export class ItemFormPart {
   }
 
   /**
-   * Colour and material per role (#12, #40): each role the item is drawn in, with a colour picker, the named presets and
-   * its material. A role without a colour of its own follows the look; "From the look" clears it. A role without a
-   * material of its own takes its usual one; materials show in the realistic look. Only editors change them.
+   * The colour rows (#410, option A of #405): one full-width row per part, named after the part (#411), with the shared
+   * hex field (#403) and a finish chip. A part on its default shows the colour it has now: the pack item's own (a car's
+   * colourway), else its role's colour in this device's look. The swatch and the chip open the part's popover below
+   * the row: preset tiles of its family, the hex field, its 2-3 finishes and "Reset to default". Only editors change
+   * them; finishes show in the Realistic look.
    */
   renderColourRoles(this: Fp3dEditor, f: Furniture) {
-    const roles = itemColourRoles(f.type);
-    const admin = this.isEditor;
-    // its glow colour while its entity is active (#289): playing, on, triggered; "From the appearance" = the usual glow
-    const activeOwn = roleColour({ accent: f.active_color ?? undefined }, "accent");
-    // one shared colour field (#403): swatch, hex value, copy
-    const t = (k: I18nKey, v?: Record<string, string>) => this.t(k, v);
-    // a part on its default shows the colour the 3D view gives its role in this device's look
+    const roles = partOrder(itemColourRoles(f.type));
+    if (!roles.length) return nothing;
     const look = deviceLook(this.hass);
-    const activeRow = html`<div class="fp3d-field fp3d-colour-role">
-      <span>${this.t("colour_active")}</span>
-      <span class="fp3d-colour-pick"><span class="fp3d-colour-swatch">
-        ${colourField({ value: activeOwn, label: this.t("colour_active"), t, disabled: !admin, clearable: true, onChange: (hex) => this.updateFurniture({ active_color: hex }) })}
-        ${colourReset({ value: activeOwn, fallback: null, label: this.t("colour_theme"), disabled: !admin, onReset: () => this.updateFurniture({ active_color: null }) })}
-      </span></span>
-    </div>`;
-    if (!roles.length) return html`<div class="fp3d-form">${this.withInfo(activeRow, "colour_active_hint", this.t("colour_active"))}</div>`;
-    const set = (role: ColourRole, hex: string | null) => this.updateFurniture({ colors: setRoleColour(f.colors, role, hex) });
-    const setMaterial = (role: ColourRole, m: string) => this.updateFurniture({ materials: setRoleMaterial(f.materials, role, (m || null) as Material | null) });
-    const materialName = (m: Material) => this.t(`material_${m}` as I18nKey);
-    const ui = panelUi(this, f.id);
-    const roleName = (role: ColourRole) => this.t(`colour_role_${role}` as I18nKey);
-    const roleField = (role: ColourRole, own: string | null) =>
-      colourField({ value: own, base: roleInLook(role, look), label: roleName(role), t, disabled: !admin, clearable: true, onChange: (hex) => set(role, hex) });
-    const toggle = html`<button type="button" class="fp3d-link fp3d-wide fp3d-finishes" aria-expanded=${ui.finishes ? "true" : "false"} @click=${() => {
-      ui.finishes = !ui.finishes;
-      this.requestUpdate();
-    }}>${this.t(ui.finishes ? "colour_finishes_less" : "colour_finishes")}</button>`;
-    // one swatch per part (#397): the name of its colour beside it ("From the appearance" follows the look); the
-    // presets, the materials and the active colour are one link away
-    if (!ui.finishes) {
-      return html`<div class="fp3d-form fp3d-colours">
-        ${roles.map((role) => {
-          const own = roleColour(f.colors, role);
-          if (role === "paint") return this.renderPaint(f, own);
-          const preset = own ? COLOUR_PRESETS.find((p) => p.hex === own) : undefined;
-          return html`<div class="fp3d-field fp3d-colour-role fp3d-colour-slim fp3d-wide">
-            <span class="fp3d-colour-swatch">
-              ${roleField(role, own)}
-              ${colourReset({ value: own, fallback: null, label: this.t("colour_theme"), disabled: !admin, onReset: () => set(role, null) })}
-            </span>
-            <span>${roleName(role)}</span>
-            <span class="fp3d-sub">${own ? (preset ? this.t(`colour_preset_${preset.id}` as I18nKey) : this.t("colour_own")) : this.t("colour_theme")}</span>
-          </div>`;
-        })}
-        ${toggle}
-      </div>`;
-    }
-    return html`<div class="fp3d-form">
-      <h4 class="fp3d-lib-head fp3d-wide">${this.t("colours")}</h4>
-      ${roles.map((role) => {
-        const own = roleColour(f.colors, role);
-        if (role === "paint") return this.renderPaint(f, own);
-        const preset = own ? COLOUR_PRESETS.find((p) => p.hex === own) : undefined;
-        const mat = ownMaterial(f.materials, role);
-        return html`<div class="fp3d-field fp3d-colour-role">
-          <span>${roleName(role)}</span>
-          <span class="fp3d-colour-pick">
-            <span class="fp3d-colour-swatch">
-              ${roleField(role, own)}
-              ${colourReset({ value: own, fallback: null, label: this.t("colour_theme"), disabled: !admin, onReset: () => set(role, null) })}
-            </span>
-            <select aria-label=${this.t("colour_preset_of", { role: roleName(role) })} ?disabled=${!admin} @change=${(e: Event) => set(role, (e.target as HTMLSelectElement).value || null)}>
-              <option value="" ?selected=${!own}>${this.t("colour_theme")}</option>
-              ${own && !preset ? html`<option value=${own} selected>${this.t("colour_own")}</option>` : nothing}
-              ${COLOUR_PRESETS.map((p) => html`<option value=${p.hex} ?selected=${p === preset}>${this.t(`colour_preset_${p.id}` as I18nKey)}</option>`)}
-            </select>
-            <select class="fp3d-material" aria-label=${this.t("material_of", { role: roleName(role) })} ?disabled=${!admin}
-              @change=${(e: Event) => setMaterial(role, (e.target as HTMLSelectElement).value)}>
-              <option value="" ?selected=${!mat}>${this.t("material_usual", { material: materialName(usualMaterial(role)) })}</option>
-              ${MATERIALS.map((m) => html`<option value=${m} ?selected=${m === mat}>${materialName(m)}</option>`)}
-            </select>
-          </span>
-        </div>`;
-      })}
-      ${activeRow}
-      <div class="fp3d-with-info fp3d-wide">${toggle}${this.infoButton("colours_hint", this.t("colours"))}</div>
+    const open = this.openPart(f);
+    return html`<div class="fp3d-parts">
+      <div class="fp3d-with-info fp3d-parts-head"><h4 class="fp3d-lib-head">${this.t("colours")}</h4>${this.infoButton("parts_hint", this.t("colours"))}</div>
+      ${roles.map((role) => html`${this.renderPartRow(f, role, roles, look, open === role)}${open === role ? this.renderPartPopover(f, role, roles, look) : nothing}`)}
     </div>`;
   }
 
-  /** A vehicle's paint (#129): ten base colours as swatches plus a hex field, saved in the item's `paint` colour role. */
-  renderPaint(this: Fp3dEditor, f: Furniture, own: string | null) {
+  /** What the panel calls a part of the item (#411): "Paint", "Legs", "Main colour", never "White" or "Dark". */
+  partLabel(this: Fp3dEditor, f: Furniture, role: ColourRole, roles: readonly ColourRole[] = itemColourRoles(f.type)): string {
+    return this.t(`part_${partName(f.type, role, roles)}` as I18nKey);
+  }
+
+  /** One part's row: its name, the hex field (the swatch opens the popover) and its finish. */
+  renderPartRow(this: Fp3dEditor, f: Furniture, role: ColourRole, roles: readonly ColourRole[], look: Theme, open: boolean) {
     const admin = this.isEditor;
-    const name = this.t("colour_role_paint");
-    // a colourway's own paint (#404) shows until one is picked, and the reset goes back to it
-    const base = itemRoleColour(f.type, "paint");
-    const shown = own ?? base;
-    return html`<div class="fp3d-field fp3d-colour-role fp3d-wide">
-      <span>${name}</span>
-      <span class="fp3d-paint">
-        ${PAINT_COLOURS.map((c) => {
-          const label = this.t(`paint_${c.id}` as I18nKey);
-          return html`<button type="button" class="fp3d-swatch" style=${`background:${c.hex}`} title=${label} aria-label=${label} aria-pressed=${shown === c.hex ? "true" : "false"}
-            ?disabled=${!admin} @click=${() => this.setPaint(f, c.hex)}></button>`;
-        })}
-        ${colourField({ value: own, base: base ?? roleInLook("paint", deviceLook(this.hass)), label: name, t: (k, v) => this.t(k, v), disabled: !admin, clearable: true, onChange: (hex) => this.setPaint(f, hex ?? "") })}
-        ${colourReset({ value: shown, fallback: base, label: this.t(base ? "colour_reset" : "colour_theme"), disabled: !admin, onReset: () => this.setPaint(f, "") })}
-      </span>
+    const name = this.partLabel(f, role, roles);
+    const own = roleColour(f.colors, role);
+    const mat = ownMaterial(f.materials, role);
+    const finish = this.t(`material_${mat ?? usualMaterial(role)}` as I18nKey);
+    const t = (k: I18nKey, v?: Record<string, string>) => this.t(k, v);
+    // prettier-ignore
+    return html`<div class="fp3d-part-row" data-part=${role}>
+      <span class="fp3d-part-name">${name}</span>
+      <span class="fp3d-colour-row">${colourField({ value: own, base: partBase(f, role, look), label: name, t, disabled: !admin, clearable: true, onChange: (hex) => this.setPartColour(f, role, hex), onMenu: () => this.togglePart(f, role), expanded: open })}${colourReset({ value: own, fallback: null, label: this.t("colour_reset"), disabled: !admin, onReset: () => this.setPartColour(f, role, null) })}</span>
+      <button type="button" class=${mat ? "fp3d-part-finish" : "fp3d-part-finish fp3d-part-usual"} aria-label=${this.t("finish_of", { part: name, finish })} aria-expanded=${open ? "true" : "false"} aria-controls=${open ? "fp3d-part-pop" : nothing} @click=${() => this.togglePart(f, role)}>${finish}</button>
     </div>`;
+  }
+
+  /** A part's popover (#410, with option C's preset tiles): presets of its family, the hex field, its finishes and the reset. */
+  renderPartPopover(this: Fp3dEditor, f: Furniture, role: ColourRole, roles: readonly ColourRole[], look: Theme) {
+    const admin = this.isEditor;
+    const name = this.partLabel(f, role, roles);
+    const own = roleColour(f.colors, role);
+    const mat = ownMaterial(f.materials, role);
+    const usual = usualMaterial(role);
+    const base = partBase(f, role, look);
+    const shown = own ?? base;
+    const materialName = (m: Material) => this.t(`material_${m}` as I18nKey);
+    const t = (k: I18nKey, v?: Record<string, string>) => this.t(k, v);
+    const close = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // closes the popover, not the panel, and gives the focus back to the part's swatch
+      e.preventDefault();
+      e.stopPropagation();
+      this.togglePart(f, null);
+      void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>(`[data-part="${role}"] fp3d-colour-field`)?.shadowRoot?.querySelector<HTMLElement>("button.sw")?.focus());
+    };
+    // prettier-ignore
+    return html`<div class="fp3d-part-pop" id="fp3d-part-pop" role="group" aria-label=${name} @keydown=${close}>
+      <div class="fp3d-part-pop-head"><b>${name}</b>${own || mat ? html`<button type="button" class="fp3d-link" ?disabled=${!admin} @click=${() => this.resetPart(f, role)}>${this.t("part_reset")}</button>` : nothing}</div>
+      <div class="fp3d-tiles" role="group" aria-label=${this.t("part_presets", { part: name })}>
+        ${familyPresets(partFamily(role)).map((p) => html`<button type="button" class="fp3d-tile" aria-pressed=${shown === p.hex ? "true" : "false"} ?disabled=${!admin} @click=${() => this.setPartColour(f, role, p.hex)}><span class="fp3d-tile-sw" style=${`background:${p.hex}`}></span><span>${this.t(p.key as I18nKey)}</span></button>`)}
+      </div>
+      <div class="fp3d-field"><span>${this.t("paint_hex")}</span><span class="fp3d-colour-row">${colourField({ value: own, base, label: name, t, disabled: !admin, clearable: true, onChange: (hex) => this.setPartColour(f, role, hex) })}${colourReset({ value: own, fallback: null, label: this.t("colour_reset"), disabled: !admin, onReset: () => this.setPartColour(f, role, null) })}</span></div>
+      <div class="fp3d-field"><span>${this.t("finish")}</span><div class="fp3d-seg" role="group" aria-label=${this.t("finish_of", { part: name, finish: materialName(mat ?? usual) })}>
+        ${partFinishes(role, mat).map((m) => html`<button type="button" aria-pressed=${(mat ?? usual) === m ? "true" : "false"} ?disabled=${!admin} @click=${() => this.setPartFinish(f, role, m)}>${m === usual ? this.t("finish_default", { finish: materialName(m) }) : materialName(m)}</button>`)}
+      </div></div>
+    </div>`;
+  }
+
+  /** The part whose popover is open in this item's panel (#410), or null: one at a time. */
+  openPart(this: Fp3dEditor, f: Furniture): ColourRole | null {
+    const o = openParts.get(this);
+    return o && o.id === f.id ? o.role : null;
+  }
+
+  /** Opens a part's popover, or closes it when it is the open one (its swatch and its finish chip both toggle it); null closes it. */
+  togglePart(this: Fp3dEditor, f: Furniture, role: ColourRole | null): void {
+    if (!role || this.openPart(f) === role) openParts.delete(this);
+    else openParts.set(this, { id: f.id, role });
+    this.requestUpdate();
+  }
+
+  /** A part's own colour ("#rrggbb"), or null back to its default: one undo step. */
+  setPartColour(this: Fp3dEditor, f: Furniture, role: ColourRole, hex: string | null): void {
+    this.updateFurniture({ colors: setRoleColour(f.colors, role, hex) });
+  }
+
+  /** A part's finish; its usual one is no finish of its own. */
+  setPartFinish(this: Fp3dEditor, f: Furniture, role: ColourRole, m: Material): void {
+    this.updateFurniture({ materials: setRoleMaterial(f.materials, role, m === usualMaterial(role) ? null : m) });
+  }
+
+  /** "Reset to default": the part's colour and finish both back to the default, in one undo step. */
+  resetPart(this: Fp3dEditor, f: Furniture, role: ColourRole): void {
+    this.updateFurniture({ colors: setRoleColour(f.colors, role, null), materials: setRoleMaterial(f.materials, role, null) });
+  }
+
+  /**
+   * "Glow colour" (#410, ORDER-3, DEF-2; was "Colour while active" among the parts): the colour the item glows in while
+   * its linked entity is active (playing, on, triggered, #289). It sits with the link and shows only when the item has
+   * one (`link`, its own or the automatic one), or a glow colour of its own already; on its default it shows the usual
+   * glow.
+   */
+  renderGlowColour(this: Fp3dEditor, f: Furniture, link: string | null | undefined) {
+    const own = roleColour({ accent: f.active_color ?? undefined }, "accent");
+    if (!link && !own) return nothing;
+    const admin = this.isEditor;
+    const label = this.t("glow_colour");
+    return this.withInfo(
+      html`<div class="fp3d-field fp3d-glow-colour">
+        <span>${label}</span>
+        <span class="fp3d-colour-row"
+          >${colourField({ value: own, base: GLOW_DEFAULT, label, t: (k, v) => this.t(k, v), disabled: !admin, clearable: true, onChange: (hex) => this.updateFurniture({ active_color: hex }) })}
+          ${colourReset({ value: own, fallback: null, label: this.t("colour_reset"), disabled: !admin, onReset: () => this.updateFurniture({ active_color: null }) })}</span
+        >
+      </div>`,
+      "colour_active_hint",
+      label,
+    );
   }
 
   /** Sets the paint of an item from a swatch or typed text: a colour is saved, empty goes back to the look, anything else is ignored. */
@@ -754,10 +782,12 @@ export class ItemFormPart {
     const power = this.entityOptions((id) => this.isPowerSensor(id));
     const doorSensors = f.type === "fridge_smart" ? this.entityOptions((id) => id.startsWith("binary_sensor.")) : [];
     const hint: I18nKey = lamp ? (f.type === "lamp_pendant" ? "lamp_hint_pendant" : "lamp_hint") : media ? "furn_links_hint_tv" : isRobotVacuum(f.type) ? "robot_hint" : "furn_links_hint";
+    const autoPick = this.autoFurnitureLink(f, "entity");
     return html`<div class="fp3d-form fp3d-links">
         ${f.type === "grid_point"
           ? html`<p class="fp3d-sub fp3d-wide">${this.t("grid_point_hint")}</p>`
-          : this.withInfo(this.entitySelect(this.t(field.label), f.entity ?? null, this.autoFurnitureLink(f, "entity"), entities, (v) => this.updateFurniture({ entity: v }), field.domains), hint, this.t(field.label))}
+          : this.withInfo(this.entitySelect(this.t(field.label), f.entity ?? null, autoPick, entities, (v) => this.updateFurniture({ entity: v }), field.domains), hint, this.t(field.label))}
+        ${this.renderGlowColour(f, f.entity && f.entity !== "none" ? f.entity : f.entity === "none" ? null : autoPick)}
         ${f.type === "lamp_fan"
           ? this.withInfo(this.entitySelect(this.t("fan_entity"), f.fan ?? null, undefined, this.entityOptions((id) => id.startsWith("fan.")), (v) => this.updateFurniture({ fan: v && v !== "none" ? v : null })), "fan_hint", this.t("fan_entity"))
           : nothing}

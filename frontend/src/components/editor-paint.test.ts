@@ -40,13 +40,18 @@ async function editor() {
 }
 const colours = (ed: Awaited<ReturnType<typeof editor>>) => ed._doc.floors[0].furniture.find((f: Furniture) => f.id === "car").colors;
 
-test("the paint role of a car offers ten swatches and the colour field in the item panel (#129, #403)", async () => {
+test("the paint row of a car opens the ten paint swatches in its popover, with the colour field (#129, #403, #410)", async () => {
   const ed = await editor();
+  // closed: one row per part (paint and glass), each with the shared colour field (#403): swatch, hex value and copy
+  const closed = flat(ed.renderColourRoles(ed.furnitureItem));
+  assert.equal((closed.match(/<fp3d-colour-field/g) ?? []).length, 2);
+  assert.doesNotMatch(closed, /class="fp3d-tile"/);
+  ed.togglePart(ed.furnitureItem, "paint");
   const html = flat(ed.renderColourRoles(ed.furnitureItem));
-  for (const name of ["White", "Black", "Silver", "Grey", "Blue", "Red", "Green", "Yellow/orange", "Brown/bronze", "Dark blue"]) assert.ok(html.includes(`aria-label=${name} `) || html.includes(`title=${name} `), name);
-  assert.equal((html.match(/class="fp3d-swatch"/g) ?? []).length, 10);
-  // the shared colour field (#403): swatch, hex value and copy
-  assert.equal((flat(ed.renderPaint(ed.furnitureItem, null)).match(/<fp3d-colour-field/g) ?? []).length, 1);
+  for (const name of ["White", "Black", "Silver", "Grey", "Blue", "Red", "Green", "Yellow/orange", "Brown/bronze", "Dark blue"]) assert.ok(html.includes(`<span>${name}</span>`), name);
+  assert.equal((html.match(/class="fp3d-tile"/g) ?? []).length, 10);
+  // the popover has the hex field too
+  assert.equal((html.match(/<fp3d-colour-field/g) ?? []).length, 3);
 });
 
 test("picking a swatch saves the colour in the paint role of the placed item (#129)", async () => {

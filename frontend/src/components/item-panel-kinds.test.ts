@@ -167,8 +167,9 @@ test("a sofa opens Appearance with one swatch per part; its other folds stay clo
   assert.match(form, /Taps and visibility/);
   assert.match(form, /More options/);
   assert.match(form, /<fp3d-colour-field/, "Appearance is open: the colour fields show");
-  assert.match(form, /Finishes and presets/);
-  assert.doesNotMatch(form, /class="fp3d-material"/, "materials are one link away");
+  // one row per part with its finish chip (#410); no select, no "Finishes and presets" toggle
+  assert.equal((form.match(/class="fp3d-part-row"/g) ?? []).length, 3);
+  assert.doesNotMatch(form, /Finishes and presets|Fewer colour options|class="fp3d-material"/);
   assert.doesNotMatch(form, /Glow when this is on<fp3d-entity-picker/, "the occupancy fold is closed");
 });
 
@@ -218,9 +219,11 @@ test("entity pickers and colour preset selects have accessible names (#396 win 4
   // the picker gets its visible label as its name, and the live value of the chosen entity
   assert.match(form, /Car \(any entity of the car\)\s*<fp3d-entity-picker[\s\S]*?\.label=Car \(any entity of the car\)/);
   const sofa = await editorWith(item("s", "sofa"));
-  const ui = (await import("./editor/item-sections.ts")).panelUi(sofa, "s");
-  ui.finishes = true;
-  assert.match(flat(sofa.renderFurnitureForm(sofa.furnitureItem)), /aria-label=Colour of Fabric/);
+  // a part's finish chip and its popover's presets and finishes are named after the part (#410)
+  sofa.togglePart(sofa.furnitureItem, "fabric");
+  const parts = flat(sofa.renderFurnitureForm(sofa.furnitureItem));
+  assert.match(parts, /aria-label=Finish of Fabric: Fabric/);
+  assert.match(parts, /aria-label=Colours for Fabric/);
 });
 
 test("Lock position keeps one name, says its state by aria-pressed, and has no emoji (#396 win 6)", async () => {

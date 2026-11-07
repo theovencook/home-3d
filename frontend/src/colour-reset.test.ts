@@ -69,7 +69,7 @@ test("an item's colour roles and paint reset to the look (#230)", async () => {
   ed.updateFurniture({ colors: setRoleColour(ed.furnitureItem.colors, role, "#123456") });
   const own = flat(ed.renderColourRoles(ed.furnitureItem));
   assert.equal(resetsIn(own), 1, "a colour of its own: one reset");
-  assert.match(own, /aria-label=From the appearance/);
+  assert.match(own, /aria-label=Back to the default colour/);
 });
 
 test("every colour field in the source has a reset beside it (#230), and every one is the shared field (#403)", () => {

@@ -147,13 +147,7 @@ export const controls = css`
   input[type="radio"] {
     accent-color: var(--fp3d-primary);
   }
-  /* colour per role (#12): a swatch beside the presets; a role following the look shows a faded swatch */
-  .fp3d-paint {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-  }
+  /* a round colour swatch to pick (#12) */
   .fp3d-swatch {
     width: 26px;
     height: 26px;
@@ -166,30 +160,11 @@ export const controls = css`
     border-color: var(--fp3d-accent, #37e0ff);
     box-shadow: 0 0 0 2px var(--fp3d-accent, #37e0ff);
   }
-  /* the colour field (#403) with its reset, then the presets and the material, each on a line of its own: the field
-     takes the width of a two-column row */
-  .fp3d-colour-pick {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-  }
-  /* the shared colour field (#403) and its reset */
-  .fp3d-colour-swatch {
-    flex: none;
-    display: grid;
-    grid-template-columns: auto auto;
-    justify-content: start;
-    align-items: center;
-  }
   /* a picker with its reset (#230) on a line of its own: the swatch takes the width */
   .fp3d-colour-row {
     display: flex;
     align-items: center;
     gap: 4px;
-  }
-  /* its material (#40) on a line of its own under the colour */
-  .fp3d-colour-pick .fp3d-material {
-    grid-column: 1 / -1;
   }
   .fp3d-field select option,
   select option {

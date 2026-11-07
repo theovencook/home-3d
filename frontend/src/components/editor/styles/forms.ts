@@ -250,19 +250,123 @@ export const formStyles = css`
       .fp3d-found-row[data-missing] dd {
         color: var(--fp3d-muted);
       }
-      .fp3d-found-toggle,
-      .fp3d-finishes {
+      .fp3d-found-toggle {
         justify-self: start;
         min-height: 32px;
         text-align: left;
       }
-      .fp3d-colour-slim {
+      /* the colour rows (#410): one full-width row per part (name, hex field, finish chip); on a narrow panel the chip
+         goes under the field rather than being cut */
+      .fp3d-parts {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 6px;
+      }
+      .fp3d-parts-head h4 {
+        margin: 0;
+      }
+      .fp3d-part-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+        min-height: 40px;
+      }
+      .fp3d-part-name {
+        flex: 1 1 5.5em;
+        min-width: 5.5em;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+      .fp3d-part-row .fp3d-colour-row {
+        flex: none;
+      }
+      .fp3d-part-finish {
+        flex: none;
+        margin-left: auto;
+        min-height: 30px;
+        padding: 0 10px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 7px;
+        background: none;
+        color: var(--fp3d-text);
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .fp3d-part-finish.fp3d-part-usual {
+        color: var(--fp3d-muted);
+      }
+      .fp3d-part-finish[aria-expanded="true"] {
+        border-color: var(--fp3d-accent);
+      }
+      .fp3d-part-finish:focus-visible {
+        outline: 2px solid var(--fp3d-accent);
+        outline-offset: 1px;
+      }
+      /* a part's popover, under its row: preset tiles (option C's), the hex field, the finish */
+      .fp3d-part-pop {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin: 2px 0 8px;
+        padding: 10px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 10px;
+        background: var(--fp3d-chrome-solid);
+        box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.35);
+      }
+      .fp3d-part-pop-head {
         display: flex;
         align-items: center;
-        gap: 10px;
+        justify-content: space-between;
+        gap: 8px;
       }
-      .fp3d-colour-slim > .fp3d-sub {
-        margin-left: auto;
+      .fp3d-tiles {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+        gap: 6px;
+      }
+      .fp3d-tile {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        min-width: 0;
+        padding: 2px;
+        border: none;
+        border-radius: 8px;
+        background: none;
+        color: var(--fp3d-muted);
+        font: inherit;
+        font-size: 11px;
+        line-height: 1.2;
+        text-align: center;
+        overflow-wrap: anywhere;
+        cursor: pointer;
+      }
+      .fp3d-tile-sw {
+        display: block;
+        width: 100%;
+        height: 28px;
+        border-radius: 6px;
+        border: 1px solid var(--fp3d-line);
+      }
+      .fp3d-tile[aria-pressed="true"] {
+        color: var(--fp3d-text);
+      }
+      .fp3d-tile[aria-pressed="true"] .fp3d-tile-sw {
+        outline: 2px solid var(--fp3d-accent);
+        outline-offset: 1px;
+      }
+      .fp3d-tile:focus-visible {
+        outline: 2px solid var(--fp3d-accent);
+      }
+      .fp3d-tile:disabled,
+      .fp3d-part-pop .fp3d-seg button:disabled {
+        cursor: default;
+        opacity: 0.6;
       }
       .fp3d-link-block {
         margin: 10px 0 4px;
@@ -1167,7 +1271,9 @@ export const formStyles = css`
         .fp3d-icon-btn,
         .fp3d-crumb,
         .fp3d-found-toggle,
-        .fp3d-finishes {
+        .fp3d-part-row,
+        .fp3d-part-finish,
+        .fp3d-tile {
           min-height: 44px;
         }
         .fp3d-icon-btn,
