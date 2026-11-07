@@ -30,7 +30,7 @@ import { lookOf, type Theme } from "../../themes.ts";
 import { shownLook } from "../../ha-theme.ts";
 import "../colour-field.ts";
 import { loadItemPicker, need } from "./lazy.ts";
-import { itemProfile, type ItemProfile } from "../../item-profile.ts";
+import { hasOnOffState, itemProfile, type ItemProfile } from "../../item-profile.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** The colour an item shown "only in this colour" starts with. */
@@ -351,13 +351,16 @@ export class ItemFormPart {
   }
 
   /**
-   * "Glow when this is on" (#116, renamed in #396): an entity lights the item's top. A second one for the other half
-   * shows only on beds (or where one is set already), and the bed help only on beds.
+   * "Glows when on" (#116, renamed in #396 and #414): an entity lights the item's top. "Second half" for the other
+   * side shows only on beds and sofas (or where one is set already), and the bed help only there.
    */
   renderStateLinks(this: Fp3dEditor, f: Furniture, p: ItemProfile = itemProfile(f.type)) {
     const glowing = (id: string) => /^(binary_sensor|switch|input_boolean|light|fan|person|device_tracker|sensor)\./.test(id);
     const second = p.secondState || (!!f.state_entity2 && f.state_entity2 !== "none");
+    // a temperature or another measuring sensor is never "on": say so at the field (#414, WORD-4)
+    const st = f.state_entity && f.state_entity !== "none" ? this.hass?.states[f.state_entity] : undefined;
     return html`${this.entitySelect(this.t("furn_state_entity"), f.state_entity ?? null, undefined, this.entityOptions(glowing), (v) => this.updateFurniture(clearFirstState(f, v)))}
+      ${st && !hasOnOffState(st) ? html`<p class="fp3d-sub fp3d-wide fp3d-warn" role="note">${this.t("glow_no_onoff")}</p>` : nothing}
       ${second && f.state_entity && f.state_entity !== "none"
         ? html`${this.entitySelect(this.t("furn_state_entity2"), f.state_entity2 ?? null, undefined, this.entityOptions(glowing), (v) => this.updateFurniture({ state_entity2: v === "none" ? null : v }))}
             ${f.state_entity2 && f.state_entity2 !== "none"

@@ -81,7 +81,7 @@ test("kind profiles: a car, a sofa, a lamp and a bed get their own sections and 
     assert.equal(sofa.main, null);
     assert.deepEqual(sofa.folds, ["appearance", "size", "glow", "taps", "more"]);
     assert.equal(sofa.openFirst, "appearance", "a sofa opens Appearance first");
-    assert.equal(sofa.secondState, false, "Second state only for beds");
+    assert.equal(sofa.secondState, true, "a sofa has two halves too (#414)");
   }
 
   const lamp = itemProfile("lamp_floor");
@@ -118,7 +118,7 @@ test("a vehicle item gets the car form, not the appliance form, and no appliance
   // what was found beside the battery, read-only
   for (const role of ["Charge \\(%\\)", "Range", "Cable plugged in", "Location", "Lock", "Climate"]) assert.match(form, new RegExp(`<dt>${role}`), role);
   assert.match(form, /4 of 7 found/);
-  for (const gone of ["Mirror", "Second state", "Ask before switching", "Consumable", "hh_service", "Select several", "FURNITURE"]) assert.ok(!form.includes(gone), `no ${gone} on a car`);
+  for (const gone of ["Mirror", "Second half", "Ask before switching", "Consumable", "hh_service", "Select several", "FURNITURE"]) assert.ok(!form.includes(gone), `no ${gone} on a car`);
   // the role pickers only after "Change what was found"
   assert.doesNotMatch(form, /Location \(device_tracker\)<fp3d-entity-picker/);
   resetFolds();
@@ -170,7 +170,7 @@ test("a sofa opens Appearance with one swatch per part; its other folds stay clo
   // one row per part with its finish chip (#410); no select, no "Finishes and presets" toggle
   assert.equal((form.match(/class="fp3d-part-row"/g) ?? []).length, 3);
   assert.doesNotMatch(form, /Finishes and presets|Fewer colour options|class="fp3d-material"/);
-  assert.doesNotMatch(form, /Glow when this is on<fp3d-entity-picker/, "the occupancy fold is closed");
+  assert.doesNotMatch(form, /Glows when on\s*<fp3d-entity-picker/, "the occupancy fold is closed");
 });
 
 test("a lamp's main section is its light; a bed's occupancy fold offers the second half (#397, #396 win 8)", async () => {
@@ -192,11 +192,11 @@ test("a lamp's main section is its light; a bed's occupancy fold offers the seco
   const bed = await editorWith(item("b", "bed", { state_entity: "binary_sensor.sample_bed_left" }));
   setFoldOpen(itemProfile("bed"), "glow", true, panelUi(bed, "b").folds);
   const bf = flat(bed.renderFurnitureForm(bed.furnitureItem));
-  assert.match(bf, /Glow when this is on/);
-  assert.match(bf, /Second state/);
-  const sofa = await editorWith(item("s", "sofa", { state_entity: "binary_sensor.sample_seat" }));
-  setFoldOpen(itemProfile("sofa"), "glow", true, panelUi(sofa, "s").folds);
-  assert.doesNotMatch(flat(sofa.renderFurnitureForm(sofa.furnitureItem)), /Second state/, "Second state only for beds");
+  assert.match(bf, /Glows when on/);
+  assert.match(bf, /Second half/);
+  const chair = await editorWith(item("a", "armchair", { state_entity: "binary_sensor.sample_seat" }));
+  setFoldOpen(itemProfile("armchair"), "glow", true, panelUi(chair, "a").folds);
+  assert.doesNotMatch(flat(chair.renderFurnitureForm(chair.furnitureItem)), /Second half/, "Second half only for beds and sofas");
   resetFolds();
 });
 

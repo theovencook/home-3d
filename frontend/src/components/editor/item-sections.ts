@@ -188,7 +188,8 @@ export class ItemSectionsPart {
   /** The item's "⋯" actions (#396): rename, duplicate, copy, the wall view and delete, with their keys. */
   itemMenuActions(this: Fp3dEditor, f: Furniture, p: ItemProfile): PanelAction[] {
     const acts: (PanelAction | null)[] = [
-      { label: this.t("item_rename"), run: () => this.renameItem(f, p) },
+      // a floor opening has no More options to name it in (#414)
+      p.folds.includes("more") ? { label: this.t("item_rename"), run: () => this.renameItem(f, p) } : null,
       { label: this.t("duplicate"), keys: ["Ctrl+D"], run: () => this.duplicateFurniture() },
       { label: this.t("copy_items"), keys: ["Ctrl+C"], run: () => this.copySelection() },
       { label: this.t("wall_view"), run: () => this.openWallViewFor(f) },
