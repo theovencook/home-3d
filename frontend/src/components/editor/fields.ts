@@ -20,6 +20,15 @@ import { callServiceSafe } from "../../failure.ts";
 import { uses12Hours } from "../../time-of-day.ts";
 import { need, loadTimeField, loadIconPicker } from "./lazy.ts";
 
+/** The units a field label may end in, "(m)" or "(°)": they go into the input as a suffix (#412). */
+const UNIT = /^(.*\S)\s*\((m|cm|mm|°|%|W|kW|kWh|Wp|kWp|V|A|s|min|h|lx|°C|°F|ft|in)\)$/;
+
+/** "Width (m)" → ["Width", "m"]; a label without a unit at its end → [label, ""] (#412, CUT-2). */
+export function splitUnit(label: string): [string, string] {
+  const m = UNIT.exec(label.trim());
+  return m ? [m[1], m[2]] : [label, ""];
+}
+
 /** FieldsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class FieldsPart {
   /** The host a module gets from the editor: the plan as edited here, and the means to change it. */
@@ -139,8 +148,9 @@ export class FieldsPart {
       if (v !== null && Math.abs(v - value) > 1e-9) onChange(min !== undefined ? Math.max(min, v) : v);
     });
     // rubbish typed shows the old value again once the box is left (typedValue)
+    const short = unitLabel(label, "imperial");
     return html`<label class="fp3d-field"
-      >${unitLabel(label, "imperial")}
+      ><span class="fp3d-field-label" title=${short}>${short}</span>
       <input
         type="text"
         inputmode="text"
@@ -191,27 +201,35 @@ export class FieldsPart {
     };
   }
 
+  /**
+   * A number field. Its unit ("(m)", "(°)" at the end of the label) is a suffix inside the input ("1.79 m"), so the
+   * label stays short and on one line (#412, CUT-2); the input keeps the whole label as its name.
+   */
   num(this: Fp3dEditor, label: string, value: number, onChange: (v: number) => void, step = 0.01, min?: number) {
     const on = this.typedEvents((text) => {
       const v = parseFloat(text.replace(",", "."));
       // the value it already shows saves nothing (no empty undo step when Enter is followed by a change event)
       if (Number.isFinite(v) && v !== round(value)) onChange(v);
     });
+    const [short, unit] = splitUnit(label);
+    const input = html`<input
+      type="number"
+      inputmode="decimal"
+      step=${step}
+      min=${min ?? nothing}
+      aria-label=${unit ? label : nothing}
+      .value=${typedValue(this.typed, String(round(value)))}
+      ?disabled=${!this.isEditor}
+      @focus=${on.focus}
+      @input=${on.input}
+      @change=${on.change}
+      @keydown=${on.keydown}
+      @blur=${on.blur}
+    />`;
     return html`<label class="fp3d-field"
-      >${label}
-      <input
-        type="number"
-        inputmode="decimal"
-        step=${step}
-        min=${min ?? nothing}
-        .value=${typedValue(this.typed, String(round(value)))}
-        ?disabled=${!this.isEditor}
-        @focus=${on.focus}
-        @input=${on.input}
-        @change=${on.change}
-        @keydown=${on.keydown}
-        @blur=${on.blur}
-    /></label>`;
+      ><span class="fp3d-field-label" title=${label}>${short}</span>
+      ${unit ? html`<span class="fp3d-unit-box">${input}<span class="fp3d-unit" aria-hidden="true">${unit}</span></span>` : input}</label
+    >`;
   }
 
   /**

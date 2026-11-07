@@ -133,18 +133,68 @@ export const sideStyles = css`
       .fp3d-row:hover {
         color: var(--fp3d-accent);
       }
+      /* a check box is a switch row (#412, A11Y-1): the text, then the switch at the end; the whole row is the target,
+         32 px high with a mouse, 44 px on touch (below) */
       .fp3d-check {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 8px;
+        min-height: 32px;
         font-size: 13px;
         color: var(--fp3d-muted);
+        cursor: pointer;
       }
       .fp3d-check.fp3d-indent {
         padding-left: 22px;
       }
       .fp3d-check input {
         accent-color: var(--fp3d-accent);
+      }
+      .fp3d-check > input[type="checkbox"] {
+        order: 2;
+        flex: none;
+        appearance: none;
+        -webkit-appearance: none;
+        position: relative;
+        width: 36px;
+        height: 20px;
+        margin: 0;
+        border-radius: 999px;
+        background: var(--fp3d-line);
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+      .fp3d-check > input[type="checkbox"]::before {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--fp3d-text);
+        transition: transform 0.15s ease;
+      }
+      .fp3d-check > input[type="checkbox"]:checked {
+        background: var(--fp3d-accent);
+      }
+      .fp3d-check > input[type="checkbox"]:checked::before {
+        transform: translateX(16px);
+        background: var(--fp3d-chrome-solid);
+      }
+      .fp3d-check > input[type="checkbox"]:focus-visible {
+        outline: 2px solid var(--fp3d-accent);
+        outline-offset: 2px;
+      }
+      .fp3d-check > input[type="checkbox"]:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      @media (pointer: coarse) {
+        .fp3d-check {
+          min-height: 44px;
+        }
       }
       .fp3d-meter rect {
         fill: #2a2a10;

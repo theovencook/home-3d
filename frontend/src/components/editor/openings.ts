@@ -15,6 +15,10 @@ import { wallPeers, SNAP_PX, round, patchItem, numberish } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 import { stateChip } from "./panel-head.ts";
 
+/** How far a door stands open by default in 3D, in degrees (viewer/openings.ts: 1.5 rad, half of it without a sensor). */
+const DOOR_OPEN_SENSED = Math.round((1.5 * 180) / Math.PI);
+const DOOR_OPEN_FREE = Math.round((0.75 * 180) / Math.PI);
+
 /** OpeningsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class OpeningsPart {
   /** Centre offset on a room edge closest to `world`, keeping the opening inside the edge. */
@@ -421,6 +425,13 @@ export class OpeningsPart {
     return this.t("opening_position_from", { corner: this.t(`compass_${corner}` as I18nKey) });
   }
 
+  /** "Automatic (window board and sill)": what automatic gives this window (#412, DEF-3), as the 3D view decides it. */
+  sillAutoText(this: Fp3dEditor, o: Opening): string {
+    const exterior = this.openingIsExterior(o);
+    const auto = o.sill > 0.3 && openingStyle(o, exterior) !== "glass_wall";
+    return this.t("sill_board_auto_of", { what: this.t(!auto ? "sill_board_none" : exterior ? "sill_board_both" : "sill_board_inside") });
+  }
+
   renderOpeningForm(this: Fp3dEditor, o: Opening) {
     const admin = this.isEditor;
     const window = o.type === "window";
@@ -559,7 +570,7 @@ export class OpeningsPart {
           ? html`<label class="fp3d-field fp3d-wide" title=${this.t("sill_board_hint")}
               >${this.t("sill_board")}
               <select ?disabled=${!admin} @change=${(e: Event) => this.updateOpening({ sill_board: ((e.target as HTMLSelectElement).value || "auto") as SillBoard })}>
-                ${SILL_BOARDS.map((m) => html`<option value=${m} ?selected=${(o.sill_board ?? "auto") === m}>${this.t(`sill_board_${m}`)}</option>`)}
+                ${SILL_BOARDS.map((m) => html`<option value=${m} ?selected=${(o.sill_board ?? "auto") === m}>${m === "auto" ? this.sillAutoText(o) : this.t(`sill_board_${m}`)}</option>`)}
               </select></label
             >`
           : nothing}
@@ -625,7 +636,7 @@ export class OpeningsPart {
                         this.updateOpening({ open_angle: v > 0 ? v : null });
                       }}
                     >
-                      <option value="0" ?selected=${!o.open_angle}>${this.t("door_angle_default")}</option>
+                      <option value="0" ?selected=${!o.open_angle}>${this.t("door_angle_default_of", { deg: o.contact !== "none" && (o.contact || autoPick("contact")) ? DOOR_OPEN_SENSED : DOOR_OPEN_FREE })}</option>
                       ${[15, 30, 45, 60, 90].map((a) => html`<option value=${a} ?selected=${o.open_angle === a}>${a}°</option>`)}
                       ${o.open_angle && ![15, 30, 45, 60, 90].includes(o.open_angle) ? html`<option value=${o.open_angle} selected>${o.open_angle}°</option>` : nothing}
                     </select></label

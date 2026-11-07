@@ -331,7 +331,7 @@ export class ItemFormPart {
         ${list.map(
           (iv, i) => html`${field(this.t("show_from"), "date", iv.from, (v) => setAt(i, { from: v }))} ${field(this.t("show_to"), "date", iv.to, (v) => setAt(i, { to: v }))}
             ${field(this.t("show_start"), "time", iv.start, (v) => setAt(i, { start: v }))} ${field(this.t("show_end"), "time", iv.end, (v) => setAt(i, { end: v }))}
-            <button class="fp3d-pin" title=${this.t("delete")} ?disabled=${off} @click=${() => set({ intervals: list.filter((_, j) => j !== i) })}>✕</button>`,
+            <button class="fp3d-pin" aria-label=${this.t("delete")} title=${this.t("delete")} ?disabled=${off} @click=${() => set({ intervals: list.filter((_, j) => j !== i) })}>✕</button>`,
         )}
       </div>
       ${off || list.length >= 12 ? nothing : html`<div class="fp3d-actions"><button class="fp3d-btn" @click=${() => set({ intervals: [...list, {}] })}>+ ${this.t("show_add_interval")}</button></div>`}
@@ -962,7 +962,7 @@ export class ItemFormPart {
                     @change=${(e: Event) => setTypes(types.map((x, j) => (j === i ? { ...x, state: (e.target as HTMLInputElement).value } : x)))}
                   />
                   ${vehicleSelect(t.vehicle, (v) => setTypes(types.map((x, j) => (j === i ? { ...x, vehicle: v ?? "" } : x))))}
-                  <button class="fp3d-btn" ?disabled=${!admin} title=${this.t("delete")} @click=${() => setTypes(types.filter((_, j) => j !== i))}>✕</button>
+                  <button class="fp3d-btn" ?disabled=${!admin} aria-label=${this.t("delete")} title=${this.t("delete")} @click=${() => setTypes(types.filter((_, j) => j !== i))}>✕</button>
                 </div>`,
               )}
               <datalist id="fp3d-parking-states">${options.map((o) => html`<option value=${o}></option>`)}</datalist>
@@ -1118,7 +1118,7 @@ export class ItemFormPart {
                   ></fp3d-entity-picker>`
                 : nothing}
               <span class="fp3d-sub">${hit ? this.t("picture_matches") : ""}</span>
-              <button class="fp3d-btn" ?disabled=${!admin} title=${this.t("delete")} @click=${() => set(rules.filter((_, j) => j !== i))}>✕</button>
+              <button class="fp3d-btn" ?disabled=${!admin} aria-label=${this.t("delete")} title=${this.t("delete")} @click=${() => set(rules.filter((_, j) => j !== i))}>✕</button>
             </div>`;
           })}
           ${admin

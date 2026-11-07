@@ -444,7 +444,7 @@ export class PoolPart {
             : html`<b class="fp3d-pc-title">${label(card.part)}</b>`}
           <span class="fp3d-muted">${this.t("card_status", { a: done, b: all })}</span>
           <span class="fp3d-wv-grow"></span>
-          <button class="fp3d-btn" title=${this.t("close")} @click=${close}>✕</button>
+          <button class="fp3d-btn" aria-label=${this.t("close")} title=${this.t("close")} @click=${close}>✕</button>
         </div>
         <div class="fp3d-pc-body">
           ${this.renderPartDrawing(a, card.part, ports)}
@@ -844,7 +844,7 @@ export class PoolPart {
                   }} />m</label
                 >`
               : nothing}
-            <button class="fp3d-btn fp3d-danger" ?disabled=${!admin} title=${this.t("delete")} @click=${() => this.deletePoolPort(a.id, p.id)}>✕</button>
+            <button class="fp3d-btn fp3d-danger" ?disabled=${!admin} aria-label=${this.t("delete")} title=${this.t("delete")} @click=${() => this.deletePoolPort(a.id, p.id)}>✕</button>
           </div>`,
         )}
         <p class="fp3d-sub">${this.t("pool_ports_hint")}</p>
@@ -877,7 +877,7 @@ export class PoolPart {
                     ${this.t("pool_valve_open")}</label
                   >`
                 : nothing}
-            <button class="fp3d-btn fp3d-danger" ?disabled=${!admin} title=${this.t("delete")} @click=${() => this.deletePoolDevice(f.id)}>✕</button>
+            <button class="fp3d-btn fp3d-danger" ?disabled=${!admin} aria-label=${this.t("delete")} title=${this.t("delete")} @click=${() => this.deletePoolDevice(f.id)}>✕</button>
           </div>`,
         )}
         ${(a.pool?.joints ?? []).map(
@@ -888,7 +888,7 @@ export class PoolPart {
               const on = pipes.some((p) => p.from === n || p.to === n || ((j.kind ?? "tee") !== "wall" && (j.kind ?? "tee") !== "floor" && nodePart(p.from) === `joint:${j.id}` && !splitNode(p.from).port && q === "in"));
               return html`<i class=${on ? "fp3d-on" : ""} title=${this.portText(n)}>${this.portText(n)}</i>`;
             })}</span>
-            <button class="fp3d-btn fp3d-danger" ?disabled=${!admin} title=${this.t("delete")} @click=${() =>
+            <button class="fp3d-btn fp3d-danger" ?disabled=${!admin} aria-label=${this.t("delete")} title=${this.t("delete")} @click=${() =>
               this.changePool(a.id, (l) => {
                 l.joints = (l.joints ?? []).filter((x) => x.id !== j.id);
                 l.pipes = (l.pipes ?? []).filter((p) => nodePart(p.from) !== `joint:${j.id}` && nodePart(p.to) !== `joint:${j.id}`);
@@ -908,7 +908,7 @@ export class PoolPart {
           (p) => html`<div class="fp3d-pool-row ${p.id === this._pipeId ? "fp3d-pool-row-sel" : ""}">
             <button class="fp3d-link" @click=${() => (this._pipeId = p.id)}>${this.poolNodeLabel(a, p.from)} → ${this.poolNodeLabel(a, p.to)}</button>
             <button class="fp3d-btn" ?disabled=${!admin} title=${this.t("pool_pipe_reverse")} @click=${() => this.changePool(a.id, (l) => { const q = l.pipes?.find((x) => x.id === p.id); if (q) [q.from, q.to, q.points] = [q.to, q.from, [...q.points].reverse()]; })}>⇄</button>
-            <button class="fp3d-btn fp3d-danger" ?disabled=${!admin} title=${this.t("delete")} @click=${() => this.changePool(a.id, (l) => (l.pipes = (l.pipes ?? []).filter((x) => x.id !== p.id)))}>✕</button>
+            <button class="fp3d-btn fp3d-danger" ?disabled=${!admin} aria-label=${this.t("delete")} title=${this.t("delete")} @click=${() => this.changePool(a.id, (l) => (l.pipes = (l.pipes ?? []).filter((x) => x.id !== p.id)))}>✕</button>
           </div>`,
         )}
         ${pipe

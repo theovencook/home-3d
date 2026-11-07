@@ -597,6 +597,7 @@ const en = {
   roof_side_right: "right",
   roof_end: "End",
   roof_end_auto: "as the shape",
+  roof_end_auto_of: "Same as the shape ({shape})",
   roof_end_gable: "Gable",
   roof_end_hint: "How the ridge ends at this end: a gable (an upright wall), a hip or a half-hip – a hip at one end only, for example.",
   roof_swap: "Swap sides",

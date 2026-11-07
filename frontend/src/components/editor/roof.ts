@@ -394,8 +394,8 @@ export class RoofPart {
               ${this.num(`${this.t("roof_turn")} (°)`, sec.rotation ?? 0, (v) => this.turnRoofSection(Math.max(-180, Math.min(180, round(v)))), 1)}
               ${admin && !this.roofFixed(sec)
                 ? html`<div class="fp3d-actions">
-                    <button class="fp3d-btn" @click=${() => this.turnRoofSection(turnBy(sec.rotation ?? 0, -15))}>↺ 15°</button>
-                    <button class="fp3d-btn" @click=${() => this.turnRoofSection(turnBy(sec.rotation ?? 0, 15))}>↻ 15°</button>
+                    <button class="fp3d-btn" aria-label=${this.t("turn_left_15")} title=${this.t("turn_left_15")} @click=${() => this.turnRoofSection(turnBy(sec.rotation ?? 0, -15))}>↺ 15°</button>
+                    <button class="fp3d-btn" aria-label=${this.t("turn_right_15")} title=${this.t("turn_right_15")} @click=${() => this.turnRoofSection(turnBy(sec.rotation ?? 0, 15))}>↻ 15°</button>
                   </div>`
                 : nothing}
             </div>`}
@@ -414,7 +414,7 @@ export class RoofPart {
                       set(end === 0 ? { end_u0: v } : { end_u1: v });
                     }}
                   >
-                    <option value="" ?selected=${value === ""}>${this.t("roof_end_auto")}</option>
+                    <option value="" ?selected=${value === ""}>${this.t("roof_end_auto_of", { shape: this.t(`roof_shape_${sec.shape}` as I18nKey) })}</option>
                     ${ROOF_ENDS.map((e) => html`<option value=${e} ?selected=${value === e}>${this.t(e === "gable" ? "roof_end_gable" : `roof_shape_${e}`)}</option>`)}
                   </select></label
                 >`;

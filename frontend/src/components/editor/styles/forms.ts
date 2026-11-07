@@ -202,23 +202,32 @@ export const formStyles = css`
         text-transform: none;
         letter-spacing: 0;
       }
-      /* help on demand: an "i" beside the field, its text under it once opened */
+      /* help on demand (#412, ORDER-2): the "i" is the last thing on its field's label line (top right), its text
+         under the field once opened */
       .fp3d-with-info {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-end;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
         gap: 4px 6px;
         min-width: 0;
       }
       .fp3d-with-info > :first-child {
-        flex: 1 1 0;
+        grid-column: 1;
+        grid-row: 1;
         min-width: 0;
+      }
+      .fp3d-with-info > .fp3d-info {
+        grid-column: 2;
+        grid-row: 1;
+      }
+      .fp3d-with-info > .fp3d-help-text {
+        grid-column: 1 / -1;
       }
       .fp3d-info {
         flex: none;
         width: 24px;
         height: 24px;
-        margin-bottom: 6px;
+        margin: 0;
         padding: 0;
         border: 1px solid var(--fp3d-line);
         border-radius: 50%;
@@ -237,6 +246,43 @@ export const formStyles = css`
       .fp3d-help-text {
         flex: 1 0 100%;
         margin: 0;
+      }
+      /* field rules (#412): a label on one line (CUT-2), its unit inside the input as a suffix ("1.79 m") */
+      .fp3d-field-label {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .fp3d-unit-box {
+        position: relative;
+        display: grid;
+        min-width: 0;
+      }
+      .fp3d-unit-box > input {
+        width: 100%;
+        box-sizing: border-box;
+        padding-right: 2.6em;
+      }
+      .fp3d-unit {
+        position: absolute;
+        right: 9px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 13px;
+        color: var(--fp3d-muted);
+        pointer-events: none;
+      }
+      /* sub-heads inside a fold are never bigger than the fold's title: label size, muted (#412, ORDER-1) */
+      .fp3d-fold-body h3,
+      .fp3d-fold-body h4 {
+        margin: 10px 0 4px;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.3;
+        letter-spacing: 0;
+        text-transform: none;
+        color: var(--fp3d-muted);
       }
       .fp3d-found {
         display: grid;

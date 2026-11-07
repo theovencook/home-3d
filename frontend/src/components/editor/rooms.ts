@@ -531,8 +531,8 @@ export class RoomsPart {
               <span>${r.name}</span><span class="fp3d-muted">${this.area(polygonArea(r.points))}</span>
             </button>
             ${this.isEditor && floor.rooms.length > 1
-              ? html`<button class="fp3d-pin" title=${this.t("room_order_up")} ?disabled=${i === 0} @click=${() => this.moveRoom(r.id, -1)}>↑</button>
-                  <button class="fp3d-pin" title=${this.t("room_order_down")} ?disabled=${i === floor.rooms.length - 1} @click=${() => this.moveRoom(r.id, 1)}>↓</button>`
+              ? html`<button class="fp3d-pin" aria-label=${this.t("room_move_up", { room: r.name })} title=${this.t("room_order_up")} ?disabled=${i === 0} @click=${() => this.moveRoom(r.id, -1)}>↑</button>
+                  <button class="fp3d-pin" aria-label=${this.t("room_move_down", { room: r.name })} title=${this.t("room_order_down")} ?disabled=${i === floor.rooms.length - 1} @click=${() => this.moveRoom(r.id, 1)}>↓</button>`
               : nothing}
           </div>`,
         )}
@@ -637,7 +637,7 @@ export class RoomsPart {
       </div>
       <div class="fp3d-actions">
         <button class="fp3d-btn" title=${this.t("room_start_view_hint")} ?disabled=${!admin} @click=${() => this.rememberRoomView()}>${this.t("room_start_view")}</button>
-        ${room.start_view ? html`<button class="fp3d-btn" title=${this.t("room_start_view_reset")} ?disabled=${!admin} @click=${() => this.updateRoom({ start_view: null })}>↺</button>` : nothing}
+        ${room.start_view ? html`<button class="fp3d-btn" aria-label=${this.t("room_start_view_reset")} title=${this.t("room_start_view_reset")} ?disabled=${!admin} @click=${() => this.updateRoom({ start_view: null })}>↺</button>` : nothing}
       </div>
       <p class="fp3d-sub" title=${this.t("room_area_net_hint")}>${this.t("room_area_net", { a: this.area(polygonArea(room.points)), n: this.area(netRoomArea(room, this.floor!, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior })) })}</p>
       ${this.renderRoomClimate(room)} ${this.renderRoomLive(room)} ${this.renderRoomOpenings(room)}
@@ -649,7 +649,7 @@ export class RoomsPart {
             <span class="fp3d-muted">${i + 1}</span>
             ${this.len(this.t("x"), p[0], (v) => this.setPoint(i, 0, v))} ${this.len(this.t("z"), p[1], (v) => this.setPoint(i, 1, v))}
             ${admin
-              ? html`<button class="fp3d-btn" title=${this.t("delete_point")} ?disabled=${room.points.length <= 3} @click=${() => void this.deleteVertex(i)}>
+              ? html`<button class="fp3d-btn" aria-label=${this.t("delete_point")} title=${this.t("delete_point")} ?disabled=${room.points.length <= 3} @click=${() => void this.deleteVertex(i)}>
                   ×
                 </button>`
               : nothing}

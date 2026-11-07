@@ -292,8 +292,8 @@ export class WallsPart {
               : nothing}
             ${this.isEditor && h !== null ? html`<button class="fp3d-btn" title=${this.t("wall_height_full")} @click=${() => set(null)}>↥</button>` : nothing}
             ${this.isEditor && h !== 0 ? html`<button class="fp3d-btn" title=${this.t("wall_none_hint")} @click=${() => set(0)}>${this.t("wall_none")}</button>` : nothing}
-            ${this.isEditor && partLen >= 0.4 ? html`<button class="fp3d-btn" title=${this.t("wall_split_hint")} @click=${() => this.splitEdge(room, i, part)}>✂</button>` : nothing}
-            ${(part === undefined || part === 0) && h !== 0 ? html`<button class="fp3d-btn" title=${this.t("wall_view_open")} @click=${() => this.openWallView(room.id, i)}>▦</button>` : nothing}
+            ${this.isEditor && partLen >= 0.4 ? html`<button class="fp3d-btn" aria-label=${this.t("wall_split")} title=${this.t("wall_split_hint")} @click=${() => this.splitEdge(room, i, part)}>✂</button>` : nothing}
+            ${(part === undefined || part === 0) && h !== 0 ? html`<button class="fp3d-btn" aria-label=${this.t("wall_view")} title=${this.t("wall_view_open")} @click=${() => this.openWallView(room.id, i)}>▦</button>` : nothing}
             ${(part === undefined || part === 0) && h !== 0
               ? html`<span class="fp3d-wide fp3d-split-row" title=${this.t("wall_thickness_hint")}
                   >${this.len(this.t("edge_thickness"), room.wall_thickness?.[i] ?? (outer.has(i) ? s.wall_exterior : s.wall_interior), (v) => {
@@ -301,7 +301,7 @@ export class WallsPart {
                     const t = Math.min(1.5, Math.max(0.02, Math.round(v * 1000) / 1000));
                     setThick(i, Math.abs(t - def) < 0.0005 ? null : t);
                   }, 0.01, 0.02)}
-                  ${this.isEditor && room.wall_thickness?.[i] != null ? html`<button class="fp3d-btn" title=${this.t("wall_thickness_reset")} @click=${() => setThick(i, null)}>↺</button>` : nothing}</span
+                  ${this.isEditor && room.wall_thickness?.[i] != null ? html`<button class="fp3d-btn" aria-label=${this.t("wall_thickness_reset")} title=${this.t("wall_thickness_reset")} @click=${() => setThick(i, null)}>↺</button>` : nothing}</span
                 >`
               : nothing}
             ${part !== undefined && part > 0 && (room.wall_splits?.[i] ?? []).some((d) => Math.abs(d - starts[part]) < 1e-3)
