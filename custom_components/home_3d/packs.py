@@ -42,7 +42,42 @@ COLOUR_ROLES = [
     "accent",
     "paint",
 ]
-MOUNTS = ["floor", "surface", "wall", "ceiling"]
+# what an item may call the part drawn in a colour role (`role_names`, #411): the names of its colour rows in the panel
+PART_NAMES = [
+    "main",
+    "second",
+    "third",
+    "details",
+    "paint",
+    "trim",
+    "tyres",
+    "tyres_trim",
+    "wheels",
+    "windows",
+    "lights",
+    "frame",
+    "legs",
+    "seat",
+    "fabric",
+    "cushion",
+    "wood",
+    "metal",
+    "glass",
+    "plant",
+    "pot",
+    "case",
+    "panels",
+    "valves",
+    "grille",
+    "buttons",
+    "screen",
+    "top",
+    "base",
+    "fronts",
+    "handles",
+    "shade",
+]
+MOUNTS =["floor", "surface", "wall", "ceiling"]
 LIGHTS = [
     "ceiling",
     "downlight",
@@ -331,6 +366,8 @@ _ITEM_FIELDS = vol.Schema(
         # the item's own colour for a role (#404): what its parts in that role show while the placed item has no
         # colour of its own for it (a car's paint in this colourway)
         vol.Optional("colors"): vol.All({vol.In(COLOUR_ROLES): vol.Match(r"^#[0-9a-fA-F]{6}$")}, vol.Length(min=1)),
+        # what its part in a role is called (#411): the item panel names that colour row so ("Paint", "Legs")
+        vol.Optional("role_names"): vol.All({vol.In(COLOUR_ROLES): vol.In(PART_NAMES)}, vol.Length(min=1)),
         # stairs: when it reaches the floor above, it cuts a stairwell opening into that floor
         vol.Optional("hole", default=False): bool,
         # a lamp: how its light spreads (like the built-in lamp of that kind)

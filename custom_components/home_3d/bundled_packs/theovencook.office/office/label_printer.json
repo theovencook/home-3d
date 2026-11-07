@@ -9,6 +9,7 @@
   "variant": {"en": "Desktop"},
   "electric": true,
   "mount": "surface",
+  "role_names": {"white": "case", "dark": "details", "accent": "buttons"},
   "parts": [
     {"shape": "rbox", "x": 0.0, "z": 0.0, "w": 1.0, "d": 1.0, "y": 0.0, "h": 0.55, "color": "white", "round": 0.3},
     {"shape": "cyl", "x": 0.0, "z": -0.1471, "w": 0.95, "d": 0.6471, "y": 0.4, "h": 0.6, "color": "white", "axis": "x"},

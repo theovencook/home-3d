@@ -346,6 +346,12 @@ shapes needs a Home 3D version that knows them (shells: Home 3D after 0.2.1).
 - `colors`: the item's own colour for a role, as `{"paint": "#a51c2c"}`: its parts in that role show this colour
   until the placed item is given one of its own, and the item panel's reset goes back to it. A car's colourways use it
   for their paint, so each looks as it should and can still be repainted. Roles left out follow the look.
+- `role_names`: what the part drawn in a role is, as `{"white": "panels", "metal": "valves"}`: the item panel names
+  that colour row so ("Panels", "Valves") instead of by the role's colour word. Names: `main`, `second`, `third`,
+  `details`, `paint`, `trim`, `tyres`, `tyres_trim`, `wheels`, `windows`, `lights`, `frame`, `legs`, `seat`, `fabric`,
+  `cushion`, `wood`, `metal`, `glass`, `plant`, `pot`, `case`, `panels`, `valves`, `grille`, `buttons`, `screen`,
+  `top`, `base`, `fronts`, `handles`, `shade`. A role left out keeps a plain name: its material (Fabric, Wood, Metal,
+  Glass …) or "Main colour", "Second colour", "Details"; a vehicle's are Paint, Tyres and trim, Wheels and Windows.
 - `hole`: stairs. When they reach the floor above, they cut the stairwell opening into that floor, like the built-in
   stairs; the steps rise from the front edge (+z) to the back.
 - `rack_frame`: the item is an empty rack (19 or 10 inch, its height in U); see [Racks](#racks).

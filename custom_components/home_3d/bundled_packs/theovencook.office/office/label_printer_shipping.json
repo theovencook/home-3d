@@ -9,6 +9,7 @@
   "variant": {"en": "Shipping labels"},
   "electric": true,
   "mount": "surface",
+  "role_names": {"white": "case", "dark": "details"},
   "parts": [
     {"shape": "rbox", "x": 0.0, "z": 0.0, "w": 1.0, "d": 1.0, "y": 0.0, "h": 0.5, "color": "dark", "round": 0.2},
     {"shape": "rbox", "x": 0.0, "z": -0.0652, "w": 0.9444, "d": 0.8696, "y": 0.5, "h": 0.4882, "color": "dark", "round": 0.35},

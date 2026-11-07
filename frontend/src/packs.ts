@@ -91,6 +91,8 @@ export interface PackItem {
   vehicle?: boolean;
   /** Its own colour per role (#404, role → "#rrggbb"): what the role shows while the placed item has none of its own. */
   colors?: Partial<Record<string, string>>;
+  /** What its part in a role is called (#411, role → a PART_NAMES name): the item panel's name of that colour row. */
+  role_names?: Partial<Record<string, string>>;
   /** Stairs: cuts a stairwell opening into the floor above when it reaches it. */
   hole?: boolean;
   /** A lamp: how its light spreads. */
@@ -551,6 +553,15 @@ export function packItem(type: string): PackItem | undefined {
 export function packInfo(type: string): PackItemInfo | undefined {
   if (!isPackType(type)) return undefined;
   return planItems.get(type) ?? items.get(type);
+}
+
+/**
+ * What a pack item calls its parts by role (#411). Names are text, not geometry: the installed pack's, so a plan's
+ * older recipe copy of the item (the Sample Home's) shows them too; the copy's when the pack is gone.
+ */
+export function packRoleNames(type: string): Partial<Record<string, string>> | undefined {
+  if (!isPackType(type)) return undefined;
+  return items.get(type)?.role_names ?? planItems.get(type)?.role_names;
 }
 
 /** Default size of any furniture type. */

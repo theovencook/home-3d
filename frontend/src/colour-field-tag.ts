@@ -23,11 +23,15 @@ export interface ColourFieldOptions {
   clearable?: boolean;
   /** The colour it has without one of its own (a part's colour in the look, a setting's default): shown muted and copied while there is no value. */
   base?: string | null;
+  /** The swatch opens the host's popover (#410) instead of the browser's picker: called on its click. */
+  onMenu?: () => void;
+  /** The host's popover is open. */
+  expanded?: boolean;
 }
 
 /** The shared colour field (#403) in a host's template. */
 export function colourField(o: ColourFieldOptions): TemplateResult {
   const take = (e: Event) => o.onChange((e as CustomEvent<{ value: string | null }>).detail.value);
   // prettier-ignore
-  return html`<fp3d-colour-field .value=${o.value ?? null} .label=${o.label} .t=${o.t} .base=${o.base ?? null} ?clearable=${!!o.clearable} ?disabled=${!!o.disabled} @colour-change=${o.live ? null : take} @colour-input=${o.live ? take : null}></fp3d-colour-field>`;
+  return html`<fp3d-colour-field .value=${o.value ?? null} .label=${o.label} .t=${o.t} .base=${o.base ?? null} ?clearable=${!!o.clearable} ?disabled=${!!o.disabled} @colour-change=${o.live ? null : take} @colour-input=${o.live ? take : null} ?menu=${!!o.onMenu} ?expanded=${!!o.expanded} @colour-menu=${o.onMenu ?? null}></fp3d-colour-field>`;
 }

@@ -36,6 +36,11 @@ function pyConstant(name: string): unknown {
 test("the brief's lists and limits are the ones the backend checks an item against", () => {
   assert.deepEqual(ITEM_FORMAT.shapes, pyConstant("PART_SHAPES"));
   assert.deepEqual(ITEM_FORMAT.colourRoles, pyConstant("COLOUR_ROLES"));
+  // pyConstant drops "_" (for numbers like 1_000), so the names are compared without it
+  assert.deepEqual(
+    ITEM_FORMAT.partNames.map((n) => n.replace(/_/g, "")),
+    pyConstant("PART_NAMES"),
+  );
   assert.deepEqual(ITEM_FORMAT.mounts, pyConstant("MOUNTS"));
   assert.deepEqual(ITEM_FORMAT.lights, pyConstant("LIGHTS"));
   assert.equal(ITEM_FORMAT.maxParts, pyConstant("MAX_PARTS"));

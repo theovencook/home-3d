@@ -8,6 +8,12 @@ export const PART_SHAPES = ["box", "cyl", "loft", "sphere", "lathe", "rbox", "sh
 /** The colour roles, in the order the item panel lists them (colour-roles.ts). */
 export const COLOUR_ROLES = ["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent", "paint"] as const;
 
+/**
+ * What a pack item may call the part drawn in a colour role (`role_names`, #411): the item panel names its colour rows
+ * after them ("Paint", "Tyres and trim") instead of the role's colour word. The text of each is `part_<name>`.
+ */
+export const PART_NAMES = ["main", "second", "third", "details", "paint", "trim", "tyres", "tyres_trim", "wheels", "windows", "lights", "frame", "legs", "seat", "fabric", "cushion", "wood", "metal", "glass", "plant", "pot", "case", "panels", "valves", "grille", "buttons", "screen", "top", "base", "fronts", "handles", "shade"] as const;
+
 /** Where an item sits. */
 export const MOUNTS = ["floor", "surface", "wall", "ceiling"] as const;
 
@@ -26,6 +32,7 @@ export const MAX_SHELL_POINTS = 16;
 export const ITEM_FORMAT = {
   shapes: PART_SHAPES,
   colourRoles: COLOUR_ROLES,
+  partNames: PART_NAMES,
   mounts: MOUNTS,
   lights: LIGHTS,
   maxParts: MAX_PARTS,

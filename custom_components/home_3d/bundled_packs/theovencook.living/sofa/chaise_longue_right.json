@@ -7,6 +7,7 @@
   "variant": {"en": "Back on the right"},
   "room": ["living", "bedroom", "conservatory"],
   "tags": ["chaise", "chaise lounge", "fainting couch", "recliner", "daybed", "upholstered"],
+  "role_names": {"wood": "legs"},
   "parts": [
     {"shape": "cyl", "x": 0.45, "z": -0.3787, "w": 0.0273, "d": 0.0662, "y": 0.0, "h": 0.1905, "color": "wood", "fix": "wdh"},
     {"shape": "cyl", "x": 0.45, "z": 0.3787, "w": 0.0273, "d": 0.0662, "y": 0.0, "h": 0.1905, "color": "wood", "fix": "wdh"},

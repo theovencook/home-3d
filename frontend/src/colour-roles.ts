@@ -84,6 +84,15 @@ export const COLOUR_PRESETS: readonly ColourPreset[] = [
   { id: "pine", hex: "#d8b27a" },
   { id: "acacia", hex: "#8a5a36" },
   { id: "anthracite", hex: "#45484c" },
+  // metals, glass and leaves, so each part family has colours of its own (#410)
+  { id: "steel", hex: "#9aa1a8" },
+  { id: "copper", hex: "#b0643a" },
+  { id: "clear_glass", hex: "#cfe3ea" },
+  { id: "frosted_glass", hex: "#e8eef1" },
+  { id: "smoked_glass", hex: "#4b5359" },
+  { id: "leaf_green", hex: "#4f7a3a" },
+  { id: "dark_green", hex: "#2c4a2e" },
+  { id: "olive", hex: "#7a7d3c" },
 ];
 
 /** The roles a built-in model is drawn in (the furniture tests check this against the models). Lamps have none. */

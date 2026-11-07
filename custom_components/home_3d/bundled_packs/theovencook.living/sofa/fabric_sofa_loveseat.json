@@ -7,6 +7,7 @@
   "variant": {"en": "Loveseat"},
   "room": ["living", "bedroom", "conservatory"],
   "tags": ["loveseat", "love seat", "settee", "couch", "fabric sofa", "upholstered", "small sofa", "snuggler"],
+  "role_names": {"wood": "legs"},
   "parts": [
     {"shape": "cyl", "x": -0.4647, "z": -0.4348, "w": 0.0294, "d": 0.0543, "y": 0.0, "h": 0.093, "color": "wood", "fix": "wdh"},
     {"shape": "cyl", "x": -0.4647, "z": 0.4348, "w": 0.0294, "d": 0.0543, "y": 0.0, "h": 0.093, "color": "wood", "fix": "wdh"},

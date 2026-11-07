@@ -237,3 +237,20 @@ test("an item part on its default shows its role's colour in the device's look (
   assert.notEqual(roleInLook("fabric", "day"), neon, "the Day look has its own");
   assert.equal(roleInLook("nope", "day"), null);
 });
+
+test("in menu mode the swatch is a button that asks the host for its popover, and says whether it is open (#410)", () => {
+  const f = field(null, { base: "#293962", menu: true, expanded: false }) as ColourField & { sent: Sent[]; render(): unknown };
+  const text = flat(f.render());
+  assert.doesNotMatch(text, /type="color"/, "no browser picker on the row");
+  assert.match(text, /<button type="button" class=sw dflt sb aria-label=Paint aria-haspopup="true" aria-expanded=false/);
+  assert.match(text, /background:#293962/, "the swatch shows the colour it has now, not a faded grey");
+  assert.match(text, /class=hex dflt/, "the hex value is still there to read, type and paste");
+  // its click sends colour-menu, no colour change
+  type Tpl = { strings: readonly string[]; values: unknown[] };
+  const t = (f.render() as Tpl).values.find((v): v is Tpl => !!v && typeof v === "object" && "strings" in v && (v as Tpl).strings[0]!.startsWith("<button"))!;
+  const click = t.values[t.strings.findIndex((s) => s.trimEnd().endsWith("@click="))] as () => void;
+  click();
+  assert.deepEqual(f.sent.map((s) => s.type), ["colour-menu"]);
+  f.expanded = true;
+  assert.match(flat(f.render()), /aria-expanded=true/);
+});
