@@ -61,6 +61,22 @@ Built-in furniture kinds: `sofa`, `sofa_l`, `sofa_u`, `armchair`, `stool`, `coff
   `frontend/src/import/simple.ts`): broken parts are repaired or left out, with a warning for each. Like the
   converters, it is not yet in the editor.
 
+## Energy sensor signs (stored plan)
+
+A stored plan's `energy` object names the power sensors of the energy balance. Two optional keys say which way the
+grid and battery sensors count; the editor shows them as a choice next to each sensor (#423):
+
+| Key | Meaning |
+|---|---|
+| `grid_invert` | `false` or absent (default): the grid sensor shows import as positive. `true`: it shows export as positive. |
+| `battery_invert` | `false` or absent (default): the battery sensor shows discharging as positive. `true`: it shows charging as positive. |
+
+Each entry of `energy.systems[]` (a further inverter or battery setup) has its own `grid_invert` and `battery_invert`
+with the same meaning. The main keys also apply to the power sensors of the placed meter and home batteries, unless
+the meter has a separate export sensor or the battery a separate charging sensor (then each sensor counts one way and
+no sign is needed). The sign applies wherever the reading is used: the energy cables and their colours, the battery
+chip with its power and charge, and time travel.
+
 ## The stored plan's version (for contributors)
 
 A plan Home 3D stores carries a `version` (`PLAN_VERSION` in `custom_components/home_3d/const.py`). When Home Assistant starts, each plan is brought up to the current version by the steps in `custom_components/home_3d/migrations.py`, then checked against the schema in `schema.py`:

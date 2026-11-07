@@ -877,6 +877,12 @@ export class ItemFormPart {
               (v) => this.updateFurniture({ power: v }),
             )
           : nothing}
+        ${role === "meter" && !volumeMeter(f.type) && !(f.export && f.export !== "none")
+          ? // which way its one signed sensor counts (#423): the plan's grid sign, the same choice as in the energy balance
+            this.renderSignChoice("grid", this._doc.energy.grid_invert, (v) => this.setEnergy({ grid_invert: v }))
+          : role === "home_battery" && !(f.charge && f.charge !== "none")
+            ? this.renderSignChoice("battery", this._doc.energy.battery_invert, (v) => this.setEnergy({ battery_invert: v }))
+            : nothing}
         ${energy && !["grid_point", "meter", "inverter", "home_battery"].includes(role ?? f.type) ? this.holoField(f) : nothing}
         ${role === "inverter"
           ? html`${this.withInfo(

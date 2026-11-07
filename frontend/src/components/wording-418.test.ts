@@ -30,7 +30,8 @@ test("no English label or German text uses sign or axis jargon: no '+X', '− ='
   const de = JSON.parse(readFileSync(new URL("../../../custom_components/home_3d/bundled_languages/theovencook.lang-de/strings.json", import.meta.url), "utf8")) as Record<string, string>;
   for (const k of ["outdoor_offset", "slope_x", "slope_nx", "slope_z", "slope_nz", "energy_grid", "energy_battery_sensor", "holo_right"]) assert.doesNotMatch(de[k], SIGNS, k);
   assert.equal(lateEnglish.outdoor_offset, "Raise or lower (m)");
-  assert.match(lateEnglish.energy_battery_sensor, /discharging shows as positive/);
+  // the sign is a choice of its own next to the sensor since #423
+  assert.equal(lateEnglish.energy_battery_sign_discharge, "Discharging shows as positive");
 });
 
 test("'Falls towards' is four named arrow buttons, the chosen one pressed (#418)", async () => {

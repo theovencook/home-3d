@@ -17,6 +17,12 @@ import { energyRole, furnitureSize, packInfo, packItemName } from "../../packs.t
 import { round, isEnergyDevice, numberish } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
+/** The two ways a grid or battery sensor can count (#423): the default (no inversion) first. */
+export const SIGN_CHOICES = {
+  grid: ["energy_grid_sign_import", "energy_grid_sign_export"],
+  battery: ["energy_battery_sign_discharge", "energy_battery_sign_charge"],
+} as const satisfies Record<"grid" | "battery", readonly [I18nKey, I18nKey]>;
+
 /** EnergyPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class EnergyPart {
   /** Energy tool: a round marker with a symbol and its name on every energy device of the floor, above all else. */
@@ -539,16 +545,10 @@ export class EnergyPart {
             </select></label
           >
           ${this.entitySelect(this.t("energy_grid"), x.grid, undefined, power, pick(x.id, "grid"))}
-          <label class="fp3d-check fp3d-wide"
-            ><input type="checkbox" .checked=${x.grid_invert} ?disabled=${!admin} @change=${(ev: Event) => set(x.id, { grid_invert: (ev.target as HTMLInputElement).checked })} />
-            ${this.t("energy_invert")}</label
-          >
+          ${this.renderSignChoice("grid", x.grid_invert, (v) => set(x.id, { grid_invert: v }))}
           ${this.entitySelect(this.t("energy_solar_sensor"), x.solar, undefined, power, pick(x.id, "solar"))}
           ${this.entitySelect(this.t("energy_battery_sensor"), x.battery, undefined, power, pick(x.id, "battery"))}
-          <label class="fp3d-check fp3d-wide"
-            ><input type="checkbox" .checked=${x.battery_invert} ?disabled=${!admin} @change=${(ev: Event) => set(x.id, { battery_invert: (ev.target as HTMLInputElement).checked })} />
-            ${this.t("energy_invert")}</label
-          >
+          ${this.renderSignChoice("battery", x.battery_invert, (v) => set(x.id, { battery_invert: v }))}
           ${this.entitySelect(this.t("energy_battery_soc"), x.battery_soc, undefined, soc, pick(x.id, "battery_soc"))}
           <button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.setEnergy({ systems: systems.filter((y) => y.id !== x.id) })}>${this.t("energy_system_remove")}</button>
         </div>`,
@@ -750,6 +750,26 @@ export class EnergyPart {
 
 
   /** Grid, solar, battery and house sensors: from the devices in the plan unless chosen here. */
+  /**
+   * Which way a grid or battery power sensor counts (#423): a choice of two plain sentences next to the sensor. It
+   * writes the plan's `grid_invert` / `battery_invert` (false or absent: import / discharging shows as positive).
+   */
+  renderSignChoice(this: Fp3dEditor, kind: "grid" | "battery", invert: boolean | undefined, onChange: (invert: boolean) => void) {
+    const [normal, flipped] = SIGN_CHOICES[kind];
+    const label = this.t(kind === "grid" ? "energy_grid_sign" : "energy_battery_sign");
+    return html`<label class="fp3d-field fp3d-wide"
+      ><span>${label}</span>
+      <select
+        data-sign=${kind}
+        ?disabled=${!this.isEditor}
+        @change=${(ev: Event) => onChange((ev.target as HTMLSelectElement).value === "flipped")}
+      >
+        <option value="normal" ?selected=${!invert}>${this.t(normal)}</option>
+        <option value="flipped" ?selected=${!!invert}>${this.t(flipped)}</option>
+      </select></label
+    >`;
+  }
+
   renderEnergyBalance(this: Fp3dEditor) {
     const e = this._doc.energy;
     const admin = this.isEditor;
@@ -783,16 +803,10 @@ export class EnergyPart {
         : nothing}
       <div class="fp3d-form">
         ${this.entitySelect(this.t("energy_grid"), e.grid, devices.grid, power, pick("grid"))}
-        <label class="fp3d-check fp3d-wide"
-          ><input type="checkbox" .checked=${e.grid_invert} ?disabled=${!admin} @change=${(ev: Event) => this.setEnergy({ grid_invert: (ev.target as HTMLInputElement).checked })} />
-          ${this.t("energy_invert")}</label
-        >
+        ${this.renderSignChoice("grid", e.grid_invert, (v) => this.setEnergy({ grid_invert: v }))}
         ${this.entitySelect(this.t("energy_solar_sensor"), e.solar, devices.solar[0] ?? null, power, pick("solar"))}
         ${this.entitySelect(this.t("energy_battery_sensor"), e.battery, devices.battery[0] ?? null, power, pick("battery"))}
-        <label class="fp3d-check fp3d-wide"
-          ><input type="checkbox" .checked=${e.battery_invert} ?disabled=${!admin} @change=${(ev: Event) => this.setEnergy({ battery_invert: (ev.target as HTMLInputElement).checked })} />
-          ${this.t("energy_invert")}</label
-        >
+        ${this.renderSignChoice("battery", e.battery_invert, (v) => this.setEnergy({ battery_invert: v }))}
         ${this.entitySelect(this.t("energy_battery_soc"), e.battery_soc, devices.soc[0] ?? null, soc, pick("battery_soc"))}
         ${this.renderEnergySystems(power, soc)}
         ${this.entitySelect(this.t("energy_consumption_sensor"), e.consumption, null, power, pick("consumption"))}
