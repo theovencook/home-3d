@@ -16,7 +16,7 @@ const PACKS_PY = readFileSync(new URL("../../../custom_components/home_3d/packs.
 
 /** A module-level constant of packs.py (a list, a tuple or a number), read as JSON. */
 function pyConstant(name: string): unknown {
-  const start = PACKS_PY.match(new RegExp(`^${name} = `, "m"));
+  const start = PACKS_PY.match(new RegExp(`^${name}\\s*=\\s*`, "m"));
   assert.ok(start?.index !== undefined, `packs.py names ${name}`);
   let text = PACKS_PY.slice(start.index + start[0].length);
   const open = text[0];
@@ -30,17 +30,13 @@ function pyConstant(name: string): unknown {
     }
     text = text.slice(0, end + 1);
   } else text = text.split("\n")[0];
-  return JSON.parse(text.replace(/\(/g, "[").replace(/\)/g, "]").replace(/,(\s*)\]/g, "$1]").replace(/_/g, ""));
+  return JSON.parse(text.replace(/\(/g, "[").replace(/\)/g, "]").replace(/,(\s*)\]/g, "$1]").replace(/(\d)_(?=\d)/g, "$1"));
 }
 
 test("the brief's lists and limits are the ones the backend checks an item against", () => {
   assert.deepEqual(ITEM_FORMAT.shapes, pyConstant("PART_SHAPES"));
   assert.deepEqual(ITEM_FORMAT.colourRoles, pyConstant("COLOUR_ROLES"));
-  // pyConstant drops "_" (for numbers like 1_000), so the names are compared without it
-  assert.deepEqual(
-    ITEM_FORMAT.partNames.map((n) => n.replace(/_/g, "")),
-    pyConstant("PART_NAMES"),
-  );
+  assert.deepEqual(ITEM_FORMAT.partNames, pyConstant("PART_NAMES"));
   assert.deepEqual(ITEM_FORMAT.mounts, pyConstant("MOUNTS"));
   assert.deepEqual(ITEM_FORMAT.lights, pyConstant("LIGHTS"));
   assert.equal(ITEM_FORMAT.maxParts, pyConstant("MAX_PARTS"));

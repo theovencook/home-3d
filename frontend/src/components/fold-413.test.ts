@@ -91,7 +91,17 @@ test("the car's 'Change what was found' is a fold with no 'Done' link (#413)", a
   resetFolds();
   const ed = await makeEditor([{ ...square("r", 0, 0, 6, 6), name: "Garage" }], [item("c", "pack:demo.cars:leaf", { entity: "sensor.car_battery", w: 1.8, d: 4.5, h: 1.5 })]);
   ed.packs = [PACK];
-  ed.hass = { ...ed.hass, entities: {}, devices: {} };
+  // the fold only shows when readings were found on the car's device (#415), so the car reports two
+  ed.hass = {
+    ...ed.hass,
+    entities: { "sensor.car_battery": { entity_id: "sensor.car_battery", device_id: "leaf" }, "lock.car_doors": { entity_id: "lock.car_doors", device_id: "leaf" } },
+    devices: { leaf: { id: "leaf", name: "Leaf" } },
+    states: {
+      ...ed.hass.states,
+      "sensor.car_battery": { entity_id: "sensor.car_battery", state: "80", attributes: { friendly_name: "Leaf battery", device_class: "battery", unit_of_measurement: "%" } },
+      "lock.car_doors": { entity_id: "lock.car_doors", state: "locked", attributes: { friendly_name: "Leaf doors" } },
+    },
+  };
   ed.selectItem("furniture", "c");
   const closed = flat(ed.renderCarMain(ed.furnitureItem, true));
   assert.match(closed, /data-fold=car-found/);

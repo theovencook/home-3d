@@ -55,9 +55,13 @@ test("a row goes to the area: its floor, the area chosen and brought into view (
 
 test("the floor page lists the outdoor areas like its items (#401)", async () => {
   const el = await editor();
+  const shut = flat(el.renderOutdoorList());
+  assert.match(shut, /Outdoor areas \(4\)/, "the fold's title counts the areas while it is closed (#413)");
+  assert.match(shut, /data-fold=out-list/);
+  assert.doesNotMatch(shut, /<fp3d-item-list/, "the fold is closed at first (#413)");
+  el.outdoorListOpen = true;
   const out = flat(el.renderOutdoorList());
-  assert.match(out, /Outdoor areas \(4\)/);
-  assert.match(out, /<fp3d-item-list/);
+  assert.match(out, /<fp3d-item-list/, "opened, it holds the same list as the items");
 });
 
 test("from upstairs the garden shows faintly; a tap on it asks, and yes goes down and chooses it (#401)", async () => {

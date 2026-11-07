@@ -69,7 +69,8 @@ test("each kind has its own kind line instead of Device or Stairs (#414, WORD-7)
   ];
   for (const [type, kind, line] of lines) {
     assert.equal(itemProfile(type).kind, kind, type);
-    assert.match(await formOf(item("i", type)), new RegExp(`${line} · Office`), type);
+    // the header (#409) leaves the kind out of "kind · place" when the title is the kind already (a kitchen unit)
+    assert.match(await formOf(item("i", type)), new RegExp(`${line} · Office|<h2>${line}</h2>\\s*<span class="fp3d-sub">Office</span>`), type);
   }
   assert.equal(itemProfile(T("battery")).kind, "energy", "a home battery stays an energy device");
   assert.equal(itemProfile("stairs").kind, "stairs", "stairs are still stairs");

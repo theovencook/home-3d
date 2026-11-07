@@ -2501,7 +2501,7 @@
  "colour_reset": "Zurück zur Standardfarbe",
  "colour_own": "Eigene Farbe",
  "colour_active_hint": "Leuchtfarbe, solange die Entität aktiv ist (spielt, an, Alarm).",
- "parts_hint": "Jedes Teil zeigt die Farbe, die es gerade hat. Gib einen Hex-Wert ein oder füge ihn ein, oder tippe auf das Farbfeld für passende Farben und die Oberfläche. „Auf Standard zurücksetzen“ setzt beides zurück. Oberflächen zeigt die Ansicht Realistisch.",
+ "parts_hint": "Jedes Teil zeigt die Farbe, die es gerade hat. Gib einen Hex-Wert ein oder füge ihn ein, oder tippe auf das Farbfeld für passende Farben und die Oberfläche. „Auf Standard zurücksetzen“ setzt beides zurück. Oberflächen siehst du in der Darstellung Realistisch.",
  "glow_colour": "Leuchtfarbe",
  "part_reset": "Auf Standard zurücksetzen",
  "part_presets": "Farben für {part}",

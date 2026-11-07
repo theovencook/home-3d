@@ -5,8 +5,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Placement } from "../model.ts";
 import { setPacks, type FurniturePack } from "../packs.ts";
-import { furnitureFits } from "./editor/furniture.ts";
+// The harness comes first: it sets the build-time globals that editor/furniture.ts (via load3d.ts) reads on load.
 import { makeEditor, square } from "./editor-harness.ts";
+import { furnitureFits } from "./editor/furniture.ts";
 
 const part = { shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 1, color: "white" };
 /** A big library: 1,200 electric items and a lamp, as an installed set of packs can be. */

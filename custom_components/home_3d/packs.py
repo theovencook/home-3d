@@ -77,7 +77,7 @@ PART_NAMES = [
     "handles",
     "shade",
 ]
-MOUNTS =["floor", "surface", "wall", "ceiling"]
+MOUNTS = ["floor", "surface", "wall", "ceiling"]
 LIGHTS = [
     "ceiling",
     "downlight",
