@@ -98,7 +98,7 @@ test("the car's 'Change what was found' is a fold with no 'Done' link (#413)", a
   assert.match(closed, /Change what was found/);
   assert.doesNotMatch(closed, /fp3d-found-toggle|>Done</);
   panelUi(ed, "c").found = true;
-  assert.match(flat(ed.renderCarMain(ed.furnitureItem, true)), /data-fold=car-found \?data-open=true/);
+  assert.match(flat(ed.renderCarMain(ed.furnitureItem, true)), /aria-expanded=true aria-controls=fp3d-fold-car-found/);
 });
 
 test("Tap, Hold and Double tap sit behind one 'Taps: Default' row (#413, MANY-6)", async () => {
