@@ -12,6 +12,7 @@ import { menuStyles } from "./editor/styles/menus.ts";
 import { wallsRoofStyles } from "./editor/styles/walls-roof.ts";
 import { formStyles } from "./editor/styles/forms.ts";
 import { phoneStyles } from "./editor/styles/phone.ts";
+import { typeCardStyles } from "./editor/styles/type-cards.ts";
 import type { Snapshot } from "../api.ts";
 import { lengthUnit, type LengthUnit } from "../units.ts";
 import type { AlignLines } from "../geometry/snap-guides.ts";
@@ -469,8 +470,6 @@ export class Fp3dEditor extends LitElement {
     const shown = this.renderRoot?.querySelector?.(".fp3d-hint-text") as HTMLElement | null | undefined;
     if (shown) shown.textContent = this.hintText();
   }
-  /** The opening panel's height before its kind was changed, kept as its minimum so nothing jumps (#63). */
-  openingFormMin: { id: string; h: number } | null = null;
   /** The '?' help overlay (#95) is open. */
   declare _help: boolean;
   /** The rack whose "Edit rack" sheet is open (#113; its furniture id). */
@@ -1339,6 +1338,7 @@ export class Fp3dEditor extends LitElement {
     menuStyles,
     wallsRoofStyles,
     formStyles,
+    typeCardStyles,
     phoneStyles,
   ];
 }

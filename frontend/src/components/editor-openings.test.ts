@@ -229,7 +229,7 @@ test("with an opening selected in Doors & windows mode the sidebar offers the ne
   el.hass = { language: "en", areas: {}, states: {}, entities: {}, devices: {}, user: { is_admin: true } };
   const text = markup(el.renderSide(el.floor));
   assert.match(text, /Next door or window/);
-  assert.match(text, /Change this opening to/);
+  assert.match(text, /fp3d-type-row/, "the opening's own Type row (#417)");
 });
 
 test("converting to a wider kind keeps the opening inside a short wall (#159)", () => {
