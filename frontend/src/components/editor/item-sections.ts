@@ -40,9 +40,15 @@ export const CAR_ROLES: readonly { key: keyof CarEntities & keyof CarLinks; labe
   { key: "climate", label: "car_climate" },
 ];
 
-// ------------------------------------------------------------------ fold state, remembered per kind
+// ------------------------------------------------------------------ fold state: Appearance per kind, the rest per selection
 
 const FOLD_KEY = "home3d.itemFolds";
+/**
+ * The folds remembered per kind in this browser (#407, DEF-4): Appearance only (the main section is always open).
+ * Size, the glow, Screen pictures, Energy, Taps and visibility and More options open for one selection: the next item
+ * starts at its short first view again.
+ */
+export const REMEMBERED_FOLDS: ReadonlySet<PanelFold> = new Set<PanelFold>(["appearance"]);
 let folds: Record<string, PanelFold[]> | null = null;
 
 function foldTable(): Record<string, PanelFold[]> {
@@ -50,20 +56,30 @@ function foldTable(): Record<string, PanelFold[]> {
   folds = {};
   try {
     const raw = JSON.parse(localStorage.getItem(FOLD_KEY) ?? "{}");
-    if (raw && typeof raw === "object") for (const [k, v] of Object.entries(raw)) if (Array.isArray(v)) folds[k] = v.filter((x): x is PanelFold => typeof x === "string");
+    // what an older version stored for the other folds is left out (#407)
+    if (raw && typeof raw === "object") for (const [k, v] of Object.entries(raw)) if (Array.isArray(v)) folds[k] = v.filter((x): x is PanelFold => typeof x === "string" && REMEMBERED_FOLDS.has(x as PanelFold));
   } catch {
     // no storage, or rubbish in it: the profile's defaults
   }
   return folds;
 }
 
-/** The folds open for a kind: what was opened last time, else the profile's first fold. */
-export function openFolds(p: ItemProfile): PanelFold[] {
-  return foldTable()[p.kind] ?? (p.openFirst ? [p.openFirst] : []);
+/** The folds open for a kind: Appearance as it was left for the kind (else the profile's first fold), plus the folds opened for this selection. */
+export function openFolds(p: ItemProfile, passing: ReadonlySet<PanelFold> = new Set()): PanelFold[] {
+  const kept = foldTable()[p.kind] ?? (p.openFirst ? [p.openFirst] : []);
+  return [...kept.filter((f) => REMEMBERED_FOLDS.has(f)), ...[...passing].filter((f) => !REMEMBERED_FOLDS.has(f))];
 }
 
-/** Opens or closes a fold for every item of the kind (and remembers it in this browser). */
-export function setFoldOpen(p: ItemProfile, fold: PanelFold, open: boolean): void {
+/**
+ * Opens or closes a fold: Appearance for every item of the kind (remembered in this browser), any other fold only for
+ * this selection (`passing`, the panel's per-selection set; without it nothing is kept).
+ */
+export function setFoldOpen(p: ItemProfile, fold: PanelFold, open: boolean, passing?: Set<PanelFold>): void {
+  if (!REMEMBERED_FOLDS.has(fold)) {
+    if (open) passing?.add(fold);
+    else passing?.delete(fold);
+    return;
+  }
   const now = openFolds(p).filter((f) => f !== fold);
   foldTable()[p.kind] = open ? [...now, fold] : now;
   try {
@@ -83,6 +99,8 @@ export function resetFolds(): void {
 interface PanelUi {
   id: string;
   menu: boolean;
+  /** The folds opened for this selection (#407): all but Appearance start closed on each new selection. */
+  folds: Set<PanelFold>;
   help: string | null;
   found: boolean;
   /** The colour rows show presets, materials and the active colour (the "Finishes and presets" link). */
@@ -93,8 +111,13 @@ const ui = new WeakMap<object, PanelUi>();
 /** The panel's passing state for the chosen item; a new item starts closed. */
 export function panelUi(ed: object, id: string): PanelUi {
   let s = ui.get(ed);
-  if (!s || s.id !== id) ui.set(ed, (s = { id, menu: false, help: null, found: false, finishes: false }));
+  if (!s || s.id !== id) ui.set(ed, (s = { id, menu: false, help: null, found: false, finishes: false, folds: new Set() }));
   return s;
+}
+
+/** A new selection (#407): the panel's passing state (open menu, help, the folds opened for the last one) is let go. */
+export function forgetPanelUi(ed: object): void {
+  ui.delete(ed);
 }
 
 /** ItemSectionsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
@@ -208,8 +231,8 @@ export class ItemSectionsPart {
   }
 
   /** Rename: More options opens with the name box focused. */
-  renameItem(this: Fp3dEditor, _f: Furniture, p: ItemProfile): void {
-    setFoldOpen(p, "more", true);
+  renameItem(this: Fp3dEditor, f: Furniture, p: ItemProfile): void {
+    setFoldOpen(p, "more", true, panelUi(this, f.id).folds);
     this.requestUpdate();
     void this.updateComplete.then(() => (this.renderRoot.querySelector?.(".fp3d-item-name") as HTMLInputElement | null)?.focus());
   }
@@ -250,16 +273,26 @@ export class ItemSectionsPart {
   }
 
   /**
-   * A fold (#396 rule 13, #397): a heading with a button (aria-expanded, 44 px row, focus ring) that shows the set
-   * values in its summary and an "N set" badge while it is closed. A closed fold renders nothing of its body.
+   * A fold (#396 rule 13, #397) of the item panel: open as openFolds says (Appearance per kind, the rest per selection,
+   * #407). A closed fold renders nothing of its body.
    */
   renderFold(this: Fp3dEditor, p: ItemProfile, fold: PanelFold, title: string, summary: string, set: number, body: () => unknown) {
-    const open = openFolds(p).includes(fold);
-    const id = `fp3d-fold-${fold}`;
-    return html`<section class="fp3d-fold" data-fold=${fold} ?data-open=${open}>
+    const passing = panelUi(this, this.furnitureItem?.id ?? "").folds;
+    const open = openFolds(p, passing).includes(fold);
+    return this.foldRow(fold, open, () => setFoldOpen(p, fold, !open, passing), title, summary, set, body);
+  }
+
+  /**
+   * The one fold of the side panel (#396 rule 13, #397): a heading with a button (aria-expanded, 44 px row, focus
+   * ring) that shows the set values in its summary and an "N set" badge while it is closed. A closed fold renders
+   * nothing of its body. `key` names it (data-fold, the body's id); `toggle` opens or closes it.
+   */
+  foldRow(this: Fp3dEditor, key: string, open: boolean, toggle: () => void, title: string, summary: string, set: number, body: () => unknown) {
+    const id = `fp3d-fold-${key}`;
+    return html`<section class="fp3d-fold" data-fold=${key} ?data-open=${open}>
       <h3 class="fp3d-fold-h">
         <button type="button" class="fp3d-fold-btn" aria-expanded=${open ? "true" : "false"} aria-controls=${id} @click=${() => {
-          setFoldOpen(p, fold, !open);
+          toggle();
           this.requestUpdate();
         }}>
           <span class="fp3d-fold-top"><span class="fp3d-fold-title">${title}</span>${set ? html`<span class="fp3d-fold-badge">${this.t("fold_set", { n: set })}</span>` : nothing}</span>

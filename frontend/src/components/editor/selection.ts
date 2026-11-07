@@ -14,6 +14,7 @@ import { furnitureName } from "../../furniture-names.ts";
 import { type FixKind, round } from "./helpers.ts";
 import { canRemovePoint, chosenPoint, choosePoint, pointOf, removePoint } from "./points.ts";
 import { refocusItemBar, renderItemBar } from "./item-bar.ts";
+import { forgetPanelUi } from "./item-sections.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** One action on an item from the plan (#398): the right-click menu shows `icon` + `text` (or `label`), the toolbar an icon named `label`. */
@@ -322,6 +323,8 @@ export class SelectionPart {
     this._point = null;
     this._roomId = kind === "room" ? id : this._roomId;
     this._openingId = kind === "opening" ? id : null;
+    // a new selection starts at the panel's short first view: folds opened for the last one close again (#407)
+    if (!(kind === "furniture" && id && id === this._furnitureId)) forgetPanelUi(this);
     this._furnitureId = kind === "furniture" ? id : null;
     this._multi = [];
     this._multiOut = [];

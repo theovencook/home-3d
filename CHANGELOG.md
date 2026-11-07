@@ -13,6 +13,7 @@ All notable changes to Home 3D.
 - Every colour field in the editor, the item editor, Settings, the View panel and the card editor is one shared field: the swatch, the colour as a hex value (#1e6ebc) to read, type or paste (#rgb, #rrggbb, rrggbb and rgb(r, g, b) are taken; anything else shows a short error and keeps the colour), and a copy button; the value is selected on focus. One change from the swatch or the text is one undo step (#403).
 - Home 3D has its own icon: a snow globe holding a lit house, drawn for this project. It replaces the icon that came from the original project. Home Assistant shows it in the integrations list and the Marketplace, with a separate version for dark cards (`dark_icon.png`). The artwork is in `docs/brand/`.
 - Editor: a short side panel (a free wall, a fence, a lawn, a pet) starts at the top again. The navigation row took the free height of the panel, so the back link and the form sat about 280 px down (#406).
+- Editor item panel: folds remember less. Only Appearance is remembered per kind of item; Size, the glow, Screen pictures, Energy, Taps and visibility and More options open for the chosen item only, so the next item starts at its short first view again. Older remembered folds other than Appearance are left out (#407).
 
 ## Home 3D 1.1.0 (6 November 2026)
 

@@ -7,7 +7,7 @@ import type { Furniture } from "../model.ts";
 import { setPacks, type FurniturePack } from "../packs.ts";
 import { itemProfile } from "../item-profile.ts";
 import { EntityPicker } from "./entity-picker.ts";
-import { resetFolds, setFoldOpen } from "./editor/item-sections.ts";
+import { panelUi, resetFolds, setFoldOpen } from "./editor/item-sections.ts";
 import { makeEditor, square } from "./editor-harness.ts";
 
 const PACK: FurniturePack = {
@@ -110,7 +110,7 @@ test("a vehicle item gets the car form, not the appliance form, and no appliance
   resetFolds();
   const ed = await editorWith(item("c", "pack:demo.cars:leaf", { entity: "sensor.demo_car_battery", w: 1.8, d: 4.5, h: 1.5 }), carHass());
   const p = itemProfile("pack:demo.cars:leaf");
-  for (const fold of p.folds) setFoldOpen(p, fold, true);
+  for (const fold of p.folds) setFoldOpen(p, fold, true, panelUi(ed, "c").folds);
   const form = flat(ed.renderFurnitureForm(ed.furnitureItem));
   assert.match(form, /fp3d-car-main/);
   assert.match(form, /Car \(any entity of the car\)/);
@@ -146,8 +146,8 @@ test("closed folds show their set values and an N set badge, and render no body 
   assert.match(energy, /Charger power/);
   assert.match(energy, /3600 W now/);
   assert.doesNotMatch(form, /Fuse circuit/, "a closed fold renders nothing of its body");
-  // opened (remembered per kind), the fields are there and the summary steps aside
-  setFoldOpen(itemProfile("pack:demo.cars:leaf"), "energy", true);
+  // opened (for this selection, #407), the fields are there and the summary steps aside
+  setFoldOpen(itemProfile("pack:demo.cars:leaf"), "energy", true, panelUi(ed, "c").folds);
   const open = flat(ed.renderFurnitureForm(ed.furnitureItem));
   assert.match(open, /Fuse circuit/);
   assert.match(open, /Counts as on above/);
@@ -189,12 +189,12 @@ test("a lamp's main section is its light; a bed's occupancy fold offers the seco
   assert.doesNotMatch(lf, /data-fold=energy/);
 
   const bed = await editorWith(item("b", "bed", { state_entity: "binary_sensor.sample_bed_left" }));
-  setFoldOpen(itemProfile("bed"), "glow", true);
+  setFoldOpen(itemProfile("bed"), "glow", true, panelUi(bed, "b").folds);
   const bf = flat(bed.renderFurnitureForm(bed.furnitureItem));
   assert.match(bf, /Glow when this is on/);
   assert.match(bf, /Second state/);
   const sofa = await editorWith(item("s", "sofa", { state_entity: "binary_sensor.sample_seat" }));
-  setFoldOpen(itemProfile("sofa"), "glow", true);
+  setFoldOpen(itemProfile("sofa"), "glow", true, panelUi(sofa, "s").folds);
   assert.doesNotMatch(flat(sofa.renderFurnitureForm(sofa.furnitureItem)), /Second state/, "Second state only for beds");
   resetFolds();
 });
@@ -269,7 +269,7 @@ test("one slim navigation row: '‹ room' and a collapse icon, not two full butt
 test("help opens by click (a button, so also by keyboard), at most one line shows under a field (#396 win 5)", async () => {
   resetFolds();
   const ed = await editorWith(item("s", "sofa"));
-  setFoldOpen(itemProfile("sofa"), "more", true);
+  setFoldOpen(itemProfile("sofa"), "more", true, panelUi(ed, "s").folds);
   const closed = flat(ed.renderFurnitureForm(ed.furnitureItem));
   assert.match(closed, /class="fp3d-info" aria-expanded=false[^>]*aria-label=More about Other names/);
   assert.doesNotMatch(closed, /title=Further names|so you ask for/);
