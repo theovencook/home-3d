@@ -287,7 +287,7 @@ def test_an_item_may_carry_its_ikea_name() -> None:
 
 
 def test_an_item_may_name_its_parts_by_role() -> None:
-    """`role_names` says what the part in a role is, so the item panel's colour row reads "Panels", not "White" (#411)."""
+    """`role_names` names the part in a role, so the colour row reads "Panels", not "White" (#411)."""
     item = {**PAYLOAD["items"][0], "role_names": {"white": "panels", "metal": "valves"}}
     clean = packs.validate_payload({**PAYLOAD, "items": [item]})
     assert clean["items"][0]["role_names"] == {"white": "panels", "metal": "valves"}
