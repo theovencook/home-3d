@@ -4,6 +4,7 @@ All notable changes to Home 3D.
 
 ## Unreleased
 
+- 3D view: when the search button is not in the view (the panel carries it in the header), the eye (clean view) takes the bottom-left corner and the star sits directly above it, mirrored when the controls are on the right; on the phone and tablet bar the eye takes the dock's corner. A card that still shows the search button keeps its layout (#422).
 - Home 3D reads as its own project: the last upstream names and German leftovers are gone from code, tests and docs. German keyword lists, voice phrases and Assist sentences are removed (Assist and the locating answers speak English); German stays a language pack like any other (#399).
 
 - Editor: outdoor areas and pools copy and paste like items. Ctrl+C / Ctrl+V and Copy / Paste (in the area's panel, its floating toolbar and its right-click menu) work for an area alone or chosen together with items (Shift + click, a frame, Select several); a mixed selection also drags and deletes together. Ctrl+V puts the copy at the pointer when it is on the plan, else a step off the original (or right above it on another floor), chooses it and is one undo step; it works across floors and homes in the same browser session. A pasted area gets a new id and no Home Assistant area; a pasted pool keeps its entities and ports but not its pipes. Ctrl+D duplicates an area (#400).

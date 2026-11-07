@@ -5284,10 +5284,15 @@ export class Fp3dView3d extends LitElement {
     void this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>(".fp3d-find-btn")?.focus());
   }
 
+  /** true while the stage carries the search button; the panel's floor bar carries the search otherwise (#305) */
+  private findButtonShown(): boolean {
+    return !!this.building && !!this.hass && !this.findInBar;
+  }
+
   private renderFind() {
     const b = this.building;
     // the panel's floor bar carries the search when it is shown (#305); a card without that bar keeps this button
-    if (!b || !this.hass || this.findInBar) return nothing;
+    if (!this.findButtonShown() || !b) return nothing;
     if (this._find === null) {
       return html`<button class="fp3d-find-btn" title=${translate(this.hass, "find")} aria-label=${translate(this.hass, "find")} @click=${() => this.openFind()}>
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></svg>
@@ -6953,7 +6958,7 @@ export class Fp3dView3d extends LitElement {
       @touchend=${this.keepTouch}
       @pointerover=${this.onPinOver}
       @pointerout=${this.onPinOut}
-      class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this.pulse && !this._low ? "fp3d-pulse" : ""} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this.controlsRight ? "fp3d-side-right" : ""} ${this._alerts.length ? "fp3d-has-alerts" : ""} ${this._through ? "fp3d-through-on" : ""} ${this._flash ? "fp3d-flash" : ""} ${this.replay ? "fp3d-replay" : ""}"
+      class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this.pulse && !this._low ? "fp3d-pulse" : ""} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this.controlsRight ? "fp3d-side-right" : ""} ${this.findButtonShown() ? "" : "fp3d-no-find"} ${this._alerts.length ? "fp3d-has-alerts" : ""} ${this._through ? "fp3d-through-on" : ""} ${this._flash ? "fp3d-flash" : ""} ${this.replay ? "fp3d-replay" : ""}"
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderWires()} ${this.clean ? nothing : this.renderLegend()}
@@ -9560,6 +9565,14 @@ export class Fp3dView3d extends LitElement {
         left: auto;
         right: 56px;
       }
+      /* no search button in the stage (it is in the header): the eye takes the corner, the star stays above it (#422) */
+      .fp3d-no-find .fp3d-eye {
+        left: 12px;
+      }
+      .fp3d-side-right.fp3d-no-find .fp3d-eye {
+        left: auto;
+        right: 12px;
+      }
       .fp3d-side-right.fp3d-panel-open :is(.fp3d-thumbs, .fp3d-find-btn, .fp3d-central-btn, .fp3d-central, .fp3d-eye-clean, fp3d-find, .fp3d-legend) {
         display: none;
       }
@@ -9746,6 +9759,20 @@ export class Fp3dView3d extends LitElement {
         .fp3d-side-right .fp3d-eye {
           left: auto;
           right: calc(var(--fp3d-dock-left, 12px) + 50px);
+        }
+        /* no search button in the stage: the eye takes the dock's corner and the star (and its menu) rise above it (#422) */
+        .fp3d-no-find .fp3d-eye {
+          left: var(--fp3d-dock-left, 12px);
+        }
+        .fp3d-side-right.fp3d-no-find .fp3d-eye {
+          left: auto;
+          right: var(--fp3d-dock-left, 12px);
+        }
+        .fp3d-no-find .fp3d-central-btn {
+          bottom: calc(var(--fp3d-dock-bottom, calc(10px + var(--fp3d-bottom-inset, 0px))) + 52px);
+        }
+        .fp3d-no-find .fp3d-central {
+          bottom: calc(var(--fp3d-dock-menu, calc(52px + var(--fp3d-bottom-inset, 0px))) + 52px);
         }
         .fp3d-thumbs-compact .fp3d-thumb,
         .fp3d-thumb-house {
