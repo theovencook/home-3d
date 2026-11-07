@@ -25,6 +25,7 @@ export class ItemPicker extends LitElement {
   static properties = {
     entries: { attribute: false },
     current: { attribute: false },
+    heading: { attribute: false },
     language: { attribute: false },
     t: { attribute: false },
     thumb: { attribute: false },
@@ -41,6 +42,8 @@ export class ItemPicker extends LitElement {
   declare entries: LibraryEntry[];
   /** The type the item has now (shown first and marked). */
   declare current: string;
+  /** The dialog's title ("Choose an item" unless a caller names its own, as "Show as furniture" does, #419). */
+  declare heading: string;
   declare language: string;
   declare t: Translate;
   /** Small picture of an entry (THUMB_PX), as the library's cards use. */
@@ -66,6 +69,7 @@ export class ItemPicker extends LitElement {
     super();
     this.entries = [];
     this.current = "";
+    this.heading = "";
     this.language = "en";
     this.t = (k) => k;
     this.thumb = null;
@@ -300,10 +304,11 @@ export class ItemPicker extends LitElement {
     const all = this.hits;
     const { rows, before, after } = this.visible();
     const sel = this.selected;
+    const title = this.heading || t("item_picker_title");
     return html`<div class="ip-back" @click=${(e: Event) => e.target === e.currentTarget && this.close()}>
-      <div class="ip-dialog" role="dialog" aria-modal="true" aria-label=${t("item_picker_title")}>
+      <div class="ip-dialog" role="dialog" aria-modal="true" aria-label=${title}>
         <header>
-          <h3>${t("item_picker_title")}</h3>
+          <h3>${title}</h3>
           <button class="fp3d-btn" @click=${() => this.close()}>${t("cancel")}</button>
         </header>
         <div class="ip-filters">

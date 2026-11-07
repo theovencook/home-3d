@@ -441,7 +441,7 @@ export const lateEnglish = {
   vehicle_to_spot_hint: "A vehicle as plain furniture always stands there. As a parking spot it appears only while a sensor reports the car, and that is where the car is set up (charge, range, lock, climate).",
   as_furniture: "Show as furniture",
   as_furniture_hint: "Replaces the pin by a furniture item in the same place, linked to this device – a speaker for a media player, a lamp for a light. Ctrl+Z takes it back. A camera keeps its pin with all its camera settings; the model only joins it.",
-  as_furniture_pick: "Pick furniture …",
+  as_furniture_open: "Show as furniture …",
   camera_look_builtin: "Built-in camera model",
   as_device: "Back to a device pin",
   as_device_hint: "Replaces the furniture by the plain pin of its device in the same place.",

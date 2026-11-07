@@ -652,7 +652,7 @@
  "vehicle_to_spot_hint": "Ein Fahrzeug als einfaches Möbel steht immer da. Als Stellplatz erscheint es nur, wenn ein Sensor das Auto meldet, und dort stellst du auch das Auto ein (Ladestand, Reichweite, Schloss, Klima).",
  "as_furniture": "Als Möbel darstellen",
  "as_furniture_hint": "Ersetzt den Pin durch ein Möbel an derselben Stelle, das mit diesem Gerät verknüpft ist – etwa ein Lautsprecher für einen Media Player oder eine Leuchte für ein Licht. Strg+Z nimmt es zurück. Bei einer Kamera bleibt der Pin mit allen Kamera-Einstellungen, das Modell kommt nur dazu.",
- "as_furniture_pick": "Möbel wählen …",
+ "as_furniture_open": "Als Möbel darstellen …",
  "camera_look_builtin": "Standard-Kameramodell",
  "as_device": "Zurück zum Geräte-Pin",
  "as_device_hint": "Ersetzt das Möbel durch den einfachen Pin seines Geräts an derselben Stelle.",

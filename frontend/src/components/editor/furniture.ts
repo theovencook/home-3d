@@ -22,9 +22,23 @@ import { furnitureName } from "../../furniture-names.ts";
 import { furnitureSize, isElectric, isRobotVacuum, packItemName, packName, packType, type FurniturePack } from "../../packs.ts";
 import { MAX_MOUNT_Y, round, isEnergyDevice, EN_HASS, type PlaceTarget } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
-import { need, loadLibrary, loadPackBrowser } from "./lazy.ts";
+import { need, loadItemPicker, loadLibrary, loadPackBrowser } from "./lazy.ts";
 import { itemShown } from "../../show-when.ts";
 import { rememberFromPin } from "./from-pin.ts";
+
+const SPEAKERISH = /speaker|sound|subwoofer|receiver|smart_|display|tv|media|turntable|projector|console/;
+
+/** Which furniture types can stand for a placed device of this entity's kind (a lamp for a light …). */
+export function furnitureFits(entityId: string): (type: string) => boolean {
+  const kind = kindOf(entityId);
+  return (t) => {
+    if (kind === "light") return isLamp(t);
+    if (kind === "climate") return t === "radiator" || t === "ac_unit";
+    if (entityId.startsWith("vacuum.")) return isRobotVacuum(t);
+    if (kind === "media") return hasScreen(t) || (isElectric(t) && SPEAKERISH.test(t));
+    return isElectric(t) && !isLamp(t);
+  };
+}
 
 /** FurniturePart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class FurniturePart {
@@ -51,21 +65,19 @@ export class FurniturePart {
 
   /** Furniture that can stand for a placed device of this kind (a speaker for a media player, a lamp for a light …). */
   furnitureFor(this: Fp3dEditor, entityId: string): { type: string; label: string }[] {
-    const kind = kindOf(entityId);
     const lang = this.hass?.language ?? "en";
     const all = [
       ...FURNITURE_TYPES.map((t) => ({ type: t as string, label: this.t(`furn_${t}` as I18nKey) })),
       ...(this.packs ?? []).flatMap((p) => p.items.map((it) => ({ type: packType(p.id, it.id), label: `${packItemName(it, lang)} · ${packName(p, lang)}` }))),
     ];
-    const speakerish = /speaker|sound|subwoofer|receiver|smart_|display|tv|media|turntable|projector|console/;
-    const fits = (t: string): boolean => {
-      if (kind === "light") return isLamp(t);
-      if (kind === "climate") return t === "radiator" || t === "ac_unit";
-      if (entityId.startsWith("vacuum.")) return isRobotVacuum(t);
-      if (kind === "media") return hasScreen(t) || (isElectric(t) && speakerish.test(t));
-      return isElectric(t) && !isLamp(t);
-    };
+    const fits = furnitureFits(entityId);
     return all.filter((x) => fits(x.type)).sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  /** The library's cards that can stand for a placed device (#419): the picker of "Show as furniture …". */
+  furnitureEntriesFor(this: Fp3dEditor, entityId: string): LibraryEntry[] {
+    const fits = furnitureFits(entityId);
+    return this.libraryEntries(this.hass?.language ?? "en").filter((e) => !e.mirror && fits(e.type));
   }
 
   /** A vehicle placed as plain furniture becomes a parking spot with this vehicle (presence and the car's data live there). */
@@ -128,26 +140,47 @@ export class FurniturePart {
     this.selectItem("device", id);
   }
 
+  /**
+   * "Show as furniture …" (#419, MANY-3): a button that opens the furniture library's picker (search, filters,
+   * pictures) with the items that fit the device, instead of one select of every library item. Picking one turns the
+   * pin into it (a camera keeps its pin and takes the model as its look); a camera with a look can go back to the
+   * built-in model.
+   */
   renderAsFurniture(this: Fp3dEditor, pl: Placement) {
     if (!this.isEditor) return nothing;
-    const options = this.furnitureFor(pl.entity_id);
-    if (!options.length) return nothing;
-    // a camera with a look of its own can go back to the built-in camera model
+    const entries = this.furnitureEntriesFor(pl.entity_id);
+    if (!entries.length) return nothing;
     const look = pl.entity_id.startsWith("camera.") ? this.floor?.furniture.find((m) => m.look_of === pl.entity_id) : undefined;
-    return html`<label class="fp3d-field fp3d-wide" title=${this.t("as_furniture_hint")}
-      >${this.t("as_furniture")}
-      <select
-        @change=${(e: Event) => {
-          const v = (e.target as HTMLSelectElement).value;
-          if (v === "__builtin") this.change((_, f) => (f.furniture = f.furniture.filter((m) => m.look_of !== pl.entity_id)));
-          else if (v) this.deviceToFurniture(pl, v);
-        }}
-      >
-        <option value="" selected>${look ? furnitureName(this.hass, look.type) : this.t("as_furniture_pick")}</option>
-        ${look ? html`<option value="__builtin">${this.t("camera_look_builtin")}</option>` : nothing}
-        ${options.map((o) => html`<option value=${o.type}>${o.label}</option>`)}
-      </select></label
-    >`;
+    need(loadItemPicker);
+    const lang = this.hass?.language ?? "en";
+    return html`<div class="fp3d-field fp3d-wide fp3d-as-furniture">
+      ${this.withInfo(
+        html`<span class="fp3d-as-furniture-row"
+          ><button type="button" class="fp3d-btn fp3d-item-pick" aria-haspopup="dialog" @click=${() => (this._itemPicker = true)}>${look ? furnitureName(this.hass, look.type) : this.t("as_furniture_open")}</button
+          >${look
+            ? html`<button type="button" class="fp3d-link" @click=${() => this.change((_, f) => (f.furniture = f.furniture.filter((m) => m.look_of !== pl.entity_id)))}>${this.t("camera_look_builtin")}</button>`
+            : nothing}</span
+        >`,
+        "as_furniture_hint",
+        this.t("as_furniture"),
+      )}
+      ${this._itemPicker
+        ? html`<fp3d-item-picker
+            .entries=${entries}
+            .current=${look?.type ?? ""}
+            .language=${lang}
+            .heading=${this.t("as_furniture")}
+            .t=${(k: string, v?: Record<string, string | number>) => this.t(k as I18nKey, v)}
+            .thumb=${this.libraryThumb}
+            .picture=${this.libraryPicture}
+            @pick=${(e: CustomEvent<{ type: string }>) => {
+              this._itemPicker = false;
+              this.deviceToFurniture(pl, e.detail.type);
+            }}
+            @close=${() => (this._itemPicker = false)}
+          ></fp3d-item-picker>`
+        : nothing}
+    </div>`;
   }
 
   /**
