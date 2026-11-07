@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { makeEditor, square, type TestEditor } from "./editor-harness.ts";
+import type { Fp3dEditor } from "./editor.ts";
 import { resetSideDrag, settleSideDrag, SIDE_DRAG_NAME, sideDrag, sideDragHandle, syncSideDrag, forgetSideDrag } from "./editor/side-drag.ts";
 
 // a storage for this test file (Node has no usable localStorage without a file)
@@ -37,13 +38,13 @@ function aside(stage = { left: 0, top: 0, right: 1280, bottom: 800 }) {
   return el;
 }
 
-async function editorWith(el: ReturnType<typeof aside>): Promise<TestEditor> {
+async function editorWith(el: ReturnType<typeof aside>): Promise<TestEditor & Fp3dEditor> {
   const ed = await makeEditor([square("r", 0, 0, 4, 4)]);
   const svg = ed.renderRoot.querySelector("svg");
   Object.defineProperty(ed, "renderRoot", { value: { querySelector: (sel: string) => (sel.startsWith("aside") ? el : svg), querySelectorAll: () => [], activeElement: null }, configurable: true });
   const attrs = new Set<string>();
   Object.assign(ed, { setAttribute: (n: string) => attrs.add(n), removeAttribute: (n: string) => attrs.delete(n), hasAttribute: (n: string) => attrs.has(n) });
-  return ed;
+  return ed as unknown as TestEditor & Fp3dEditor;
 }
 
 const pointer = (x: number, y: number, target: object = { closest: () => null }) => {
@@ -107,8 +108,14 @@ test("double-click and the snap-back button put the panel back and forget the pl
   const ed = await editorWith(el);
   syncSideDrag(ed);
   // the navigation row shows the snap-back button while the panel is moved
-  const flat = (v: unknown): string =>
-    v && typeof v === "object" && "strings" in v ? (v as { strings: string[]; values: unknown[] }).strings.map((s, i) => s + (i < (v as { values: unknown[] }).values.length ? flat((v as { values: unknown[] }).values[i]) : "")).join("") : Array.isArray(v) ? v.map(flat).join("") : typeof v === "string" ? v : "";
+  const flat = (v: unknown): string => {
+    if (Array.isArray(v)) return v.map(flat).join("");
+    if (v && typeof v === "object" && "strings" in v) {
+      const t = v as unknown as { strings: readonly string[]; values: unknown[] };
+      return t.strings.map((s, i) => s + (i < t.values.length ? flat(t.values[i]) : "")).join("");
+    }
+    return typeof v === "string" ? v : "";
+  };
   assert.match(flat(ed.renderNavRow(null, true)), /fp3d-side-snap" aria-label=Put the panel back in its place/);
   sideDragHandle(ed).dblclick({ target: { closest: () => null } } as unknown as MouseEvent);
   assert.equal(sideDrag(ed)?.offset, null);

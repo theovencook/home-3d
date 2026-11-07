@@ -187,7 +187,7 @@ export class ItemSectionsPart {
 
   /** The item's "⋯" actions (#396): rename, duplicate, copy, the wall view and delete, with their keys. */
   itemMenuActions(this: Fp3dEditor, f: Furniture, p: ItemProfile): PanelAction[] {
-    return [
+    const acts: (PanelAction | null)[] = [
       { label: this.t("item_rename"), run: () => this.renameItem(f, p) },
       { label: this.t("duplicate"), keys: ["Ctrl+D"], run: () => this.duplicateFurniture() },
       { label: this.t("copy_items"), keys: ["Ctrl+C"], run: () => this.copySelection() },
@@ -196,7 +196,8 @@ export class ItemSectionsPart {
       this.isEditor && madeFromPin(f.id) && !!f.entity && f.entity !== "none" && f.type !== "parking" ? { label: this.t("as_device"), run: () => this.furnitureToDevice(f) } : null,
       this.isEditor && isVehicleItem(f.type) && f.type.startsWith("pack:") ? { label: this.t("vehicle_to_spot"), run: () => this.vehicleToSpot(f) } : null,
       { label: this.t("delete"), keys: ["Del"], danger: true, run: () => void this.deleteFurniture() },
-    ].filter((a): a is PanelAction => !!a);
+    ];
+    return acts.filter((a): a is PanelAction => !!a);
   }
 
   /** The header's "⋯" menu of an item (the shared panel menu, #409). */
