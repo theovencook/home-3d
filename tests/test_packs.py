@@ -286,6 +286,17 @@ def test_an_item_may_carry_its_ikea_name() -> None:
             packs.validate_payload({**PAYLOAD, "items": [{**item, "ikea": bad}]})
 
 
+def test_an_item_may_name_its_parts_by_role() -> None:
+    """`role_names` says what the part in a role is, so the item panel's colour row reads "Panels", not "White" (#411)."""
+    item = {**PAYLOAD["items"][0], "role_names": {"white": "panels", "metal": "valves"}}
+    clean = packs.validate_payload({**PAYLOAD, "items": [item]})
+    assert clean["items"][0]["role_names"] == {"white": "panels", "metal": "valves"}
+    assert "role_names" not in packs.validate_payload(PAYLOAD)["items"][0]
+    for bad in ({}, {"white": "Panels"}, {"white": "radiator"}, {"chrome": "panels"}, ["panels"]):
+        with pytest.raises(packs.PackError):
+            packs.validate_payload({**PAYLOAD, "items": [{**item, "role_names": bad}]})
+
+
 def test_feature_packs_need_no_items_but_a_pack_needs_something() -> None:
     """A pack may list features without furniture (compatibility); an empty pack is refused."""
     pro = {**PAYLOAD, "id": "test.pro", "items": [], "features": ["camera_cockpit", "weather"]}

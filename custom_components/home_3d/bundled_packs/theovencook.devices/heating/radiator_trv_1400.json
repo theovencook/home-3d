@@ -9,6 +9,7 @@
   "variant": {"en": "600 × 1400 mm"},
   "mount": "wall",
   "wall_y": 0.15,
+  "role_names": {"white": "panels", "metal": "valves", "dark": "grille", "accent": "details"},
   "parts": [
     {"shape": "box", "x": 0, "z": -0.32, "w": 0.9211, "d": 0.36, "y": 0.1538, "h": 0.7692, "color": "white", "top": "white"},
     {"shape": "box", "x": 0, "z": 0.26, "w": 0.9211, "d": 0.36, "y": 0.1538, "h": 0.7692, "color": "white"},

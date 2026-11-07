@@ -18,6 +18,7 @@
     "couch",
     "settee"
   ],
+  "role_names": {"wood": "legs"},
   "parts": [
     {
       "shape": "cyl",

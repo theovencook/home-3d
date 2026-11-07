@@ -24,6 +24,7 @@
   "variant": {
     "en": "2-seater"
   },
+  "role_names": {"wood": "legs"},
   "parts": [
     {
       "shape": "cyl",
