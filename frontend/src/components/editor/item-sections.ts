@@ -5,6 +5,7 @@
 
 import { html, nothing, svg, type TemplateResult } from "lit";
 import { carEntities, carState, entityName, type CarEntities } from "../../devices.ts";
+import { carDeviceOptions, deviceName, deviceOf, deviceSeed } from "../../car-device.ts";
 import { formatNumber, type I18nKey } from "../../i18n.ts";
 import { stateText } from "../../markers.ts";
 import { withKeys } from "../../clipboard.ts";
@@ -107,6 +108,8 @@ interface PanelUi {
   folds: Set<PanelFold>;
   help: string | null;
   found: boolean;
+  /** The car reading chosen in "Add a reading", its picker open (#415). */
+  adding: string | null;
   /** The colour rows show presets, materials and the active colour (the "Finishes and presets" link). */
   finishes: boolean;
 }
@@ -115,7 +118,7 @@ const ui = new WeakMap<object, PanelUi>();
 /** The panel's passing state for the chosen item; a new item starts closed. */
 export function panelUi(ed: object, id: string): PanelUi {
   let s = ui.get(ed);
-  if (!s || s.id !== id) ui.set(ed, (s = { id, menu: false, help: null, found: false, finishes: false, folds: new Set() }));
+  if (!s || s.id !== id) ui.set(ed, (s = { id, menu: false, help: null, found: false, adding: null, finishes: false, folds: new Set() }));
   return s;
 }
 
@@ -286,10 +289,55 @@ export class ItemSectionsPart {
   }
 
   /**
-   * The car's main section (#396 win 1, #397): one picker for any entity of the car, then a read-only list of what
-   * was found beside it (charge, range, charging, cable, location, lock, climate); "Change what was found" opens the
-   * role pickers in place. `seed` is the picker of a vehicle item (its main link); a parking spot passes none (its
-   * presence sensor is its main link, the car is chosen with car_device).
+   * "Car device" (#415, WORD-3): the car's Home Assistant device. The plan keeps one entity of it as before (a vehicle
+   * item's main link, a parking spot's car.device); a car linked to an entity without a device keeps the entity picker.
+   */
+  carDevicePicker(this: Fp3dEditor, f: Furniture, vehicle: boolean, any: { id: string; label: string }[]) {
+    const hass = this.hass!;
+    const car = f.car ?? {};
+    const ref = (v: unknown) => (typeof v === "string" && v && v !== "none" ? v : null);
+    const seed = vehicle ? (ref(car.device) ?? ref(f.entity)) : ref(car.device);
+    const device = deviceOf(hass, seed);
+    const label = this.t("car_device");
+    if (seed && !device)
+      return vehicle
+        ? this.entitySelect(label, f.entity ?? null, undefined, any, (v) => this.updateFurniture({ entity: v }), ["sensor", "device_tracker", "binary_sensor"])
+        : this.entitySelect(label, car.device ?? null, undefined, any, (v) => this.updateFurniture({ car: { ...car, device: v === "none" ? null : v } }));
+    const options = carDeviceOptions(hass);
+    const shown = device && !options.some((o) => o.id === device) ? [{ id: device, label: deviceName(hass, device) }, ...options] : options;
+    const choose = (v: string) => {
+      if (v === "none") {
+        if (vehicle) this.updateFurniture({ entity: "none", ...(car.device ? { car: { ...car, device: null } } : {}) });
+        else this.updateFurniture({ car: { ...car, device: null } });
+        return;
+      }
+      const one = deviceSeed(hass, v, vehicle ? ref(f.entity) : ref(car.device));
+      if (!one) return;
+      // a vehicle's device is its main link; an older second device entity steps aside
+      if (vehicle) this.updateFurniture({ entity: one, ...(car.device ? { car: { ...car, device: null } } : {}) });
+      else this.updateFurniture({ car: { ...car, device: one } });
+    };
+    return html`<label class="fp3d-field fp3d-wide"
+      >${label}
+      <fp3d-entity-picker
+        .options=${shown}
+        .fixed=${[{ id: "none", label: this.t("entity_none") }]}
+        .value=${device ?? "none"}
+        .placeholder=${this.t("car_device_search")}
+        .label=${label}
+        ?disabled=${!this.isEditor}
+        @change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          choose(e.detail.value);
+        }}
+      ></fp3d-entity-picker></label
+    >`;
+  }
+
+  /**
+   * The car's main section (#396 win 1, #397, #415): one "Car device" picker, the readings found on it with their
+   * values, and one "Add a reading" menu for the rest; "Change what was found" opens the pickers of the found ones.
+   * A parking spot passes vehicle = false (its presence sensor is its main link, the car is stored in car.device).
    */
   renderCarMain(this: Fp3dEditor, f: Furniture, vehicle: boolean) {
     if (!this.hass) return nothing;
@@ -301,6 +349,8 @@ export class ItemSectionsPart {
     const set = (patch: Partial<CarLinks>) => this.updateFurniture({ car: { ...car, ...patch } });
     const any = this.entityOptions((id) => /^(sensor|binary_sensor|lock|climate|switch|device_tracker|number|select|input_number|input_boolean)\./.test(id));
     const found = CAR_ROLES.filter((r) => now[r.key]).length;
+    const missing = CAR_ROLES.filter((r) => !now[r.key]);
+    const adding = missing.find((r) => r.key === s.adding) ?? null;
     const options: Record<string, (id: string) => boolean> = {
       soc: (id) => numberish(id),
       range: (id) => numberish(id),
@@ -315,23 +365,39 @@ export class ItemSectionsPart {
       return st ? stateText(hass, st) || st.state : "";
     };
     return html`<section class="fp3d-link-block fp3d-car-main" aria-labelledby="fp3d-car-h">
-      <div class="fp3d-h3row"><h3 id="fp3d-car-h">${this.t("section_car")}</h3><span class="fp3d-fold-badge">${this.t("car_found", { n: found, total: CAR_ROLES.length })}</span></div>
-      <div class="fp3d-form fp3d-links">
-        ${this.withInfo(
-          vehicle
-            ? this.entitySelect(this.t("car_device"), f.entity ?? null, undefined, any, (v) => this.updateFurniture({ entity: v }), ["sensor", "device_tracker", "binary_sensor"])
-            : this.entitySelect(this.t("car_device"), car.device ?? null, undefined, any, (v) => set({ device: v === "none" ? null : v })),
-          "car_hint",
-          this.t("car_device"),
-        )}
-      </div>
-      <dl class="fp3d-found">
-        ${CAR_ROLES.map((r) => {
-          const id = now[r.key];
-          return html`<div class="fp3d-found-row" ?data-missing=${!id}><dt>${this.t(r.label)}</dt><dd title=${id ?? ""}>${id ? value(id) || entityName(hass, id) : this.t("car_not_found")}</dd></div>`;
-        })}
-      </dl>
-      ${this.isEditor
+      <div class="fp3d-h3row"><h3 id="fp3d-car-h">${this.t("section_car")}</h3>${found ? html`<span class="fp3d-fold-badge">${found === 1 ? this.t("car_readings_one") : this.t("car_readings", { n: found })}</span>` : nothing}</div>
+      <div class="fp3d-form fp3d-links">${this.withInfo(this.carDevicePicker(f, vehicle, any), "car_hint", this.t("car_device"))}</div>
+      ${found
+        ? html`<dl class="fp3d-found">
+            ${CAR_ROLES.filter((r) => now[r.key]).map((r) => {
+              const id = now[r.key]!;
+              return html`<div class="fp3d-found-row"><dt>${this.t(r.label)}</dt><dd title=${id}>${value(id) || entityName(hass, id)}</dd></div>`;
+            })}
+          </dl>`
+        : nothing}
+      ${this.isEditor && missing.length
+        ? html`<div class="fp3d-form fp3d-links fp3d-car-add">
+            <label class="fp3d-field fp3d-wide"
+              >${this.t("car_add_reading")}
+              <select
+                @change=${(e: Event) => {
+                  s.adding = (e.target as HTMLSelectElement).value || null;
+                  this.requestUpdate();
+                }}
+              >
+                <option value="" ?selected=${!adding}>${this.t("car_add_choose")}</option>
+                ${missing.map((r) => html`<option value=${r.key} ?selected=${adding?.key === r.key}>${this.t(r.label)}</option>`)}
+              </select></label
+            >
+            ${adding
+              ? this.entitySelect(this.t(adding.label), null, undefined, this.entityOptions(options[adding.key], adding.key), (v) => {
+                  s.adding = null;
+                  if (v && v !== "none") set({ [adding.key]: v });
+                })
+              : nothing}
+          </div>`
+        : nothing}
+      ${this.isEditor && found
         ? html`<button type="button" class="fp3d-link fp3d-found-toggle" aria-expanded=${s.found ? "true" : "false"} @click=${() => {
             s.found = !s.found;
             this.requestUpdate();
@@ -339,8 +405,7 @@ export class ItemSectionsPart {
         : nothing}
       ${s.found
         ? html`<div class="fp3d-form fp3d-links">
-            ${vehicle ? this.entitySelect(this.t("car_device_other"), car.device ?? null, undefined, any, (v) => set({ device: v === "none" ? null : v })) : nothing}
-            ${CAR_ROLES.map((r) => this.entitySelect(this.t(r.label), car[r.key] ?? null, auto[r.key], this.entityOptions(options[r.key], r.key), (v) => set({ [r.key]: v === "none" ? "none" : v })))}
+            ${CAR_ROLES.filter((r) => now[r.key] || car[r.key]).map((r) => this.entitySelect(this.t(r.label), car[r.key] ?? null, auto[r.key], this.entityOptions(options[r.key], r.key), (v) => set({ [r.key]: v === "none" ? "none" : v })))}
           </div>`
         : nothing}
     </section>`;
