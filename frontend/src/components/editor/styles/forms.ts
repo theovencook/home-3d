@@ -111,13 +111,18 @@ export const formStyles = css`
       .fp3d-plan-hint {
         margin: 6px 0 0;
       }
+      /* the side panel is a flex column: the row keeps its own height there, so a short panel starts at the top
+         (#406: "flex: 1" gave it the free height, with the back link in its middle); beside the pin it grows sideways */
       .fp3d-nav-row {
         display: flex;
-        flex: 1 1 auto;
+        flex: 0 0 auto;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
         min-height: 36px;
+      }
+      .fp3d-pin-row > .fp3d-nav-row {
+        flex: 1 1 auto;
       }
       .fp3d-nav-row .fp3d-side-fold {
         margin-left: auto;
