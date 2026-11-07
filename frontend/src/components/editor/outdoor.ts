@@ -5,7 +5,7 @@ import { areaEntities, entityName, groupByDevice, isPlaceable, kindOf } from "..
 import { OUTDOOR_TOP, poolShapePoints } from "../../model.ts";
 import type { I18nKey } from "../../i18n.ts";
 import { iconPath } from "../../icons.ts";
-import { bounds, centroid, isLamp, isAxisRect, OUTDOOR_TYPES, outdoorStanding, outdoorZones, SLOPE_DIRS, type SlopeDir, pointInPolygon, uid, type Floor, type OutdoorArea, type OutdoorType, type Vec2 } from "../../model.ts";
+import { bounds, centroid, isLamp, isAxisRect, OUTDOOR_TYPES, outdoorStanding, outdoorZones, type SlopeDir, pointInPolygon, uid, type Floor, type OutdoorArea, type OutdoorType, type Vec2 } from "../../model.ts";
 import { round, patchItem } from "./helpers.ts";
 import { thinArea, THIN_HIT_PX } from "./outdoor-find.ts";
 import { chosenPoint, pointKeys, renderMids } from "./points.ts";
@@ -260,14 +260,10 @@ export class OutdoorPart {
             ? this.len(this.t("balcony_rail"), a.height ?? 1, (v) => this.updateOutdoor({ height: Math.min(2, Math.max(0.4, round(v))) }), 0.05, 0.4)
             : nothing}
         ${this.len(this.t("outdoor_offset"), a.offset ?? 0, (v) => this.updateOutdoor({ offset: Math.min(10, Math.max(-10, round(v))) || null }), 0.05)}
+        <p class="fp3d-sub fp3d-wide fp3d-field-note">${this.t("outdoor_offset_note")}</p>
         ${a.type !== "pool"
           ? html`${this.len(this.t("outdoor_slope"), a.slope ?? 0, (v) => this.updateOutdoor({ slope: Math.min(20, Math.max(0, round(v))) || null }), 0.05, 0)}
-              <label class="fp3d-field"
-                >${this.t("outdoor_slope_dir")}
-                <select ?disabled=${!admin} @change=${(e: Event) => this.updateOutdoor({ slope_dir: (e.target as HTMLSelectElement).value as SlopeDir })}>
-                  ${SLOPE_DIRS.map((d) => html`<option value=${d} ?selected=${d === (a.slope_dir ?? "x")}>${this.t(`slope_${d.replace("-", "n")}` as I18nKey)}</option>`)}
-                </select></label
-              >`
+              ${this.renderSlopeDir(a.slope_dir ?? "x", admin, (d) => this.updateOutdoor({ slope_dir: d }))}`
           : nothing}
         ${a.type === "pool" ? this.renderPoolShape(a) : nothing}
         <label class="fp3d-check fp3d-wide" title=${this.t("outdoor_outline_hint")}
@@ -295,5 +291,22 @@ export class OutdoorPart {
       <p class="fp3d-sub">${this.t("outdoor_hint")}</p>
       ${this.renderModuleFields(a)}
     </section>`;
+  }
+
+  /**
+   * "Falls towards" as four arrow buttons on the plan's directions (#418, WORD-9): the arrow points the way the
+   * ground runs down; each button is named ("Falls towards the right") and pressed while chosen.
+   */
+  renderSlopeDir(this: Fp3dEditor, value: SlopeDir, enabled: boolean, set: (d: SlopeDir) => void) {
+    const arrows: Record<SlopeDir, [string, string]> = { "-z": ["↑", "up"], "-x": ["←", "left"], x: ["→", "right"], z: ["↓", "down"] };
+    return html`<div class="fp3d-field fp3d-slope-dir" role="group" aria-label=${this.t("outdoor_slope_dir")}>
+      <span>${this.t("outdoor_slope_dir")}</span>
+      <span class="fp3d-arrows">
+        ${(["-z", "-x", "x", "z"] as const).map((d) => {
+          const name = this.t(`slope_${d.replace("-", "n")}` as I18nKey);
+          return html`<button type="button" class="fp3d-btn fp3d-arrow-${arrows[d][1]}" aria-pressed=${d === value ? "true" : "false"} ?disabled=${!enabled} aria-label=${`${this.t("outdoor_slope_dir")} ${name}`} title=${name} @click=${() => set(d)}><span aria-hidden="true">${arrows[d][0]}</span></button>`;
+        })}
+      </span>
+    </div>`;
   }
 }

@@ -303,6 +303,17 @@ export class ItemSectionsPart {
     return this.foldRow(key, open, () => setSideFold(this, k, !open), title, summary, set, body);
   }
 
+  /**
+   * One row of a tool panel's list (#418, A11Y-3): a 44 px button that looks like one, with its name, a detail line,
+   * a chevron and a selected style (aria-current), as the room list.
+   */
+  pickRow(this: Fp3dEditor, name: unknown, detail: unknown, selected: boolean, go: () => void) {
+    return html`<button type="button" class="fp3d-pick-row" aria-current=${selected ? "true" : nothing} @click=${go}>
+      <span class="fp3d-pick-name">${name}</span>${detail ? html`<span class="fp3d-pick-sub">${detail}</span>` : nothing}
+      <span class="fp3d-fold-chev" aria-hidden="true">${panelIcon("chevron")}</span>
+    </button>`;
+  }
+
   /** An entity's friendly name for a summary line, or "" for none. */
   linkName(this: Fp3dEditor, ref: unknown): string {
     if (typeof ref !== "string" || !ref || ref === "none" || !this.hass) return "";

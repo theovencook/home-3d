@@ -197,16 +197,20 @@ export class SolarPart {
     this._solarId = null;
   }
 
-  /** The overview of the solar fields, below the roof sections. */
+  /** The energy panel's Solar fold (#418, MANY-7): the fields as 44 px rows, add buttons and the strings, one line of help. */
   renderSolarList(this: Fp3dEditor) {
     const fields = this._doc.settings.roof.solar ?? [];
     const roofList = roofFaces(this._doc);
     const faces = new Map(fields.map((f) => [f.id, fieldFace(this._doc, f, roofList)] as const));
     const admin = this.isEditor;
-    return html`<section>
-      ${this.renderRoofFloors()}
-      <h3>☀ ${this.t("solar_fields")}</h3>
-      <p class="fp3d-sub">${this.t(roofList.length ? "solar_hint" : "solar_no_roof")}</p>
+    const modules = (f: SolarField) => {
+      const face = faces.get(f.id);
+      return face ? fieldModules(face, f).length : 0;
+    };
+    const kwp = fields.reduce((a, f) => a + (modules(f) * (f.wp ?? 400)) / 1000, 0);
+    const summary = fields.length ? this.t("solar_fold_sum", { n: fields.length, kwp: formatNumber(this.hass, kwp, 1) }) : this.t("solar_fold_none");
+    return this.sideFold("energy-solar", "", true, `☀ ${this.t("solar_fields")} (${fields.length})`, summary, 0, () => html`
+      <div class="fp3d-with-info"><p class="fp3d-sub">${this.t(roofList.length ? "solar_hint_short" : "solar_no_roof")}</p>${roofList.length ? this.infoButton("solar_hint", this.t("solar_fields")) : nothing}</div>
       ${fields.length
         ? html`<label class="fp3d-check fp3d-solar-dim-toggle"
             ><input type="checkbox" .checked=${this._solarDim} @change=${(e: Event) => this.setSolarDim((e.target as HTMLInputElement).checked)} />
@@ -214,18 +218,16 @@ export class SolarPart {
           >`
         : nothing}
       ${fields.length
-        ? html`<div class="fp3d-room-list">
+        ? html`<div class="fp3d-pick-list">
             ${fields.map((f, i) => {
               const face = faces.get(f.id);
-              const n = face ? fieldModules(face, f).length : 0;
-              return html`<div class="fp3d-row">
-                <button
-                  class="fp3d-dev-name"
-                  @click=${() => this.selectSolar(f.id)}
-                >
-                  <span>${f.name || `${this.t("solar_field")} ${i + 1}`} · ${face ? this.faceLabel(face) : this.t("solar_face_gone")} · ${this.t("solar_summary", { n, kwp: formatNumber(this.hass, (n * (f.wp ?? 400)) / 1000, 1) })}</span>
-                </button>
-              </div>`;
+              const n = modules(f);
+              return this.pickRow(
+                f.name || `${this.t("solar_field")} ${i + 1}`,
+                `${face ? this.faceLabel(face) : this.t("solar_face_gone")} · ${this.t("solar_summary", { n, kwp: formatNumber(this.hass, (n * (f.wp ?? 400)) / 1000, 1) })}`,
+                f.id === this._solarId,
+                () => this.selectSolar(f.id),
+              );
             })}
           </div>`
         : nothing}
@@ -238,13 +240,12 @@ export class SolarPart {
         ? html`<h4 class="fp3d-lib-head">${this.t("solar_strings")}</h4>
             ${(this._doc.settings.roof.strings ?? []).map((st) => {
               const own = fields.filter((f) => f.string === st.id);
-              const counts = own.map((f) => (faces.get(f.id) ? fieldModules(faces.get(f.id)!, f).length : 0));
+              const counts = own.map((f) => modules(f));
               const n = counts.reduce((a, b) => a + b, 0);
-              const kwp = own.reduce((a, f, k) => a + (counts[k] * (f.wp ?? 400)) / 1000, 0);
-              return html`<p class="fp3d-sub">🔗 <b>${st.name}</b> · ${this.t("solar_string_sum", { fields: own.length, n, kwp: formatNumber(this.hass, kwp, 1) })}</p>`;
+              const sum = own.reduce((a, f, k) => a + (counts[k] * (f.wp ?? 400)) / 1000, 0);
+              return html`<p class="fp3d-sub">🔗 <b>${st.name}</b> · ${this.t("solar_string_sum", { fields: own.length, n, kwp: formatNumber(this.hass, sum, 1) })}</p>`;
             })}`
-        : nothing}
-    </section>`;
+        : nothing}`);
   }
 
   renderSolarForm(this: Fp3dEditor, f: SolarField) {

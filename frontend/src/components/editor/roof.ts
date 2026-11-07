@@ -400,7 +400,7 @@ export class RoofPart {
                 : nothing}
             </div>`}
         ${sec.shape === "gable" || sec.shape === "hip" || sec.shape === "halfhip"
-          ? html`<div class="fp3d-form" title=${this.t("roof_end_hint")}>
+          ? html`<div class="fp3d-form fp3d-roof-ends">
               ${([0, 1] as const).map((end) => {
                 // the u0 end is the left one (ridge across the plan) or the top one (ridge up and down)
                 const where = this.t(sec.axis === "x" ? (end === 0 ? "roof_side_left" : "roof_side_right") : end === 0 ? "roof_side_top" : "roof_side_bottom");
@@ -419,6 +419,7 @@ export class RoofPart {
                   </select></label
                 >`;
               })}
+              <div class="fp3d-with-info fp3d-wide"><span class="fp3d-sub">${this.t("roof_end_short")}</span>${this.infoButton("roof_end_hint", this.t("roof_end"))}</div>
             </div>`
           : nothing}
         <label class="fp3d-check fp3d-wide" title=${this.t("roof_open_hint")}

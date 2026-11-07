@@ -192,6 +192,59 @@ export const formStyles = css`
       .fp3d-fold-body {
         padding-bottom: 10px;
       }
+      /* a tool panel's list row (#418, A11Y-3): a 44 px button with a chevron and a selected style */
+      .fp3d-pick-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin: 6px 0;
+      }
+      .fp3d-pick-row {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 1px;
+        width: 100%;
+        min-height: 44px;
+        padding: 6px 28px 6px 10px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 10px;
+        background: none;
+        color: var(--fp3d-text);
+        font: inherit;
+        font-size: 13.5px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-pick-row:hover {
+        background: color-mix(in srgb, var(--fp3d-accent) 8%, transparent);
+      }
+      .fp3d-pick-row[aria-current="true"] {
+        border-color: var(--fp3d-accent);
+        background: color-mix(in srgb, var(--fp3d-accent) 16%, transparent);
+        font-weight: 600;
+      }
+      .fp3d-pick-sub {
+        font-size: 12px;
+        font-weight: 400;
+        color: var(--fp3d-muted);
+      }
+      /* "Falls towards" (#418): the four arrows of the measure tool, left-aligned under the label */
+      .fp3d-slope-dir {
+        grid-column: 1 / -1;
+      }
+      .fp3d-slope-dir .fp3d-arrows {
+        justify-content: start;
+        margin-top: 4px;
+      }
+      .fp3d-slope-dir .fp3d-btn[aria-pressed="true"] {
+        border-color: var(--fp3d-accent);
+        background: color-mix(in srgb, var(--fp3d-accent) 22%, transparent);
+      }
+      .fp3d-field-note {
+        margin-top: -4px;
+      }
       .fp3d-fold-badge {
         padding: 1px 7px;
         border-radius: 999px;

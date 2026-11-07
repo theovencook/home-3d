@@ -118,31 +118,24 @@ export class EnergyPart {
     })}</g>`;
   }
 
-  /** Energy: the cables, each to lay by hand with points and a height. */
+  /** The energy panel's Cables fold (#418, MANY-7): each cable a 44 px row to pick, then lay it by hand with points and a height. */
   renderCableSettings(this: Fp3dEditor) {
     const keys = this.cableKeys();
     if (!keys.length) return nothing;
     const admin = this.isEditor;
     const cables = this._doc.settings.roof.cables ?? [];
     const sel = this._cableId ? cables.find((c) => c.id === this._cableId) : undefined;
-    return html`<section>
-      <h3>〰 ${this.t("cables_title")}</h3>
-      <p class="fp3d-sub">${this.t("cables_hint")}</p>
-      <div class="fp3d-room-list">
-        ${keys.map(
-          (key) => html`<div class="fp3d-row">
-            <button
-              class="fp3d-dev-name ${key === this._cableId ? "fp3d-sel" : ""}"
-              @click=${() => {
-                this._cableId = key === this._cableId ? null : key;
-                // a laid cable lives on its floor: the plan goes there so its points can be dragged
-                const laid = cables.find((c) => c.id === key);
-                if (this._cableId && laid && this._doc.floors.some((f) => f.id === laid.floor_id)) this._floorId = laid.floor_id;
-              }}
-            >
-              <span>${this.cableLabel(key)}${cables.some((c) => c.id === key) ? html` <em class="fp3d-sub">· ${this.t("cable_laid")}</em>` : nothing}</span>
-            </button>
-          </div>`,
+    const laidN = keys.filter((k) => cables.some((c) => c.id === k)).length;
+    return this.sideFold("energy-cables", "", !!this._cableId, `〰 ${this.t("cables_title")} (${keys.length})`, laidN ? this.t("cables_laid_n", { n: laidN }) : this.t("cables_auto_all"), 0, () => html`
+      <div class="fp3d-with-info"><p class="fp3d-sub">${this.t("cables_hint_short")}</p>${this.infoButton("cables_hint", this.t("cables_title"))}</div>
+      <div class="fp3d-pick-list">
+        ${keys.map((key) =>
+          this.pickRow(this.cableLabel(key), cables.some((c) => c.id === key) ? this.t("cable_laid") : "", key === this._cableId, () => {
+            this._cableId = key === this._cableId ? null : key;
+            // a laid cable lives on its floor: the plan goes there so its points can be dragged
+            const laid = cables.find((c) => c.id === key);
+            if (this._cableId && laid && this._doc.floors.some((f) => f.id === laid.floor_id)) this._floorId = laid.floor_id;
+          }),
         )}
       </div>
       ${this._cableId
@@ -166,8 +159,7 @@ export class EnergyPart {
                   </div>
                   <p class="fp3d-sub">${sel.floor_id === this._floorId ? this.t("cable_points_hint") : this.t("cable_other_floor", { floor: this._doc.floors.find((f) => f.id === sel.floor_id)?.name ?? "" })}</p>`
               : nothing}`
-        : nothing}
-    </section>`;
+        : nothing}`);
   }
 
   renderEnergyMarkers(this: Fp3dEditor) {
@@ -406,29 +398,26 @@ export class EnergyPart {
     this.showPoint(item.x, item.z);
   }
 
-  /** Inverters, batteries and wallboxes of all floors, and buttons to add them on the floor shown. */
+  /**
+   * The energy panel's Devices fold (#418, MANY-7): the floor shown (where new ones go), the inverters, batteries,
+   * wallboxes, meter and grid connection of all floors as 44 px rows, and the buttons to add them.
+   */
   renderEnergyDevices(this: Fp3dEditor) {
     const admin = this.isEditor;
     const list = this._doc.floors.flatMap((fl) => fl.furniture.filter((m) => isEnergyDevice(m.type)).map((m) => ({ fl, m })));
-    return html`<section>
-      <h3>⚡ ${this.t("energy_devices")}</h3>
-      <p class="fp3d-sub">${this.t("energy_devices_hint")}</p>
+    const names = [...new Set(list.map(({ m }) => this.typeName(m.type)))].join(" · ");
+    return this.sideFold("energy-devices", "", false, `⚡ ${this.t("energy_devices")} (${list.length})`, names || this.t("energy_devices_none"), 0, () => html`
+      ${this.renderRoofFloors()}
+      <div class="fp3d-with-info"><p class="fp3d-sub">${this.t("energy_devices_hint_short")}</p>${this.infoButton("energy_devices_hint", this.t("energy_devices"))}</div>
       ${list.length
-        ? html`<div class="fp3d-room-list">
-            ${list.map(
-              ({ fl, m }) => html`<div class="fp3d-row">
-                <button
-                  class="fp3d-dev-name"
-                  @click=${() => {
-                    this._floorId = fl.id;
-                    this._solarId = null;
-                    this.selectItem("furniture", m.id);
-                    this.showPoint(m.x, m.z);
-                  }}
-                >
-                  <span>${m.name || this.typeName(m.type)} · ${fl.name}</span>
-                </button>
-              </div>`,
+        ? html`<div class="fp3d-pick-list">
+            ${list.map(({ fl, m }) =>
+              this.pickRow(m.name || this.typeName(m.type), fl.name, m.id === this._furnitureId, () => {
+                this._floorId = fl.id;
+                this._solarId = null;
+                this.selectItem("furniture", m.id);
+                this.showPoint(m.x, m.z);
+              }),
             )}
           </div>`
         : nothing}
@@ -445,8 +434,7 @@ export class EnergyPart {
             + ${this.t(`furn_${type}` as I18nKey)}
           </button>`,
         )}
-      </div>
-    </section>`;
+      </div>`);
   }
 
   renderMeter(this: Fp3dEditor, floor: Floor) {
