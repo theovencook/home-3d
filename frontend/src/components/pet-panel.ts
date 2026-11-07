@@ -276,11 +276,9 @@ export class PetPanel extends LitElement {
     const live = this._live;
     const at = live?.trigger ? triggers.findIndex((x) => x.id === live.trigger) : spots.findIndex((s) => s.id === live?.spot);
     const now = live === undefined ? "" : !live ? this.t("pet_now_free") : live.trigger ? this.t("pet_now_trigger", { n: at + 1 }) : this.t("pet_now_spot", { n: at + 1 });
+    // the name, kind and place are in the side panel's shared header above this element (#409)
     return html`<style>${STYLE}</style>
-      <section>
-        <h3>🐾 ${pet.name || this.t(`pet_kind_${pet.kind}`)}</h3>
-        ${this.roamOff ? html`<p class="fp3d-note">${this.t("pet_roam_off")}</p>` : now ? html`<p class="fp3d-sub">${now}</p>` : nothing}
-      </section>
+      ${this.roamOff ? html`<p class="fp3d-note">${this.t("pet_roam_off")}</p>` : now ? html`<p class="fp3d-sub" role="status">${now}</p>` : nothing}
       <section>
         <h3>${this.t("pet_routine")}</h3>
         <p class="fp3d-sub">${this.t("pet_routine_hint")}</p>

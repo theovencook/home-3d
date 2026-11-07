@@ -11,7 +11,6 @@ import { furnishRoom, PACKAGES, type PackageId } from "../../packages.ts";
 import { nameNewRoom, roomNameSuggestions } from "../../room-naming.ts";
 import { carryRectResize, strandedBy } from "../../geometry/room-resize.ts";
 import { formatNumber, type I18nKey } from "../../i18n.ts";
-import { withKeys } from "../../clipboard.ts";
 import { bounds, centroid, FLOOR_MATERIALS, splitAliases, FURNITURE_SIZE, isAxisRect, spotGrid, step, type Direction, pointInPolygon, polygonArea, uid, type Building, type Floor, type Furniture, type FurnitureType, type Room, type Vec2 } from "../../model.ts";
 import { roomLiveSensors, type LiveKind } from "../../room-effects.ts";
 import { askConfirm } from "../../ask.ts";
@@ -546,8 +545,32 @@ export class RoomsPart {
     const rect = isAxisRect(room.points);
     const b = bounds(room.points);
     return html`<section>
-      <div class="fp3d-h3row"><h3>${this.t("room")}</h3>${this.fixButton("room", room.id)}</div>
+      ${this.renderPanelHeader({
+        id: `room:${room.id}`,
+        title: room.name || this.t("room"),
+        kind: this.t("room"),
+        where: this.floor?.name,
+        lock: this.fixLock("room", room.id),
+        menu: [
+          { label: this.t("pkg_open"), run: () => (this._packages = !this._packages) },
+          { label: this.t("spots_place"), run: () => this.openSpotForm(room) },
+          { label: this.t("duplicate"), keys: ["Ctrl+D"], run: () => this.duplicateRoom() },
+          this.pasteAction(),
+          { label: this.t("delete"), keys: ["Del"], danger: true, run: () => this.deleteRoom() },
+        ],
+      })}
       ${this.renderResizeNote(room)}
+      ${this._spots ? this.renderSpotForm(room) : nothing}
+      ${this._packages
+        ? html`<div class="fp3d-packages">
+            ${PACKAGES.map(
+              (p) => html`<button class="fp3d-btn" @click=${() => this.applyPackage(room, p)}>
+                <b>${this.t(`pkg_${p}` as I18nKey)}</b><span>${this.t(`pkg_${p}_desc` as I18nKey)}</span>
+              </button>`,
+            )}
+            <p class="fp3d-sub">${this.t("pkg_hint")}</p>
+          </div>`
+        : nothing}
       <div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
           >${this.t("room_name")}
@@ -625,27 +648,7 @@ export class RoomsPart {
           </div>`,
         )}
       </details>
-      ${admin
-        ? html`<div class="fp3d-actions">
-            <button class="fp3d-btn fp3d-primary" @click=${() => (this._packages = !this._packages)}>${this.t("pkg_open")}</button>
-            <button class="fp3d-btn" @click=${() => this.openSpotForm(room)}>${this.t("spots_place")}</button>
-            <button class="fp3d-btn" title=${withKeys(this.t("duplicate"), ["Ctrl+D"])} @click=${() => this.duplicateRoom()}>${this.t("duplicate")}</button>
-            ${this.renderPasteButton()}
-            <button class="fp3d-btn fp3d-danger" title=${withKeys(this.t("delete"), ["Del"])} @click=${() => this.deleteRoom()}>${this.t("delete")}</button>
-          </div>`
-        : nothing}
       ${this.renderModuleRoomFields(room)}
-      ${this._spots ? this.renderSpotForm(room) : nothing}
-      ${this._packages
-        ? html`<div class="fp3d-packages">
-            ${PACKAGES.map(
-              (p) => html`<button class="fp3d-btn" @click=${() => this.applyPackage(room, p)}>
-                <b>${this.t(`pkg_${p}` as I18nKey)}</b><span>${this.t(`pkg_${p}_desc` as I18nKey)}</span>
-              </button>`,
-            )}
-            <p class="fp3d-sub">${this.t("pkg_hint")}</p>
-          </div>`
-        : nothing}
     </section>`;
   }
 

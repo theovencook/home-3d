@@ -7,7 +7,6 @@ import type { I18nKey } from "../../i18n.ts";
 import { iconPath } from "../../icons.ts";
 import { bounds, centroid, isLamp, isAxisRect, OUTDOOR_TYPES, outdoorStanding, outdoorZones, SLOPE_DIRS, type SlopeDir, pointInPolygon, uid, type Floor, type OutdoorArea, type OutdoorType, type Vec2 } from "../../model.ts";
 import { round, patchItem } from "./helpers.ts";
-import { withKeys } from "../../clipboard.ts";
 import { thinArea, THIN_HIT_PX } from "./outdoor-find.ts";
 import { chosenPoint, pointKeys, renderMids } from "./points.ts";
 import type { Fp3dEditor } from "../editor.ts";
@@ -230,7 +229,19 @@ export class OutdoorPart {
       this.updateOutdoor({ points: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]].map(([x, z]) => [round(x), round(z)] as Vec2) });
     };
     return html`<section>
-      <div class="fp3d-h3row"><h3>${this.t("outdoor")}</h3>${this.fixButton("outdoor", a.id)}</div>
+      ${this.renderPanelHeader({
+        id: `outdoor:${a.id}`,
+        title: this.t(`out_${a.type}` as I18nKey),
+        kind: this.t("outdoor"),
+        where: this.floor?.name,
+        lock: this.fixLock("outdoor", a.id),
+        menu: [
+          { label: this.t("duplicate"), keys: ["Ctrl+D"], run: () => this.duplicateOutdoor() },
+          { label: this.t("copy_items"), keys: ["Ctrl+C"], run: () => void this.copySelection() },
+          this.pasteAction(),
+          { label: this.t("delete"), keys: ["Del"], danger: true, run: () => this.deleteOutdoor() },
+        ],
+      })}
       <div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
           >${this.t("outdoor_type")}
@@ -283,14 +294,6 @@ export class OutdoorPart {
       ${a.slope ? html`<p class="fp3d-sub">${this.t("outdoor_slope_hint")}</p>` : nothing}
       <p class="fp3d-sub">${this.t("outdoor_hint")}</p>
       ${this.renderModuleFields(a)}
-      ${admin
-        ? html`<div class="fp3d-actions">
-            <button class="fp3d-btn" @click=${() => this.duplicateOutdoor()}>${this.t("duplicate")}</button>
-            <button class="fp3d-btn" title=${withKeys(this.t("help_key_copy"), ["Ctrl+C"])} @click=${() => this.copySelection()}>${this.t("copy_items")}</button>
-            ${this.renderPasteButton()}
-            <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteOutdoor()}>${this.t("delete")}</button>
-          </div>`
-        : nothing}
     </section>`;
   }
 }

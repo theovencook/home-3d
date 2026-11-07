@@ -1321,6 +1321,7 @@
  "pet_routine": "Tagesablauf",
  "pet_routine_hint": "Seine Plätze über den Tag: „Platz hinzufügen“ tippen, dann in den Grundriss. Ohne Zeiten: ganztags; ohne Tage: jeden Tag. Zwischen den Zeiten läuft es zum nächsten Platz.",
  "pet_spot_add": "Platz hinzufügen",
+ "pet_delete_ask": "{name} löschen? Tagesablauf und Auslöser werden mit gelöscht.",
  "pet_spot_n": "Platz {n}",
  "pet_from": "Von",
  "pet_to": "Bis",

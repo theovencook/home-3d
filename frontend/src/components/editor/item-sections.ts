@@ -13,6 +13,7 @@ import { itemProfile, type ItemProfile, type PanelFold } from "../../item-profil
 import { type CarLinks, type Furniture } from "../../model.ts";
 import { numberish, binaryish } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
+import { stateChip, type PanelAction } from "./panel-head.ts";
 
 /** Small line icons of the item panel (24 x 24, stroke = currentColor), decorative: the buttons carry the names. */
 const ICONS = {
@@ -168,66 +169,33 @@ export class ItemSectionsPart {
     const out: string[] = [];
     const main = ref(f.entity);
     const st = main ? hass.states[main] : undefined;
-    if (st) {
-      const text = stateText(hass, st);
-      if (text) out.push(text);
-    }
+    // Home Assistant's translated state, in sentence case (#409, WORD-8: "online" read as a raw state)
+    if (st) out.push(stateChip(hass, st));
     const power = ref(f.power);
     const pw = power ? hass.states[power] : undefined;
     if (pw) out.push(stateText(hass, pw));
     return out.filter(Boolean);
   }
 
-  /** "Lock position": one constant name, aria-pressed for the state, a lock icon (#396). */
+  /** "Lock position": one constant name, aria-pressed for the state, a lock icon (#396); the shared header lock (#409). */
   lockPositionButton(this: Fp3dEditor, f: Furniture) {
-    if (!this.isEditor) return nothing;
-    const fixed = this.isFixedItem("furniture", f.id);
-    const name = this.t("lock_position");
-    return html`<button type="button" class="fp3d-btn fp3d-fix fp3d-icon-btn" aria-pressed=${fixed ? "true" : "false"} aria-label=${name} title=${withKeys(name, ["L"])} @click=${() => this.toggleFixed("furniture", f.id)}>
-      ${panelIcon(fixed ? "lock" : "unlock")}
-    </button>`;
+    return this.lockButton(this.fixLock("furniture", f.id));
   }
 
-  /** The header's "⋯" menu (#396): rename, duplicate, copy, the wall view, the rack and delete, with their keys. */
+  /** The item's "⋯" actions (#396): rename, duplicate, copy, the wall view and delete, with their keys. */
+  itemMenuActions(this: Fp3dEditor, f: Furniture, p: ItemProfile): PanelAction[] {
+    return [
+      { label: this.t("item_rename"), run: () => this.renameItem(f, p) },
+      { label: this.t("duplicate"), keys: ["Ctrl+D"], run: () => this.duplicateFurniture() },
+      { label: this.t("copy_items"), keys: ["Ctrl+C"], run: () => this.copySelection() },
+      { label: this.t("wall_view"), run: () => this.openWallViewFor(f) },
+      { label: this.t("delete"), keys: ["Del"], danger: true, run: () => void this.deleteFurniture() },
+    ];
+  }
+
+  /** The header's "⋯" menu of an item (the shared panel menu, #409). */
   itemMenu(this: Fp3dEditor, f: Furniture, p: ItemProfile) {
-    if (!this.isEditor) return nothing;
-    const s = panelUi(this, f.id);
-    const close = () => {
-      s.menu = false;
-      this.requestUpdate();
-    };
-    const run = (fn: () => void) => () => {
-      s.menu = false;
-      fn();
-      this.requestUpdate();
-    };
-    const item = (label: string, keys: string[], fn: () => void, danger = false) =>
-      html`<button type="button" role="menuitem" class=${danger ? "fp3d-ctx-danger" : ""} @click=${run(fn)}><span>${label}</span>${keys.length ? html`<kbd>${keys.join(", ")}</kbd>` : nothing}</button>`;
-    return html`<span class="fp3d-menu-wrap"
-      @keydown=${(e: KeyboardEvent) => {
-        if (e.key !== "Escape" || !s.menu) return;
-        e.stopPropagation();
-        close();
-        (this.renderRoot.querySelector?.(".fp3d-item-more") as HTMLElement | null)?.focus();
-      }}
-      @focusout=${(e: FocusEvent) => {
-        const to = e.relatedTarget as Node | null;
-        if (s.menu && to && !(e.currentTarget as HTMLElement).contains(to)) close();
-      }}
-      ><button type="button" class="fp3d-btn fp3d-icon-btn fp3d-item-more" aria-haspopup="menu" aria-expanded=${s.menu ? "true" : "false"} aria-label=${this.t("item_menu")} title=${this.t("item_menu")} @click=${() => {
-        s.menu = !s.menu;
-        this.requestUpdate();
-      }}>${panelIcon("more")}</button>
-      ${s.menu
-        ? html`<div class="fp3d-ctx fp3d-item-menu" role="menu" aria-label=${this.t("item_menu")}>
-            ${item(this.t("item_rename"), [], () => this.renameItem(f, p))}
-            ${item(this.t("duplicate"), ["Ctrl+D"], () => this.duplicateFurniture())}
-            ${item(this.t("copy_items"), ["Ctrl+C"], () => this.copySelection())}
-            ${item(this.t("wall_view"), [], () => this.openWallViewFor(f))}
-            ${item(this.t("delete"), ["Del"], () => void this.deleteFurniture(), true)}
-          </div>`
-        : nothing}</span
-    >`;
+    return this.panelMenu(f.id, this.itemMenuActions(f, p));
   }
 
   /** Rename: More options opens with the name box focused. */
@@ -237,20 +205,19 @@ export class ItemSectionsPart {
     void this.updateComplete.then(() => (this.renderRoot.querySelector?.(".fp3d-item-name") as HTMLInputElement | null)?.focus());
   }
 
-  /** The header (#396, #397): the item's name as the heading, its kind and room, its live state, Lock position and "⋯". */
+  /** The header (#396, #397, #409): the item's name as the heading, its kind and room, its live state, Lock position and "⋯". */
   renderItemHeader(this: Fp3dEditor, f: Furniture, p: ItemProfile) {
     const roomId = this.roomAt([f.x, f.z]);
     const room = roomId ? this.floor?.rooms.find((r) => r.id === roomId)?.name : null;
-    const where = room || this.floor?.name || "";
-    const live = this.itemLiveState(f, p);
-    return html`<header class="fp3d-item-head">
-      <div class="fp3d-item-title">
-        <h2>${this.itemTitle(f)}</h2>
-        <span class="fp3d-sub">${[this.t(`item_kind_${p.kind}` as I18nKey), where].filter(Boolean).join(" · ")}</span>
-      </div>
-      <div class="fp3d-item-tools">${this.lockPositionButton(f)}${this.itemMenu(f, p)}</div>
-      ${live.length ? html`<div class="fp3d-live" role="status">${live.map((s) => html`<span class="fp3d-live-chip">${s}</span>`)}</div>` : nothing}
-    </header>`;
+    return this.renderPanelHeader({
+      id: f.id,
+      title: this.itemTitle(f),
+      kind: this.t(`item_kind_${p.kind}` as I18nKey),
+      where: room || this.floor?.name || "",
+      live: this.itemLiveState(f, p),
+      lock: this.fixLock("furniture", f.id),
+      menu: this.itemMenuActions(f, p),
+    });
   }
 
   /** Position (#397): always open, never sticky; X, Y, Turn with the 90° buttons beside it, and the plan hint (from option D). */

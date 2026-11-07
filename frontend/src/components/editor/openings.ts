@@ -13,6 +13,7 @@ import { signedArea, OPENING_PRESETS, openingPreset, type OpeningPreset, pointIn
 import { windowGetsWell } from "../../geometry/wells.ts";
 import { wallPeers, SNAP_PX, round, patchItem, numberish } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
+import { stateChip } from "./panel-head.ts";
 
 /** OpeningsPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class OpeningsPart {
@@ -498,8 +499,17 @@ export class OpeningsPart {
     const preset = openingPreset(o);
     const door = o.type === "door";
     const minH = this.openingFormMin?.id === o.id ? this.openingFormMin.h : 0;
+    const roomName = this.floor?.rooms.find((r) => r.id === o.room_id)?.name;
     return html`<section style=${minH ? `min-height:${Math.round(minH)}px` : ""}>
-      <div class="fp3d-h3row"><h3>${this.t(`preset_${preset}` as I18nKey)}</h3>${this.fixButton("opening", o.id)}</div>
+      ${this.renderPanelHeader({
+        id: `opening:${o.id}`,
+        title: this.t(`preset_${preset}` as I18nKey),
+        kind: this.t(window ? "opening_window" : garage ? "preset_garage" : "opening_door"),
+        where: roomName || this.floor?.name,
+        live: [o.contact && o.contact !== "none" ? stateChip(this.hass, this.hass?.states[o.contact]) : "", o.cover && o.cover !== "none" ? stateChip(this.hass, this.hass?.states[o.cover]) : ""],
+        lock: this.fixLock("opening", o.id),
+        menu: [{ label: this.t("delete"), keys: ["Del"], danger: true, run: () => this.deleteOpening() }],
+      })}
       ${admin ? html`<p class="fp3d-sub">${this.t("opening_change_to")}</p>` : nothing}
       ${admin
         ? this.renderOpeningKinds(preset, (p, ev) => {
@@ -644,9 +654,6 @@ export class OpeningsPart {
           : nothing}
       </div>
       <p class="fp3d-sub">${this.t(window ? "opening_hint" : garage ? "garage_hint" : "door_hint")}</p>
-      ${admin
-        ? html`<div class="fp3d-actions"><button class="fp3d-btn fp3d-danger" @click=${() => this.deleteOpening()}>${this.t("delete")}</button></div>`
-        : nothing}
     </section>`;
   }
 }

@@ -269,16 +269,18 @@ export class RoofPart {
     const index = (this._doc.settings.roof.windows ?? []).findIndex((x) => x.id === w.id) + 1;
     const covers = this.entityOptions((id) => id.startsWith("cover."));
     const contacts = this.entityOptions((id) => binaryish(id) || numberish(id));
-    return html`<button class="fp3d-btn fp3d-back" @click=${() => (this._roofWinId = null)}>‹ ${this.t("roof_sections")}</button>
-      <section>
-        <div class="fp3d-h3row">
-          <h3>🪟 ${this.t("roof_window")} ${index}</h3>
-          ${admin
-            ? html`<button class="fp3d-btn fp3d-fix" aria-pressed=${!!w.locked} title=${this.t("fix_hint")} @click=${() => set({ locked: !w.locked })}>
-                ${w.locked ? `🔒 ${this.t("unfix")}` : `🔓 ${this.t("fix")}`}
-              </button>`
-            : nothing}
-        </div>
+    return html`<section>
+        ${this.renderPanelHeader({
+          id: `roof-window:${w.id}`,
+          title: w.name || `${this.t("roof_window")} ${index}`,
+          kind: this.t("roof_window"),
+          where: (() => {
+            const face = faces.find((x) => x.key === w.face);
+            return face ? this.faceLabel(face) : null;
+          })(),
+          lock: this.ownLock(w.locked, () => set({ locked: !w.locked })),
+          menu: [{ label: this.t("delete"), keys: ["Del"], danger: true, run: () => this.deleteRoofWindow() }],
+        })}
         <div class="fp3d-form">
           <label class="fp3d-field fp3d-wide"
             >${this.t("solar_face")}
@@ -309,7 +311,6 @@ export class RoofPart {
         <p class="fp3d-sub">${this.t("roof_window_float_hint")}</p>
         <p class="fp3d-sub">${this.t("roof_window_motor_hint")}</p>
         <p class="fp3d-sub">${this.t("roof_window_hint")}</p>
-        ${admin ? html`<div class="fp3d-actions"><button class="fp3d-btn fp3d-danger" @click=${() => this.deleteRoofWindow()}>${this.t("delete")}</button></div>` : nothing}
       </section>`;
   }
 
@@ -357,20 +358,24 @@ export class RoofPart {
     const n = (sections: RoofSection[]) => sections.findIndex((x) => x.id === sec.id) + 1;
     const num = (label: string, value: number, apply: (v: number) => void, step = 0.05, min = 0) => this.len(label, value, (v) => apply(Math.max(min, round(v))), step, min);
     const deg = (label: string, value: number, apply: (v: number) => void) => this.num(label, value, (v) => apply(Math.max(0, round(v))), 1, 0);
-    const planLocked = !!this._doc.settings.lock_plan;
-    return html`<button class="fp3d-btn fp3d-back" @click=${() => (this._roofId = null)}>‹ ${this.t("roof_sections")}</button>
-      <section>
+    // the kind's own actions are in "⋯" with Duplicate and Delete (#409): Swap sides, a dormer on either side
+    const dormers = !flat && !sec.dormer && !sec.open;
+    return html`<section>
+        ${this.renderPanelHeader({
+          id: `roof:${sec.id}`,
+          title: `${sec.dormer ? this.t("roof_dormer") : this.t("roof_section")} ${n(this._doc.settings.roof.sections ?? [])}`,
+          kind: this.t(`roof_shape_${sec.shape}` as I18nKey),
+          where: sectionFloor(this._doc, sec)?.name,
+          lock: this.ownLock(sec.locked, () => set({ locked: !sec.locked })),
+          menu: [
+            !flat && { label: this.t("roof_swap"), run: () => set({ flip: !sec.flip }) },
+            dormers && { label: `+ ${this.t("roof_dormer")} ${sideA}`, run: () => this.addDormer("a") },
+            dormers && !pent && { label: `+ ${this.t("roof_dormer")} ${sideB}`, run: () => this.addDormer("b") },
+            { label: this.t("duplicate"), run: () => this.duplicateRoofSection() },
+            { label: this.t("delete"), keys: ["Del"], danger: true, run: () => this.deleteRoofSection() },
+          ],
+        })}
         ${this.renderRoofFloors()}
-        <div class="fp3d-h3row">
-          <h3>${sec.dormer ? this.t("roof_dormer") : this.t("roof_section")} ${n(this._doc.settings.roof.sections ?? [])}</h3>
-          ${admin
-            ? planLocked
-              ? html`<button class="fp3d-btn fp3d-fix" aria-pressed="true" title=${this.t("lock_plan_hint")} @click=${() => this.toggleLockPlan()}>🔒 ${this.t("plan_locked")}</button>`
-              : html`<button class="fp3d-btn fp3d-fix" aria-pressed=${!!sec.locked} title=${this.t("fix_hint")} @click=${() => set({ locked: !sec.locked })}>
-                  ${sec.locked ? `🔒 ${this.t("unfix")}` : `🔓 ${this.t("fix")}`}
-                </button>`
-            : nothing}
-        </div>
         <label class="fp3d-field fp3d-wide"
           >${this.t("roof_shape")}
           <select ?disabled=${!admin} @change=${(e: Event) => set({ shape: (e.target as HTMLSelectElement).value as RoofShape })}>
@@ -458,19 +463,7 @@ export class RoofPart {
             <p class="fp3d-sub">${this.t(sec.points ? "roof_points_hint" : "roof_outline_hint")}</p>`
           : nothing}
         <p class="fp3d-sub">${this.t("roof_ridge_height")}: ${this.m(ridgeHeight(sec), 2)} · ${this.t("roof_section_hint")}</p>
-        ${admin
-          ? html`<div class="fp3d-actions">
-              ${flat
-                ? nothing
-                : html`<button class="fp3d-btn" title=${this.t("roof_swap_hint")} @click=${() => set({ flip: !sec.flip })}>⇅ ${this.t("roof_swap")}</button>`}
-              ${!flat && !sec.dormer && !sec.open
-                ? html`<button class="fp3d-btn" title=${this.t("roof_dormer_hint")} @click=${() => this.addDormer("a")}>+ ${this.t("roof_dormer")} ${sideA}</button>
-                  ${pent ? nothing : html`<button class="fp3d-btn" title=${this.t("roof_dormer_hint")} @click=${() => this.addDormer("b")}>+ ${this.t("roof_dormer")} ${sideB}</button>`}`
-                : nothing}
-              <button class="fp3d-btn" @click=${() => this.duplicateRoofSection()}>${this.t("duplicate")}</button>
-              <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteRoofSection()}>${this.t("delete")}</button>
-            </div>`
-          : nothing}
+        ${dormers && admin ? html`<p class="fp3d-sub">${this.t("roof_dormer_hint")}</p>` : nothing}
       </section>`;
   }
 

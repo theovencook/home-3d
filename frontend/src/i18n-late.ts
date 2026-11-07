@@ -2212,6 +2212,7 @@ export const lateEnglish = {
   pet_routine: "Daily routine",
   pet_routine_hint: "Its spots through the day: tap “Add a spot”, then the plan. No times: all day; no days marked: every day. Between its times it walks to the next spot.",
   pet_spot_add: "Add a spot",
+  pet_delete_ask: "Delete {name}? Its routine and triggers go too.",
   pet_spot_n: "Spot {n}",
   pet_from: "From",
   pet_to: "To",

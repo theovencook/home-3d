@@ -53,7 +53,6 @@ export class WallsPart {
   }
 
   renderFreeWallForm(this: Fp3dEditor, w: FreeWall) {
-    const admin = this.isEditor;
     const length = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
     const setLength = (v: number) => {
       const l = Math.max(0.1, v);
@@ -68,7 +67,13 @@ export class WallsPart {
       this.updateFreeWall({ a: shift(w.a), b: shift(w.b) });
     };
     return html`<section>
-      <div class="fp3d-h3row"><h3>${this.t("free_wall")}</h3>${this.fixButton("wall", w.id)}</div>
+      ${this.renderPanelHeader({
+        id: `wall:${w.id}`,
+        title: this.t("free_wall"),
+        where: this.roomAt(mid) ? this.floor?.rooms.find((r) => r.id === this.roomAt(mid))?.name : this.floor?.name,
+        lock: this.fixLock("wall", w.id),
+        menu: [{ label: this.t("delete"), keys: ["Del"], danger: true, run: () => this.deleteFreeWall() }],
+      })}
       <div class="fp3d-form">
         ${this.len(this.t("x"), mid[0], (v) => moveTo(0, v))} ${this.len(this.t("z"), mid[1], (v) => moveTo(1, v))}
         <p class="fp3d-sub fp3d-wide">${this.t("wall_pos_hint")}</p>
@@ -76,11 +81,6 @@ export class WallsPart {
         ${this.len(this.t("wall_thickness"), w.thickness ?? this._doc.settings.wall_interior, (v) => this.updateFreeWall({ thickness: Math.min(1, Math.max(0.02, v)) }), 0.01, 0.02)}
         ${this.len(this.t("wall_height"), w.height ?? this.floor?.height ?? 2.5, (v) => this.updateFreeWall({ height: v >= (this.floor?.height ?? 2.5) - 0.005 ? null : Math.max(0.05, v) }), 0.05, 0.05)}
       </div>
-      ${admin
-        ? html`<div class="fp3d-actions">
-            <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteFreeWall()}>${this.t("delete")}</button>
-          </div>`
-        : nothing}
       <p class="fp3d-sub">${this.t("free_wall_hint")}</p>
     </section>`;
   }

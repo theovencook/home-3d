@@ -33,6 +33,13 @@ export const formStyles = css`
       .fp3d-sheet-body .fp3d-item-head {
         top: -4px;
       }
+      /* the same header on every panel (#409); outside the item panel's flex column it keeps a gap under it */
+      .fp3d-panel-head {
+        margin-bottom: 8px;
+      }
+      .fp3d-item-panel > .fp3d-panel-head {
+        margin-bottom: 0;
+      }
       .fp3d-item-title {
         min-width: 0;
       }

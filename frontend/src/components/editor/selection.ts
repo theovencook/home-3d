@@ -15,6 +15,7 @@ import { type FixKind, round } from "./helpers.ts";
 import { canRemovePoint, chosenPoint, choosePoint, pointOf, removePoint } from "./points.ts";
 import { refocusItemBar, renderItemBar } from "./item-bar.ts";
 import { forgetPanelUi } from "./item-sections.ts";
+import type { PanelAction } from "./panel-head.ts";
 import type { Fp3dEditor } from "../editor.ts";
 
 /** One action on an item from the plan (#398): the right-click menu shows `icon` + `text` (or `label`), the toolbar an icon named `label`. */
@@ -398,6 +399,12 @@ export class SelectionPart {
   }
 
   /** "Paste (n)" while the clipboard holds items (#74): pastes them on this floor. */
+  /** Paste for a header's "⋯" menu (#409): there while the editor's clipboard holds something. */
+  pasteAction(this: Fp3dEditor): PanelAction | null {
+    if (!clipboard || !this.isEditor) return null;
+    return { label: this.t("paste_items_n", { n: clipSize(clipboard) }), keys: ["Ctrl+V"], run: () => void this.pasteClipboard() };
+  }
+
   renderPasteButton(this: Fp3dEditor) {
     if (!clipboard || !this.isEditor) return nothing;
     return html`<button class="fp3d-btn" title=${withKeys(this.t("help_key_paste"), ["Ctrl+V"])} @click=${() => this.pasteClipboard()}>${this.t("paste_items_n", { n: clipSize(clipboard) })}</button>`;

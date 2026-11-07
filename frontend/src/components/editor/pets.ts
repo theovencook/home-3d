@@ -35,7 +35,15 @@ export class PetsPart {
     const pet = this._doc.settings.pets?.list.find((p) => p.id === this._petId);
     if (!pet) return nothing;
     need(loadPetPanel);
-    return html`<fp3d-pet-panel
+    const kind = this.t(`pet_kind_${pet.kind}` as I18nKey);
+    return html`${this.renderPanelHeader({
+        id: `pet:${pet.id}`,
+        title: pet.name || kind,
+        kind,
+        where: petFloor(this._doc, pet)?.name,
+        menu: [{ label: this.t("delete"), danger: true, run: () => void this.deletePet(pet.id) }],
+      })}
+      <fp3d-pet-panel
       .pet=${pet}
       .floors=${this._doc.floors.map((f) => ({ id: f.id, name: f.name }))}
       .hass=${this.hass}
@@ -47,6 +55,18 @@ export class PetsPart {
       @pet-change=${(e: CustomEvent<{ pet: Pet }>) => this.changePet(e.detail.pet)}
       @pet-pick=${(e: CustomEvent<{ ref: string | null }>) => (this._petPick = e.detail.ref)}
     ></fp3d-pet-panel>`;
+  }
+
+  /** Delete a pet (#409: Delete is in the header's "⋯" of every panel), after asking; its panel closes. */
+  async deletePet(this: Fp3dEditor, id: string): Promise<void> {
+    const pet = this._doc.settings.pets?.list.find((p) => p.id === id);
+    if (!pet || !this.isEditor) return;
+    if (!(await this.ask(this.t("pet_delete_ask", { name: pet.name || this.t(`pet_kind_${pet.kind}` as I18nKey) })))) return;
+    this.change((doc) => {
+      const pets = doc.settings.pets;
+      if (pets) pets.list = pets.list.filter((p) => p.id !== id);
+    });
+    if (this._petId === id) this._petId = null;
   }
 
   changePet(this: Fp3dEditor, pet: Pet): void {

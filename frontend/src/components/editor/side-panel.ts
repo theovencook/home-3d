@@ -147,10 +147,23 @@ export class SidePanelPart {
     </div>`;
   }
 
-  /** Where the side panel's back link goes (#396): from an item to its room or the floor, from a room to the floor, from an item while furnishing to the library. */
+  /**
+   * Where the side panel's back link goes (#396): from an item to its room or the floor, from a room to the floor, from
+   * an item while furnishing to the library; in the roof tool from a section or roof window to the sections, in the
+   * energy tool from a solar field to the list (#409, CONS-6: the same small crumb in every tool).
+   */
   sideBack(this: Fp3dEditor): { label: string; name: string; go: () => void } | null {
     const t = this._tool;
-    if (t === "roof" || t === "energy" || t === "pool" || t === "measure") return null;
+    const to = (name: string, go: () => void) => ({ label: this.t("back_to_room", { room: name }), name, go });
+    if (t === "roof")
+      return this._roofWinId || this.roofSection
+        ? to(this.t("roof_sections"), () => {
+            this._roofWinId = null;
+            this._roofId = null;
+          })
+        : null;
+    if (t === "energy") return this._solarId ? to(this.t("solar_fields"), () => (this._solarId = null)) : null;
+    if (t === "pool" || t === "measure") return null;
     const room = this.room;
     const floorName = this.floor?.name ?? this.t("floor");
     if (t === "furniture" && this.isEditor) {
@@ -167,8 +180,13 @@ export class SidePanelPart {
     const room = this.room;
     const admin = this.isEditor;
     const areas = Object.values(this.hass?.areas ?? {}).sort((a, b) => a.name.localeCompare(b.name));
-    if (this._tool === "roof") return this.renderRoofPanel();
-    if (this._tool === "energy") return this.renderEnergyPanel();
+    // on a phone the crumb row comes with the panel (beside the plan it is the pin row's)
+    const crumb = () => {
+      const back = this.narrow ? this.sideBack() : null;
+      return back ? this.renderNavRow(back, false) : nothing;
+    };
+    if (this._tool === "roof") return html`${crumb()}${this.renderRoofPanel()}`;
+    if (this._tool === "energy") return html`${crumb()}${this.renderEnergyPanel()}`;
     if (this._tool === "pool") return this.renderPoolPanel(floor);
     // by measure the tool owns the panel: its form is all there is, with a way back to the floor settings (#301)
     if (this._tool === "measure" && floor) return this.renderMeasureForm();
@@ -229,7 +247,23 @@ export class SidePanelPart {
     return html`
       ${nextKind} ${admin ? nothing : html`<p class="fp3d-note">${this.t("read_only")}</p>`}
       <section>
-        <h3>${floor ? this.t("floor_settings_of", { floor: floor.name }) : this.t("floors")}</h3>
+        ${floor
+          ? // the floor's header (#409): its lock is the plan lock, its actions in "⋯" (CONS-8: no button rows at the bottom)
+            this.renderPanelHeader({
+              id: `floor:${floor.id}`,
+              title: this.t("floor_settings_of", { floor: floor.name }),
+              kind: this.t("floor"),
+              lock: this.planLock(),
+              menu: [
+                { label: this.t("move_up"), run: () => this.moveFloor(1) },
+                { label: this.t("move_down"), run: () => this.moveFloor(-1) },
+                floor.rooms.length >= 2 && { label: this.t("gaps_close"), run: () => this.closeFloorGaps() },
+                floor.rooms.length > 0 && { label: this.t("straighten"), run: () => this.straightenFloor() },
+                this.pasteAction(),
+                { label: this.t("delete_floor"), danger: true, run: () => void this.deleteFloor() },
+              ],
+            })
+          : html`<h3>${this.t("floors")}</h3>`}
         ${floors.length
           ? nothing
           : this.startShowing()
@@ -237,7 +271,6 @@ export class SidePanelPart {
             : html`${admin ? html`<button class="fp3d-btn fp3d-primary" @click=${() => this.addFloor()}>${this.t("first_floor_add")}</button>` : nothing}
               <p class="fp3d-sub">${this.t("floor_none_hint")}</p>`}
         ${floor && !floor.rooms.length ? areaImport : nothing}
-        ${admin && floor ? this.renderSettingsLink("general", "lock_plan", this._doc.settings.lock_plan ? "plan_locked" : "plan_lock", this._doc.settings.lock_plan ? "🔒" : "🔓") : nothing}
         ${floor
           ? html`<div class="fp3d-form">
               <label class="fp3d-field fp3d-wide"
@@ -275,23 +308,7 @@ export class SidePanelPart {
                   >`
                 : nothing}
               ${floor.rooms.length ? areaImport : nothing}
-              ${admin
-                ? html`<div class="fp3d-actions fp3d-wide">
-                    <button class="fp3d-btn" title=${this.t("floor_order_hint")} @click=${() => this.moveFloor(1)}>${this.t("move_up")}</button>
-                    <button class="fp3d-btn" title=${this.t("floor_order_hint")} @click=${() => this.moveFloor(-1)}>${this.t("move_down")}</button>
-                    <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteFloor()}>${this.t("delete_floor")}</button>
-                    ${this.renderPasteButton()}
-                  </div>
-                  <div class="fp3d-actions fp3d-wide">
-                    <button class="fp3d-btn" title=${this.t("gaps_hint")} ?disabled=${floor.rooms.length < 2} @click=${() => this.closeFloorGaps()}>
-                      ${this.t("gaps_close")}
-                    </button>
-                    <button class="fp3d-btn" title=${this.t("straighten_hint")} ?disabled=${!floor.rooms.length} @click=${() => this.straightenFloor()}>
-                      ${this.t("straighten")}
-                    </button>
-                  </div>
-                  ${this._notice ? html`<p class="fp3d-sub fp3d-wide fp3d-notice">${this._notice}</p>` : nothing}`
-                : nothing}
+              ${admin && this._notice ? html`<p class="fp3d-sub fp3d-wide fp3d-notice">${this._notice}</p>` : nothing}
             </div>`
           : nothing}
       </section>

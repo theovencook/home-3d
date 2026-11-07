@@ -8,6 +8,7 @@ import { uid, type SolarField, type SolarString, type Vec2 } from "../../model.t
 import { energyRole } from "../../packs.ts";
 import { round } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
+import { stateChip } from "./panel-head.ts";
 
 /** SolarPart: methods of `Fp3dEditor`, copied onto its prototype by editor.ts (see parts.ts). */
 export class SolarPart {
@@ -258,17 +259,20 @@ export class SolarPart {
     const power = this.entityOptions((id) => this.isPowerSensor(id));
     const set = (patch: Partial<SolarField>) => this.updateSolar(patch);
     const index = (this._doc.settings.roof.solar ?? []).findIndex((x) => x.id === f.id) + 1;
-    return html`<button class="fp3d-btn fp3d-back" @click=${() => (this._solarId = null)}>‹ ${this.t("solar_fields")}</button>
-      <section>
+    return html`<section>
+        ${this.renderPanelHeader({
+          id: `solar:${f.id}`,
+          title: f.name || `${this.t("solar_field")} ${index}`,
+          kind: this.t("solar_field"),
+          where: face ? this.faceLabel(face) : ground ? this.t("solar_ground") : null,
+          live: [f.entity && f.entity !== "none" ? stateChip(this.hass, this.hass?.states[f.entity]) : ""],
+          lock: this.ownLock(f.locked, () => this.updateSolar({ locked: !f.locked })),
+          menu: [
+            face && { label: this.t("solar_fit"), run: () => set({ ...proposeField(face, f.id), portrait: f.portrait }) },
+            { label: this.t("delete"), keys: ["Del"], danger: true, run: () => this.deleteSolar() },
+          ],
+        })}
         ${this.renderRoofFloors()}
-        <div class="fp3d-h3row">
-          <h3>☀ ${f.name || `${this.t("solar_field")} ${index}`}</h3>
-          ${admin
-            ? html`<button class="fp3d-btn fp3d-fix" aria-pressed=${!!f.locked} title=${this.t("fix_hint")} @click=${() => this.updateSolar({ locked: !f.locked })}>
-                ${f.locked ? `🔒 ${this.t("unfix")}` : `🔓 ${this.t("fix")}`}
-              </button>`
-            : nothing}
-        </div>
         <div class="fp3d-form">
           <label class="fp3d-field fp3d-wide"
             >${this.t("solar_name")}
@@ -419,12 +423,6 @@ export class SolarPart {
         </div>
         <p class="fp3d-sub">${this.t("solar_string_hint")}</p>
         <p class="fp3d-sub">${this.t("solar_form_hint")}</p>
-        ${admin
-          ? html`<div class="fp3d-actions">
-              <button class="fp3d-btn" ?disabled=${!face} @click=${() => face && set({ ...proposeField(face, f.id), portrait: f.portrait })}>${this.t("solar_fit")}</button>
-              <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteSolar()}>${this.t("delete")}</button>
-            </div>`
-          : nothing}
       </section>`;
   }
 }

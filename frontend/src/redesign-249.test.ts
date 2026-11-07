@@ -322,8 +322,8 @@ test("every place the old ⚙ menu led to is reachable from the editor: the floo
   assert.equal(locate.section, "people");
   assert.deepEqual(locate.control, { kind: "action", button: "st_open", action: "locate" });
   assert.match(src("./panel.ts"), /action === "locate" && this\.hass/);
-  // the deep links the panels had stay (energy, the bins' kerb, the plan lock)
-  assert.ok((editorSource().match(/this\.renderSettingsLink\(/g) ?? []).length >= 3);
+  // the deep links the panels had stay (energy, the bins' kerb); the plan lock is the floor header's lock now (#409)
+  assert.ok((editorSource().match(/this\.renderSettingsLink\(/g) ?? []).length >= 2);
   // the floor page shows the links
   assert.match(src("./components/editor/side-panel.ts"), /\$\{this\.renderHomeLinks\(\)\}/);
 });

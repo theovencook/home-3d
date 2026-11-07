@@ -14,6 +14,7 @@ import { furnitureName } from "../../furniture-names.ts";
 import { hiddenUnplaced, setUnplacedHidden, suggestLinks, unplacedByArea, type LinkSuggestion } from "../../unplaced.ts";
 import { ENTITY_DRAG, PAW, round, patchItem } from "./helpers.ts";
 import type { Fp3dEditor } from "../editor.ts";
+import { stateChip } from "./panel-head.ts";
 
 const DEV_ICONS = {
   eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z",
@@ -252,14 +253,25 @@ export class DevicePanelPart {
     const light = kind === "light";
     const mount = pl.mount ?? "ceiling";
     const auto = kind ? defaultHeight(kind, this.floor?.height ?? 2.5, light ? mount : null) : 1;
+    const roomId = this.roomAt([pl.x, pl.z]);
+    const remove = () => {
+      this.removeDevice(pl.entity_id);
+      this._deviceId = null;
+    };
     return html`<section>
-      <div class="fp3d-h3row"><h3>${this.t("device")}</h3>${this.fixButton("device", pl.entity_id)}</div>
-      <p class="fp3d-dev-title">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d=${kind ? iconPath(kind) : ""} />
-        </svg>
-        ${entityName(this.hass, pl.entity_id)}
-      </p>
+      ${this.renderPanelHeader({
+        id: `device:${pl.entity_id}`,
+        title: pl.name || entityName(this.hass, pl.entity_id),
+        kind: this.t("device"),
+        where: (roomId && this.floor?.rooms.find((r) => r.id === roomId)?.name) || this.floor?.name,
+        live: [stateChip(this.hass, this.hass?.states[pl.entity_id])],
+        lock: this.fixLock("device", pl.entity_id),
+        menu: [
+          { label: this.t("device_centre"), run: () => this.centreDevice() },
+          pl.y != null && { label: this.t("height_auto"), run: () => this.updateDevice({ y: null }) },
+          { label: this.t("delete"), keys: ["Del"], danger: true, run: remove },
+        ],
+      })}
       <div class="fp3d-form">
         ${light
           ? html`<label class="fp3d-field fp3d-wide"
@@ -321,24 +333,9 @@ export class DevicePanelPart {
             >`
           : nothing}
         ${this.iconInput(pl.icon, (v) => this.updateDevice({ icon: v }))}
+        ${this.renderAsFurniture(pl)}
       </div>
       ${this.renderItemActions(pl.actions, pl.entity_id, (a) => this.updateDevice({ actions: a }))}
-      ${admin
-        ? html`<div class="fp3d-actions">
-            <button class="fp3d-btn" @click=${() => this.centreDevice()}>${this.t("device_centre")}</button>
-            ${pl.y !== null ? html`<button class="fp3d-btn" @click=${() => this.updateDevice({ y: null })}>${this.t("height_auto")}</button>` : nothing}
-            ${this.renderAsFurniture(pl)}
-            <button
-              class="fp3d-btn fp3d-danger"
-              @click=${() => {
-                this.removeDevice(pl.entity_id);
-                this._deviceId = null;
-              }}
-            >
-              ${this.t("devices_remove")}
-            </button>
-          </div>`
-        : nothing}
     </section>`;
   }
 
